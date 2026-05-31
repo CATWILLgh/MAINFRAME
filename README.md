@@ -62,19 +62,21 @@ End result the hub aims for: **the same baseline of quality and discipline appli
 ```mermaid
 graph LR
     subgraph repo["MAINFRAME repo (this)"]
-      A1[CLAUDE.md<br/>umbrella instructions]
-      A2[settings.json<br/>permissions + hooks]
-      A3[skills/<br/>domain playbooks]
-      A4[agents/<br/>file-based subagents]
-      A5[hooks/<br/>pre/post-tool scripts]
-      A6[rules/<br/>path-scoped rules]
+      P[plugin-dist/<br/>skills + agents + hooks + commands]
+      E[export/<br/>CLAUDE.md + settings.json + rules + secret helper]
     end
 
-    repo -->|install.sh<br/>per-item symlinks| home[~/.claude/]
-    home -->|loaded every session| any[Any project on the machine]
+    P -->|one symlink<br/>~/.claude/skills/mainframe/| home[~/.claude/]
+    E -->|per-item symlinks| home
+    home -->|Claude auto-loads<br/>as 'mainframe' plugin| any[Any project<br/>on the machine]
 ```
 
-Each artifact type lives in its own layer with a specified contract. See [`docs/layers/`](docs/layers/) for full layer specifications.
+The hub ships in two channels:
+
+- **A plugin** (`plugin-dist/`) carries skills, agents, hooks, and commands. After install, Claude Code auto-loads it as the `mainframe` plugin via the skills-dir mechanism, and everything inside becomes available with the `mainframe:` namespace prefix (e.g. `/mainframe:code-audit`, `subagent_type: "mainframe:python-backend-engineer"`). That namespace is the visible mark that something is coming from this hub, not from your local project setup or another plugin.
+- **Single-file and per-item symlinks** (`export/`) carry the umbrella `CLAUDE.md`, the permission `settings.json`, path-scoped `rules/`, and a small credentials helper — pieces the plugin format does not currently support.
+
+See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -91,19 +93,24 @@ cd ~/Documents/projects/MAINFRAME
 ```mermaid
 graph LR
     A[git clone] --> B[./install.sh]
-    B --> C{Pre-existing<br/>file?}
-    C -->|yes| D[Backup to<br/>.backup-TIMESTAMP]
-    C -->|no| E[Create symlink]
-    D --> E
-    E --> F[~/.claude/&lt;layer&gt;/&lt;item&gt;<br/>→ repo/export/&lt;layer&gt;/&lt;item&gt;]
+    B --> C[plugin-dist/ →<br/>~/.claude/skills/mainframe/]
+    B --> D[export/CLAUDE.md & settings.json<br/>→ ~/.claude/ symlinks]
+    B --> E[export/rules/* →<br/>~/.claude/rules/ per-item]
+    C --> F[Claude auto-loads<br/>'mainframe' plugin]
+    D --> G[Umbrella + permissions<br/>active in every session]
+    E --> G
+    F --> G
 ```
 
 What `install.sh` does:
 
-- **Per-item symlinks** from `export/{skills,hooks,rules,agents,commands,output-styles}/*` into matching directories under `~/.claude/`. Composes with any existing user-created skills/hooks/rules — does NOT replace the whole directory.
-- **Backs up** any pre-existing real file before replacing with a symlink.
+- **One symlink for the plugin** — `plugin-dist/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads it and prefixes everything inside with the `mainframe:` namespace.
+- **Single-file symlinks** for the umbrella `CLAUDE.md` and the permission `settings.json` (the plugin format does not provide an equivalent for these).
+- **Per-item symlinks** for `export/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
+- **Credentials helper** — links `export/scripts/secret` into `~/.local/bin/` and seeds `~/.config/credentials/` + `~/.claude/credentials-index.md` from the template.
+- **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
+- **Backs up** any pre-existing real file before replacing it with a symlink.
 - **Idempotent** — re-running is a no-op when state matches.
-- **Drift cleanup** — removes managed symlinks whose source disappeared since the last run.
 
 Options:
 
@@ -113,6 +120,8 @@ Options:
 ./install.sh --uninstall  # remove managed symlinks
 ./install.sh --help
 ```
+
+To temporarily disable the plugin without uninstalling, use `claude plugin disable mainframe` (and `claude plugin enable mainframe` to re-enable).
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -167,20 +176,41 @@ Other model / effort combinations may work but I haven't verified them. When an 
   <img src="assets/divider.png" alt="" width="100%">
 </p>
 
-## What's inside
+## Directory map
 
-| Path | Purpose |
-|------|---------|
-| [`export/CLAUDE.md`](export/CLAUDE.md) | Umbrella operating instructions — loaded into every Claude Code session globally |
-| [`export/settings.json`](export/settings.json) | Permission rules (allow/ask/deny) + hook registration |
-| [`export/skills/`](export/skills/) | Claude Code skills — domain playbooks (code audit, secrets, testing strategy, stack-specific backend/frontend patterns, etc.) |
-| [`export/agents/`](export/agents/) | File-based subagents: `react-frontend-engineer`, `python-backend-engineer`, `nestjs-backend-engineer`, `web-search` |
-| [`export/hooks/`](export/hooks/) | Pre/post-tool-use Python scripts for live validation and safety (security scans, suppression-marker detection, comment discipline) |
-| [`export/rules/`](export/rules/) | Path-scoped rule files loaded on-demand via `paths:` frontmatter |
-| [`export/commands/`](export/commands/) | Slash commands |
-| [`export/output-styles/`](export/output-styles/) | Output style overrides |
-| [`tools/`](tools/) | Python validators for `CLAUDE.md` and `SKILL.md` (run by hooks, also runnable manually) |
-| [`docs/layers/`](docs/layers/) | Architecture specs per layer |
+```
+MAINFRAME/
+├── README.md, LICENSE, CONTRIBUTING.md   # project meta
+├── install.sh                            # installer (creates the symlinks into ~/.claude/)
+├── assets/                               # README images (banner, divider, badge)
+│
+├── plugin-dist/                          # the plugin — auto-loads as 'mainframe' after install
+│   ├── .claude-plugin/plugin.json        # plugin manifest (name, version, license)
+│   ├── skills/                           # 14 skills, one folder per skill
+│   ├── agents/                           # 4 file-based sub-agents (Python, Node.js, React, web-search)
+│   ├── commands/                         # slash commands (currently empty)
+│   └── hooks/
+│       ├── hooks.json                    # which hook fires on which event
+│       ├── scripts/                      # 13 Python scripts (security scans, marker discipline, ...)
+│       └── rules/                        # Semgrep YAML rules
+│
+├── export/                               # what the plugin format does NOT carry
+│   ├── CLAUDE.md                         # umbrella operating rules (partnership, evidence, honesty, ...)
+│   ├── settings.json                     # permissions (allow/ask/deny tiers)
+│   ├── rules/                            # path-scoped guidance (currently empty, future-proof)
+│   ├── scripts/secret                    # credentials helper script
+│   └── templates/credentials-index.md    # starter template for the credentials index
+│
+├── tools/                                # Python validators (used by hooks; runnable manually)
+│   ├── validate-claude-md.py             # umbrella spec + project-agnosticism check
+│   ├── validate-skill.py                 # skill format + size limits
+│   └── agnostic-blacklist.txt.example    # copy to agnostic-blacklist.txt and add your own project names
+│
+└── docs/
+    └── layers/                           # architecture spec per layer (skills, agents, hooks, rules, ...)
+```
+
+Anything you do not see here lives outside the repo by design — internal ADRs, working notes, the maintainer's inbox of unprocessed candidates, and per-machine memory are all gitignored. The published artifact is the hub itself, not the maintainer's working files.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -224,12 +254,12 @@ graph TD
 
 ## Principles
 
-Every artifact in `export/` holds these:
+Every artifact shipped by this hub (whether in `plugin-dist/` or `export/`) holds these:
 
 1. **Project-agnostic** — no hardcoded project names, stacks, paths, or domains.
 2. **Evidence-based** — new rules need real experience, an authoritative source, or a measured experiment. Not "feels right".
 3. **English in artifacts** — skills, agents, commands, hooks all in English (LLM adherence).
-4. **Single source of truth** — each artifact exists in exactly one location in `export/`.
+4. **Single source of truth** — each artifact exists in exactly one location in the repo.
 5. **Sub-agent economy** — pick the right model per task (Haiku for trivial, Sonnet for most research, Opus only for genuine reasoning needs).
 
 <p align="center">
