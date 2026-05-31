@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Validator for skills in MAINFRAME hub (export/skills/**).
+Validator for skills in MAINFRAME hub (plugin-dist/skills/**).
 
 Checks Anthropic spec + hub discipline limits (see ADR 0003 and
 docs/layers/skills.md).
@@ -48,7 +48,7 @@ except ImportError as e:
 
 # ---- Configuration ----
 
-SKILLS_DIR = PROJECT_ROOT / "export" / "skills"
+SKILLS_DIR = PROJECT_ROOT / "plugin-dist" / "skills"
 
 # Limits (see ADR 0003)
 MAX_SKILL_TOKENS = 5000          # body that survives auto-compaction in full
@@ -319,10 +319,10 @@ def format_human(target: Path, issues: list[dict]) -> str:
 # ---- Skill discovery ----
 
 def find_skill_dir_for_file(file_path: Path) -> Path | None:
-    """Given a file under export/skills/**, find the enclosing skill directory.
+    """Given a file under plugin-dist/skills/**, find the enclosing skill directory.
 
-    A "skill directory" is the immediate child of export/skills/.
-    Returns None if file_path is not inside export/skills/.
+    A "skill directory" is the immediate child of plugin-dist/skills/.
+    Returns None if file_path is not inside plugin-dist/skills/.
     """
     try:
         rel = file_path.resolve().relative_to(SKILLS_DIR.resolve())
@@ -344,9 +344,9 @@ def all_skill_dirs() -> list[Path]:
 def run_session_start() -> int:
     skills = all_skill_dirs()
     if not skills:
-        print("## Skills (export/skills/) — no skills yet")
+        print("## Skills (plugin-dist/skills/) — no skills yet")
         return 0
-    print("## Skills validation (export/skills/)")
+    print("## Skills validation (plugin-dist/skills/)")
     for s in skills:
         iss = validate_skill(s)
         errors = [i for i in iss if i["level"] == "error"]
@@ -376,7 +376,7 @@ def run_from_hook() -> int:
 
     skill_dir = find_skill_dir_for_file(Path(file_path))
     if skill_dir is None:
-        return 0  # not under export/skills/, exit instantly
+        return 0  # not under plugin-dist/skills/, exit instantly
 
     issues = validate_skill(skill_dir)
     if not issues:
@@ -387,9 +387,9 @@ def run_from_hook() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validator for skills in export/skills/.")
+    parser = argparse.ArgumentParser(description="Validator for skills in plugin-dist/skills/.")
     parser.add_argument("path", nargs="?", help="Path to a skill directory or any file inside one.")
-    parser.add_argument("--all", action="store_true", help="Validate every skill under export/skills/.")
+    parser.add_argument("--all", action="store_true", help="Validate every skill under plugin-dist/skills/.")
     parser.add_argument("--json", action="store_true", help="JSON output (CLI mode).")
     parser.add_argument("--from-hook", action="store_true", help="PostToolUse hook mode (reads stdin).")
     parser.add_argument("--session-start", action="store_true", help="SessionStart hook mode (short summary).")
