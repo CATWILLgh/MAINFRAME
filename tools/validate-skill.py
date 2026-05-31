@@ -2,8 +2,7 @@
 """
 Validator for skills in MAINFRAME hub (plugin-dist/skills/**).
 
-Checks Anthropic spec + hub discipline limits (see ADR 0003 and
-docs/layers/skills.md).
+Checks Anthropic spec + hub discipline limits (see docs/layers/skills.md).
 
 Run with the project's local venv (which has tiktoken and pyyaml):
   .venv/bin/python3 tools/validate-skill.py <skill_dir>
@@ -50,7 +49,7 @@ except ImportError as e:
 
 SKILLS_DIR = PROJECT_ROOT / "plugin-dist" / "skills"
 
-# Limits (see ADR 0003)
+# Limits (see docs/layers/skills.md)
 MAX_SKILL_TOKENS = 5000          # body that survives auto-compaction in full
 MAX_SKILL_LINES = 500            # Anthropic recommendation at first load
 MAX_SUPPORT_TOKENS = 5000        # hub discipline

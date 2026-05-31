@@ -66,7 +66,7 @@ Authoritative source: [`packages/shadcn/src/commands/info.ts`](https://github.co
 }
 ```
 
-The Anthropic-authored shadcn skill that ships in `inbox/` references `isRSC`, `tailwindCssFile`, `aliasPrefix`, and `packageManager` — those names are **wrong** at the JSON output layer. They are internal types inside the CLI source, not what `--json` emits. Use the names above. `packageManager` is NOT in this output — detect it from the lockfile (handled by `react-frontend-patterns/recon.js`).
+The Anthropic-authored shadcn skill references `isRSC`, `tailwindCssFile`, `aliasPrefix`, and `packageManager` — those names are **wrong** at the JSON output layer. They are internal types inside the CLI source, not what `--json` emits. Use the names above. `packageManager` is NOT in this output — detect it from the lockfile (handled by `react-frontend-patterns/recon.js`).
 
 When the CLI version diverges from this skill: re-read `collectInfo` at the source URL above and update this section. The CLI runs every shadcn project's skill on every interaction, per upstream design — schema drift is a real risk.
 

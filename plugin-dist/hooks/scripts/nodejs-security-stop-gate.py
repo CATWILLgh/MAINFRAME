@@ -16,7 +16,7 @@ Design (honestly framed — NOT a mirror of Python's ruff-fast per-edit + Stop c
   high-confidence patterns only. Probe caught child_process injection from a
   3-pattern bad-code corpus (eval / md5 / child_process). Frame this honestly
   to the model — finding ABSENCE is not a clean bill of health.
-- Hub-shipped rule `frontend-token-storage.yml` (per ADR 0061) adds the
+- Hub-shipped rule `frontend-token-storage.yml` adds the
   localStorage / sessionStorage token-storage check that the public ruleset
   does not cover. Lives next to this script under `rules/`, located via
   `os.path.realpath(__file__)` so the symlinked deployment still finds it.

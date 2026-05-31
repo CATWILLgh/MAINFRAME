@@ -107,9 +107,7 @@ Auto-mode (`defaultMode: "auto"`) добавляет 4-шаговый алгор
 
 **Категории default block (примеры из docs):** «destroying data through force-pushes or mass deletions», «deleting remote git branches from vague instructions», «degrading security by disabling logging», «retrying failed deployment commands with safety-check flags removed», «irreversibly destroying files that existed before the session». Полный список — через `claude auto-mode defaults` команду; в docs не опубликован полностью.
 
-Подробнее: [[permissions-auto-mode-classifier memory]].
-
-### 1.8. 3-tier модель хаба (2026-05-28, ADR 0031)
+### 1.8. 3-tier модель хаба (2026-05-28)
 
 Категоризация правил в `export/settings.json` по 3 уровням с явными критериями. Источники: OWASP LLM06 (Excessive Agency), NIST SP 800-53 AC-6/CM-7 (least privilege/functionality), Anthropic Auto Mode docs, real-world incidents (Replit 2025-07, PocketOS 2026-04, nx supply chain 2025-08).
 
@@ -119,11 +117,9 @@ Auto-mode (`defaultMode: "auto"`) добавляет 4-шаговый алгор
 
 **Tier 3 — `allow`** (audit без prompt): изолировано в working dir + обратимо + явно запрошено. Read-only команды НЕ требуют явных `allow` правил — Claude Code auto-allows их.
 
-Полные критерии с примерами: [[permissions-tier-model memory]].
-
 ### 1.9. Path-scoped control — только через hook
 
-Matcher-based path control (например, `Bash(rm -rf ./inbox/*)`) **ненадёжен**: Claude может писать абсолютные или относительные пути, нормализации перед сравнением нет, glob/tilde/variable expansion не разрешается перед matching. Единственный надёжный способ — `PreToolUse` hook со скриптом, который парсит команду через `shlex`, разрешает пути через `os.path.abspath`/`expanduser`/`expandvars`, проверяет принадлежность к `$CLAUDE_PROJECT_DIR`.
+Matcher-based path control (например, `Bash(rm -rf ./private-dir/*)`) **ненадёжен**: Claude может писать абсолютные или относительные пути, нормализации перед сравнением нет, glob/tilde/variable expansion не разрешается перед matching. Единственный надёжный способ — `PreToolUse` hook со скриптом, который парсит команду через `shlex`, разрешает пути через `os.path.abspath`/`expanduser`/`expandvars`, проверяет принадлежность к `$CLAUDE_PROJECT_DIR`.
 
 Caveat: hook `permissionDecision: "ask"` в auto-mode переходит в `"defer"` — не даёт UI prompt, а сохраняет вызов для Agent SDK wrapper. То есть hook даёт path-precision, но не возвращает интерактивность в auto-mode.
 
@@ -171,16 +167,12 @@ Caveat: hook `permissionDecision: "ask"` в auto-mode переходит в `"de
 - Anywhere-form надёжен только в `deny`. В `ask` — не работает совсем.
 - Prefix-form работает в `ask` для одних команд, не для других — причина неизвестна (см. серая зона).
 
-### 2.3. ADR'ы
-
-- [ADR 0012](../decisions/0012-permissions-ask-no-verify.md) — `permissions.ask` на `--no-verify`. 5 prefix-form patterns применены, composite handling — open (см. серая зона #2 ниже).
-
 ---
 
 ## 3. Gray zones / open questions
 
 1. **Почему `Bash(prefix:*)` в `deny` не блокирует, а в `allow` блокирует?** Docs описывают единый matching engine; различие — undocumented runtime quirk.
-2. **Почему `Bash(git commit --no-verify*)` не fires в `ask` на composite, хотя `Bash(rm -rf *)` fires?** Гипотезы: quoting (`-m "..."`), trailing flag combinations, специфика обработки `--no-verify`. Требует доп. эксперимента — в `docs/backlog.md` v2.3.x.
+2. **Почему `Bash(git commit --no-verify*)` не fires в `ask` на composite, хотя `Bash(rm -rf *)` fires?** Гипотезы: quoting (`-m "..."`), trailing flag combinations, специфика обработки `--no-verify`. Требует доп. эксперимента.
 3. **`acceptEdits` mode + `ask` правила** — поведение не документировано. Empirical: `rm -rf` fires (denied); `git commit --no-verify` не fires. Inconsistent.
 4. **`ask` rules в headless `-p` mode (без `--dontAsk`)** — по аналогии с dontAsk должно быть deny, прямо не сказано.
 5. **Symlinks на settings paths** — не упомянуты в docs. Empirically: работают (хаб их использует), file watcher подхватывает.
@@ -202,4 +194,3 @@ Caveat: hook `permissionDecision: "ask"` в auto-mode переходит в `"de
 
 **Internal:**
 - Эмпирика хаба 2026-05-27 (deny: prefix vs anywhere) и 2026-05-28 (ask: prefix vs anywhere, composite, runtime quirks) — таблица §2.2.
-- ADR 0012 — практическое применение.

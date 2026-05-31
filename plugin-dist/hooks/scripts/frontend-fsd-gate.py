@@ -5,7 +5,7 @@ Opt-in per project: fires ONLY when `.dependency-cruiser.{cjs,js,json}` exists
 in the session cwd. If absent, exits silently — the hub does not impose FSD
 on projects that did not opt in.
 
-Design (ADR 0061 — frontend quality iteration):
+Design:
 - Architecture enforcement, NOT security. Catches upward-direction imports
   forbidden by FSD: entities → features/pages/widgets, shared → entities,
   features → pages, etc. Per https://feature-sliced.design.
@@ -28,7 +28,7 @@ Why not a per-project hard-coded ruleset shipped by the hub: project layouts
 diverge (alias prefix `@/` vs `~/`, monorepo `apps/X/src/` vs flat `src/`,
 custom layer names). A one-size-fits-all hub-shipped config would FP on most
 real projects. Opt-in via user-defined config = zero noise where unwanted,
-real signal where wanted. Per ADR 0061 advisor discipline: "Conditional on
+real signal where wanted. Per advisor discipline: "Conditional on
 context, not blanket."
 """
 

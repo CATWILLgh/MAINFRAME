@@ -10,18 +10,18 @@ file (with extension-aware rule set + plugin flags), and emits a non-blocking
 Design (honestly framed — partial coverage, NOT a full Node-security gate):
 - BASE_RULES (all JS/TS): `eslint/no-eval`, `eslint/no-new-func` — classic RCE
   vectors via dynamic code execution. Source: oxc.rs/docs/guide/usage/linter.
-  Verified per ADR 0058 iteration-2 on synthetic bad-JS.
+  Verified on synthetic bad-JS.
 - JSX_REACT_RULES (.tsx/.jsx only): `react/no-danger` (dangerouslySetInnerHTML),
   `react/jsx-no-script-url` (href="javascript:..."), `react/jsx-no-target-blank`
-  (target="_blank" without rel=noreferrer). Verified per ADR 0061 probe on
+  (target="_blank" without rel=noreferrer). Verified by probe on
   synthetic violations.tsx + 0 FP on shadcn-style clean component.
 - JSX_A11Y_RULES (.tsx/.jsx only): `jsx-a11y/alt-text` (img without alt),
   `jsx-a11y/anchor-is-valid` (a without href / bad href),
-  `jsx-a11y/aria-role` (invalid ARIA role). Verified per ADR 0061 probe on
+  `jsx-a11y/aria-role` (invalid ARIA role). Verified by probe on
   synthetic violations.tsx + 0 FP on shadcn `<Avatar>`/`<Label>`/`<Field>`.
 - `react-perf-plugin` deliberately EXCLUDED — empirically a FP firehose
   (fires on every `onClick={handler}` from `useState` + every `style={{}}`).
-  Skip per ADR 0061 + ADR 0056 curation lesson.
+  Skip per curation lesson on per-edit FP cost.
 - Out of scope for this per-edit hook: weak crypto, TLS verification disabled,
   YAML unsafe load, hardcoded credentials, full Semgrep p/security-audit
   ruleset. Partially covered at Stop by `nodejs-security-stop-gate.py`.

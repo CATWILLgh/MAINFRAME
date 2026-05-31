@@ -231,7 +231,7 @@ def load_blacklist() -> list[str]:
 
 
 def check_r6_agnostic(graph: list) -> list[dict]:
-    """Принцип проектной агностичности: blacklist по docs/principles.md, case-insensitive substring."""
+    """Принцип проектной агностичности: blacklist в tools/agnostic-blacklist.txt, case-insensitive substring."""
     patterns = load_blacklist()
     if not patterns:
         return []
@@ -248,7 +248,7 @@ def check_r6_agnostic(graph: list) -> list[dict]:
                         "level": "warning",
                         "file": str(path),
                         "line": line_num,
-                        "message": f"найден паттерн `{pat}` — проектная специфика в глобальном файле (см. docs/principles.md).",
+                        "message": f"найден паттерн `{pat}` — проектная специфика в глобальном файле (нарушает принцип agnostic, см. docs/layers/claude-md.md).",
                     })
     return issues
 

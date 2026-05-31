@@ -12,9 +12,7 @@
 Слой = тип артефакта в `export/`, который доставляется в `~/.claude/` через симлинк (`install.sh`) и действует во **всех** проектах пользователя без правок на стороне проекта.
 
 **Не слои:**
-- `docs/` — конвенции, решения, спеки, backlog (то, что ты сейчас читаешь).
-- `reference/` — petrified исходники с заголовком.
-- `inbox/` — очередь необработанных артефактов.
+- `docs/layers/` — спеки слоёв (то, что ты сейчас читаешь).
 - `tools/` — скрипты, owned by хабом (валидаторы).
 
 ## Канонический список слоёв
@@ -33,8 +31,8 @@
 
 **Notes:**
 - (4), (5) и (6) технически живут в одном файле (`settings.json`), но это **разные слои** — у них разные правила синтаксиса, разный eval, разные failure modes, разные источники истины. Спеки разнесены.
-- (2), (7), (8), (9) — заранее зарезервированы; (2) Rules введён 2026-05-29 ([ADR 0040](../decisions/0040-rules-layer.md)) после empirical-верификации paths-activation; конкретных файлов в `export/rules/` пока нет — будут по мере выявления path-scoped guidance.
-- Все симлинки создаются `install.sh` — покрывает все 8 слоёв с 2026-05-29 ([ADR 0041](../decisions/0041-install-sh-extended-coverage.md)). Использовать: `./install.sh` (sync), `./install.sh --dry-run` (диагностика), `./install.sh --uninstall` (снять симлинки).
+- (2), (7), (8), (9) — заранее зарезервированы; (2) Rules введён 2026-05-29 после empirical-верификации paths-activation; конкретных файлов в `export/rules/` пока нет — будут по мере выявления path-scoped guidance.
+- Все симлинки создаются `install.sh` — покрывает все 8 слоёв с 2026-05-29. Использовать: `./install.sh` (sync), `./install.sh --dry-run` (диагностика), `./install.sh --uninstall` (снять симлинки).
 
 ## External touchpoints (не наши слои, но знать стоит)
 
@@ -92,6 +90,6 @@ MCP — стандарт от Anthropic, позволяющий Claude'у под
 
 ## Известная серая зона по валидаторам и file watcher на симлинках
 
-- ~~Точная процедура `install.sh`~~ — закрыто 2026-05-29 в [ADR 0041](../decisions/0041-install-sh-extended-coverage.md).
-- Validate matrix per layer — какой validator проверяет какой слой и при каком событии — `docs/backlog.md`. Включает решение по `validate-rules.py` (см. backlog).
+- ~~Точная процедура `install.sh`~~ — закрыто 2026-05-29.
+- Validate matrix per layer — какой validator проверяет какой слой и при каком событии — open future work. Включает решение по `validate-rules.py`.
 - Поведение симлинков `~/.claude/settings.json` → external file для file watcher — empirically работает (свежий settings.json подхватывается через симлинк без рестарта сессии), но без формальной проверки smoke-тестом.

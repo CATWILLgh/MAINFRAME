@@ -85,17 +85,17 @@ Skill можно сделать ближе к sub-agent: `context: fork`. Sub-ag
 
 ### 2.1. Текущие скиллы в `export/skills/`
 
-| Имя | `user-invocable` | `disable-model-invocation` | Назначение | ADR |
-|---|---|---|---|---|
-| `no-suppression-markers` | false | (нет) — auto-loads | Self-discipline: не оставлять TODO/FIXME/skip/disable | [0004](../decisions/0004-suppression-markers-cross-layer.md) |
-| `severity-calibration` | false | (нет) — auto-loads | Калибровка severity, rubric Critical/High/Medium/Low | [0008](../decisions/0008-severity-calibration.md) |
-| `code-audit` | false | (нет) — auto-loads | Параллельный multi-aspect аудит через Explore | [0009](../decisions/0009-code-audit-skill.md) |
-| `surface-ticket` | false | (нет) — auto-loads | Operational companion к ADR 0017: формат тикета для out-of-scope находки в `docs/tickets/` проекта; 5-state lifecycle + audit + reopen-в-том-же-файле | [0018](../decisions/0018-surface-ticket-skill.md) |
-| `ops-app-server-safety` | false | (нет) — auto-loads | Защита от дубликатов dev-серверов и Docker-стеков: preflight по порту/процессу, безопасный перезапуск через SIGTERM с эскалацией. Первый скилл без якоря в CLAUDE.md (чистый auto-loading) | [0028](../decisions/0028-ops-app-server-safety-skill.md) |
+| Имя | `user-invocable` | `disable-model-invocation` | Назначение |
+|---|---|---|---|
+| `no-suppression-markers` | false | (нет) — auto-loads | Self-discipline: не оставлять TODO/FIXME/skip/disable |
+| `severity-calibration` | false | (нет) — auto-loads | Калибровка severity, rubric Critical/High/Medium/Low |
+| `code-audit` | false | (нет) — auto-loads | Параллельный multi-aspect аудит через Explore |
+| `surface-ticket` | false | (нет) — auto-loads | Формат тикета для out-of-scope находки в проекте; 5-state lifecycle + audit + reopen-в-том-же-файле |
+| `ops-app-server-safety` | false | (нет) — auto-loads | Защита от дубликатов dev-серверов и Docker-стеков: preflight по порту/процессу, безопасный перезапуск через SIGTERM с эскалацией. Первый скилл без якоря в CLAUDE.md (чистый auto-loading) |
 
-Все 5 скиллов активированы 2026-05-28 (раскат через `install.sh`, см. [ADR 0041](../decisions/0041-install-sh-extended-coverage.md)).
+Все 5 скиллов активированы 2026-05-28 (раскат через `install.sh`).
 
-**Все пять используют `description + when_to_use` split** (обновлено 2026-05-28) **в нейтральном стиле** (ADR 0027 — описываем триггер, не источник триггера). Combined chars в пределах валидатора (1536).
+**Все пять используют `description + when_to_use` split** (обновлено 2026-05-28) **в нейтральном стиле** (описываем триггер, не источник триггера). Combined chars в пределах валидатора (1536).
 
 ### 2.2. Лимиты валидатора хаба
 
@@ -114,22 +114,16 @@ Skill можно сделать ближе к sub-agent: `context: fork`. Sub-ag
 ### 2.3. Принципы хаба для скиллов
 
 - **Триггер-фразы — в `when_to_use`, не в `description`.** Description = что делает, when_to_use = когда сработать. После split 2026-05-28 у нас именно так.
-- **Стиль формулировок — нейтральный, через ситуацию, без привязки к стороне** (ADR 0027, 2026-05-28). Описываем триггер, не источник триггера. Запрещены формулировки `"Use when the user asks..."`, `"Trigger when Claude is planning..."`. Правильно: `"Use when starting, restarting, or stopping a long-running development server or container stack."`. Причина — механика подключения сопоставляет *task* с *description*, не различая источник задачи (сообщение пользователя или собственный план модели). Условия применимости стиля: (а) конкретность — vague формулировки приводят к ложным срабатываниям; (б) сохранение якорных ключевых слов (команды типа `npm run dev`, имена процессов, глаголы действий). Подробнее: [[skill-description-style memory]].
-- **`user-invocable: false` по умолчанию**, кроме случаев с side effects (commit, deploy, scaffold). См. [hub-skill-visibility-criterion memory](file:///Users/user/.claude/projects/-Users-user-Documents-projects-MAINFRAME/memory/hub-skill-visibility-criterion.md). Критерий = side effects, не invocation frequency.
+- **Стиль формулировок — нейтральный, через ситуацию, без привязки к стороне** (2026-05-28). Описываем триггер, не источник триггера. Запрещены формулировки `"Use when the user asks..."`, `"Trigger when Claude is planning..."`. Правильно: `"Use when starting, restarting, or stopping a long-running development server or container stack."`. Причина — механика подключения сопоставляет *task* с *description*, не различая источник задачи (сообщение пользователя или собственный план модели). Условия применимости стиля: (а) конкретность — vague формулировки приводят к ложным срабатываниям; (б) сохранение якорных ключевых слов (команды типа `npm run dev`, имена процессов, глаголы действий).
+- **`user-invocable: false` по умолчанию**, кроме случаев с side effects (commit, deploy, scaffold). Критерий = side effects, не invocation frequency.
 - **`disable-model-invocation: true`** — использовать когда skill **не должен auto-load в main context**, а только preloaded в специальном sub-agent. Сейчас в хабе не применяется; запланировано для domain-skill'ов (`perf-analysis`).
 - **Связь между скиллами** — через упоминание имени в теле (`severity-calibration` упомянут в `code-audit`).
-
-### 2.4. ADR'ы
-
-- [0003](../decisions/0003-layered-architecture.md) — формальные правила скиллов (лимиты, глубина).
-- [0008](../decisions/0008-severity-calibration.md) — `severity-calibration` skill (staged).
-- [0009](../decisions/0009-code-audit-skill.md) — `code-audit` skill (staged).
 
 ---
 
 ## 3. Gray zones / open questions
 
-1. **Условия активации скилла модель решает контекстно.** Известно (verified 2026-05-28 против `features-overview`): descriptions видны Claude'у в каждом запросе сессии, matching идёт по «task» (не только user message — также собственный план модели), конкретность бьёт расплывчатость, vague descriptions → ложные срабатывания. Точный алгоритм матча — не документирован. См. [[skill-triggering-mechanics memory]].
+1. **Условия активации скилла модель решает контекстно.** Известно (verified 2026-05-28 против `features-overview`): descriptions видны Claude'у в каждом запросе сессии, matching идёт по «task» (не только user message — также собственный план модели), конкретность бьёт расплывчатость, vague descriptions → ложные срабатывания. Точный алгоритм матча — не документирован.
 2. **Конфликты between скиллами** при пересекающихся `when_to_use` — какой подключится первым? Не документировано.
 3. **Token budget после compaction** — frontmatter остаётся в системе или подгружается заново? Не проверено.
 4. **Sub-agent `skills:` preload в реальном runtime** — docs claim, не верифицировано empirically в этой сессии. Обязательная проверка при первом использовании (предыдущий опыт с permissions: docs и runtime расходятся).
@@ -145,7 +139,6 @@ Skill можно сделать ближе к sub-agent: `context: fork`. Sub-ag
 - `code.claude.com/docs/en/features-overview` — Skill vs Subagent сравнение.
 - `code.claude.com/docs/en/sub-agents` — `skills:` preload в sub-agents.
 
-**Internal:**
-- [ADR 0003](../decisions/0003-layered-architecture.md) — лимиты и discipline хаба.
+**Related:**
 - `tools/validate-skill.py` — runtime валидатор.
 - [decision-tree.md](decision-tree.md) — выбор слоя при появлении нового артефакта.

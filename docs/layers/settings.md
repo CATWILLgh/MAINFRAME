@@ -89,14 +89,6 @@
 
 При каждой нетривиальной правке `export/settings.json` создаётся `export/settings.json.backup-<timestamp>` (см. два существующих backup'а от 2026-05-27 и 2026-05-28).
 
-### 2.3. ADR'ы, влияющие на слой
-
-Косвенно (через permissions/hooks/output-styles, которые живут в settings.json):
-- [0012](../decisions/0012-permissions-ask-no-verify.md) — permissions блок (см. [permissions.md](permissions.md)).
-- [0014](../decisions/0014-stop-gate-suppression-markers.md) — hooks блок (см. [hooks.md](hooks.md)).
-
-Прямо для прочих полей — пока нет ADR'ов; правки делались инкрементально.
-
 ---
 
 ## 3. Gray zones / open questions

@@ -38,7 +38,7 @@ import sys
 
 PATTERNS = [
     (re.compile(r"\brm\s+-rf\b"),
-     "`rm -rf` matches the hub deny pattern (per ADR 0031-0033). Use `rm -r` instead — different command, passes the deny."),
+     "`rm -rf` matches the hub deny pattern. Use `rm -r` instead — different command, passes the deny."),
     (re.compile(r"\bcat\s*>\s*/tmp/"),
      "`cat > /tmp/...` heredoc creates files via shell. Prefer the Write tool — content goes to the transcript verbatim, classifier sees it, no prompt."),
     (re.compile(r"\becho\s+.+?>\s*/tmp/"),

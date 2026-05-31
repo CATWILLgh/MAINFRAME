@@ -84,7 +84,7 @@ TypeScript SDK поддерживает additional events; полный спис
 ### 1.4. Path resolution и cwd
 
 - **`cwd` hook'а** = текущий каталог сессии (может меняться через `cd`). **Не использовать относительные пути.**
-- **`${CLAUDE_PROJECT_DIR}`** — каталог запуска Claude (стабильный). Источник: `code.claude.com/docs/en/hooks` + хабовая эмпирика в `docs/rules-and-imports.md`.
+- **`${CLAUDE_PROJECT_DIR}`** — каталог запуска Claude (стабильный). Источник: `code.claude.com/docs/en/hooks` + хабовая эмпирика.
 
 ### 1.5. File watcher / hot-reload
 
@@ -94,14 +94,14 @@ TypeScript SDK поддерживает additional events; полный спис
 
 ---
 
-## 2. Hub usage & ADRs
+## 2. Hub usage
 
 ### 2.1. Текущие хуки в `export/hooks/`
 
-| Файл | Event | Статус | ADR |
-|---|---|---|---|
-| `scan-suppression-markers.py` | `PostToolUse` (Edit\|Write\|MultiEdit) | LIVE через симлинк | [0004](../decisions/0004-suppression-markers-cross-layer.md), [0013](../decisions/0013-write-overwrite-git-diff.md) |
-| `stop-gate-suppression-markers.py` | `Stop` | **STAGED** — не активирован, ждёт согласия пользователя | [0014](../decisions/0014-stop-gate-suppression-markers.md) |
+| Файл | Event | Статус |
+|---|---|---|
+| `scan-suppression-markers.py` | `PostToolUse` (Edit\|Write\|MultiEdit) | LIVE через симлинк |
+| `stop-gate-suppression-markers.py` | `Stop` | **STAGED** — не активирован, ждёт согласия пользователя |
 
 ### 2.2. Используемые vs неиспользуемые события
 

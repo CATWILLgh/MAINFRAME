@@ -5,7 +5,7 @@ Goal — not a gate, not a block. Comments aren't suppression markers; the rule
 is "default to no comments, comment only the WHY". Detection is purely regex
 on diff; the model decides if any added comment is genuine WHY or an
 anti-pattern (Position/Phase Marker, Journal/Byline, Redundant Paraphrase,
-Noise) per the CLAUDE.md Engineering rule and ADR 0045.
+Noise) per the CLAUDE.md Engineering rule.
 
 Design:
 - Non-blocking: PostToolUse cannot block anyway; only emits additionalContext.

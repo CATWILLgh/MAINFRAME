@@ -2,7 +2,7 @@
 
 > Modular instruction files that load **on demand** when Claude reads a matching file, scoped by `paths:` glob. In the hub: `export/rules/<name>.md` → symlink `~/.claude/rules/<name>.md`. Path-scoped guidance without burdening main context in unrelated projects.
 
-> Last updated: 2026-05-29 (layer introduced, ADR 0040).
+> Last updated: 2026-05-29 (layer introduced).
 
 ---
 
@@ -90,7 +90,7 @@ Historical GitHub issues against `paths:` behaviour (filed Q1 2026):
 | #23478 | `paths:` triggers on Read only, not on Write | **Confirmed as documented** — Read-only trigger is our use case anyway. |
 | #23569 | Git worktree resolution may break `paths:` | Not retested. Assume live until verified. |
 
-Full investigation: `docs/rules-and-imports.md`. Verification details: [ADR 0040](../decisions/0040-rules-layer.md), [memory user-level-rules-paths-activation](/Users/user/.claude/projects/-Users-user-Documents-projects-MAINFRAME/memory/user-level-rules-paths-activation.md).
+Verified empirically (V2 subagent test and headless `claude -p` differential) on Claude Code v2.1.128 — see §Источники below.
 
 ---
 
@@ -105,7 +105,7 @@ Full investigation: `docs/rules-and-imports.md`. Verification details: [ADR 0040
 
 Examples that fit:
 - TypeScript-specific patterns auto-loaded only when Claude touches `**/*.{ts,tsx}`.
-- `.env` handling advice auto-loaded on Read of `**/.env*` (parental to the dev/prod policy in [ADR 0036](../decisions/0036-env-file-readability.md)).
+- `.env` handling advice auto-loaded on Read of `**/.env*`.
 - SQL-migration discipline auto-loaded on Read of `**/migrations/**/*.sql`.
 
 **Do NOT use when:**
@@ -122,7 +122,7 @@ Examples that fit:
 
 ### 2.2. Hub conventions for rule files
 
-These conventions extend the hub principles (`docs/principles.md`):
+These conventions extend the hub principles:
 
 1. **Project-agnostic globs** (principle #1). Globs target file *patterns*, not project layouts. `**/*.py` is fine; `apps/myproject/src/**/*.py` is not.
 2. **English body** (principle #3). Like all artifacts shipped to the agent.
@@ -143,10 +143,6 @@ If a rule outgrows these targets, see Recipe M2 in the decision-tree (split by t
 ### 2.4. Validator
 
 No validator exists yet for `export/rules/`. When the first rule is added to the hub, evaluate whether `tools/validate-rules.py` is justified by frequency of rule edits. Until then — manual review against §2.2 + §2.3.
-
-### 2.5. ADRs
-
-- [ADR 0040](../decisions/0040-rules-layer.md) — introduction of the Rules layer; rejection of README-per-folder strategy.
 
 ---
 
@@ -172,7 +168,3 @@ No validator exists yet for `export/rules/`. When the first rule is added to the
 - V2 subagent test — pre/post Read differential. PRE=NONE, POST=magic. Confirmed on-demand in subagent.
 - Headless `claude -p` main-session test — same differential, same result. Confirmed on-demand in main session.
 
-**Internal:**
-- [docs/rules-and-imports.md](../rules-and-imports.md) — fuller `.claude/rules/` + `@import` analysis with bug-tracker references.
-- [docs/decisions/0040-rules-layer.md](../decisions/0040-rules-layer.md) — ADR introducing the layer.
-- [docs/principles.md](../principles.md) — hub principles, §1 (agnosticism), §3 (English), §4 (single source of truth).

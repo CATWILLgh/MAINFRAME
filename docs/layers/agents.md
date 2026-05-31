@@ -2,14 +2,14 @@
 
 > Изолированные субагенты с собственным контекстом. В хабе: `export/agents/<name>.md` (пока **пусто** — зарезервированный слой).
 
-> Последнее обновление: 2026-05-29 (research + дисциплина запуска; ADR 0043).
+> Последнее обновление: 2026-05-29 (research + дисциплина запуска).
 
 ---
 
 ## Где живёт
 
 - В хабе: `export/agents/<name>.md` — один markdown-файл на агента.
-- На машине: `~/.claude/agents/<name>.md` (симлинк файла, через [install.sh](../../install.sh) — [ADR 0041](../decisions/0041-install-sh-extended-coverage.md)).
+- На машине: `~/.claude/agents/<name>.md` (симлинк файла, через [install.sh](../../install.sh)).
 - Активация: после симлинка sub-agent вызывается через `Agent(subagent_type: "<name>")`.
 
 ---
@@ -18,7 +18,7 @@
 
 ### 1.1. Шесть режимов сабагентов — карта
 
-Шесть режимов с разной context-inheritance и use case'ами. Полная спецификация — [docs/subagent-modes-spec.md](../subagent-modes-spec.md) (226 строк, 5 authoritative sources).
+Шесть режимов с разной context-inheritance и use case'ами.
 
 | Режим | Activation | Context inherits | When |
 |---|---|---|---|
@@ -115,21 +115,19 @@ isolation: worktree             # форсить git worktree для file isolat
 
 ---
 
-## 2. Hub usage & ADRs
+## 2. Hub usage
 
 ### 2.1. Текущие агенты в `export/agents/`
 
-| Агент | Назначение | Activation | ADR |
-|---|---|---|---|
-| `web-search` (model: sonnet, effort: low) | Поиск authoritative информации через Context7 + WebSearch/Fetch. Возвращает structured citations с verbatim quotes. Picked через 108-датапоинт tournament — 18/18 perfect runs, zero drift по 6 verification queries. | `Agent(subagent_type: "web-search")` | [0048](../decisions/0048-web-search-agent-and-tournament-method.md) |
+| Агент | Назначение | Activation |
+|---|---|---|
+| `web-search` (model: sonnet, effort: low) | Поиск authoritative информации через Context7 + WebSearch/Fetch. Возвращает structured citations с verbatim quotes. Picked через 108-датапоинт tournament — 18/18 perfect runs, zero drift по 6 verification queries. | `Agent(subagent_type: "web-search")` |
 
-**Будущие кандидаты:** `perf-analyzer` (накопленные зёрна в [iteration-track-status.md](../iteration-track-status.md)).
-
-Методология подбора model + effort для новых агентов — skill [`agent-tournament`](../../.claude/skills/agent-tournament/SKILL.md), project-scoped в MAINFRAME.
+Методология подбора model + effort для новых агентов — внутренний skill `agent-tournament` (project-scoped в MAINFRAME).
 
 ### 2.2. Subagent discipline (research 2026-05-29)
 
-Дисциплина запуска субагентов выработана по research + ADR 0043. Базовые правила вынесены в [export/CLAUDE.md](../../export/CLAUDE.md) Orchestration; детали — здесь.
+Дисциплина запуска субагентов выработана по research. Базовые правила вынесены в [export/CLAUDE.md](../../export/CLAUDE.md) Orchestration; детали — здесь.
 
 #### 2.2.1. English prompts
 
@@ -182,7 +180,7 @@ Soft patterns (когда hard knobs не покрывают конкретны�
 Soft patterns:
 - **JSON-fenced + schema-in-prose** + «Return ONLY valid JSON matching this shape» — работает для Sonnet; для Haiku короче и без отвлечений.
 - **Labeled-block** («OUTPUT:\n…») — parse только после метки, рассуждение до неё допустимо. Устойчивее, чем «no preamble».
-- **Positive example beats negation** — конкретный sample вместо «do NOT include reasoning». Особенно для Opus 4.x ([memory opus-4-8-behavior](/Users/user/.claude/projects/-Users-user-Documents-projects-MAINFRAME/memory/opus-4-8-behavior.md)).
+- **Positive example beats negation** — конкретный sample вместо «do NOT include reasoning». Особенно для Opus 4.x.
 - Короткий prompt + шаблон в конце — для Haiku.
 
 **Anti-patterns:**
@@ -243,17 +241,13 @@ Soft patterns:
 - **`disable-model-invocation: true`** для domain skills — закрывает main context от лишней нагрузки. Связка: skill `disable-model-invocation: true` + sub-agent `skills: [name]`.
 - **English body** (принцип #3).
 - **Project-agnostic** (принцип #1) — agent не знает имена проектов, фреймворков как обязательных.
-- **«Use proactively» в `description`** для агентов авто-диспатча. Anthropic CLI sub-agents docs явно рекомендуют фразу как механизм усиления автоматической делегации: «To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field» (`code.claude.com/docs/en/sub-agents`). Применяется к любому `export/agents/<name>.md`, чей intended-mode — автоматическое подключение по match'у description'а, не explicit user invocation. Прецедент-trigger: ADR 0053 (operator failure to dispatch к `web-search` несмотря на match — отсутствие phrase contributed к miss).
-
-### 2.4. ADR'ы
-
-- [0043](../decisions/0043-subagent-discipline.md) — subagent discipline: English prompts, anti-runaway, output discipline, composition criteria.
+- **«Use proactively» в `description`** для агентов авто-диспатча. Anthropic CLI sub-agents docs явно рекомендуют фразу как механизм усиления автоматической делегации: «To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field» (`code.claude.com/docs/en/sub-agents`). Применяется к любому `export/agents/<name>.md`, чей intended-mode — автоматическое подключение по match'у description'а, не explicit user invocation.
 
 ---
 
 ## 3. Gray zones / open questions
 
-1. **`maxTurns:` enforcement — мягкое.** Empirically verified через 108 invocations в [ADR 0048](../decisions/0048-web-search-agent-and-tournament-method.md) tournament: `maxTurns: 10` нарушается частью вариантов (макс наблюдено 16 turns — haiku-low, до 1.6× cap). Среди sonnet+haiku × low/medium/high — только sonnet-medium дал 0/18 нарушений, остальные 1-2/18. Documented как «hard knob» в Anthropic spec, но runtime — partial enforcement. Не закладываться как структурная гарантия; рассматривать как soft target. Tool inheritance, deny patterns, `permissionMode` остаются основной защитой.
+1. **`maxTurns:` enforcement — мягкое.** Empirically verified через 108 invocations в tournament: `maxTurns: 10` нарушается частью вариантов (макс наблюдено 16 turns — haiku-low, до 1.6× cap). Среди sonnet+haiku × low/medium/high — только sonnet-medium дал 0/18 нарушений, остальные 1-2/18. Documented как «hard knob» в Anthropic spec, но runtime — partial enforcement. Не закладываться как структурная гарантия; рассматривать как soft target. Tool inheritance, deny patterns, `permissionMode` остаются основной защитой.
 2. **Полная frontmatter schema для file-based субагентов.** В docs упоминаются дополнительные поля (`hooks`, `color`, `mcpServers`, `memory`, `effort`), но их семантика именно при загрузке `.md` из `~/.claude/agents/` не описана explicitly. CamelCase vs kebab-case в frontmatter (`disallowedTools` vs `disabled-tools`) — verify при первом артефакте.
 3. **Sub-agent `skills:` preload empirically** — docs claim, не верифицировано в runtime. Обязательная проверка при первом использовании.
 4. **Поведение `disable-model-invocation: true` skill при preload через sub-agent `skills:`** — корректно работает? Не верифицировано.
@@ -273,8 +267,4 @@ Soft patterns:
 - Workflow tool live schema — concurrency caps `min(16, cpu_cores - 2)`, 1000-agent lifetime, `schema:` parameter, pipeline/parallel/phase primitives.
 
 **Internal:**
-- [docs/subagent-modes-spec.md](../subagent-modes-spec.md) — 226-строчная spec по 6 modes.
-- [docs/decisions/0043-subagent-discipline.md](../decisions/0043-subagent-discipline.md) — ADR с research findings.
-- [Memory opus-4-8-behavior](/Users/user/.claude/projects/-Users-user-Documents-projects-MAINFRAME/memory/opus-4-8-behavior.md) — literal interpretation, positive examples beat negation.
-- [docs/principles.md](../principles.md) §1 (agnostic), §3 (English), §5 (model selection).
 - [docs/layers/decision-tree.md](decision-tree.md) — выбор слоя при появлении нового артефакта.

@@ -136,7 +136,7 @@
 
 Все сигналы — **наблюдаемые**, не «по ощущению». Если правило сформулировано как «когда выглядит большим» — оно не enforceable. Если сформулировано как «когда содержит conditional language» — обе стороны могут указать на файл и подтвердить факт.
 
-> **Scope §A — только эволюция уже размещённого артефакта, не первичное размещение.** Эти сигналы отвечают на вопрос «когда мигрировать существующее правило/скилл», а не «куда поместить новое». Для первичного размещения используются Q1-Q4 + Recipe A-F выше. Прецедент ошибки: в ADR 0025 validation pass применил сигнал «conditional language → Recipe M1» к первичному размещению нового правила; source check скорректировал — conditional language в формулировке нового правила это **грамматика** condition-norm, не маркер процедуры.
+> **Scope §A — только эволюция уже размещённого артефакта, не первичное размещение.** Эти сигналы отвечают на вопрос «когда мигрировать существующее правило/скилл», а не «куда поместить новое». Для первичного размещения используются Q1-Q4 + Recipe A-F выше. Прецедент ошибки: validation pass применил сигнал «conditional language → Recipe M1» к первичному размещению нового правила; source check скорректировал — conditional language в формулировке нового правила это **грамматика** condition-norm, не маркер процедуры.
 
 | Сигнал (что наблюдается) | Где искать |
 |---|---|
@@ -149,7 +149,7 @@
 | Domain-specific знание в always-on слое (`stack X`, `framework Y`, проектная специфика) | Принцип #1 хаба + grep по proper nouns |
 | Hook output игнорируется моделью (модель не реагирует на `additionalContext`) | Эмпирика в сессиях |
 | Combined `description + when_to_use` skill'а близок к лимиту (1536 chars) | `validate-skill.py` warning |
-| ADR применил артефакт, и через 3+ итерации появились 2+ relate-ADR'а к нему | Подсчёт ссылок в `docs/decisions/` |
+| Артефакт применён, и через 3+ итерации появились 2+ связанных уточнения | Подсчёт ссылок в архитектурной документации |
 
 ## §B. Migration recipes
 
@@ -233,7 +233,7 @@
 
 ## §C. Disposition старого артефакта
 
-Четыре возможных финальных состояния. Это применение [ADR 0011 supersede-not-append](../decisions/0011-supersede-not-append.md) на уровне слоёв.
+Четыре возможных финальных состояния. Это применение принципа supersede-not-append на уровне слоёв.
 
 | Disposition | Когда применять | Что делать |
 |---|---|---|
@@ -256,8 +256,8 @@
 | Усиление формулировки явным rationale (без изменения по сути) | **`augmentation-in-place`** |
 
 **Прецеденты `augmentation-in-place`:**
-- [ADR 0017](../decisions/0017-surgical-flag-adjacent.md) — retro source check добавил trivial carve-out.
-- [ADR 0021](../decisions/0021-cargo-cult-and-fabrication.md) — term substitution (cargo-cult reuse) + rationale enrichment (documented LLM failure mode).
+- Retro source check добавил trivial carve-out к существующему правилу.
+- Term substitution (cargo-cult reuse) + rationale enrichment (documented LLM failure mode).
 
 ## §D. ADR mandatory
 
@@ -310,7 +310,7 @@
 
 ### Прецеденты
 
-- [ADR 0017 surgical-flag-adjacent](../decisions/0017-surgical-flag-adjacent.md) — retro-check после применения (первый случай). Verdict: HOLDS с refinement (trivial carve-out добавлен). С ADR 0018 и далее source check идёт **перед** apply, не после.
+- Первый случай: retro-check после применения. Verdict: HOLDS с refinement (trivial carve-out добавлен). С последующих миграций source check идёт **перед** apply, не после.
 
 ### Что check НЕ заменяет
 
@@ -322,10 +322,10 @@ Source check — это **дополнительный слой защиты о�
 
 ## Sanity check для новой evolution-секции
 
-Применяя эти правила к **ADR 0008 (severity-calibration)** обратным моделированием:
+Применяя эти правила к выделению `severity-calibration` в отдельный skill обратным моделированием:
 - В тот момент уже существовало правило honesty в CLAUDE.md.
 - Сигнал, по §A: «правило содержит conditional language / обрастает rubric и discipline details».
 - Recipe M1 (CLAUDE.md → Skill): capability «assign severity» + rubric + discipline → skill `severity-calibration`; универсальный принцип («reserve top level for real impact») остался в CLAUDE.md.
 - Disposition (§C): не delete (одна строка осталась в CLAUDE.md), не split — это `extend` (выделение в skill при сохранении short pointer в CLAUDE.md). Этот вариант не покрыт явно — но укладывается в **M1 by design**: «универсальная резюме-фраза остаётся в CLAUDE.md».
 
-→ Sanity check passed: применение новых правил привело бы к той же декомпозиции, что в ADR 0008. Mutual correction работает.
+→ Sanity check passed: применение новых правил привело бы к той же декомпозиции, что была сделана исторически. Mutual correction работает.

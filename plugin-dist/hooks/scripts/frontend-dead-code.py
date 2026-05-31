@@ -5,11 +5,11 @@ Opt-in per project: fires ONLY when a Knip config exists in the session cwd —
 `knip.json`, `knip.ts`, `knip.js`, `knip.config.{js,ts,mjs,cjs}`, or a `knip`
 key in `package.json`. If absent, exits silently.
 
-Design (ADR 0061 — frontend quality iteration):
+Design:
 - Dead-code reporting, NOT security. Knip with `--include files` finds source
   files that are never reached from any declared entry point. Files only,
   NOT unused exports — that mode has high FP on public-API entry points (per
-  ADR 0061 research synthesis + advisor curation).
+  research synthesis + advisor curation).
 - Stop-only. Knip scans the whole module graph; per-edit invocation would
   be too slow.
 - Conditional: the hub does not ship a Knip config — entry points and
@@ -18,8 +18,8 @@ Design (ADR 0061 — frontend quality iteration):
 - Decision: `additionalContext` (non-blocking), NOT `block`. Dead-file
   cleanup is housekeeping, not a contract violation — a blocking gate here
   would interrupt the workflow on every Stop with stale or transitional
-  files. Per ADR 0061: "context cost must be justified" — block reserved
-  for security / contract findings.
+  files. Per the hub principle "context cost must be justified" — block
+  reserved for security / contract findings.
 - Self-loop guard via `stop_hook_active`.
 - Fail-safe: ANY error → exit 0 with no output. Missing knip → silent
   (install via install.sh `bootstrap_frontend_quality_tools`).

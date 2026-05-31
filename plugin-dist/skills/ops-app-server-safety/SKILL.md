@@ -80,4 +80,4 @@ Between preflight and start there is a race window: a third process can grab the
 - Docker Compose CLI reference (`up`, `ps`, `down`) — https://docs.docker.com/reference/cli/docker/compose/up/
 - `lsof(8)` man page — https://man7.org/linux/man-pages/man8/lsof.8.html
 
-Internal: §E source check by sub-agent on 2026-05-28 — see ADR 0028.
+Internal: §E source check by sub-agent on 2026-05-28.

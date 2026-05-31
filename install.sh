@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# MAINFRAME hub installer (plugin layout per ADR 0064).
+# MAINFRAME hub installer.
 # Safe by default: backs up any existing target before linking.
 #
 # Linked:
@@ -56,7 +56,7 @@ UNINSTALL=0
 
 usage() {
     cat <<EOF
-MAINFRAME hub installer (plugin layout per ADR 0064)
+MAINFRAME hub installer
 
 Installs the hub as a Claude Code plugin: a single symlink in
 ~/.claude/skills/ points to this repo's plugin-dist/ directory, which Claude
@@ -102,7 +102,7 @@ CLAUDE_DIR="$HOME/.claude"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
 # Single-file (and single-dir) artifacts. Format: "<source-relative-to-project>:<target-absolute>"
-# Post-migration to plugin layout (ADR 0064):
+# Layout:
 #   - plugin-dist/ is symlinked as a single directory under ~/.claude/skills/mainframe/.
 #     Claude Code auto-loads it as the 'mainframe' plugin via the skills-dir mechanism,
 #     and skills/agents/commands/hooks inside get the `mainframe:` namespace prefix.
@@ -569,11 +569,9 @@ list_backups() {
     fi
 }
 
-# Per ADR 0064: the previous install layout placed each skill, agent, and hook
-# as an individual symlink under ~/.claude/<layer>/. The plugin migration moves
-# those artifacts inside the single `~/.claude/skills/mainframe/` plugin link,
-# leaving the old per-item symlinks dangling. This routine removes them and, if
-# the per-layer directory ends up empty, removes the empty directory too.
+# Old per-item symlinks under ~/.claude/{skills,agents,hooks}/ from the
+# pre-plugin install layout dangle after the move; left in place they
+# would shadow the new plugin's namespaced artifacts.
 cleanup_stale_post_migration() {
     local stale_skills=(
         code-audit curl-requests git-conventional-commits-ru nestjs-backend-patterns
