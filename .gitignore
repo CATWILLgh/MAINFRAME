@@ -1,0 +1,42 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code project-local config
+.claude/
+.claude/settings.local.json
+
+# Python venv (local toolchain — tiktoken, pyyaml)
+.venv/
+__pycache__/
+*.pyc
+
+# OS temp
+*~
+
+# install.sh backup files (may contain references to private project paths)
+*.backup
+*.backup-*
+*.bak
+
+# Personal scratch (private)
+todo
+
+# Project-internal CLAUDE.md (development context for the hub maintainer)
+# The shipped CLAUDE.md is export/CLAUDE.md and IS published.
+/CLAUDE.md
+
+# Private documents (only docs/layers/ is published)
+docs/*
+!docs/layers/
+
+# Internal queues and references
+inbox/
+reference/
