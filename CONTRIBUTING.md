@@ -119,7 +119,7 @@ Conventional Commits v1.0.0.
 
 - `type` and `scope` — **English**, lowercase
 - Breaking marker `!` — only when a downstream consumer must adapt
-- Description — your language, English is good for cross-platform readability
+- Description and body — **English** (this repo is public, international audience reads the log)
 - Body — bullet list focused on **why** (not what), what to verify, trade-offs accepted
 - No `Co-Authored-By: Claude ...` or `Generated with Claude Code` trailers
 
