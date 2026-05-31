@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="MAINFRAME" width="100%">
+</p>
+
 # MAINFRAME
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -5,13 +9,15 @@
 [![Status](https://img.shields.io/badge/status-personal--use-orange.svg)]()
 [![Style](https://img.shields.io/badge/principles-agnostic%20%7C%20evidence--based%20%7C%20English-blue.svg)](#principles)
 
-Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
+<img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
 
 A personal hub of global Claude Code customizations — `CLAUDE.md` umbrella, skills, agents, hooks, rules — that take effect across every project on the machine through symlinks into `~/.claude/`.
 
 > **Personal-use.** No support, no compatibility guarantees, no backwards-compatibility promises. Forks are welcome under MIT, but this hub is shaped to one engineer's workflow.
 
----
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## Architecture
 
@@ -32,7 +38,9 @@ graph LR
 
 Each artifact type lives in its own layer with a specified contract. See [`docs/layers/`](docs/layers/) for full layer specifications.
 
----
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## Install
 
@@ -68,7 +76,9 @@ Options:
 ./install.sh --help
 ```
 
----
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## Update
 
@@ -86,7 +96,9 @@ graph LR
     C --> D[Next Claude session:<br/>latest active]
 ```
 
----
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## What's inside
 
@@ -103,7 +115,9 @@ graph LR
 | [`tools/`](tools/) | Python validators for `CLAUDE.md` and `SKILL.md` (run by hooks, also runnable manually) |
 | [`docs/layers/`](docs/layers/) | Architecture specs per layer |
 
----
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## Layer architecture
 
@@ -137,7 +151,9 @@ graph TD
 | Output styles | [`docs/layers/output-styles.md`](docs/layers/output-styles.md) |
 | Decision tree | [`docs/layers/decision-tree.md`](docs/layers/decision-tree.md) |
 
----
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## Principles
 
@@ -149,11 +165,17 @@ Every artifact in `export/` holds these:
 4. **Single source of truth** — each artifact exists in exactly one location in `export/`
 5. **Sub-agent economy** — pick the right model per task (Haiku for trivial, Sonnet for most research, Opus only for genuine reasoning needs)
 
----
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for fork conventions, principles, validators, and commit format.
+
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
 
 ## License
 
