@@ -5,6 +5,8 @@
 [![Status](https://img.shields.io/badge/status-personal--use-orange.svg)]()
 [![Style](https://img.shields.io/badge/principles-agnostic%20%7C%20evidence--based%20%7C%20English-blue.svg)](#principles)
 
+Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
+
 A personal hub of global Claude Code customizations — `CLAUDE.md` umbrella, skills, agents, hooks, rules — that take effect across every project on the machine through symlinks into `~/.claude/`.
 
 > **Personal-use.** No support, no compatibility guarantees, no backwards-compatibility promises. Forks are welcome under MIT, but this hub is shaped to one engineer's workflow.
@@ -35,7 +37,7 @@ Each artifact type lives in its own layer with a specified contract. See [`docs/
 ## Install
 
 ```bash
-git clone https://github.com/<your-fork>/MAINFRAME ~/Documents/projects/MAINFRAME
+git clone https://github.com/CATWILLgh/MAINFRAME ~/Documents/projects/MAINFRAME
 cd ~/Documents/projects/MAINFRAME
 ./install.sh
 ```
