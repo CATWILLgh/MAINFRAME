@@ -16,7 +16,7 @@ The trigger is **the decision to not fix in this change**, not the act of notici
 - Fixed inline within scope, safely → no ticket.
 - Not fixed now (any reason: out of scope, too large, awaits decision, blocked, deferred, partial) → **ticket required before declare-done.**
 
-This makes the rule symmetric with the [marker ban](../../CLAUDE.md): a TODO/FIXME/`@ts-ignore` in code is forbidden, so the sanctioned alternative is a ticket. The discipline is behavioural (CLAUDE.md + this skill), not enforced by a hook.
+This makes the rule symmetric with the [marker ban](../../../export/CLAUDE.md): a TODO/FIXME/`@ts-ignore` in code is forbidden, so the sanctioned alternative is a ticket. The discipline is behavioural (CLAUDE.md + this skill), not enforced by a hook.
 
 ## When to write a ticket vs fix inline
 

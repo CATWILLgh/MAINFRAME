@@ -5,7 +5,7 @@ First step on activation. Two paths.
 ## Preferred: deterministic script
 
 ```bash
-node ~/.claude/skills/nestjs-backend-patterns/recon.js [project_root]
+node ~/.claude/skills/mainframe/skills/nestjs-backend-patterns/recon.js [project_root]
 ```
 
 Parses `package.json` + tsconfig + lockfile signal. Emits the RECON block to stdout deterministically. Read its source [recon.js](recon.js) if you need to extend detection signals.

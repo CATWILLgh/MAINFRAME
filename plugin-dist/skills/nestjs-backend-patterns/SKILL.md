@@ -12,7 +12,7 @@ Preloaded into the `nestjs-backend-engineer` sub-agent. Provides a dispatch tabl
 
 ## How to use
 
-1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/nestjs-backend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + tsconfig + lockfile. Manual fallback per [recon.md](recon.md) when the script is unavailable.
+1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/nestjs-backend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + tsconfig + lockfile. Manual fallback per [recon.md](recon.md) when the script is unavailable.
 2. **Apply universal principles** (below) — they hold regardless of stack.
 3. **Dispatch by recon outcome** — read the relevant supporting file(s) from the table below. Do NOT pre-read files irrelevant to the recon outcome (token discipline).
 4. **For endpoint-specific situational concerns** (idempotency, pagination, rate limiting, health probes, config-from-env) — consult [api-conventions.md](api-conventions.md) when the concern is in scope.

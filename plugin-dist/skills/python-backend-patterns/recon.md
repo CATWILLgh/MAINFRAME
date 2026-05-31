@@ -5,7 +5,7 @@ First step on activation. Two paths.
 ## Preferred: deterministic script
 
 ```bash
-python3 ~/.claude/skills/python-backend-patterns/recon.py [project_root]
+python3 ~/.claude/skills/mainframe/skills/python-backend-patterns/recon.py [project_root]
 ```
 
 Parses `pyproject.toml` (PEP 621 + Poetry + uv) and `requirements.txt`. Emits the RECON block to stdout deterministically — same input always gives same output. Read its source [recon.py](recon.py) if you need to extend detection signals.

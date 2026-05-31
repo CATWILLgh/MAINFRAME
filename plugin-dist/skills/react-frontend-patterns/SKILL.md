@@ -14,7 +14,7 @@ The companion skill `shadcn` (also preloaded) owns the **UI composition layer** 
 
 ## How to use
 
-1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/react-frontend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + lockfile + `vite.config.*` + `tsconfig*`. The script also tries `npx shadcn@latest info --json` if `components.json` is present (live truth for Tailwind version, framework, aliases). Manual fallback per [recon.md](recon.md).
+1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/react-frontend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + lockfile + `vite.config.*` + `tsconfig*`. The script also tries `npx shadcn@latest info --json` if `components.json` is present (live truth for Tailwind version, framework, aliases). Manual fallback per [recon.md](recon.md).
 2. **Refuse non-Vite stacks early.** If recon detects Next.js (`next` in deps), Remix, Astro, or React Native — surface the mismatch and exit. A separate agent will own those.
 3. **Apply universal principles** (below) — they hold regardless of project size, age, or existing structure.
 4. **Apply the architectural stance** (FSD + Boy Scout) — see the dedicated section. Pull toward FSD on new code; do not avalanche-refactor existing structure.

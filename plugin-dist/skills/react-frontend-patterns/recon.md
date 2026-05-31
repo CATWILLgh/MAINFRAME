@@ -5,7 +5,7 @@ First step on activation. Two paths.
 ## Preferred: deterministic script
 
 ```bash
-node ~/.claude/skills/react-frontend-patterns/recon.js [project_root]
+node ~/.claude/skills/mainframe/skills/react-frontend-patterns/recon.js [project_root]
 ```
 
 Parses `package.json` + `tsconfig.json` + lockfile + `components.json`. If `components.json` is present and `shadcn` is reachable on PATH or via `npx`, the script also tries `npx shadcn@latest info --json` for live truth. Emits the RECON block to stdout deterministically.

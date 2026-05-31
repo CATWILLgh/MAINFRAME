@@ -12,7 +12,7 @@ Preloaded into the `python-backend-engineer` sub-agent. Provides a dispatch tabl
 
 ## How to use
 
-1. **Recon first.** Run the script [recon.py](recon.py) — `python3 ~/.claude/skills/python-backend-patterns/recon.py [project_root]` — for deterministic parse of `pyproject.toml` + `requirements.txt`. Manual fallback per [recon.md](recon.md) when script unavailable or project is `Pipfile` / `setup.py`-only.
+1. **Recon first.** Run the script [recon.py](recon.py) — `python3 ~/.claude/skills/mainframe/skills/python-backend-patterns/recon.py [project_root]` — for deterministic parse of `pyproject.toml` + `requirements.txt`. Manual fallback per [recon.md](recon.md) when script unavailable or project is `Pipfile` / `setup.py`-only.
 2. **Apply universal principles** (below) — they hold regardless of stack.
 3. **Dispatch by recon outcome** — read the relevant supporting file(s) from the table below. Do NOT pre-read files irrelevant to the recon outcome (token discipline).
 4. **For endpoint-specific situational concerns** (idempotency, pagination, rate limiting, health probes, config-from-env) — consult [api-conventions.md](api-conventions.md) when the concern is in scope.
