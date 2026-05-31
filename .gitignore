@@ -29,6 +29,10 @@ __pycache__/
 # Personal scratch (private)
 todo
 
+# Project-name blacklist (per-fork; contains private project identifiers).
+# Template lives at tools/agnostic-blacklist.txt.example.
+tools/agnostic-blacklist.txt
+
 # Project-internal CLAUDE.md (development context for the hub maintainer)
 # The shipped CLAUDE.md is export/CLAUDE.md and IS published.
 /CLAUDE.md
