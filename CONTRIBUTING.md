@@ -19,10 +19,10 @@ You now have an independent hub. Shape it freely. Pull from upstream selectively
 
 ## Principles
 
-Every artifact in `export/` must hold these:
+Every artifact the hub ships (whether under `plugin-dist/` or `export/`) must hold these:
 
 ### 1. Project-agnostic
-No hardcoded project names, stacks, paths, or domains in anything that lands in `export/`. Stack-specific patterns live in stack-specific skills (e.g. `react-frontend-patterns`), NOT in the umbrella `CLAUDE.md`.
+No hardcoded project names, stacks, paths, or domains in any artifact. Stack-specific patterns live in stack-specific skills (e.g. `react-frontend-patterns`), NOT in the umbrella `CLAUDE.md`.
 
 **Check before contributing**: would this be useful, neutral, or harmful in a random project that doesn't use the named stack? Useful or neutral — ship. Harmful or noise — cut, or move into a stack-specific skill.
 
@@ -39,7 +39,7 @@ Each rule costs tokens and adherence. The Anthropic spec explicitly warns: longe
 Reason: LLMs are tuned on English, follow English instructions more precisely, spend fewer tokens for the same content (~30-40% savings on typical instructions).
 
 ### 4. Single source of truth
-Each artifact exists in exactly one location in `export/`. No mirrors, no copies between projects.
+Each artifact exists in exactly one location in the repo. No mirrors, no copies between projects.
 
 ### 5. Sub-agent economy
 Pick the model per task:
@@ -55,16 +55,19 @@ Always set `model` explicitly in `Agent` calls — never let it default.
 
 1. **Decide the layer** using [`docs/layers/decision-tree.md`](docs/layers/decision-tree.md). It walks 4 axes (activation, context isolation, kind, cross-layer triggering) plus the bloat-prevention toolkit (`when_to_use`, `disable-model-invocation`, `context: fork`, narrow `tools:`).
 2. **Read the layer spec** at [`docs/layers/<layer>.md`](docs/layers/) — every layer has its own contract.
-3. **Create the artifact** in `export/<layer>/`.
+3. **Place the artifact** in the correct location:
+   - Skills, agents, commands, hooks → `plugin-dist/<layer>/`
+   - Path-scoped rules → `export/rules/`
+   - Umbrella `CLAUDE.md` and `settings.json` stay at `export/` root
 4. **Validate**:
    ```bash
    # CLAUDE.md changes
    python3 tools/validate-claude-md.py export/CLAUDE.md
    
    # New / changed skills
-   .venv/bin/python3 tools/validate-skill.py export/skills/<your-skill>/
+   .venv/bin/python3 tools/validate-skill.py plugin-dist/skills/<your-skill>/
    ```
-5. **Test in a fresh Claude Code session** — `./install.sh` then start a new project session and verify activation.
+5. **Test in a fresh Claude Code session** — `./install.sh` then start a new project session and verify activation (the artifact should appear with the `mainframe:` namespace prefix).
 6. **Commit** with conventional format (see below).
 
 ---
@@ -92,7 +95,7 @@ Skill format rules:
 - No dead supporting files
 
 ```bash
-.venv/bin/python3 tools/validate-skill.py export/skills/<your-skill>/
+.venv/bin/python3 tools/validate-skill.py plugin-dist/skills/<your-skill>/
 .venv/bin/python3 tools/validate-skill.py --all
 ```
 
@@ -127,7 +130,7 @@ Conventional Commits v1.0.0.
 
 **Splitting**: mixed changes get split into atomic commits by type and independent scope. A `feat` change should not be bundled with a `refactor` change in unrelated code.
 
-**Multi-line messages**: use `git commit -F /dev/stdin <<'EOF' ... EOF` (heredoc). The `-m "..."` form breaks on Cyrillic, newlines, and backticks.
+**Multi-line messages**: use `git commit -F /dev/stdin <<'EOF' ... EOF` (heredoc). The `-m "..."` form breaks on newlines and backticks (and on non-ASCII characters in shells with the wrong locale).
 
 ---
 
