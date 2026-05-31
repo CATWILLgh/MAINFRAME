@@ -1,14 +1,24 @@
 #!/usr/bin/env bash
 #
-# MAINFRAME hub installer.
-# Symlinks artifacts from this repo's export/ into ~/.claude/.
+# MAINFRAME hub installer (plugin layout per ADR 0064).
 # Safe by default: backs up any existing target before linking.
 #
 # Linked:
-#   - single files:         export/CLAUDE.md, export/settings.json
-#   - directory contents:   export/{skills,hooks,rules,agents,commands,output-styles}/*
-#     Per-item (not whole-dir symlinks) so the hub composes with any user-created
-#     skills/hooks/rules/etc. instead of replacing the entire directory.
+#   - plugin:       plugin-dist/  →  ~/.claude/skills/mainframe/
+#                   Claude Code auto-loads it as the 'mainframe' plugin via
+#                   the skills-dir mechanism. Skills, agents, commands, and
+#                   hooks inside get the `mainframe:` namespace prefix.
+#   - umbrella:     export/CLAUDE.md  →  ~/.claude/CLAUDE.md
+#                   export/settings.json  →  ~/.claude/settings.json
+#                   (Plugin format does not provide an equivalent for these.)
+#   - rules:        export/rules/* item-by-item  →  ~/.claude/rules/
+#                   (Plugin format does not support path-scoped rules with
+#                   `paths:` frontmatter; per-item keeps the layer composable.)
+#
+# Migration cleanup: removes any stale per-item symlinks in
+# ~/.claude/{skills,agents,hooks}/ left over from the pre-plugin layout. If
+# the per-layer directories end up empty, they are removed (the plugin owns
+# those artifacts now).
 #
 # Usage:
 #   ./install.sh              # install (with backup of existing files)
@@ -17,8 +27,6 @@
 #   ./install.sh --help
 #
 # Idempotent: re-running with the same state does nothing.
-# Drift cleanup: install also removes hub-symlinks in ~/.claude/<layer>/ whose
-# export/ targets have been removed since the last run.
 
 set -euo pipefail
 
@@ -48,13 +56,20 @@ UNINSTALL=0
 
 usage() {
     cat <<EOF
-MAINFRAME hub installer
+MAINFRAME hub installer (plugin layout per ADR 0064)
 
-Symlinks artifacts from this repo's export/ into ~/.claude/, so the hub's
-global Claude Code customizations take effect across every project.
+Installs the hub as a Claude Code plugin: a single symlink in
+~/.claude/skills/ points to this repo's plugin-dist/ directory, which Claude
+Code auto-loads as the 'mainframe' plugin. Skills, agents, commands, and hooks
+inside the plugin become available with the 'mainframe:' namespace prefix.
 
-Linked: export/CLAUDE.md, export/settings.json, and the contents of
-export/{skills,hooks,rules,agents,commands,output-styles}/ (item-by-item).
+Single-file artifacts that the plugin format does not support stay as direct
+symlinks: CLAUDE.md (umbrella instructions) and settings.json (permissions
+and user-level config). Path-scoped rules in export/rules/ install per-item.
+
+The first install after upgrading from the pre-plugin layout also cleans up
+stale per-item symlinks in ~/.claude/{skills,agents,hooks}/ left over from
+the old layout, and removes the empty directories if any.
 
 Usage:
   $0                  Install (creates symlinks; backs up existing files).
@@ -86,23 +101,27 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
-# Single-file artifacts. Format: "<source-relative-to-project>:<target-absolute>"
+# Single-file (and single-dir) artifacts. Format: "<source-relative-to-project>:<target-absolute>"
+# Post-migration to plugin layout (ADR 0064):
+#   - plugin-dist/ is symlinked as a single directory under ~/.claude/skills/mainframe/.
+#     Claude Code auto-loads it as the 'mainframe' plugin via the skills-dir mechanism,
+#     and skills/agents/commands/hooks inside get the `mainframe:` namespace prefix.
+#   - CLAUDE.md and settings.json stay as direct symlinks because the plugin format
+#     does not provide an equivalent for the umbrella instructions or user-level
+#     permission rules.
 ARTIFACTS=(
     "export/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md"
     "export/settings.json:${CLAUDE_DIR}/settings.json"
+    "plugin-dist:${CLAUDE_DIR}/skills/mainframe"
 )
 
 # Directories whose CONTENTS are linked item-by-item into ~/.claude/<dir>/.
-# Per-item (not a whole-dir symlink) so the hub composes with any skills/hooks
-# the user already has, instead of replacing the directory.
+# Only `rules/` remains item-by-item — the plugin format does not currently support
+# path-scoped rules with `paths:` frontmatter, so they stay outside the plugin and
+# install per-item so the hub composes with any rules the user already has.
 # Format: "<source-dir-relative>:<target-dir-absolute>"
 MANAGED_DIRS=(
-    "export/skills:${CLAUDE_DIR}/skills"
-    "export/hooks:${CLAUDE_DIR}/hooks"
     "export/rules:${CLAUDE_DIR}/rules"
-    "export/agents:${CLAUDE_DIR}/agents"
-    "export/commands:${CLAUDE_DIR}/commands"
-    "export/output-styles:${CLAUDE_DIR}/output-styles"
 )
 
 # Safe backup dir for items inside managed dirs (skills/, hooks/, rules/, etc.).
@@ -550,6 +569,89 @@ list_backups() {
     fi
 }
 
+# Per ADR 0064: the previous install layout placed each skill, agent, and hook
+# as an individual symlink under ~/.claude/<layer>/. The plugin migration moves
+# those artifacts inside the single `~/.claude/skills/mainframe/` plugin link,
+# leaving the old per-item symlinks dangling. This routine removes them and, if
+# the per-layer directory ends up empty, removes the empty directory too.
+cleanup_stale_post_migration() {
+    local stale_skills=(
+        code-audit curl-requests git-conventional-commits-ru nestjs-backend-patterns
+        no-suppression-markers ops-app-server-safety python-backend-patterns
+        react-frontend-patterns secrets-handling severity-calibration shadcn
+        surface-ticket task-workflow testing-strategy
+    )
+    local stale_agents=(
+        nestjs-backend-engineer.md python-backend-engineer.md
+        react-frontend-engineer.md web-search.md
+    )
+    local stale_hooks=(
+        bash-pattern-reminder.py comment-discipline-reminder.py frontend-dead-code.py
+        frontend-fsd-gate.py nodejs-deps-audit.py nodejs-security-scan.py
+        nodejs-security-stop-gate.py path-validation.py python-deps-audit.py
+        python-security-scan.py python-security-stop-gate.py scan-suppression-markers.py
+        stop-gate-suppression-markers.py rules
+    )
+
+    local removed=0
+    local name target
+
+    for name in "${stale_skills[@]}"; do
+        target="${CLAUDE_DIR}/skills/${name}"
+        if [[ -L "$target" ]]; then
+            if [[ $DRY_RUN -eq 1 ]]; then
+                log_action "would remove stale: ${target}"
+            else
+                rm "$target"
+                log_ok "removed stale symlink: ${target}"
+            fi
+            ((removed++))
+        fi
+    done
+    for name in "${stale_agents[@]}"; do
+        target="${CLAUDE_DIR}/agents/${name}"
+        if [[ -L "$target" ]]; then
+            if [[ $DRY_RUN -eq 1 ]]; then
+                log_action "would remove stale: ${target}"
+            else
+                rm "$target"
+                log_ok "removed stale symlink: ${target}"
+            fi
+            ((removed++))
+        fi
+    done
+    for name in "${stale_hooks[@]}"; do
+        target="${CLAUDE_DIR}/hooks/${name}"
+        if [[ -L "$target" ]]; then
+            if [[ $DRY_RUN -eq 1 ]]; then
+                log_action "would remove stale: ${target}"
+            else
+                rm "$target"
+                log_ok "removed stale symlink: ${target}"
+            fi
+            ((removed++))
+        fi
+    done
+
+    if [[ $removed -gt 0 ]]; then
+        log_info "removed ${removed} stale per-item symlinks from the pre-migration layout"
+    fi
+
+    # If agents/ and hooks/ are now empty (all entries were stale and removed),
+    # remove the directories themselves — the plugin owns them now.
+    local dir
+    for dir in "${CLAUDE_DIR}/agents" "${CLAUDE_DIR}/hooks"; do
+        if [[ -d "$dir" && -z "$(ls -A "$dir" 2>/dev/null)" ]]; then
+            if [[ $DRY_RUN -eq 1 ]]; then
+                log_action "would rmdir empty ${dir}"
+            else
+                rmdir "$dir"
+                log_ok "removed empty ${dir}"
+            fi
+        fi
+    done
+}
+
 # ---- Main ----
 
 main() {
@@ -579,9 +681,20 @@ main() {
     fi
 
     log_info "Installing MAINFRAME hub symlinks into ${CLAUDE_DIR}..."
-    log_info "Source: ${PROJECT_ROOT}/export"
+    log_info "Source: ${PROJECT_ROOT}/{export,plugin-dist}"
     log_info "Timestamp tag for any backups: ${TIMESTAMP}"
     echo
+
+    cleanup_stale_post_migration
+
+    if [[ ! -d "${CLAUDE_DIR}/skills" ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would create ${CLAUDE_DIR}/skills"
+        else
+            mkdir -p "${CLAUDE_DIR}/skills"
+            log_ok "created ${CLAUDE_DIR}/skills"
+        fi
+    fi
 
     for entry in "${ARTIFACTS[@]}"; do
         local src="${entry%%:*}"
