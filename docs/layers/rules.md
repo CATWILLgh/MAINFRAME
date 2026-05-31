@@ -136,7 +136,7 @@ No Anthropic-documented limit. Practical hub target for `paths:`-rules:
 
 - **Body ≤ ~200 lines / ~2K tokens.** Rules load every time Claude reads a matching file — the smaller, the less burden per Read.
 - **Single tight topic per rule.** Split by topic into multiple rules with distinct globs; do not pack a rule with cross-domain advice.
-- **No `@`-imports inside a rule** (per principle, avoid the undocumented mechanism — see `docs/rules-and-imports.md` §B.5).
+- **No `@`-imports inside a rule** — avoid the undocumented mechanism.
 
 If a rule outgrows these targets, see Recipe M2 in the decision-tree (split by topic) or M5 (migrate domain knowledge to a sub-agent + scoped skill).
 
@@ -149,7 +149,7 @@ No validator exists yet for `export/rules/`. When the first rule is added to the
 ## 3. Gray zones / open questions
 
 1. **Hot-reload of rule edits in active session.** Not documented. Edit takes effect on next Read of a matching file (file watcher), but order-of-operations for rules already loaded once in the session is not specified.
-2. **`@`-imports inside rule files.** Not officially documented (see `docs/rules-and-imports.md` §B.5). Not used in hub rules.
+2. **`@`-imports inside rule files.** Not officially documented. Not used in hub rules.
 3. **`paths:` matching in git worktrees** (#23569). Not retested in v2.1.128. Hub rules should avoid layouts where worktree resolution would affect glob matching.
 4. **Rule loaded once, then matching file Read again later in the same session.** Reloaded? Cached? Not documented; assume single load per session as a working model.
 5. **Conflict resolution between two paths-rules whose globs overlap.** Anthropic docs say «may pick one arbitrarily» for contradictions. Hub strategy: design non-overlapping globs.

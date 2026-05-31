@@ -122,12 +122,6 @@ TypeScript SDK поддерживает additional events; полный спис
 - **Self-exclusion** для marker-detector hook'ов: `_SELF_FILES` whitelist, иначе детектор флагается сам собой.
 - **Stdlib only** — без venv'ов и third-party deps для скорости старта.
 
-### 2.4. ADR'ы
-
-- [0004](../decisions/0004-suppression-markers-cross-layer.md) — PostToolUse `scan-suppression-markers.py`, дизайн v1.
-- [0013](../decisions/0013-write-overwrite-git-diff.md) — Write-overwrite diff для scan-hook (v2.2).
-- [0014](../decisions/0014-stop-gate-suppression-markers.md) — Stop-event `stop-gate-suppression-markers.py` (staged, v2.1).
-
 ---
 
 ## 3. Gray zones / open questions
@@ -148,6 +142,3 @@ TypeScript SDK поддерживает additional events; полный спис
 - `code.claude.com/docs/en/agent-sdk/python` — `HookEvent` type list.
 - `code.claude.com/docs/en/agent-sdk/typescript` — TS-specific types.
 
-**Internal:**
-- [`docs/rules-and-imports.md`](../rules-and-imports.md) — `$CLAUDE_PROJECT_DIR` и path resolution; хабовая эмпирика по cwd дрейфу.
-- ADR'ы 0004, 0013, 0014.
