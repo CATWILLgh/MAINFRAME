@@ -154,7 +154,7 @@ If any answer is not clear — do not execute. Surface to the user.
 
 ### 14. Commit via `git-conventional-commits-ru`
 
-When the change is ready and verified — invoke [`git-conventional-commits-ru`](../git-conventional-commits-ru/SKILL.md). It picks the description language by repo audience — the user's language for private / team repos, English for public / open-source. English `type/scope/!` always, identifier names in backticks, body as bullet list, mixed changes split into atomic commits.
+When the change is ready and verified — invoke [`git-conventional-commits-ru`](../git-conventional-commits-ru/SKILL.md). It resolves the description language from the repo (explicit `CLAUDE.md` directive → existing commit history → English default), not from the conversation. English `type/scope/!` always, identifier names in backticks, body as bullet list, mixed changes split into atomic commits.
 
 Never emit AI-attribution trailers (`Co-Authored-By: Claude …`, `Generated with Claude Code` and similar).
 
