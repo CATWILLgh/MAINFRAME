@@ -92,6 +92,16 @@ TypeScript SDK поддерживает additional events; полный спис
 
 Точный размер «brief delay» не задокументирован; эмпирически — мс-секунды.
 
+### 1.6. Hooks и субагенты (находка 2026-06-01)
+
+Раньше неявно предполагалось, что хуки — про главную сессию. Уточнено по источнику:
+
+- **`PreToolUse` / `PostToolUse` / `Stop` срабатывают и на tool-вызовы сабагента**, не только главного агента. `PreToolUseHookInput` несёт поля `agent_id` и `agent_type` — *«present when the hook fires inside a subagent»* (`code.claude.com/docs/en/agent-sdk/python`). То есть глобальный хук может различать контекст: пустой `agent_id` → главный агент, заполненный → сабагент (`agent_type` = `name` агента).
+- **Два канала навесить хук на сабагента:**
+  1. **Глобальный** — `plugin-dist/hooks/hooks.json` (или `export/settings.json`). Стреляет у всех: главный агент + каждый сабагент.
+  2. **Per-agent** — поле `hooks:` во frontmatter сабагента: scoped к этому агенту, все события, очищается по завершении; `Stop` во frontmatter рантайм-конвертится в `SubagentStop` (`code.claude.com/docs/en/sub-agents`).
+- ⚠️ **Критично:** per-agent frontmatter `hooks:` (а также `permissionMode`, `mcpServers`) **`Ignored for plugin subagents`**. Наши агенты — плагинные, значит per-agent хуки у них **не работают**. → **Кросс-агентный хук** (нужный и главному, и сабагентам) у хаба может жить **только в глобальном `plugin-dist/hooks/hooks.json`**. См. [agents.md §1.2.1](agents.md).
+
 ---
 
 ## 2. Hub usage

@@ -61,7 +61,25 @@ isolation: worktree             # форсить git worktree для file isolat
 Тело — system prompt субагента (если нет явного `prompt:`). `$ARGUMENTS` — placeholder для входных аргументов.
 ```
 
-Дополнительные поля упомянуты в `--agents` JSON list (`hooks`, `color`, `mcpServers`, `memory`, `effort`) — семантика при загрузке файла `.md` из `~/.claude/agents/` не описана explicitly; verify при первом артефакте (см. §3.2).
+### 1.2.1. Полный frontmatter (документировано — `code.claude.com/docs/en/sub-agents`)
+
+Раньше считалось, что семантика дополнительных полей (`hooks`, `mcpServers`, `memory`) «не описана explicitly» — это была gray zone. Теперь список полный и документированный:
+
+| Поле | Назначение | Примечание |
+|---|---|---|
+| `name` | id агента (required) | Хуки получают это значение как `agent_type` |
+| `description` | когда делегировать (required) | видно main Claude'у |
+| `tools` | allowlist | **Опущено → наследует ВСЕ tools, включая `Skill`.** Указано → только перечисленные |
+| `disallowedTools` | block-list | убрать tool из inherited/specified |
+| `model` | `sonnet`/`opus`/`haiku`/full-id/`inherit` | default `inherit` |
+| `maxTurns` | потолок agentic turns | soft enforcement (см. §3.1) |
+| `skills` | preload | впрыскивает **полный контент** скилла в контекст на старте; ось «что preloaded», НЕ «что доступно» (доступ — через `tools`/`Skill`) |
+| `permissionMode` | режим прав | ⚠️ **Ignored for plugin subagents** |
+| `mcpServers` | MCP-серверы агента | ⚠️ **Ignored for plugin subagents** |
+| `hooks` | lifecycle-хуки в области агента (все события; `Stop` → `SubagentStop`) | ⚠️ **Ignored for plugin subagents** |
+| `memory` | `user`/`project`/`local` | кросс-сессионная память |
+
+> ⚠️ **Критично для хаба:** наши агенты живут в `plugin-dist/` → это **plugin subagents**. Поля `permissionMode`, `mcpServers`, `hooks` в их frontmatter **игнорируются** (`code.claude.com/docs/en/sub-agents`, supported-frontmatter-fields). Следствие: задать хук / режим прав / MCP на уровне конкретного хаб-агента через frontmatter **нельзя** — работают только глобальные механизмы (`plugin-dist/hooks/hooks.json`, `export/settings.json`). Для кросс-агентного хука (нужного и главному агенту, и сабагентам) это и есть единственный путь — см. [hooks.md §1.6](hooks.md).
 
 ### 1.3. Agent tool — invocation schema
 
@@ -248,8 +266,8 @@ Soft patterns:
 ## 3. Gray zones / open questions
 
 1. **`maxTurns:` enforcement — мягкое.** Empirically verified через 108 invocations в tournament: `maxTurns: 10` нарушается частью вариантов (макс наблюдено 16 turns — haiku-low, до 1.6× cap). Среди sonnet+haiku × low/medium/high — только sonnet-medium дал 0/18 нарушений, остальные 1-2/18. Documented как «hard knob» в Anthropic spec, но runtime — partial enforcement. Не закладываться как структурная гарантия; рассматривать как soft target. Tool inheritance, deny patterns, `permissionMode` остаются основной защитой.
-2. **Полная frontmatter schema для file-based субагентов.** В docs упоминаются дополнительные поля (`hooks`, `color`, `mcpServers`, `memory`, `effort`), но их семантика именно при загрузке `.md` из `~/.claude/agents/` не описана explicitly. CamelCase vs kebab-case в frontmatter (`disallowedTools` vs `disabled-tools`) — verify при первом артефакте.
-3. **Sub-agent `skills:` preload empirically** — docs claim, не верифицировано в runtime. Обязательная проверка при первом использовании.
+2. ✓ **RESOLVED (2026-06-01).** Полная frontmatter schema теперь документирована — см. §1.2.1. Ключевая находка: `permissionMode`, `mcpServers`, `hooks` **игнорируются для plugin subagents** (наши агенты именно такие). `disallowedTools` — canonical camelCase.
+3. ✓ **RESOLVED (2026-06-01).** `skills:` preload верифицирован эмпирически этой сессией (`decision-reviewer`, `*-engineer` стартуют с preloaded скиллами и работают) + документирован: впрыскивает полный контент на старте, ось отдельная от доступа (`tools`/`Skill`). См. [skills.md §1.6](skills.md) и [[skill-triggering-mechanics]].
 4. **Поведение `disable-model-invocation: true` skill при preload через sub-agent `skills:`** — корректно работает? Не верифицировано.
 5. **Order разрешения tools** между sub-agent `tools:` allowlist и глобальными permissions (allow/deny/ask) — не явно описано.
 6. **Workflow tool vs Agent tool пересечения** — Workflow обёртка над Agent с дополнительными primitives. Когда Workflow excess, когда необходим — рекомендация в §2.2.4 эмпирическая.
