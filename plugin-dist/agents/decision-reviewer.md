@@ -4,7 +4,7 @@ description: "An independent, evidence-grounded second look at a proposed decisi
 tools: Read, Grep, Glob, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: opus
 effort: high
-maxTurns: 20
+maxTurns: 50
 permissionMode: plan
 skills:
   - decision-review

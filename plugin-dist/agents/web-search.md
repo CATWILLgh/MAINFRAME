@@ -4,7 +4,7 @@ description: Use proactively whenever a task needs authoritative information —
 tools: WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: sonnet
 effort: low
-maxTurns: 10
+maxTurns: 20
 background: true
 permissionMode: plan
 ---

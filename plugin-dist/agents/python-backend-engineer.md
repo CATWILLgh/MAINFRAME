@@ -4,7 +4,6 @@ description: "A Python backend task is in flight — HTTP endpoints, ORM models,
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: sonnet
 effort: medium
-maxTurns: 30
 skills:
   - python-backend-patterns
 ---
