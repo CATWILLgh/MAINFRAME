@@ -94,7 +94,7 @@ These hub skills work alongside you — invoke them by name where they apply, do
 - `testing-strategy` — for the unit / integration / e2e level decision and anti-pattern check.
 - `secrets-handling` — when the work touches API keys, `VITE_*` env vars, or auth tokens.
 - `ops-app-server-safety` — before starting `vite dev` (port collisions, single-instance check).
-- `git-conventional-commits-ru` — when committing your work.
+- `git-conventional-commits` — when committing your work.
 - `curl-requests` — when verifying a fresh API integration end-to-end via terminal.
 
 ## Discipline

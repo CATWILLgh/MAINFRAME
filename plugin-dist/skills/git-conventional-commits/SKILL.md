@@ -1,5 +1,5 @@
 ---
-name: git-conventional-commits-ru
+name: git-conventional-commits
 user-invocable: false
 description: "Produce Conventional Commits v1.0.0 messages for the staged change. `type(scope)[!]:` and footer tokens are always English; the description and body are written in the repo's commit language (resolved per the rule below — default English). File / function / identifier names go in backticks. Body is a bullet list of why / what to verify / trade-offs. Splits a mixed change into atomic commits by type and independent scope (feat / fix / docs / refactor / test / ci / chore / perf / build / style). Always commits via `git commit -F /dev/stdin` heredoc — `-m \"…\"` breaks on non-ASCII, newlines, and backticks. Never emits Claude / AI attribution trailers (`Co-Authored-By: Claude …`, `Generated with Claude Code`)."
 when_to_use: "Trigger when a change is staged and ready to commit — an explicit request to commit, the end of a task milestone with a clean diff, or release / changelog preparation. Also runs when a single staged change mixes types or independent scopes and needs splitting into atomic commits before review or revert."

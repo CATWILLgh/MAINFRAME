@@ -152,9 +152,9 @@ Before `git checkout <sha>`, `git reset --hard`, `git rebase`, `git push --force
 
 If any answer is not clear — do not execute. Surface to the user.
 
-### 14. Commit via `git-conventional-commits-ru`
+### 14. Commit via `git-conventional-commits`
 
-When the change is ready and verified — invoke [`git-conventional-commits-ru`](../git-conventional-commits-ru/SKILL.md). It resolves the description language from the repo (explicit `CLAUDE.md` directive → existing commit history → English default), not from the conversation. English `type/scope/!` always, identifier names in backticks, body as bullet list, mixed changes split into atomic commits.
+When the change is ready and verified — invoke [`git-conventional-commits`](../git-conventional-commits/SKILL.md). It resolves the description language from the repo (explicit `CLAUDE.md` directive → existing commit history → English default), not from the conversation. English `type/scope/!` always, identifier names in backticks, body as bullet list, mixed changes split into atomic commits.
 
 Never emit AI-attribution trailers (`Co-Authored-By: Claude …`, `Generated with Claude Code` and similar).
 
@@ -224,6 +224,6 @@ At the cap — stop, do not «keep improving». A loop hitting the cap is a sign
 - [`severity-calibration`](../severity-calibration/SKILL.md) — ranking findings honestly (used in advisor responses and reports).
 - [`no-suppression-markers`](../no-suppression-markers/SKILL.md) — `TODO` / `FIXME` / `.skip` / disable-comment ban (active throughout — never the resolution to a found issue).
 - [`ops-app-server-safety`](../ops-app-server-safety/SKILL.md) — when the work spawns dev servers or `docker compose` stacks (Step 8 verification of running processes).
-- [`git-conventional-commits-ru`](../git-conventional-commits-ru/SKILL.md) — commit step (Step 14).
+- [`git-conventional-commits`](../git-conventional-commits/SKILL.md) — commit step (Step 14).
 - [`web-search`](../../agents/web-search.md) — authoritative source verification (Step 2 Recon when Context7 misses or surfaces conflict).
 - [`decision-reviewer`](../../agents/decision-reviewer.md) — adversarial grounded review of a high-stakes approach (Step 6a, before the advisor checkpoint; conditional on cost-of-wrong).
