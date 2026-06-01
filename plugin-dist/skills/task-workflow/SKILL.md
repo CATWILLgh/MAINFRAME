@@ -97,7 +97,7 @@ Once a leading approach exists from synthesis, gate it before any writing or lar
 - **Interactive + no plan file:** the synthesised plan is presented inline; proceed unless the user objects within the same turn.
 - **Auto-mode:** proceed.
 
-A casual «ок / sounds good» in regular chat is not a substitute for `ExitPlanMode` approval on a non-trivial change with a written plan. If a plan file exists in interactive mode, route through the gate.
+A casual «ok / sounds good» in regular chat is not a substitute for `ExitPlanMode` approval on a non-trivial change with a written plan. If a plan file exists in interactive mode, route through the gate.
 
 ### 8. Execution
 

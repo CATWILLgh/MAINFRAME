@@ -2,7 +2,7 @@
 name: curl-requests
 user-invocable: false
 description: "HTTP(S) request templates and safe-defaults for `curl`: Bearer / Basic / `.netrc` auth, JSON GET/POST, multipart upload, healthcheck. Diagnostics — redirects, timeout (`--connect-timeout` + `--max-time`), retry whitelist (`--retry` covers HTTP 408 / 429 / 500-504 / 522 / 524 + connection timeouts, NOT arbitrary 4xx), header-only inspection (`-I` actually changes method to HEAD; `-i` keeps GET and just includes headers in output). Anti-patterns: hardcoded secrets, missing `--fail` / `--fail-with-body`, `-k` outside explicit debug, no `--max-time` on healthcheck, Basic over plain HTTP (cleartext), `--location` forwarding `Authorization` header to a cross-host redirect."
-when_to_use: "An HTTP endpoint needs to be checked or driven from the terminal — explicit requests («сделай curl / проверь эндпоинт / отправь запрос к API»), API testing during recon or verification, downloading or uploading by URL, debugging a web service response, healthchecking a running container or service. Also applies when verifying a freshly-edited HTTP handler — curl against the endpoint surfaces status code and response shape without re-deploying."
+when_to_use: "An HTTP endpoint needs to be checked or driven from the terminal — explicit requests («make a curl call / check an endpoint / send a request to an API»), API testing during recon or verification, downloading or uploading by URL, debugging a web service response, healthchecking a running container or service. Also applies when verifying a freshly-edited HTTP handler — curl against the endpoint surfaces status code and response shape without re-deploying."
 ---
 
 # Working with curl

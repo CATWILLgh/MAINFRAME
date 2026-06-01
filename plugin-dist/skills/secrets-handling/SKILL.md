@@ -52,7 +52,7 @@ Never assign a secret to a regular variable that gets echoed, logged, or written
 
 ## How to refer to a service in conversation
 
-When the user says «зайди на vps-store, посмотри логи nginx»:
+When the user says «go to vps-store, check the nginx logs»:
 
 1. Read `~/.claude/credentials-index.md`, locate the `vps-store` section.
 2. Note the access pattern from the index (`ssh vps-store`, key path, any pre-set env-var names).
