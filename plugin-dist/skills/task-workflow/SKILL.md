@@ -2,7 +2,7 @@
 name: task-workflow
 user-invocable: false
 description: "Universal cycle for any task that modifies code, configuration, documentation, or infrastructure — feature, bugfix, refactor, migration, ops work. Cycle: triage → recon → plan (file when ≥ 3 phases) → parallel dispatch → synthesis → advisor → execution → verification → out-of-scope tickets → edge-case sweep → advisor → git safety → commit → report. Plan files land in `~/.claude/plans/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md` — outside the project, not tracked by git, persistent across sessions. Adapts to both interactive sessions (uses `EnterPlanMode` / `ExitPlanMode` when present) and unattended auto-runs (writes the plan file directly, no blocking gate). Size and urgency do not bypass the cycle; they only change which conditional steps activate."
-when_to_use: "Trigger on any modifying task — explicit «сделай / пофикси / добавь / реализуй / зарефактори / обнови / настрой / разверни / удали», multi-file refactors, bug fixes, feature work, ops changes, doc edits that change instructions. Does not run on read-only questions («что в этом файле / как работает X / где найти Y / объясни архитектуру Z») — those bypass the cycle entirely. «Маленькая правка», «срочно», «один файл» are not exceptions — they only change which conditional steps activate (plan file, sub-agents); advisor and verification stay unconditional."
+when_to_use: "Trigger on any modifying task — an instruction to create, fix, add, implement, refactor, update, configure, deploy, or delete, in any language the user writes in; also multi-file refactors, bug fixes, feature work, ops changes, doc edits that change instructions. Does not run on read-only questions (what's in this file / how does X work / where is Y / explain the architecture of Z) — those bypass the cycle entirely. «It's a small change», «it's urgent», «just one file» are not exceptions — they only change which conditional steps activate (plan file, sub-agents); advisor and verification stay unconditional."
 ---
 
 # Task workflow
@@ -11,7 +11,7 @@ Universal cycle for any task that modifies code, configuration, documentation, o
 
 ## Top-level rule
 
-Size and urgency are not exceptions. «Маленькая правка», «срочно», «один файл» do not skip steps. They only change which *conditional* steps run — plan file is conditional on ≥ 3 phases; sub-agent dispatch is conditional on recon scope; advisor and verification stay unconditional.
+Size and urgency are not exceptions. «It's a small change», «it's urgent», «just one file» do not skip steps. They only change which *conditional* steps run — plan file is conditional on ≥ 3 phases; sub-agent dispatch is conditional on recon scope; advisor and verification stay unconditional.
 
 «This is too small for X» is the most reliable signal that you are about to drop a step you should not drop.
 
@@ -31,6 +31,8 @@ The cycle adapts to two modes:
 When in doubt — prefer auto (safer default; the user's primary workflow is unattended runs). «Could the user respond in seconds?» is not a reliable signal — the model cannot measure that.
 
 ## Cycle
+
+The full control-flow map, including every turn-back, is in [flow.md](flow.md).
 
 ### 1. Triage (one question)
 
@@ -55,86 +57,9 @@ Recon trades minutes now against hours of regression debugging later. Skipping i
 
 ### 3. Plan — audit file when ≥ 3 phases or ≥ 3 edge-cases
 
-Write an audit file before dispatching execution work when **either**:
-- The task decomposes into 3+ phases with dependencies, OR
-- Recon surfaced 3+ edge-cases / risks worth tracking.
+Write an audit file before dispatching execution work when **either** the task decomposes into 3+ dependent phases, OR recon surfaced 3+ edge-cases / risks worth tracking. Below those thresholds — skip it; the cycle still runs.
 
-Below those thresholds — skip the audit file; the cycle below still runs.
-
-**Two paths exist — they serve different roles, do not conflate.**
-
-| Role | Path | Owner | Lifetime |
-|---|---|---|---|
-| Tool plan file (interactive `EnterPlanMode` only) | `~/.claude/plans/<random-kebab-slug>.md` (e.g. `typed-forging-glacier.md`) — flat, no hierarchy, no date | Claude Code tool (path injected via plan-mode system message) | Single session, may be reused or replaced by the tool |
-| Hub audit copy (always) | `~/.claude/plans/audit/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md` — hierarchical, dated | This skill | Persistent across sessions, audit trail |
-
-Verified empirically against Claude Code plan mode (2026-05-30 inspection): the tool-controlled path is flat with a random slug; ours is a parallel audit convention living under the `audit/` subdirectory so it does not collide.
-
-**Audit path components:**
-- `<basename(cwd)>` — `basename "$(pwd)"` — derives the project segment automatically, no per-project configuration.
-- `<YYYY-MM-DD>` — today's date in ISO.
-- `<topic>` — short kebab-case slug from the task headline (≤ 6 words).
-
-`mkdir -p` the directory; the audit copy lives outside any project, is never tracked by git, and persists across sessions. Audit retrospectively with `ls ~/.claude/plans/audit/<project>/`.
-
-**Format (mirrors Claude Code plan mode Phase 4 instructions, extended with phases / risks / retrospective):**
-
-```markdown
-# <Topic title>
-
-> Project: <basename(cwd)>
-> Date: <YYYY-MM-DD>
-> Type: <feature | fix | refactor | migration | ops | docs>
-> Mode: <interactive | auto>
-
-## Context
-
-[Why this change — the problem or need it addresses, what prompted it, the intended outcome. 1-3 sentences.]
-
-## Recommended approach
-
-[The chosen approach (not all alternatives). What will be done at a high level.]
-
-## Critical files
-
-- `path/to/file1` — what changes / what is reused
-- `path/to/file2` — what changes / what is reused
-
-## Phases
-
-1. <phase name> — [files] — [depends on previous? yes/no]
-2. <phase name> — [files] — …
-3. …
-
-## Risks
-
-- <risk>: <mitigation>
-
-## Verification
-
-[How to test end-to-end: run the code, run MCP tools, run tests. Specific commands.]
-
----
-
-## What actually happened (filled retroactively after execution)
-
-[Deviations from plan, why; surprises; what cost more / less than expected.]
-```
-
-**Interactive mode** — follow tool plan mode's 5-phase workflow:
-1. Enter plan mode (`EnterPlanMode`); tool injects the plan file path into the system message.
-2. **Phase 1: Explore** — dispatch `Explore` agents in parallel (1-3 max) to understand the codebase.
-3. **Phase 2: Plan** — dispatch `Plan` agents (1-3) to design the approach from different angles.
-4. **Phase 3: Review** — read critical files, surface remaining questions via `AskUserQuestion`.
-5. **Phase 4: Write** — write the plan into the tool's plan file (the path given in the system message). Simultaneously write the same content into the hub audit copy at `~/.claude/plans/audit/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md` for persistent audit.
-6. **Phase 5: ExitPlanMode** — request approval.
-
-**Auto mode** — Phase 1-4 of the same workflow but without the tool:
-1. Skip `EnterPlanMode` (it would block on user consent).
-2. Phase 1 Explore + Phase 2 Plan still run (`Explore` and `Plan` agent types are available in both modes).
-3. Phase 3 Review — internal reasoning instead of `AskUserQuestion`.
-4. Phase 4 Write — only the hub audit copy at `~/.claude/plans/audit/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md`.
-5. Proceed to Step 4 of this cycle (no Phase 5).
+The format, the two plan-file paths (interactive tool file vs the always-written hub audit copy), and the interactive-vs-auto workflow live in [plan-file.md](plan-file.md). The audit copy persists outside the project (never tracked by git); its value is the diff between plan and reality, filled in at Step 16.
 
 ### 4. Parallel dispatch of investigation sub-agents
 
@@ -229,7 +154,7 @@ If any answer is not clear — do not execute. Surface to the user.
 
 ### 14. Commit via `git-conventional-commits-ru`
 
-When the change is ready and verified — invoke [`git-conventional-commits-ru`](../git-conventional-commits-ru/SKILL.md). Russian description, English `type/scope/!`, identifier names in backticks, body as bullet list, mixed changes split into atomic commits.
+When the change is ready and verified — invoke [`git-conventional-commits-ru`](../git-conventional-commits-ru/SKILL.md). It picks the description language by repo audience — the user's language for private / team repos, English for public / open-source. English `type/scope/!` always, identifier names in backticks, body as bullet list, mixed changes split into atomic commits.
 
 Never emit AI-attribution trailers (`Co-Authored-By: Claude …`, `Generated with Claude Code` and similar).
 
@@ -244,16 +169,16 @@ Never emit AI-attribution trailers (`Co-Authored-By: Claude …`, `Generated wit
 
 **Multi-phase task** (executed in stages): after each phase a short intermediate report; the next phase starts without asking unless there is a real fork (design choice, blocker, sensitive operation).
 
-**Single-phase task** or **final report** — same shape:
+**Single-phase task** or **final report** — same shape, rendered in the user's language:
 
 ```
-Сделано: 1-3 строки — что изменилось.
-Проверено: какие команды / файлы — конкретно.
-Что осталось: следующая фаза / smoke / push / зависимости от пользователя.
-Риски: что может сломаться и как откатить.
+Done: 1-3 lines — what changed.
+Verified: which commands / files — concretely.
+Remaining: next phase / smoke / push / user dependencies.
+Risks: what could break and how to roll back.
 ```
 
-Style: plain Russian, identifier names in backticks, no emoji unless asked, no «продолжать?» when the next step is obvious from the plan.
+Style: plain language (the user's language), identifier names in backticks, no emoji unless asked, no «continue?» when the next step is obvious from the plan.
 
 **Fill the plan file's «What actually happened» section** after the task lands. Deviations from plan, surprises, what cost more / less. This is the audit value of the plan file — not the plan itself, but the diff between plan and reality.
 
@@ -261,14 +186,14 @@ Style: plain Russian, identifier names in backticks, no emoji unless asked, no �
 
 | Excuse | Reality |
 |---|---|
-| «Это маленькая правка, advisor не нужен» | Advisor is unconditional. Size only adjusts conditional steps (plan file, sub-agents), not advisor. |
-| «Срочно, пропустим verification» | Verification separates «agent said done» from «actually done». Urgency is reason to be careful, not careless. |
-| «Очевидно, recon не нужен» | Most regressions start from confidence without recon. 3-5 files is 2 minutes. |
-| «Один файл, plan не нужен» | One file ≠ one phase. If the change has internal dependencies (data model → migration → service → tests), still ≥ 3 phases — plan file applies. |
-| «Я уже делал такое» | New context, new project state, new dependencies. Recon still runs. |
-| «Сам сделаю быстрее, чем sub-agent» | True for narrow targeted edits. False for broad investigation. Default to dispatch for anything multi-file or multi-angle. |
-| «Тест напишу потом» | Then the change is not done. TDD trigger fires on business logic and bugfixes — see [`testing-strategy`](../testing-strategy/SKILL.md). |
-| «Срочно, plan файл лишний» | Plan file is 2 minutes; the audit trail it leaves saves hours when something breaks. Triggered by phases / edge-cases, not by «срочно». |
+| «It's a small change, advisor isn't needed» | Advisor is unconditional. Size only adjusts conditional steps (plan file, sub-agents), not advisor. |
+| «Urgent — skip verification» | Verification separates «agent said done» from «actually done». Urgency is reason to be careful, not careless. |
+| «Obvious — recon isn't needed» | Most regressions start from confidence without recon. 3-5 files is 2 minutes. |
+| «One file, no plan needed» | One file ≠ one phase. If the change has internal dependencies (data model → migration → service → tests), still ≥ 3 phases — plan file applies. |
+| «I've done this before» | New context, new project state, new dependencies. Recon still runs. |
+| «I'll do it faster than a sub-agent» | True for narrow targeted edits. False for broad investigation. Default to dispatch for anything multi-file or multi-angle. |
+| «I'll write the test later» | Then the change is not done. TDD trigger fires on business logic and bugfixes — see [`testing-strategy`](../testing-strategy/SKILL.md). |
+| «Urgent — plan file is overkill» | Plan file is 2 minutes; the audit trail it leaves saves hours when something breaks. Triggered by phases / edge-cases, not by urgency. |
 
 ## When the cycle does NOT apply
 
