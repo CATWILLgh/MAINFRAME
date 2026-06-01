@@ -154,9 +154,13 @@ Sub-agent outputs go through synthesis, not dump.
 
 Boil down to ≤ 200 words: convergent findings, divergent findings, gaps. Copying agent replies wholesale defeats the orchestration value — main context fills with raw tool output instead of decisions.
 
-### 6. Advisor #1 (mandatory before substantive work)
+### 6. Decision review → Advisor #1 (before substantive work)
 
-Call `advisor()` after synthesis, **before** writing or large dispatch. The advisor sees the full transcript — recon, plan file (if any), synthesised findings.
+Once a leading approach exists from synthesis, gate it before any writing or large dispatch. Two checks, **in this order** — the deep review first, the advisor last:
+
+**6a. High cost-of-being-wrong → dispatch `decision-reviewer` FIRST.** When the synthesised approach is an architecture choice, hard-to-reverse, broad-blast-radius, or expensive-to-undo decision, dispatch the `decision-reviewer` agent on that approach **before** the advisor call. It is adversarial, grounded, and fed only the artifact — so the prompt must carry the chosen approach, the alternatives weighed, the load-bearing assumptions, and the affected files/paths (it sees **only your prompt**, not this session; a one-line «review this» starves it). Conditional on stakes — a low-stakes change skips 6a and goes straight to 6b. Do **not** fold this into the advisor call; they are different checks (advisor: holistic, sees your framing; decision-reviewer: adversarial, artifact-only).
+
+**6b. Then `advisor()` as the final checkpoint.** Call `advisor()` after synthesis **and after any decision-review** — so the advisor sees the reviewer's verdict in the transcript and makes the last call before substantive work: proceed, or turn back to further investigation / redesign.
 
 - Round cap: 3. If round 3 still surfaces new material — the approach is wrong; stop, escalate to user, do not run a 4th round.
 - A critical advisor finding → revise plan / approach, re-call.
@@ -297,3 +301,4 @@ At the cap — stop, do not «keep improving». A loop hitting the cap is a sign
 - [`ops-app-server-safety`](../ops-app-server-safety/SKILL.md) — when the work spawns dev servers or `docker compose` stacks (Step 8 verification of running processes).
 - [`git-conventional-commits-ru`](../git-conventional-commits-ru/SKILL.md) — commit step (Step 14).
 - [`web-search`](../../agents/web-search.md) — authoritative source verification (Step 2 Recon when Context7 misses or surfaces conflict).
+- [`decision-reviewer`](../../agents/decision-reviewer.md) — adversarial grounded review of a high-stakes approach (Step 6a, before the advisor checkpoint; conditional on cost-of-wrong).
