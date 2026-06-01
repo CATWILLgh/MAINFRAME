@@ -41,6 +41,6 @@ tools/agnostic-blacklist.txt
 docs/*
 !docs/layers/
 
-# Internal queues and references
-inbox/
-reference/
+# Hub-development workspace — queue (inbox), used-for-hub sources (reference),
+# rejected/kept project artifacts (archive). All local, never published.
+workspace/
