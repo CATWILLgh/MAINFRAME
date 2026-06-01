@@ -4,6 +4,7 @@ description: "A React frontend task is in flight on a Vite SPA stack — pages, 
 tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: sonnet
 effort: medium
+background: true
 skills:
   - react-frontend-patterns
   - shadcn
