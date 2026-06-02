@@ -4,7 +4,7 @@ Read when building or reviewing an HTTP endpoint and one of these concerns is in
 
 ## Idempotency keys for POST
 
-State-changing POST operations should accept an `Idempotency-Key` header. Server stores request hash + response for N hours; replays return the cached response without re-executing. Per Stripe API docs: «All `POST` requests accept idempotency keys.»
+State-changing POST operations should accept an `Idempotency-Key` header. Server stores request hash + response for N hours; replays return the cached response without re-executing. Per Stripe API docs: "All `POST` requests accept idempotency keys."
 
 ```python
 key = request.headers.get("Idempotency-Key")
@@ -21,7 +21,7 @@ Offset-based (`?page=N&per_page=K`) — admin / reporting UIs where jumping to p
 
 ## Rate limiting
 
-Per RFC 6585: «The 429 status code indicates that the user has sent too many requests in a given amount of time ('rate limiting').» Pair with `Retry-After` header (seconds or HTTP-date).
+Per RFC 6585: "The 429 status code indicates that the user has sent too many requests in a given amount of time ('rate limiting')." Pair with `Retry-After` header (seconds or HTTP-date).
 
 Algorithm — token bucket (burst-tolerant, common for API gateways) or sliding window (smoother, slightly more expensive). Implement at the gateway layer (Cloudflare / Fastly / nginx `limit_req`) or via `slowapi` (FastAPI) / `flask-limiter` (Flask).
 
@@ -29,7 +29,7 @@ Authenticated users — limit per `user_id`, NOT per IP (shared NAT / corporate 
 
 ## Health and readiness probes
 
-Per Kubernetes: «If the liveness probe fails, the container will be restarted… If the readiness probe fails, the pod will be marked unready and will not receive traffic from any services.»
+Per Kubernetes: "If the liveness probe fails, the container will be restarted… If the readiness probe fails, the pod will be marked unready and will not receive traffic from any services."
 
 - `GET /live` — process alive; returns 200 with minimal work. Failure → restart.
 - `GET /ready` — process ready to serve (DB reachable, cache reachable). Failure → traffic gated off, no restart.
@@ -38,7 +38,7 @@ Anti-pattern: single `/health` conflating both — restart loops on transient do
 
 ## Configuration via pydantic-settings
 
-Prefer `pydantic-settings` over ad-hoc `os.environ.get(...)`. Per official docs: «Fields not provided as keyword arguments will be read from environment variables.»
+Prefer `pydantic-settings` over ad-hoc `os.environ.get(...)`. Per official docs: "Fields not provided as keyword arguments will be read from environment variables."
 
 ```python
 class Settings(BaseSettings):

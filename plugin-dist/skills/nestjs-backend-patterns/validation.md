@@ -1,6 +1,6 @@
 # Validation patterns
 
-Two dominant choices in TS backend ecosystem 2026 — pick by stack and ergonomics. Both work, neither is strictly «better» across all axes. Per-stack defaults below.
+Two dominant choices in TS backend ecosystem 2026 — pick by stack and ergonomics. Both work, neither is strictly "better" across all axes. Per-stack defaults below.
 
 ## Zod — schema-first, type-inferred
 

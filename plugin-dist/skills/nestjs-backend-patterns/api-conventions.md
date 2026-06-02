@@ -4,7 +4,7 @@ Read when building or reviewing an HTTP endpoint and one of these concerns is in
 
 ## Idempotency keys for POST
 
-State-changing POST operations should accept an `Idempotency-Key` header. Server stores request hash + response for N hours; replays return the cached response without re-executing. Per Stripe API docs: «All `POST` requests accept idempotency keys.»
+State-changing POST operations should accept an `Idempotency-Key` header. Server stores request hash + response for N hours; replays return the cached response without re-executing. Per Stripe API docs: "All `POST` requests accept idempotency keys."
 
 ```typescript
 const key = req.headers["idempotency-key"];
@@ -21,13 +21,13 @@ Offset-based (`?page=N&perPage=K`) — admin UIs where jumping to page is needed
 
 ## Rate limiting
 
-Per RFC 6585: «The 429 status code indicates that the user has sent too many requests in a given amount of time ('rate limiting').» Pair with `Retry-After` header.
+Per RFC 6585: "The 429 status code indicates that the user has sent too many requests in a given amount of time ('rate limiting')." Pair with `Retry-After` header.
 
 Implementation: `@nestjs/throttler` (NestJS), `@fastify/rate-limit` (Fastify), `express-rate-limit` (Express). Authenticated — limit per `userId`, NOT per IP. Unauthenticated — per IP.
 
 ## Health and readiness probes
 
-Per Kubernetes: «If the liveness probe fails, the container will be restarted… If the readiness probe fails, the pod will be marked unready and will not receive traffic from any services.»
+Per Kubernetes: "If the liveness probe fails, the container will be restarted… If the readiness probe fails, the pod will be marked unready and will not receive traffic from any services."
 
 - `GET /live` — process alive; minimal work, returns 200.
 - `GET /ready` — process ready (DB reachable, Redis reachable, deps up). Failure → traffic gated off, no restart.

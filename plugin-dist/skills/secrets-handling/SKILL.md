@@ -52,7 +52,7 @@ Never assign a secret to a regular variable that gets echoed, logged, or written
 
 ## How to refer to a service in conversation
 
-When the user says «go to vps-store, check the nginx logs»:
+When the user says "go to vps-store, check the nginx logs":
 
 1. Read `~/.claude/credentials-index.md`, locate the `vps-store` section.
 2. Note the access pattern from the index (`ssh vps-store`, key path, any pre-set env-var names).
@@ -102,10 +102,10 @@ A match means **something resembling a secret is in your response**. It may be a
 
 | Excuse | Reality |
 |---|---|
-| «User asked me to show the token» | Confirm in-band that they want the literal value, not a description. Default — do not echo. |
-| «It's just for the error message» | The error message goes to the chat transcript. Refuse — log the call without the value. |
-| «I'll redact it after pasting» | Pre-reply scan is the redaction. There is no "after pasting" for an LLM. |
-| «It's a fake-looking placeholder» | Run the scan anyway. Many real tokens look fake at a glance. |
+| "User asked me to show the token" | Confirm in-band that they want the literal value, not a description. Default — do not echo. |
+| "It's just for the error message" | The error message goes to the chat transcript. Refuse — log the call without the value. |
+| "I'll redact it after pasting" | Pre-reply scan is the redaction. There is no "after pasting" for an LLM. |
+| "It's a fake-looking placeholder" | Run the scan anyway. Many real tokens look fake at a glance. |
 
 ## When this skill is irrelevant
 

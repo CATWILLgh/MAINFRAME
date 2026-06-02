@@ -4,13 +4,13 @@ Three shapes: separate schema per tenant, shared schema with discriminator colum
 
 ## PostgreSQL RLS
 
-- Per PostgreSQL docs: «Tables can have row security policies that restrict, on a per-user basis, which rows can be returned by normal queries or inserted, updated, or deleted by data modification commands.»
+- Per PostgreSQL docs: "Tables can have row security policies that restrict, on a per-user basis, which rows can be returned by normal queries or inserted, updated, or deleted by data modification commands."
 - Activate per table: `ALTER TABLE <t> ENABLE ROW LEVEL SECURITY; ALTER TABLE <t> FORCE ROW LEVEL SECURITY;`.
 - Policy reads tenant context from session GUC: `CREATE POLICY tenant_isolation ON <t> USING (organization_id = current_setting('app.current_tenant')::bigint);`.
 
 ## CRITICAL caveat — referential integrity bypasses RLS
 
-Per PostgreSQL docs: «Referential integrity checks, such as unique or primary key constraints and foreign key references, always bypass row security to ensure that data integrity is maintained.»
+Per PostgreSQL docs: "Referential integrity checks, such as unique or primary key constraints and foreign key references, always bypass row security to ensure that data integrity is maintained."
 
 Practical consequences:
 - A `UNIQUE` column visible to one tenant prevents another from inserting the same value (information leak).

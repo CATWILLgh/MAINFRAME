@@ -41,25 +41,25 @@ These apply regardless of architectural school, project size, or existing layout
 
 ### The server is canonical — clients trust nothing they receive
 
-The frontend is a presenter, not an authority. Whatever the server sends — **validate at the boundary** before the type system is allowed to assume it. The umbrella rule («data at system boundaries… is untrusted and must be validated») is the floor.
+The frontend is a presenter, not an authority. Whatever the server sends — **validate at the boundary** before the type system is allowed to assume it. The umbrella rule ("data at system boundaries… is untrusted and must be validated") is the floor.
 
 - **Inbound API response → Zod schema** at the infrastructure-layer mapper / HTTP client. Bare `as ApiResponse` casts on `fetch` results are forbidden — a static type at the boundary is not a contract, runtime validation is.
-- **No business decisions on the client.** Permission checks, status transitions, computed totals — display what the server returned, do not compute or re-decide. If the UI needs to know «can this user click Approve», the server returns a `capabilities: { canApprove: true }` flag; the client renders, it does not compute.
-- **Client-side form validation is a UX accelerator only.** Per MDN Form Validation: «Never trust data passed to your server from the client. Even if your form is validating correctly… a malicious user can still alter the network request». The server re-validates everything. Your Zod schema in the form is for fast feedback, not security.
+- **No business decisions on the client.** Permission checks, status transitions, computed totals — display what the server returned, do not compute or re-decide. If the UI needs to know "can this user click Approve", the server returns a `capabilities: { canApprove: true }` flag; the client renders, it does not compute.
+- **Client-side form validation is a UX accelerator only.** Per MDN Form Validation: "Never trust data passed to your server from the client. Even if your form is validating correctly… a malicious user can still alter the network request". The server re-validates everything. Your Zod schema in the form is for fast feedback, not security.
 
 ### UI layer holds no business logic
 
 A component renders, dispatches events, reads state. Business decisions live one layer below — in use-cases / model files / data-fetching hooks. The presence of a non-trivial `if` over domain rules inside a `.tsx` is a smell. The fix is to lift the rule into a typed function / hook outside the component.
 
-### Discriminated request states — no implicit «loading» from null checks
+### Discriminated request states — no implicit "loading" from null checks
 
-State of any async operation is one of `{ status: 'idle' } | { status: 'loading' } | { status: 'success', data: T } | { status: 'error', error: E }`. TanStack Query exposes this natively (`status`, `error`, `data`). Do NOT replace it with «is `data` null → must be loading» heuristics — they confuse the error state with the loading state and lose the original error.
+State of any async operation is one of `{ status: 'idle' } | { status: 'loading' } | { status: 'success', data: T } | { status: 'error', error: E }`. TanStack Query exposes this natively (`status`, `error`, `data`). Do NOT replace it with "is `data` null → must be loading" heuristics — they confuse the error state with the loading state and lose the original error.
 
 ### Server state and form state are separate stores
 
 `@tanstack/react-query` is the single source of truth for server data. `react-hook-form` is the single source of truth for the **draft** the user is currently editing. They do not duplicate. Pattern: `useQuery` fetches → `useForm({ defaultValues: data })` initialises the draft from the snapshot → `mutation.mutate(form.getValues())` on submit → `queryClient.invalidateQueries` on success refreshes the snapshot.
 
-What is forbidden: storing the loaded server entity in form state and editing it «in place» — every change becomes a desync risk against the cache.
+What is forbidden: storing the loaded server entity in form state and editing it "in place" — every change becomes a desync risk against the cache.
 
 ### TypeScript strict mode — `any` is a contract break, not a shortcut
 
@@ -83,11 +83,11 @@ The pull is gradual, not destructive. Two enforcement levels:
 
 **Level 2 — architectural school**: contextual. Detect what is in place via recon. If FSD-shaped — follow it. If Clean Architecture — work within its style for in-scope edits (do not break the layering you find); write *new* features in FSD-shape where they don't conflict; surface the divergence as a ticket via [`surface-ticket`](#cross-refs) so the team has a record. If flat / ad-hoc — propose FSD as the target structure at the **first touch of an area**, do not impose it on the whole codebase in one PR.
 
-**Boy Scout Rule applies to both levels**: leave the file cleaner than you found it. New code never repeats the bad pattern even if neighbours do. Existing code in your edit path gets aligned one step closer to the target — not «rewrite all».
+**Boy Scout Rule applies to both levels**: leave the file cleaner than you found it. New code never repeats the bad pattern even if neighbours do. Existing code in your edit path gets aligned one step closer to the target — not "rewrite all".
 
-**Strangler Fig caveat — no avalanche refactor**: a refactor touching more than 3 files OR more than 100 LOC requires surfacing the plan to the user before applying (same gate as `nestjs-backend-engineer`). Quietly migrating 20 files because «they were nearby» is forbidden.
+**Strangler Fig caveat — no avalanche refactor**: a refactor touching more than 3 files OR more than 100 LOC requires surfacing the plan to the user before applying (same gate as `nestjs-backend-engineer`). Quietly migrating 20 files because "they were nearby" is forbidden.
 
-**Tech debt outlet — surface tickets, not silent workarounds**: when you spot a problem you choose not to fix in scope — adjacent anti-pattern, postponed in-scope issue, partial implementation, deliberately deferred refactor — record it via the [`surface-ticket`](#cross-refs) skill in `docs/tickets/`. Not fixed now → ticket. Fixed inline within scope → no ticket. This is non-optional; the umbrella `CLAUDE.md` rule («any problem you choose not to fix right now becomes a ticket») is the source.
+**Tech debt outlet — surface tickets, not silent workarounds**: when you spot a problem you choose not to fix in scope — adjacent anti-pattern, postponed in-scope issue, partial implementation, deliberately deferred refactor — record it via the [`surface-ticket`](#cross-refs) skill in `docs/tickets/`. Not fixed now → ticket. Fixed inline within scope → no ticket. This is non-optional; the umbrella `CLAUDE.md` rule ("any problem you choose not to fix right now becomes a ticket") is the source.
 
 ## Out of scope
 

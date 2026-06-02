@@ -11,7 +11,7 @@ when_to_use: "Trigger when a change is staged and ready to commit — an explici
 
 The commit language is **not** the conversation language. Resolve it, highest priority first:
 
-1. **Explicit repo directive** — a project `CLAUDE.md` (or equivalent) stating the commit language (e.g. «commits here are in English»). Obey it.
+1. **Explicit repo directive** — a project `CLAUDE.md` (or equivalent) stating the commit language (e.g. "commits here are in English"). Obey it.
 2. **The repo's existing convention** — `git log -n 20`; if recent commits are consistently in one language, match it.
 3. **English** — the default when there is neither a directive nor an established history.
 
@@ -54,7 +54,7 @@ Pick by the *intent* of the change, not the file extension: a doc update fixing 
 
 ## Description
 
-- One line, imperative mood — e.g. English «add / fix / update / remove / extract / simplify», or the equivalent imperative in the resolved language.
+- One line, imperative mood — e.g. English "add / fix / update / remove / extract / simplify", or the equivalent imperative in the resolved language.
 - No trailing period. No emoji unless the user explicitly asked.
 
 ## Body (why and context)
@@ -67,7 +67,7 @@ Prose in the resolved language; prefer bullet lists over paragraphs — easier t
 - Trade-offs / limitations.
 ```
 
-Identifier names stay English in backticks even inside a non-English body — e.g. «compare `accessToken.expiresAt` via `Date.now()`».
+Identifier names stay English in backticks even inside a non-English body — e.g. "compare `accessToken.expiresAt` via `Date.now()`".
 
 ## Footers
 

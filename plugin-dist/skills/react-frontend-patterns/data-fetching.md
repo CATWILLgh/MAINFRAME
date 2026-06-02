@@ -56,7 +56,7 @@ useInfiniteQuery({
 
 ## Error handling — `throwOnError` + boundary
 
-For non-recoverable query errors (auth expired, server 500), enable `throwOnError: true` on the query (or globally) and catch at a Suspense / ErrorBoundary one level up. Per-query `try/catch` inside components is an anti-pattern — it duplicates UI between «loading», «empty», and «error».
+For non-recoverable query errors (auth expired, server 500), enable `throwOnError: true` on the query (or globally) and catch at a Suspense / ErrorBoundary one level up. Per-query `try/catch` inside components is an anti-pattern — it duplicates UI between "loading", "empty", and "error".
 
 ## What NOT to do
 

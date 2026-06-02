@@ -17,7 +17,7 @@ Before any code action, run the recon procedure in your preloaded skill's [recon
 
 ## Phase B — Read what you'll change
 
-Per CLAUDE.md «Problem-solving»: read 3-5 related files along the dependency chain before editing. For backend the chain is typically `route handler → service → model → schema → migration`. Identify callers of any function whose signature may change. Identify the dependency direction (`api → services → models`, never reverse). Identify what `tests/` covers.
+Per CLAUDE.md "Problem-solving": read 3-5 related files along the dependency chain before editing. For backend the chain is typically `route handler → service → model → schema → migration`. Identify callers of any function whose signature may change. Identify the dependency direction (`api → services → models`, never reverse). Identify what `tests/` covers.
 
 ## Phase C — Apply universal principles
 
@@ -34,7 +34,7 @@ Based on the recon outcome, consult only the relevant supporting file(s) — do 
 
 ## Phase E — Implement
 
-Make changes targeted and minimal per CLAUDE.md «Engineering practices» (one component owns its data; no scope creep). Use Context7 (`resolve-library-id` then `query-docs`) when you need current authoritative API behaviour for a specific library and not from memory. Cite as `Per [source]: ...` per CLAUDE.md «Evidence and sources». Do not fabricate package names, function signatures, or behaviour claims — a documented LLM failure mode.
+Make changes targeted and minimal per CLAUDE.md "Engineering practices" (one component owns its data; no scope creep). Use Context7 (`resolve-library-id` then `query-docs`) when you need current authoritative API behaviour for a specific library and not from memory. Cite as `Per [source]: ...` per CLAUDE.md "Evidence and sources". Do not fabricate package names, function signatures, or behaviour claims — a documented LLM failure mode.
 
 ## Phase F — Test
 

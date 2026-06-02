@@ -22,7 +22,7 @@ If recon is ambiguous in some other dimension (two state libraries, mixed Zod ve
 
 ## Phase B — Read what you'll change
 
-Per CLAUDE.md «Problem-solving»: read 3-5 related files along the dependency chain before editing. For a Vite + React project the typical chain is `route/page → feature slice (ui + model + api) → entity → shared (api client / ui kit)`. For a touch on data: `feature/api → entity/api → shared/http-client`. For a touch on UI: design-tokens / theme CSS → shared `ui/` primitives → the feature component you're editing. Identify callers of any component / hook whose signature changes.
+Per CLAUDE.md "Problem-solving": read 3-5 related files along the dependency chain before editing. For a Vite + React project the typical chain is `route/page → feature slice (ui + model + api) → entity → shared (api client / ui kit)`. For a touch on data: `feature/api → entity/api → shared/http-client`. For a touch on UI: design-tokens / theme CSS → shared `ui/` primitives → the feature component you're editing. Identify callers of any component / hook whose signature changes.
 
 ## Phase C — Apply universal principles
 
@@ -39,9 +39,9 @@ Based on the recon outcome, consult only the relevant supporting file(s) — do 
 
 ## Phase E — Implement
 
-Make changes targeted and minimal per CLAUDE.md «Engineering practices» (one component owns its data; no scope creep). Use Context7 (`resolve-library-id` then `query-docs`) when you need current authoritative API behaviour for a specific library and not from memory. Cite as `Per [source]: ...` per CLAUDE.md «Evidence and sources». Do not fabricate component names, prop signatures, hook APIs, or behaviour claims — a documented LLM failure mode.
+Make changes targeted and minimal per CLAUDE.md "Engineering practices" (one component owns its data; no scope creep). Use Context7 (`resolve-library-id` then `query-docs`) when you need current authoritative API behaviour for a specific library and not from memory. Cite as `Per [source]: ...` per CLAUDE.md "Evidence and sources". Do not fabricate component names, prop signatures, hook APIs, or behaviour claims — a documented LLM failure mode.
 
-Boy Scout / Strangler discipline (per the skill's «Architectural stance» section):
+Boy Scout / Strangler discipline (per the skill's "Architectural stance" section):
 - **New code** always on the target — FSD slices, universal principles fully applied.
 - **Existing code** in your edit path — align toward the target one step at a time. Do not avalanche-refactor.
 - **Big-refactor gate**: touching > 3 files or > 100 LOC — surface the plan to the user before applying. This matches the rule on `nestjs-backend-engineer` and `python-backend-engineer`.

@@ -2,7 +2,7 @@
 name: task-workflow
 user-invocable: false
 description: "Universal cycle for any task that modifies code, configuration, documentation, or infrastructure — feature, bugfix, refactor, migration, ops work. Cycle: triage → recon → plan (file when ≥ 3 phases) → parallel dispatch → synthesis → advisor → execution → verification → out-of-scope tickets → edge-case sweep → advisor → git safety → commit → report. Plan files land in `~/.claude/plans/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md` — outside the project, not tracked by git, persistent across sessions. Adapts to both interactive sessions (uses `EnterPlanMode` / `ExitPlanMode` when present) and unattended auto-runs (writes the plan file directly, no blocking gate). Size and urgency do not bypass the cycle; they only change which conditional steps activate."
-when_to_use: "Trigger on any modifying task — an instruction to create, fix, add, implement, refactor, update, configure, deploy, or delete, in any language the user writes in; also multi-file refactors, bug fixes, feature work, ops changes, doc edits that change instructions. Does not run on read-only questions (what's in this file / how does X work / where is Y / explain the architecture of Z) — those bypass the cycle entirely. «It's a small change», «it's urgent», «just one file» are not exceptions — they only change which conditional steps activate (plan file, sub-agents); advisor and verification stay unconditional."
+when_to_use: "Trigger on any modifying task — an instruction to create, fix, add, implement, refactor, update, configure, deploy, or delete, in any language the user writes in; also multi-file refactors, bug fixes, feature work, ops changes, doc edits that change instructions. Does not run on read-only questions (what's in this file / how does X work / where is Y / explain the architecture of Z) — those bypass the cycle entirely. 'It's a small change', 'it's urgent', 'just one file' are not exceptions — they only change which conditional steps activate (plan file, sub-agents); advisor and verification stay unconditional."
 ---
 
 # Task workflow
@@ -11,9 +11,9 @@ Universal cycle for any task that modifies code, configuration, documentation, o
 
 ## Top-level rule
 
-Size and urgency are not exceptions. «It's a small change», «it's urgent», «just one file» do not skip steps. They only change which *conditional* steps run — plan file is conditional on ≥ 3 phases; sub-agent dispatch is conditional on recon scope; advisor and verification stay unconditional.
+Size and urgency are not exceptions. "It's a small change", "it's urgent", "just one file" do not skip steps. They only change which *conditional* steps run — plan file is conditional on ≥ 3 phases; sub-agent dispatch is conditional on recon scope; advisor and verification stay unconditional.
 
-«This is too small for X» is the most reliable signal that you are about to drop a step you should not drop.
+"This is too small for X" is the most reliable signal that you are about to drop a step you should not drop.
 
 ## Mode awareness
 
@@ -28,7 +28,7 @@ The cycle adapts to two modes:
 2. If invoked headlessly (`claude -p` without an interactive TTY) → **auto**.
 3. Otherwise → **interactive**.
 
-When in doubt — prefer auto (safer default; the user's primary workflow is unattended runs). «Could the user respond in seconds?» is not a reliable signal — the model cannot measure that.
+When in doubt — prefer auto (safer default; the user's primary workflow is unattended runs). "Could the user respond in seconds?" is not a reliable signal — the model cannot measure that.
 
 ## Cycle
 
@@ -43,7 +43,7 @@ Is the task **ambiguous**? — new feature with unclear requirements, design for
   - Auto: pick the most plausible interpretation, record the assumption in the plan file (or in the report if no plan file), proceed.
 - Not ambiguous (explicit bugfix, known pattern, narrow change) → proceed to Recon.
 
-Do not confuse «ambiguous» with «small». A small change with one obvious approach skips brainstorm; an ambiguous one does not, regardless of size.
+Do not confuse "ambiguous" with "small". A small change with one obvious approach skips brainstorm; an ambiguous one does not, regardless of size.
 
 ### 2. Recon-first (always)
 
@@ -66,10 +66,10 @@ The format, the two plan-file paths (interactive tool file vs the always-written
 Independent investigation tasks dispatch in **one message** with multiple `Agent` calls. Sequential calls in main context waste turns and fill the parent context with raw tool output.
 
 In every sub-agent prompt — required fields:
-- **Path restriction:** «Operate inside `<cwd>` only. Do not Read / Glob / Grep outside that root.»
-- **Return cap:** «Reply in ≤ N words / lines» (pick N by depth: 200 for quick recon, 600 for deep dive).
+- **Path restriction:** "Operate inside `<cwd>` only. Do not Read / Glob / Grep outside that root."
+- **Return cap:** "Reply in ≤ N words / lines" (pick N by depth: 200 for quick recon, 600 for deep dive).
 - **Format:** exact structure expected — sections, headers, `file:line` citations.
-- **Concrete deliverable:** «Return paths with line ranges, not generalities» / «Return the failing assertion, not a description of it».
+- **Concrete deliverable:** "Return paths with line ranges, not generalities" / "Return the failing assertion, not a description of it".
 
 Prompts to sub-agents are English regardless of conversation language — models follow English more precisely and spend fewer tokens.
 
@@ -83,7 +83,7 @@ Boil down to ≤ 200 words: convergent findings, divergent findings, gaps. Copyi
 
 Once a leading approach exists from synthesis, gate it before any writing or large dispatch. Two checks, **in this order** — the deep review first, the advisor last:
 
-**6a. High cost-of-being-wrong → dispatch `decision-reviewer` FIRST.** When the synthesised approach is an architecture choice, hard-to-reverse, broad-blast-radius, or expensive-to-undo decision, dispatch the `decision-reviewer` agent on that approach **before** the advisor call. It is adversarial, grounded, and fed only the artifact — so the prompt must carry the chosen approach, the alternatives weighed, the load-bearing assumptions, and the affected files/paths (it sees **only your prompt**, not this session; a one-line «review this» starves it). Conditional on stakes — a low-stakes change skips 6a and goes straight to 6b. Do **not** fold this into the advisor call; they are different checks (advisor: holistic, sees your framing; decision-reviewer: adversarial, artifact-only).
+**6a. High cost-of-being-wrong → dispatch `decision-reviewer` FIRST.** When the synthesised approach is an architecture choice, hard-to-reverse, broad-blast-radius, or expensive-to-undo decision, dispatch the `decision-reviewer` agent on that approach **before** the advisor call. It is adversarial, grounded, and fed only the artifact — so the prompt must carry the chosen approach, the alternatives weighed, the load-bearing assumptions, and the affected files/paths (it sees **only your prompt**, not this session; a one-line "review this" starves it). Conditional on stakes — a low-stakes change skips 6a and goes straight to 6b. Do **not** fold this into the advisor call; they are different checks (advisor: holistic, sees your framing; decision-reviewer: adversarial, artifact-only).
 
 **6b. Then `advisor()` as the final checkpoint.** Call `advisor()` after synthesis **and after any decision-review** — so the advisor sees the reviewer's verdict in the transcript and makes the last call before substantive work: proceed, or turn back to further investigation / redesign.
 
@@ -93,21 +93,21 @@ Once a leading approach exists from synthesis, gate it before any writing or lar
 
 ### 7. Approval (interactive) / proceed (auto)
 
-- **Interactive + plan file exists:** wait for `ExitPlanMode` approval. The approval IS the execution authorization — no extra «when to start?» turn. `ExitPlanMode`'s `allowedPrompts` already captures the granted permissions.
+- **Interactive + plan file exists:** wait for `ExitPlanMode` approval. The approval IS the execution authorization — no extra "when to start?" turn. `ExitPlanMode`'s `allowedPrompts` already captures the granted permissions.
 - **Interactive + no plan file:** the synthesised plan is presented inline; proceed unless the user objects within the same turn.
 - **Auto-mode:** proceed.
 
-A casual «ok / sounds good» in regular chat is not a substitute for `ExitPlanMode` approval on a non-trivial change with a written plan. If a plan file exists in interactive mode, route through the gate.
+A casual "ok / sounds good" in regular chat is not a substitute for `ExitPlanMode` approval on a non-trivial change with a written plan. If a plan file exists in interactive mode, route through the gate.
 
 ### 8. Execution
 
 Dispatch specialised sub-agents for the work itself — one per independent piece. In every execution prompt:
 
 - **Path restriction** (same as Recon).
-- **TDD where it applies** (business logic, validators, lifecycle, calculations, bug fixes): explicit «write a failing test first, then minimal code, then refactor». See [`testing-strategy`](../testing-strategy/SKILL.md) for the test level decision.
-- **Concrete `file:line` targets** — not «find and fix», but «edit `service.ts:120-145`, function `processOrder`, condition on line 132».
-- **Anti-regression scope:** «do not change `<list of adjacent files>` even if you spot opportunities» — those are tickets, not edits.
-- **Verification command:** «after the edit, run `<lint | typecheck | test>` and report the result».
+- **TDD where it applies** (business logic, validators, lifecycle, calculations, bug fixes): explicit "write a failing test first, then minimal code, then refactor". See [`testing-strategy`](../testing-strategy/SKILL.md) for the test level decision.
+- **Concrete `file:line` targets** — not "find and fix", but "edit `service.ts:120-145`, function `processOrder`, condition on line 132".
+- **Anti-regression scope:** "do not change `<list of adjacent files>` even if you spot opportunities" — those are tickets, not edits.
+- **Verification command:** "after the edit, run `<lint | typecheck | test>` and report the result".
 
 Independent execution phases dispatch in parallel (one message, multiple `Agent` calls). Dependent phases run sequentially.
 
@@ -115,14 +115,14 @@ Specialised agents — pick by the project's stack. If the project has a `CLAUDE
 
 ### 9. Verification after each execution sub-agent
 
-Do not trust the agent's «done» without verification:
+Do not trust the agent's "done" without verification:
 
 - `grep` the changed file for the assertion the agent claims to have added / removed.
 - Run the lint / typecheck / test command the agent was told to run; read the output, not just the exit code.
 - Read the first 30 lines of changed files — catches surprise mass-rewrites and accidental file replacement.
 - `find . -name ".claude" -type d 2>/dev/null` from the project root — sub-agents occasionally leak transient state directories; clean them.
 
-Mismatch → targeted follow-up to the same agent with the specific gap, not «try again». Re-dispatch on the same target cap: 2.
+Mismatch → targeted follow-up to the same agent with the specific gap, not "try again". Re-dispatch on the same target cap: 2.
 
 ### 10. Out-of-scope findings → ticket
 
@@ -178,30 +178,30 @@ Remaining: next phase / smoke / push / user dependencies.
 Risks: what could break and how to roll back.
 ```
 
-Style: plain language (the user's language), identifier names in backticks, no emoji unless asked, no «continue?» when the next step is obvious from the plan.
+Style: plain language (the user's language), identifier names in backticks, no emoji unless asked, no "continue?" when the next step is obvious from the plan.
 
-**Fill the plan file's «What actually happened» section** after the task lands. Deviations from plan, surprises, what cost more / less. This is the audit value of the plan file — not the plan itself, but the diff between plan and reality.
+**Fill the plan file's "What actually happened" section** after the task lands. Deviations from plan, surprises, what cost more / less. This is the audit value of the plan file — not the plan itself, but the diff between plan and reality.
 
 ## Closing common rationalisations
 
 | Excuse | Reality |
 |---|---|
-| «It's a small change, advisor isn't needed» | Advisor is unconditional. Size only adjusts conditional steps (plan file, sub-agents), not advisor. |
-| «Urgent — skip verification» | Verification separates «agent said done» from «actually done». Urgency is reason to be careful, not careless. |
-| «Obvious — recon isn't needed» | Most regressions start from confidence without recon. 3-5 files is 2 minutes. |
-| «One file, no plan needed» | One file ≠ one phase. If the change has internal dependencies (data model → migration → service → tests), still ≥ 3 phases — plan file applies. |
-| «I've done this before» | New context, new project state, new dependencies. Recon still runs. |
-| «I'll do it faster than a sub-agent» | True for narrow targeted edits. False for broad investigation. Default to dispatch for anything multi-file or multi-angle. |
-| «I'll write the test later» | Then the change is not done. TDD trigger fires on business logic and bugfixes — see [`testing-strategy`](../testing-strategy/SKILL.md). |
-| «Urgent — plan file is overkill» | Plan file is 2 minutes; the audit trail it leaves saves hours when something breaks. Triggered by phases / edge-cases, not by urgency. |
+| "It's a small change, advisor isn't needed" | Advisor is unconditional. Size only adjusts conditional steps (plan file, sub-agents), not advisor. |
+| "Urgent — skip verification" | Verification separates "agent said done" from "actually done". Urgency is reason to be careful, not careless. |
+| "Obvious — recon isn't needed" | Most regressions start from confidence without recon. 3-5 files is 2 minutes. |
+| "One file, no plan needed" | One file ≠ one phase. If the change has internal dependencies (data model → migration → service → tests), still ≥ 3 phases — plan file applies. |
+| "I've done this before" | New context, new project state, new dependencies. Recon still runs. |
+| "I'll do it faster than a sub-agent" | True for narrow targeted edits. False for broad investigation. Default to dispatch for anything multi-file or multi-angle. |
+| "I'll write the test later" | Then the change is not done. TDD trigger fires on business logic and bugfixes — see [`testing-strategy`](../testing-strategy/SKILL.md). |
+| "Urgent — plan file is overkill" | Plan file is 2 minutes; the audit trail it leaves saves hours when something breaks. Triggered by phases / edge-cases, not by urgency. |
 
 ## When the cycle does NOT apply
 
 Read-only questions only:
-- «What's in this file?»
-- «How does X work?»
-- «Where is Y?»
-- «Explain the architecture of Z.»
+- "What's in this file?"
+- "How does X work?"
+- "Where is Y?"
+- "Explain the architecture of Z."
 
 Anything that **changes** state — files, config, infra, database, deployment — runs the cycle.
 
@@ -214,7 +214,7 @@ Anything that **changes** state — files, config, infra, database, deployment �
 | Edge-case sweep | 1 |
 | Re-dispatch same agent on same target | 2 |
 
-At the cap — stop, do not «keep improving». A loop hitting the cap is a signal the approach is wrong, not that one more round will close it.
+At the cap — stop, do not "keep improving". A loop hitting the cap is a signal the approach is wrong, not that one more round will close it.
 
 ## Cross-refs
 

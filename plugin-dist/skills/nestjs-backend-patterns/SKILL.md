@@ -42,13 +42,13 @@ These hold regardless of framework / ORM / validation choice. Cross-reference th
 
 ### The server is canonical — authority, state, computed values
 
-Validation of inbound request data at the trust boundary is mandatory; that rule lives in the umbrella `CLAUDE.md` Engineering practices («Trust framework and type-system guarantees»: «data at system boundaries… is untrusted and must be validated»). Apply it. This bullet adds the **authority half** beyond schema validation:
+Validation of inbound request data at the trust boundary is mandatory; that rule lives in the umbrella `CLAUDE.md` Engineering practices ("Trust framework and type-system guarantees": "data at system boundaries… is untrusted and must be validated"). Apply it. This bullet adds the **authority half** beyond schema validation:
 
-- **Authorization on every protected endpoint, server-checked** against actual tenant + role from JWT. Per OWASP Authorization Cheat Sheet: «Access control checks must be performed server-side… client-side checks may be permissible for improving the user experience, they should never be the decisive factor». Guards / decorators alone are not enough for high-stakes operations — re-check ownership in the service layer.
+- **Authorization on every protected endpoint, server-checked** against actual tenant + role from JWT. Per OWASP Authorization Cheat Sheet: "Access control checks must be performed server-side… client-side checks may be permissible for improving the user experience, they should never be the decisive factor". Guards / decorators alone are not enough for high-stakes operations — re-check ownership in the service layer.
 - **Business state transitions controlled by the server.** Status flow (e.g. `draft → submitted → approved`) is a whitelist defined and enforced in the service layer. Reject unauthorised transitions there, not at the controller.
 - **Computed and derived values come from the server.** Totals, percentages, aggregate counts, computed prices, derived statuses — recompute server-side. Never accept these as input fields even if the client computed them.
 - **Related-resource IDs are ownership-verified server-side.** When a request body contains `machineId`, `jobId`, etc., load the row server-side and check ownership against the JWT tenant before any operation. The client cannot be trusted to send only IDs it owns.
-- **Client-side validation is a UX accelerator only.** Per MDN: «Never trust data passed to your server from the client. Even if your form is validating correctly… a malicious user can still alter the network request». Reproduce all schema and business checks server-side regardless of what the client form did.
+- **Client-side validation is a UX accelerator only.** Per MDN: "Never trust data passed to your server from the client. Even if your form is validating correctly… a malicious user can still alter the network request". Reproduce all schema and business checks server-side regardless of what the client form did.
 
 ### Layer split
 

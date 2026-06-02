@@ -17,7 +17,7 @@ logger.info("job.create", job_id=j.id, org_id=org.id, duration_ms=dt)
 
 ## OpenTelemetry — auto-instrumentation first
 
-- Per dash0/OTel docs: «The OpenTelemetry LoggingHandler connects Python's familiar logging API to the OTel ecosystem, and every logging call flows into your observability pipeline as a first-class OTel log record, with trace context, typed attributes, and resource metadata attached.»
+- Per dash0/OTel docs: "The OpenTelemetry LoggingHandler connects Python's familiar logging API to the OTel ecosystem, and every logging call flows into your observability pipeline as a first-class OTel log record, with trace context, typed attributes, and resource metadata attached."
 - Add framework auto-instrumentation: `opentelemetry-instrumentation-{fastapi,flask,django,sqlalchemy,requests}`. Picks up spans for free.
 - Manual spans for business operations: `tracer.start_as_current_span("billing.charge")` around the operation that matters to the user.
 

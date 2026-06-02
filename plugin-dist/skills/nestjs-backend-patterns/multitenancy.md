@@ -4,7 +4,7 @@ Same backend concerns as any stack — PostgreSQL RLS at DB layer, propagation o
 
 ## AsyncLocalStorage — propagation primitive
 
-Per Node docs: «These classes are used to associate state and propagate it throughout callbacks and promise chains. It is similar to thread-local storage in other languages.»
+Per Node docs: "These classes are used to associate state and propagate it throughout callbacks and promise chains. It is similar to thread-local storage in other languages."
 
 ```typescript
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -46,7 +46,7 @@ await prisma.$executeRaw`SET LOCAL app.current_tenant = ${orgId}`;
 
 Then RLS policies `USING (organization_id = current_setting('app.current_tenant')::uuid)` enforce isolation at DB level — defense in depth.
 
-**Critical caveat (PostgreSQL official)**: «Referential integrity checks, such as unique or primary key constraints and foreign key references, always bypass row security». Include `organization_id` in composite UNIQUE indices; review FK relationships for cross-tenant exposure.
+**Critical caveat (PostgreSQL official)**: "Referential integrity checks, such as unique or primary key constraints and foreign key references, always bypass row security". Include `organization_id` in composite UNIQUE indices; review FK relationships for cross-tenant exposure.
 
 ## Tenant identity from JWT, never from request body
 

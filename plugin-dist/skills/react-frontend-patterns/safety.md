@@ -23,7 +23,7 @@ Place the parse inside the HTTP-client / mapper. UI never sees unvalidated shape
 
 ## `dangerouslySetInnerHTML` — only with DOMPurify
 
-User-controlled HTML → DOMPurify (or equivalent) first. Server-trusted HTML (e.g. rendered Markdown the backend already sanitised) — OK to render directly, but annotate the source so future readers see the trust assumption. Per OWASP XSS Prevention Cheat Sheet: «context-aware output encoding» is the floor; bypass only with a sanitiser.
+User-controlled HTML → DOMPurify (or equivalent) first. Server-trusted HTML (e.g. rendered Markdown the backend already sanitised) — OK to render directly, but annotate the source so future readers see the trust assumption. Per OWASP XSS Prevention Cheat Sheet: "context-aware output encoding" is the floor; bypass only with a sanitiser.
 
 ## Tailwind v3 → v4 — different setup, different defaults
 
@@ -43,7 +43,7 @@ If recon reported `tailwind: v3` and the work is **not** a Tailwind migration �
 - `localStorage.setItem('refreshToken', ...)` — XSS-exposed secret.
 - `VITE_STRIPE_SECRET_KEY` — shipped in the bundle, found in 30 seconds by anyone with DevTools.
 - `dangerouslySetInnerHTML={{ __html: comment.body }}` without DOMPurify — XSS injection vector.
-- Catching every `fetch` error with a single «something went wrong» — the user cannot diagnose, the dev cannot reproduce.
+- Catching every `fetch` error with a single "something went wrong" — the user cannot diagnose, the dev cannot reproduce.
 
 ## Sources
 

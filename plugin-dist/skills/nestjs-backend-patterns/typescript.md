@@ -4,7 +4,7 @@
 
 ## `strict: true` is the floor
 
-Per TypeScript docs: «The `strict` flag enables a wide range of type checking behavior that results in stronger guarantees of program correctness».
+Per TypeScript docs: "The `strict` flag enables a wide range of type checking behavior that results in stronger guarantees of program correctness".
 
 `strict: true` enables 11 flags simultaneously, most critical being `strictNullChecks` (no `T | undefined` confusion) and `noImplicitAny` (forces explicit types where inference fails). **`strict: true` is not optional in enterprise code.** If a project's tsconfig has `strict: false`, that is technical debt — surface via `surface-ticket`, do not silently work around it.
 
@@ -13,7 +13,7 @@ Per TypeScript docs: «The `strict` flag enables a wide range of type checking b
 | Flag | Why valuable for backend |
 |---|---|
 | `noUncheckedIndexedAccess` | Array / object index access returns `T \| undefined` instead of `T`. Catches `users[0].name` when `users` could be empty. Major source of runtime crashes in service code. |
-| `exactOptionalPropertyTypes` | `foo?: string` cannot be `null` (must be omitted or string). Prevents the «explicit `undefined` vs omitted» confusion in optional fields. |
+| `exactOptionalPropertyTypes` | `foo?: string` cannot be `null` (must be omitted or string). Prevents the "explicit `undefined` vs omitted" confusion in optional fields. |
 | `noFallthroughCasesInSwitch` | Catches missing `break` in switch cases — classic state-machine bug. |
 | `noImplicitOverride` | Forces `override` keyword on subclass methods — catches typos / signature drift. |
 

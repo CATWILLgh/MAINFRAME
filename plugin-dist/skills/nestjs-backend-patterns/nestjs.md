@@ -22,7 +22,7 @@ export class JobsController {
 
 ## DI scopes — singleton by default
 
-- **DEFAULT (singleton)** — one instance for the entire app lifetime, 0-cost. Use for stateless services. Per NestJS docs «a single instance of the provider is shared across the entire application».
+- **DEFAULT (singleton)** — one instance for the entire app lifetime, 0-cost. Use for stateless services. Per NestJS docs "a single instance of the provider is shared across the entire application".
 - **REQUEST** — one instance per HTTP request. Propagates up the dependency chain — every consumer becomes REQUEST-scoped. **Adds overhead.** Use only for genuine per-request mutable state.
 - **TRANSIENT** — new instance per injection point. Niche.
 

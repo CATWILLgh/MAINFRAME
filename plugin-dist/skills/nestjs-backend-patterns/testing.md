@@ -52,7 +52,7 @@ expect(successes).toHaveLength(1);
 
 ## What NOT to test
 
-Framework primitives (`req.body` parsing), pure ORM mappings without business logic, internal call structure (see CLAUDE.md «Test the public contract»).
+Framework primitives (`req.body` parsing), pure ORM mappings without business logic, internal call structure (see CLAUDE.md "Test the public contract").
 
 ## Sources
 
