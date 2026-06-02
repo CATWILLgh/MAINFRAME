@@ -65,68 +65,21 @@ If `docs/tickets/` does not exist in the project yet, create both:
 
 File-based ticket queue for this project. Convention is managed by the hub `surface-ticket` skill.
 
-- Filename: `NNN-short-slug.md`, where NNN is the next sequential integer.
+- Filename: `<id>-short-slug.md`, where `<id>` is a random 8-hex token (branch-collision-free).
 - Status / priority / component live in each ticket's YAML frontmatter, not here.
 - List open: `rg -l '^status: open' docs/tickets/`
 - High priority: `rg -l '^priority: (critical|high)' docs/tickets/`
 - Search body: `rg -l 'keyword' docs/tickets/`
 ```
 
-## Filename
+## Creating a ticket — read the template first
 
-`NNN-<short-slug>.md` where:
-- `NNN` = next sequential integer. Compute:
-  ```sh
-  ls docs/tickets/ 2>/dev/null | grep -E '^[0-9]+-' | sed 's/-.*//' | sort -n | tail -1
-  ```
-  +1. If no tickets yet, start at `001`.
-- `<short-slug>` = 3-7 kebab-case words summarising the issue.
+When you create a ticket, **first read [template.md](template.md)**, then copy its skeleton — do not reconstruct the schema from memory (stale keys and the old sequential-id habit creep back in that way). The template holds the filename rule, the id-generation command, the frontmatter schema, and the body section headers.
 
-## Frontmatter (required schema)
-
-```yaml
----
-id: <NNN>
-title: <one line, human description>
-status: open                  # open | needs-refinement | in-progress | closed | approved
-priority: medium              # critical | high | medium | low
-component: <free tag>         # e.g. "server", "client", "infra", "docs"
-discovered: <YYYY-MM-DD>
-discovered-from: []           # cross-refs: ["#221", "#244"] or empty
-tags: []                      # for grep: ["validation", "security", "perf"]
----
-```
-
-Never omit a frontmatter key. Empty values are `[]` for lists, `null` / empty string otherwise.
-
-## Body — fixed sections
-
-Use these section headers verbatim. Skip a section only if it genuinely does not apply; do not invent new sections without reason.
-
-```markdown
-# NNN: <title>
-
-## What was observed
-<facts only: where, what, expected vs actual, output / behaviour>
-
-## Why it is a problem
-<impact: correctness / security / business invariant / UX. Reference standards if applicable (OWASP, CWE, RFC)>
-
-## Why it is not a duplicate
-<cross-refs to related tickets, with explanation of the distinction>
-- [#XXX](XXX-slug.md) — covers X; this ticket is about Y.
-
-## What probably needs to be done
-<actionable steps. Mark "requires verification" where uncertain>
-
-## Acceptance criteria
-<measurable: tests pass, lint clean, behavior verified by ...>
-
-## Sources
-<code references using `path:line`, docs links, related commits>
-```
-
-If the ticket starts as `needs-refinement`, the body may be a one-line stub plus a "Context needed" section; full sections are filled in when status is moved to `open`.
+What the template enforces, called out here so it is not lost:
+- **Filename `<id>-<slug>.md`**, where `<id>` is a **random 8-hex token** (`openssl rand -hex 4`), not a sequential number. Random ids never collide across branches, so there is no renumber-on-merge and no need to scan other branches before allocating. The filename id and the frontmatter `id:` must match.
+- **Never omit a frontmatter key.** Empty values are `[]` for lists, `null` / empty string otherwise.
+- If the ticket starts as `needs-refinement`, the body may be a one-line stub plus a "Context needed" section; full sections are filled in when status moves to `open`.
 
 ## Status lifecycle
 
