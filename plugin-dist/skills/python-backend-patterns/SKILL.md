@@ -33,6 +33,9 @@ Preloaded into the `python-backend-engineer` sub-agent. Provides a dispatch tabl
 | `observability: structlog+otel` OR `stdlib-logging` | [observability.md](observability.md) |
 | Any testing task | [testing.md](testing.md) |
 | Any migration / schema-change task | [migrations.md](migrations.md) |
+| `caching: redis` | [redis.md](redis.md) |
+| PostgreSQL query / index / JSONB / upsert work | [postgres.md](postgres.md) |
+| PostgreSQL concurrency / job queue / isolation / pooling | [postgres-concurrency.md](postgres-concurrency.md) |
 | Idempotency / pagination / rate limiting / health probes / config-from-env | [api-conventions.md](api-conventions.md) |
 
 ## Universal principles (apply across stacks)
