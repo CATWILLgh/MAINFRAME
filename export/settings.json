@@ -255,8 +255,9 @@
   "effortLevel": "xhigh",
   "advisorModel": "opus",
   "editorMode": "normal",
-  "verbose": true,
+  "verbose": false,
   "preferredNotifChannel": "kitty",
+  "autoCompactEnabled": true,
   "teammateMode": "in-process",
   "remoteControlAtStartup": false
 }
