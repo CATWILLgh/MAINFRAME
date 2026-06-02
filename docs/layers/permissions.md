@@ -1,133 +1,133 @@
 # Layer: Permissions
 
-> Слой Claude Code, контролирующий, какие tool-вызовы разрешены, запрещены или требуют подтверждения у пользователя. В хабе: `export/settings.json` блок `permissions.{allow, deny, ask}` → симлинк в `~/.claude/settings.json` → действует во всех проектах.
+> The Claude Code layer that controls which tool calls are allowed, blocked, or require user confirmation. In the hub: the `export/settings.json` block `permissions.{allow, deny, ask}` → symlinked to `~/.claude/settings.json` → takes effect in all projects.
 
-> Последнее обновление: 2026-05-28 (3-секционный rewrite).
+> Last updated: 2026-05-28 (3-section rewrite).
 
 ---
 
-## Где живёт / Как install
+## Where it lives / How to install
 
-- В хабе: `export/settings.json` — поля `permissions.allow`, `permissions.deny`, `permissions.ask`, плюс `permissions.defaultMode`.
-- На машине: `~/.claude/settings.json` (симлинк на хабовый файл).
-- В любом проекте: `<repo>/.claude/settings.json` (project-scope) и `<repo>/.claude/settings.local.json` (gitignored, local).
-- Активация: одновременно со всем `export/settings.json` через симлинк. Отдельной активации только для permissions нет. File watcher Claude Code подхватывает правки «with brief delay» без рестарта.
+- In the hub: `export/settings.json` — fields `permissions.allow`, `permissions.deny`, `permissions.ask`, plus `permissions.defaultMode`.
+- On the machine: `~/.claude/settings.json` (symlink to the hub file).
+- In any project: `<repo>/.claude/settings.json` (project-scope) and `<repo>/.claude/settings.local.json` (gitignored, local).
+- Activation: simultaneously with all of `export/settings.json` via symlink. There is no separate activation for permissions only. The Claude Code file watcher picks up edits "with brief delay" without a restart.
 
 ---
 
 ## 1. Canonical reference (Anthropic Claude Code docs)
 
-### 1.1. Синтаксис правил (Bash, основной случай)
+### 1.1. Rule syntax (Bash, the primary case)
 
-Формат: `"Tool"` или `"Tool(specifier)"`. Источник: `code.claude.com/docs/en/permissions`.
+Format: `"Tool"` or `"Tool(specifier)"`. Source: `code.claude.com/docs/en/permissions`.
 
-> «Bash permission rules support wildcard matching with `*`. Wildcards can appear at any position in the command, including at the beginning, middle, or end.»
+> "Bash permission rules support wildcard matching with `*`. Wildcards can appear at any position in the command, including at the beginning, middle, or end."
 
-| Pattern | Что match'ит | Пример команд |
+| Pattern | What it matches | Example commands |
 |---|---|---|
-| `Bash(npm run build)` | строго эту команду без extra args | `npm run build` |
-| `Bash(npm run test *)` | starts with `npm run test ` + что угодно | `npm run test unit`, не `npm run testfoo` |
-| `Bash(npm *)` | starts with `npm ` (с пробелом) | `npm install`, не `npmx` |
-| `Bash(npm*)` | starts with `npm` (без пробела) | `npm install` И `npmx run` |
-| `Bash(* install)` | заканчивается ` install` | `pnpm install`, `apt install` |
+| `Bash(npm run build)` | exactly this command with no extra args | `npm run build` |
+| `Bash(npm run test *)` | starts with `npm run test ` + anything | `npm run test unit`, not `npm run testfoo` |
+| `Bash(npm *)` | starts with `npm ` (with a space) | `npm install`, not `npmx` |
+| `Bash(npm*)` | starts with `npm` (no space) | `npm install` AND `npmx run` |
+| `Bash(* install)` | ends with ` install` | `pnpm install`, `apt install` |
 | `Bash(git * main)` | `git <whatever> main` | `git checkout main`, `git push origin main` |
-| `Bash(* --version)` | заканчивается ` --version` | `node --version` |
-| `Bash(* --help *)` | содержит ` --help ` | `npm --help install` |
+| `Bash(* --version)` | ends with ` --version` | `node --version` |
+| `Bash(* --help *)` | contains ` --help ` | `npm --help install` |
 
-**Word-boundary правило (критическое):**
+**Word-boundary rule (critical):**
 
-> «When `*` appears at the end with a space before it (like `Bash(ls *)`), it enforces a word boundary, requiring the prefix to be followed by a space or end-of-string. For example, `Bash(ls *)` matches `ls -la` but not `lsof`. In contrast, `Bash(ls*)` without a space matches both `ls -la` and `lsof`.»
+> "When `*` appears at the end with a space before it (like `Bash(ls *)`), it enforces a word boundary, requiring the prefix to be followed by a space or end-of-string. For example, `Bash(ls *)` matches `ls -la` but not `lsof`. In contrast, `Bash(ls*)` without a space matches both `ls -la` and `lsof`."
 
-**`:*` суффикс:**
+**`:*` suffix:**
 
-> «The `:*` form is only recognized at the end of a pattern.» — эквивалентен `<prefix> *` (с пробелом + word boundary). `Bash(ls:*)` == `Bash(ls *)`.
+> "The `:*` form is only recognized at the end of a pattern." — equivalent to `<prefix> *` (with a space + word boundary). `Bash(ls:*)` == `Bash(ls *)`.
 
-**Один `*` matches любую sequence, включая пробелы** — поэтому один wildcard может span несколько аргументов.
+**A single `*` matches any sequence, including spaces** — so one wildcard can span multiple arguments.
 
 ### 1.2. Evaluation order
 
-> «Rules are evaluated in order: **deny rules first, then ask, then allow.** The first matching rule wins.»
+> "Rules are evaluated in order: **deny rules first, then ask, then allow.** The first matching rule wins."
 
 ```
-1. deny — match → BLOCKED (даже в bypassPermissions mode)
-2. ask  — match → prompt (или deny в dontAsk/headless)
-3. allow — match → разрешено без prompt'а
-4. no match → default behavior (prompt в interactive, deny в dontAsk)
+1. deny — match → BLOCKED (even in bypassPermissions mode)
+2. ask  — match → prompt (or deny in dontAsk/headless)
+3. allow — match → permitted without a prompt
+4. no match → default behavior (prompt in interactive, deny in dontAsk)
 ```
 
-**`bypassPermissions` exception:** deny rules применяются всегда, даже в этом mode. Цитата: «If a deny rule matches, the tool is blocked, even if `bypassPermissions` mode is active.»
+**`bypassPermissions` exception:** deny rules are applied always, even in this mode. Quote: "If a deny rule matches, the tool is blocked, even if `bypassPermissions` mode is active."
 
-### 1.3. Cross-scope: permission rules **merge**, не override
+### 1.3. Cross-scope: permission rules **merge**, not override
 
-> «Permission rules behave differently because they merge across scopes rather than override.»
-> «If user settings allow a permission and project settings deny it, the deny rule blocks it. The reverse is also true: a user-level deny blocks a project-level allow, because deny rules from any scope are evaluated before allow rules.»
+> "Permission rules behave differently because they merge across scopes rather than override."
+> "If user settings allow a permission and project settings deny it, the deny rule blocks it. The reverse is also true: a user-level deny blocks a project-level allow, because deny rules from any scope are evaluated before allow rules."
 
-Порядок сбора:
-1. Все `deny` от ВСЕХ scopes (managed, user, project, local) → проверяются первыми.
-2. Все `ask` от всех scopes → вторыми.
-3. Все `allow` от всех scopes → третьими.
+Collection order:
+1. All `deny` from ALL scopes (managed, user, project, local) → evaluated first.
+2. All `ask` from all scopes → evaluated second.
+3. All `allow` from all scopes → evaluated third.
 
-**Следствие:** добавление `deny` в любом слое (например, в хабе через симлинк) — жёсткая защита, которую нельзя обойти `allow` в другом слое.
+**Consequence:** adding a `deny` in any layer (e.g. in the hub via symlink) is a hard guard that cannot be bypassed by an `allow` in another layer.
 
-### 1.4. Composite Bash commands — официальная декомпозиция
+### 1.4. Composite Bash commands — official decomposition
 
-> «Claude Code is aware of shell operators, so a rule like `Bash(safe-cmd *)` won't give it permission to run the command `safe-cmd && other-cmd`. The recognized command separators are `&&`, `||`, `;`, `|`, `|&`, `&`, and newlines. **A rule must match each subcommand independently.**»
+> "Claude Code is aware of shell operators, so a rule like `Bash(safe-cmd *)` won't give it permission to run the command `safe-cmd && other-cmd`. The recognized command separators are `&&`, `||`, `;`, `|`, `|&`, `&`, and newlines. **A rule must match each subcommand independently.**"
 
-То есть команда декомпозируется в AST по разделителям, и pattern check применяется к каждой sub-команде.
+That is, the command is decomposed into an AST by separators, and the pattern check is applied to each subcommand.
 
-**Hardening 2026-w15:** до этого update'а compound commands были bypass route (backslash flags, env var prefixes, `/dev/tcp` redirects, compound operators). Сейчас закрыто. Источник: `code.claude.com/docs/en/whats-new/2026-w15`.
+**Hardening 2026-w15:** prior to this update, compound commands were a bypass route (backslash flags, env var prefixes, `/dev/tcp` redirects, compound operators). Now closed. Source: `code.claude.com/docs/en/whats-new/2026-w15`.
 
-### 1.5. Mode-зависимое поведение `ask`
+### 1.5. Mode-dependent behavior of `ask`
 
-| Mode | Что делает `ask` rule |
+| Mode | What an `ask` rule does |
 |---|---|
-| `default` (interactive) | Показывает prompt пользователю |
-| `dontAsk` | «ask rules are denied rather than prompting» (источник: permission-modes) |
-| `bypassPermissions` | `ask` rules игнорируются полностью; `deny` всё ещё блокирует |
-| Headless `-p` | Не документировано явно; по аналогии с `dontAsk` — likely deny |
+| `default` (interactive) | Shows a prompt to the user |
+| `dontAsk` | "ask rules are denied rather than prompting" (source: permission-modes) |
+| `bypassPermissions` | `ask` rules are ignored entirely; `deny` still blocks |
+| Headless `-p` | Not explicitly documented; by analogy with `dontAsk` — likely deny |
 
-**`acceptEdits` mode auto-approves только filesystem команды:** `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp`, `sed`, плюс с safe env-prefixes (`LANG=C`, `NO_COLOR=1`) и process wrappers (`timeout`, `nice`, `nohup`). На прочие команды стандартные правила работают.
+**`acceptEdits` mode auto-approves only filesystem commands:** `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp`, `sed`, plus those with safe env-prefixes (`LANG=C`, `NO_COLOR=1`) and process wrappers (`timeout`, `nice`, `nohup`). Standard rules apply to all other commands.
 
-### 1.6. Особые случаи
+### 1.6. Special cases
 
-- **`eval`** — всегда требует одобрения, независимо от rules. Источник: `agent-sdk/secure-deployment`.
-- **`Bash`** без specifier (bare-name rule) — matches ВСЕ Bash-команды и убирает tool из permission pipeline early. Антипаттерн.
-- **`allowManagedPermissionRulesOnly: true`** (managed scope) — игнорирует user/project rules для permissions, только managed. Корпоративная блокировка.
+- **`eval`** — always requires approval, regardless of rules. Source: `agent-sdk/secure-deployment`.
+- **`Bash`** without a specifier (bare-name rule) — matches ALL Bash commands and removes the tool from the permission pipeline early. Anti-pattern.
+- **`allowManagedPermissionRulesOnly: true`** (managed scope) — ignores user/project rules for permissions, managed only. Corporate lockdown.
 
 ### 1.7. Auto-mode classifier (2026-05-28)
 
-Auto-mode (`defaultMode: "auto"`) добавляет 4-шаговый алгоритм классификации между правилами и моделью:
+Auto-mode (`defaultMode: "auto"`) adds a 4-step classification algorithm between the rules and the model:
 
-1. Действия matching `permissions.allow` или `permissions.deny` — resolve немедленно.
-2. Read-only операции и file edits в working directory — auto-approve (кроме protected paths).
-3. Всё остальное → классификатор.
-4. Если классификатор блокирует, Claude получает причину и пробует альтернативу.
+1. Actions matching `permissions.allow` or `permissions.deny` — resolved immediately.
+2. Read-only operations and file edits within the working directory — auto-approved (except protected paths).
+3. Everything else → the classifier.
+4. If the classifier blocks, Claude receives the reason and tries an alternative.
 
-**Критическое следствие для `ask`:** правило не попадает в шаг 1, не попадает в шаг 2 → falls through to classifier. Классификатор блокирует destructive действия **молча**, без интерактивного prompt'а. Это меняет семантику `ask` в auto-mode: rule, который в default-mode даёт prompt, в auto-mode даёт silent block.
+**Critical consequence for `ask`:** the rule does not reach step 1, does not reach step 2 → falls through to the classifier. The classifier blocks destructive actions **silently**, without an interactive prompt. This changes the semantics of `ask` in auto-mode: a rule that in default-mode yields a prompt will yield a silent block in auto-mode.
 
-**Категории default block (примеры из docs):** «destroying data through force-pushes or mass deletions», «deleting remote git branches from vague instructions», «degrading security by disabling logging», «retrying failed deployment commands with safety-check flags removed», «irreversibly destroying files that existed before the session». Полный список — через `claude auto-mode defaults` команду; в docs не опубликован полностью.
+**Default block categories (examples from docs):** "destroying data through force-pushes or mass deletions", "deleting remote git branches from vague instructions", "degrading security by disabling logging", "retrying failed deployment commands with safety-check flags removed", "irreversibly destroying files that existed before the session". The full list is available via the `claude auto-mode defaults` command; it is not published in full in the docs.
 
-### 1.8. 3-tier модель хаба (2026-05-28)
+### 1.8. Hub 3-tier model (2026-05-28)
 
-Категоризация правил в `export/settings.json` по 3 уровням с явными критериями. Источники: OWASP LLM06 (Excessive Agency), NIST SP 800-53 AC-6/CM-7 (least privilege/functionality), Anthropic Auto Mode docs, real-world incidents (Replit 2025-07, PocketOS 2026-04, nx supply chain 2025-08).
+Categorization of rules in `export/settings.json` into 3 tiers with explicit criteria. Sources: OWASP LLM06 (Excessive Agency), NIST SP 800-53 AC-6/CM-7 (least privilege/functionality), Anthropic Auto Mode docs, real-world incidents (Replit 2025-07, PocketOS 2026-04, nx supply chain 2025-08).
 
-**Tier 1 — `deny`** (hard block, no override): необратимое + выход за scope + подрыв безопасности + катастрофический масштаб. Любой один критерий достаточен.
+**Tier 1 — `deny`** (hard block, no override): irreversible + out-of-scope + undermines security + catastrophic scale. Any single criterion is sufficient.
 
-**Tier 2 — `ask`** (prompt в default-mode, classifier-block в auto-mode): потенциально разрушительное с ограниченной областью + нестандартное для текущей задачи + пересечение границ доверия + ambiguous request + destructive action.
+**Tier 2 — `ask`** (prompt in default-mode, classifier-block in auto-mode): potentially destructive with limited scope + non-standard for the current task + crosses trust boundaries + ambiguous request + destructive action.
 
-**Tier 3 — `allow`** (audit без prompt): изолировано в working dir + обратимо + явно запрошено. Read-only команды НЕ требуют явных `allow` правил — Claude Code auto-allows их.
+**Tier 3 — `allow`** (audited without prompt): isolated within the working directory + reversible + explicitly requested. Read-only commands do NOT require explicit `allow` rules — Claude Code auto-allows them.
 
-### 1.9. Path-scoped control — только через hook
+### 1.9. Path-scoped control — via hook only
 
-Matcher-based path control (например, `Bash(rm -rf ./private-dir/*)`) **ненадёжен**: Claude может писать абсолютные или относительные пути, нормализации перед сравнением нет, glob/tilde/variable expansion не разрешается перед matching. Единственный надёжный способ — `PreToolUse` hook со скриптом, который парсит команду через `shlex`, разрешает пути через `os.path.abspath`/`expanduser`/`expandvars`, проверяет принадлежность к `$CLAUDE_PROJECT_DIR`.
+Matcher-based path control (e.g. `Bash(rm -rf ./private-dir/*)`) is **unreliable**: Claude may write absolute or relative paths, there is no normalization before comparison, and glob/tilde/variable expansion is not resolved before matching. The only reliable approach is a `PreToolUse` hook with a script that parses the command via `shlex`, resolves paths with `os.path.abspath`/`expanduser`/`expandvars`, and checks membership against `$CLAUDE_PROJECT_DIR`.
 
-Caveat: hook `permissionDecision: "ask"` в auto-mode переходит в `"defer"` — не даёт UI prompt, а сохраняет вызов для Agent SDK wrapper. То есть hook даёт path-precision, но не возвращает интерактивность в auto-mode.
+Caveat: a hook `permissionDecision: "ask"` in auto-mode transitions to `"defer"` — it does not show a UI prompt but instead holds the call for the Agent SDK wrapper. That is, the hook provides path-precision but does not restore interactivity in auto-mode.
 
 ---
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Текущие настройки в `export/settings.json`
+### 2.1. Current settings in `export/settings.json`
 
 ```json
 "permissions": {
@@ -142,55 +142,55 @@ Caveat: hook `permissionDecision: "ask"` в auto-mode переходит в `"de
     "Bash(git commit --no-verify*)", "Bash(git push --no-verify*)", "Bash(git rebase --no-verify*)",
     "Bash(npm install --no-verify*)", "Bash(pnpm install --no-verify*)"
   ],
-  "allow": [ /* ~80 prefix-form rules, в основном `Bash(cmd:*)` */ ]
+  "allow": [ /* ~80 prefix-form rules, mostly `Bash(cmd:*)` */ ]
 }
 ```
 
-### 2.2. Canonical claim vs hub empirical — расхождения
+### 2.2. Canonical claim vs hub empirical — discrepancies
 
-Эмпирические таблицы из тестов в этой же сессии (2026-05-27 и 2026-05-28). Anthropic docs описывают **единый matching engine** для всех трёх списков — никаких documented различий между формами. Наблюдается обратное:
+Empirical tables from tests in this same session (2026-05-27 and 2026-05-28). Anthropic docs describe **a single matching engine** for all three lists — no documented differences between forms. The observed behavior is the opposite:
 
-| Pattern | Слой | Docs claim | Hub empirical | Дата |
+| Pattern | Layer | Docs claim | Hub empirical | Date |
 |---|---|---|---|---|
-| `Bash(*pat*)` anywhere | `deny` | Должно работать (универсальный) | **Работает** | 2026-05-27 |
-| `Bash(prefix:*)` | `deny` | Должно работать | **НЕ блокирует** | 2026-05-27 |
-| `Bash(prefix*)` | `deny` | Должно работать | **НЕ работает** | 2026-05-27 |
-| `Bash(*pat*)` anywhere | `ask` | Должно работать | **НЕ fires** (silent pass) | 2026-05-28 |
-| `Bash(* pat *)` anywhere with spaces | `ask` | Должно работать | **НЕ fires** | 2026-05-28 |
-| `Bash(* pat)` ends-with | `ask` | Должно работать | **НЕ fires** | 2026-05-28 |
-| `Bash(rm -rf *)` prefix+space | `ask` | Должно работать | **Работает** (direct + composite через `cd && rm`) | 2026-05-28 |
-| `Bash(git commit --no-verify*)` prefix | `ask` для composite `cd /dir && git commit --no-verify ...` | Должно работать (sub-decomposition) | **НЕ fires** — нерешённое расхождение | 2026-05-28 |
-| Composite decomposition по `&&`/`;`/`\|` | все | Работает (hardened 2026-w15) | **Работает для `rm -rf`**, **не работает для `git commit --no-verify`** | 2026-05-28 |
+| `Bash(*pat*)` anywhere | `deny` | Should work (universal) | **Works** | 2026-05-27 |
+| `Bash(prefix:*)` | `deny` | Should work | **Does NOT block** | 2026-05-27 |
+| `Bash(prefix*)` | `deny` | Should work | **Does NOT work** | 2026-05-27 |
+| `Bash(*pat*)` anywhere | `ask` | Should work | **Does NOT fire** (silent pass) | 2026-05-28 |
+| `Bash(* pat *)` anywhere with spaces | `ask` | Should work | **Does NOT fire** | 2026-05-28 |
+| `Bash(* pat)` ends-with | `ask` | Should work | **Does NOT fire** | 2026-05-28 |
+| `Bash(rm -rf *)` prefix+space | `ask` | Should work | **Works** (direct + composite via `cd && rm`) | 2026-05-28 |
+| `Bash(git commit --no-verify*)` prefix | `ask` for composite `cd /dir && git commit --no-verify ...` | Should work (sub-decomposition) | **Does NOT fire** — unresolved discrepancy | 2026-05-28 |
+| Composite decomposition via `&&`/`;`/`\|` | all | Works (hardened 2026-w15) | **Works for `rm -rf`**, **does not work for `git commit --no-verify`** | 2026-05-28 |
 
-**Что это значит для нас:**
-- Docs утверждают единый matcher → наши runtime quirks нельзя выводить из теории, **только эмпирика**.
-- Anywhere-form надёжен только в `deny`. В `ask` — не работает совсем.
-- Prefix-form работает в `ask` для одних команд, не для других — причина неизвестна (см. серая зона).
+**What this means for us:**
+- Docs assert a single matcher → our runtime quirks cannot be derived from theory, **empirical testing only**.
+- The anywhere-form is reliable only in `deny`. In `ask` — it does not work at all.
+- The prefix-form works in `ask` for some commands and not others — the reason is unknown (see gray zones).
 
 ---
 
 ## 3. Gray zones / open questions
 
-1. **Почему `Bash(prefix:*)` в `deny` не блокирует, а в `allow` блокирует?** Docs описывают единый matching engine; различие — undocumented runtime quirk.
-2. **Почему `Bash(git commit --no-verify*)` не fires в `ask` на composite, хотя `Bash(rm -rf *)` fires?** Гипотезы: quoting (`-m "..."`), trailing flag combinations, специфика обработки `--no-verify`. Требует доп. эксперимента.
-3. **`acceptEdits` mode + `ask` правила** — поведение не документировано. Empirical: `rm -rf` fires (denied); `git commit --no-verify` не fires. Inconsistent.
-4. **`ask` rules в headless `-p` mode (без `--dontAsk`)** — по аналогии с dontAsk должно быть deny, прямо не сказано.
-5. **Symlinks на settings paths** — не упомянуты в docs. Empirically: работают (хаб их использует), file watcher подхватывает.
-6. **Размер «brief delay» file watcher'а** — не задокументирован; emp. observation — миллисекунды-секунды.
-7. **`--force-with-lease` под общим pattern `*--force*`** — anywhere-form `Bash(*--force*)` поймает и `--force-with-lease` (что нежелательно: safer вариант push'а). Точечный технический блок не реализован; behavioral guard в CLAUDE.md покрывает злоупотребление.
+1. **Why does `Bash(prefix:*)` in `deny` not block, while in `allow` it does block?** Docs describe a single matching engine; the difference is an undocumented runtime quirk.
+2. **Why does `Bash(git commit --no-verify*)` not fire in `ask` on composite commands, while `Bash(rm -rf *)` does?** Hypotheses: quoting (`-m "..."`), trailing flag combinations, specific handling of `--no-verify`. Requires further experimentation.
+3. **`acceptEdits` mode + `ask` rules** — behavior is undocumented. Empirical: `rm -rf` fires (denied); `git commit --no-verify` does not fire. Inconsistent.
+4. **`ask` rules in headless `-p` mode (without `--dontAsk`)** — by analogy with dontAsk it should be deny, but this is not stated explicitly.
+5. **Symlinks on settings paths** — not mentioned in docs. Empirically: they work (the hub uses them), the file watcher picks them up.
+6. **The size of the file watcher "brief delay"** — not documented; empirical observation — milliseconds to seconds.
+7. **`--force-with-lease` under the general pattern `*--force*`** — the anywhere-form `Bash(*--force*)` will also catch `--force-with-lease` (undesirable: it is the safer push variant). A precise technical block is not implemented; the behavioral guard in CLAUDE.md covers misuse.
 
 ---
 
-## Источники
+## Sources
 
-**Authoritative (Anthropic Claude Code docs через Context7 `/websites/code_claude`):**
+**Authoritative (Anthropic Claude Code docs via Context7 `/websites/code_claude`):**
 - `code.claude.com/docs/en/permissions` — wildcards, compound commands, settings precedence.
 - `code.claude.com/docs/en/settings` — scopes, priority, file watcher.
-- `code.claude.com/docs/en/agent-sdk/permissions` — deny в bypassPermissions, dontAsk semantics, eval order.
-- `code.claude.com/docs/en/permission-modes` — `acceptEdits`-список filesystem команд, `dontAsk` semantics.
-- `code.claude.com/docs/en/agent-sdk/secure-deployment` — AST parsing, `eval` всегда требует одобрения.
+- `code.claude.com/docs/en/agent-sdk/permissions` — deny in bypassPermissions, dontAsk semantics, eval order.
+- `code.claude.com/docs/en/permission-modes` — `acceptEdits` filesystem command list, `dontAsk` semantics.
+- `code.claude.com/docs/en/agent-sdk/secure-deployment` — AST parsing, `eval` always requires approval.
 - `code.claude.com/docs/en/whats-new/2026-w15` — compound command hardening.
 - `code.claude.com/docs/en/server-managed-settings` — `allowManagedPermissionRulesOnly`.
 
 **Internal:**
-- Эмпирика хаба 2026-05-27 (deny: prefix vs anywhere) и 2026-05-28 (ask: prefix vs anywhere, composite, runtime quirks) — таблица §2.2.
+- Hub empirical data 2026-05-27 (deny: prefix vs anywhere) and 2026-05-28 (ask: prefix vs anywhere, composite, runtime quirks) — table §2.2.

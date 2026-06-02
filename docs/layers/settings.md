@@ -1,113 +1,113 @@
-# Layer: Settings (прочие поля)
+# Layer: Settings (other fields)
 
-> Конфигурация Claude Code за пределами `permissions` и `hooks` (которые имеют отдельные спеки). В хабе: `export/settings.json` остальные поля.
+> Configuration of Claude Code outside `permissions` and `hooks` (which have their own separate specs). In the hub: `export/settings.json` — the remaining fields.
 
-> Последнее обновление: 2026-05-28 (3-секционный rewrite).
+> Last updated: 2026-05-28 (3-section rewrite).
 
 ---
 
-## Где живёт / Как install
+## Where it lives / How to install
 
-- В хабе: `export/settings.json` — единый файл, в котором сосуществуют `permissions`, `hooks` и прочие поля.
-- На машине: `~/.claude/settings.json` (симлинк целого файла).
-- Активация: одним симлинком; правки в `export/settings.json` подхватываются file watcher'ом без рестарта.
+- In the hub: `export/settings.json` — a single file where `permissions`, `hooks`, and other fields coexist.
+- On the machine: `~/.claude/settings.json` (symlink of the whole file).
+- Activation: a single symlink; edits to `export/settings.json` are picked up by the file watcher without a restart.
 
 ---
 
 ## 1. Canonical reference (Anthropic Claude Code docs)
 
-### 1.1. Scopes (4 уровня)
+### 1.1. Scopes (4 levels)
 
-Источник: `code.claude.com/docs/en/settings`.
+Source: `code.claude.com/docs/en/settings`.
 
-| Scope | Локация | Влияние | Shared? |
+| Scope | Location | Impact | Shared? |
 |---|---|---|---|
-| **Managed** | macOS: `/Library/Application Support/ClaudeCode/managed-settings.json` или MDM | Все пользователи машины | Yes (IT-deploy) |
-| **User** | `~/.claude/settings.json` | Один пользователь, во всех проектах | No |
-| **Project** | `<repo>/.claude/settings.json` | Все, кто работает в репо | Yes (git) |
-| **Local** | `<repo>/.claude/settings.local.json` | Только этот пользователь в этом репо | No (gitignored) |
+| **Managed** | macOS: `/Library/Application Support/ClaudeCode/managed-settings.json` or MDM | All users on the machine | Yes (IT-deploy) |
+| **User** | `~/.claude/settings.json` | One user, across all projects | No |
+| **Project** | `<repo>/.claude/settings.json` | Everyone working in the repo | Yes (git) |
+| **Local** | `<repo>/.claude/settings.local.json` | Only this user in this repo | No (gitignored) |
 
 ### 1.2. Priority order
 
-От высшего к низшему:
-1. **Managed** — нельзя переопределить ничем.
-2. **Command-line arguments** (`--allowedTools`, `--permission-mode`, ...) — сессионные.
-3. **Local** — переопределяет project и user.
-4. **Project** — переопределяет user.
-5. **User** — действует, когда нигде больше не задано.
+From highest to lowest:
+1. **Managed** — cannot be overridden by anything.
+2. **Command-line arguments** (`--allowedTools`, `--permission-mode`, ...) — session-scoped.
+3. **Local** — overrides project and user.
+4. **Project** — overrides user.
+5. **User** — applies when nothing else is set.
 
 ### 1.3. Merge vs override
 
-**Стандартные настройки (не permissions): override (closer scope wins).**
+**Standard settings (not permissions): override (closer scope wins).**
 
-> «If your user settings set `spinnerTipsEnabled` to `true` and project settings set it to `false`, the project value applies.»
+> "If your user settings set `spinnerTipsEnabled` to `true` and project settings set it to `false`, the project value applies."
 
-**Permissions rules: merge across scopes** (см. отдельную спеку [permissions.md](permissions.md)).
+**Permissions rules: merge across scopes** (see the separate spec [permissions.md](permissions.md)).
 
-### 1.4. Hot-reload через file watcher
+### 1.4. Hot-reload via file watcher
 
-> «Claude Code monitors your settings files and reloads them upon changes, allowing edits to most keys to apply to the running session without a restart. This includes `permissions`, `hooks`, and credential helpers like `apiKeyHelper`.»
+> "Claude Code monitors your settings files and reloads them upon changes, allowing edits to most keys to apply to the running session without a restart. This includes `permissions`, `hooks`, and credential helpers like `apiKeyHelper`."
 
-Точный размер «brief delay» не документирован.
+The exact size of the "brief delay" is not documented.
 
-### 1.5. Известные канонические поля
+### 1.5. Known canonical fields
 
-Из docs (`code.claude.com/docs/en/settings`):
-- `$schema` — JSON Schema URL для IDE-валидации.
-- `env` — env vars для bash-инструмента и hook'ов.
-- `permissions.{allow,deny,ask,defaultMode}` — см. [permissions.md](permissions.md).
-- `hooks` — см. [hooks.md](hooks.md).
-- `enabledPlugins` — toggles для plugins marketplace.
-- `outputStyle` — выбор активного output style (см. [output-styles.md](output-styles.md)).
+From docs (`code.claude.com/docs/en/settings`):
+- `$schema` — JSON Schema URL for IDE validation.
+- `env` — env vars for the bash tool and hooks.
+- `permissions.{allow,deny,ask,defaultMode}` — see [permissions.md](permissions.md).
+- `hooks` — see [hooks.md](hooks.md).
+- `enabledPlugins` — toggles for plugins marketplace.
+- `outputStyle` — selects the active output style (see [output-styles.md](output-styles.md)).
 - `autoMemoryEnabled` — runtime memory toggle.
-- `companyAnnouncements` — массив строк, показываются при старте.
+- `companyAnnouncements` — array of strings, displayed at startup.
 - `apiKeyHelper` — credential helper command.
-- `statusLine.command` — кастомный статус-скрипт.
+- `statusLine.command` — custom status script.
 - `allowManagedPermissionRulesOnly` — only managed permissions apply (corp lockdown).
 
 ---
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Текущие поля в `export/settings.json` (помимо permissions/hooks)
+### 2.1. Current fields in `export/settings.json` (besides permissions/hooks)
 
-| Поле | Значение | Назначение |
+| Field | Value | Purpose |
 |---|---|---|
-| `$schema` | `https://json.schemastore.org/claude-code-settings.json` | IDE-валидация |
-| `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `"1"` | Эксп. флаг agent teams |
-| `permissions.defaultMode` | `"acceptEdits"` | Default mode сессии |
+| `$schema` | `https://json.schemastore.org/claude-code-settings.json` | IDE validation |
+| `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `"1"` | Experimental agent teams flag |
+| `permissions.defaultMode` | `"acceptEdits"` | Default session mode |
 | `enabledPlugins.superpowers@claude-plugins-official` | `false` | Disabled |
 | `enabledPlugins.context7@claude-plugins-official` | `true` | Enabled (Context7 plugin) |
-| `language` | `"Russian"` | Язык интерфейса/ответов |
-| `advisorModel` | `"opus"` | Модель для `advisor()` |
-| `preferredNotifChannel` | `"kitty"` | Канал нотификаций |
-| `teammateMode` | `"in-process"` | Mode для teammates |
+| `language` | `"Russian"` | Interface/response language |
+| `advisorModel` | `"opus"` | Model used for `advisor()` |
+| `preferredNotifChannel` | `"kitty"` | Notification channel |
+| `teammateMode` | `"in-process"` | Mode for teammates |
 | `remoteControlAtStartup` | `false` | Remote control |
-| `effortLevel` | `"max"` | Effort level Claude'а |
+| `effortLevel` | `"max"` | Claude's effort level |
 
-### 2.2. Backups в репо
+### 2.2. Backups in the repo
 
-При каждой нетривиальной правке `export/settings.json` создаётся `export/settings.json.backup-<timestamp>` (см. два существующих backup'а от 2026-05-27 и 2026-05-28).
+On every non-trivial edit to `export/settings.json`, a `export/settings.json.backup-<timestamp>` is created (see the two existing backups from 2026-05-27 and 2026-05-28).
 
 ---
 
 ## 3. Gray zones / open questions
 
-1. **Полный реестр всех допустимых ключей** — есть `$schema`, но не вся спека человекочитаемо одним списком. Часть полей (`teammateMode`, `effortLevel`, `preferredNotifChannel`, `remoteControlAtStartup`) не описана в основных docs страницах — приходится reverse-engineering из IDE-подсказок.
-2. **Поведение симлинков** `~/.claude/settings.json` → external file — не упомянуто в docs. Empirically: работает, file watcher подхватывает.
-3. **Несколько JSON-файлов на одном scope** (например, `~/.claude/settings.json` + `~/.claude/settings.deny.json`) — не задокументировано, не работает (только один файл на scope).
-4. **`extends:` / `include:` для импорта другого settings** — не существует.
-5. **Partial overlay (.d/-папка)** — нет.
-6. **Точный размер «brief delay»** file watcher'а — не задокументирован.
+1. **Full registry of all allowed keys** — `$schema` exists, but the full spec is not available as a single human-readable list. Some fields (`teammateMode`, `effortLevel`, `preferredNotifChannel`, `remoteControlAtStartup`) are not described on the main docs pages — they require reverse-engineering from IDE hints.
+2. **Symlink behavior** `~/.claude/settings.json` → external file — not mentioned in docs. Empirically: works, the file watcher picks it up.
+3. **Multiple JSON files at the same scope** (e.g. `~/.claude/settings.json` + `~/.claude/settings.deny.json`) — not documented, does not work (only one file per scope).
+4. **`extends:` / `include:` for importing another settings file** — does not exist.
+5. **Partial overlay (.d/ directory)** — does not exist.
+6. **Exact size of the "brief delay"** of the file watcher — not documented.
 
 ---
 
-## Источники
+## Sources
 
-**Authoritative (Anthropic Claude Code docs через Context7):**
-- `code.claude.com/docs/en/settings` — scopes, priority order, hot-reload, основные ключи.
+**Authoritative (Anthropic Claude Code docs via Context7):**
+- `code.claude.com/docs/en/settings` — scopes, priority order, hot-reload, main keys.
 - `code.claude.com/docs/en/env-vars` — env vars vs settings env block.
 
 **Internal:**
-- Эмпирика хаба 2026-05-26 (порядок precedence, merge для permissions vs override для прочего).
-- ADR'ы 0012, 0014.
+- Hub empirics 2026-05-26 (precedence order, merge for permissions vs override for other fields).
+- ADRs 0012, 0014.

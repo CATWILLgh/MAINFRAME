@@ -1,16 +1,16 @@
 # Layer: Output styles
 
-> Кастомные стили вывода Claude'а (например, «diagram-first», «code-reviewer», «brevity»). В хабе: `export/output-styles/<name>.md` (пока **пусто**).
+> Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `export/output-styles/<name>.md` (currently **empty**).
 
-> Последнее обновление: 2026-05-28 (3-секционный rewrite). Слой зарезервирован; артефактов нет.
+> Last updated: 2026-05-28 (3-section rewrite). Layer is reserved; no artifacts yet.
 
 ---
 
-## Где будет жить / Как install
+## Where it lives / How to install
 
-- В хабе: `export/output-styles/<name>.md` — один файл на стиль.
-- На машине: `~/.claude/output-styles/<name>.md` (симлинк через `install.sh`).
-- Активация: через `/config` (выбор активного) или `outputStyle: "<name>"` в `settings.json`.
+- In the hub: `export/output-styles/<name>.md` — one file per style.
+- On the machine: `~/.claude/output-styles/<name>.md` (symlinked via `install.sh`).
+- Activation: via `/config` (selecting the active style) or `outputStyle: "<name>"` in `settings.json`.
 
 ---
 
@@ -18,67 +18,67 @@
 
 ### 1.1. Frontmatter
 
-Источник: `code.claude.com/docs/en/output-styles`.
+Source: `code.claude.com/docs/en/output-styles`.
 
 ```yaml
 ---
 name: <kebab-case>                       # display name
-description: <одна строка>               # для меню /config
-keep-coding-instructions: <true|false>   # сохранять стандартные coding-инструкции при активации
+description: <one line>                  # shown in /config menu
+keep-coding-instructions: <true|false>   # whether to preserve standard coding instructions when the style is active
 ---
 
-Тело — markdown-инструкция, добавляется в system prompt при активации стиля.
+Body — a markdown instruction, appended to the system prompt when the style is activated.
 ```
 
-### 1.2. Активация и scope
+### 1.2. Activation and scope
 
-- Активный стиль выбирается через `/config` (runtime) или фиксируется глобально через `outputStyle: "<name>"` в `settings.json`.
-- Стиль действует **на всю сессию**, пока не сменён.
-- При активации тело файла **добавляется в system prompt** — модель видит инструкции как часть базовых правил.
-- `keep-coding-instructions: false` — заменить стандартные coding-инструкции собственными; `true` (default) — добавить поверх.
+- The active style is selected via `/config` (runtime) or fixed globally via `outputStyle: "<name>"` in `settings.json`.
+- A style applies **for the entire session** until changed.
+- When activated, the file body **is appended to the system prompt** — the model sees the instructions as part of its baseline rules.
+- `keep-coding-instructions: false` — replaces the standard coding instructions with the style's own; `true` (default) — adds on top of them.
 
 ### 1.3. Skills vs Output styles
 
 | | Output style | Skill |
 |---|---|---|
-| Назначение | формат/тон/структура вывода (как отвечать) | conditional knowledge / workflow (что делать) |
-| Активация | sticky через `/config` или settings (вся сессия) | per-trigger через `description + when_to_use` |
-| В system prompt | да, при активации | нет; подгружается тело при триггере |
-| Frontmatter | `name`, `description`, `keep-coding-instructions` | широкий (см. [skills.md](skills.md)) |
+| Purpose | output format / tone / structure (how to respond) | conditional knowledge / workflow (what to do) |
+| Activation | sticky via `/config` or settings (whole session) | per-trigger via `description + when_to_use` |
+| In system prompt | yes, when activated | no; body is loaded on trigger |
+| Frontmatter | `name`, `description`, `keep-coding-instructions` | broad (see [skills.md](skills.md)) |
 
-Output style — для **глобальной vibe сессии**. Skill — для **точечного знания/процедуры**.
+Output style — for the **global session vibe**. Skill — for **targeted knowledge / procedure**.
 
 ---
 
 ## 2. Hub usage & ADRs
 
-**Артефактов нет.** Слой зарезервирован. Возможные кандидаты на будущее:
-- `code-review` — структурированный вывод для аудита.
-- `brevity` — максимально короткие ответы.
-- `diagram-first` — приоритет диаграмм/ASCII-схем.
+**No artifacts.** Layer is reserved. Possible future candidates:
+- `code-review` — structured output for audits.
+- `brevity` — maximally concise responses.
+- `diagram-first` — diagrams / ASCII schematics as the primary output format.
 
-Принципы хаба (когда появится первый стиль):
-- **Один стиль = одна явная цель** (не «универсальный»).
-- **`description` короткое** — показывается в `/config` меню.
-- **Не дублировать поведение CLAUDE.md** — общие правила там; стиль покрывает только формат.
+Hub principles (when the first style is added):
+- **One style = one explicit goal** (not "all-purpose").
+- **`description` kept short** — displayed in the `/config` menu.
+- **Do not duplicate CLAUDE.md behavior** — general rules belong there; a style covers format only.
 
-ADR'ы: нет.
+ADRs: none.
 
 ---
 
 ## 3. Gray zones / open questions
 
-1. **`keep-coding-instructions: false`** — что именно удаляется? Точный scope (только техническое поведение, или вся discipline) не описан явно.
-2. **Composition** — можно ли активировать два стиля одновременно? Не задокументировано; предполагаемо нет.
-3. **Persistence через сессии** — `outputStyle:` в settings sticky; через `/config` — на текущую сессию? Уточнить.
+1. **`keep-coding-instructions: false`** — what exactly is removed? The precise scope (only technical behavior, or all discipline) is not described explicitly.
+2. **Composition** — can two styles be active at the same time? Not documented; presumably no.
+3. **Persistence across sessions** — `outputStyle:` in settings is sticky; via `/config` — only for the current session? To be confirmed.
 
 ---
 
-## Источники
+## Sources
 
-**Authoritative (Anthropic Claude Code docs через Context7):**
-- `code.claude.com/docs/en/output-styles` — формат, frontmatter, `keep-coding-instructions`.
-- `code.claude.com/docs/en/agent-sdk/modifying-system-prompts` — как стили вписываются в system prompt.
+**Authoritative (Anthropic Claude Code docs via Context7):**
+- `code.claude.com/docs/en/output-styles` — format, frontmatter, `keep-coding-instructions`.
+- `code.claude.com/docs/en/agent-sdk/modifying-system-prompts` — how styles fit into the system prompt.
 
 **Internal:**
-- [decision-tree.md](decision-tree.md) — Q3 (тип артефакта: vibe/format → Output style).
+- [decision-tree.md](decision-tree.md) — Q3 (artifact type: vibe/format → Output style).

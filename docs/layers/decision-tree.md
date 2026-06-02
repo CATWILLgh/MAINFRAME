@@ -1,331 +1,331 @@
-# Decision tree: на какой слой ложится новый артефакт
+# Decision tree: which layer owns a new artifact
 
-> При появлении нового правила, навыка, проверки или процесса — **сначала пройди это дерево**, потом размещай. Без ad hoc выбора. Иначе хаб превратится в ком всего обо всем.
+> When a new rule, skill, check, or process appears — **walk this tree first**, then place it. No ad hoc choices. Otherwise the hub turns into a ball of everything about everything.
 
-> Последнее обновление: 2026-05-29 (добавлена ось file-path match → Rule).
+> Last updated: 2026-05-29 (added axis: file-path match → Rule).
 
 ---
 
-## Q1 — Как должно активироваться?
+## Q1 — How should it activate?
 
-| Активация | Слой |
+| Activation | Layer |
 |---|---|
-| Всегда, в каждой сессии каждого проекта | **CLAUDE.md** ([claude-md.md](claude-md.md)) |
-| Claude читает файл по glob-паттерну (`Read` tool) | **Rule** ([rules.md](rules.md)) с `paths:` frontmatter |
-| Семантический match (модель видит триггер и подключает) | **Skill** ([skills.md](skills.md)) |
-| Системное событие (tool-use, stop, session-start, file change) | **Hook** ([hooks.md](hooks.md)) |
-| Пользователь явно вызывает `/<name>` | **Command** ([commands.md](commands.md)) или Skill с `user-invocable: true` |
-| Главный агент делегирует тяжёлую задачу | **Sub-agent** ([agents.md](agents.md)) |
-| Технический гейт на команду / tool-вызов | **Permissions** ([permissions.md](permissions.md)) |
-| Формат / стиль вывода | **Output style** ([output-styles.md](output-styles.md)) |
+| Always, in every session of every project | **CLAUDE.md** ([claude-md.md](claude-md.md)) |
+| Claude reads a file matching a glob pattern (`Read` tool) | **Rule** ([rules.md](rules.md)) with `paths:` frontmatter |
+| Semantic match (model sees the trigger and loads it) | **Skill** ([skills.md](skills.md)) |
+| System event (tool-use, stop, session-start, file change) | **Hook** ([hooks.md](hooks.md)) |
+| User explicitly calls `/<name>` | **Command** ([commands.md](commands.md)) or Skill with `user-invocable: true` |
+| Main agent delegates a heavy task | **Subagent** ([agents.md](agents.md)) |
+| Technical gate on a command / tool call | **Permissions** ([permissions.md](permissions.md)) |
+| Output format / style | **Output style** ([output-styles.md](output-styles.md)) |
 
-## Q2 — Где должен жить контекст?
+## Q2 — Where should the context live?
 
-| Цель | Механизм |
+| Goal | Mechanism |
 |---|---|
-| В main context, всегда виден | CLAUDE.md или Skill (default) |
-| В main context, только при триггере по path | Rule с `paths:` ([rules.md](rules.md)) |
-| В main context, только при семантическом триггере | Skill с узким `when_to_use` |
-| В отдельном forked context, summary возвращается | Skill `context: fork` **или** Sub-agent |
-| Только в специальном sub-agent, main не видит вообще | Skill `disable-model-invocation: true` + Sub-agent `skills: [name]` |
+| In main context, always visible | CLAUDE.md or Skill (default) |
+| In main context, only on path trigger | Rule with `paths:` ([rules.md](rules.md)) |
+| In main context, only on semantic trigger | Skill with a narrow `when_to_use` |
+| In a separate forked context, summary returned | Skill `context: fork` **or** Subagent |
+| Only in a dedicated subagent, main never sees it | Skill `disable-model-invocation: true` + Subagent `skills: [name]` |
 
-## Q3 — Что это вообще?
+## Q3 — What is it, fundamentally?
 
-| Природа | Слой |
+| Nature | Layer |
 |---|---|
-| Always-on правило поведения, дисциплина | CLAUDE.md |
-| Path-scoped knowledge (привязано к файлам по pattern) | Rule с `paths:` |
-| Conditional knowledge / workflow / процедура (семантический trigger) | Skill |
-| Реакция на событие в системе | Hook |
-| Блокировка / разрешение конкретных команд | Permissions |
-| Format / vibe / структура вывода | Output style |
-| Изолированный worker (parallel/heavy) | Sub-agent |
+| Always-on behavioral rule, discipline | CLAUDE.md |
+| Path-scoped knowledge (bound to files by pattern) | Rule with `paths:` |
+| Conditional knowledge / workflow / procedure (semantic trigger) | Skill |
+| Reaction to a system event | Hook |
+| Block / allow specific commands | Permissions |
+| Format / vibe / output structure | Output style |
+| Isolated worker (parallel/heavy) | Subagent |
 
-## Q4 — Cross-layer triggering («переплетённая сетка»)
+## Q4 — Cross-layer triggering ("the interlocking grid")
 
-Без явного mechanism — silent reliance on hope. Не размещай артефакт без явной активации.
+Without an explicit mechanism — silent reliance on hope. Do not place an artifact without an explicit activation.
 
-**Автоматические триггеры:**
-- Hook — на системном событии.
-- Rule с `paths:` — на Read файла по glob.
-- Skill — на match по `description + when_to_use`.
-- Sub-agent — на вызов `Agent(subagent_type)`.
+**Automatic triggers:**
+- Hook — on a system event.
+- Rule with `paths:` — on Read of a file matching a glob.
+- Skill — on match against `description + when_to_use`.
+- Subagent — on call to `Agent(subagent_type)`.
 
-**Явные cross-references (расширяют trigger surface):**
-- Упоминание имени skill в CLAUDE.md → модель видит и оба frontmatter'а, и явную инструкцию.
-- Упоминание имени skill в теле другого skill → relationship hint.
-- `skills: [name]` в sub-agent frontmatter → preload при старте sub-agent'а.
-- Skill упомянут в agent description → агент активирует его явно.
+**Explicit cross-references (expand the trigger surface):**
+- Mentioning a skill name in CLAUDE.md → the model sees both frontmatter and the explicit instruction.
+- Mentioning a skill name in another skill's body → relationship hint.
+- `skills: [name]` in a subagent frontmatter → preload on subagent start.
+- Skill mentioned in an agent description → agent activates it explicitly.
 
 ---
 
 ## Bloat-prevention toolkit
 
-Каждый раз, когда добавляется новый артефакт, спроси: «может ли он раздувать main context во всех проектах?» Если да — применить один из:
+Every time a new artifact is added, ask: "could it bloat the main context in every project?" If yes — apply one of:
 
-1. **Rule с `paths:`** — если знание привязано к файлам по pattern (`.ts`, `migrations/**`), оно подгружается только когда Claude реально читает такой файл. См. [rules.md](rules.md).
-2. **Узкий `when_to_use`** — skill не триггерится без необходимости.
-3. **`disable-model-invocation: true`** на skill + `skills: [name]` в sub-agent — skill loaded ТОЛЬКО когда sub-agent активен. Main context чист.
-4. **`context: fork`** — heavy skill отдельным контекстом; summary возвращается.
-5. **Узкий `tools:` allowlist у sub-agent** — `Skill` не в tools = sub-agent совсем не подгружает skills.
-
----
-
-## Recipe — типовые варианты
-
-### Recipe A: глобальное правило поведения
-
-> «Always be honest about severity» — действует везде, во всех проектах.
-
-→ **CLAUDE.md (export/)**. Один bullet в соответствующей секции.
-
-### Recipe B: дисциплинарный self-check
-
-> «Перед declare-done скан-нуть файлы на TODO/FIXME» — должен срабатывать в конце задачи.
-
-→ **Skill** (`user-invocable: false`, без `disable-model-invocation`). Триггер через `when_to_use`. Дополнительно — PostToolUse Hook для немедленного reminder per-edit.
-
-### Recipe C: тяжёлый аудит конкретного домена
-
-> «Проанализировать перформанс БД-запросов» — нужно несколько Explore-агентов, проверять docs, синтезировать.
-
-→ **Sub-agent** (`perf-analyzer`) с preloaded skill (`perf-analysis`, `disable-model-invocation: true`). Main context не нагружается perf-знанием в нерелевантных проектах.
-
-### Recipe D: технический гейт на опасную команду
-
-> «Перехватить `git push --force`» — техническая защита.
-
-→ **Permissions** (`deny` или `ask`, anywhere-form в deny, prefix-form в ask). НЕ skill, не CLAUDE.md — это техническая защита уровня tool-вызова.
-
-### Recipe E: автоматический gate перед stop-турном
-
-> «Перед declare-done — отказаться, если есть незарезолвленные маркеры».
-
-→ **Hook** (`Stop` event, decision-control `block`). Не skill — это блокирующая реакция на event.
-
-### Recipe F: user-вызываемая команда со сторонним эффектом
-
-> «`/release` — собрать changelog и пометить теги».
-
-→ **Command** или **Skill с `user-invocable: true`**. Side effects наружу → видимость в `/`-меню обязательна.
-
-### Recipe G: path-scoped guidance, применимое глобально
-
-> «При работе с `**/*.{ts,tsx}` напоминать про strict null-checks» — должно срабатывать только когда Claude реально читает TS-файл, в Python-проекте — не нагружать контекст.
-
-→ **Rule** (`export/rules/<name>.md` → симлинк `~/.claude/rules/`) с `paths:` frontmatter. См. [rules.md](rules.md). Body короткий, English, project-agnostic globs.
+1. **Rule with `paths:`** — if the knowledge is bound to files by pattern (`.ts`, `migrations/**`), it is loaded only when Claude actually reads such a file. See [rules.md](rules.md).
+2. **Narrow `when_to_use`** — the skill does not trigger unnecessarily.
+3. **`disable-model-invocation: true`** on the skill + `skills: [name]` in the subagent — the skill is loaded ONLY when the subagent is active. Main context stays clean.
+4. **`context: fork`** — heavy skill in a separate context; summary is returned.
+5. **Narrow `tools:` allowlist on the subagent** — `Skill` not in tools = subagent does not load skills at all.
 
 ---
 
-## Что НЕ делать (при размещении)
+## Recipe — canonical patterns
 
-- Не размещать «как обновлять decision tree» / «правила про правила». Дерево расширяется только когда реальный артефакт натыкается на ось, которую дерево не разрешает.
-- Не делать skill там, где справится hook. Skill подключается контекстно (могут пропустить), hook срабатывает гарантированно.
-- Не делать CLAUDE.md правило, если оно применимо только в одном домене (нарушает principle #1 агностичности).
-- Не делать sub-agent там, где достаточно skill `context: fork` — agent тяжелее, имеет больше overhead.
-- **Не делать Rule без `paths:` в хабе.** Rule без `paths:` грузится always-on во всех сессиях во всех проектах — это уже роль CLAUDE.md, дублирование. Если always-on — иди в CLAUDE.md.
-- **Не делать Rule с глобами, привязанными к конкретному проекту** (`apps/myproject/**`). Хаб project-agnostic (§1); глобы должны быть pattern-based, не layout-based.
+### Recipe A: global behavioral rule
+
+> "Always be honest about severity" — applies everywhere, in every project.
+
+→ **CLAUDE.md (export/)**. One bullet in the relevant section.
+
+### Recipe B: disciplinary self-check
+
+> "Before declare-done, scan files for TODO/FIXME" — should fire at the end of a task.
+
+→ **Skill** (`user-invocable: false`, without `disable-model-invocation`). Trigger via `when_to_use`. Additionally — a PostToolUse Hook for an immediate reminder per edit.
+
+### Recipe C: heavy audit of a specific domain
+
+> "Analyze DB query performance" — needs several Explore subagents, doc lookups, synthesis.
+
+→ **Subagent** (`perf-analyzer`) with a preloaded skill (`perf-analysis`, `disable-model-invocation: true`). Main context is not burdened with perf knowledge in unrelated projects.
+
+### Recipe D: technical gate on a dangerous command
+
+> "Intercept `git push --force`" — technical protection.
+
+→ **Permissions** (`deny` or `ask`, anywhere-form in deny, prefix-form in ask). NOT a skill, not CLAUDE.md — this is technical protection at the tool-call level.
+
+### Recipe E: automatic gate before the stop turn
+
+> "Before declare-done — block if there are unresolved markers."
+
+→ **Hook** (`Stop` event, decision-control `block`). Not a skill — this is a blocking reaction to an event.
+
+### Recipe F: user-invocable command with side effects
+
+> "`/release` — build the changelog and tag releases."
+
+→ **Command** or **Skill with `user-invocable: true`**. Side effects going outward → visibility in the `/`-menu is mandatory.
+
+### Recipe G: path-scoped guidance, applicable globally
+
+> "When working with `**/*.{ts,tsx}` remind about strict null-checks" — should fire only when Claude actually reads a TS file; in a Python project — do not load the context.
+
+→ **Rule** (`export/rules/<name>.md` → symlink `~/.claude/rules/`) with `paths:` frontmatter. See [rules.md](rules.md). Body is short, English, project-agnostic globs.
 
 ---
 
-# Evolution: когда и как мигрировать существующее
+## What NOT to do (when placing)
 
-Артефакты не статичны. Правило в CLAUDE.md может перерасти в skill + hook combo. Skill может разрастись и разделиться. Два skill'а — слиться. Эта секция даёт **наблюдаемые сигналы** для миграции и пошаговые правила; обе стороны (ты и я) должны видеть один и тот же сигнал и приходить к одному решению.
+- Do not place "how to update the decision tree" / "rules about rules". The tree expands only when a real artifact hits an axis the tree does not resolve.
+- Do not make a skill where a hook would do. A skill is loaded contextually (may be missed); a hook fires unconditionally.
+- Do not make a CLAUDE.md rule if it applies only in one domain (violates principle #1 of project agnosticism).
+- Do not make a subagent where a skill with `context: fork` is sufficient — a subagent is heavier and carries more overhead.
+- **Do not make a Rule without `paths:` in the hub.** A Rule without `paths:` is always-on in every session in every project — that is already the role of CLAUDE.md, and this would be a duplicate. If always-on — go to CLAUDE.md.
+- **Do not make a Rule with globs tied to a specific project** (`apps/myproject/**`). The hub is project-agnostic (§1); globs must be pattern-based, not layout-based.
 
-## §A. Observable migration signals (наблюдаемые триггеры)
+---
 
-Все сигналы — **наблюдаемые**, не «по ощущению». Если правило сформулировано как «когда выглядит большим» — оно не enforceable. Если сформулировано как «когда содержит conditional language» — обе стороны могут указать на файл и подтвердить факт.
+# Evolution: when and how to migrate existing artifacts
 
-> **Scope §A — только эволюция уже размещённого артефакта, не первичное размещение.** Эти сигналы отвечают на вопрос «когда мигрировать существующее правило/скилл», а не «куда поместить новое». Для первичного размещения используются Q1-Q4 + Recipe A-F выше. Прецедент ошибки: validation pass применил сигнал «conditional language → Recipe M1» к первичному размещению нового правила; source check скорректировал — conditional language в формулировке нового правила это **грамматика** condition-norm, не маркер процедуры.
+Artifacts are not static. A rule in CLAUDE.md can outgrow itself into a skill + hook combo. A skill can grow and split. Two skills can merge. This section gives **observable signals** for migration and step-by-step rules; both sides (you and I) must see the same signal and reach the same decision.
 
-| Сигнал (что наблюдается) | Где искать |
+## §A. Observable migration signals
+
+All signals are **observable**, not "by feel". If a rule is phrased as "when it looks large" — it is not enforceable. If phrased as "when it contains conditional language" — both sides can point to a file and confirm the fact.
+
+> **Scope of §A — evolution of already-placed artifacts only, not initial placement.** These signals answer "when to migrate an existing rule/skill", not "where to put a new one". For initial placement use Q1-Q4 + Recipe A-F above. Precedent for error: a validation pass applied the signal "conditional language → Recipe M1" to the initial placement of a new rule; a source check corrected this — conditional language in the wording of a new rule is **grammar** of a condition-norm, not a procedure marker.
+
+| Signal (what is observed) | Where to look |
 |---|---|
-| Правило в CLAUDE.md содержит conditional language («когда X — делай Y», «в случае Z», «при триггере») | Грепом по `export/CLAUDE.md` |
-| Правило в CLAUDE.md или skill'е содержит **path-specific language** (упоминает конкретные extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) и применимо только когда такой файл реально в работе | Grep по `export/CLAUDE.md` и `export/skills/**/SKILL.md` на extensions и pattern-keywords |
-| SKILL.md превышает валидатор-лимит — body > 500 строк ИЛИ > 5K tokens | `validate-skill.py` report |
-| SKILL.md покрывает 2+ темы (множественные `## ` секции с разными доменами) | Grep по headers в SKILL.md |
-| Два skill'а имеют overlapping `when_to_use` фразы (одни и те же триггер-слова) | Сравнение frontmatter всех скиллов |
-| Skill дублирует поведение существующего hook (та же проверка, та же reaction) | Sweep matching по labels/regex'ам |
-| Domain-specific знание в always-on слое (`stack X`, `framework Y`, проектная специфика) | Принцип #1 хаба + grep по proper nouns |
-| Hook output игнорируется моделью (модель не реагирует на `additionalContext`) | Эмпирика в сессиях |
-| Combined `description + when_to_use` skill'а близок к лимиту (1536 chars) | `validate-skill.py` warning |
-| Артефакт применён, и через 3+ итерации появились 2+ связанных уточнения | Подсчёт ссылок в архитектурной документации |
+| A rule in CLAUDE.md contains conditional language ("when X — do Y", "in case Z", "on trigger") | Grep in `export/CLAUDE.md` |
+| A rule in CLAUDE.md or a skill contains **path-specific language** (mentions specific extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) and applies only when such a file is actually in use | Grep in `export/CLAUDE.md` and `export/skills/**/SKILL.md` for extensions and pattern-keywords |
+| SKILL.md exceeds the validator limit — body > 500 lines OR > 5K tokens | `validate-skill.py` report |
+| SKILL.md covers 2+ topics (multiple `## ` sections with different domains) | Grep on headers in SKILL.md |
+| Two skills have overlapping `when_to_use` phrases (the same trigger words) | Compare frontmatter of all skills |
+| A skill duplicates the behavior of an existing hook (same check, same reaction) | Sweep matching on labels/regexes |
+| Domain-specific knowledge in an always-on layer (`stack X`, `framework Y`, project specifics) | Hub principle #1 + grep for proper nouns |
+| Hook output is ignored by the model (model does not react to `additionalContext`) | Empirical evidence from sessions |
+| Combined `description + when_to_use` of a skill is close to the limit (1536 chars) | `validate-skill.py` warning |
+| An artifact has been applied, and after 3+ iterations 2+ related refinements have appeared | Count references in architectural documentation |
 
 ## §B. Migration recipes
 
-Шаблонные миграции; пройдены те же 4 оси decision-tree, что и при первоначальном размещении.
+Template migrations; the same 4 axes of the decision tree are walked as during initial placement.
 
-### Recipe M1: CLAUDE.md правило → Skill (conditional decomposition)
+### Recipe M1: CLAUDE.md rule → Skill (conditional decomposition)
 
-**Триггер:** правило в CLAUDE.md содержит conditional language («когда X — делай Y»).
+**Trigger:** a rule in CLAUDE.md contains conditional language ("when X — do Y").
 
-**Действие:**
-1. Capability statement (что делать) → `description` нового skill.
-2. Conditional часть (когда) → `when_to_use` нового skill.
-3. Универсальная резюме-фраза остаётся в CLAUDE.md (одна строка), указывающая «details — в `<skill-name>`».
-4. ADR с триггером + axis-walk + disposition.
+**Action:**
+1. Capability statement (what to do) → `description` of the new skill.
+2. Conditional part (when) → `when_to_use` of the new skill.
+3. A universal summary phrase stays in CLAUDE.md (one line), pointing to "details — in `<skill-name>`".
+4. ADR with trigger + axis-walk + disposition.
 
-### Recipe M2: Большой skill → Split (decomposition по темам)
+### Recipe M2: Large skill → Split (decomposition by topic)
 
-**Триггер:** SKILL.md > 500 lines / 5K tokens, ИЛИ покрывает 2+ темы.
+**Trigger:** SKILL.md > 500 lines / 5K tokens, OR covers 2+ topics.
 
-**Действие:**
-1. Идентифицируй главные темы (по `## ` секциям).
-2. Каждая тема → отдельный skill с собственными `description + when_to_use`.
-3. Если есть always-on часть (одно правило для всех тем) — в CLAUDE.md одной строкой.
-4. Старый skill: disposition по §C ниже.
+**Action:**
+1. Identify the main topics (by `## ` sections).
+2. Each topic → a separate skill with its own `description + when_to_use`.
+3. If there is an always-on part (one rule for all topics) — one line in CLAUDE.md.
+4. Old skill: disposition per §C below.
 5. ADR.
 
-### Recipe M3: Два skill'а с overlapping triggers → Consolidate
+### Recipe M3: Two skills with overlapping triggers → Consolidate
 
-**Триггер:** `when_to_use` двух скиллов содержит одни и те же триггер-фразы, либо они всегда вызываются вместе.
+**Trigger:** `when_to_use` of two skills contains the same trigger phrases, or they are always invoked together.
 
-**Действие:**
-1. Главный skill сохраняется (тот, чьё `description` шире).
-2. Второй: либо merge содержимого в supporting file (`<main>/<second>.md`), либо delete с переносом уникального content.
+**Action:**
+1. The primary skill is kept (the one whose `description` is broader).
+2. The second: either merge its content into a supporting file (`<main>/<second>.md`), or delete with unique content transferred.
 3. ADR.
 
-### Recipe M4: Skill дублирует automatic hook → Решить primary
+### Recipe M4: Skill duplicates an automatic hook → Resolve primary
 
-**Триггер:** hook реализует ту же проверку/реакцию, что и skill.
+**Trigger:** a hook implements the same check/reaction as a skill.
 
-**Действие:**
-1. Если **гарантия исполнения важнее** контекстной видимости → hook остаётся primary; skill либо удаляется, либо становится human-readable reference (с пометкой «automated via `<hook>`»).
-2. Если **контекстная активация важнее** (модель должна понимать почему срабатывает) → skill primary, hook опционален как fail-safe.
+**Action:**
+1. If **execution guarantee matters more** than contextual visibility → hook stays primary; skill is either deleted or becomes a human-readable reference (labeled "automated via `<hook>`").
+2. If **contextual activation matters more** (the model must understand why it fires) → skill is primary, hook is optional as a fail-safe.
 3. ADR.
 
-### Recipe M5: Domain-specific знание из always-on → Sub-agent + scoped skill
+### Recipe M5: Domain-specific knowledge from always-on → Subagent + scoped skill
 
-**Триггер:** домен-специфичный контент в CLAUDE.md или широком skill (например, framework patterns, perf-procedures).
+**Trigger:** domain-specific content in CLAUDE.md or a broad skill (e.g., framework patterns, perf procedures).
 
-**Действие:**
-1. Создать sub-agent (`export/agents/<domain>.md`) с `description` под domain.
-2. Domain знание → skill с `disable-model-invocation: true`, чтобы main context не подхватывал.
-3. В sub-agent frontmatter: `skills: [<domain-skill>]` — preload.
-4. Удалить domain-фрагменты из CLAUDE.md / широкого skill.
+**Action:**
+1. Create a subagent (`export/agents/<domain>.md`) with a `description` scoped to the domain.
+2. Domain knowledge → skill with `disable-model-invocation: true`, so main context does not pick it up.
+3. In subagent frontmatter: `skills: [<domain-skill>]` — preload.
+4. Remove domain fragments from CLAUDE.md / the broad skill.
 5. ADR.
 
-### Recipe M6: Heavy skill всегда нагружает main → `context: fork`
+### Recipe M6: Heavy skill always burdens main → `context: fork`
 
-**Триггер:** skill реально полезен, но при auto-trigger вытаскивает много content в main context, который в основном остаётся неиспользованным.
+**Trigger:** the skill is genuinely useful, but on auto-trigger pulls a lot of content into main context that mostly goes unused.
 
-**Действие:**
-1. Skill frontmatter: `context: fork` + `agent: <тип>` (обычно `Explore`).
-2. Возможно — переписать тело skill для использования `$ARGUMENTS`.
+**Action:**
+1. Skill frontmatter: `context: fork` + `agent: <type>` (usually `Explore`).
+2. Possibly — rewrite the skill body to use `$ARGUMENTS`.
 3. ADR.
 
-### Recipe M7: Path-specific guidance в CLAUDE.md или skill → Rule с `paths:`
+### Recipe M7: Path-specific guidance in CLAUDE.md or a skill → Rule with `paths:`
 
-**Триггер:** правило в `export/CLAUDE.md` или скилле содержит path-specific language (см. сигнал в §A) — knowledge применимо только когда Claude реально работает с файлами по конкретному паттерну, а не во всех сессиях/задачах.
+**Trigger:** a rule in `export/CLAUDE.md` or a skill contains path-specific language (see signal in §A) — the knowledge applies only when Claude is actually working with files matching a specific pattern, not in every session/task.
 
-**Действие:**
-1. Тело знания → новый файл `export/rules/<name>.md`.
-2. Path-условие → `paths:` frontmatter с glob'ами; глобы должны быть project-agnostic (`**/*.ts`, не `apps/myproject/**`).
-3. Проверить **anti-pattern over-broad glob** (см. [rules.md §2.1](rules.md)): если glob матчится почти в каждой сессии, миграция не оправдана — оставить в CLAUDE.md или skill.
-4. Универсальная резюме-фраза остаётся в исходном файле (одна строка), указывает «details — в rule `<name>`», по аналогии с M1.
-5. Disposition исходного фрагмента по §C (обычно `split` если CLAUDE.md содержал смешанное знание, либо `delete` если фрагмент целиком ушёл).
+**Action:**
+1. Knowledge body → new file `export/rules/<name>.md`.
+2. Path condition → `paths:` frontmatter with globs; globs must be project-agnostic (`**/*.ts`, not `apps/myproject/**`).
+3. Check for **anti-pattern: over-broad glob** (see [rules.md §2.1](rules.md)): if the glob matches in nearly every session, the migration is not justified — leave it in CLAUDE.md or the skill.
+4. A universal summary phrase stays in the source file (one line), pointing to "details — in rule `<name>`", by analogy with M1.
+5. Disposition of the source fragment per §C (usually `split` if CLAUDE.md contained mixed knowledge, or `delete` if the fragment was moved entirely).
 6. ADR.
 
-**Когда НЕ применять M7:**
-- Path-language есть, но glob будет матчиться почти всегда → over-broad, оставить в CLAUDE.md.
-- Знание не «когда трогаешь файл X», а «когда выполняешь процедуру Y» — это семантический trigger, M1 (→ Skill), не M7.
-- Знание уровня always-on safety (например, secrets handling) — путь Rule может его «спрятать», что снижает гарантию срабатывания. Оставить в CLAUDE.md.
+**When NOT to apply M7:**
+- Path-language is present, but the glob would match almost always → over-broad; leave in CLAUDE.md.
+- The knowledge is not "when you touch file X" but "when you execute procedure Y" — that is a semantic trigger, M1 (→ Skill), not M7.
+- Always-on safety knowledge (e.g., secrets handling) — routing it through a Rule may "hide" it, reducing the guarantee of activation. Leave in CLAUDE.md.
 
-## §C. Disposition старого артефакта
+## §C. Disposition of the old artifact
 
-Четыре возможных финальных состояния. Это применение принципа supersede-not-append на уровне слоёв.
+Four possible final states. This is the application of the supersede-not-append principle at the layer level.
 
-| Disposition | Когда применять | Что делать |
+| Disposition | When to apply | What to do |
 |---|---|---|
-| **`delete`** | Контент полностью перенесён в новое место, дублёра не нужно | Удалить файл; обновить все ссылки (grep `<old-name>` по репо). |
-| **`supersede with pointer`** | Файл живёт как tombstone-указатель на новое расположение | Заменить содержимое на 1-3 строки: «Superseded by `<new>`. See ADR `<NNNN>`.». Это валидный artifact, но не активный — индикатор истории. |
-| **`split`** | Части ушли на разные слои/файлы | Каждый кусок move'ить отдельно по своему recipe. Старый файл — либо delete (если ничего не осталось), либо supersede with pointer (если есть ценная история). Все ссылки обновить. |
-| **`augmentation-in-place`** | Артефакт корректен по сути, но требует усиления (явный label, carve-out, rationale enrichment, term substitution) **без перемещения** на другой слой | Edit текста в том же месте. Cross-refs стабильны (location и behaviour те же). В ADR — обязательно зафиксировать `trigger` (что побудило augmentation), `before` и `after` формулировки, `rationale` (почему изменение по сути а не косметика). |
+| **`delete`** | Content fully moved to the new location, no duplicate needed | Delete the file; update all references (grep `<old-name>` across the repo). |
+| **`supersede with pointer`** | File lives on as a tombstone pointer to the new location | Replace contents with 1-3 lines: "Superseded by `<new>`. See ADR `<NNNN>`." This is a valid artifact, but not active — an indicator of history. |
+| **`split`** | Parts moved to different layers/files | Move each piece separately following its own recipe. Old file — either delete (if nothing remains) or supersede with pointer (if there is valuable history). Update all references. |
+| **`augmentation-in-place`** | The artifact is correct in substance but needs strengthening (explicit label, carve-out, rationale enrichment, term substitution) **without moving** to a different layer | Edit the text in place. Cross-refs remain stable (location and behavior unchanged). In the ADR — mandatory: record `trigger` (what prompted the augmentation), `before` and `after` formulations, `rationale` (why the change is substantive, not cosmetic). |
 
-**Правило: никогда не оставлять контрадикции рядом.** Если новый артефакт говорит X, а старый продолжает существовать с «not X» рядом — это шум, который путает обе стороны. Один из них должен победить, второй — disposition.
+**Rule: never leave a contradiction standing.** If the new artifact says X, and the old one continues to exist saying "not X" alongside it — that is noise that confuses both sides. One of them must win; the other must receive a disposition.
 
-**Когда `augmentation-in-place`, а когда другая опция:**
+**When `augmentation-in-place`, and when another option:**
 
-| Случай | Disposition |
+| Case | Disposition |
 |---|---|
-| Правило перемещается на другой слой (например, из CLAUDE.md → Skill) | **Migration recipe (M1-M6)**, не augmentation. См. §B. |
-| Правило split на несколько правил на разных слоях | **`split`** |
-| Правило полностью убирается (refuted / out-of-scope) | **`delete`** или **`supersede with pointer`** |
-| Term substitution (нашли что текущий term has wrong public meaning) | **`augmentation-in-place`** |
-| Добавление carve-out / exception к существующему правилу | **`augmentation-in-place`** |
-| Усиление формулировки явным rationale (без изменения по сути) | **`augmentation-in-place`** |
+| Rule is moved to a different layer (e.g., from CLAUDE.md → Skill) | **Migration recipe (M1-M6)**, not augmentation. See §B. |
+| Rule is split into several rules on different layers | **`split`** |
+| Rule is removed entirely (refuted / out-of-scope) | **`delete`** or **`supersede with pointer`** |
+| Term substitution (found that the current term has the wrong public meaning) | **`augmentation-in-place`** |
+| Adding a carve-out / exception to an existing rule | **`augmentation-in-place`** |
+| Strengthening wording with explicit rationale (without substantive change) | **`augmentation-in-place`** |
 
-**Прецеденты `augmentation-in-place`:**
-- Retro source check добавил trivial carve-out к существующему правилу.
+**Precedents for `augmentation-in-place`:**
+- A retro source check added a trivial carve-out to an existing rule.
 - Term substitution (cargo-cult reuse) + rationale enrichment (documented LLM failure mode).
 
 ## §D. ADR mandatory
 
-**Каждая миграция = ADR.** Это не bureaucracy — это audit trail для будущих сессий и компактов. Без ADR через 2 недели никто не вспомнит, почему правило ушло из CLAUDE.md в skill, и через ещё одну неделю кто-нибудь вернёт его обратно.
+**Every migration = an ADR.** This is not bureaucracy — it is an audit trail for future sessions and compacts. Without an ADR, in two weeks no one will remember why a rule moved from CLAUDE.md into a skill, and a week later someone will move it back.
 
-В ADR обязательно:
-1. **Триггер** (какой observable signal из §A сработал).
-2. **Axis-walk** (как прошли 4 оси decision-tree для нового расположения).
-3. **Disposition** (delete / supersede / split — см. §C).
-4. **Обновлённые ссылки** (список файлов с обновлёнными pointer'ами).
-5. **Authoritative sources block** (см. §E ниже).
+Required in the ADR:
+1. **Trigger** (which observable signal from §A fired).
+2. **Axis-walk** (how the 4 axes of the decision tree were walked for the new placement).
+3. **Disposition** (delete / supersede / split — see §C).
+4. **Updated references** (list of files with updated pointers).
+5. **Authoritative sources block** (see §E below).
 
 ## §E. Authoritative source check before ADR
 
-**Между классификацией кандидата и применением ADR — обязательный шаг для FRESH или PARTIAL кандидатов без двух+ независимых internal user-experience источников.** Этот шаг превращает «нам показалось, что это правильно» в «3-7 авторитетных источников подтверждают».
+**Between classifying a candidate and applying the ADR — a mandatory step for FRESH or PARTIAL candidates without two or more independent internal user-experience sources.** This step turns "we thought this was right" into "3-7 authoritative sources confirm it".
 
-### Когда обязателен
+### When required
 
-| Статус кандидата | Источников | Check обязателен? |
+| Candidate status | Sources | Check required? |
 |---|---|---|
-| APPLIED | (уже зафиксировано) | нет |
-| REJECT | (отклонено) | нет |
-| OVERLAP | (дубль) | нет |
-| BACKLOG | (отложено) | нет |
-| FRESH или PARTIAL, **2+** независимых user-experience источников | OK | желательно, но не блокирующе |
-| FRESH или PARTIAL, **1** источник user-experience | (рискованно) | **обязателен** |
-| FRESH или PARTIAL, источник «best-practice-aligned» (без user-exp) | (слабее) | **обязателен** |
+| APPLIED | (already recorded) | no |
+| REJECT | (rejected) | no |
+| OVERLAP | (duplicate) | no |
+| BACKLOG | (deferred) | no |
+| FRESH or PARTIAL, **2+** independent user-experience sources | OK | desirable, but not blocking |
+| FRESH or PARTIAL, **1** user-experience source | (risky) | **required** |
+| FRESH or PARTIAL, source is "best-practice-aligned" (no user-exp) | (weaker) | **required** |
 
-### Процедура
+### Procedure
 
-1. **Запустить research-сабагента** (sonnet, background) на authoritative external sources. Категории по природе правила:
-   - **Anthropic Claude Code docs** (Context7 `/websites/code_claude`) — если правило про слой Claude Code.
-   - **Engineering literature** — Google Engineering Practices, Linux Kernel guidelines, Martin Fowler, Refactoring, Clean Code — для behavioural rules.
-   - **Security/Auth** — OWASP, CWE, RFC — для security.
-   - **Performance** — official benchmarks, system docs — для perf.
+1. **Launch a research subagent** (sonnet, background) on authoritative external sources. Categories by rule nature:
+   - **Anthropic Claude Code docs** (Context7 `/websites/code_claude`) — if the rule is about a Claude Code layer.
+   - **Engineering literature** — Google Engineering Practices, Linux Kernel guidelines, Martin Fowler, Refactoring, Clean Code — for behavioral rules.
+   - **Security/Auth** — OWASP, CWE, RFC — for security.
+   - **Performance** — official benchmarks, system docs — for perf.
 
-2. **Sub-agent возвращает один из verdicts:**
-   - **HOLDS** — правило согласуется с industry wisdom. Источники → в ADR секцию «Authoritative sources».
-   - **NEEDS REFINEMENT** — нужны уточнения / carve-outs / context bounds. Corrigieren формулировку, повторить или применить.
-   - **CONTRADICTS** — авторитеты говорят прямо обратное. Откатить или radically reformulate; зафиксировать в ADR причину.
+2. **Subagent returns one of the verdicts:**
+   - **HOLDS** — the rule is consistent with industry wisdom. Sources → into the ADR section "Authoritative sources".
+   - **NEEDS REFINEMENT** — refinements / carve-outs / context bounds are needed. Correct the wording, repeat or apply.
+   - **CONTRADICTS** — authorities say the opposite. Roll back or radically reformulate; record the reason in the ADR.
 
-3. **Применять ADR только после verdict.**
+3. **Apply the ADR only after a verdict.**
 
-### Что в ADR
+### What goes in the ADR
 
-Раздел **«Authoritative sources»** (отдельно от internal sources):
-- 3-7 источников с URL и verbatim quote (1-2 предложения).
-- Знак влияния: `+1` (поддерживает), `-1` (антипод), `nuanced` (контекст-зависимо).
-- Если verdict NEEDS REFINEMENT — явно отметить, что было изменено и почему.
+Section **"Authoritative sources"** (separate from internal sources):
+- 3-7 sources with URL and verbatim quote (1-2 sentences).
+- Influence marker: `+1` (supports), `-1` (opposes), `nuanced` (context-dependent).
+- If verdict is NEEDS REFINEMENT — explicitly note what was changed and why.
 
-### Прецеденты
+### Precedents
 
-- Первый случай: retro-check после применения. Verdict: HOLDS с refinement (trivial carve-out добавлен). С последующих миграций source check идёт **перед** apply, не после.
+- First case: retro-check applied after the fact. Verdict: HOLDS with refinement (trivial carve-out added). From subsequent migrations onward, the source check happens **before** apply, not after.
 
-### Что check НЕ заменяет
+### What the check does NOT replace
 
-- Decision-tree axis-walk (§A-§D) — остаётся обязательным.
-- Анализ регрессий — остаётся.
-- Validate hub'а (validate-claude-md.py, validate-skill.py) — остаётся.
+- Decision-tree axis-walk (§A-§D) — remains mandatory.
+- Regression analysis — remains.
+- Hub validation (`validate-claude-md.py`, `validate-skill.py`) — remains.
 
-Source check — это **дополнительный слой защиты от «уверенной галлюцинации»**: не «вместо», а «поверх».
+The source check is an **additional layer of protection against "confident hallucination"**: not "instead of", but "on top of".
 
-## Sanity check для новой evolution-секции
+## Sanity check for the new evolution section
 
-Применяя эти правила к выделению `severity-calibration` в отдельный skill обратным моделированием:
-- В тот момент уже существовало правило honesty в CLAUDE.md.
-- Сигнал, по §A: «правило содержит conditional language / обрастает rubric и discipline details».
-- Recipe M1 (CLAUDE.md → Skill): capability «assign severity» + rubric + discipline → skill `severity-calibration`; универсальный принцип («reserve top level for real impact») остался в CLAUDE.md.
-- Disposition (§C): не delete (одна строка осталась в CLAUDE.md), не split — это `extend` (выделение в skill при сохранении short pointer в CLAUDE.md). Этот вариант не покрыт явно — но укладывается в **M1 by design**: «универсальная резюме-фраза остаётся в CLAUDE.md».
+Applying these rules to the extraction of `severity-calibration` into a separate skill by back-modeling:
+- At that point, an honesty rule already existed in CLAUDE.md.
+- Signal, per §A: "rule contains conditional language / is growing a rubric and discipline details".
+- Recipe M1 (CLAUDE.md → Skill): capability "assign severity" + rubric + discipline → skill `severity-calibration`; the universal principle ("reserve top level for real impact") stayed in CLAUDE.md.
+- Disposition (§C): not delete (one line remained in CLAUDE.md), not split — this is `extend` (extraction into a skill while keeping a short pointer in CLAUDE.md). This variant is not covered explicitly — but fits within **M1 by design**: "a universal summary phrase stays in CLAUDE.md".
 
-→ Sanity check passed: применение новых правил привело бы к той же декомпозиции, что была сделана исторически. Mutual correction работает.
+→ Sanity check passed: applying the new rules would have led to the same decomposition that was done historically. Mutual correction works.

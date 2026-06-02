@@ -1,25 +1,25 @@
-# Blacklist для проверки R6 (принцип агностичности).
+# Blacklist for the R6 check (agnosticism principle).
 #
-# Этот .example файл — шаблон. Скопируй его в `tools/agnostic-blacklist.txt`
-# и добавь свои project-specific имена. Сам `agnostic-blacklist.txt` под
-# .gitignore — у каждого форка свой собственный.
+# This .example file is a template. Copy it to `tools/agnostic-blacklist.txt`
+# and add your own project-specific names. The `agnostic-blacklist.txt` itself is
+# under .gitignore — each fork keeps its own.
 #
-# Формат: один паттерн на строку. Case-insensitive substring match.
-# Строки, начинающиеся с # — комментарии. Пустые строки игнорируются.
+# Format: one pattern per line. Case-insensitive substring match.
+# Lines starting with # are comments. Empty lines are ignored.
 #
-# Цель: не дать проектно-специфичным терминам просочиться в export/CLAUDE.md
-# и в граф его импортов. Хук срабатывает на уровне warning — это страховка,
-# а не блокировка. Финальное решение остаётся за человеком.
+# Purpose: keep project-specific terms from leaking into export/CLAUDE.md
+# and its import graph. The hook fires at the warning level — it is a safety net,
+# not a block. The final decision stays with the human.
 #
-# Что СЮДА класть:
-#   - имена конкретных проектов
-#   - имена клиентов, бизнес-доменов, частных терминов
-#   - явные привязки к стеку, если такой стек не должен фигурировать глобально
+# What to put HERE:
+#   - names of specific projects
+#   - names of clients, business domains, private terms
+#   - explicit stack bindings, if such a stack must not appear globally
 #
-# Что СЮДА НЕ класть:
-#   - общие слова, которые могут встречаться в нейтральном контексте
-#     (например "TypeScript" — упоминать можно, но не как обязательный стек)
+# What NOT to put here:
+#   - generic words that may occur in a neutral context
+#     (for example "TypeScript" — may be mentioned, but not as a mandatory stack)
 
 
-# === Имена проектов ===
-# (добавь свои здесь)
+# === Project names ===
+# (add your own here)

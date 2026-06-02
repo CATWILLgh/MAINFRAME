@@ -57,27 +57,27 @@ Brace-expansion (`"src/**/*.{ts,tsx}"`) is supported.
 
 ### 1.3. Trigger — Read tool only
 
-From docs: «Path-scoped rules trigger when Claude reads files matching the pattern, not on every tool use.»
+From docs: "Path-scoped rules trigger when Claude reads files matching the pattern, not on every tool use."
 
 Read = the `Read` tool. NOT triggered by Write, Grep, Glob, or chat mention of the path. This is a deliberate narrow trigger.
 
 ### 1.4. Recursive discovery
 
-«All `.md` files are discovered recursively, so you can organize rules into subdirectories like `frontend/` or `backend/`.»
+"All `.md` files are discovered recursively, so you can organize rules into subdirectories like `frontend/` or `backend/`."
 
 Files outside `.md` (e.g. `.txt`, `.json`) are not picked up.
 
 ### 1.5. Symlinks
 
-«The `.claude/rules/` directory supports symlinks, so you can maintain a shared set of rules and link them into multiple projects. Symlinks are resolved and loaded normally, and circular symlinks are detected and handled gracefully.»
+"The `.claude/rules/` directory supports symlinks, so you can maintain a shared set of rules and link them into multiple projects. Symlinks are resolved and loaded normally, and circular symlinks are detected and handled gracefully."
 
 This is what `install.sh` relies on for the hub.
 
 ### 1.6. Conflicts between rules and CLAUDE.md
 
-«If two rules contradict each other, Claude may pick one arbitrarily. Review your CLAUDE.md files, nested CLAUDE.md files, and `.claude/rules/` periodically to remove outdated or conflicting instructions.»
+"If two rules contradict each other, Claude may pick one arbitrarily. Review your CLAUDE.md files, nested CLAUDE.md files, and `.claude/rules/` periodically to remove outdated or conflicting instructions."
 
-Load order is documented («user-level rules load before project rules, giving project rules higher priority»), but it is a soft signal, not enforcement. Treat contradictions as bugs, not as trump-card behaviour.
+Load order is documented ("user-level rules load before project rules, giving project rules higher priority"), but it is a soft signal, not enforcement. Treat contradictions as bugs, not as trump-card behaviour.
 
 ### 1.7. Known bugs and empirical status
 
@@ -90,7 +90,7 @@ Historical GitHub issues against `paths:` behaviour (filed Q1 2026):
 | #23478 | `paths:` triggers on Read only, not on Write | **Confirmed as documented** — Read-only trigger is our use case anyway. |
 | #23569 | Git worktree resolution may break `paths:` | Not retested. Assume live until verified. |
 
-Verified empirically (V2 subagent test and headless `claude -p` differential) on Claude Code v2.1.128 — see §Источники below.
+Verified empirically (V2 subagent test and headless `claude -p` differential) on Claude Code v2.1.128 — see §Sources below.
 
 ---
 
@@ -152,11 +152,11 @@ No validator exists yet for `export/rules/`. When the first rule is added to the
 2. **`@`-imports inside rule files.** Not officially documented. Not used in hub rules.
 3. **`paths:` matching in git worktrees** (#23569). Not retested in v2.1.128. Hub rules should avoid layouts where worktree resolution would affect glob matching.
 4. **Rule loaded once, then matching file Read again later in the same session.** Reloaded? Cached? Not documented; assume single load per session as a working model.
-5. **Conflict resolution between two paths-rules whose globs overlap.** Anthropic docs say «may pick one arbitrarily» for contradictions. Hub strategy: design non-overlapping globs.
+5. **Conflict resolution between two paths-rules whose globs overlap.** Anthropic docs say "may pick one arbitrarily" for contradictions. Hub strategy: design non-overlapping globs.
 
 ---
 
-## Источники
+## Sources
 
 **Authoritative (Anthropic Claude Code docs through Context7):**
 - `code.claude.com/docs/en/memory` — rule loading, `paths:` frontmatter, conflict guidance.

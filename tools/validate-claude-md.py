@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Валидатор глобального CLAUDE.md хаба MAINFRAME.
+Validator for the global CLAUDE.md of the MAINFRAME hub.
 
-Проверяет соответствие правилам Anthropic (R1-R5) и принципу агностичности (R6).
-Полная спецификация — `docs/layers/claude-md.md`.
+Checks compliance with the Anthropic rules (R1-R5) and the agnosticism principle (R6).
+Full specification — `docs/layers/claude-md.md`.
 
-Режимы запуска:
-  python3 tools/validate-claude-md.py <path>            # CLI: валидация конкретного файла
-  python3 tools/validate-claude-md.py <path> --json     # CLI: вывод в JSON
-  python3 tools/validate-claude-md.py --from-hook       # Hook: путь читается из stdin (PostToolUse)
-  python3 tools/validate-claude-md.py --session-start   # Hook: сводка по всем целевым файлам в stdout
+Run modes:
+  python3 tools/validate-claude-md.py <path>            # CLI: validate a specific file
+  python3 tools/validate-claude-md.py <path> --json     # CLI: JSON output
+  python3 tools/validate-claude-md.py --from-hook       # Hook: path read from stdin (PostToolUse)
+  python3 tools/validate-claude-md.py --session-start   # Hook: summary of all target files to stdout
 
 Exit code:
-  0 — нет errors (warnings допустимы)
-  1 — есть errors
+  0 — no errors (warnings allowed)
+  1 — errors present
 """
 
 from __future__ import annotations
@@ -25,12 +25,12 @@ import re
 import sys
 from pathlib import Path
 
-# ---------- Конфигурация ----------
+# ---------- Configuration ----------
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Файлы, которые валидируем. Любые правки за пределами этого множества
-# хук пропускает мгновенно.
+# Files we validate. Any edit outside this set
+# the hook skips instantly.
 TARGET_FILES = {
     (PROJECT_ROOT / "export" / "CLAUDE.md").resolve(),
     (PROJECT_ROOT / "CLAUDE.md").resolve(),
@@ -42,15 +42,15 @@ MAX_LINES = 200
 MAX_IMPORT_DEPTH = 5
 OLD_DOMAIN = "docs.anthropic.com/en/docs/claude-code"
 
-# Извлечение @import-токенов из текста.
-# Берём всё после @ до пробела/конца строки/запятой/скобки.
+# Extract @import tokens from text.
+# Take everything after @ up to whitespace/end-of-line/comma/paren.
 IMPORT_RE = re.compile(r"@([~/]?[\w][\w./\-~]*)")
 
 
-# ---------- Утилиты для работы с графом импортов ----------
+# ---------- Import-graph utilities ----------
 
 def strip_html_comments(text: str) -> str:
-    """Удалить блок-уровневые HTML-комментарии — Claude Code их стрипает перед инжектом."""
+    """Strip block-level HTML comments — Claude Code strips them before injection."""
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
 
 
@@ -59,7 +59,7 @@ def count_non_empty_lines(text: str) -> int:
 
 
 def resolve_import_path(token: str, base: Path) -> Path:
-    """Резолв @path относительно файла с импортом. Поддержка ~ и абсолютных путей."""
+    """Resolve @path relative to the importing file. Supports ~ and absolute paths."""
     if token.startswith("~"):
         return Path(os.path.expanduser(token)).resolve()
     if token.startswith("/"):
@@ -69,8 +69,8 @@ def resolve_import_path(token: str, base: Path) -> Path:
 
 def iter_imports(content: str):
     """
-    Пройти по строкам content, вернуть [(line_num, token), ...] для всех @import.
-    Игнорирует @ внутри тройных бэктик-блоков (там это пример, не директива).
+    Walk the lines of content, return [(line_num, token), ...] for all @import.
+    Ignores @ inside triple-backtick blocks (there it is an example, not a directive).
     """
     in_code = False
     for line_num, line in enumerate(content.splitlines(), 1):
@@ -80,14 +80,14 @@ def iter_imports(content: str):
             continue
         if in_code:
             continue
-        # @ должно быть в начале токена (не часть email или middle-of-word)
+        # @ must be at the start of the token (not part of an email or mid-word)
         for m in IMPORT_RE.finditer(line):
-            # Отсеять @ внутри слов: проверяем, что перед @ нет буквы/цифры
+            # Filter out @ inside words: check there is no letter/digit before @
             start = m.start()
             if start > 0 and line[start - 1].isalnum():
                 continue
             token = m.group(1)
-            # Импорт обязан содержать "/" или "." или начинаться с ~/, иначе это не путь
+            # An import must contain "/" or "." or start with ~/, otherwise it is not a path
             if "/" not in token and "." not in token and not token.startswith("~"):
                 continue
             yield line_num, token
@@ -95,10 +95,10 @@ def iter_imports(content: str):
 
 def build_import_graph(start: Path) -> tuple[list[tuple[Path, str, int]], list[dict]]:
     """
-    Обойти граф импортов начиная со start.
-    Возвращает:
-      - graph: [(path, content, depth), ...] для всех существующих и читаемых файлов
-      - issues: ошибки, найденные при обходе (превышение глубины, несуществующий импорт, не UTF-8)
+    Walk the import graph starting from start.
+    Returns:
+      - graph: [(path, content, depth), ...] for all existing and readable files
+      - issues: errors found during the walk (depth exceeded, missing import, not UTF-8)
     """
     graph: list[tuple[Path, str, int]] = []
     issues: list[dict] = []
@@ -117,7 +117,7 @@ def build_import_graph(start: Path) -> tuple[list[tuple[Path, str, int]], list[d
                     "level": "error",
                     "file": str(origin),
                     "line": origin_line,
-                    "message": f"импорт `@{path_token_from(origin, path)}` не существует (резолв: {path}).",
+                    "message": f"import `@{path_token_from(origin, path)}` does not exist (resolved: {path}).",
                 })
             return
 
@@ -129,14 +129,14 @@ def build_import_graph(start: Path) -> tuple[list[tuple[Path, str, int]], list[d
                 "level": "warning",
                 "file": str(path),
                 "line": None,
-                "message": "файл не в UTF-8 — пропуск.",
+                "message": "file is not UTF-8 — skipping.",
             })
             return
 
         graph.append((path, content, depth))
 
-        # Если глубина уже на пределе — следующих импортов не разворачиваем,
-        # но факт превышения фиксируется только при попытке.
+        # If depth is already at the limit — do not expand further imports,
+        # but the fact of exceeding is recorded only on attempt.
         for line_num, token in iter_imports(content):
             child_depth = depth + 1
             if child_depth > MAX_IMPORT_DEPTH:
@@ -145,7 +145,7 @@ def build_import_graph(start: Path) -> tuple[list[tuple[Path, str, int]], list[d
                     "level": "error",
                     "file": str(path),
                     "line": line_num,
-                    "message": f"глубина импорта `@{token}` превышает {MAX_IMPORT_DEPTH} хопов.",
+                    "message": f"import depth `@{token}` exceeds {MAX_IMPORT_DEPTH} hops.",
                 })
                 continue
             child_path = resolve_import_path(token, path)
@@ -156,17 +156,17 @@ def build_import_graph(start: Path) -> tuple[list[tuple[Path, str, int]], list[d
 
 
 def path_token_from(origin: Path, resolved: Path) -> str:
-    """Попытаться восстановить, как именно был записан токен (для красоты сообщения)."""
+    """Try to reconstruct how exactly the token was written (for a nicer message)."""
     try:
         return str(resolved.relative_to(origin.parent))
     except ValueError:
         return str(resolved)
 
 
-# ---------- Правила ----------
+# ---------- Rules ----------
 
 def check_r1_size(graph: list) -> list[dict]:
-    """≤ 200 строк после раскрытия импортов и стрипа HTML-комментариев (рекомендация Anthropic)."""
+    """≤ 200 lines after expanding imports and stripping HTML comments (Anthropic recommendation)."""
     total = 0
     for _, content, _ in graph:
         stripped = strip_html_comments(content)
@@ -178,15 +178,15 @@ def check_r1_size(graph: list) -> list[dict]:
             "file": None,
             "line": None,
             "message": (
-                f"суммарный размер после раскрытия импортов: {total} непустых строк "
-                f"(рекомендация Anthropic: ≤ {MAX_LINES}; больше → ниже adherence и больше токенов)."
+                f"total size after expanding imports: {total} non-empty lines "
+                f"(Anthropic recommendation: ≤ {MAX_LINES}; more → lower adherence and more tokens)."
             ),
         }]
     return []
 
 
 def check_r2_no_frontmatter(graph: list) -> list[dict]:
-    """Корневой CLAUDE.md не должен начинаться с YAML-frontmatter (он только для .claude/rules/)."""
+    """The root CLAUDE.md must not start with YAML frontmatter (it is only for .claude/rules/)."""
     if not graph:
         return []
     root_path, root_content, _ = graph[0]
@@ -197,13 +197,13 @@ def check_r2_no_frontmatter(graph: list) -> list[dict]:
             "level": "warning",
             "file": str(root_path),
             "line": 1,
-            "message": "YAML-frontmatter в начале файла не задокументирован для корневого CLAUDE.md.",
+            "message": "YAML frontmatter at the start of the file is not documented for the root CLAUDE.md.",
         }]
     return []
 
 
 def check_r5_old_domain(graph: list) -> list[dict]:
-    """Нет ссылок на старый домен docs.anthropic.com/en/docs/claude-code (отдаёт 301)."""
+    """No links to the old domain docs.anthropic.com/en/docs/claude-code (returns 301)."""
     issues = []
     for path, content, _ in graph:
         for line_num, line in enumerate(content.splitlines(), 1):
@@ -213,7 +213,7 @@ def check_r5_old_domain(graph: list) -> list[dict]:
                     "level": "warning",
                     "file": str(path),
                     "line": line_num,
-                    "message": f"ссылка на старый домен `{OLD_DOMAIN}` — замени на `code.claude.com/docs/en`.",
+                    "message": f"link to the old domain `{OLD_DOMAIN}` — replace with `code.claude.com/docs/en`.",
                 })
     return issues
 
@@ -231,13 +231,13 @@ def load_blacklist() -> list[str]:
 
 
 def check_r6_agnostic(graph: list) -> list[dict]:
-    """Принцип проектной агностичности: blacklist в tools/agnostic-blacklist.txt, case-insensitive substring."""
+    """Project-agnosticism principle: blacklist in tools/agnostic-blacklist.txt, case-insensitive substring."""
     patterns = load_blacklist()
     if not patterns:
         return []
     issues = []
     for path, content, _ in graph:
-        # HTML-комментарии стрипаются Claude — наши проектные пометки в них допустимы.
+        # HTML comments are stripped by Claude — our project-specific notes inside them are allowed.
         active = strip_html_comments(content)
         for line_num, line in enumerate(active.splitlines(), 1):
             line_lower = line.lower()
@@ -248,22 +248,22 @@ def check_r6_agnostic(graph: list) -> list[dict]:
                         "level": "warning",
                         "file": str(path),
                         "line": line_num,
-                        "message": f"найден паттерн `{pat}` — проектная специфика в глобальном файле (нарушает принцип agnostic, см. docs/layers/claude-md.md).",
+                        "message": f"found pattern `{pat}` — project-specific content in a global file (violates the agnostic principle, see docs/layers/claude-md.md).",
                     })
     return issues
 
 
-# ---------- Главная логика ----------
+# ---------- Main logic ----------
 
 def validate_target(target: Path) -> list[dict]:
-    """Прогнать все проверки для одного целевого файла."""
+    """Run all checks for a single target file."""
     if not target.exists():
         return [{
             "rule": "INFO",
             "level": "info",
             "file": str(target),
             "line": None,
-            "message": "файл не существует — пропуск (это нормально, пока хаб не собран).",
+            "message": "file does not exist — skipping (this is normal until the hub is assembled).",
         }]
 
     graph, graph_issues = build_import_graph(target)
@@ -273,7 +273,7 @@ def validate_target(target: Path) -> list[dict]:
             "level": "info",
             "file": str(target),
             "line": None,
-            "message": "не удалось прочитать файл.",
+            "message": "could not read the file.",
         }]
 
     issues = list(graph_issues)
@@ -293,7 +293,7 @@ def format_human(target: Path, issues: list[dict]) -> str:
     warnings = [i for i in issues if i["level"] == "warning"]
     infos = [i for i in issues if i["level"] == "info"]
 
-    parts = [f"Валидатор CLAUDE.md — {rel}"]
+    parts = [f"CLAUDE.md validator — {rel}"]
     for label, bucket in (("errors", errors), ("warnings", warnings), ("info", infos)):
         if not bucket:
             continue
@@ -317,8 +317,8 @@ def relpath(p: Path) -> str:
 
 
 def run_session_start() -> int:
-    """SessionStart hook: краткая сводка в stdout (попадает в additionalContext)."""
-    out = ["## Валидация глобальных файлов хаба MAINFRAME"]
+    """SessionStart hook: brief summary to stdout (goes into additionalContext)."""
+    out = ["## MAINFRAME hub global-files validation"]
     for target in sorted(TARGET_FILES):
         issues = validate_target(target)
         errors = [i for i in issues if i["level"] == "error"]
@@ -326,7 +326,7 @@ def run_session_start() -> int:
         infos = [i for i in issues if i["level"] == "info"]
         rel = relpath(target)
         if infos and not errors and not warnings:
-            out.append(f"- `{rel}` — пропущено: {infos[0]['message']}")
+            out.append(f"- `{rel}` — skipped: {infos[0]['message']}")
         elif not errors and not warnings:
             out.append(f"- `{rel}` — OK")
         else:
@@ -335,17 +335,17 @@ def run_session_start() -> int:
                 line_part = f":{i['line']}" if i.get("line") else ""
                 out.append(f"  - [{i['rule']}]{line_part} {i['message']}")
             if len(errors) + len(warnings) > 3:
-                out.append(f"  - … ещё {len(errors) + len(warnings) - 3}. Запусти `python3 tools/validate-claude-md.py {rel}` для деталей.")
+                out.append(f"  - … {len(errors) + len(warnings) - 3} more. Run `python3 tools/validate-claude-md.py {rel}` for details.")
     print("\n".join(out))
     return 0
 
 
 def run_from_hook() -> int:
-    """PostToolUse hook: путь файла читается из stdin (формат Claude Code)."""
+    """PostToolUse hook: file path read from stdin (Claude Code format)."""
     try:
         data = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
-        return 0  # нет валидного входа — тихо выходим
+        return 0  # no valid input — exit quietly
 
     tool_input = data.get("tool_input") or {}
     file_path = tool_input.get("file_path") or tool_input.get("notebook_path")
@@ -354,7 +354,7 @@ def run_from_hook() -> int:
 
     target = Path(file_path).resolve()
 
-    # Раннее path-фильтрование — если правка не нашего файла, выходим за миллисекунду.
+    # Early path filtering — if the edit is not our file, exit within a millisecond.
     if target not in TARGET_FILES:
         return 0
 
@@ -362,7 +362,7 @@ def run_from_hook() -> int:
     if not issues:
         return 0
 
-    # PostToolUse: stderr попадает в transcript для Claude.
+    # PostToolUse: stderr goes into the transcript for Claude.
     print(format_human(target, issues), file=sys.stderr)
 
     has_errors = any(i["level"] == "error" for i in issues)
@@ -370,11 +370,11 @@ def run_from_hook() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Валидатор CLAUDE.md по правилам Anthropic + принципам MAINFRAME.")
-    parser.add_argument("path", nargs="?", help="Путь к файлу для валидации (CLI-режим).")
-    parser.add_argument("--json", action="store_true", help="Вывод в JSON (CLI-режим).")
-    parser.add_argument("--from-hook", action="store_true", help="Режим PostToolUse: путь читается из stdin.")
-    parser.add_argument("--session-start", action="store_true", help="Режим SessionStart: сводка по всем TARGET_FILES.")
+    parser = argparse.ArgumentParser(description="CLAUDE.md validator per Anthropic rules + MAINFRAME principles.")
+    parser.add_argument("path", nargs="?", help="Path to the file to validate (CLI mode).")
+    parser.add_argument("--json", action="store_true", help="JSON output (CLI mode).")
+    parser.add_argument("--from-hook", action="store_true", help="PostToolUse mode: path read from stdin.")
+    parser.add_argument("--session-start", action="store_true", help="SessionStart mode: summary of all TARGET_FILES.")
     args = parser.parse_args()
 
     if args.session_start:

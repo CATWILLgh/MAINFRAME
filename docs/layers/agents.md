@@ -1,288 +1,288 @@
 # Layer: Agents (sub-agents)
 
-> Изолированные субагенты с собственным контекстом. В хабе: `export/agents/<name>.md` (пока **пусто** — зарезервированный слой).
+> Isolated subagents with their own context. In the hub: `export/agents/<name>.md` (currently **empty** — reserved layer).
 
-> Последнее обновление: 2026-05-29 (research + дисциплина запуска).
+> Last updated: 2026-05-29 (research + launch discipline).
 
 ---
 
-## Где живёт
+## Where it lives
 
-- В хабе: `export/agents/<name>.md` — один markdown-файл на агента.
-- На машине: `~/.claude/agents/<name>.md` (симлинк файла, через [install.sh](../../install.sh)).
-- Активация: после симлинка sub-agent вызывается через `Agent(subagent_type: "<name>")`.
+- In the hub: `export/agents/<name>.md` — one markdown file per agent.
+- On the machine: `~/.claude/agents/<name>.md` (file symlink, via [install.sh](../../install.sh)).
+- Activation: after the symlink, a sub-agent is invoked via `Agent(subagent_type: "<name>")`.
 
 ---
 
 ## 1. Canonical reference (Anthropic Claude Code docs)
 
-### 1.1. Шесть режимов сабагентов — карта
+### 1.1. Six subagent modes — map
 
-Шесть режимов с разной context-inheritance и use case'ами.
+Six modes with different context inheritance and use cases.
 
-| Режим | Activation | Context inherits | When |
+| Mode | Activation | Context inherits | When |
 |---|---|---|---|
-| **A. Именованный** | `Agent(subagent_type=...)`, `@`-mention, `--agent` flag | Только task prompt + CLAUDE.md (если не Explore/Plan) | Изолированная focused задача |
-| **B. Fork** | `CLAUDE_CODE_FORK_SUBAGENT=1` + `/fork` | **Весь parent transcript** | Параллельная ветка от текущего состояния |
-| **C. Background** | `background: true` / `Ctrl+B` | Как A или B | Параллельная работа без блокировки |
-| **D. SendMessage resume** | `SendMessage(to=agentId)`, требует `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` | Свою прошлую историю | Продолжить остановленного субагента |
-| **E. Agent teams** | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` + `TeamCreate` | CLAUDE.md проекта + spawn prompt; lead history не наследует | Несколько параллельных сессий с inter-agent communication |
-| **F. Background sessions** | `claude --bg`, `/bg`, Agent View dispatch | Новая сессия → CLAUDE.md проекта; `/bg` из существующей → continue | Долгоживущие фоновые задачи, мониторинг |
+| **A. Named** | `Agent(subagent_type=...)`, `@`-mention, `--agent` flag | Task prompt + CLAUDE.md only (unless Explore/Plan) | Isolated, focused task |
+| **B. Fork** | `CLAUDE_CODE_FORK_SUBAGENT=1` + `/fork` | **Full parent transcript** | Parallel branch from the current state |
+| **C. Background** | `background: true` / `Ctrl+B` | Same as A or B | Parallel work without blocking |
+| **D. SendMessage resume** | `SendMessage(to=agentId)`, requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` | Its own past history | Resume a stopped subagent |
+| **E. Agent teams** | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` + `TeamCreate` | Project CLAUDE.md + spawn prompt; lead history is not inherited | Multiple parallel sessions with inter-agent communication |
+| **F. Background sessions** | `claude --bg`, `/bg`, Agent View dispatch | New session → project CLAUDE.md; `/bg` from existing → continue | Long-lived background tasks, monitoring |
 
 ### 1.2. Frontmatter — schema
 
-Источник: `code.claude.com/docs/en/sub-agents` (file-based субагенты в Claude Code).
+Source: `code.claude.com/docs/en/sub-agents` (file-based subagents in Claude Code).
 
-Базовые поля (наиболее часто используемые в хабе):
+Core fields (most commonly used in the hub):
 
 ```yaml
 ---
-name: <kebab-case>              # имя для Agent(subagent_type: "name")
-description: <когда делегировать; видно main Claude'у>
-prompt: <system prompt>         # либо тело файла после frontmatter, либо явное поле
-tools: <Bash|Read|Write|...>    # allowlist subset стандартных tools.
-                                # Без поля → inherit все parent tools (антипаттерн).
+name: <kebab-case>              # name for Agent(subagent_type: "name")
+description: <when to delegate; visible to the main Claude>
+prompt: <system prompt>         # either the file body after frontmatter, or an explicit field
+tools: <Bash|Read|Write|...>    # allowlist subset of standard tools.
+                                # Omitted → inherits ALL parent tools (anti-pattern).
 disallowedTools: <...>          # explicit block-list (camelCase per SDK schema).
-                                # NB: kebab-case вариант (`disabled-tools`) встречается
-                                # в part docs, но canonical SDK имя — camelCase.
-model: <opus|sonnet|haiku|inherit>  # override модели. Default — inherit от parent.
-skills:                         # preload skills в context субагента
+                                # NB: the kebab-case variant (`disabled-tools`) appears
+                                # in some docs, but the canonical SDK name is camelCase.
+model: <opus|sonnet|haiku|inherit>  # model override. Default — inherit from parent.
+skills:                         # preload skills into the subagent context
   - skill-name-1
-maxTurns: <N>                   # HARD CAP на API round-trips. Verified в
+maxTurns: <N>                   # HARD CAP on API round-trips. Verified in
                                 # AgentDefinition type (TS/Python SDK) + agent-loop
-                                # docs документируют subtype `error_max_turns`
-                                # как result когда лимит достигнут. [v2.1.128]
-background: <true|false>        # форсит background mode (см. режим C).
-permissionMode: <plan|acceptEdits|...>  # override permission mode.
-                                # Нельзя расширить выше parent mode.
-isolation: worktree             # форсить git worktree для file isolation.
+                                # docs document subtype `error_max_turns`
+                                # as result when the limit is reached. [v2.1.128]
+background: <true|false>        # forces background mode (see mode C).
+permissionMode: <plan|acceptEdits|...>  # permission mode override.
+                                # Cannot be elevated above parent mode.
+isolation: worktree             # force git worktree for file isolation.
 ---
 
-Тело — system prompt субагента (если нет явного `prompt:`). `$ARGUMENTS` — placeholder для входных аргументов.
+Body — system prompt of the subagent (if no explicit `prompt:`). `$ARGUMENTS` — placeholder for input arguments.
 ```
 
-### 1.2.1. Полный frontmatter (документировано — `code.claude.com/docs/en/sub-agents`)
+### 1.2.1. Full frontmatter (documented — `code.claude.com/docs/en/sub-agents`)
 
-Раньше считалось, что семантика дополнительных полей (`hooks`, `mcpServers`, `memory`) «не описана explicitly» — это была gray zone. Теперь список полный и документированный:
+Previously it was assumed that the semantics of additional fields (`hooks`, `mcpServers`, `memory`) were "not described explicitly" — this was a gray zone. The list is now complete and documented:
 
-| Поле | Назначение | Примечание |
+| Field | Purpose | Note |
 |---|---|---|
-| `name` | id агента (required) | Хуки получают это значение как `agent_type` |
-| `description` | когда делегировать (required) | видно main Claude'у |
-| `tools` | allowlist | **Опущено → наследует ВСЕ tools, включая `Skill`.** Указано → только перечисленные |
-| `disallowedTools` | block-list | убрать tool из inherited/specified |
+| `name` | agent id (required) | Hooks receive this value as `agent_type` |
+| `description` | when to delegate (required) | visible to the main Claude |
+| `tools` | allowlist | **Omitted → inherits ALL tools, including `Skill`.** Specified → only those listed |
+| `disallowedTools` | block-list | remove a tool from inherited/specified |
 | `model` | `sonnet`/`opus`/`haiku`/full-id/`inherit` | default `inherit` |
-| `maxTurns` | потолок agentic turns | soft enforcement (см. §3.1) |
-| `skills` | preload | впрыскивает **полный контент** скилла в контекст на старте; ось «что preloaded», НЕ «что доступно» (доступ — через `tools`/`Skill`) |
-| `permissionMode` | режим прав | ⚠️ **Ignored for plugin subagents** |
-| `mcpServers` | MCP-серверы агента | ⚠️ **Ignored for plugin subagents** |
-| `hooks` | lifecycle-хуки в области агента (все события; `Stop` → `SubagentStop`) | ⚠️ **Ignored for plugin subagents** |
-| `memory` | `user`/`project`/`local` | кросс-сессионная память |
+| `maxTurns` | ceiling on agentic turns | soft enforcement (see §3.1) |
+| `skills` | preload | injects the **full content** of the skill into context at startup; the "what is preloaded" axis, NOT "what is accessible" (access is via `tools`/`Skill`) |
+| `permissionMode` | permission mode | ⚠️ **Ignored for plugin subagents** |
+| `mcpServers` | MCP servers for the agent | ⚠️ **Ignored for plugin subagents** |
+| `hooks` | lifecycle hooks in the agent scope (all events; `Stop` → `SubagentStop`) | ⚠️ **Ignored for plugin subagents** |
+| `memory` | `user`/`project`/`local` | cross-session memory |
 
-> ⚠️ **Критично для хаба:** наши агенты живут в `plugin-dist/` → это **plugin subagents**. Поля `permissionMode`, `mcpServers`, `hooks` в их frontmatter **игнорируются** (`code.claude.com/docs/en/sub-agents`, supported-frontmatter-fields). Следствие: задать хук / режим прав / MCP на уровне конкретного хаб-агента через frontmatter **нельзя** — работают только глобальные механизмы (`plugin-dist/hooks/hooks.json`, `export/settings.json`). Для кросс-агентного хука (нужного и главному агенту, и сабагентам) это и есть единственный путь — см. [hooks.md §1.6](hooks.md).
+> ⚠️ **Critical for the hub:** our agents live in `plugin-dist/` → they are **plugin subagents**. The fields `permissionMode`, `mcpServers`, `hooks` in their frontmatter **are ignored** (`code.claude.com/docs/en/sub-agents`, supported-frontmatter-fields). Consequence: setting a hook / permission mode / MCP for a specific hub agent via frontmatter **is not possible** — only global mechanisms work (`plugin-dist/hooks/hooks.json`, `export/settings.json`). For a cross-agent hook (needed by both the main agent and subagents) this is the only path — see [hooks.md §1.6](hooks.md).
 
 ### 1.3. Agent tool — invocation schema
 
-Атрибуты live в schema самого Agent tool (видны main Claude'у в каждой сессии):
+Attributes live in the schema of the Agent tool itself (visible to the main Claude in every session):
 
-| Атрибут | Назначение |
+| Attribute | Purpose |
 |---|---|
-| `description` | Короткое (3-5 слов) описание задачи — попадает в UI и telemetry |
-| `prompt` | Полный prompt сабагенту. На английском (см. §2.2.1) |
-| `subagent_type` | Имя кастомного агента (из `export/agents/`) или built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
-| `model` | Override модели per-call: `opus` / `sonnet` / `haiku`. Без поля — inherit |
-| `isolation` | `"worktree"` — fresh git worktree (≈200–500 мс overhead + диск). Использовать только когда parallel agents мутируют файлы |
-| `mode` | Override permission mode: `plan` / `acceptEdits` / `auto` / `default` / `dontAsk` / `bypassPermissions` |
-| `run_in_background` | Запустить async — Claude получит notification при completion. Use когда не нужен результат для следующего хода |
-| `team_name` | Для agent teams; иначе omit |
-| `name` | Имя экземпляра для `SendMessage` resume |
+| `description` | Short (3-5 words) task description — appears in UI and telemetry |
+| `prompt` | Full prompt to the subagent. In English (see §2.2.1) |
+| `subagent_type` | Name of a custom agent (from `export/agents/`) or built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
+| `model` | Model override per-call: `opus` / `sonnet` / `haiku`. Without the field — inherit |
+| `isolation` | `"worktree"` — fresh git worktree (≈200–500 ms overhead + disk). Use only when parallel agents mutate files |
+| `mode` | Permission mode override: `plan` / `acceptEdits` / `auto` / `default` / `dontAsk` / `bypassPermissions` |
+| `run_in_background` | Launch async — Claude receives a notification on completion. Use when the result is not needed for the next turn |
+| `team_name` | For agent teams; otherwise omit |
+| `name` | Instance name for `SendMessage` resume |
 
-### 1.4. Context isolation — что субагент видит / не видит
+### 1.4. Context isolation — what a subagent sees / does not see
 
-Полная картина — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Короткий summary:
+Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short summary:
 
-**Видит:**
-- Свой system prompt (тело frontmatter-файла) или delegation prompt.
-- `prompt` параметр от parent'а — **единственный канал** передачи контекста (для режимов A/C/E/F).
-- CLAUDE.md hierarchy (кроме Explore и Plan, которые её пропускают).
-- Preloaded skills из `skills:` frontmatter.
-- Git status snapshot (кроме Explore и Plan).
+**Sees:**
+- Its own system prompt (frontmatter file body) or delegation prompt.
+- The `prompt` parameter from the parent — **the only channel** for passing context (for modes A/C/E/F).
+- CLAUDE.md hierarchy (except Explore and Plan, which skip it).
+- Preloaded skills from `skills:` frontmatter.
+- Git status snapshot (except Explore and Plan).
 
-**НЕ видит:**
-- История разговора parent'а (исключение — Fork-субагент в B).
-- Tool results parent'а.
-- Skills, уже active в parent context (если их нет в `skills:` preload или не auto-loaded в субагенте).
+**Does NOT see:**
+- Parent conversation history (exception — Fork subagent in B).
+- Parent tool results.
+- Skills already active in the parent context (unless present in `skills:` preload or auto-loaded in the subagent).
 
-**Возвращает:**
-- Только final assistant message — это **есть** возвращаемое значение. Tool calls внутри субагента не surfaceятся в main context.
+**Returns:**
+- Only the final assistant message — this **is** the return value. Tool calls inside a subagent are not surfaced in the main context.
 
 ### 1.5. Built-in subagent types
 
-| Тип | Модель | Tools | Особенности |
+| Type | Model | Tools | Notes |
 |---|---|---|---|
-| `Explore` | Haiku | Read-only | **Skip'ает CLAUDE.md и git status.** Read excerpts (not whole files) с window'ом — для locate/grep задач |
-| `Plan` | Inherits parent model | Read-only | **Skip'ает CLAUDE.md и git status.** Для design / plan reasoning без edit-капабилити |
-| `general-purpose` | Inherits parent | All inherited | Универсальный worker. При fork mode заменяется fork-ом |
-| `statusline-setup`, `claude-code-guide` | Specialized | — | Утилитарные, специфичные use cases |
+| `Explore` | Haiku | Read-only | **Skips CLAUDE.md and git status.** Reads excerpts (not whole files) with a window — for locate/grep tasks |
+| `Plan` | Inherits parent model | Read-only | **Skips CLAUDE.md and git status.** For design / plan reasoning without edit capability |
+| `general-purpose` | Inherits parent | All inherited | Universal worker. In fork mode, replaced by a fork |
+| `statusline-setup`, `claude-code-guide` | Specialized | — | Utility, specific use cases |
 
-### 1.6. Concurrency и lifetime caps
+### 1.6. Concurrency and lifetime caps
 
-- **Per workflow concurrency**: `min(16, cpu_cores - 2)` concurrent agents (документировано в Workflow tool schema).
-- **Per workflow lifetime**: 1000 agents total cap — backstop против runaway loops.
-- **Nesting**: субагент **не может** spawn субагентов. Agent tool недоступен внутри субагента. Workflow внутри child Workflow throws.
+- **Per workflow concurrency**: `min(16, cpu_cores - 2)` concurrent agents (documented in Workflow tool schema).
+- **Per workflow lifetime**: 1000 agents total cap — backstop against runaway loops.
+- **Nesting**: a subagent **cannot** spawn subagents. The Agent tool is unavailable inside a subagent. Workflow inside a child Workflow throws.
 
 ---
 
 ## 2. Hub usage
 
-### 2.1. Текущие агенты в `export/agents/`
+### 2.1. Current agents in `export/agents/`
 
-| Агент | Назначение | Activation |
+| Agent | Purpose | Activation |
 |---|---|---|
-| `web-search` (model: sonnet, effort: low) | Поиск authoritative информации через Context7 + WebSearch/Fetch. Возвращает structured citations с verbatim quotes. Picked через 108-датапоинт tournament — 18/18 perfect runs, zero drift по 6 verification queries. | `Agent(subagent_type: "web-search")` |
+| `web-search` (model: sonnet, effort: low) | Search for authoritative information via Context7 + WebSearch/Fetch. Returns structured citations with verbatim quotes. Selected via a 108-data-point tournament — 18/18 perfect runs, zero drift across 6 verification queries. | `Agent(subagent_type: "web-search")` |
 
-Методология подбора model + effort для новых агентов — внутренний skill `agent-tournament` (project-scoped в MAINFRAME).
+Methodology for selecting model + effort for new agents — internal skill `agent-tournament` (project-scoped in MAINFRAME).
 
 ### 2.2. Subagent discipline (research 2026-05-29)
 
-Дисциплина запуска субагентов выработана по research. Базовые правила вынесены в [export/CLAUDE.md](../../export/CLAUDE.md) Orchestration; детали — здесь.
+Subagent launch discipline was developed through research. Basic rules are in [export/CLAUDE.md](../../export/CLAUDE.md) Orchestration; details here.
 
 #### 2.2.1. English prompts
 
-Все subagent prompts — на английском, независимо от языка разговора с пользователем. Принцип хаба #3 + Anthropic prompt-engineering guidance (модели tuned на English, точнее следуют инструкциям, меньше токенов на ту же мысль). Применимо к `prompt:` параметру Agent tool, телу `export/agents/<name>.md`, prompts внутри Workflow. User-facing reply остаётся на языке пользователя.
+All subagent prompts are in English, regardless of the language of the conversation with the user. Hub principle #3 + Anthropic prompt-engineering guidance (models are tuned on English, follow instructions more precisely, fewer tokens for the same content). Applies to the `prompt:` parameter of the Agent tool, the body of `export/agents/<name>.md`, and prompts inside Workflow. User-facing replies remain in the user's language.
 
 #### 2.2.2. Anti-runaway
 
-Surface — Claude Code CLI: main session + Agent tool invocation file-based субагентов из `~/.claude/agents/`. Verified hard knobs:
+Surface — Claude Code CLI: main session + Agent tool invocation of file-based subagents from `~/.claude/agents/`. Verified hard knobs:
 
-| Knob | Где | Эффект | Источник |
+| Knob | Where | Effect | Source |
 |---|---|---|---|
-| `tools: [...]` allowlist | frontmatter | Структурно блокирует целые категории. Без `WebSearch` в allowlist — субагент физически не может искать. | sub-agents page |
-| `maxTurns: N` | frontmatter | «Maximum number of agentic turns before the subagent stops» | sub-agents #supported-frontmatter-fields + tools-reference #agent-tool-behavior |
-| `disallowedTools: [...]` | frontmatter | Block-list — убрать конкретный tool из inherited без полной enumeration. | sub-agents |
-| `permissionMode: plan` | frontmatter | Read-only — субагент не сможет write. | sub-agents #permission-modes |
-| `permissionMode: dontAsk` | frontmatter | Auto-deny prompts — субагент не получит permission escalation. | sub-agents |
-| `background: true` | frontmatter | Auto-deny any tool call requiring prompt → cap blast radius. | sub-agents |
-| `PreToolUse` hook с exit code 2 | внешний слой | Блокировка конкретных команд внутри allowed tool (e.g. allow Bash но reject SQL writes). | sub-agents #conditional-rules-with-hooks |
+| `tools: [...]` allowlist | frontmatter | Structurally blocks entire categories. Without `WebSearch` in the allowlist — the subagent physically cannot search. | sub-agents page |
+| `maxTurns: N` | frontmatter | "Maximum number of agentic turns before the subagent stops" | sub-agents #supported-frontmatter-fields + tools-reference #agent-tool-behavior |
+| `disallowedTools: [...]` | frontmatter | Block-list — remove a specific tool from inherited without full enumeration. | sub-agents |
+| `permissionMode: plan` | frontmatter | Read-only — the subagent cannot write. | sub-agents #permission-modes |
+| `permissionMode: dontAsk` | frontmatter | Auto-deny prompts — the subagent does not receive permission escalation. | sub-agents |
+| `background: true` | frontmatter | Auto-deny any tool call requiring a prompt → cap blast radius. | sub-agents |
+| `PreToolUse` hook with exit code 2 | external layer | Block specific commands inside an allowed tool (e.g. allow Bash but reject SQL writes). | sub-agents #conditional-rules-with-hooks |
 
-**5 tools структурно недоступны субагенту** независимо от frontmatter: `Agent` (no nesting), `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode` (unless `permissionMode: plan`), `ScheduleWakeup`, `WaitForMcpServers`. Источник: sub-agents #available-tools.
+**5 tools are structurally unavailable to a subagent** regardless of frontmatter: `Agent` (no nesting), `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode` (unless `permissionMode: plan`), `ScheduleWakeup`, `WaitForMcpServers`. Source: sub-agents #available-tools.
 
-**Не documented:** timeout / parent abort mechanism для runaway. Единственное hard runtime termination — auto-compaction на ~95% context capacity.
+**Not documented:** timeout / parent abort mechanism for runaway. The only hard runtime termination — auto-compaction at ~95% context capacity.
 
-Soft patterns (когда hard knobs не покрывают конкретный кейс):
+Soft patterns (when hard knobs do not cover a specific case):
 
-Триада (без любого элемента pattern разваливается):
+The triad (without any element the pattern falls apart):
 
-1. **Ordinal cap.** «Search at most 3 times» — конкретное число, не «try to limit».
-2. **Output label.** «After your third search — return whatever you have and label BUDGET_EXHAUSTED.»
-3. **Unconditional return clause.** «Whether or not you have an answer — return.»
+1. **Ordinal cap.** "Search at most 3 times" — a concrete number, not "try to limit".
+2. **Output label.** "After your third search — return whatever you have and label BUDGET_EXHAUSTED."
+3. **Unconditional return clause.** "Whether or not you have an answer — return."
 
-Дополнительные patterns:
-- **Consecutive empty abort.** «If 2 consecutive tool calls return empty/error — stop with label NO_PROGRESS.»
-- **Output-format forcing early commit.** «After reading at most 5 files, write your analysis. Do not read more.»
+Additional patterns:
+- **Consecutive empty abort.** "If 2 consecutive tool calls return empty/error — stop with label NO_PROGRESS."
+- **Output-format forcing early commit.** "After reading at most 5 files, write your analysis. Do not read more."
 
 **Anti-patterns:**
-- Hedges: «try to limit», «aim for», «if possible», «prefer» — игнорируются.
-- «Stop when you have enough information» — семантически пустое.
-- Inherited tools без `tools:` allowlist — структурного cap нет.
-- Prompt-only budget без structured return label — субагент извинится вместо отдачи partial data.
+- Hedges: "try to limit", "aim for", "if possible", "prefer" — are ignored.
+- "Stop when you have enough information" — semantically empty.
+- Inherited tools without a `tools:` allowlist — no structural cap.
+- Prompt-only budget without a structured return label — the subagent will apologize instead of returning partial data.
 
-**Эмпирика 2026-05-29 (две итерации, 6 research-сабагентов с одинаковым template hard cap 5 tool calls):** 6/5, 5/5, 4/5, 4/5, 8/5, 6/5. Soft enforcement leaks ≈ 50% случаев, до +60% превышения. Когда критично — `maxTurns:` в frontmatter (verified hard knob).
+**Empirics 2026-05-29 (two iterations, 6 research subagents with identical template hard cap of 5 tool calls):** 6/5, 5/5, 4/5, 4/5, 8/5, 6/5. Soft enforcement leaks in ≈50% of cases, up to +60% overage. When critical — `maxTurns:` in frontmatter (verified hard knob).
 
 #### 2.2.3. Output discipline
 
-**Hard knob по структуре вывода в Claude Code CLI surface отсутствует.** Verified: ни поле frontmatter, ни Agent tool параметр для structured output / schema validation / retry-on-mismatch не documented. Возврат — natural-language summary, без contract. Источник: `code.claude.com/docs/en/sub-agents` — описание только «works independently and returns results», «relevant summary returns to your main conversation».
+**There is no hard knob for output structure in the Claude Code CLI surface.** Verified: neither a frontmatter field nor an Agent tool parameter for structured output / schema validation / retry-on-mismatch is documented. The return is a natural-language summary, without a contract. Source: `code.claude.com/docs/en/sub-agents` — describes only "works independently and returns results", "relevant summary returns to your main conversation".
 
-(`schema:` параметр Workflow tool — это Workflow-only, не Agent. Документированные example субагенты — code-reviewer, debugger — используют structured checklists в теле system prompt, но это illustrative, не documented best practice для machine-parseable.)
+(`schema:` parameter of the Workflow tool — this is Workflow-only, not Agent. The documented example subagents — code-reviewer, debugger — use structured checklists in the system prompt body, but this is illustrative, not a documented best practice for machine-parseable output.)
 
 Soft patterns:
-- **JSON-fenced + schema-in-prose** + «Return ONLY valid JSON matching this shape» — работает для Sonnet; для Haiku короче и без отвлечений.
-- **Labeled-block** («OUTPUT:\n…») — parse только после метки, рассуждение до неё допустимо. Устойчивее, чем «no preamble».
-- **Positive example beats negation** — конкретный sample вместо «do NOT include reasoning». Особенно для Opus 4.x.
-- Короткий prompt + шаблон в конце — для Haiku.
+- **JSON-fenced + schema-in-prose** + "Return ONLY valid JSON matching this shape" — works for Sonnet; for Haiku, keep it shorter and without distractions.
+- **Labeled-block** ("OUTPUT:\n…") — parse only after the label, reasoning before it is acceptable. More robust than "no preamble".
+- **Positive example beats negation** — a concrete sample instead of "do NOT include reasoning". Especially for Opus 4.x.
+- Short prompt + template at the end — for Haiku.
 
 **Anti-patterns:**
-- «Return ONLY X» без позитивного якоря — soft, не надёжно.
-- Markdown headers в prompt'е → воспроизводятся в выводе даже при «no headers».
-- Ожидание structured output от Haiku на сложных задачах.
+- "Return ONLY X" without a positive anchor — soft, not reliable.
+- Markdown headers in the prompt → reproduced in output even with "no headers".
+- Expecting structured output from Haiku on complex tasks.
 
-**Retry/parse pattern (когда строгая структура важна):**
+**Retry/parse pattern (when strict structure matters):**
 1. `JSON.parse(result)` →
-2. regex-extract первый JSON блок →
-3. retry с явным example «previous returned malformed, return ONLY JSON» (1 retry max) →
-4. degrade to prose-parse или бросить выше.
+2. regex-extract first JSON block →
+3. retry with explicit example "previous returned malformed, return ONLY JSON" (1 retry max) →
+4. degrade to prose-parse or throw upstream.
 
-`SendMessage` для clarification требует `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` — не применимо к одиночному Agent tool invocation.
+`SendMessage` for clarification requires `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` — not applicable to a single Agent tool invocation.
 
 #### 2.2.4. Composition decision criteria
 
-Прямые documented patterns из `code.claude.com/docs/en/sub-agents`:
+Direct documented patterns from `code.claude.com/docs/en/sub-agents`:
 
-| Подход | Когда (по docs) |
+| Approach | When (per docs) |
 |---|---|
-| **Inline (main conversation)** | «frequent back-and-forth or iterative refinement», «multiple phases share significant context», «quick, targeted change», «latency matters» (subagents start fresh) |
-| **Single Agent call** | Side task «would flood your main conversation with search results, logs, or file contents you won't reference again» — субагент работает в своём context, возвращает только summary |
-| **Parallel research** | «spawn multiple subagents to work simultaneously» по independent areas. «Works best when the research paths don't depend on each other.» |
-| **Chain (sequential)** | «find performance issues, then use the optimizer subagent to fix them» — main session passes output одного → input следующего |
-| **Fork** | Когда named subagent «would need too much background to be useful» либо «try several approaches in parallel from the same starting point». Reuses parent prompt cache — дешевле named subagent для same-context задач |
-| **Skill** | Когда нужен «reusable prompts or workflows that run in the main conversation context rather than isolated subagent context» |
-| **`/btw`** | «quick question about something already in your conversation». Sees full context, no tool access, answer не добавляется в history |
-| **Workflow tool** | На странице `sub-agents` **не описан**. Criterion Workflow vs manual parallel Agent calls в CLI docs отсутствует — эмпирическое правило хаба: Workflow при >5 workers или phase barriers. См. §3 gray zones |
+| **Inline (main conversation)** | "frequent back-and-forth or iterative refinement", "multiple phases share significant context", "quick, targeted change", "latency matters" (subagents start fresh) |
+| **Single Agent call** | Side task "would flood your main conversation with search results, logs, or file contents you won't reference again" — the subagent works in its own context, returns only a summary |
+| **Parallel research** | "spawn multiple subagents to work simultaneously" across independent areas. "Works best when the research paths don't depend on each other." |
+| **Chain (sequential)** | "find performance issues, then use the optimizer subagent to fix them" — main session passes output of one → input of the next |
+| **Fork** | When a named subagent "would need too much background to be useful" or to "try several approaches in parallel from the same starting point". Reuses parent prompt cache — cheaper than a named subagent for same-context tasks |
+| **Skill** | When "reusable prompts or workflows that run in the main conversation context rather than isolated subagent context" are needed |
+| **`/btw`** | "quick question about something already in your conversation". Sees full context, no tool access, answer is not added to history |
+| **Workflow tool** | Not described on the `sub-agents` page. The criterion for Workflow vs manual parallel Agent calls is absent from CLI docs — hub empirical rule: Workflow for >5 workers or phase barriers. See §3 gray zones |
 
-**Built-in subagent выбор** (из `sub-agents` docs):
-- `Explore` (Haiku, read-only) — «search or understand a codebase without making changes», «keeps exploration results out of your main conversation context».
-- `general-purpose` — задача требует «both exploration and modification, complex reasoning to interpret results, or multiple dependent steps».
+**Built-in subagent selection** (from `sub-agents` docs):
+- `Explore` (Haiku, read-only) — "search or understand a codebase without making changes", "keeps exploration results out of your main conversation context".
+- `general-purpose` — task requires "both exploration and modification, complex reasoning to interpret results, or multiple dependent steps".
 
 **Best practices (documented):**
-- «Design focused subagents: each subagent should excel at one specific task».
-- «Write detailed descriptions: Claude uses the description to decide when to delegate».
-- «Limit tool access: grant only necessary permissions for security and focus».
+- "Design focused subagents: each subagent should excel at one specific task".
+- "Write detailed descriptions: Claude uses the description to decide when to delegate".
+- "Limit tool access: grant only necessary permissions for security and focus".
 
 **Cost warning (documented, implicit anti-pattern):**
-- «Running many subagents that each return detailed results can consume significant context» — для sustained parallelism docs указывают на agent teams (каждый worker свой независимый context).
-- «A fork cannot spawn further forks» — fork-of-fork невозможен.
+- "Running many subagents that each return detailed results can consume significant context" — for sustained parallelism, docs point to agent teams (each worker has its own independent context).
+- "A fork cannot spawn further forks" — fork-of-fork is not possible.
 
-**Эмпирические правила хаба** (не documented в CLI surface, по опыту):
-- Параллельная ширина 2–3 для research/audit; 3–5 для component decomposition на больших codebase. >5 — диminishing synthesis value при linearly растущем token cost.
-- Workflow vs manual fan-out — Workflow при >5 workers или явных phase barriers, manual Agent calls при 2–4 параллельных независимых задачах.
-- Fan-out без independence (shared write target) — conflicting writes; всегда проверять что workers genuinely independent.
+**Hub empirical rules** (not documented in the CLI surface, based on experience):
+- Parallel width of 2–3 for research/audit; 3–5 for component decomposition on large codebases. >5 — diminishing synthesis value at linearly growing token cost.
+- Workflow vs manual fan-out — Workflow for >5 workers or explicit phase barriers, manual Agent calls for 2–4 parallel independent tasks.
+- Fan-out without independence (shared write target) — conflicting writes; always verify that workers are genuinely independent.
 
-### 2.3. Хабовые принципы для агентов
+### 2.3. Hub principles for agents
 
-Когда первый артефакт появится в `export/agents/`:
+When the first artifact appears in `export/agents/`:
 
-- **Узкий `tools:` allowlist** — agent делает только то, ради чего создан. Структурный cap > prompt cap.
-- **Hard knobs обязательны.** Default convention для каждого `export/agents/<name>.md`: `tools:` allowlist (только нужные tools) + `maxTurns: N` (разумный потолок) + `permissionMode: plan` или `dontAsk` если нужно. Это **базовый минимум** для агента в хабе.
-- **Soft patterns — дополнение, не замена.** Триаду (ordinal cap + label + unconditional return) в prompt включать как fallback и для специфики задачи, не как primary enforcement.
-- **`model:` per task type** — sonnet/haiku по умолчанию; opus только если задача требует именно его силы.
-- **`skills:` preload** для специализированных доменов — лучше, чем тащить domain knowledge в main CLAUDE.md.
-- **`disable-model-invocation: true`** для domain skills — закрывает main context от лишней нагрузки. Связка: skill `disable-model-invocation: true` + sub-agent `skills: [name]`.
-- **English body** (принцип #3).
-- **Project-agnostic** (принцип #1) — agent не знает имена проектов, фреймворков как обязательных.
-- **«Use proactively» в `description`** для агентов авто-диспатча. Anthropic CLI sub-agents docs явно рекомендуют фразу как механизм усиления автоматической делегации: «To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field» (`code.claude.com/docs/en/sub-agents`). Применяется к любому `export/agents/<name>.md`, чей intended-mode — автоматическое подключение по match'у description'а, не explicit user invocation.
+- **Narrow `tools:` allowlist** — the agent does only what it was created for. Structural cap > prompt cap.
+- **Hard knobs are mandatory.** Default convention for every `export/agents/<name>.md`: `tools:` allowlist (only needed tools) + `maxTurns: N` (reasonable ceiling) + `permissionMode: plan` or `dontAsk` if needed. This is the **baseline minimum** for an agent in the hub.
+- **Soft patterns — supplement, not replacement.** Include the triad (ordinal cap + label + unconditional return) in the prompt as a fallback and for task specifics, not as primary enforcement.
+- **`model:` per task type** — sonnet/haiku by default; opus only if the task genuinely requires its capabilities.
+- **`skills:` preload** for specialized domains — better than pulling domain knowledge into the main CLAUDE.md.
+- **`disable-model-invocation: true`** for domain skills — keeps the main context free of unnecessary load. Pattern: skill `disable-model-invocation: true` + sub-agent `skills: [name]`.
+- **English body** (principle #3).
+- **Project-agnostic** (principle #1) — the agent does not know project names or frameworks as mandatory.
+- **"Use proactively" in `description`** for auto-dispatch agents. Anthropic CLI sub-agents docs explicitly recommend the phrase as a mechanism to strengthen automatic delegation: "To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field" (`code.claude.com/docs/en/sub-agents`). Applies to any `export/agents/<name>.md` whose intended mode is automatic activation on description match, not explicit user invocation.
 
 ---
 
 ## 3. Gray zones / open questions
 
-1. **`maxTurns:` enforcement — мягкое.** Empirically verified через 108 invocations в tournament: `maxTurns: 10` нарушается частью вариантов (макс наблюдено 16 turns — haiku-low, до 1.6× cap). Среди sonnet+haiku × low/medium/high — только sonnet-medium дал 0/18 нарушений, остальные 1-2/18. Documented как «hard knob» в Anthropic spec, но runtime — partial enforcement. Не закладываться как структурная гарантия; рассматривать как soft target. Tool inheritance, deny patterns, `permissionMode` остаются основной защитой.
-2. ✓ **RESOLVED (2026-06-01).** Полная frontmatter schema теперь документирована — см. §1.2.1. Ключевая находка: `permissionMode`, `mcpServers`, `hooks` **игнорируются для plugin subagents** (наши агенты именно такие). `disallowedTools` — canonical camelCase.
-3. ✓ **RESOLVED (2026-06-01).** `skills:` preload верифицирован эмпирически этой сессией (`decision-reviewer`, `*-engineer` стартуют с preloaded скиллами и работают) + документирован: впрыскивает полный контент на старте, ось отдельная от доступа (`tools`/`Skill`). См. [skills.md §1.6](skills.md) и [[skill-triggering-mechanics]].
-4. **Поведение `disable-model-invocation: true` skill при preload через sub-agent `skills:`** — корректно работает? Не верифицировано.
-5. **Order разрешения tools** между sub-agent `tools:` allowlist и глобальными permissions (allow/deny/ask) — не явно описано.
-6. **Workflow tool vs Agent tool пересечения** — Workflow обёртка над Agent с дополнительными primitives. Когда Workflow excess, когда необходим — рекомендация в §2.2.4 эмпирическая.
+1. **`maxTurns:` enforcement — soft.** Empirically verified across 108 invocations in tournament: `maxTurns: 10` is violated by some variants (max observed 16 turns — haiku-low, up to 1.6× cap). Among sonnet+haiku × low/medium/high — only sonnet-medium gave 0/18 violations, the rest 1-2/18. Documented as a "hard knob" in Anthropic spec, but runtime is partial enforcement. Do not rely on it as a structural guarantee; treat as a soft target. Tool inheritance, deny patterns, `permissionMode` remain the primary protection.
+2. ✓ **RESOLVED (2026-06-01).** Full frontmatter schema is now documented — see §1.2.1. Key finding: `permissionMode`, `mcpServers`, `hooks` **are ignored for plugin subagents** (our agents are exactly that). `disallowedTools` — canonical camelCase.
+3. ✓ **RESOLVED (2026-06-01).** `skills:` preload verified empirically in this session (`decision-reviewer`, `*-engineer` start with preloaded skills and work) + documented: injects full content at startup, a separate axis from access (`tools`/`Skill`). See [skills.md §1.6](skills.md) and [[skill-triggering-mechanics]].
+4. **Behavior of `disable-model-invocation: true` skill when preloaded via sub-agent `skills:`** — does it work correctly? Not verified.
+5. **Tool resolution order** between sub-agent `tools:` allowlist and global permissions (allow/deny/ask) — not explicitly described.
+6. **Workflow tool vs Agent tool intersections** — Workflow is a wrapper over Agent with additional primitives. When Workflow is excessive, when it is necessary — the recommendation in §2.2.4 is empirical.
 
 ---
 
-## Источники
+## Sources
 
-**Authoritative (Anthropic Claude Code docs через Context7 + Agent tool live schema):**
+**Authoritative (Anthropic Claude Code docs via Context7 + Agent tool live schema):**
 - `code.claude.com/docs/en/sub-agents` — frontmatter (`maxTurns`, `tools`, `skills`, `model`), `--agents` JSON.
-- `code.claude.com/docs/en/features-overview` — Skill vs Subagent сравнение; context isolation rationale.
+- `code.claude.com/docs/en/features-overview` — Skill vs Subagent comparison; context isolation rationale.
 - `code.claude.com/docs/en/agent-teams` — dimension decomposition pattern, inter-agent communication.
 - `code.claude.com/docs/en/tools-reference` — tools inheritance default.
-- Agent tool live schema (видна в каждой сессии) — 8 invocation attributes.
+- Agent tool live schema (visible in every session) — 8 invocation attributes.
 - Workflow tool live schema — concurrency caps `min(16, cpu_cores - 2)`, 1000-agent lifetime, `schema:` parameter, pipeline/parallel/phase primitives.
 
 **Internal:**
-- [docs/layers/decision-tree.md](decision-tree.md) — выбор слоя при появлении нового артефакта.
+- [docs/layers/decision-tree.md](decision-tree.md) — layer selection when a new artifact appears.

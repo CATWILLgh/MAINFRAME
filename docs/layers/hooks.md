@@ -1,52 +1,52 @@
 # Layer: Hooks
 
-> Скрипты, выполняемые Claude Code при определённых событиях (tool-use, stop, session-start, file-change и т.п.). В хабе: `export/hooks/*.py` + регистрация в `export/settings.json` `hooks.*`.
+> Scripts executed by Claude Code on specific events (tool-use, stop, session-start, file-change, etc.). In the hub: `export/hooks/*.py` + registration in `export/settings.json` `hooks.*`.
 
-> Последнее обновление: 2026-05-28 (3-секционный rewrite после subagent deep-dive: 16 event types).
+> Last updated: 2026-05-28 (3-section rewrite after subagent deep-dive: 16 event types).
 
 ---
 
-## Где живёт / Как install
+## Where it lives / How to install
 
-- В хабе: `export/hooks/*.py` (скрипты) + `export/settings.json` блок `hooks.{EventName}` (регистрация).
-- На машине: `~/.claude/hooks/*.py` (симлинки) + `~/.claude/settings.json` (часть симлинка целиком).
-- Активация:
-  1. Симлинк папки `export/hooks/` → `~/.claude/hooks/` (через `install.sh`).
-  2. Запись в `hooks.<EventName>` внутри `export/settings.json`.
-  3. File watcher Claude Code подхватывает изменения «with brief delay» без рестарта.
+- In the hub: `export/hooks/*.py` (scripts) + `export/settings.json` block `hooks.{EventName}` (registration).
+- On the machine: `~/.claude/hooks/*.py` (symlinks) + `~/.claude/settings.json` (part of the symlink as a whole).
+- Activation:
+  1. Symlink the `export/hooks/` folder → `~/.claude/hooks/` (via `install.sh`).
+  2. Entry in `hooks.<EventName>` inside `export/settings.json`.
+  3. Claude Code's file watcher picks up changes "with brief delay" without a restart.
 
 ---
 
 ## 1. Canonical reference (Anthropic Claude Code docs)
 
-### 1.1. Полный список событий (Python SDK)
+### 1.1. Full event list (Python SDK)
 
-Источник: `code.claude.com/docs/en/agent-sdk/python` + `code.claude.com/docs/en/hooks`.
+Source: `code.claude.com/docs/en/agent-sdk/python` + `code.claude.com/docs/en/hooks`.
 
 | Event | Trigger | Matcher | Decision control | Notes |
 |---|---|---|---|---|
-| `PreToolUse` | До tool execution | да (tool name) | allow / deny / ask / defer | Можно modify `updatedInput` |
-| `PostToolUse` | После успешного tool | да (tool name) | block | Можно modify `updatedToolOutput` |
-| `PostToolUseFailure` | После failed tool | да (tool name) | context-only | `additionalContext` |
-| `UserPromptSubmit` | Submit prompt | — | block | Получает `prompt` |
-| `Stop` | Claude заканчивает ход | **нет matcher** | `{"decision":"block","reason":...}` | `stop_hook_active` guard |
-| `SubagentStop` | Сабагент заканчивает | да (`agent_type`) | block / continue:false | |
-| `SubagentStart` | Сабагент стартует | да (`agent_type`) | context-only | Инъекция глобального контекста |
-| `SessionStart` | Session начинается | да (`source`: startup/resume/clear/compact) | context-only | |
-| `SessionEnd` | Session заканчивается | да (`reason`) | **не может блокировать** | Cleanup only |
-| `Notification` | Notification triggered | да (type) | context-only | |
-| `PreCompact` | Перед компакцией | — | — | Payload schema не приведена детально |
-| `PostCompact` | После компакции | — | — | То же |
-| `Setup` | Session setup | — | — | Payload не детализирован |
-| `FileChanged` | Файл изменён | да (pattern) | — | Live file watching |
-| `ConfigChange` | `settings.json` изменился | да (empty = all) | — | Fires на hot-reload |
-| `PermissionRequest` | Permission prompt triggered | да (tool name) | allow/deny + `updatedPermissions` | Можно менять mode |
+| `PreToolUse` | Before tool execution | yes (tool name) | allow / deny / ask / defer | Can modify `updatedInput` |
+| `PostToolUse` | After successful tool | yes (tool name) | block | Can modify `updatedToolOutput` |
+| `PostToolUseFailure` | After failed tool | yes (tool name) | context-only | `additionalContext` |
+| `UserPromptSubmit` | Prompt submitted | — | block | Receives `prompt` |
+| `Stop` | Claude finishes a turn | **no matcher** | `{"decision":"block","reason":...}` | `stop_hook_active` guard |
+| `SubagentStop` | Subagent finishes | yes (`agent_type`) | block / continue:false | |
+| `SubagentStart` | Subagent starts | yes (`agent_type`) | context-only | Global context injection |
+| `SessionStart` | Session begins | yes (`source`: startup/resume/clear/compact) | context-only | |
+| `SessionEnd` | Session ends | yes (`reason`) | **cannot block** | Cleanup only |
+| `Notification` | Notification triggered | yes (type) | context-only | |
+| `PreCompact` | Before compaction | — | — | Payload schema not detailed |
+| `PostCompact` | After compaction | — | — | Same |
+| `Setup` | Session setup | — | — | Payload not detailed |
+| `FileChanged` | File changed | yes (pattern) | — | Live file watching |
+| `ConfigChange` | `settings.json` changed | yes (empty = all) | — | Fires on hot-reload |
+| `PermissionRequest` | Permission prompt triggered | yes (tool name) | allow/deny + `updatedPermissions` | Can change mode |
 
-TypeScript SDK поддерживает additional events; полный список не выложен в найденных docs.
+The TypeScript SDK supports additional events; the full list is not published in the available docs.
 
-### 1.2. Синтаксис регистрации
+### 1.2. Registration syntax
 
-`PostToolUse` (с matcher):
+`PostToolUse` (with matcher):
 ```json
 "hooks": {
   "PostToolUse": [{
@@ -59,7 +59,7 @@ TypeScript SDK поддерживает additional events; полный спис
 }
 ```
 
-`Stop` (без matcher):
+`Stop` (without matcher):
 ```json
 "hooks": {
   "Stop": [{
@@ -71,84 +71,83 @@ TypeScript SDK поддерживает additional events; полный спис
 }
 ```
 
-Другие типы hook-entry:
+Other hook-entry types:
 - `prompt`: `{ "type": "prompt", "prompt": "Evaluate: $ARGUMENTS" }` — LLM-based decision.
 - `agent`: `{ "type": "agent", "prompt": "...", "timeout": 120 }` — subagent-based.
 
-### 1.3. Stop hook — критические детали
+### 1.3. Stop hook — critical details
 
-> Decision control: вернуть `{"decision":"block","reason":...}` на stdout + exit 0.
+> Decision control: return `{"decision":"block","reason":...}` on stdout + exit 0.
 
-> `stop_hook_active` semantics: payload содержит `stop_hook_active: true`, если hook **уже блокировал** этот же turn. Hook **обязан** проверить и exit 0, иначе loop. После **8 consecutive blocks** Claude Code override-ит и завершает turn всё равно.
+> `stop_hook_active` semantics: the payload contains `stop_hook_active: true` if the hook **has already blocked** this same turn. The hook **must** check this and exit 0, otherwise a loop occurs. After **8 consecutive blocks** Claude Code overrides and ends the turn regardless.
 
-### 1.4. Path resolution и cwd
+### 1.4. Path resolution and cwd
 
-- **`cwd` hook'а** = текущий каталог сессии (может меняться через `cd`). **Не использовать относительные пути.**
-- **`${CLAUDE_PROJECT_DIR}`** — каталог запуска Claude (стабильный). Источник: `code.claude.com/docs/en/hooks` + хабовая эмпирика.
+- **Hook `cwd`** = the current directory of the session (may change via `cd`). **Do not use relative paths.**
+- **`${CLAUDE_PROJECT_DIR}`** — the directory from which Claude was launched (stable). Source: `code.claude.com/docs/en/hooks` + hub empirics.
 
 ### 1.5. File watcher / hot-reload
 
-> «Direct edits to hooks in settings files are normally picked up automatically by the file watcher.»
+> "Direct edits to hooks in settings files are normally picked up automatically by the file watcher."
 
-Точный размер «brief delay» не задокументирован; эмпирически — мс-секунды.
+The exact size of the "brief delay" is not documented; empirically it is milliseconds to seconds.
 
-### 1.6. Hooks и субагенты (находка 2026-06-01)
+### 1.6. Hooks and subagents (finding 2026-06-01)
 
-Раньше неявно предполагалось, что хуки — про главную сессию. Уточнено по источнику:
+Previously it was implicitly assumed that hooks apply only to the main session. Clarified from source:
 
-- **`PreToolUse` / `PostToolUse` / `Stop` срабатывают и на tool-вызовы сабагента**, не только главного агента. `PreToolUseHookInput` несёт поля `agent_id` и `agent_type` — *«present when the hook fires inside a subagent»* (`code.claude.com/docs/en/agent-sdk/python`). То есть глобальный хук может различать контекст: пустой `agent_id` → главный агент, заполненный → сабагент (`agent_type` = `name` агента).
-- **Два канала навесить хук на сабагента:**
-  1. **Глобальный** — `plugin-dist/hooks/hooks.json` (или `export/settings.json`). Стреляет у всех: главный агент + каждый сабагент.
-  2. **Per-agent** — поле `hooks:` во frontmatter сабагента: scoped к этому агенту, все события, очищается по завершении; `Stop` во frontmatter рантайм-конвертится в `SubagentStop` (`code.claude.com/docs/en/sub-agents`).
-- ⚠️ **Критично:** per-agent frontmatter `hooks:` (а также `permissionMode`, `mcpServers`) **`Ignored for plugin subagents`**. Наши агенты — плагинные, значит per-agent хуки у них **не работают**. → **Кросс-агентный хук** (нужный и главному, и сабагентам) у хаба может жить **только в глобальном `plugin-dist/hooks/hooks.json`**. См. [agents.md §1.2.1](agents.md).
+- **`PreToolUse` / `PostToolUse` / `Stop` fire on subagent tool calls as well**, not only on the main agent. `PreToolUseHookInput` carries the fields `agent_id` and `agent_type` — *"present when the hook fires inside a subagent"* (`code.claude.com/docs/en/agent-sdk/python`). A global hook can therefore distinguish context: empty `agent_id` → main agent, populated → subagent (`agent_type` = agent `name`).
+- **Two channels for attaching a hook to a subagent:**
+  1. **Global** — `plugin-dist/hooks/hooks.json` (or `export/settings.json`). Fires for all: main agent + every subagent.
+  2. **Per-agent** — `hooks:` field in the subagent's frontmatter: scoped to that agent, all events, cleared on completion; `Stop` in frontmatter is runtime-converted to `SubagentStop` (`code.claude.com/docs/en/sub-agents`).
+- ⚠️ **Critical:** per-agent frontmatter `hooks:` (and also `permissionMode`, `mcpServers`) are **ignored for plugin subagents**. Our agents are plugin agents, so per-agent hooks **do not work** for them. → A **cross-agent hook** (needed by both the main agent and subagents) in the hub can live **only in the global `plugin-dist/hooks/hooks.json`**. See [agents.md §1.2.1](agents.md).
 
 ---
 
 ## 2. Hub usage
 
-### 2.1. Текущие хуки в `export/hooks/`
+### 2.1. Current hooks in `export/hooks/`
 
-| Файл | Event | Статус |
+| File | Event | Status |
 |---|---|---|
-| `scan-suppression-markers.py` | `PostToolUse` (Edit\|Write\|MultiEdit) | LIVE через симлинк |
-| `stop-gate-suppression-markers.py` | `Stop` | **STAGED** — не активирован, ждёт согласия пользователя |
+| `scan-suppression-markers.py` | `PostToolUse` (Edit\|Write\|MultiEdit) | LIVE via symlink |
+| `stop-gate-suppression-markers.py` | `Stop` | **STAGED** — not activated, awaiting user approval |
 
-### 2.2. Используемые vs неиспользуемые события
+### 2.2. Used vs unused events
 
-| Событие | Используем? | Если не — кандидат? |
+| Event | In use? | If not — candidate? |
 |---|---|---|
-| `PostToolUse` | да (scan-suppression-markers) | — |
+| `PostToolUse` | yes (scan-suppression-markers) | — |
 | `Stop` | staged (stop-gate-suppression-markers) | — |
-| `UserPromptSubmit` | нет | yes — блокировка опасных команд до отправки (по sub A) |
-| `SubagentStart` | нет | yes — инъекция глобального контекста в каждый сабагент |
-| `SessionStart`, `SessionEnd`, `PreToolUse`, `Notification`, `FileChanged`, `ConfigChange`, `PermissionRequest` | нет | maybe — конкретный usecase ещё не сформулирован |
-| `PreCompact`, `PostCompact`, `Setup`, `PostToolUseFailure` | нет | maybe — payload неясен, нужна доп. проверка |
+| `UserPromptSubmit` | no | yes — blocking dangerous commands before submission |
+| `SubagentStart` | no | yes — injecting global context into each subagent |
+| `SessionStart`, `SessionEnd`, `PreToolUse`, `Notification`, `FileChanged`, `ConfigChange`, `PermissionRequest` | no | maybe — no concrete use case defined yet |
+| `PreCompact`, `PostCompact`, `Setup`, `PostToolUseFailure` | no | maybe — payload unclear, needs further investigation |
 
-### 2.3. Принципы хаба для hook'ов
+### 2.3. Hub principles for hooks
 
-- **Абсолютные пути** в `"command"`: `$HOME/.claude/hooks/...` или `${CLAUDE_PROJECT_DIR}/...`, не относительные.
-- **Fail-safe**: любая ошибка hook'а → exit 0 без output. Hook не должен ломать сессию.
-- **Self-loop guard** для `Stop` hook'а: проверять `stop_hook_active` и exit 0.
-- **Self-exclusion** для marker-detector hook'ов: `_SELF_FILES` whitelist, иначе детектор флагается сам собой.
-- **Stdlib only** — без venv'ов и third-party deps для скорости старта.
+- **Absolute paths** in `"command"`: `$HOME/.claude/hooks/...` or `${CLAUDE_PROJECT_DIR}/...`, not relative.
+- **Fail-safe**: any hook error → exit 0 with no output. A hook must not break the session.
+- **Self-loop guard** for the `Stop` hook: check `stop_hook_active` and exit 0.
+- **Self-exclusion** for marker-detector hooks: `_SELF_FILES` whitelist, otherwise the detector flags itself.
+- **Stdlib only** — no venvs or third-party deps, for fast startup.
 
 ---
 
 ## 3. Gray zones / open questions
 
-1. **Полный список TypeScript SDK events** — упомянуто что TS поддерживает additional, список не выложен.
-2. **Точный размер «brief delay»** file watcher'а — не задокументирован.
-3. **Поведение symlinks** на `settings.json` для file watcher — empirically работает (хаб использует), но без формального smoke-теста.
-4. **Payload schema для `Setup`, `PreCompact`, `PostCompact`, `SessionEnd`** — в найденных Context7-фрагментах не приведена явно. Требует доп. проверки перед использованием.
-5. **Behavior `Stop` hook'а после 8 consecutive blocks** — override происходит автоматически. Что если hook нужно вызывать чаще? Workaround не описан.
+1. **Full TypeScript SDK event list** — it is mentioned that TS supports additional events; the list is not published.
+2. **Exact size of "brief delay"** for the file watcher — not documented.
+3. **Symlink behavior** for `settings.json` with the file watcher — works empirically (the hub relies on it), but without a formal smoke test.
+4. **Payload schema for `Setup`, `PreCompact`, `PostCompact`, `SessionEnd`** — not explicitly provided in the available Context7 fragments. Needs further verification before use.
+5. **`Stop` hook behavior after 8 consecutive blocks** — the override happens automatically. What if the hook needs to fire more frequently? No workaround is documented.
 
 ---
 
-## Источники
+## Sources
 
-**Authoritative (Anthropic Claude Code docs через Context7):**
+**Authoritative (Anthropic Claude Code docs via Context7):**
 - `code.claude.com/docs/en/hooks` — payload schemas, decision-control.
 - `code.claude.com/docs/en/hooks-guide` — patterns, examples, matchers.
 - `code.claude.com/docs/en/agent-sdk/python` — `HookEvent` type list.
 - `code.claude.com/docs/en/agent-sdk/typescript` — TS-specific types.
-
