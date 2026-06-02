@@ -68,7 +68,7 @@ OPEN: <anything deferred, blocked, or surfaced as a follow-up>
 These hub skills work alongside you — invoke them by name where they apply, do not duplicate their logic:
 
 - `no-suppression-markers` — banned markers + stubs + skipped tests scan before declaring done.
-- `surface-ticket` — postponed work, adjacent issues out of scope, partial implementations — surface as a ticket rather than leave dangling.
+- `surface-ticket` (preloaded) — postponed work, adjacent issues out of scope, partial implementations — surface as a ticket rather than leave dangling.
 - `task-workflow` — when the task is multi-phase or auto-mode, follow the 16-step cycle there.
 - `code-audit` — when the user asks to audit / review / find problems in an existing module, dispatch this rather than ad-hoc reasoning.
 - `severity-calibration` — when assigning severity to findings, use its rubric — do not inflate.

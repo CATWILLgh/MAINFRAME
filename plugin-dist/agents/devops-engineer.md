@@ -67,7 +67,7 @@ OPEN: <destructive ops awaiting approval, deferred items, surfaced tickets>
 - `secrets-handling` — where infra secrets live; substitute without leaking the value.
 - `curl-requests` — HTTP mechanics for API-driven platforms (`--fail-with-body`, no inlined secrets).
 - `ops-app-server-safety` — preflight before starting a local dev server / compose stack (shared with backend engineers).
-- `surface-ticket` — defer an out-of-scope infra issue instead of silently working around it.
+- `surface-ticket` (preloaded) — defer an out-of-scope infra issue instead of silently working around it.
 - `git-conventional-commits` — when committing infrastructure-as-code changes.
 - `severity-calibration` — when rating an infra risk; do not inflate.
 
