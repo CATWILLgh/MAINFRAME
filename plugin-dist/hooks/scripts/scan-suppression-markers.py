@@ -46,7 +46,7 @@ _SELF_FILES = {
     "python-security-scan.py", "python-security-stop-gate.py",
     "nodejs-security-scan.py", "nodejs-security-stop-gate.py",
     "nodejs-deps-audit.py", "python-deps-audit.py",
-    "bash-pattern-reminder.py",
+    "bash-pattern-reminder.py", "comment-discipline-reminder.py",
     "frontend-fsd-gate.py", "frontend-dead-code.py",
 }
 
