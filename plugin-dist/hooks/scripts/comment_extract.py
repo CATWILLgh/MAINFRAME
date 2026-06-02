@@ -16,9 +16,11 @@ Design contract — fail to SILENCE, never to EMIT:
   file is skipped — those bodies can span lines and hold comment-like text, so
   the safe move is to extract nothing. Incomplete coverage degrades to a missed
   comment (false negative), never to a misread one (false positive).
-- Mixed-syntax / regex-heavy files where inline detection cannot be proven
-  FP-free (JSX/TSX/Vue/Svelte HTML text, Ruby `#`-in-regex) are skipped for the
-  same reason.
+- JSX/TSX/Vue/Svelte run the JS state machine: JSX/HTML text only becomes a
+  marker false positive if it also matches a marker, which rendered UI text does
+  not. The one narrow residual is literal code shown as text in <pre>/<code>
+  outside {…}/template. Ruby stays generic-only (a `#` can sit in a regex or
+  heredoc body, which is off-stack effort to model).
 
 Return shape: `extract(text, ext)` -> list of (lineno, text, kind) where
 kind is "comment" or "docstring"; lineno is 1-based. Returns [] on anything
@@ -36,16 +38,19 @@ DOCSTRING = "docstring"
 
 PY_EXT = {".py", ".pyi"}
 
-# Extensions that get LINE-START-only extraction (still zero-FP): inline/block
-# detection here cannot be proven FP-free without a real parser.
-#   jsx/tsx/vue/svelte: HTML/JSX text outside strings can contain `//` or `/* */`
-#   rb: `#` can sit inside a `/regex/` or `%r{}` literal
-CONSERVATIVE_EXT = {".jsx", ".tsx", ".vue", ".svelte", ".rb"}
+# Generic-only extensions (targeted detection disabled, generic nudge kept).
+#   rb: `#` can sit inside a `/regex/`, `%r{}`, or heredoc body — modelling those
+#       is off-stack effort; a `#`-scanner would mis-read them. Kept generic-only.
+# (jsx/tsx/vue/svelte ARE scanned: running the JS state machine on them yields
+# zero marker-FP on real code — JSX/HTML text only marker-FPs if it also matches
+# a marker, which rendered UI text does not. The one narrow residual is literal
+# code shown as text in <pre>/<code> not wrapped in {…}/template.)
+CONSERVATIVE_EXT = {".rb"}
 
 
 def _profile(line, block=None, nests=False, backtick=None, strings="\"'",
              char=False, lifetime=False, sql_double=False, no_escape="",
-             exotic=None):
+             heredoc=False, exotic=None):
     return {
         "line": tuple(line),
         "block": block,                 # (open, close) or None
@@ -56,7 +61,8 @@ def _profile(line, block=None, nests=False, backtick=None, strings="\"'",
         "lifetime": lifetime,           # Rust: a lone ' may be a lifetime, not a char
         "sql_double": sql_double,       # '' inside a '-string is an escaped quote
         "no_escape": set(no_escape),    # delimiters where backslash is NOT an escape
-        "exotic": re.compile(exotic) if exotic else None,  # presence -> line-start fallback
+        "heredoc": heredoc,             # shell `<<EOF` heredocs — skip the body
+        "exotic": re.compile(exotic) if exotic else None,  # presence -> skip file
     }
 
 
@@ -91,18 +97,28 @@ LANG_PROFILES = {
     ".mjs": _profile(("//",), _C_BLOCK, backtick="opaque"),
     ".cjs": _profile(("//",), _C_BLOCK, backtick="opaque"),
     ".ts":  _profile(("//",), _C_BLOCK, backtick="opaque"),
+    # JSX/Vue/Svelte — run the JS machine; JSX/HTML text marker-FPs only if it
+    # also matches a marker (rendered UI text does not). Narrow residual: literal
+    # code shown as text in <pre>/<code> outside {…}/template.
+    ".jsx": _profile(("//",), _C_BLOCK, backtick="opaque"),
+    ".tsx": _profile(("//",), _C_BLOCK, backtick="opaque"),
+    ".vue": _profile(("//",), _C_BLOCK, backtick="opaque"),
+    ".svelte": _profile(("//",), _C_BLOCK, backtick="opaque"),
     # SQL — '-string with '' doubling; no backslash escape.
     ".sql": _profile(("--",), _C_BLOCK, strings="'", sql_double=True, no_escape="'"),
     # Shell — # comments; '-string has no escape; backtick = command subst (opaque);
-    # heredoc forces fallback.
-    ".sh":   _profile(("#",), None, backtick="opaque", no_escape="'", exotic=r"<<[-~]?\s*\\?\w"),
-    ".bash": _profile(("#",), None, backtick="opaque", no_escape="'", exotic=r"<<[-~]?\s*\\?\w"),
-    ".zsh":  _profile(("#",), None, backtick="opaque", no_escape="'", exotic=r"<<[-~]?\s*\\?\w"),
+    # heredoc bodies are skipped (see _extract_generic).
+    ".sh":   _profile(("#",), None, backtick="opaque", no_escape="'", heredoc=True),
+    ".bash": _profile(("#",), None, backtick="opaque", no_escape="'", heredoc=True),
+    ".zsh":  _profile(("#",), None, backtick="opaque", no_escape="'", heredoc=True),
     # Lua — -- comments; long-bracket [[...]] / --[[...]] forces fallback.
     ".lua": _profile(("--",), None, exotic=r"--\[\[|\[=*\[|\[\["),
 }
 
 _CHAR_LIT_RE = re.compile(r"'(?:\\.|[^'\\\n])'")
+# Shell heredoc operator: `<<EOF`, `<<-EOF`, `<<~EOF`, `<<'EOF'`, `<<\EOF`.
+# Sentinel must start with a letter/underscore so `<< 2` (bit shift) is not one.
+_HEREDOC_RE = re.compile(r"<<([-~]?)\s*\\?(['\"]?)([A-Za-z_]\w*)\2")
 
 
 def extract(text, ext):
@@ -199,6 +215,8 @@ def _extract_generic(src, p):
     lifetime = p["lifetime"]
     sql_double = p["sql_double"]
     no_escape = p["no_escape"]
+    heredoc = p["heredoc"]
+    pending_hd = None
 
     def starts(s):
         return src.startswith(s, i)
@@ -219,6 +237,15 @@ def _extract_generic(src, p):
             out.append((lineno, src[i:j].rstrip(), COMMENT))
             i = j
             continue
+
+        # heredoc operator — remember the sentinel; the body is skipped at the
+        # next newline (the rest of this line is still ordinary command text).
+        if heredoc and c == "<" and starts("<<"):
+            mh = _HEREDOC_RE.match(src, i)
+            if mh:
+                pending_hd = (mh.group(3), mh.group(1))
+                i = mh.end()
+                continue
 
         # block comment
         if bopen and starts(bopen):
@@ -307,6 +334,22 @@ def _extract_generic(src, p):
 
         if c == "\n":
             lineno += 1
+            i += 1
+            if pending_hd:
+                sentinel, mode = pending_hd
+                pending_hd = None
+                while i < n:
+                    eol = src.find("\n", i)
+                    end = eol if eol != -1 else n
+                    seg = src[i:end]
+                    term = (seg.lstrip("\t") if mode == "-"
+                            else seg.strip() if mode == "~" else seg)
+                    i = end + 1 if eol != -1 else n
+                    if eol != -1:
+                        lineno += 1
+                    if term == sentinel:
+                        break
+            continue
         i += 1
 
     return out
