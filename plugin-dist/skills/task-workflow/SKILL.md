@@ -15,20 +15,21 @@ Size and urgency are not exceptions. "It's a small change", "it's urgent", "just
 
 "This is too small for X" is the most reliable signal that you are about to drop a step you should not drop.
 
-## Mode awareness
+## Two phases
 
-The cycle adapts to two modes:
+The cycle runs in two phases, and the **phase** — not the UI mode flag — decides whether to ask the user.
 
-- **Interactive session** (human at the keyboard, responds within a minute): `EnterPlanMode` / `ExitPlanMode` / `AskUserQuestion` are available and meaningful. The Plan step uses the tool when applicable.
-- **Unattended auto-run** (long autonomous prompts, scheduled tasks, headless `claude -p`): `EnterPlanMode` and `AskUserQuestion` block on user consent and may freeze the run for hours. The Plan step writes the audit file directly; no gate.
+1. **Discussion / planning** — the user is in the loop (before a `/goal`, an `ExitPlanMode` approval, or an explicit "go"). Widen coverage with recon (dispatch sub-agents), surface forks, and ask **decision-level** questions through `AskUserQuestion`. There is **no cap on the number of questions** — drive by coverage, not a count (5 for a narrow task, 15-20 over hours for a deep one are both right). The phase stays open while a decision-level unknown remains — a fork that changes the outcome and only the user can resolve — and closes when only engineering details are left; those resolve during execution or become tickets. Recon sub-agents exist to surface the decision-level unknowns before execution starts.
+2. **Execution** — after the boundary. Work to the goal autonomously, no questions. An out-of-scope or postponable finding → `surface-ticket` and continue. **STOP and surface** only an un-discussed business-logic / functionality / user-facing change that needs the user's decision — test: "if I choose wrong here, did I commit the product to something the user did not sign off on?" Engineering decisions inside the agreed scope — proceed; never stop for those.
 
-**Detection — observable signals only**, not self-assessment:
+**Boundary** = `/goal` set, plan approved via `ExitPlanMode`, or an explicit "go / run it". Discussion can happen even with the auto-mode UI selected — what matters is whether the user is present to answer, not the mode flag.
 
-1. If a system reminder declares auto mode (e.g. `## Auto Mode Active`) at session start or during the session → **auto**.
-2. If invoked headlessly (`claude -p` without an interactive TTY) → **auto**.
-3. Otherwise → **interactive**.
+**Can the user answer? — gate on phase and presence, not the UI mode flag.**
 
-When in doubt — prefer auto (safer default; the user's primary workflow is unattended runs). "Could the user respond in seconds?" is not a reliable signal — the model cannot measure that.
+- **Ask** while you are responding to the user in an active exchange and no boundary has launched execution yet — *even when the auto-mode UI is selected*. Discussion in auto mode is normal; the auto-mode reminder alone does not mean "unattended", and `AskUserQuestion` / `EnterPlanMode` are appropriate here.
+- **Do not ask** once execution has launched (post-boundary, running autonomously), or the run is genuinely unattended — headless `claude -p`, a scheduled run, or many turns deep with no human turn. Then pick the most plausible interpretation, record the assumption (plan file, or the report if none), and proceed; reserve a hard stop for an un-discussed business-logic change.
+
+When in doubt during execution — do not block. A frozen unattended run (the user's primary workflow) costs far more than a recorded assumption.
 
 ## Cycle
 
@@ -39,8 +40,8 @@ The full control-flow map, including every turn-back, is in [flow.md](flow.md).
 Is the task **ambiguous**? — new feature with unclear requirements, design fork, two reasonable approaches with non-obvious trade-offs.
 
 - Ambiguous → brainstorm first. State the alternatives, identify the constraint that resolves the fork.
-  - Interactive: `AskUserQuestion` to surface the fork.
-  - Auto: pick the most plausible interpretation, record the assumption in the plan file (or in the report if no plan file), proceed.
+  - User present: surface the fork through `AskUserQuestion`, not a free-text chat question. Phrase the question and every option in plain, concrete language a non-technical reader answers at a glance; lean on the built-in Other for the free-form path. It is non-blocking — the user can pick Other or just type in chat — so prefer it whenever a real decision-fork needs the user, and skip it when there is no fork.
+  - Unattended: pick the most plausible interpretation, record the assumption in the plan file (or in the report if no plan file), proceed.
 - Not ambiguous (explicit bugfix, known pattern, narrow change) → proceed to Recon.
 
 Do not confuse "ambiguous" with "small". A small change with one obvious approach skips brainstorm; an ambiguous one does not, regardless of size.
@@ -64,6 +65,8 @@ The format, the two plan-file paths (interactive tool file vs the always-written
 ### 4. Parallel dispatch of investigation sub-agents
 
 Independent investigation tasks dispatch in **one message** with multiple `Agent` calls. Sequential calls in main context waste turns and fill the parent context with raw tool output.
+
+Default to `run_in_background: true` when fanning out (several agents, or any long-running one): interleaved foreground replies in the chat are hard to trace afterwards; read each result on its completion notification. Keep foreground only for a single quick agent whose result gates the very next step.
 
 In every sub-agent prompt — required fields:
 - **Path restriction:** "Operate inside `<cwd>` only. Do not Read / Glob / Grep outside that root."
@@ -129,6 +132,8 @@ Mismatch → targeted follow-up to the same agent with the specific gap, not "tr
 Any problem the agent (or recon) found that is **not** being fixed in this change → ticket via [`surface-ticket`](../surface-ticket/SKILL.md) before declare-done. This covers adjacent bugs, anti-patterns, postponed refactors, partial implementations left in place. The decision to not fix now IS the trigger.
 
 Fixed inline within scope — no ticket. Trivially safe cosmetic fixes (typo in comment, single rename) may apply inline — say so afterwards.
+
+When a finding rises to a hard **stop** rather than a ticket (an un-discussed business-logic change that needs the user's decision), follow the execution-phase rule in [Two phases](#two-phases).
 
 ### 11. Edge-case sweep (after implementation)
 
