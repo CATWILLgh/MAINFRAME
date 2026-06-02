@@ -3,6 +3,7 @@ name: dokploy-api
 description: "Operate a Dokploy instance through its HTTP API (self-hosted PaaS on Docker + Traefik): authentication via the `x-api-key` header, the tRPC-over-OpenAPI call convention (GET = flat query params, POST = JSON body, bare-JSON responses, `{message,code,issues}` errors), the resource hierarchy Project -> Environment -> {Application | Compose | Database}, and canonical workflows for deploying applications and Compose stacks, provisioning databases, attaching domains/TLS, and managing servers and backups. Includes destructive-operation safety and a live-spec navigation technique for any endpoint beyond the cookbook."
 when_to_use: "Use when interacting with a Dokploy server: creating projects or environments, deploying or redeploying an application or Docker Compose stack, provisioning a database (Postgres/MySQL/MongoDB/Redis/MariaDB/LibSQL), attaching a domain or issuing Let's Encrypt certificates, reading deployment logs or status, managing servers or backups, or calling any tRPC-style `*.create` / `*.deploy` / `*.one` endpoint with an `x-api-key`. Also applies when a project's config references a Dokploy instance, `DOKPLOY_URL`, or a `DOKPLOY_API_KEY`."
 user-invocable: false
+disable-model-invocation: true
 ---
 
 # Working with the Dokploy API

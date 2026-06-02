@@ -20,7 +20,7 @@ Per-ORM SKIP LOCKED: SQLAlchemy `.with_for_update(skip_locked=True, key_share=Tr
 
 ## Ops boundary — recognize & escalate (not yours to fix)
 
-| Topic | Signal → call `devops-engineer` / DBA |
+| Topic | Signal → surface for `devops-engineer` / DBA |
 |---|---|
 | Partitioning | a single table exceeds RAM; plans scan all partitions despite indexes |
 | Autovacuum / bloat | `n_dead_tup` persistently high; `VACUUM` shows up in the slow-query log |
