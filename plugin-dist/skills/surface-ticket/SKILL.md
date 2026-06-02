@@ -2,7 +2,7 @@
 name: surface-ticket
 user-invocable: false
 description: Capture any problem you choose not to fix right now — adjacent bug discovered out of scope, in-scope issue you postpone, deliberately deferred refactor, partial implementation, "quick fix" or hack left in place — as a structured ticket in the project's docs/tickets/ folder. Uses a stable template with YAML frontmatter (id/title/status/priority/component/discovered/discovered-from/tags) and a fixed body structure (what observed, why it matters, why not a duplicate, what to do, acceptance criteria, sources). Supports a 5-state audit lifecycle Open / Needs Refinement / In Progress / Closed / Approved with reopen-in-the-same-file when audit fails or when an approved ticket's bug recurs.
-when_to_use: Trigger whenever a problem will not be fixed in the current change — an adjacent bug surfaced from another task, an in-scope anti-pattern that cannot be resolved here, a known limitation shipped with the change, a postponed refactor, a partial implementation, or a "quick fix" / hack left in place. Also runs on closed-ticket audit cycles and on regressions of previously approved tickets. The act of deciding not to fix now IS the trigger; no user acknowledgement required.
+when_to_use: Trigger whenever a problem will not be fixed in the current change — an adjacent bug surfaced from another task, an in-scope anti-pattern that cannot be resolved here, a known limitation shipped with the change, a postponed refactor, a partial implementation, a "quick fix" / hack left in place, or a pre-existing failure you did not cause (a red test, broken build, lint or type error already there) — "it was already broken, not mine" is a trigger, not a pass. Also runs on closed-ticket audit cycles and on regressions of previously approved tickets. The act of deciding not to fix now IS the trigger; no user acknowledgement required.
 ---
 
 # Surface ticket
@@ -21,8 +21,13 @@ This makes the rule symmetric with the [marker ban](../../../export/CLAUDE.md): 
 ## When to write a ticket vs fix inline
 
 - **Trivial safe fix** (typo in comment, single variable rename, missing newline — no logic risk): may apply inline. Say so afterwards.
-- **Anything else** (logic bug, anti-pattern, missing validation, broken contract, refactor opportunity, scope-creep candidate, known limitation, deliberately deferred work, hack or quick fix you leave behind): **ticket, then move on.**
-- **Self-found tech debt** — if you deliberately leave a hack, quick fix, partial implementation, weakened test, or postponed refactor in the codebase, a ticket is **mandatory before declare-done**. Surfacing it later is fine; leaving it unwritten is not.
+- **Anything else** (logic bug, anti-pattern, missing validation, broken contract, refactor opportunity, scope-creep candidate, known limitation): **ticket, then move on** — the three sources below name where such work comes from.
+
+Three sources of ticket-worthy work — all mandatory before declare-done:
+
+- **Debt you create** — a hack, quick fix, partial implementation, weakened test, or postponed refactor you deliberately leave in the codebase. Surfacing it later is fine; leaving it unwritten is not.
+- **Debt you find in your path** — an anti-pattern, missing validation, or design smell in code you are touching but cannot fix here without scope creep. Name it, ticket it, move on — do not silently work around it.
+- **Pre-existing failures you did not cause** — a red test, broken build, lint error, type error, or runtime fault that was already there before your change. "It was already broken, not mine" / "my house is on the edge" is **not** a licence to walk past it. You are not obliged to *fix* it (that may be scope creep or risky), but you must *surface* it: ticket it before declare-done. Batch a related cluster — a whole module's red suite, a sweep of one lint rule — into **one** ticket that lists the failures, not one ticket per failing test; a first encounter with a legacy repo can surface dozens, and one-per-failure floods the queue. Two reasons it matters beyond tidiness — a pre-existing red test can mask whether *your* change regressed something, and silent rot is how a codebase decays one "not mine" at a time. If the failure blocks verifying your own change (suite won't run, build is broken), raise `priority` and flag it to the user, not only the ticket.
 
 ## Before creating — check for existing
 
@@ -256,3 +261,4 @@ Refresh the project's `docs/tickets/README.md` only if the conventions in this s
 - Do not create a new ticket for a regression of an `approved` bug when the root cause matches — reopen the original. The carve-out for distinct root cause is the exception, not the default.
 - Do not change `discovered:` or `id:` on re-occurrence updates or reopens. They mark the ticket's identity, not the latest sighting.
 - Do not silently leave a hack, quick fix, partial implementation, or deferred refactor in the codebase without writing a ticket. The marker ban in CLAUDE.md and this skill are a pair — neither works on its own.
+- Do not treat a pre-existing failure as out of scope by default. "It was already broken, not mine" is a ticket trigger, not a pass — walking past a red test or broken build without surfacing it is the same omission as leaving your own debt unticketed.
