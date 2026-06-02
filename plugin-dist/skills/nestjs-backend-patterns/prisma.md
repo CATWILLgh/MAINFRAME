@@ -8,6 +8,7 @@ Most-adopted Node ORM for traditional / NestJS backends. `schema.prisma` is the 
 - After schema change: `npx prisma generate` → regenerates client. Required after every schema edit before code uses new types.
 - `npx prisma migrate dev --name <description>` — generates SQL migration + applies in dev.
 - `npx prisma migrate deploy` — applies pending migrations in prod (no client regen).
+- **Zero-downtime safety — non-blocking DDL, expand-contract, batched backfills: see [migrations.md](migrations.md).**
 
 ## Client usage
 

@@ -46,6 +46,7 @@ Define `relations(...)` config separately from table — explicit declaration of
 - `drizzle-kit generate` → SQL files in `drizzle/` dir from schema diff.
 - `drizzle-kit migrate` → applies in dev.
 - For prod: run SQL files via your migration runner of choice; Drizzle does not enforce migration lifecycle.
+- **Zero-downtime safety — non-blocking DDL, expand-contract, batched backfills: see [migrations.md](migrations.md).**
 
 ## Transactions + locking
 

@@ -34,6 +34,7 @@ Preloaded into the `nestjs-backend-engineer` sub-agent. Provides a dispatch tabl
 | `observability: pino+otel` OR `console` | [observability.md](observability.md) |
 | Any TS strictness question | [typescript.md](typescript.md) |
 | Any testing task | [testing.md](testing.md) |
+| Any migration / schema-change task | [migrations.md](migrations.md) |
 | Idempotency / pagination / rate limiting / health probes / config-from-env | [api-conventions.md](api-conventions.md) |
 
 ## Universal principles (apply across stacks)

@@ -32,6 +32,7 @@ Preloaded into the `python-backend-engineer` sub-agent. Provides a dispatch tabl
 | `multitenancy: rls` OR `app-filter` | [multitenancy.md](multitenancy.md) |
 | `observability: structlog+otel` OR `stdlib-logging` | [observability.md](observability.md) |
 | Any testing task | [testing.md](testing.md) |
+| Any migration / schema-change task | [migrations.md](migrations.md) |
 | Idempotency / pagination / rate limiting / health probes / config-from-env | [api-conventions.md](api-conventions.md) |
 
 ## Universal principles (apply across stacks)

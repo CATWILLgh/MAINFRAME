@@ -55,6 +55,10 @@ for row in batch:
 stmt = select(Job.status, func.count(Job.id)).group_by(Job.status)
 ```
 
+## Migrations
+
+Alembic is the migration runner for SQLAlchemy. Safety doctrine — non-blocking DDL, expand-contract, batched/idempotent backfills, plus Alembic specifics (`autocommit_block`, paired `downgrade`) — see [migrations.md](migrations.md).
+
 ## Sources
 
 - SQLAlchemy 2.0 ORM Querying Guide — https://docs.sqlalchemy.org/en/20/orm/queryguide/

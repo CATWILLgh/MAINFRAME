@@ -47,6 +47,7 @@ await dataSource.transaction(async (manager) => {
 - Generate: `typeorm-ts-node-commonjs migration:generate src/migrations/<name> -d data-source.ts`.
 - Review diff before commit — TypeORM sometimes generates noise (column reordering, default changes that are no-ops).
 - Up + down both required; raw SQL OK for non-trivial transformations (`queryRunner.query(...)`).
+- **Zero-downtime safety — non-blocking DDL, expand-contract, batched backfills: see [migrations.md](migrations.md).**
 
 ## Soft delete
 

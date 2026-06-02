@@ -38,6 +38,7 @@ class JobViewSet(viewsets.ModelViewSet):
 - One migration per logical change, generated via `python manage.py makemigrations`.
 - Always inspect the generated file before committing — Django sometimes generates redundant operations.
 - Data migrations: use `RunPython` with both `forward` and `reverse` functions; never irreversible by default.
+- **Zero-downtime safety — `AddIndexConcurrently` + `atomic = False`, expand-contract, batched backfills: see [migrations.md](migrations.md).**
 
 ## Async caveat
 
