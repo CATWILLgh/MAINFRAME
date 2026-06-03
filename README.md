@@ -309,6 +309,18 @@ Every artifact shipped by this hub (whether in `plugin-dist/` or `export/`) hold
   <img src="assets/divider.png" alt="" width="100%">
 </p>
 
+## A personal note
+
+I'm not a scientist or a credentialed engineer. I'm just someone who genuinely enjoys working with AI agents and models — and who has put a *lot* of hours into it over the past couple of years. To put it plainly: this year alone my Git history already shows over 2,300 commits and counting; about 300 the year before; and before that, nothing — I worked entirely on my own machine and didn't even know how Git worked.
+
+I started sharing this for people just getting into all of this, or looking for something new — because I hadn't come across repos quite like it. Maybe they're out there, somewhere at the bottom of GitHub; maybe some are even better than mine. But this one is mine, and I enjoy making it.
+
+So if you want to try it, try it. If not, that's fine too — I'm not insisting on anything. Take what's useful, leave the rest.
+
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
+
 ## Contributing
 
 This is a personal hub but friends, acquaintances, and curious strangers are welcome to fork, adapt, and share what works. The repo gets better when more people poke at it from different angles — new approaches, sharper rules, things I haven't tried.
