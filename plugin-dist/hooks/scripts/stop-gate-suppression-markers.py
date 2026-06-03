@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Stop hook: hard gate against unresolved suppression markers.
+"""Stop hook: hard gate against unresolved suppression markers / debug residue.
 
 Fires when Claude is about to stop a turn. If the session's *working-tree diff
-vs `git HEAD`* contains newly-added suppression / placeholder markers in
-source-code files, block the stop with a reason — forcing Claude to resolve
-them (or obtain explicit user permission) before declaring the turn done.
+vs `git HEAD`* contains newly-added suppression / placeholder markers or debug
+residue (`debugger`, `breakpoint()`, `pdb.set_trace`, `var_dump`/`dd`,
+`console.debug`) in source-code files, block the stop with a reason — forcing
+Claude to resolve them (or obtain explicit user permission) before declaring
+the turn done.
 
 Design (v1):
 - Block via `{"decision": "block", "reason": ...}` on stdout, exit 0. Source:
@@ -22,9 +24,9 @@ Design (v1):
   or noise-up a session because of itself.
 - Stdlib only. No venv, no third-party deps.
 
-NOTE: marker definitions are duplicated from `scan-suppression-markers.py`;
-keep in sync. A shared module is the cleaner refactor — deferred so the
-two hooks can be installed and tested independently first.
+NOTE: marker AND debug-residue definitions are duplicated from
+`scan-suppression-markers.py`; keep in sync. A shared module is the cleaner
+refactor — deferred so the two hooks can be installed and tested independently.
 """
 
 import json
@@ -65,6 +67,21 @@ MARKERS = [
     ("pytest/unittest skip", re.compile(r"@(?:pytest\.mark\.skip|unittest\.skip)")),
 ]
 
+# Debug residue: (label, compiled regex, extensions). Always-residue subset only;
+# `console.log`/`print()` excluded (CLI output + structured logging are exempt).
+# Extension-gated to stay 0-FP — kept in sync with `scan-suppression-markers.py`.
+_JS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"}
+_PY = {".py", ".pyi"}
+_PHP = {".php"}
+DEBUG_RESIDUE = [
+    ("debugger statement", re.compile(r"\bdebugger\b"), _JS),
+    ("console.debug", re.compile(r"\bconsole\.debug\s*\("), _JS),
+    ("breakpoint()", re.compile(r"\bbreakpoint\s*\("), _PY),
+    ("pdb.set_trace()", re.compile(r"\bpdb\.set_trace\s*\("), _PY),
+    ("var_dump()", re.compile(r"\bvar_dump\s*\("), _PHP),
+    ("dd()", re.compile(r"\bdd\s*\("), _PHP),
+]
+
 
 def _ext(path):
     dot = path.rfind(".")
@@ -85,7 +102,7 @@ def _added_markers_in_diff(cwd):
     except Exception:
         return None
 
-    current_file_ok = False
+    current_ext = None  # extension of the file under the current `+++` header, if scannable
     found = set()
     for line in out.splitlines():
         if line.startswith("+++ "):
@@ -93,18 +110,20 @@ def _added_markers_in_diff(cwd):
             path = line[4:]
             if path.startswith("b/"):
                 path = path[2:]
-            current_file_ok = (
-                _ext(path) in CODE_EXTENSIONS
-                and os.path.basename(path) not in _SELF_FILES
-            )
+            ext = _ext(path)
+            ok = ext in CODE_EXTENSIONS and os.path.basename(path) not in _SELF_FILES
+            current_ext = ext if ok else None
             continue
-        if not current_file_ok:
+        if current_ext is None:
             continue
         if not line.startswith("+") or line.startswith("+++"):
             continue
         body = line[1:]
         for label, rx in MARKERS:
             if rx.search(body):
+                found.add(label)
+        for label, rx, exts in DEBUG_RESIDUE:
+            if current_ext in exts and rx.search(body):
                 found.add(label)
     return sorted(found)
 
@@ -122,11 +141,12 @@ def main():
         return  # nothing found, or git unavailable -> let Claude stop
 
     reason = (
-        "Suppression/placeholder markers are present in the working-tree diff "
-        f"vs HEAD: {', '.join(labels)}. Per the global engineering rule these "
-        "are not allowed in work declared complete. Resolve them in the "
-        "affected source files (or obtain explicit user permission to keep "
-        "them) before stopping the turn."
+        "Suppression markers or debug residue are present in the working-tree "
+        f"diff vs HEAD: {', '.join(labels)}. Per the global engineering rules "
+        "these are not allowed in work declared complete — suppression markers "
+        "need explicit user permission, debug residue must be removed. Resolve "
+        "them in the affected source files (or obtain explicit user permission "
+        "to keep a marker) before stopping the turn."
     )
     print(json.dumps({"decision": "block", "reason": reason}))
 

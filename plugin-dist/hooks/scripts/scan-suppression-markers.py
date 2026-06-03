@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: flag newly-introduced suppression / placeholder markers.
+"""PostToolUse hook: flag newly-introduced suppression markers or debug residue.
 
 Reads the PostToolUse hook payload from stdin (JSON), looks at the file just
 written/edited, and — only for source-code files — checks whether the change
-*introduced* any suppression or placeholder markers (TODO/FIXME, skipped tests,
-silenced type/lint checks). If so, it emits a non-blocking `additionalContext`
-note so the model self-corrects per the global engineering rule.
+*introduced* any suppression / placeholder marker (TODO/FIXME, skipped tests,
+silenced type/lint checks) or debug residue (`debugger`, `breakpoint()`,
+`pdb.set_trace`, `var_dump`/`dd`, `console.debug`). If so, it emits a
+non-blocking `additionalContext` note so the model self-corrects per the
+global engineering rules.
 
 Design (v1):
 - Non-blocking: PostToolUse cannot block anyway; we only surface a note.
@@ -64,6 +66,25 @@ MARKERS = [
     ("pytest/unittest skip", re.compile(r"@(?:pytest\.mark\.skip|unittest\.skip)")),
 ]
 
+# Debug residue: (label, compiled regex, extensions). Only the *always-residue*
+# subset — patterns that are never legitimate in shipped code. `console.log` and
+# `print()` are deliberately excluded: the global rule exempts CLI output and
+# structured logging, so flagging them would be a false-positive firehose.
+# Extension-gated to stay 0-FP across languages — e.g. `breakpoint('md')` is a
+# responsive-design helper in frontend code, but the bare Python builtin is
+# always residue.
+_JS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"}
+_PY = {".py", ".pyi"}
+_PHP = {".php"}
+DEBUG_RESIDUE = [
+    ("debugger statement", re.compile(r"\bdebugger\b"), _JS),
+    ("console.debug", re.compile(r"\bconsole\.debug\s*\("), _JS),
+    ("breakpoint()", re.compile(r"\bbreakpoint\s*\("), _PY),
+    ("pdb.set_trace()", re.compile(r"\bpdb\.set_trace\s*\("), _PY),
+    ("var_dump()", re.compile(r"\bvar_dump\s*\("), _PHP),
+    ("dd()", re.compile(r"\bdd\s*\("), _PHP),
+]
+
 
 def _ext(path):
     dot = path.rfind(".")
@@ -71,17 +92,22 @@ def _ext(path):
     return path[dot:].lower() if dot > slash else ""
 
 
-def _added_markers(old_text, new_text):
-    """Marker labels whose occurrence count increased from old_text to new_text."""
+def _added_markers(old_text, new_text, ext):
+    """Marker / debug-residue labels whose count increased from old to new."""
     found = []
     for label, rx in MARKERS:
         if len(rx.findall(new_text)) > len(rx.findall(old_text)):
             found.append(label)
+    for label, rx, exts in DEBUG_RESIDUE:
+        if ext in exts and len(rx.findall(new_text)) > len(rx.findall(old_text)):
+            found.append(label)
     return found
 
 
-def _markers_in(text):
-    return [label for label, rx in MARKERS if rx.search(text)]
+def _markers_in(text, ext):
+    found = [label for label, rx in MARKERS if rx.search(text)]
+    found += [label for label, rx, exts in DEBUG_RESIDUE if ext in exts and rx.search(text)]
+    return found
 
 
 def _read_git_head(file_path):
@@ -111,18 +137,19 @@ def _read_git_head(file_path):
         return None
 
 
-def _collect(tool_name, tool_input):
-    """Return the list of newly-introduced marker labels for this tool call."""
+def _collect(tool_name, tool_input, ext):
+    """Return the list of newly-introduced marker / debug-residue labels."""
     if tool_name == "Edit":
         return _added_markers(
             tool_input.get("old_string", "") or "",
             tool_input.get("new_string", "") or "",
+            ext,
         )
     if tool_name == "MultiEdit":
         edits = tool_input.get("edits", []) or []
         old = "".join(e.get("old_string", "") or "" for e in edits)
         new = "".join(e.get("new_string", "") or "" for e in edits)
-        return _added_markers(old, new)
+        return _added_markers(old, new, ext)
     if tool_name == "Write":
         # Field name is `content` for the Write tool; tolerate `file_text` too.
         content = tool_input.get("content")
@@ -131,8 +158,8 @@ def _collect(tool_name, tool_input):
         new = content or ""
         old = _read_git_head(tool_input.get("file_path", ""))
         if old is not None:
-            return _added_markers(old, new)
-        return _markers_in(new)
+            return _added_markers(old, new, ext)
+        return _markers_in(new, ext)
     return []
 
 
@@ -142,13 +169,14 @@ def main():
     tool_input = payload.get("tool_input", {}) or {}
 
     file_path = tool_input.get("file_path", "")
-    if not file_path or _ext(file_path) not in CODE_EXTENSIONS:
+    ext = _ext(file_path)
+    if not file_path or ext not in CODE_EXTENSIONS:
         return  # not a source-code edit -> nothing to do
     if os.path.basename(file_path) in _SELF_FILES:
         return  # the hub's marker-detector hooks contain marker patterns by design
 
     labels = []
-    for label in _collect(tool_name, tool_input):
+    for label in _collect(tool_name, tool_input, ext):
         if label not in labels:
             labels.append(label)
     if not labels:
@@ -156,13 +184,14 @@ def main():
 
     verb = "edit" if tool_name in ("Edit", "MultiEdit") else "write"
     note = (
-        f"Heads-up: this {verb} introduced suppression/placeholder marker(s): "
-        f"{', '.join(labels)}. Per the global engineering rule, placeholder "
-        "markers (TODO/FIXME/HACK/XXX), skipped/focused tests, and silenced "
-        "type/lint checks are not allowed in work you declare complete, and "
-        "adding them needs explicit user permission — a failing check is a "
-        "contract signal to surface, not to silence. Resolve them or get the "
-        "user's OK before declaring the task done."
+        f"Heads-up: this {verb} introduced leftover(s) the global engineering "
+        f"rules ban in completed work: {', '.join(labels)}. Suppression markers "
+        "(TODO/FIXME/HACK/XXX), skipped/focused tests, and silenced type/lint "
+        "checks must not be added without explicit user permission — a failing "
+        "check is a contract signal to surface, not to silence. Debug residue "
+        "(debugger, breakpoint(), pdb.set_trace, var_dump/dd, console.debug) is "
+        "diagnostic leftover and must be removed. Resolve them, or get the "
+        "user's OK, before declaring the task done."
     )
     print(json.dumps({
         "hookSpecificOutput": {
