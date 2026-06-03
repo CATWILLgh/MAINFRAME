@@ -7,6 +7,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-v2.1%2B-blueviolet)](https://code.claude.com)
 [![Status](https://img.shields.io/badge/status-personal--use-orange.svg)]()
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#platforms)
+[![Tuned for](https://img.shields.io/badge/tuned%20for-Opus%204.7%2B-blueviolet.svg)](#tested-configuration)
+[![Last commit](https://img.shields.io/github/last-commit/CATWILLgh/MAINFRAME?label=last%20commit)](https://github.com/CATWILLgh/MAINFRAME/commits)
+[![Skills](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/plugin-dist/skills?type=dir&label=skills&color=blue)](plugin-dist/skills)
+[![Agents](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/plugin-dist/agents?type=file&extension=md&label=agents&color=blue)](plugin-dist/agents)
+[![Hooks](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/plugin-dist/hooks/scripts?type=file&extension=py&label=hooks&color=blue)](plugin-dist/hooks/scripts)
 [![Style](https://img.shields.io/badge/principles-agnostic%20%7C%20evidence--based%20%7C%20English-blue.svg)](#principles)
 
 <img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
