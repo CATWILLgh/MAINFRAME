@@ -2,7 +2,7 @@
 
 Jest is the universal base. `supertest` for HTTP contract tests via in-process server (no socket bind). `testcontainers-node` for real-DB integration tests when DB semantics matter (RLS, FK, advisory locks, JSONB triggers).
 
-Pyramid orientation per hub `testing-strategy` skill — unit-first, integration only when a cross-boundary contract demands it.
+Tier orientation per hub `testing-strategy` skill — Tier 1 (no real environment: in-process unit + `supertest`) is the default and the continuous-regression gate; a real-DB / external tier is reached only when a cross-boundary contract demands it. Cheaper is not less important — the higher tier guards risk Tier 1 cannot.
 
 ## Per-endpoint contract — 4 mandatory scenarios
 

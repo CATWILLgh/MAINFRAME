@@ -1,6 +1,6 @@
 # Testing patterns
 
-`pytest` + (for async stacks) `pytest-asyncio` + `httpx.AsyncClient`. Real-DB tests via `testcontainers-python` when DB semantics matter (RLS, locking, JSONB, triggers). Pyramid orientation per hub `testing-strategy` skill — unit-first, integration only when a cross-boundary contract demands it.
+`pytest` + (for async stacks) `pytest-asyncio` + `httpx.AsyncClient`. Real-DB tests via `testcontainers-python` when DB semantics matter (RLS, locking, JSONB, triggers). Tier orientation per hub `testing-strategy` skill — Tier 1 (no real environment: in-process unit + `httpx.AsyncClient`) is the default and the continuous-regression gate; real-DB integration is a higher tier, reached only when a cross-boundary contract demands it. Cheaper is not less important — the higher tier guards risk Tier 1 cannot.
 
 ## Per-endpoint contract — 4 mandatory scenarios
 

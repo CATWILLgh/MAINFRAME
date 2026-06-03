@@ -107,7 +107,7 @@ A casual "ok / sounds good" in regular chat is not a substitute for `ExitPlanMod
 Dispatch specialised sub-agents for the work itself — one per independent piece. In every execution prompt:
 
 - **Path restriction** (same as Recon).
-- **TDD where it applies** (business logic, validators, lifecycle, calculations, bug fixes): explicit "write a failing test first, then minimal code, then refactor". See [`testing-strategy`](../testing-strategy/SKILL.md) for the test level decision.
+- **TDD — non-negotiable** for business logic, validators, lifecycle, calculations, bug fixes: explicit "write a failing test first, then minimal code, then refactor". Spike / exploratory code is exempt while the shape is still being discovered, but covered by a test before declare-done. See [`testing-strategy`](../testing-strategy/SKILL.md) for the tier and level decision.
 - **Concrete `file:line` targets** — not "find and fix", but "edit `service.ts:120-145`, function `processOrder`, condition on line 132".
 - **Anti-regression scope:** "do not change `<list of adjacent files>` even if you spot opportunities" — those are tickets, not edits.
 - **Verification command:** "after the edit, run `<lint | typecheck | test>` and report the result".

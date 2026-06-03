@@ -1,13 +1,29 @@
 ---
 name: testing-strategy
 user-invocable: false
-description: Apply the testing pyramid and low-infrastructure-first principle to choose which test(s) to write for any non-trivial code change, bug fix, or new behaviour. Triages by what the change touches (behaviour boundary, integration boundary, user-facing path), names the appropriate test level, and flags anti-patterns (testing implementation, flaky e2e, weakening assertions, slow suites). Tests are part of the change itself, not a follow-up. Pairs with the CLAUDE.md TDD bullets — bug-fix failing test first, Red→Green→Refactor, default to fast isolated tests.
+description: Apply infra-need tiers (what an autonomous run can self-verify — no-env / local / test-prod), the nested testing pyramid, and a maximal-but-not-excessive coverage rule to choose which test(s) to write for any non-trivial code change, bug fix, or new behaviour. Triages by what the change touches and what it must stand up to run, names the right tier and level, and flags anti-patterns (testing implementation, flaky e2e, weakening assertions, slow suites). Tests are part of the change itself, not a follow-up. Pairs with the CLAUDE.md TDD bullets — bug-fix failing test first, Red→Green→Refactor, Tier-1-first.
 when_to_use: Trigger on any non-trivial code change — implementing a feature, fixing a bug, refactoring behaviour, modifying logic that other code depends on. Also runs when about to write a test directly, planning a change touching multiple layers, reviewing a test suite for shape and quality, or evaluating whether an existing test is at the right level. The default assumption is that a behavioural change ships with its test, not without one — engage this skill as part of planning the change, not as a separate later step.
 ---
 
 # Testing strategy
 
 Decide **which test(s) to write** for a change so that regressions are caught at the cheapest, fastest level possible. Companion to the CLAUDE.md TDD bullets — those state the principles; this skill is the triage procedure.
+
+Two questions, in order: **which tier** (what must stand up to run the test — the primary axis), then **which level** (unit / integration / e2e, nested inside the tier).
+
+## Infra-need tiers — what an autonomous run can verify
+
+Classify first by what the test must stand up to run. This is primary because it decides what an autonomous run can fire as self-verification on every change.
+
+| Tier | Needs | Runnable | Typical |
+|---|---|---|---|
+| **Tier 1 — no real environment** | in-process, in-memory, no external services | always — the continuous-regression gate | unit, contract tests, in-memory / fake-backed integration |
+| **Tier 2 — local environment** | local DB / services / `docker compose` up | only when those are running | integration against real local services, local smoke |
+| **Tier 3 — test / staging environment** | a deployed real-ish environment | generally not mid-change | e2e against staging, contracts against real externals |
+
+The tiers are **isolation by purpose, not a priority ranking**. A higher tier catches a class of failure the lower ones structurally cannot — real env config, deployment wiring, real external contracts — so it is not "less important", only outside the autonomous loop. Development lives in Tier 1; **Tier 1 green is the gate every change must pass**. Reach up a tier only when the risk being closed exists only there.
+
+Tier and level do **not** map one-to-one: an in-memory integration test or a contract test is Tier 1 despite being integration-level. Place by infra-need first, then pick the level below.
 
 ## Triage — which level fits this change
 
@@ -29,7 +45,7 @@ Walk the change against these questions in order. Stop at the first match.
 | **End-to-end** (full user-facing flow) | Golden-path user journey, regression of a critical flow that previously broke in production | Used to verify business rules — those belong at unit level; one e2e per rule means slow suite |
 | **Characterisation** | Locking in current behaviour of legacy code before refactor | Used as the only level forever — characterisation tests do not document intent, they document accident |
 
-Default ratio across a stack: many more unit than integration, many more integration than e2e. Google's 70/20/10 (unit/integration/e2e) is a reasonable starting target — the **shape** matters more than the exact numbers.
+Default ratio across a stack: many more unit than integration, many more integration than e2e. Google's 70/20/10 (unit/integration/e2e) is a reasonable starting target — the **shape** matters more than the exact numbers. That shape is the economic consequence of the tiers above — cheap no-env tests dominate because they cost least to run, not because lower levels matter more.
 
 ## When the pyramid bends
 
@@ -40,6 +56,17 @@ Two legitimate deviations from a strict pyramid:
 
 State the deviation explicitly when you take it ("using integration as primary because the route handler is the entire behaviour") — do not silently drift up the pyramid.
 
+## Coverage — maximal, not excessive
+
+Maximal coverage means every branch, edge case, and contract is exercised — **once**, at the cheapest tier that can observe it. Not-excessive means stopping there.
+
+- **Cover:** every logic branch, boundary, error path, and cross-boundary contract the change introduces or touches.
+- **Skip:** trivial getters / setters, framework or language guarantees, generated code — testing these catches no regression and breaks on safe refactors.
+- **Do not duplicate:** the same logic re-asserted at a higher tier for no added risk — one observation at the cheapest tier is enough.
+- **One sanctioned redundancy:** a *critical* business rule may be deliberately checked at more than one tier (e.g. unit and e2e). That is defence in depth on a high-cost-of-failure path, not excess — state why when you do it.
+
+Coverage percentage is a diagnostic, not a target. Chasing a number manufactures the excess this rule exists to prevent (Goodhart): tests that assert the trivial to move the metric. Optimise for "would this catch a real regression", not for the percentage.
+
 ## Anti-patterns
 
 - **Testing implementation, not behaviour.** Asserting on internal method calls, private state, or call sequence rather than the output the caller observes. Makes refactoring expensive and produces false-positive failures on safe internal changes. Per Fowler: "Test for observable behaviour instead."
@@ -47,7 +74,7 @@ State the deviation explicitly when you take it ("using integration as primary b
 - **Mocking what you do not own and then trusting the mock.** Mocking an external API to a behaviour the real API does not exhibit. The test passes; production fails. If the contract matters, integration-test the real thing or use a contract test (Pact, Spring Contract).
 - **Flaky tests left in place.** A test that passes/fails non-deterministically is worse than no test — it trains the team to retry rather than investigate. Quarantine immediately (skip + `surface-ticket`) and fix the determinism, do not "rerun until green."
 - **Slow suites dominated by e2e.** When the full suite takes 30+ minutes, developers stop running it locally. CI becomes the only gate; feedback loops break. Move logic-level checks down to unit / integration.
-- **Test-after that confirms what exists.** Writing the test after the code, especially for the same scenario the author had in mind, confirms the implementation exists rather than that it does the right thing. For new behaviour requiring guarantee → test-first. For exploratory work → write the test once you know what guarantee you need, then refactor the spike code against it.
+- **Test-after that confirms what exists.** Writing the test after the code, especially for the same scenario the author had in mind, confirms the implementation exists rather than that it does the right thing. For business logic, validators, lifecycle, calculations and bug fixes → test-first is non-negotiable (per the CLAUDE.md TDD mandate). For genuinely exploratory work → write the test once you know what guarantee you need, then cover the spike against it before declaring it done.
 - **`.skip` / `.only` / `xit` left in committed code.** Already banned by the [`no-suppression-markers` skill](../no-suppression-markers/SKILL.md). If a test truly cannot run now, the failure or the need is captured via [`surface-ticket`](../surface-ticket/SKILL.md), not a marker.
 
 ## Verification before declaring done
@@ -69,3 +96,4 @@ Run the suite and **observe the result with your own eyes**. CI status is not a 
 - Mike Cohn, *Succeeding with Agile* (2009) — original pyramid concept.
 - Gerard Meszaros, *xUnit Test Patterns* (2007) — test smells catalogue (overspecified software, fragile test, slow test).
 - Kent C. Dodds, *Testing Trophy* — frontend-specific deviation from classical pyramid (do not generalise).
+- Goodhart's law — "when a measure becomes a target, it ceases to be a good measure"; why a coverage-percentage target manufactures low-value tests.
