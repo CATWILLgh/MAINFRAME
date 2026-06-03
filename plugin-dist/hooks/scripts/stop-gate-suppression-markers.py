@@ -1,145 +1,50 @@
 #!/usr/bin/env python3
 """Stop hook: hard gate against unresolved suppression markers / debug residue.
 
-Fires when Claude is about to stop a turn. If the session's *working-tree diff
-vs `git HEAD`* contains newly-added suppression / placeholder markers or debug
-residue (`debugger`, `breakpoint()`, `pdb.set_trace`, `var_dump`/`dd`,
-`console.debug`) in source-code files, block the stop with a reason — forcing
-Claude to resolve them (or obtain explicit user permission) before declaring
-the turn done.
+Fires when Claude is about to stop a turn. If the working-tree diff vs `git HEAD`
+contains newly-added suppression / placeholder markers or debug residue
+(`debugger`, `breakpoint()`, `pdb.set_trace`, `var_dump`/`dd`, `console.debug`)
+in source-code files, block the stop with a reason — forcing resolution (or
+explicit user permission) before the turn is declared done.
 
-Design (v1):
-- Block via `{"decision": "block", "reason": ...}` on stdout, exit 0. Source:
-  Anthropic Claude Code hooks docs, "Stop decision control".
-- Self-loop guard: if `stop_hook_active` is true on input, exit 0 silently.
-  This prevents the gate from blocking forever once Claude is mid-cleanup.
-- Diff-aware: read added (`+`) lines from `git diff HEAD` in the session cwd.
-  Working-tree state captures markers introduced this session that are still
-  not resolved. Lines that came from prior commits (legacy markers) do not
-  appear as `+`, so they are not flagged.
-- Whitelist: only flag added lines in files whose extension is a known source
-  extension. Prose/config (.md/.json/.yaml) legitimately mentions these
-  markers (including the hub's own docs); never block on those.
-- Fail-safe: any error -> exit 0 without output. The gate must never break
-  or noise-up a session because of itself.
-- Stdlib only. No venv, no third-party deps.
-
-NOTE: marker AND debug-residue definitions are duplicated from
-`scan-suppression-markers.py`; keep in sync. A shared module is the cleaner
-refactor — deferred so the two hooks can be installed and tested independently.
+Only ADDED (`+`) lines are flagged, so legacy markers from prior commits don't
+trip it. Shared scaffolding is in `_hooklib`, the detector sets in `_markers`.
+Self-loop-guarded; fail-open on git/lib failure (any error -> exit 0).
 """
 
-import json
 import os
-import re
-import subprocess
 import sys
 
-
-CODE_EXTENSIONS = {
-    ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-    ".dart", ".go", ".rb", ".rs", ".java", ".kt", ".kts", ".swift",
-    ".cs", ".cpp", ".cc", ".c", ".h", ".hpp", ".scala", ".php",
-    ".lua", ".sh", ".bash", ".zsh", ".sql", ".vue", ".svelte",
-}
-
-# Basenames of the hub's own marker-detection hooks. They legitimately contain
-# marker regexes/strings as detector logic; flagging them would be a self-
-# reference false-positive (and would self-block this hook on its first commit).
-_SELF_FILES = {
-    "scan-suppression-markers.py", "stop-gate-suppression-markers.py",
-    "python-security-scan.py", "python-security-stop-gate.py",
-    "nodejs-security-scan.py", "nodejs-security-stop-gate.py",
-    "nodejs-deps-audit.py", "python-deps-audit.py",
-    "bash-pattern-reminder.py", "comment-discipline-reminder.py",
-    "frontend-fsd-gate.py", "frontend-dead-code.py",
-}
-
-MARKERS = [
-    ("TODO/FIXME/HACK/XXX comment", re.compile(r"\b(?:TODO|FIXME|HACK|XXX)\b", re.IGNORECASE)),
-    ("@ts-ignore / @ts-nocheck", re.compile(r"@ts-(?:ignore|nocheck)\b")),
-    ("eslint-disable", re.compile(r"eslint-disable\b")),
-    ("# type: ignore", re.compile(r"#\s*type:\s*ignore\b")),
-    ("# noqa", re.compile(r"#\s*noqa\b")),
-    ("pylint: disable", re.compile(r"pylint:\s*disable\b")),
-    ("skipped/focused test (.skip/.only/xit/fit)",
-     re.compile(r"(?:\.(?:skip|only)\s*\(|\b(?:xit|fit|xdescribe|fdescribe)\s*\()")),
-    ("pytest/unittest skip", re.compile(r"@(?:pytest\.mark\.skip|unittest\.skip)")),
-]
-
-# Debug residue: (label, compiled regex, extensions). Always-residue subset only;
-# `console.log`/`print()` excluded (CLI output + structured logging are exempt).
-# Extension-gated to stay 0-FP — kept in sync with `scan-suppression-markers.py`.
-_JS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"}
-_PY = {".py", ".pyi"}
-_PHP = {".php"}
-DEBUG_RESIDUE = [
-    ("debugger statement", re.compile(r"\bdebugger\b"), _JS),
-    ("console.debug", re.compile(r"\bconsole\.debug\s*\("), _JS),
-    ("breakpoint()", re.compile(r"\bbreakpoint\s*\("), _PY),
-    ("pdb.set_trace()", re.compile(r"\bpdb\.set_trace\s*\("), _PY),
-    ("var_dump()", re.compile(r"\bvar_dump\s*\("), _PHP),
-    ("dd()", re.compile(r"\bdd\s*\("), _PHP),
-]
-
-
-def _ext(path):
-    dot = path.rfind(".")
-    slash = max(path.rfind("/"), path.rfind("\\"))
-    return path[dot:].lower() if dot > slash else ""
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import added_lines_by_file, emit_block, load_payload, run, stop_guard_cwd
+    from _markers import MARKERS, DEBUG_RESIDUE
+except Exception:
+    sys.exit(0)
 
 
 def _added_markers_in_diff(cwd):
-    """Run `git diff HEAD` in `cwd`; return labels of markers present in added
-    (`+`) lines of source-code files. Return None if git is unavailable or the
-    cwd is not a git work tree — caller treats None as "no-op, let Claude stop".
-    """
-    try:
-        out = subprocess.check_output(
-            ["git", "diff", "HEAD", "--unified=0", "--no-color"],
-            cwd=cwd, stderr=subprocess.DEVNULL, timeout=5,
-        ).decode(errors="replace")
-    except Exception:
-        return None
-
-    current_ext = None  # extension of the file under the current `+++` header, if scannable
+    """Sorted labels of markers / debug residue in added (`+`) lines of the
+    working-tree diff vs HEAD. Empty if none, or if git is unavailable."""
     found = set()
-    for line in out.splitlines():
-        if line.startswith("+++ "):
-            # `+++ b/path/to/file` (or `+++ /dev/null` for deletes)
-            path = line[4:]
-            if path.startswith("b/"):
-                path = path[2:]
-            ext = _ext(path)
-            ok = ext in CODE_EXTENSIONS and os.path.basename(path) not in _SELF_FILES
-            current_ext = ext if ok else None
-            continue
-        if current_ext is None:
-            continue
-        if not line.startswith("+") or line.startswith("+++"):
-            continue
-        body = line[1:]
+    for file_ext, body in added_lines_by_file(cwd):
         for label, rx in MARKERS:
             if rx.search(body):
                 found.add(label)
         for label, rx, exts in DEBUG_RESIDUE:
-            if current_ext in exts and rx.search(body):
+            if file_ext in exts and rx.search(body):
                 found.add(label)
     return sorted(found)
 
 
 def main():
-    payload = json.load(sys.stdin)
-
-    # Self-loop guard: if we already blocked this stop once, let it through.
-    if payload.get("stop_hook_active"):
-        return
-
-    cwd = payload.get("cwd") or "."
+    payload = load_payload()
+    cwd = stop_guard_cwd(payload)
+    if cwd is None:
+        return  # already blocked once this turn -> let the stop through
     labels = _added_markers_in_diff(cwd)
     if not labels:
         return  # nothing found, or git unavailable -> let Claude stop
-
     reason = (
         "Suppression markers or debug residue are present in the working-tree "
         f"diff vs HEAD: {', '.join(labels)}. Per the global engineering rules "
@@ -148,13 +53,8 @@ def main():
         "them in the affected source files (or obtain explicit user permission "
         "to keep a marker) before stopping the turn."
     )
-    print(json.dumps({"decision": "block", "reason": reason}))
+    emit_block(reason)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        # Fail-safe: never break or noise-up a session because of this hook.
-        pass
-    sys.exit(0)
+    run(main)
