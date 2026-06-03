@@ -29,6 +29,12 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import load_payload, emit_note, run
+except Exception:
+    sys.exit(0)
+
 DEP_FILES = {"pyproject.toml", "requirements.txt", "Pipfile", "setup.py", "setup.cfg"}
 DEP_FILE_PREFIXES = ("requirements",)
 
@@ -89,7 +95,7 @@ def _extract_vulns(audit_result):
 
 
 def main():
-    payload = json.load(sys.stdin)
+    payload = load_payload()
     tool_input = payload.get("tool_input", {}) or {}
     file_path = tool_input.get("file_path", "")
     if not file_path or not _is_dep_file(file_path):
@@ -107,8 +113,7 @@ def main():
             "`pipx install pip-audit`) for known-vulnerability detection "
             "against the PyPA Advisory Database when dependency files change."
         )
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": note}}))
+        emit_note("PostToolUse", note)
         return
 
     vulns = _extract_vulns(result)
@@ -128,13 +133,8 @@ def main():
         "to the listed fix versions, or surface via `surface-ticket` if the "
         "upgrade is out of scope for the current task."
     )
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": note}}))
+    emit_note("PostToolUse", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

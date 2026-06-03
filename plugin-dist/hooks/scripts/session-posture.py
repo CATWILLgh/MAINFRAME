@@ -17,8 +17,14 @@ Fires on startup / resume / clear / compact (every fresh-context case).
 Non-blocking (additionalContext only), fail-safe (any error -> exit 0), stdlib.
 """
 
-import json
+import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import load_payload, emit_note, run
+except Exception:
+    sys.exit(0)
 
 POSTURE = (
     "MAINFRAME working posture — engage the process, do not reason past it:\n"
@@ -39,17 +45,9 @@ POSTURE = (
 
 
 def main():
-    try:
-        json.load(sys.stdin)  # consume the payload; posture is injected unconditionally
-    except Exception:
-        pass
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "SessionStart", "additionalContext": POSTURE}}))
+    load_payload()  # consume the payload; posture is injected unconditionally
+    emit_note("SessionStart", POSTURE)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

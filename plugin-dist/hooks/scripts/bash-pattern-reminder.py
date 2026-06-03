@@ -32,9 +32,15 @@ Patterns caught (sourced from memory `rm-rf-anywhere-deny-pattern` 3 classes):
 | `pipx install <pkg>` ad-hoc | install.sh `_install_tool` helper |
 """
 
-import json
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import load_payload, emit_note, run
+except Exception:
+    sys.exit(0)
 
 PATTERNS = [
     (re.compile(r"\brm\s+-rf\b"),
@@ -59,7 +65,7 @@ PATTERNS = [
 
 
 def main():
-    payload = json.load(sys.stdin)
+    payload = load_payload()
     if payload.get("tool_name") != "Bash":
         return
     command = (payload.get("tool_input") or {}).get("command", "")
@@ -83,13 +89,8 @@ def main():
         f"If the command is genuinely correct as written, proceed — this is a "
         f"reminder, not a block."
     )
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse", "additionalContext": note}}))
+    emit_note("PreToolUse", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

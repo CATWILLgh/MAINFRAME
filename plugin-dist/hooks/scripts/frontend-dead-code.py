@@ -33,6 +33,12 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import load_payload, stop_guard_cwd, emit_note, run
+except Exception:
+    sys.exit(0)
+
 CONFIG_FILES = ("knip.json", "knip.jsonc", "knip.ts", "knip.js",
                 "knip.config.js", "knip.config.ts", "knip.config.mjs",
                 "knip.config.cjs")
@@ -90,10 +96,10 @@ def _run(cwd):
 
 
 def main():
-    payload = json.load(sys.stdin)
-    if payload.get("stop_hook_active"):
+    payload = load_payload()
+    cwd = stop_guard_cwd(payload)
+    if cwd is None:
         return
-    cwd = payload.get("cwd") or "."
     if not _has_config(cwd):
         return
     dead_files = _run(cwd)
@@ -112,13 +118,8 @@ def main():
         "mode reports FILES only (not unused exports — that mode has high FP "
         "on public-API surfaces). This is informational; you may proceed."
     )
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "Stop", "additionalContext": note}}))
+    emit_note("Stop", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

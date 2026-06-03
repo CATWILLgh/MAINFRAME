@@ -22,9 +22,15 @@ Design (non-blocking, low-noise):
   `git commit`.
 """
 
-import json
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import load_payload, emit_note, run
+except Exception:
+    sys.exit(0)
 
 # `git [-c k=v | -C path | --opts] commit ...` — the commit subcommand specifically.
 # `-c`/`-C` take a value token, so match them before the generic flag alternative.
@@ -60,7 +66,7 @@ def extract_subject(cmd):
 
 
 def main():
-    payload = json.load(sys.stdin)
+    payload = load_payload()
     if payload.get("tool_name") != "Bash":
         return
     command = (payload.get("tool_input") or {}).get("command", "")
@@ -105,13 +111,8 @@ def main():
         f"{skill_line}"
         "This is a reminder, not a block — if the message is already correct, proceed."
     )
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse", "additionalContext": note}}))
+    emit_note("PreToolUse", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

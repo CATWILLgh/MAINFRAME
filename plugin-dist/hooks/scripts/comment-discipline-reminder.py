@@ -33,22 +33,17 @@ does not re-fire on every later edit to the same file.
 Design: non-blocking; fail-safe (any error -> exit 0); stdlib only.
 """
 
-import json
 import os
 import re
-import subprocess
 import sys
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import comment_extract as ce  # noqa: E402
-
-CODE_EXTENSIONS = {
-    ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-    ".dart", ".go", ".rb", ".rs", ".java", ".kt", ".kts", ".swift",
-    ".cs", ".cpp", ".cc", ".c", ".h", ".hpp", ".scala", ".php",
-    ".lua", ".sh", ".bash", ".zsh", ".sql", ".vue", ".svelte",
-}
+try:
+    from _hooklib import CODE_EXTENSIONS, ext, load_payload, read_git_head, emit_note, run
+except Exception:
+    sys.exit(0)
 
 _SELF_FILES = {"comment-discipline-reminder.py", "comment_extract.py"}
 
@@ -89,37 +84,12 @@ def _flag(text, kind):
             or bool(_EPHEMERAL_RE.search(text)))
 
 
-def _ext(path):
-    dot = path.rfind(".")
-    slash = max(path.rfind("/"), path.rfind("\\"))
-    return path[dot:].lower() if dot > slash else ""
-
-
 def _read_file(path):
     try:
         if os.path.getsize(path) > _MAX_BYTES:
             return None
         with open(path, encoding="utf-8") as f:
             return f.read()
-    except Exception:
-        return None
-
-
-def _read_git_head(file_path):
-    if not file_path:
-        return None
-    cwd = os.path.dirname(file_path) or "."
-    try:
-        rel = subprocess.check_output(
-            ["git", "ls-files", "--full-name", file_path],
-            cwd=cwd, stderr=subprocess.DEVNULL, timeout=2,
-        ).decode().strip()
-        if not rel:
-            return None
-        return subprocess.check_output(
-            ["git", "show", f"HEAD:{rel}"],
-            cwd=cwd, stderr=subprocess.DEVNULL, timeout=2,
-        ).decode()
     except Exception:
         return None
 
@@ -151,7 +121,7 @@ def _before_after(tool_name, tool_input, file_path):
         if content is None:
             content = tool_input.get("file_text", "")
         after = content or ""
-        before = _read_git_head(file_path)
+        before = read_git_head(file_path)
         return (before if before is not None else ""), after
     return "", ""
 
@@ -161,20 +131,15 @@ def _first_line(text):
     return body.splitlines()[0].strip()[:100] if body else ""
 
 
-def _emit(note):
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": note}}))
-
-
 def main():
-    payload = json.load(sys.stdin)
+    payload = load_payload()
     tool_name = payload.get("tool_name", "")
     if tool_name not in ("Edit", "MultiEdit", "Write"):
         return
     tool_input = payload.get("tool_input", {}) or {}
     file_path = tool_input.get("file_path", "")
-    ext = _ext(file_path)
-    if not file_path or ext not in CODE_EXTENSIONS:
+    file_ext = ext(file_path)
+    if not file_path or file_ext not in CODE_EXTENSIONS:
         return
     if os.path.basename(file_path) in _SELF_FILES:
         return
@@ -182,8 +147,8 @@ def main():
     before, after = _before_after(tool_name, tool_input, file_path)
 
     # Targeted layer — airtight extraction; the precise process-leakage callout.
-    after_c = Counter((t, k) for _, t, k in ce.extract(after, ext))
-    before_c = Counter((t, k) for _, t, k in ce.extract(before, ext))
+    after_c = Counter((t, k) for _, t, k in ce.extract(after, file_ext))
+    before_c = Counter((t, k) for _, t, k in ce.extract(before, file_ext))
     flagged = [(t, k) for (t, k) in (after_c - before_c).elements() if _flag(t, k)]
     if flagged:
         quoted = "".join(f"  - {_first_line(t)}\n" for t, _ in flagged[:3])
@@ -201,14 +166,14 @@ def main():
             "workaround belongs in a ticket (surface-ticket skill), not a "
             "comment. This is a reminder, not a block."
         )
-        _emit(note)
+        emit_note("PostToolUse", note)
         return
 
     # Generic nudge — a low-stakes line-start signal, kept alive even on files
     # the airtight extractor skips (.tsx/.rb, heredoc). Docstrings and inline/
     # block comments are intentionally out of this count; targeted never uses it.
-    la = Counter(t for _, t, _ in ce.extract_lenient(after, ext))
-    lb = Counter(t for _, t, _ in ce.extract_lenient(before, ext))
+    la = Counter(t for _, t, _ in ce.extract_lenient(after, file_ext))
+    lb = Counter(t for _, t, _ in ce.extract_lenient(before, file_ext))
     n = sum((la - lb).values())
     if n == 0:
         return
@@ -226,12 +191,8 @@ def main():
         "keep it, short: one sentence per non-obvious WHY. Otherwise remove "
         "before declaring done. This is a reminder, not a block."
     )
-    _emit(note)
+    emit_note("PostToolUse", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

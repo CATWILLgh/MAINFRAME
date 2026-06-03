@@ -38,6 +38,12 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import load_payload, stop_guard_cwd, emit_block, run
+except Exception:
+    sys.exit(0)
+
 CONFIG_FILES = (".dependency-cruiser.cjs", ".dependency-cruiser.js",
                 ".dependency-cruiser.json", "dependency-cruiser.config.cjs",
                 "dependency-cruiser.config.js", "dependency-cruiser.config.mjs")
@@ -82,10 +88,10 @@ def _run(cwd):
 
 
 def main():
-    payload = json.load(sys.stdin)
-    if payload.get("stop_hook_active"):
+    payload = load_payload()
+    cwd = stop_guard_cwd(payload)
+    if cwd is None:
         return
-    cwd = payload.get("cwd") or "."
     if not _has_config(cwd):
         return
     violations = _run(cwd)
@@ -110,12 +116,8 @@ def main():
         "surface via the `surface-ticket` skill — this gate honors only the "
         "project config, not inline suppressions."
     )
-    print(json.dumps({"decision": "block", "reason": reason}))
+    emit_block(reason)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

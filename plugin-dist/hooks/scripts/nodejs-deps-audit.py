@@ -28,6 +28,12 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import load_payload, emit_note, run
+except Exception:
+    sys.exit(0)
+
 LOCK_FILES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb"}
 MANIFEST_FILES = {"package.json"}
 
@@ -77,7 +83,7 @@ def _extract_vulns(audit_result):
 
 
 def main():
-    payload = json.load(sys.stdin)
+    payload = load_payload()
     tool_input = payload.get("tool_input", {}) or {}
     file_path = tool_input.get("file_path", "")
     if not file_path or not _is_dep_file(file_path):
@@ -97,8 +103,7 @@ def main():
             "known-vulnerability detection against the OSV.dev database when "
             "dependency files change."
         )
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": note}}))
+        emit_note("PostToolUse", note)
         return
 
     vulns = _extract_vulns(result)
@@ -118,13 +123,8 @@ def main():
         "to a fixed version, or surface via `surface-ticket` if the upgrade is "
         "out of scope for the current task."
     )
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": note}}))
+    emit_note("PostToolUse", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)
