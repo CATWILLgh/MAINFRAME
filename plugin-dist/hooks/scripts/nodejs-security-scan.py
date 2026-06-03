@@ -38,17 +38,17 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import emit_note, ext, load_payload, run
+except Exception:
+    sys.exit(0)
+
 BASE_RULES = ["no-eval", "no-new-func"]
 JSX_REACT_RULES = ["react/no-danger", "react/jsx-no-script-url", "react/jsx-no-target-blank"]
 JSX_A11Y_RULES = ["jsx-a11y/alt-text", "jsx-a11y/anchor-is-valid", "jsx-a11y/aria-role"]
 JS_EXTS = (".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx")
 JSX_EXTS = (".tsx", ".jsx")
-
-
-def _ext(path):
-    dot = path.rfind(".")
-    slash = max(path.rfind("/"), path.rfind("\\"))
-    return path[dot:].lower() if dot > slash else ""
 
 
 def _oxlint_cmd():
@@ -66,10 +66,10 @@ def _run_oxlint(file_path):
     cmd = _oxlint_cmd()
     if cmd is None:
         return "OXLINT_MISSING"
-    ext = _ext(file_path)
+    file_ext = ext(file_path)
     args = cmd + ["-A", "all", "--format=json"]
     rules = list(BASE_RULES)
-    if ext in JSX_EXTS:
+    if file_ext in JSX_EXTS:
         args.extend(["--react-plugin", "--jsx-a11y-plugin"])
         rules.extend(JSX_REACT_RULES)
         rules.extend(JSX_A11Y_RULES)
@@ -91,10 +91,10 @@ def _run_oxlint(file_path):
 
 
 def main():
-    payload = json.load(sys.stdin)
+    payload = load_payload()
     tool_input = payload.get("tool_input", {}) or {}
     file_path = tool_input.get("file_path", "")
-    if not file_path or _ext(file_path) not in JS_EXTS:
+    if not file_path or ext(file_path) not in JS_EXTS:
         return
     if not os.path.exists(file_path):
         return
@@ -109,8 +109,7 @@ def main():
             "oxlint` (or any `npx`-providing Node setup) for eval / Function-"
             "constructor detection on JS/TS edits."
         )
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": note}}))
+        emit_note("PostToolUse", note)
         return
     if not diags:
         return
@@ -125,8 +124,8 @@ def main():
         lines.append(f"  L{ln} — {code}: {msg}")
     more = f"\n  …and {len(diags) - 10} more" if len(diags) > 10 else ""
 
-    ext = _ext(file_path)
-    if ext in JSX_EXTS:
+    file_ext = ext(file_path)
+    if file_ext in JSX_EXTS:
         coverage = (
             "Covered: eval/Function-constructor (no-eval, no-new-func) + React XSS "
             "vectors (no-danger, jsx-no-script-url, jsx-no-target-blank) + core a11y "
@@ -147,13 +146,8 @@ def main():
         "+ hub localStorage rule. Inline `// oxlint-disable` is NOT honored — "
         "genuine exceptions surface via the `surface-ticket` skill."
     )
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": note}}))
+    emit_note("PostToolUse", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

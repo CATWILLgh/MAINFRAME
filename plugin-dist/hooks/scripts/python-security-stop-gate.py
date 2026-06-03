@@ -26,37 +26,17 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import changed_files, emit_block, load_payload, run, stop_guard_cwd
+except Exception:
+    sys.exit(0)
+
 CURATED_RULES = (
     "S102,S307,S301,S506,S602,S604,S501,S324,S311,S105,S106,S107,"
     "B006,B008,B011,B904"
 )
 PY_EXTS = (".py", ".pyi")
-
-
-def _ext(path):
-    dot = path.rfind(".")
-    slash = max(path.rfind("/"), path.rfind("\\"))
-    return path[dot:].lower() if dot > slash else ""
-
-
-def _changed_py_files(cwd):
-    """Return absolute paths of .py files modified in the working tree vs HEAD."""
-    try:
-        out = subprocess.check_output(
-            ["git", "diff", "HEAD", "--name-only", "--diff-filter=AM"],
-            cwd=cwd, stderr=subprocess.DEVNULL, timeout=5,
-        ).decode(errors="replace")
-    except Exception:
-        return []
-    files = []
-    for rel in out.splitlines():
-        rel = rel.strip()
-        if not rel or _ext(rel) not in PY_EXTS:
-            continue
-        abs_path = os.path.join(cwd, rel)
-        if os.path.exists(abs_path):
-            files.append(abs_path)
-    return files
 
 
 def _run_ruff(files):
@@ -80,11 +60,11 @@ def _run_ruff(files):
 
 
 def main():
-    payload = json.load(sys.stdin)
-    if payload.get("stop_hook_active"):
+    payload = load_payload()
+    cwd = stop_guard_cwd(payload)
+    if cwd is None:
         return
-    cwd = payload.get("cwd") or "."
-    files = _changed_py_files(cwd)
+    files = changed_files(cwd, PY_EXTS)
     if not files:
         return
     findings = _run_ruff(files)
@@ -110,12 +90,8 @@ def main():
         "(rare), surface via the `surface-ticket` skill — `# noqa` is not "
         "honored by this gate."
     )
-    print(json.dumps({"decision": "block", "reason": reason}))
+    emit_block(reason)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

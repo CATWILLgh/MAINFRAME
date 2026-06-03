@@ -103,6 +103,33 @@ def read_git_head(file_path):
         return None
 
 
+def changed_files(cwd, exts):
+    """Absolute paths of source files added/modified vs HEAD in `cwd`, filtered
+    to `exts` and existence-checked. [] if git is unavailable.
+
+    Unlike added_lines_by_file this does NOT exclude the hub's own detector files
+    — the security gates legitimately analyze any changed source file. Absolute
+    paths so the caller can hand them straight to an external analyzer.
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "diff", "HEAD", "--name-only", "--diff-filter=AM"],
+            cwd=cwd, stderr=subprocess.DEVNULL, timeout=5,
+        ).decode(errors="replace")
+    except Exception:
+        return []
+    exts = set(exts)
+    files = []
+    for rel in out.splitlines():
+        rel = rel.strip()
+        if not rel or ext(rel) not in exts:
+            continue
+        abs_path = os.path.join(cwd, rel)
+        if os.path.exists(abs_path):
+            files.append(abs_path)
+    return files
+
+
 def added_lines_by_file(cwd, self_files=HUB_HOOK_FILES):
     """List of (ext, added_line_body) for `+` lines in `git diff HEAD` across
     source-code files, skipping the hub's own detector files.

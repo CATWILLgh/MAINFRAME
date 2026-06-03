@@ -38,6 +38,12 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import emit_note, ext, load_payload, run
+except Exception:
+    sys.exit(0)
+
 CURATED_RULES = (
     "S102,S307,S301,S506,S602,S604,S501,S324,S311,S105,S106,S107,"
     "B006,B008,B011,B904"
@@ -64,12 +70,6 @@ RULE_LABELS = {
 }
 
 
-def _ext(path):
-    dot = path.rfind(".")
-    slash = max(path.rfind("/"), path.rfind("\\"))
-    return path[dot:].lower() if dot > slash else ""
-
-
 def _run_ruff(file_path):
     """Run ruff S-subset on `file_path`. Return list of finding dicts or None."""
     ruff = shutil.which("ruff")
@@ -92,10 +92,10 @@ def _run_ruff(file_path):
 
 
 def main():
-    payload = json.load(sys.stdin)
+    payload = load_payload()
     tool_input = payload.get("tool_input", {}) or {}
     file_path = tool_input.get("file_path", "")
-    if not file_path or _ext(file_path) not in PY_EXTS:
+    if not file_path or ext(file_path) not in PY_EXTS:
         return
     if not os.path.exists(file_path):
         return
@@ -110,8 +110,7 @@ def main():
             "`pipx install ruff`) for OWASP/Bandit-aligned high-confidence "
             "anti-pattern detection on Python edits."
         )
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": note}}))
+        emit_note("PostToolUse", note)
         return
     if not findings:
         return
@@ -134,13 +133,8 @@ def main():
         "surfaces via the `surface-ticket` skill, not as a silenced marker. "
         "Resolve before declaring done."
     )
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PostToolUse", "additionalContext": note}}))
+    emit_note("PostToolUse", note)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)

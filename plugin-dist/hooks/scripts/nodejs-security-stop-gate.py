@@ -36,6 +36,12 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _hooklib import changed_files, emit_block, load_payload, run, stop_guard_cwd
+except Exception:
+    sys.exit(0)
+
 SEMGREP_CONFIGS = ["p/security-audit"]
 JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 
@@ -51,31 +57,6 @@ def _hub_rule_configs():
         if name.endswith((".yml", ".yaml")):
             out.append(os.path.join(_HUB_RULES_DIR, name))
     return out
-
-
-def _ext(path):
-    dot = path.rfind(".")
-    slash = max(path.rfind("/"), path.rfind("\\"))
-    return path[dot:].lower() if dot > slash else ""
-
-
-def _changed_js_files(cwd):
-    try:
-        out = subprocess.check_output(
-            ["git", "diff", "HEAD", "--name-only", "--diff-filter=AM"],
-            cwd=cwd, stderr=subprocess.DEVNULL, timeout=5,
-        ).decode(errors="replace")
-    except Exception:
-        return []
-    files = []
-    for rel in out.splitlines():
-        rel = rel.strip()
-        if not rel or _ext(rel) not in JS_EXTS:
-            continue
-        abs_path = os.path.join(cwd, rel)
-        if os.path.exists(abs_path):
-            files.append(abs_path)
-    return files
 
 
 def _run_semgrep(files):
@@ -101,11 +82,11 @@ def _run_semgrep(files):
 
 
 def main():
-    payload = json.load(sys.stdin)
-    if payload.get("stop_hook_active"):
+    payload = load_payload()
+    cwd = stop_guard_cwd(payload)
+    if cwd is None:
         return
-    cwd = payload.get("cwd") or "."
-    files = _changed_js_files(cwd)
+    files = changed_files(cwd, JS_EXTS)
     if not files:
         return
     findings = _run_semgrep(files)
@@ -133,12 +114,8 @@ def main():
         "exception, surface via the `surface-ticket` skill — Semgrep does not "
         "honor inline suppression markers in this gate."
     )
-    print(json.dumps({"decision": "block", "reason": reason}))
+    emit_block(reason)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    run(main)
