@@ -119,6 +119,27 @@ def test_read_git_head():
         shutil.rmtree(d, ignore_errors=True)
 
 
+def test_changed_files():
+    d = _repo()
+    try:
+        _write(d, "a.py", "x = 1\n")
+        _write(d, "b.js", "var x = 1\n")
+        _git(d, "add", "-A")
+        _git(d, "commit", "-qm", "base")
+        _write(d, "a.py", "x = 2\n")       # modified .py -> M
+        _write(d, "c.py", "y = 1\n")       # new .py -> A (staged below; git diff
+        _write(d, "b.js", "var x = 2\n")   #   HEAD does not list untracked files)
+        _git(d, "add", "-A")
+        py = _hooklib.changed_files(d, (".py", ".pyi"))
+        assert sorted(os.path.basename(p) for p in py) == ["a.py", "c.py"]
+        assert all(os.path.isabs(p) for p in py)
+        js = _hooklib.changed_files(d, (".js",))
+        assert [os.path.basename(p) for p in js] == ["b.js"]
+        assert _hooklib.changed_files(tempfile.gettempdir() + "/no-such-xyz", (".py",)) == []
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
