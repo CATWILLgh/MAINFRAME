@@ -13,8 +13,11 @@ Boundary: HUB_HOOK_FILES is the COMMON self-exclusion set. comment-discipline
 keeps its own smaller self-set locally — do NOT merge it into this one.
 """
 
+import datetime
+import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 
@@ -38,6 +41,7 @@ HUB_HOOK_FILES = frozenset({
     "bash-pattern-reminder.py", "comment-discipline-reminder.py",
     "frontend-fsd-gate.py", "frontend-dead-code.py",
     "_hooklib.py", "_markers.py", "test_hooklib.py", "test_markers.py",
+    "telemetry.py", "test_telemetry.py",
 })
 
 
@@ -162,6 +166,70 @@ def added_lines_by_file(cwd, self_files=HUB_HOOK_FILES):
             continue
         rows.append((current_ext, line[1:]))
     return rows
+
+
+_TELEMETRY_BANNED_KEYS = frozenset({
+    "tool_input", "prompt", "command", "content", "code", "text",
+    "path", "file_path", "cwd", "transcript_path",
+})
+
+
+def _telemetry_db_path():
+    return (os.environ.get("MAINFRAME_TELEMETRY_DB")
+            or os.path.expanduser("~/.claude/telemetry/telemetry.db"))
+
+
+def _telemetry_project_key(cwd):
+    # Stable per-project key that disambiguates same-named dirs without storing
+    # the full (potentially sensitive) path.
+    if not cwd:
+        return ""
+    base = os.path.basename(os.path.normpath(cwd))
+    digest = hashlib.sha256(cwd.encode("utf-8", "replace")).hexdigest()[:6]
+    return f"{base}-{digest}"
+
+
+def log_event(event, payload=None, hook_payload=None):
+    """Append one telemetry row, best-effort — any failure is a silent no-op.
+
+    Passive Bucket-1 sink (ADR 0073). Must never stall or break a session:
+    short busy_timeout, whole body guarded. `payload` is event-specific metadata
+    — banned structural keys are stripped as a secrets second-line-of-defence.
+    `hook_payload` is the hook stdin JSON, read only for session_id / agent_type
+    / cwd, never dumped wholesale.
+    """
+    try:
+        hp = hook_payload or {}
+        safe = {k: v for k, v in (payload or {}).items()
+                if k not in _TELEMETRY_BANNED_KEYS}
+        row = (
+            datetime.datetime.now().isoformat(timespec="seconds"),
+            str(hp.get("session_id") or ""),
+            str(hp.get("agent_type") or ""),
+            _telemetry_project_key(hp.get("cwd") or ""),
+            str(event),
+            json.dumps(safe, separators=(",", ":")),
+        )
+        db = _telemetry_db_path()
+        os.makedirs(os.path.dirname(db), exist_ok=True)
+        conn = sqlite3.connect(db, timeout=0.05)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=50")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS events ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, session_id TEXT, "
+                "agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_event_ts ON events(event, ts)")
+            conn.execute(
+                "INSERT INTO events(ts, session_id, agent_type, project, event, payload) "
+                "VALUES (?,?,?,?,?,?)", row)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
 
 
 def run(main_fn):

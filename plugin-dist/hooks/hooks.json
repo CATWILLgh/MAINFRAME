@@ -13,6 +13,11 @@
             "type": "command",
             "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooklib-smoke-check.py"]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
           }
         ]
       }
@@ -35,6 +40,16 @@
             "type": "command",
             "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/commit-conventional-reminder.py"]
+          }
+        ]
+      },
+      {
+        "matcher": "advisor|Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
           }
         ]
       }
@@ -74,6 +89,16 @@
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/nodejs-security-scan.py"]
           }
         ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
+          }
+        ]
       }
     ],
     "Stop": [
@@ -107,6 +132,15 @@
           }
         ]
       }
+    ],
+    "PermissionDenied": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"] } ] }
+    ],
+    "SubagentStart": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"] } ] }
+    ],
+    "SessionEnd": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"] } ] }
     ]
   }
 }
