@@ -40,13 +40,29 @@ This repo is my attempt to do that baseline layer **separately** from any specif
   <img src="assets/divider.png" alt="" width="100%">
 </p>
 
+## Where this comes from
+
+This isn't a weekend project or a copied template. It's distilled from thousands of hours of working with AI coding agents, day after day — what consistently helped, what quietly broke, what was worth keeping. Every rule here earned its place by surviving real use.
+
+Three things shape it:
+
+- **Hard-won experience.** The rules come from patterns I hit over and over on real projects — not from theory.
+- **Authoritative sources.** I don't ship a rule on a hunch. Each non-trivial decision is checked against primary sources — Anthropic's own docs, RFCs, established engineering material — and validated with a small experiment where I can.
+- **Constant feedback.** I work on this almost every day, together with the agent. When something underperforms in real use, it gets refined or dropped. The hub is never "finished" — it's continuously corrected against what actually happens.
+
+And here's the part that's easy to miss. It looks like just a folder of Markdown files — some skills, a few agents. It isn't. Steering a language model reliably, across many projects and long autonomous runs, is one of the genuinely hard parts of working with agentic systems. The model's inference — how it generates each step — is a kind of *ordered chaos*: powerful, but hard to keep pointed in the right direction at scale. This hub is my standing attempt to put just enough structure around that chaos to make the output dependable, without strangling what the model is good at.
+
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
+
 ## What you actually get
 
 In plain words — what each piece is for:
 
 - **Umbrella `CLAUDE.md`** — a tight set of working rules Claude follows in every project on your machine. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, no leftover `TODO`/`FIXME` markers, and so on. About 200 lines, intentionally short to stay in focus.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like "audit this code carefully", "format this commit message in Conventional Commits style", "scan this diff for forgotten secrets" — instead of one giant document trying to cover everything.
-- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python and Node.js, a frontend engineer for React, a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
+- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python and Node.js, a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
 - **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan diffs for security issues with `ruff`/`semgrep`/`osv-scanner`. Things that fire without you having to remember to fire them.
 - **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
 - **Permissions** — three-tier model (deny / ask / allow) that's strict by default. Some things must never run; some need confirmation; the rest run quietly with logging.
@@ -77,6 +93,27 @@ The hub ships in two channels:
 - **Single-file and per-item symlinks** (`export/`) carry the umbrella `CLAUDE.md`, the permission `settings.json`, path-scoped `rules/`, and a small credentials helper — pieces the plugin format does not currently support.
 
 See [`docs/layers/`](docs/layers/) for full per-layer specifications.
+
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
+
+## Requirements
+
+**Required:**
+
+- **Claude Code v2.1+** — the host (CLI or IDE extension).
+- **git** — to clone the repo, and for the hooks that diff your working tree.
+- **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
+- **Python 3** — the validators and most hooks are stdlib Python 3. Without it they silently no-op (the installer warns; it does not fail).
+
+**Recommended — each unlocks a group of checks; anything missing just stays silent, and `install.sh` prints an OS-specific install hint:**
+
+- **Node.js / npm** — the React and Node.js agents, the shadcn CLI (`npx`), the frontend recon script, and the JS hooks (`oxlint`, `dependency-cruiser`, `knip`).
+- **uv or pipx** — installs the Python tooling the hooks call: `ruff`, `semgrep`, `pip-audit`.
+- **osv-scanner** — the dependency-vulnerability hook (`install.sh` can fetch the binary for you).
+
+Nothing here hard-fails a session: a tool that isn't installed disables only its own hook. Run `./install.sh --dry-run` to preview everything and see exactly what's missing.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -186,12 +223,12 @@ MAINFRAME/
 │
 ├── plugin-dist/                          # the plugin — auto-loads as 'mainframe' after install
 │   ├── .claude-plugin/plugin.json        # plugin manifest (name, version, license)
-│   ├── skills/                           # 14 skills, one folder per skill
-│   ├── agents/                           # 4 file-based sub-agents (Python, Node.js, React, web-search)
+│   ├── skills/                           # 17 skills, one folder per skill
+│   ├── agents/                           # 6 file-based sub-agents (Python, Node.js, React, devops, decision-reviewer, web-search)
 │   ├── commands/                         # slash commands (currently empty)
 │   └── hooks/
 │       ├── hooks.json                    # which hook fires on which event
-│       ├── scripts/                      # 13 Python scripts (security scans, marker discipline, ...)
+│       ├── scripts/                      # 19 Python scripts (security scans, marker discipline, ...)
 │       └── rules/                        # Semgrep YAML rules
 │
 ├── export/                               # what the plugin format does NOT carry
