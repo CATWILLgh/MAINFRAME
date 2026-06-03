@@ -253,6 +253,7 @@
     "context7@claude-plugins-official": true
   },
   "language": "Russian",
+  "outputStyle": "Explanatory",
   "effortLevel": "xhigh",
   "advisorModel": "opus",
   "editorMode": "normal",
