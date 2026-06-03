@@ -2,7 +2,7 @@
 
 > Scripts executed by Claude Code on specific events (tool-use, stop, session-start, file-change, etc.). In the hub: `export/hooks/*.py` + registration in `export/settings.json` `hooks.*`.
 
-> Last updated: 2026-05-28 (3-section rewrite after subagent deep-dive: 16 event types).
+> Last updated: 2026-06-04 (full event sweep — **exactly 30 events**, ground-truthed against the installed Claude Code v2.1.160 `/hooks` menu; supersedes the stale 16-event May list). Docs lag the CLI — the running CLI is the authority.
 
 ---
 
@@ -19,30 +19,48 @@
 
 ## 1. Canonical reference (Anthropic Claude Code docs)
 
-### 1.1. Full event list (Python SDK)
+### 1.1. Full event list — 30 events (ground truth: the installed CLI)
 
-Source: `code.claude.com/docs/en/agent-sdk/python` + `code.claude.com/docs/en/hooks`.
+**Authority: the `/hooks` menu of the installed Claude Code v2.1.160**, which enumerates **exactly 30** hook events — the most honest source (the published docs and SDK type lists lag it). Descriptions are verbatim from that menu. Matcher + decision-control are cross-checked against `code.claude.com/docs` via Context7; **where the docs disagreed with the running CLI, the CLI wins** — e.g. `PostToolBatch` / `TeammateIdle` / `TaskCompleted` are real CLI events here, NOT "SDK-only" as the Python-vs-TS SDK literal implied.
 
-| Event | Trigger | Matcher | Decision control | Notes |
+| # | Event | Fires when (CLI verbatim) | Matcher | Decision / notes |
 |---|---|---|---|---|
-| `PreToolUse` | Before tool execution | yes (tool name) | allow / deny / ask / defer | Can modify `updatedInput` |
-| `PostToolUse` | After successful tool | yes (tool name) | block | Can modify `updatedToolOutput` |
-| `PostToolUseFailure` | After failed tool | yes (tool name) | context-only | `additionalContext` |
-| `UserPromptSubmit` | Prompt submitted | — | block | Receives `prompt` |
-| `Stop` | Claude finishes a turn | **no matcher** | `{"decision":"block","reason":...}` | `stop_hook_active` guard |
-| `SubagentStop` | Subagent finishes | yes (`agent_type`) | block / continue:false | |
-| `SubagentStart` | Subagent starts | yes (`agent_type`) | context-only | Global context injection |
-| `SessionStart` | Session begins | yes (`source`: startup/resume/clear/compact) | context-only | |
-| `SessionEnd` | Session ends | yes (`reason`) | **cannot block** | Cleanup only |
-| `Notification` | Notification triggered | yes (type) | context-only | |
-| `PreCompact` | Before compaction | — | — | Payload schema not detailed |
-| `PostCompact` | After compaction | — | — | Same |
-| `Setup` | Session setup | — | — | Payload not detailed |
-| `FileChanged` | File changed | yes (pattern) | — | Live file watching |
-| `ConfigChange` | `settings.json` changed | yes (empty = all) | — | Fires on hot-reload |
-| `PermissionRequest` | Permission prompt triggered | yes (tool name) | allow/deny + `updatedPermissions` | Can change mode |
+| 1 | `PreToolUse` | before tool execution | tool name | allow/deny/ask/defer + `updatedInput` |
+| 2 | `PostToolUse` | after tool execution | tool name | block + `updatedToolOutput` |
+| 3 | `PostToolUseFailure` | after tool execution fails | tool name | context-only |
+| 4 | `PostToolBatch` | after a batch of tool calls resolves | — | — |
+| 5 | `PermissionDenied` | **after auto-mode classifier denies a tool call** | — | context — auto-mode-specific |
+| 6 | `Notification` | when notifications are sent | type | context-only |
+| 7 | `UserPromptSubmit` | when the user submits a prompt | — | block + context; sees prompt |
+| 8 | `UserPromptExpansion` | when a user-typed slash command expands into a prompt | — | — |
+| 9 | `SessionStart` | when a new session is started | source | context (command + mcp_tool only) |
+| 10 | `Stop` | right before Claude concludes its response | none | block; `stop_hook_active` guard |
+| 11 | `StopFailure` | when the turn ends due to an API error | — | context-only |
+| 12 | `SubagentStart` | when a subagent (Agent tool call) is started | agent_type | context; payload `agent_id`/`agent_type` |
+| 13 | `SubagentStop` | right before a subagent concludes its response | — | block |
+| 14 | `PreCompact` | before conversation compaction | — | block |
+| 15 | `PostCompact` | after conversation compaction | — | cannot block |
+| 16 | `SessionEnd` | when a session is ending | reason | cannot block |
+| 17 | `PermissionRequest` | when a permission dialog is displayed | — | decision hook (allow / deny) |
+| 18 | `Setup` | repo setup hooks for init and maintenance | — | context (command + mcp_tool only) |
+| 19 | `TeammateIdle` | when a teammate is about to go idle | — | — |
+| 20 | `TaskCreated` | when a task is being created | — | — |
+| 21 | `TaskCompleted` | when a task is being marked as completed | — | — |
+| 22 | `Elicitation` | when an MCP server requests user input | — | command/http/mcp_tool |
+| 23 | `ElicitationResult` | after a user responds to an MCP elicitation | — | command/http/mcp_tool |
+| 24 | `ConfigChange` | when configuration files change during a session | — | cannot block (async) |
+| 25 | `InstructionsLoaded` | when an instruction file (CLAUDE.md or rule) is loaded | — | cannot block (async) |
+| 26 | `WorktreeCreate` | create an isolated worktree for VCS-agnostic isolation | — | cannot block (async) |
+| 27 | `WorktreeRemove` | remove a previously created worktree | — | cannot block (async) |
+| 28 | `CwdChanged` | after the working directory changes | — | cannot block (async) |
+| 29 | `FileChanged` | when a watched file changes | — | cannot block (async) |
+| 30 | `MessageDisplay` | while assistant message text is displayed | — | — |
 
-The TypeScript SDK supports additional events; the full list is not published in the available docs.
+**Cadence (docs framing):** per-session (9, 16, 18), per-turn (7, 10, 11), per-tool (1, 2, 3), async (24–29). The rest are situational — subagent (12/13), compaction (14/15), permission (5/17), task (20/21), elicitation (22/23), expansion (8), display (30), batch (4).
+
+**vs the stale 16-event May list:** the running CLI confirms **exactly 30**. Newly surfaced and hub-relevant: `PermissionDenied` (#5 — fires when the auto-mode classifier blocks a tool → a direct, countable signal of **auto-mode friction**, the user's primary workflow), `UserPromptExpansion` (#8 — slash / skill expansion), `MessageDisplay` (#30). The menu header "**16 hooks configured**" equals the hub's own current registrations (§2.1: 2+3+6+5) — an independent confirmation of our count.
+
+**Honest gaps (not fact):** exact INPUT payload fields per event are not all documented — the menu gives names + triggers, not schemas. Decision-control for the newer events (`PostToolBatch`, `PermissionDenied`, `UserPromptExpansion`, `MessageDisplay`, `TaskCreated/Completed`, `TeammateIdle`) is not laid out in the retrieved docs — verify before building a hook that reads or blocks on them.
 
 ### 1.2. Registration syntax
 
@@ -106,23 +124,40 @@ Previously it was implicitly assumed that hooks apply only to the main session. 
 
 ## 2. Hub usage
 
-### 2.1. Current hooks in `export/hooks/`
+### 2.1. Current hub hooks
 
-| File | Event | Status |
+Live registration: `plugin-dist/hooks/hooks.json` (source of truth). As of 2026-06-04 the hub uses **4 of the 30 events** (16 configured hook entries):
+
+| Event | Matcher | Hub scripts |
 |---|---|---|
-| `scan-suppression-markers.py` | `PostToolUse` (Edit\|Write\|MultiEdit) | LIVE via symlink |
-| `stop-gate-suppression-markers.py` | `Stop` | **STAGED** — not activated, awaiting user approval |
+| `SessionStart` | `startup\|resume\|clear\|compact` | `session-posture`, `hooklib-smoke-check` |
+| `PreToolUse` | `Bash` | `path-validation`, `bash-pattern-reminder`, `commit-conventional-reminder` |
+| `PostToolUse` | `Edit\|Write\|MultiEdit` | `scan-suppression-markers`, `comment-discipline-reminder`, `python-security-scan`, `python-deps-audit`, `nodejs-deps-audit`, `nodejs-security-scan` |
+| `Stop` | (none) | `stop-gate-suppression-markers`, `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code` |
 
-### 2.2. Used vs unused events
+Shared scaffolding (`_hooklib.py` + `_markers.py`, stdlib-only) underlies them. The other 26 events are unused — see the opportunity map below.
 
-| Event | In use? | If not — candidate? |
+### 2.2. Opportunity map — unused events (direct purpose + analytics)
+
+Two kinds of opportunity per event: **direct** (the hook acts on the session) and **analytics** (a silent, observe-only hook that logs a fact and returns nothing — `exit 0`, no stdout — for later research). Analytics maps onto the "did the behaviour happen" facts that are otherwise only felt, not counted.
+
+| Event | Direct-purpose candidacy | Analytics candidacy (silent log) |
 |---|---|---|
-| `PostToolUse` | yes (scan-suppression-markers) | — |
-| `Stop` | staged (stop-gate-suppression-markers) | — |
-| `UserPromptSubmit` | no | yes — blocking dangerous commands before submission |
-| `SubagentStart` | no | yes — injecting global context into each subagent |
-| `SessionStart`, `SessionEnd`, `PreToolUse`, `Notification`, `FileChanged`, `ConfigChange`, `PermissionRequest` | no | maybe — no concrete use case defined yet |
-| `PreCompact`, `PostCompact`, `Setup`, `PostToolUseFailure` | no | maybe — payload unclear, needs further investigation |
+| `PreToolUse` (Task / Agent) | — | **high** — sub-agent dispatch count + `agent_type` |
+| `PreToolUse` (advisor) | — | **high** — advisor calls per cycle |
+| `PreToolUse` (Skill) | — | high — skill activation frequency |
+| `PostToolUse` (Write → `docs/tickets/`) | — | **high** — ticket-creation rate |
+| existing detector hooks | (already act) | **high** — `log_event()` the incident (rule, file_ext, decision) → real FP / trivial rate |
+| `UserPromptSubmit` | pre-block dangerous commands | high — turns per task |
+| `SubagentStart` / `SubagentStop` | global context injection¹ | high — sub-agent lifecycle / count |
+| `PreCompact` | — | med — compaction frequency (context-pressure signal) |
+| `SessionStart` / `SessionEnd` | (posture already wired) | med — session bound for aggregation |
+| `PermissionRequest` | programmatic allow / deny | med — permission-prompt frequency (auto-mode friction) |
+| `CwdChanged` / `InstructionsLoaded` / `FileChanged` / `Worktree*` | — | low — situational |
+
+¹ Subagent context injection carries the cross-agent caveat in §1.6 — per-agent frontmatter `hooks:` are **ignored for plugin subagents**, so a cross-agent hook must live in the global `hooks.json`.
+
+→ The high-value analytics rows are the on-ramp for the telemetry layer (next step): they auto-count exactly the behaviours observed in real use (advisor calls, sub-agent use, tickets, incident FP rate). Measurement discipline + the behaviour-vs-quality split: project memory `structured-workflow-efficacy-evidence`.
 
 ### 2.3. Hub principles for hooks
 
@@ -136,18 +171,23 @@ Previously it was implicitly assumed that hooks apply only to the main session. 
 
 ## 3. Gray zones / open questions
 
-1. **Full TypeScript SDK event list** — it is mentioned that TS supports additional events; the list is not published.
+1. ✓ **RESOLVED (2026-06-04).** Full event list ground-truthed from the installed CLI `/hooks` menu (§1.1, exactly 30). Correction: `TeammateIdle`, `TaskCompleted`, `PostToolBatch` are real CLI events (they appear in the menu) — the earlier "SDK-only" read from the Python `HookEvent` literal was a surface-confusion; the running CLI overrides the SDK type list.
 2. **Exact size of "brief delay"** for the file watcher — not documented.
 3. **Symlink behavior** for `settings.json` with the file watcher — works empirically (the hub relies on it), but without a formal smoke test.
-4. **Payload schema for `Setup`, `PreCompact`, `PostCompact`, `SessionEnd`** — not explicitly provided in the available Context7 fragments. Needs further verification before use.
+4. **Input payload schema** for the async events (`ConfigChange`, `CwdChanged`, `InstructionsLoaded`, `FileChanged`, `Worktree*`), `Elicitation*`, `Setup`, `PreCompact`/`PostCompact`, `SessionEnd` — the *event names + hook-type support + decision-control* are confirmed (§1.1), but the exact fields each delivers are not laid out in the retrieved docs. Verify the specific fields before building a hook that reads them.
+6. **`TaskCreated` (plugin surface) vs `TaskCompleted` (SDK literal)** — adjacent names on different surfaces; confirm which one the CLI actually emits before targeting it.
 5. **`Stop` hook behavior after 8 consecutive blocks** — the override happens automatically. What if the hook needs to fire more frequently? No workaround is documented.
 
 ---
 
 ## Sources
 
+**Authoritative — ground truth:**
+- **Installed CLI `/hooks` menu (Claude Code v2.1.160)** — the canonical 30-event enumeration with verbatim descriptions. Beats the docs, which lag.
+
 **Authoritative (Anthropic Claude Code docs via Context7):**
-- `code.claude.com/docs/en/hooks` — payload schemas, decision-control.
-- `code.claude.com/docs/en/hooks-guide` — patterns, examples, matchers.
-- `code.claude.com/docs/en/agent-sdk/python` — `HookEvent` type list.
-- `code.claude.com/docs/en/agent-sdk/typescript` — TS-specific types.
+- `code.claude.com/docs/en/hooks` — cadence model, payload schemas, decision-control, supported hook-types per event.
+- `code.claude.com/docs/en/hooks-guide` — patterns, examples, matchers ("specific fields they filter").
+- `code.claude.com/docs/en/plugins-reference` — plugin hook events (`TaskCreated`, async events).
+- `code.claude.com/docs/en/agent-sdk/python` — `HookEvent` literal + `HookSpecificOutput` union (decision-control per event).
+- `code.claude.com/docs/en/agent-sdk/typescript` — TS-only extras (`TeammateIdle`, `TaskCompleted`, `PostToolBatch`).
