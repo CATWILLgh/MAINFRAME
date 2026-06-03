@@ -60,7 +60,7 @@
 
 **vs the stale 16-event May list:** the running CLI confirms **exactly 30**. Newly surfaced and hub-relevant: `PermissionDenied` (#5 — fires when the auto-mode classifier blocks a tool → a direct, countable signal of **auto-mode friction**, the user's primary workflow), `UserPromptExpansion` (#8 — slash / skill expansion), `MessageDisplay` (#30). The menu header "**16 hooks configured**" equals the hub's own current registrations (§2.1: 2+3+6+5) — an independent confirmation of our count.
 
-**Honest gaps (not fact):** exact INPUT payload fields per event are not all documented — the menu gives names + triggers, not schemas. Decision-control for the newer events (`PostToolBatch`, `PermissionDenied`, `UserPromptExpansion`, `MessageDisplay`, `TaskCreated/Completed`, `TeammateIdle`) is not laid out in the retrieved docs — verify before building a hook that reads or blocks on them.
+**Payload + decision-control:** for the telemetry-target events (`PermissionDenied`, `PreToolUse`, `PostToolUse`, `SubagentStart/Stop`, `UserPromptSubmit`, `Stop`, `SessionStart/End`, `PreCompact`) these are now documented + verified in **§1.7**. Still unverified (names + triggers known, payload schemas not): `PostToolBatch`, `UserPromptExpansion`, `MessageDisplay`, `TaskCreated/Completed`, `TeammateIdle`, `Elicitation*`, `Worktree*`, `CwdChanged`, `InstructionsLoaded`, `FileChanged`, `ConfigChange` — verify before instrumenting them.
 
 ### 1.2. Registration syntax
 
@@ -119,6 +119,31 @@ Previously it was implicitly assumed that hooks apply only to the main session. 
   1. **Global** — `plugin-dist/hooks/hooks.json` (or `export/settings.json`). Fires for all: main agent + every subagent.
   2. **Per-agent** — `hooks:` field in the subagent's frontmatter: scoped to that agent, all events, cleared on completion; `Stop` in frontmatter is runtime-converted to `SubagentStop` (`code.claude.com/docs/en/sub-agents`).
 - ⚠️ **Critical:** per-agent frontmatter `hooks:` (and also `permissionMode`, `mcpServers`) are **ignored for plugin subagents**. Our agents are plugin agents, so per-agent hooks **do not work** for them. → A **cross-agent hook** (needed by both the main agent and subagents) in the hub can live **only in the global `plugin-dist/hooks/hooks.json`**. See [agents.md §1.2.1](agents.md).
+
+---
+
+### 1.7. Payload + decision reference — telemetry-target events (verified 2026-06-04)
+
+Closes the "unknown functionality" gap before any telemetry is built. Confirmed against `code.claude.com/docs/en/hooks` — the `PermissionDenied` / `SubagentStart` / `PreToolUse` / common-field shapes are firsthand-quoted from that doc this session; the rest are from the same page (relayed via `claude-code-guide`) and consistent with the SDK `HookSpecificOutput` types — spot-check a specific field before relying on it.
+
+**Common input fields (every event):** `session_id`, `transcript_path` (the conversation `.jsonl`), `cwd`, `hook_event_name`, `permission_mode` (`default` / `plan` / `acceptEdits` / `auto` / `dontAsk` / `bypassPermissions` — availability varies by event). Inside a subagent, `agent_id` + `agent_type` (= the agent's name) are added to tool/subagent events.
+
+| Event | Adds to payload | Honored output | Block? |
+|---|---|---|---|
+| `PermissionDenied` | `tool_name`, `tool_input`, `tool_use_id`, **`reason`** (auto-mode deny reason) | `{hookSpecificOutput:{hookEventName, retry:bool}}` | no — decision already made; `retry:true` re-offers the call |
+| `PreToolUse` | `tool_name`, `tool_input`, `tool_use_id` | `{hookSpecificOutput:{permissionDecision:"allow\|deny\|ask\|defer", permissionDecisionReason, modifiedInput?, additionalContext?}}`; exit 0 = no decision | yes (`deny`) |
+| `PostToolUse` | `tool_name`, `tool_input`, `tool_response` | `{decision:"block", reason}` / `additionalContext` | yes |
+| `SubagentStart` | `agent_id`, `agent_type` | `additionalContext` | no |
+| `SubagentStop` | `agent_id`, `agent_type`, `transcript_path` | `{decision:"block", reason}` | yes |
+| `UserPromptSubmit` | `prompt` | `{decision:"block", reason}` (erases prompt) | yes |
+| `Stop` | `agent_id`/`agent_type`, `stop_hook_active` | `{decision:"block", reason}` | yes |
+| `SessionStart` | `source`, `model`, `session_title` | `{hookSpecificOutput:{additionalContext, watchPaths?, reloadSkills?}}` | no |
+| `SessionEnd` | end `reason` | — (cleanup only) | no |
+| `PreCompact` | (common only) | `{decision:"block", reason}` | yes |
+
+**Exit-code convention:** on a blockable event, **exit 2** blocks with stderr as the reason; **exit 0** is normal (emit JSON on stdout for a structured decision). A pure **analytics** hook = read stdin → append a record → **exit 0 with no stdout** → invisible to the agent.
+
+**Telemetry implication:** `PermissionDenied` is the prize — `tool_name` + `tool_input` + `reason` let an auto-mode-friction log record *what was denied and why* with zero guessing. `SubagentStart` carries `agent_type` → a clean sub-agent-usage key. Every event carries `session_id` → per-session aggregation for free.
 
 ---
 
