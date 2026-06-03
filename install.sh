@@ -307,6 +307,28 @@ install_dir_contents() {
     done
 }
 
+# Append the secrets-source line to a shell rc file, idempotently. The `secret`
+# env-vars must reach each shell the user actually opens: zsh reads ~/.zshenv on
+# every invocation; bash/sh read ~/.bashrc (interactive) and ~/.profile (login).
+# Non-interactive shells read no rc file and are out of scope.
+_append_secret_source_line() {
+    local rcfile="$1" source_line="$2"
+    if grep -Fqs "$source_line" "$rcfile" 2>/dev/null; then
+        log_ok "$(basename "$rcfile") already sources the secrets store"
+        return 0
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would append source-line to ${rcfile}"
+        return 0
+    fi
+    {
+        echo ""
+        echo "# MAINFRAME hub: auto-source personal secrets store."
+        echo "$source_line"
+    } >> "$rcfile"
+    log_ok "appended source-line to ${rcfile}"
+}
+
 bootstrap_secrets() {
     local bin_dir="$HOME/.local/bin"
     local secret_src="${PROJECT_ROOT}/export/scripts/secret"
@@ -379,24 +401,53 @@ bootstrap_secrets() {
         fi
     fi
 
-    if [[ -f "$zshenv" ]] && grep -Fq "$source_line" "$zshenv" 2>/dev/null; then
-        log_ok ".zshenv already sources ${store_dir}/secrets.env"
-    else
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log_action "would append source-line to ${zshenv}"
-        else
-            {
-                echo ""
-                echo "# MAINFRAME hub: auto-source personal secrets store."
-                echo "$source_line"
-            } >> "$zshenv"
-            log_ok "appended source-line to ${zshenv}"
-        fi
-    fi
+    # zsh: always (it reads ~/.zshenv on every invocation; create if absent).
+    # bash/sh: only rc files that already exist — don't create init files for a
+    # shell the user may not use.
+    _append_secret_source_line "$zshenv" "$source_line"
+    if [[ -f "$HOME/.bashrc" ]]; then _append_secret_source_line "$HOME/.bashrc" "$source_line"; fi
+    if [[ -f "$HOME/.profile" ]]; then _append_secret_source_line "$HOME/.profile" "$source_line"; fi
 
     if [[ $DRY_RUN -eq 0 ]]; then
         log_warn "Recommendation: exclude ${store_dir} from cloud backups (Time Machine, iCloud, Backblaze)."
     fi
+}
+
+# Non-fatal preflight: the tooling phase is best-effort, so surface missing
+# prerequisites up front with OS-appropriate install hints, instead of letting
+# the user discover them as a string of per-tool failures.
+check_tooling_prerequisites() {
+    local need_py=0 need_npm=0
+    if ! command -v uv >/dev/null 2>&1 && ! command -v pipx >/dev/null 2>&1; then need_py=1; fi
+    if ! command -v npm >/dev/null 2>&1; then need_npm=1; fi
+    if [[ $need_py -eq 0 && $need_npm -eq 0 ]]; then
+        return 0
+    fi
+    local mgr=""
+    if command -v apt-get >/dev/null 2>&1; then mgr=apt
+    elif command -v brew >/dev/null 2>&1; then mgr=brew
+    elif command -v dnf >/dev/null 2>&1; then mgr=dnf
+    fi
+    log_warn "Some tooling prerequisites are missing — related hooks stay SILENT until installed:"
+    if [[ $need_py -eq 1 ]]; then
+        log_warn "  - uv OR pipx (for ruff / pip-audit / semgrep):"
+        case "$mgr" in
+            apt)  log_warn "      sudo apt install -y pipx && pipx ensurepath" ;;
+            brew) log_warn "      brew install uv   (or: brew install pipx)" ;;
+            dnf)  log_warn "      sudo dnf install -y pipx && pipx ensurepath" ;;
+            *)    log_warn "      install uv (https://docs.astral.sh/uv/) or pipx" ;;
+        esac
+    fi
+    if [[ $need_npm -eq 1 ]]; then
+        log_warn "  - npm / Node.js (for oxlint / dependency-cruiser / knip):"
+        case "$mgr" in
+            apt)  log_warn "      sudo apt install -y nodejs npm" ;;
+            brew) log_warn "      brew install node" ;;
+            dnf)  log_warn "      sudo dnf install -y nodejs npm" ;;
+            *)    log_warn "      install Node.js (https://nodejs.org)" ;;
+        esac
+    fi
+    log_warn "This installer is idempotent — re-run it after installing them."
 }
 
 _install_tool() {
@@ -432,8 +483,10 @@ _install_tool() {
 }
 
 bootstrap_python_security_tools() {
-    _install_tool ruff ruff@latest
-    _install_tool pip-audit pip-audit
+    # Tooling installs are best-effort: `|| true` keeps one failure from aborting
+    # the phase under `set -e` (each helper warns internally on failure).
+    _install_tool ruff ruff@latest || true
+    _install_tool pip-audit pip-audit || true
 }
 
 _install_osv_scanner() {
@@ -457,7 +510,8 @@ _install_osv_scanner() {
     mkdir -p "${HOME}/.local/bin"
     local latest_tag
     latest_tag="$(curl -fsSL https://api.github.com/repos/google/osv-scanner/releases/latest 2>/dev/null \
-                    | grep '"tag_name"' | sed -E 's/.*"v?([^"]+)".*/\1/')"
+                    | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v?[^"]+"' \
+                    | sed -E 's/.*"v?([^"]+)"$/\1/')"
     if [[ -z "$latest_tag" ]]; then
         log_warn "Could not query GitHub for osv-scanner latest release; skipping."
         return 1
@@ -496,19 +550,21 @@ _install_npm_global() {
         return 0
     fi
     log_warn "'npm install -g $pkg' failed."
+    log_warn "If this is a permissions error, set a user-writable global prefix and retry:"
+    log_warn "  npm config set prefix ~/.local   (ensure ~/.local/bin is on PATH)"
     log_warn "$pkg-related hook will be SILENT until installed manually."
     return 1
 }
 
 bootstrap_nodejs_security_tools() {
-    _install_tool semgrep semgrep
-    _install_osv_scanner
-    _install_npm_global oxlint
+    _install_tool semgrep semgrep || true
+    _install_osv_scanner || true
+    _install_npm_global oxlint || true
 }
 
 bootstrap_frontend_quality_tools() {
-    _install_npm_global dependency-cruiser depcruise
-    _install_npm_global knip
+    _install_npm_global dependency-cruiser depcruise || true
+    _install_npm_global knip || true
 }
 
 # Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
@@ -710,6 +766,9 @@ main() {
 
     echo
     bootstrap_secrets
+
+    echo
+    check_tooling_prerequisites
 
     echo
     bootstrap_python_security_tools
