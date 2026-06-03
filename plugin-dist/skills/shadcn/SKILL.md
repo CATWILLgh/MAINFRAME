@@ -139,6 +139,7 @@ When the CLI version diverges from this skill: re-read `collectInfo` at the sour
 ## Anti-patterns the agent must catch
 
 - A new styled `<div>` that re-implements `<Alert>` / `<Badge>` / `<Empty>` / `<Skeleton>` — replace.
+- A second component re-implementing one that already exists (a custom `<Button>` wrapper beside the shadcn `Button`) — consolidate to the one component with `variant`s, never fork. Visual-consistency rationale: `frontend-design/distinctiveness.md`.
 - `space-y-*` for vertical stacks — replace with `flex flex-col gap-*`.
 - `w-N h-N` where `N` is equal — replace with `size-N`.
 - Raw color (`text-blue-500`, `bg-red-100`) instead of semantic token — replace.

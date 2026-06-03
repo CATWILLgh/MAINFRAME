@@ -20,8 +20,10 @@ Preloaded into the `react-frontend-engineer` sub-agent. The **third design layer
 
 | Decision | File |
 |---|---|
+| Intentional vs generic, anti-slop, personality, component reuse | [distinctiveness.md](distinctiveness.md) |
 | Colour tokens, palettes, contrast | [color.md](color.md) |
-| Type scale, pairing, hierarchy | [typography.md](typography.md) |
+| Type scale, measure, hierarchy (basics) | [typography.md](typography.md) |
+| Crisp / expressive type — rendering, `clamp`, `tabular-nums`, variable fonts | [type-craft.md](type-craft.md) |
 | A11y beyond Radix (contrast, targets, labels, focus, ARIA) | [accessibility.md](accessibility.md) |
 | Animation, transitions, reduced-motion | [motion.md](motion.md) |
 | Spacing, responsive, visual hierarchy, density | [layout.md](layout.md) |
@@ -29,11 +31,13 @@ Preloaded into the `react-frontend-engineer` sub-agent. The **third design layer
 ## Always-on design principles
 
 1. **Tokens, never raw values.** Colour and type live in semantic tokens (`bg-primary`, `text-muted-foreground`), never one-off hex or arbitrary sizes.
-2. **Accessibility is a floor, not a polish pass.** WCAG 2.2 AA contrast, keyboard, labels, target size are requirements — designed in, not retrofitted.
-3. **Hierarchy by size → spacing → contrast → colour.** Never colour alone. One primary action per view.
-4. **Motion is purposeful and reduced-motion-safe.** Subtle, compositor-only, switch-off-able.
-5. **Consistency over novelty.** One spacing rhythm, one type scale, one icon family, one motion vocabulary per product.
-6. **Cite, don't taste.** Non-trivial design rules trace to WCAG / Material 3 / HIG / shadcn — not memory.
+2. **Default ≠ done.** Untouched shadcn / Tailwind defaults (blue primary, uniform radius, even spacing) read as generic. Make deliberate choices — character comes from *restraint*, not quirk (see [distinctiveness.md](distinctiveness.md)).
+3. **Accessibility is a floor, not a polish pass.** WCAG 2.2 AA contrast, keyboard, labels, target size are requirements — designed in, not retrofitted.
+4. **Hierarchy by size → spacing → contrast → colour.** Never colour alone. One focal point per view.
+5. **Motion is purposeful and reduced-motion-safe.** Subtle, compositor-only, switch-off-able.
+6. **Consistency over novelty.** One spacing rhythm, one type scale, one icon family, one motion vocabulary — and **one component per role** (don't fork a second Button; use variants — see [shadcn](../shadcn/SKILL.md)).
+7. **Restraint by count.** Limit how many sizes / radii / accents / font families are in play — the figures live in [distinctiveness.md](distinctiveness.md).
+8. **Cite, don't taste.** Non-trivial design rules trace to WCAG / Material 3 / HIG / shadcn — not memory.
 
 ## Posture by product type
 
@@ -43,7 +47,7 @@ Preloaded into the `react-frontend-engineer` sub-agent. The **third design layer
 | SaaS / app | moderate density | scannable groups, consistent nav | task completion |
 | Data tool / dashboard | tight, tabular | small functional type, alignment | glanceability |
 
-Match the posture first — it sets spacing, density, and type scale. A dashboard built with marketing spacing wastes the screen; a landing page built with dashboard density feels cramped.
+Match the posture first — it sets spacing, density, and type scale. A dashboard built with marketing spacing wastes the screen; a landing page built with dashboard density feels cramped. Posture is the floor; [distinctiveness.md](distinctiveness.md) is what sets it apart — pick deliberate anchors within the posture, never ship the default.
 
 ## Pre-delivery design check
 
@@ -53,7 +57,14 @@ Match the posture first — it sets spacing, density, and type scale. A dashboar
 - Inputs have visible labels; errors are text near the field.
 - Motion gated on `prefers-reduced-motion`; only `transform` / `opacity` animated.
 - One spacing rhythm, one type scale, posture consistent across the surface.
+- No untouched defaults (default-blue primary, uniform radius/spacing); a deliberate accent + restraint applied.
+- One component per role — no duplicate, near-identical components.
+- Anything you can't fix in scope (contrast fail, duplicate component, off-scale value) → `surface-ticket`, never left silent.
+
+## Optional project tooling
+
+The agent isn't in a vacuum: in a project doing real design work you MAY set up `eslint-plugin-tailwindcss`'s deterministic rules (`no-contradicting-classname`, `classnames-order`, `enforces-shorthand`) and run them as a check. Low-leverage (cosmetic) and opt-in — the doctrine in this skill is the primary mechanism. A raw-colour / token linter is deliberately NOT used: it is a false-positive firehose on charts, SVG, and third-party props.
 
 ## Sources
 
-WCAG 2.2 (w3.org/TR/WCAG22) · Material Design 3 (m3.material.io) · Apple HIG (developer.apple.com/design) · shadcn theming (ui.shadcn.com/docs/theming) · Tailwind (tailwindcss.com) · NN/g (nngroup.com) · Refactoring UI. Per-topic citations live in each supporting file.
+WCAG 2.2 (w3.org/TR/WCAG22) · Material Design 3 (m3.material.io) · Apple HIG (developer.apple.com/design) · shadcn theming (ui.shadcn.com/docs/theming) · Tailwind (tailwindcss.com) · NN/g (nngroup.com) · Refactoring UI · Butterick Practical Typography · MDN / web.dev (type rendering). Per-topic citations live in each supporting file.

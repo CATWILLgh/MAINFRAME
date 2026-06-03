@@ -18,18 +18,19 @@ Every `<token>` / `<token>-foreground` pair must clear 4.5:1. `border`, `input`,
 
 ## Method (don't fabricate a palette)
 
-1. Start from shadcn's default token scaffold — broadly-accessible OKLCH neutrals.
-2. Substitute the brand hue into `primary` (and optionally `accent`); set `primary-foreground` to near-white or near-black — whichever clears 4.5:1.
+1. Start from shadcn's default scaffold for the **neutral ramp only** (broadly-accessible OKLCH) — do NOT keep its default blue/violet `primary`; that untouched default is a slop tell.
+2. Choose your own accent and substitute it into `primary` (and optionally `accent`); set `primary-foreground` to near-white or near-black — whichever clears 4.5:1.
 3. Re-verify every pair with a contrast checker (WebAIM, or an OKLCH lightness-delta tool) before shipping. Never assert a ratio you did not measure.
 4. Author light and dark independently — dark is not an inversion (WCAG + Material 3); verify each theme's pairs separately.
 
-## Archetype directions (starting hues — then verify)
+## Choose a palette with a point of view (not a cliché)
 
-- **Trust / SaaS** — blue `primary`, neutral-slate surfaces, one warm `accent` for the CTA.
-- **Growth / commerce** — green `primary`; split success vs urgency across `accent` + `destructive`.
-- **Premium** — near-black `primary` on warm-neutral surfaces, restrained gold `accent`.
+- **Pick the accent by personality, not industry.** Skip the reflexive "fintech = blue, eco = green" mapping — those are clichés that read generic. Pick one hue fitting the product's character and commit to it as the single `accent`.
+- **Temperature + saturation are the real levers.** Warm vs cool, muted vs saturated set the mood more than the exact hue. A restrained, slightly-unexpected accent (terracotta, deep teal, warm neutral) reads more intentional than safe blue.
+- **One accent per surface** — the rest is a neutral ramp + `destructive`. Restraint makes the accent land (see [distinctiveness.md](distinctiveness.md)).
+- `destructive` always reads as danger and clears 4.5:1.
 
-Pick semantic intent first, hue second. Never more than one `accent`. `destructive` always reads as danger and clears 4.5:1.
+Whatever you choose, run every pair through the contrast floors above — personality never overrides legibility.
 
 ## Sources
 
