@@ -68,7 +68,7 @@ In plain words — what each piece is for:
 
 - **Umbrella `CLAUDE.md`** — a tight set of working rules Claude follows in every project on your machine. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, no leftover `TODO`/`FIXME` markers, and so on. About 200 lines, intentionally short to stay in focus.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like "audit this code carefully", "format this commit message in Conventional Commits style", "scan this diff for forgotten secrets" — instead of one giant document trying to cover everything.
-- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python and Node.js, a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
+- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
 - **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan diffs for security issues with `ruff`/`semgrep`/`osv-scanner`. Things that fire without you having to remember to fire them.
 - **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
 - **Permissions** — three-tier model (deny / ask / allow) that's strict by default. Some things must never run; some need confirmation; the rest run quietly with logging.
@@ -230,7 +230,7 @@ MAINFRAME/
 ├── plugin-dist/                          # the plugin — auto-loads as 'mainframe' after install
 │   ├── .claude-plugin/plugin.json        # plugin manifest (name, version, license)
 │   ├── skills/                           # 17 skills, one folder per skill
-│   ├── agents/                           # 6 file-based sub-agents (Python, Node.js, React, devops, decision-reviewer, web-search)
+│   ├── agents/                           # 7 file-based sub-agents (Python, Node.js, Next.js, React, devops, decision-reviewer, web-search)
 │   ├── commands/                         # slash commands (currently empty)
 │   └── hooks/
 │       ├── hooks.json                    # which hook fires on which event
@@ -311,7 +311,7 @@ Every artifact shipped by this hub (whether in `plugin-dist/` or `export/`) hold
 
 ## A personal note
 
-I'm not a scientist or a credentialed engineer. I'm just someone who genuinely enjoys working with AI agents and models — and who has put a *lot* of hours into it over the past couple of years. To put it plainly: this year alone my Git history already shows over 2,300 commits and counting; about 300 the year before; and before that, nothing — I worked entirely on my own machine and didn't even know how Git worked.
+I'm not a scientist or a credentialed engineer. I'm just someone who genuinely enjoys working with AI agents and models — and who has put a *lot* of hours into it over the past couple of years. To put it plainly: this year alone my Git history already shows over 2,300 private commits over 3+ prodaction projects and counting; about 300 the year before; and before that, nothing — I worked entirely on my own machine and didn't even know how Git worked.
 
 I started sharing this for people just getting into all of this, or looking for something new — because I hadn't come across repos quite like it. Maybe they're out there, somewhere at the bottom of GitHub; maybe some are even better than mine. But this one is mine, and I enjoy making it.
 
