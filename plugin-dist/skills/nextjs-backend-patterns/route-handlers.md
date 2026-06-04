@@ -21,6 +21,8 @@ The HTTP API layer of an App Router app. Export one named async function per met
 - Business logic lives in a service / use-case, not inline in the handler (layer split).
 - Typed errors → mapped HTTP codes (`201` create, `409` conflict, `422` business-rule, `204` delete); never leak raw ORM errors.
 - `edge` runtime: no Node APIs (`fs`, most ORMs, native crypto) — keep DB work on `nodejs`.
+- **No built-in CORS** — for cross-origin / mobile consumers, set `Access-Control-Allow-*` headers on the `Response` yourself and handle the `OPTIONS` preflight.
+- Post-response work (logging, analytics) → `after()` from `next/server` (stable in 15) — runs after the response streams, without blocking it.
 
 ## Route Handler vs Server Action
 

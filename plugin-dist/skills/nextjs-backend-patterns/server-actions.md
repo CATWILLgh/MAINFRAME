@@ -13,12 +13,13 @@ A `'use server'` function compiles to a **public POST endpoint**. Treat every on
 - **Closed-over variables are encrypted** by Next when serialized client→server — but don't close over secrets needlessly.
 - Action IDs are encrypted + non-deterministic, recalculated between builds.
 - **Revalidate BEFORE redirect:** call `revalidatePath('/x')` / `revalidateTag('x')` *then* `redirect()` — *"Ensure fresh data… before redirect."*
-- `cookies()` / `headers()` are available; return serializable result state for `useActionState`.
+- **`await cookies()` / `await headers()`** — these are **async in Next 15** (like `params`; `draftMode()` too); awaiting is required. Return serializable result state for `useActionState`.
 
 ## Discipline
 
 - The action body is entry only: **validate → authorize → call a service/use-case → revalidate**. No business logic inline.
 - Return typed result states (success / field errors) for form UX — don't throw raw errors at the client.
+- **Rate-limit** expensive / sensitive actions — they are unauthenticated-reachable public POSTs; Next's production guidance recommends throttling them.
 
 ## Sources
 

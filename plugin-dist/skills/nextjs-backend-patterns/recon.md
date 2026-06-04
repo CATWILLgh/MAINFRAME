@@ -10,7 +10,6 @@ When `recon.js` is unavailable, detect by hand from `package.json` + the file tr
 - **orm** — `@prisma/client` / `prisma` → prisma; `drizzle-orm` → drizzle; else flag.
 - **auth** — `next-auth` (v5 if `^5` / `beta` / `next`) / `@clerk/nextjs` / `lucia` / none.
 - **validation** — `zod` / `valibot` / none.
-- **caching_signals** — grep for `revalidate`, `revalidateTag`, `unstable_cache`, `'use cache'`, `cacheComponents`.
 - **ts_strict** — `tsconfig.json` `compilerOptions.strict`.
 
 ## Output
@@ -23,7 +22,6 @@ RECON:
   orm: prisma
   auth: next-auth@5
   validation: zod
-  caching_signals: revalidateTag
   ts_strict: true
 ```
 

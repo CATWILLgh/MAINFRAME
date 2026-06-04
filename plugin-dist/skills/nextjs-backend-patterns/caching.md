@@ -13,7 +13,7 @@
 
 - Per fetch: `{ cache: 'force-cache' }` (persist) · `{ cache: 'no-store' }` (always fresh) · `{ next: { revalidate: 60, tags: ['posts'] } }`.
 - Per segment: `export const dynamic = 'force-static' | 'force-dynamic'`; `export const revalidate = N`.
-- **`use cache` directive** caches a function/component return value — **experimental, requires `cacheComponents: true`** in config. Treat as opt-in; flag the instability. `unstable_cache` still exists but is legacy.
+- **`use cache` directive** caches a function/component return value — **experimental, behind a config flag** (`experimental.useCache` / `dynamicIO` in Next 15; renamed `cacheComponents` in Next 16). Treat as opt-in; confirm the flag name for the project's version. `unstable_cache` still exists but is legacy.
 
 ## Invalidation
 

@@ -4,7 +4,7 @@ The Next-specific data concern is **connection management**, not query syntax (g
 
 ## Prisma — singleton, or you exhaust the pool
 
-- **One global `PrismaClient`, reused.** Dev hot-reload and serverless cold-starts otherwise create a new client per invocation and exhaust DB connections. Per Prisma: *"Creating multiple instances can exhaust your database's connection limit and slow down queries."*
+- **One global `PrismaClient`, reused.** Dev hot-reload and serverless cold-starts otherwise create a new client per invocation; per Prisma, multiple instances create multiple connection pools and can exhaust the database's connection limit and slow queries.
 - The pattern (`lib/db.ts`, marked `import 'server-only'`): keep the client on `globalThis` in dev, fresh in prod —
   `export const db = globalThis.__db ?? new PrismaClient()`
   `if (process.env.NODE_ENV !== 'production') globalThis.__db = db`
