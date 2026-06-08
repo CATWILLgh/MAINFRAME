@@ -9,6 +9,7 @@ is extracted — never `tool_input` values, prompt text, file contents, or paths
 See `docs/layers/hooks.md` §1.7 and ADR 0073.
 """
 
+import hashlib
 import os
 import re
 import sys
@@ -35,6 +36,21 @@ def _ticket_component(file_path):
         return ""
 
 
+def _ticket_uid(file_path):
+    # Hash of the ticket's basename — lets DISTINCT tickets be counted without logging
+    # the descriptive slug or the path (privacy). Rewrites of the same file share the
+    # uid, so create-vs-rewrite is separable in analysis.
+    base = os.path.basename(file_path)
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()[:12]
+
+
+def _norm_skill(raw):
+    # Strip the plugin namespace (`mainframe:task-workflow` -> `task-workflow`) so the
+    # same skill aggregates into one bucket regardless of how it was invoked.
+    name = str(raw).split()[0] if raw else ""
+    return name.split(":")[-1]
+
+
 def main():
     payload = load_payload()
     event = payload.get("hook_event_name") or ""
@@ -54,11 +70,13 @@ def main():
         # call), never executed client-side — so it never reaches the tool-use hooks; only Skill does.
         if tool == "Skill":
             skill = tool_input.get("skill") or tool_input.get("name") or tool_input.get("command") or ""
-            log_event("skill_load", {"skill": str(skill).split()[0] if skill else ""}, payload)
+            log_event("skill_load", {"skill": _norm_skill(skill)}, payload)
     elif event == "PostToolUse":
         file_path = tool_input.get("file_path") or ""
         if file_path and _TICKET_RE.search(file_path):
-            log_event("ticket_created", {"component": _ticket_component(file_path)}, payload)
+            log_event("ticket_created",
+                      {"component": _ticket_component(file_path),
+                       "uid": _ticket_uid(file_path)}, payload)
     elif event == "UserPromptSubmit":
         log_event("turn", {"prompt_len": len(payload.get("prompt") or "")}, payload)
     elif event == "SessionStart":

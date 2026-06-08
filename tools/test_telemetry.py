@@ -17,6 +17,7 @@ _SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "..", "plugin-dist", "hooks", "scripts")
 sys.path.insert(0, _SCRIPTS)
 import _hooklib
+import telemetry
 
 
 def _fresh_db():
@@ -113,6 +114,21 @@ def test_concurrency_16_writers():
     # WAL + 50ms busy_timeout should land the vast majority; drops are acceptable
     # but must be the exception, not the rule.
     assert rate >= 0.90, f"too many drops: {got}/{expected}"
+
+
+def test_ticket_uid_is_hash_not_slug():
+    p = "/x/docs/tickets/630a4151-permission-classifier-unavailable-deny.md"
+    uid = telemetry._ticket_uid(p)
+    assert len(uid) == 12 and all(c in "0123456789abcdef" for c in uid), uid
+    assert "permission" not in uid and "630a4151" not in uid       # slug / id not leaked
+    assert uid == telemetry._ticket_uid(p)                          # stable: a rewrite -> same uid
+    assert telemetry._ticket_uid("/x/docs/tickets/a7c5a653-other.md") != uid  # distinct ticket
+
+
+def test_skill_name_normalized():
+    assert telemetry._norm_skill("mainframe:task-workflow") == "task-workflow"
+    assert telemetry._norm_skill("task-workflow") == "task-workflow"
+    assert telemetry._norm_skill("") == ""
 
 
 def main():
