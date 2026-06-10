@@ -28,7 +28,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import load_payload, emit_note, run
+    from _hooklib import load_payload, emit_note, log_event, run
 except Exception:
     sys.exit(0)
 
@@ -112,6 +112,11 @@ def main():
         "This is a reminder, not a block — if the message is already correct, proceed."
     )
     emit_note("PreToolUse", note)
+    rule = ("ai-trailer" if has_trailer
+            else "non-conventional-subject" if subject
+            else "no-inline-message")
+    log_event("incident", {"hook": "commit-conventional-reminder",
+                           "rule_id": rule}, payload)
 
 
 if __name__ == "__main__":

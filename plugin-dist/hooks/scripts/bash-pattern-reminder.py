@@ -38,28 +38,28 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import load_payload, emit_note, run
+    from _hooklib import load_payload, emit_note, log_event, run
 except Exception:
     sys.exit(0)
 
 PATTERNS = [
-    (re.compile(r"\brm\s+-rf\b"),
+    ("rm-rf", re.compile(r"\brm\s+-rf\b"),
      "`rm -rf` matches the hub deny pattern. Use `rm -r` instead — different command, passes the deny."),
-    (re.compile(r"\bcat\s*>\s*/tmp/"),
+    ("cat-tmp", re.compile(r"\bcat\s*>\s*/tmp/"),
      "`cat > /tmp/...` heredoc creates files via shell. Prefer the Write tool — content goes to the transcript verbatim, classifier sees it, no prompt."),
-    (re.compile(r"\becho\s+.+?>\s*/tmp/"),
+    ("echo-tmp", re.compile(r"\becho\s+.+?>\s*/tmp/"),
      "`echo ... > /tmp/...` writes via shell redirect. Prefer the Write tool — content visible to classifier."),
-    (re.compile(r"\bprintf\s+.+?>\s*/tmp/"),
+    ("printf-tmp", re.compile(r"\bprintf\s+.+?>\s*/tmp/"),
      "`printf ... > /tmp/...` writes via shell redirect. Prefer the Write tool — content visible to classifier."),
-    (re.compile(r"\btee\s+/tmp/"),
+    ("tee-tmp", re.compile(r"\btee\s+/tmp/"),
      "`tee /tmp/...` writes via shell pipe. Prefer the Write tool — structured content visibility."),
-    (re.compile(r"\bchmod\s+\S*[+]?x\S*\s+\S*/tmp/"),
+    ("chmod-tmp", re.compile(r"\bchmod\s+\S*[+]?x\S*\s+\S*/tmp/"),
      "`chmod +x /tmp/...` makes a tmp file executable. Avoid /tmp for executables; use the project dir, or Write tool then invoke via `bash path/to/file.sh` (no chmod needed)."),
-    (re.compile(r"\bnpm\s+install\s+(?:-g|--global)\b"),
+    ("npm-global", re.compile(r"\bnpm\s+install\s+(?:-g|--global)\b"),
      "`npm install -g` modifies the user environment globally. If this is a hub-scoped tool, add to install.sh `_install_npm_global` helper. Ad-hoc installs should surface to the user first."),
-    (re.compile(r"\buv\s+tool\s+install\b"),
+    ("uv-tool", re.compile(r"\buv\s+tool\s+install\b"),
      "`uv tool install` is a global tool install. Hub-scoped tools belong in install.sh `_install_tool` helper. Ad-hoc installs should surface to the user first."),
-    (re.compile(r"\bpipx\s+install\b"),
+    ("pipx", re.compile(r"\bpipx\s+install\b"),
      "`pipx install` is a global tool install. Hub-scoped tools belong in install.sh `_install_tool` helper. Ad-hoc installs should surface to the user first."),
 ]
 
@@ -73,14 +73,14 @@ def main():
         return
 
     findings = []
-    for rx, guidance in PATTERNS:
+    for label, rx, guidance in PATTERNS:
         if rx.search(command):
-            findings.append(guidance)
+            findings.append((label, guidance))
 
     if not findings:
         return
 
-    bullets = "\n".join(f"  - {f}" for f in findings)
+    bullets = "\n".join(f"  - {g}" for _, g in findings)
     note = (
         f"bash-pattern-reminder: this Bash command contains {len(findings)} "
         f"pattern(s) known to trigger auto-mode classifier prompts or break "
@@ -90,6 +90,9 @@ def main():
         f"reminder, not a block."
     )
     emit_note("PreToolUse", note)
+    log_event("incident", {"hook": "bash-pattern-reminder",
+                           "rule_id": ",".join(l for l, _ in findings),
+                           "count": len(findings)}, payload)
 
 
 if __name__ == "__main__":
