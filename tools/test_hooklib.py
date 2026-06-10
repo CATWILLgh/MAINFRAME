@@ -72,7 +72,13 @@ def test_emit_note_and_block():
     with redirect_stdout(buf):
         _hooklib.emit_block("nope")
     out = json.loads(buf.getvalue())
-    assert out == {"decision": "block", "reason": "nope"}
+    assert out["decision"] == "block"
+    # Every stop-gate block carries the harness-feedback nudge: FP-signal
+    # channel that must not read as a waiver of the fix.
+    assert out["reason"].startswith("nope"), out["reason"]
+    assert "harness-feedback" in out["reason"]
+    assert "does not waive" in out["reason"]
+    assert out["reason"] == "nope" + _hooklib.FEEDBACK_NUDGE
 
 
 def test_added_lines_by_file():

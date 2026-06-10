@@ -67,9 +67,19 @@ def emit_note(event, text):
     }))
 
 
+# Appended to every stop-gate block: the hub's false-positive signal channel.
+# Non-waiver phrasing is deliberate — the nudge must never read as an
+# alternative to fixing the finding.
+FEEDBACK_NUDGE = (
+    " If a flagged finding is a false positive of this gate, file harness "
+    "feedback via the `harness-feedback` skill after resolving — feedback "
+    "does not waive the fix."
+)
+
+
 def emit_block(reason):
-    """Emit a Stop-hook hard block with a reason."""
-    print(json.dumps({"decision": "block", "reason": reason}))
+    """Emit a Stop-hook hard block with a reason (+ harness-feedback nudge)."""
+    print(json.dumps({"decision": "block", "reason": reason + FEEDBACK_NUDGE}))
 
 
 def stop_guard_cwd(payload):
