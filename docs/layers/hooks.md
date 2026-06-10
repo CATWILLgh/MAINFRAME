@@ -135,11 +135,11 @@ Closes the "unknown functionality" gap before any telemetry is built. Confirmed 
 | `PostToolUse` | `tool_name`, `tool_input`, `tool_response` | `{decision:"block", reason}` / `additionalContext` | yes |
 | `SubagentStart` | `agent_id`, `agent_type` | `additionalContext` | no |
 | `SubagentStop` | `agent_id`, `agent_type`, `transcript_path` | `{decision:"block", reason}` | yes |
-| `UserPromptSubmit` | `prompt` | `{decision:"block", reason}` (erases prompt) | yes |
+| `UserPromptSubmit` | `prompt` | `{decision:"block", reason}` (erases prompt) / `hookSpecificOutput.additionalContext` (injected alongside the prompt; binary also carries `initialUserMessage`) — verified docs+binary 2026-06-10 | yes |
 | `Stop` | `agent_id`/`agent_type`, `stop_hook_active` | `{decision:"block", reason}` | yes |
 | `SessionStart` | `source`, `model`, `session_title` | `{hookSpecificOutput:{additionalContext, watchPaths?, reloadSkills?}}` | no |
 | `SessionEnd` | end `reason` | — (cleanup only) | no |
-| `PreCompact` | (common only) | `{decision:"block", reason}` | yes |
+| `PreCompact` | (common only) | `{decision:"block", reason}`; **conflict (2026-06-10):** official docs claim `additionalContext` support, the installed binary's schema strings do not show it for this event — unresolved, do not build on it (post-compact `SessionStart(compact)` injection is the verified alternative) | yes |
 
 **Exit-code convention:** on a blockable event, **exit 2** blocks with stderr as the reason; **exit 0** is normal (emit JSON on stdout for a structured decision). A pure **analytics** hook = read stdin → append a record → **exit 0 with no stdout** → invisible to the agent.
 
@@ -151,14 +151,18 @@ Closes the "unknown functionality" gap before any telemetry is built. Confirmed 
 
 ### 2.1. Current hub hooks
 
-Live registration: `plugin-dist/hooks/hooks.json` (source of truth). As of 2026-06-04 the hub uses **4 of the 30 events** (16 configured hook entries):
+Live registration: `plugin-dist/hooks/hooks.json` (source of truth). As of 2026-06-10 the hub uses **7 of the 30 events**:
 
 | Event | Matcher | Hub scripts |
 |---|---|---|
-| `SessionStart` | `startup\|resume\|clear\|compact` | `session-posture`, `hooklib-smoke-check` |
+| `SessionStart` | `compact` | `feedback-nudge-compact` (harness-feedback nudge after long sessions) |
+| `SessionStart` | `startup\|resume\|clear\|compact` | `session-posture`, `hooklib-smoke-check`, `telemetry` |
 | `PreToolUse` | `Bash` | `path-validation`, `bash-pattern-reminder`, `commit-conventional-reminder` |
+| `PreToolUse` | `Skill` | `telemetry` |
 | `PostToolUse` | `Edit\|Write\|MultiEdit` | `scan-suppression-markers`, `comment-discipline-reminder`, `python-security-scan`, `python-deps-audit`, `nodejs-deps-audit`, `nodejs-security-scan` |
-| `Stop` | (none) | `stop-gate-suppression-markers`, `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code` |
+| `PostToolUse` | `Write` | `telemetry` |
+| `Stop` | `*` | `stop-gate-suppression-markers`, `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code` — every `emit_block` reason carries the `harness-feedback` nudge (`_hooklib.FEEDBACK_NUDGE`) |
+| `PermissionDenied` / `SubagentStart` / `SessionEnd` | `*` | `telemetry` |
 
 Shared scaffolding (`_hooklib.py` + `_markers.py`, stdlib-only) underlies them. The other 26 events are unused — see the opportunity map below.
 
