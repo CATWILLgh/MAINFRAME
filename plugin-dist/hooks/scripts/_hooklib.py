@@ -17,6 +17,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -66,6 +67,36 @@ def emit_note(event, text):
     print(json.dumps({
         "hookSpecificOutput": {"hookEventName": event, "additionalContext": text}
     }))
+
+
+def emit_permission(decision, reason):
+    """Emit a PreToolUse permission decision (allow / deny / ask).
+
+    The Stop-hook twin is emit_block; this is the PreToolUse shape. On `deny`
+    the harness-feedback nudge is appended on dev installs (same non-waiver
+    channel as emit_block) so a false positive has a reporting path.
+    """
+    if decision == "deny" and feedback_skill_installed():
+        reason += FEEDBACK_NUDGE
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        }
+    }))
+
+
+# `git [-c k=v | -C path | --opts] commit ...` — the commit subcommand. `-c`/`-C`
+# take a value token, so match them before the generic flag alternative. Single
+# source for every hook that needs to recognise a commit (the reminder + the
+# secret gate) — keep here, not duplicated per script.
+_COMMIT_RE = re.compile(r"\bgit\b(?:\s+-[cC]\s+\S+|\s+--?\S+)*\s+commit\b")
+
+
+def is_git_commit(command):
+    """True if the shell command invokes `git commit`."""
+    return bool(command and _COMMIT_RE.search(command))
 
 
 # Appended to stop-gate blocks on dev installs: the hub's false-positive

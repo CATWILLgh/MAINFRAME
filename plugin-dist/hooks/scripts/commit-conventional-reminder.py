@@ -28,13 +28,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import load_payload, emit_note, log_event, run
+    from _hooklib import load_payload, emit_note, log_event, run, is_git_commit
 except Exception:
     sys.exit(0)
-
-# `git [-c k=v | -C path | --opts] commit ...` — the commit subcommand specifically.
-# `-c`/`-C` take a value token, so match them before the generic flag alternative.
-COMMIT_RE = re.compile(r"\bgit\b(?:\s+-[cC]\s+\S+|\s+--?\S+)*\s+commit\b")
 
 # Conventional Commits v1.0.0 subject: type(scope)!: description
 CONV_RE = re.compile(
@@ -70,7 +66,7 @@ def main():
     if payload.get("tool_name") != "Bash":
         return
     command = (payload.get("tool_input") or {}).get("command", "")
-    if not command or not COMMIT_RE.search(command):
+    if not command or not is_git_commit(command):
         return
 
     subject = extract_subject(command)
