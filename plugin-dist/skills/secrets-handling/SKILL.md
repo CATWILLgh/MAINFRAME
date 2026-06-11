@@ -117,4 +117,5 @@ A match means **something resembling a secret is in your response**. It may be a
 - [`curl-requests`](../curl-requests/SKILL.md) — HTTP testing; the canonical consumer of `secret get` (Pattern B) and env-var (Pattern A).
 - [`surface-ticket`](../surface-ticket/SKILL.md) — if a credential is missing or misconfigured and out of scope to fix now, surface a ticket; do not leave the issue dangling.
 - `path-validation.py` (PreToolUse hook) — enforces denial of direct reads on `~/.config/credentials/`; this skill is the policy, hook is the safety net.
+- `secret-commit-gate.py` (PreToolUse hook) — denies a `git commit` whose staged diff adds a high-confidence token from the table above (type + file only in the reason, never the value). Keep the gate's `SECRET_PATTERNS` in sync with this skill's high-confidence table; encrypted-secret repos (SOPS / git-crypt) are auto-skipped. See ADR 0079.
 - `secret` helper script (`~/.local/bin/secret`) — installed by `install.sh`; the only sanctioned read/write interface to the tier-2 store.
