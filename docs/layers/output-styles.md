@@ -1,8 +1,8 @@
 # Layer: Output styles
 
-> Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `export/output-styles/<name>.md` (currently **empty**).
+> Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `export/output-styles/<name>.md`.
 
-> Last updated: 2026-05-28 (3-section rewrite). Layer is reserved; no artifacts yet.
+> Last updated: 2026-06-11. First artifact shipped: `explanatory-concise` (verified against CLI bundle 2.1.165).
 
 ---
 
@@ -35,7 +35,7 @@ Body — a markdown instruction, appended to the system prompt when the style is
 - The active style is selected via `/config` (runtime) or fixed globally via `outputStyle: "<name>"` in `settings.json`.
 - A style applies **for the entire session** until changed.
 - When activated, the file body **is appended to the system prompt** — the model sees the instructions as part of its baseline rules.
-- `keep-coding-instructions: false` — replaces the standard coding instructions with the style's own; `true` (default) — adds on top of them.
+- `keep-coding-instructions` — `true` keeps the standard coding instructions and adds the style on top; `false` drops them, leaving only the style body. **Default is `false`** (verified in CLI bundle 2.1.165, schema `RU5`; the built-ins set it `true` explicitly). A coding-capable custom style MUST set `keep-coding-instructions: true` — omitting it silently drops the engineering discipline.
 
 ### 1.3. Skills vs Output styles
 
@@ -52,25 +52,25 @@ Output style — for the **global session vibe**. Skill — for **targeted knowl
 
 ## 2. Hub usage & ADRs
 
-**No artifacts.** Layer is reserved. Possible future candidates:
-- `code-review` — structured output for audits.
-- `brevity` — maximally concise responses.
-- `diagram-first` — diagrams / ASCII schematics as the primary output format.
+**Shipped:**
+- `explanatory-concise` — forks the built-in `Explanatory` style: keeps the `## Insights` block verbatim (the `★ Insight` teaching the user values) and `keep-coding-instructions: true`, but drops the built-in's "you may exceed typical length constraints" license and adds a short-and-plain-language directive. Solves the recurring "reply got long and dense mid-session" friction structurally: the body lives in the system prompt every turn and survives compaction, so it does not decay like a start-of-session reminder. Activated by the user via `/config` (not forced). Provenance: built-in `Explanatory` body extracted from CLI bundle 2.1.165.
 
-Hub principles (when the first style is added):
+Possible future candidates: `code-review` (structured audit output), `diagram-first` (ASCII schematics primary).
+
+Hub principles:
 - **One style = one explicit goal** (not "all-purpose").
 - **`description` kept short** — displayed in the `/config` menu.
-- **Do not duplicate CLAUDE.md behavior** — general rules belong there; a style covers format only.
+- **Do not duplicate CLAUDE.md behavior** — general rules belong there; a style covers tone / format / length posture.
 
-ADRs: none.
+ADRs: none yet (the first style was a direct user request; record an ADR if a second arrives or the rationale grows).
 
 ---
 
-## 3. Gray zones / open questions
+## 3. Resolved (verified against CLI bundle 2.1.165, 2026-06-11)
 
-1. **`keep-coding-instructions: false`** — what exactly is removed? The precise scope (only technical behavior, or all discipline) is not described explicitly.
-2. **Composition** — can two styles be active at the same time? Not documented; presumably no.
-3. **Persistence across sessions** — `outputStyle:` in settings is sticky; via `/config` — only for the current session? To be confirmed.
+1. **`keep-coding-instructions: false`** drops the standard engineering-instructions block entirely; only the style body (plus fixed system sections like tool guidance) remains. Default when omitted is `false`.
+2. **Composition** — only one style is active at a time (`outputStyle` is a single value). The active style's body is injected into the system prompt as `# Output Style: {name}` (function `TQ3`), plus a per-turn meta reminder (`L83`; custom styles get the generic "Remember to follow the specific guidelines for this style").
+3. **Persistence** — the system prompt is rebuilt from live settings every request, so the style **survives context compaction** and does not decay like a start-of-session message. Changes to the file or `outputStyle` take effect only after `/clear` or a new session. `/output-style` was removed in v2.1.91 — use `/config`. `outputStylesPath` (settings) overrides the auto-scan of the `output-styles/` dirs.
 
 ---
 

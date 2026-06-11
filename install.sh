@@ -135,12 +135,15 @@ DEV_ARTIFACTS=(
 )
 
 # Directories whose CONTENTS are linked item-by-item into ~/.claude/<dir>/.
-# Only `rules/` remains item-by-item — the plugin format does not currently support
-# path-scoped rules with `paths:` frontmatter, so they stay outside the plugin and
-# install per-item so the hub composes with any rules the user already has.
+# These layers have no plugin-format equivalent, so they stay outside the plugin and
+# install per-item so the hub composes with anything the user already has there:
+#   - `rules/` — path-scoped rules with `paths:` frontmatter (no plugin support).
+#   - `output-styles/` — user-selectable styles activated via `/config`; per-item so
+#     the hub's styles sit alongside the user's own.
 # Format: "<source-dir-relative>:<target-dir-absolute>"
 MANAGED_DIRS=(
     "export/rules:${CLAUDE_DIR}/rules"
+    "export/output-styles:${CLAUDE_DIR}/output-styles"
 )
 
 # Safe backup dir for items inside managed dirs (skills/, hooks/, rules/, etc.).
