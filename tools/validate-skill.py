@@ -48,6 +48,7 @@ except ImportError as e:
 # ---- Configuration ----
 
 SKILLS_DIR = PROJECT_ROOT / "plugin-dist" / "skills"
+DEV_SKILLS_DIR = PROJECT_ROOT / "dev" / "skills"
 
 # Limits (see docs/layers/skills.md)
 MAX_SKILL_TOKENS = 5000          # body that survives auto-compaction in full
@@ -318,24 +319,25 @@ def format_human(target: Path, issues: list[dict]) -> str:
 # ---- Skill discovery ----
 
 def find_skill_dir_for_file(file_path: Path) -> Path | None:
-    """Given a file under plugin-dist/skills/**, find the enclosing skill directory.
-
-    A "skill directory" is the immediate child of plugin-dist/skills/.
-    Returns None if file_path is not inside plugin-dist/skills/.
-    """
-    try:
-        rel = file_path.resolve().relative_to(SKILLS_DIR.resolve())
-    except ValueError:
-        return None
-    if not rel.parts:
-        return None
-    return SKILLS_DIR / rel.parts[0]
+    """Find the enclosing skill directory — an immediate child of
+    plugin-dist/skills/ or dev/skills/. None if outside both roots."""
+    for root in (SKILLS_DIR, DEV_SKILLS_DIR):
+        try:
+            rel = file_path.resolve().relative_to(root.resolve())
+        except ValueError:
+            continue
+        if rel.parts:
+            return root / rel.parts[0]
+    return None
 
 
 def all_skill_dirs() -> list[Path]:
-    if not SKILLS_DIR.exists():
-        return []
-    return sorted([p for p in SKILLS_DIR.iterdir() if p.is_dir() and not p.name.startswith(".")])
+    dirs = []
+    for root in (SKILLS_DIR, DEV_SKILLS_DIR):
+        if root.exists():
+            dirs += [p for p in root.iterdir()
+                     if p.is_dir() and not p.name.startswith(".")]
+    return sorted(dirs)
 
 
 # ---- Modes ----
@@ -343,9 +345,9 @@ def all_skill_dirs() -> list[Path]:
 def run_session_start() -> int:
     skills = all_skill_dirs()
     if not skills:
-        print("## Skills (plugin-dist/skills/) — no skills yet")
+        print("## Skills (plugin-dist/skills/ + dev/skills/) — no skills yet")
         return 0
-    print("## Skills validation (plugin-dist/skills/)")
+    print("## Skills validation (plugin-dist/skills/ + dev/skills/)")
     for s in skills:
         iss = validate_skill(s)
         errors = [i for i in iss if i["level"] == "error"]

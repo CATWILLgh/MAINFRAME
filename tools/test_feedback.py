@@ -15,7 +15,7 @@ import tempfile
 sys.dont_write_bytecode = True   # keep __pycache__ out of the validated skill dir
 
 _SKILL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "..", "plugin-dist", "skills", "harness-feedback")
+                          "..", "dev", "skills", "harness-feedback")
 sys.path.insert(0, _SKILL_DIR)
 import feedback
 
