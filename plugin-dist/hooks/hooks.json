@@ -144,6 +144,11 @@
             "type": "command",
             "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/frontend-dead-code.py"]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/fallow-quality-note.py"]
           }
         ]
       }

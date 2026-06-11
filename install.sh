@@ -584,6 +584,7 @@ bootstrap_nodejs_security_tools() {
 bootstrap_frontend_quality_tools() {
     _install_npm_global dependency-cruiser depcruise || true
     _install_npm_global knip || true
+    _install_npm_global fallow || true
 }
 
 # Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
