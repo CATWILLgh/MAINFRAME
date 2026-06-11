@@ -161,7 +161,7 @@ Live registration: `plugin-dist/hooks/hooks.json` (source of truth). As of 2026-
 | `PreToolUse` | `Skill` | `telemetry` |
 | `PostToolUse` | `Edit\|Write\|MultiEdit` | `scan-suppression-markers`, `comment-discipline-reminder`, `python-security-scan`, `python-deps-audit`, `nodejs-deps-audit`, `nodejs-security-scan` |
 | `PostToolUse` | `Write` | `telemetry` |
-| `Stop` | `*` | `stop-gate-suppression-markers`, `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code` — every `emit_block` reason carries the `harness-feedback` nudge (`_hooklib.FEEDBACK_NUDGE`) |
+| `Stop` | `*` | `stop-gate-suppression-markers`, `stop-gate-comment-discipline` (process-narration comments vs HEAD, shared `_markers.flag_comment`), `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code` — every `emit_block` reason carries the `harness-feedback` nudge (`_hooklib.FEEDBACK_NUDGE`) |
 | `PermissionDenied` / `SubagentStart` / `SessionEnd` | `*` | `telemetry` |
 
 Shared scaffolding (`_hooklib.py` + `_markers.py`, stdlib-only) underlies them. The other 26 events are unused — see the opportunity map below.

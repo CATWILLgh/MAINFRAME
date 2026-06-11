@@ -38,3 +38,46 @@ DEBUG_RESIDUE = [
     ("var_dump()", re.compile(r"\bvar_dump\s*\("), PHP),
     ("dd()", re.compile(r"\bdd\s*\("), PHP),
 ]
+
+# Process-narration comment forms (Clean Code Position/Phase Marker + Nonlocal
+# Information). Shared by comment-discipline-reminder + its stop-gate. Operates
+# on EXTRACTED comment/docstring text (comment_extract), never on raw lines —
+# raw UI strings legitimately contain ordinal text.
+#
+# Ordinal marker: keyword + number, single capital letter, or roman numeral.
+# Guards: equation context excluded; pronoun "I" excluded; lowercase letters
+# excluded (domain prose risk outweighs the rare lowercase narration).
+COMMENT_MARKER_RE = re.compile(
+    r"\b(?i:phase|stage|step|part|iteration|milestone)"
+    r"\s*[-#:]?\s*(?:\d+|(?!I\b)[A-Z]\b|[IVX]{2,4}\b)(?!\s*[=<>])"
+)
+
+# Reference to an ephemeral, out-of-repo process artifact. Always leakage, in
+# any context — the one class applied to docstrings as well as comments.
+EPHEMERAL_RE = re.compile(
+    r"\bas (?:discussed|requested|agreed|we discussed|per our discussion)\b"
+    r"|\b(?:per|from|see|in|follow) the (?:plan|to-?do(?: list)?|task list)\b",
+    re.IGNORECASE,
+)
+
+
+def is_divider(line):
+    """Decorative section divider: a long symbol run, or two 3+ runs."""
+    if re.search(r"={4,}|-{4,}|\*{4,}|#{4,}|_{4,}", line):
+        return True
+    return (len(re.findall(r"={3,}", line)) >= 2
+            or len(re.findall(r"-{3,}", line)) >= 2)
+
+
+def flag_comment(text, is_docstring):
+    """True when an extracted comment/docstring is process narration.
+
+    A docstring is leakage only on an ephemeral reference ("Phase 2 of the
+    compiler" is ordinary domain prose there); a comment also on an ordinal
+    marker or a decorative divider.
+    """
+    if is_docstring:
+        return bool(EPHEMERAL_RE.search(text))
+    return (bool(COMMENT_MARKER_RE.search(text))
+            or is_divider(text)
+            or bool(EPHEMERAL_RE.search(text)))

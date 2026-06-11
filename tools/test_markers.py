@@ -61,6 +61,41 @@ def test_zero_false_positives():
     assert labels_for("const x = 1", ".ts") == []
 
 
+def test_comment_marker_digit_and_letter_phases():
+    flag = _markers.flag_comment
+    assert flag("# Phase 2: wire the API", False)
+    assert flag("// Step 1 of 3", False)
+    assert flag("# Plan phase B", False)            # letter phase — the user's exact artifact
+    assert flag("// Phase B: cleanup", False)
+    assert flag("# STEP C", False)
+    assert flag("// stage II rollout", False)        # roman numeral
+
+
+def test_comment_marker_negatives():
+    flag = _markers.flag_comment
+    assert not flag("# phase 0 = DC component", False)      # equation context
+    assert not flag("// the step I described earlier", False)  # pronoun I
+    assert not flag("# variant B of the algorithm", False)   # no ordinal keyword
+    assert not flag("# fetch retries with backoff", False)   # plain WHY comment
+    assert not flag("// phase b lowercase letter", False)    # lowercase letter form skipped
+
+
+def test_flag_comment_docstring_scope():
+    flag = _markers.flag_comment
+    # Ordinal markers are ordinary domain prose in docstrings — silent there.
+    assert not flag("Phase 2 of the compiler: type-check.", True)
+    # Ephemeral plan references are leakage in ANY context.
+    assert flag("Added per the plan, see the todo list.", True)
+    assert flag("# as discussed, temporary glue", False)
+
+
+def test_divider_detection():
+    flag = _markers.flag_comment
+    assert flag("# ==========================", False)
+    assert flag("// ----- setup -----", False)
+    assert not flag("# a == b means equality", False)
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

@@ -39,6 +39,7 @@ HUB_HOOK_FILES = frozenset({
     "nodejs-security-scan.py", "nodejs-security-stop-gate.py",
     "nodejs-deps-audit.py", "python-deps-audit.py",
     "bash-pattern-reminder.py", "comment-discipline-reminder.py",
+    "stop-gate-comment-discipline.py", "comment_extract.py",
     "frontend-fsd-gate.py", "frontend-dead-code.py",
     "_hooklib.py", "_markers.py", "test_hooklib.py", "test_markers.py",
     "telemetry.py", "test_telemetry.py",

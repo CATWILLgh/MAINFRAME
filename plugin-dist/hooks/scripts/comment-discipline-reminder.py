@@ -34,14 +34,15 @@ Design: non-blocking; fail-safe (any error -> exit 0); stdlib only.
 """
 
 import os
-import re
 import sys
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import comment_extract as ce  # noqa: E402
 try:
-    from _hooklib import CODE_EXTENSIONS, ext, load_payload, read_git_head, emit_note, run
+    from _hooklib import (CODE_EXTENSIONS, ext, load_payload, log_event,
+                          read_git_head, emit_note, run)
+    from _markers import flag_comment
 except Exception:
     sys.exit(0)
 
@@ -49,39 +50,9 @@ _SELF_FILES = {"comment-discipline-reminder.py", "comment_extract.py"}
 
 _MAX_BYTES = 2_000_000
 
-# Ordinal phase/stage/step marker: "Phase 2", "Step 1 of 3", "Stage 3:".
-# Digit required (drops FP-prone letter/roman forms). Negative lookahead excludes
-# equation context so a domain comment "// phase 0 = DC component" stays silent.
-_MARKER_RE = re.compile(
-    r"\b(?:phase|stage|step|part|iteration|milestone)\s*[-#:]?\s*\d+(?!\s*[=<>])",
-    re.IGNORECASE,
-)
-
-# Reference to an ephemeral, out-of-repo process artifact. Always leakage, in any
-# context — the one marker class applied to docstrings as well as comments.
-_EPHEMERAL_RE = re.compile(
-    r"\bas (?:discussed|requested|agreed|we discussed|per our discussion)\b"
-    r"|\b(?:per|from|see|in|follow) the (?:plan|to-?do(?: list)?|task list)\b",
-    re.IGNORECASE,
-)
-
-
-def _is_divider(line):
-    if re.search(r"={4,}|-{4,}|\*{4,}|#{4,}|_{4,}", line):
-        return True
-    if len(re.findall(r"={3,}", line)) >= 2 or len(re.findall(r"-{3,}", line)) >= 2:
-        return True
-    return False
-
 
 def _flag(text, kind):
-    """A docstring is leakage only on an ephemeral reference; a comment also on
-    an ordinal marker or a decorative divider."""
-    if kind == ce.DOCSTRING:
-        return bool(_EPHEMERAL_RE.search(text))
-    return (bool(_MARKER_RE.search(text))
-            or _is_divider(text)
-            or bool(_EPHEMERAL_RE.search(text)))
+    return flag_comment(text, kind == ce.DOCSTRING)
 
 
 def _read_file(path):
@@ -167,6 +138,9 @@ def main():
             "comment. This is a reminder, not a block."
         )
         emit_note("PostToolUse", note)
+        log_event("incident", {"hook": "comment-discipline-reminder",
+                               "rule_id": "process-leakage",
+                               "count": len(flagged)}, payload)
         return
 
     # Generic nudge — a low-stakes line-start signal, kept alive even on files
