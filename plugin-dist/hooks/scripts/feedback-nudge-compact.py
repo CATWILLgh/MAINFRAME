@@ -14,7 +14,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import emit_note, load_payload, log_event, run
+    from _hooklib import (emit_note, feedback_skill_installed, load_payload,
+                          log_event, run)
 except Exception:
     sys.exit(0)
 
@@ -28,6 +29,8 @@ NUDGE = (
 
 
 def main():
+    if not feedback_skill_installed():
+        return  # dev-only: the nudge points at a skill plain installs lack
     payload = load_payload()
     if payload.get("source") != "compact":
         return  # registered with matcher "compact"; re-check as boundary data

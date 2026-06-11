@@ -68,17 +68,27 @@ def test_emit_note_and_block():
     out = json.loads(buf.getvalue())
     assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
     assert out["hookSpecificOutput"]["additionalContext"] == "hi"
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        _hooklib.emit_block("nope")
-    out = json.loads(buf.getvalue())
-    assert out["decision"] == "block"
-    # Every stop-gate block carries the harness-feedback nudge: FP-signal
-    # channel that must not read as a waiver of the fix.
-    assert out["reason"].startswith("nope"), out["reason"]
-    assert "harness-feedback" in out["reason"]
-    assert "does not waive" in out["reason"]
-    assert out["reason"] == "nope" + _hooklib.FEEDBACK_NUDGE
+    # Dev-only nudge: with the harness-feedback skill installed the block
+    # reason carries the FP-signal nudge (non-waiver); without it — bare reason.
+    try:
+        os.environ["MAINFRAME_FEEDBACK_NUDGE"] = "1"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _hooklib.emit_block("nope")
+        out = json.loads(buf.getvalue())
+        assert out["decision"] == "block"
+        assert out["reason"].startswith("nope"), out["reason"]
+        assert "harness-feedback" in out["reason"]
+        assert "does not waive" in out["reason"]
+        assert out["reason"] == "nope" + _hooklib.FEEDBACK_NUDGE
+
+        os.environ["MAINFRAME_FEEDBACK_NUDGE"] = "0"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _hooklib.emit_block("nope")
+        assert json.loads(buf.getvalue()) == {"decision": "block", "reason": "nope"}
+    finally:
+        os.environ.pop("MAINFRAME_FEEDBACK_NUDGE", None)
 
 
 def test_added_lines_by_file():

@@ -68,9 +68,9 @@ def emit_note(event, text):
     }))
 
 
-# Appended to every stop-gate block: the hub's false-positive signal channel.
-# Non-waiver phrasing is deliberate — the nudge must never read as an
-# alternative to fixing the finding.
+# Appended to stop-gate blocks on dev installs: the hub's false-positive
+# signal channel. Non-waiver phrasing is deliberate — the nudge must never
+# read as an alternative to fixing the finding.
 FEEDBACK_NUDGE = (
     " If a flagged finding is a false positive of this gate, file harness "
     "feedback via the `harness-feedback` skill after resolving — feedback "
@@ -78,9 +78,20 @@ FEEDBACK_NUDGE = (
 )
 
 
+def feedback_skill_installed():
+    """True when the dev-only `harness-feedback` skill is installed (env
+    `MAINFRAME_FEEDBACK_NUDGE` = 1/0 overrides — tests and explicit opt-out)."""
+    override = os.environ.get("MAINFRAME_FEEDBACK_NUDGE")
+    if override is not None:
+        return override == "1"
+    return os.path.isdir(os.path.expanduser("~/.claude/skills/harness-feedback"))
+
+
 def emit_block(reason):
-    """Emit a Stop-hook hard block with a reason (+ harness-feedback nudge)."""
-    print(json.dumps({"decision": "block", "reason": reason + FEEDBACK_NUDGE}))
+    """Emit a Stop-hook hard block with a reason (+ nudge on dev installs)."""
+    if feedback_skill_installed():
+        reason += FEEDBACK_NUDGE
+    print(json.dumps({"decision": "block", "reason": reason}))
 
 
 def stop_guard_cwd(payload):
@@ -222,7 +233,10 @@ def log_event(event, payload=None, hook_payload=None):
             json.dumps(safe, separators=(",", ":")),
         )
         db = _telemetry_db_path()
-        os.makedirs(os.path.dirname(db), exist_ok=True)
+        if os.environ.get("MAINFRAME_TELEMETRY_DB"):
+            os.makedirs(os.path.dirname(db), exist_ok=True)
+        elif not os.path.isdir(os.path.dirname(db)):
+            return  # dir absent = telemetry not opted in (dev-only, install.sh --dev)
         conn = sqlite3.connect(db, timeout=0.05)
         try:
             conn.execute("PRAGMA journal_mode=WAL")
