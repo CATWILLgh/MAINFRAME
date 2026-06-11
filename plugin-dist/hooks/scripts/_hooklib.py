@@ -197,8 +197,11 @@ _TELEMETRY_BANNED_KEYS = frozenset({
 
 
 def _telemetry_db_path():
+    # ~/.claude/mainframe is the hub-OWNED namespace (a --dev symlink into the
+    # hub repo). ~/.claude/telemetry is unusable as an opt-in marker: Claude
+    # Code itself creates and uses it, so it exists on every machine.
     return (os.environ.get("MAINFRAME_TELEMETRY_DB")
-            or os.path.expanduser("~/.claude/telemetry/telemetry.db"))
+            or os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db"))
 
 
 def _telemetry_project_key(cwd):

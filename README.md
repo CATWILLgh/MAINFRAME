@@ -165,10 +165,10 @@ Options:
 ./install.sh --help
 ```
 
-**`--dev` — hub-development instrumentation (most users don't need this).** A plain install ships none of it. The flag adds two opt-in pieces, both strictly local:
+**`--dev` — hub-development instrumentation (most users don't need this).** A plain install ships none of it. The flag adds two opt-in pieces, both strictly local; their data lives inside the repo at `workspace/runtime/` (gitignored), reached via the hub-owned symlink `~/.claude/mainframe`:
 
-- **`harness-feedback` skill** (`dev/skills/`) — agents file structured friction reports about the hub's own rules/hooks into `~/.claude/feedback/` for later triage. Without the skill installed, the related nudges in hook output stay silent.
-- **Usage telemetry** — creates `~/.claude/telemetry/`; only while that directory exists do the hooks log event metadata (no prompts, no code, no paths) into a local SQLite DB. Nothing is ever sent anywhere. Delete the directory to stop logging.
+- **`harness-feedback` skill** (`dev/skills/`) — agents file structured friction reports about the hub's own rules/hooks into `~/.claude/mainframe/feedback/` for later triage. Without the skill installed, the related nudges in hook output stay silent.
+- **Usage telemetry** — hooks log event metadata (no prompts, no code, no paths) into a local SQLite DB under `~/.claude/mainframe/telemetry/`, and only while that hub-owned namespace exists. Nothing is ever sent anywhere. Remove the symlink to stop logging.
 
 To temporarily disable the plugin without uninstalling, use `claude plugin disable mainframe` (and `claude plugin enable mainframe` to re-enable).
 

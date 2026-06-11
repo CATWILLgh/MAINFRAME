@@ -75,11 +75,12 @@ the old layout, and removes the empty directories if any.
 Usage:
   $0                  Install (creates symlinks; backs up existing files).
   $0 --dev            Install PLUS the hub-development instrumentation:
-                      the 'harness-feedback' skill (agents file structured
-                      friction reports to ~/.claude/feedback/) and local
-                      usage telemetry (~/.claude/telemetry/ — hook events
-                      logged to a local SQLite DB; nothing leaves the
-                      machine). Ordinary users do not need this.
+                      the 'harness-feedback' skill and the hub data
+                      namespace ~/.claude/mainframe -> workspace/runtime/
+                      in this repo (gitignored), holding friction reports
+                      (feedback/) and local usage telemetry (telemetry/ —
+                      a local SQLite DB; nothing leaves the machine).
+                      Ordinary users do not need this.
   $0 --dry-run        Show what would happen, no changes.
   $0 --uninstall      Remove symlinks created by this script (incl. --dev
                       ones; telemetry/feedback data is left in place).
@@ -125,10 +126,12 @@ ARTIFACTS=(
 )
 
 # Hub-development instrumentation, installed ONLY with --dev (see usage).
-# Telemetry has no artifact of its own: the hooks log only while
-# ~/.claude/telemetry/ exists, and only --dev creates that directory.
+# ~/.claude/mainframe is the hub-OWNED data namespace: the hooks log telemetry
+# only while it exists. ~/.claude/telemetry cannot serve as the opt-in marker —
+# Claude Code itself creates and uses that directory on every machine.
 DEV_ARTIFACTS=(
     "dev/skills/harness-feedback:${CLAUDE_DIR}/skills/harness-feedback"
+    "workspace/runtime:${CLAUDE_DIR}/mainframe"
 )
 
 # Directories whose CONTENTS are linked item-by-item into ~/.claude/<dir>/.
@@ -746,7 +749,7 @@ main() {
             uninstall_dir_contents "${entry%%:*}" "${entry##*:}"
         done
         uninstall_one "export/scripts/secret" "$HOME/.local/bin/secret"
-        log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, ~/.claude/{telemetry,feedback}/."
+        log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
         log_ok "Uninstall complete."
         list_backups
@@ -775,17 +778,15 @@ main() {
         install_one "$src" "$tgt"
     done
     if [[ $DEV -eq 1 ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would create workspace/runtime/{telemetry,feedback} (hub data, gitignored)"
+        else
+            mkdir -p "${PROJECT_ROOT}/workspace/runtime/telemetry" \
+                     "${PROJECT_ROOT}/workspace/runtime/feedback"
+        fi
         for entry in "${DEV_ARTIFACTS[@]}"; do
             install_one "${entry%%:*}" "${entry##*:}"
         done
-        if [[ ! -d "${CLAUDE_DIR}/telemetry" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would create ${CLAUDE_DIR}/telemetry (enables local usage telemetry)"
-            else
-                mkdir -p "${CLAUDE_DIR}/telemetry"
-                log_ok "created ${CLAUDE_DIR}/telemetry — local usage telemetry enabled"
-            fi
-        fi
     fi
     for entry in "${MANAGED_DIRS[@]}"; do
         install_dir_contents "${entry%%:*}" "${entry##*:}"

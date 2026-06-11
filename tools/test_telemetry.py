@@ -96,14 +96,14 @@ def test_privacy_strips_banned_keys():
 
 def test_default_path_requires_existing_dir():
     # Dev-only opt-in: without the env override, log_event must neither create
-    # ~/.claude/telemetry nor write anything while the dir is absent.
+    # ~/.claude/mainframe/telemetry nor write anything while the dir is absent.
     old_home = os.environ.get("HOME")
     os.environ.pop("MAINFRAME_TELEMETRY_DB", None)
     home = tempfile.mkdtemp()
     os.environ["HOME"] = home
     try:
         _hooklib.log_event("e", {"k": 1}, {"session_id": "s"})
-        tdir = os.path.join(home, ".claude", "telemetry")
+        tdir = os.path.join(home, ".claude", "mainframe", "telemetry")
         assert not os.path.exists(tdir), "dir must not be created implicitly"
         os.makedirs(tdir)
         _hooklib.log_event("e2", {}, {"session_id": "s"})

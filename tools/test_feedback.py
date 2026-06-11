@@ -3,7 +3,7 @@
 
 Run: `python3 tools/test_feedback.py` (exit 0 = pass). Stdlib only. Uses a temp
 target dir via the `MAINFRAME_FEEDBACK_DIR` env var so the real
-`~/.claude/feedback` is never touched. CLI-level tests spawn real subprocesses —
+`~/.claude/mainframe/feedback` is never touched. CLI-level tests spawn real subprocesses —
 the actual skill scenario (agent runs the script via Bash).
 """
 

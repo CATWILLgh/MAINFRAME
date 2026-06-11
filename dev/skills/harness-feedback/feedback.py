@@ -10,7 +10,7 @@ Usage (body on stdin, all metadata as flags):
     ...
     EOF
 
-Writes `$MAINFRAME_FEEDBACK_DIR` (default `~/.claude/feedback/`)
+Writes `$MAINFRAME_FEEDBACK_DIR` (default `~/.claude/mainframe/feedback/`)
 `/<YYYYMMDD-HHMMSS>-<project>-<slug>.md` and prints the written path.
 Exit 0 = written; non-zero = rejected, reason on stderr. Stdlib only.
 """
@@ -56,7 +56,7 @@ def _unique_path(directory, stem):
 
 def _feedback_dir():
     return (os.environ.get("MAINFRAME_FEEDBACK_DIR")
-            or os.path.expanduser("~/.claude/feedback"))
+            or os.path.expanduser("~/.claude/mainframe/feedback"))
 
 
 def _todays_count(directory, day_prefix, project):
