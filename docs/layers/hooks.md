@@ -159,8 +159,7 @@ Live registration: `plugin-dist/hooks/hooks.json` (source of truth). As of 2026-
 | `SessionStart` | `startup\|resume\|clear\|compact` | `session-posture`, `hooklib-smoke-check`, `telemetry` |
 | `PreToolUse` | `Bash` | `path-validation`, `bash-pattern-reminder`, `commit-conventional-reminder` |
 | `PreToolUse` | `Skill` | `telemetry` |
-| `PostToolUse` | `Edit\|Write\|MultiEdit` | `scan-suppression-markers`, `comment-discipline-reminder`, `python-security-scan`, `python-deps-audit`, `nodejs-deps-audit`, `nodejs-security-scan` |
-| `PostToolUse` | `Write` | `telemetry` |
+| `PostToolUse` | `Edit\|Write\|MultiEdit` | `scan-suppression-markers`, `comment-discipline-reminder`, `python-security-scan`, `python-deps-audit`, `nodejs-deps-audit`, `nodejs-security-scan`, `telemetry` (ticket-creation rate + `code_edit` domain bucket with `agent_type` attribution — denominator for profile-agent under-use) |
 | `Stop` | `*` | `stop-gate-suppression-markers`, `stop-gate-comment-discipline` (process-narration comments vs HEAD, shared `_markers.flag_comment`), `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code`, `fallow-quality-note` (advisory: fallow analyzer на изменённых TS/JS; throttled 5 min; conservative categories only) — on dev installs every `emit_block` reason carries the `harness-feedback` nudge (`_hooklib.FEEDBACK_NUDGE`; silent on plain installs) |
 | `PermissionDenied` / `SubagentStart` / `SessionEnd` | `*` | `telemetry` |
 

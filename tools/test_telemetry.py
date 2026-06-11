@@ -6,6 +6,7 @@ DB via the `MAINFRAME_TELEMETRY_DB` env var so the real `~/.claude` DB is never
 touched. The concurrency test spawns real subprocesses — the actual hook scenario.
 """
 
+import io
 import json
 import os
 import sqlite3
@@ -33,6 +34,8 @@ def _rows(db):
         return con.execute(
             "SELECT ts, session_id, agent_type, project, event, payload FROM events"
         ).fetchall()
+    except sqlite3.OperationalError:
+        return []                       # no row was ever logged -> table absent
     finally:
         con.close()
 
@@ -148,6 +151,60 @@ def test_skill_name_normalized():
     assert telemetry._norm_skill("mainframe:task-workflow") == "task-workflow"
     assert telemetry._norm_skill("task-workflow") == "task-workflow"
     assert telemetry._norm_skill("") == ""
+
+
+def test_lang_bucket_maps_profile_domains():
+    assert telemetry._lang_bucket("/x/app/Widget.tsx") == "frontend"
+    assert telemetry._lang_bucket("/x/app/Widget.jsx") == "frontend"
+    assert telemetry._lang_bucket("/x/styles/main.scss") == "frontend"
+    assert telemetry._lang_bucket("/x/src/service.ts") == "ts"
+    assert telemetry._lang_bucket("/x/types/foo.d.ts") == "ts"
+    assert telemetry._lang_bucket("/x/api/handler.py") == "python"
+
+
+def test_lang_bucket_skips_noncode():
+    # Non-profile-eligible files return None -> not logged, keeping code_edit a clean
+    # denominator for profile-agent under-use.
+    for p in ("/x/README.md", "/x/config.json", "/x/data.yaml", "/x/Makefile", "/x/go.mod"):
+        assert telemetry._lang_bucket(p) is None, p
+
+
+def _drive_post_tool_use(file_path, session, agent_type):
+    payload = {"hook_event_name": "PostToolUse", "session_id": session,
+               "agent_type": agent_type, "cwd": "/proj",
+               "tool_input": {"file_path": file_path}}
+    old = sys.stdin
+    sys.stdin = io.StringIO(json.dumps(payload))
+    try:
+        telemetry.main()
+    finally:
+        sys.stdin = old
+
+
+def test_code_edit_logged_with_subagent_attribution():
+    db = _fresh_db()
+    _drive_post_tool_use("/proj/src/Widget.tsx", "s1",
+                         "mainframe:react-frontend-engineer")
+    rows = [r for r in _rows(db) if r[4] == "code_edit"]
+    assert len(rows) == 1, rows
+    _, sid, at, _, _, payload = rows[0]
+    assert sid == "s1" and at == "mainframe:react-frontend-engineer"
+    body = json.loads(payload)
+    assert body["lang"] == "frontend" and body["ext"] == ".tsx"
+
+
+def test_code_edit_main_agent_empty_attribution():
+    db = _fresh_db()
+    _drive_post_tool_use("/proj/api/main.py", "s2", "")
+    rows = [r for r in _rows(db) if r[4] == "code_edit"]
+    assert len(rows) == 1 and rows[0][2] == ""        # main agent -> empty agent_type
+    assert json.loads(rows[0][5])["lang"] == "python"
+
+
+def test_noncode_edit_writes_no_code_edit_row():
+    db = _fresh_db()
+    _drive_post_tool_use("/proj/notes.md", "s3", "")
+    assert not [r for r in _rows(db) if r[4] == "code_edit"]
 
 
 def main():

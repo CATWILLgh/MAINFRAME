@@ -23,6 +23,17 @@ except Exception:
 _TICKET_RE = re.compile(r"[/\\]docs[/\\]tickets[/\\].+\.md$")
 _COMPONENT_RE = re.compile(r"^component:\s*(.+)$", re.MULTILINE)
 
+# Coarse domain buckets for code edits — only languages a profile sub-agent owns are
+# kept; everything else returns None and is not logged, so `code_edit` stays a clean
+# denominator for measuring profile-agent under-use (ADR 0073).
+_EXT_LANG = {
+    ".tsx": "frontend", ".jsx": "frontend",
+    ".css": "frontend", ".scss": "frontend", ".sass": "frontend", ".less": "frontend",
+    ".vue": "frontend", ".svelte": "frontend",
+    ".ts": "ts",
+    ".py": "python",
+}
+
 
 def _ticket_component(file_path):
     # Extract only the `component:` tag from a freshly-written ticket — never log
@@ -51,6 +62,11 @@ def _norm_skill(raw):
     return name.split(":")[-1]
 
 
+def _lang_bucket(file_path):
+    ext = os.path.splitext(file_path)[1].lower()
+    return _EXT_LANG.get(ext)
+
+
 def main():
     payload = load_payload()
     event = payload.get("hook_event_name") or ""
@@ -77,6 +93,11 @@ def main():
             log_event("ticket_created",
                       {"component": _ticket_component(file_path),
                        "uid": _ticket_uid(file_path)}, payload)
+        lang = _lang_bucket(file_path) if file_path else None
+        if lang:
+            log_event("code_edit",
+                      {"lang": lang, "ext": os.path.splitext(file_path)[1].lower()},
+                      payload)
     elif event == "UserPromptSubmit":
         log_event("turn", {"prompt_len": len(payload.get("prompt") or "")}, payload)
     elif event == "SessionStart":
