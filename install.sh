@@ -461,7 +461,7 @@ check_tooling_prerequisites() {
         esac
     fi
     if [[ $need_npm -eq 1 ]]; then
-        log_warn "  - npm / Node.js (for oxlint / dependency-cruiser / knip):"
+        log_warn "  - npm / Node.js (for oxlint / dependency-cruiser / knip / fallow):"
         case "$mgr" in
             apt)  log_warn "      sudo apt install -y nodejs npm" ;;
             brew) log_warn "      brew install node" ;;
