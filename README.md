@@ -4,7 +4,7 @@
 
 # MAINFRAME
 
-[![CI](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml/badge.svg)](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml)
+[![CI](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-v2.1%2B-blueviolet)](https://code.claude.com)
 [![Status](https://img.shields.io/badge/status-personal--use-orange.svg)]()
