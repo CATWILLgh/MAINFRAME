@@ -143,6 +143,7 @@ The core design: **warn early, block at the end.** When you edit a file, the adv
 |---|---|
 | `session-posture.py` | Injects the working posture — engage the process, plan-then-execute, orchestrate by default |
 | `hooklib-smoke-check.py` | Self-test that the shared hook library imports cleanly |
+| `task-workflow-engagement.py` | Before your first file edit of a session segment, nudges you to actually invoke the `task-workflow` process skill — a skill survives a context compaction but gets deprioritised, so it can be present yet not followed. Also fires after each compaction. Advisory, once per segment |
 
 **Always-on, silent:** `telemetry.py` logs local-only usage counters (event metadata — no prompts, code, or paths), and only when the `--dev` instrumentation is installed. Three shared libraries back the rest: `_hooklib.py` (common scaffolding), `_markers.py` (the marker / debug-residue detector sets), `comment_extract.py` (false-positive-free comment extraction).
 
@@ -322,7 +323,7 @@ MAINFRAME/
 │   ├── commands/                         # slash commands (currently empty)
 │   └── hooks/
 │       ├── hooks.json                    # which hook fires on which event
-│       ├── scripts/                      # 25 Python files — 22 hook scripts + 3 shared libs (security scans, marker discipline, ...)
+│       ├── scripts/                      # 26 Python files — 23 hook scripts + 3 shared libs (security scans, marker discipline, ...)
 │       └── rules/                        # Semgrep YAML rules
 │
 ├── export/                               # what the plugin format does NOT carry
