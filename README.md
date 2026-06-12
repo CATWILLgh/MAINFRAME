@@ -22,6 +22,15 @@ A baseline of operating rules, focused sub-agents, and small automatic checks I 
 
 It's shaped for one workflow in particular: long **auto-mode** runs — hours, sometimes days, where Claude and I plan a larger feature up front, then it executes on its own with no one watching each step. Every rule, hook, and permission tier here is built to hold quality through exactly that: an unattended run where a missed check turns into a bug nobody catches until later.
 
+## Engineering at a glance
+
+For the technically curious — the concrete engineering this repo demonstrates, not the motivation behind it:
+
+- **Fail-open hooks.** Every check exits cleanly when its tool is missing or it errors, so the hook layer can never break a session — safety that degrades to silence, never to a stall.
+- **A git-level secret gate.** A `PreToolUse` hook scans the staged diff and blocks `git commit` when a high-confidence credential is present — caught before it ever reaches history, not after.
+- **Size budgets against lost-in-the-middle.** Skills, agents, and hooks are capped at ≤5K tokens — a limit calibrated to the runtime's compaction behaviour so the content survives a context compaction intact instead of being truncated.
+- **Covered by tests and CI.** ~90 stdlib-Python tests, zero third-party runtime dependencies, run on every push (the CI badge above) alongside the format/size validators.
+
 > **Personal-use.** No support, no compatibility guarantees, no backwards-compatibility promises. Forks are welcome under MIT, but this hub is shaped to one engineer's workflow.
 
 <p align="center">
