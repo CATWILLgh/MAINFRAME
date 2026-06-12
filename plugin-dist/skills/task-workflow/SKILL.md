@@ -2,7 +2,7 @@
 name: task-workflow
 user-invocable: false
 description: "Universal cycle for any task that modifies code, configuration, documentation, or infrastructure — feature, bugfix, refactor, migration, ops work. Cycle: triage → recon → plan (file when ≥ 3 phases) → parallel dispatch → synthesis → advisor → execution → verification → out-of-scope tickets → edge-case sweep → advisor → git safety → commit → report. Plan files land in `~/.claude/plans/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md` — outside the project, not tracked by git, persistent across sessions. Adapts to both interactive sessions (uses `EnterPlanMode` / `ExitPlanMode` when present) and unattended auto-runs (writes the plan file directly, no blocking gate). Size and urgency do not bypass the cycle; they only change which conditional steps activate."
-when_to_use: "Trigger on any modifying task — an instruction to create, fix, add, implement, refactor, update, configure, deploy, or delete, in any language the user writes in; also multi-file refactors, bug fixes, feature work, ops changes, doc edits that change instructions. Does not run on read-only questions (what's in this file / how does X work / where is Y / explain the architecture of Z) — those bypass the cycle entirely. 'It's a small change', 'it's urgent', 'just one file' are not exceptions — they only change which conditional steps activate (plan file, sub-agents); advisor and verification stay unconditional."
+when_to_use: "Trigger on any modifying task — an instruction to create, fix, add, implement, refactor, update, configure, deploy, or delete, in any language the user writes in; also multi-file refactors, bug fixes, feature work, ops changes, doc edits that change instructions. Does not run on read-only questions (what's in this file / how does X work / where is Y / explain the architecture of Z) — those bypass the cycle entirely. 'It's a small change', 'it's urgent', 'just one file' are not exceptions — they only change which conditional steps activate (plan file, sub-agents); verification stays unconditional and advisor scales to stakes (advisor #1 skipped only on a recon-confirmed trivial low-blast-radius change; advisor #2 stays bar a guarded pure-mechanical edit)."
 ---
 
 # Task workflow
@@ -11,7 +11,7 @@ Universal cycle for any task that modifies code, configuration, documentation, o
 
 ## Top-level rule
 
-Size and urgency are not exceptions. "It's a small change", "it's urgent", "just one file" do not skip steps. They only change which *conditional* steps run — plan file is conditional on ≥ 3 phases; sub-agent dispatch is conditional on recon scope; advisor and verification stay unconditional.
+Size and urgency are not exceptions. "It's a small change", "it's urgent", "just one file" do not skip steps. They only change which *conditional* steps run — plan file is conditional on ≥ 3 phases; sub-agent dispatch is conditional on recon scope; verification stays unconditional. Advisor scales to stakes the same way `decision-reviewer` does (6a): advisor #1 (before-writing) is skipped only on a **recon-confirmed** trivial change — low blast radius (not shared / contract / auth / security, no dependents to break), reversible, obvious approach — decided *after* recon (so blast radius is known, not guessed) and **recorded** in the plan / report; advisor #2 (before-done) stays unconditional bar one guarded pure-mechanical exception (Step 12). Size alone never triggers the skip — only recon-confirmed low blast radius does.
 
 "This is too small for X" is the most reliable signal that you are about to drop a step you should not drop.
 
@@ -88,7 +88,7 @@ Once a leading approach exists from synthesis, gate it before any writing or lar
 
 **6a. High cost-of-being-wrong → dispatch `decision-reviewer` FIRST.** When the synthesised approach is an architecture choice, hard-to-reverse, broad-blast-radius, or expensive-to-undo decision, dispatch the `decision-reviewer` agent on that approach **before** the advisor call. It is adversarial, grounded, and fed only the artifact — so the prompt must carry the chosen approach, the alternatives weighed, the load-bearing assumptions, and the affected files/paths (it sees **only your prompt**, not this session; a one-line "review this" starves it). Conditional on stakes — a low-stakes change skips 6a and goes straight to 6b. Do **not** fold this into the advisor call; they are different checks (advisor: holistic, sees your framing; decision-reviewer: adversarial, artifact-only).
 
-**6b. Then `advisor()` as the final checkpoint.** Call `advisor()` after synthesis **and after any decision-review** — so the advisor sees the reviewer's verdict in the transcript and makes the last call before substantive work: proceed, or turn back to further investigation / redesign.
+**6b. Then `advisor()` as the final checkpoint — conditional on stakes, mirroring 6a.** Call `advisor()` after synthesis **and after any decision-review** — so the advisor sees the reviewer's verdict in the transcript and makes the last call before substantive work: proceed, or turn back to further investigation / redesign. **Skip this before-writing call only on a recon-confirmed trivial change** — low blast radius (not shared / contract / auth / security, no dependents to break), reversible, obvious approach. This is Step 6, so recon (Step 2) has already established the blast radius — the skip is evidence-based, not a guess; **record it** (one line in the plan / report) so an auto-mode mis-call is auditable. Any doubt, or anything above trivial → call it. advisor #2 (Step 12) runs regardless.
 
 - Round cap: 3. If round 3 still surfaces new material — the approach is wrong; stop, escalate to user, do not run a 4th round.
 - A critical advisor finding → revise plan / approach, re-call.
@@ -143,7 +143,7 @@ If a dedicated edge-case auditor sub-agent is available, dispatch it; otherwise 
 
 ### 12. Advisor #2 (mandatory before declare-done)
 
-Before declaring the task complete — `advisor()` once more on the finished result. One round; this is validation, not re-design.
+Before declaring the task complete — `advisor()` once more on the finished result. One round; this is validation, not re-design. **This call is unconditional, with one guarded exception: a pure-mechanical edit** — typo, rename, comment, or formatting with zero logic — **may skip advisor entirely, but only when both guards hold:** the change touches no exported / public identifier (nothing external can consume it), **and** no instruction-bearing text (`CLAUDE.md`, a skill, or an agent definition — those change agent behaviour, so they are never "mechanical"). Fail either guard → advisor #2 runs.
 
 If the advisor surfaces a new issue at this stage — verify it against the actual change. A finding the advisor missed during #1 but caught at #2 is worth fixing; a conflict between advisor and primary-source evidence is worth one reconcile call.
 
@@ -191,7 +191,7 @@ Style: plain language (the user's language), identifier names in backticks, no e
 
 | Excuse | Reality |
 |---|---|
-| "It's a small change, advisor isn't needed" | Advisor is unconditional. Size only adjusts conditional steps (plan file, sub-agents), not advisor. |
+| "It's a small change, advisor isn't needed" | advisor #2 stays (bar a guarded pure-mechanical edit, Step 12); advisor #1 is skipped only on a **recon-confirmed** low-blast-radius change — decided after recon, recorded, never on the *feeling* that it's small. The gate is recon-established blast radius, not size. |
 | "Urgent — skip verification" | Verification separates "agent said done" from "actually done". Urgency is reason to be careful, not careless. |
 | "Obvious — recon isn't needed" | Most regressions start from confidence without recon. 3-5 files is 2 minutes. |
 | "One file, no plan needed" | One file ≠ one phase. If the change has internal dependencies (data model → migration → service → tests), still ≥ 3 phases — plan file applies. |
