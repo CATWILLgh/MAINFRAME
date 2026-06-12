@@ -19,6 +19,8 @@
 
 A baseline of operating rules, focused sub-agents, and small automatic checks I want to apply in **every** Claude Code session on my machine. Set up once — every project, every session, inherits the same discipline.
 
+It's shaped for one workflow in particular: long **auto-mode** runs — hours, sometimes days, where Claude and I plan a larger feature up front, then it executes on its own with no one watching each step. Every rule, hook, and permission tier here is built to hold quality through exactly that: an unattended run where a missed check turns into a bug nobody catches until later.
+
 > **Personal-use.** No support, no compatibility guarantees, no backwards-compatibility promises. Forks are welcome under MIT, but this hub is shaped to one engineer's workflow.
 
 <p align="center">
@@ -69,11 +71,90 @@ In plain words — what each piece is for:
 - **Umbrella `CLAUDE.md`** — a tight set of working rules Claude follows in every project on your machine. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, no leftover `TODO`/`FIXME` markers, and so on. About 200 lines, intentionally short to stay in focus.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like "audit this code carefully", "format this commit message in Conventional Commits style", "scan this diff for forgotten secrets" — instead of one giant document trying to cover everything.
 - **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
-- **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan diffs for security issues with `ruff`/`semgrep`/`osv-scanner`. Things that fire without you having to remember to fire them.
+- **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan diffs for security issues with `ruff`/`semgrep`/`osv-scanner`. Block a finished turn when a real problem is still unresolved. Things that fire without you having to remember to fire them — the full list with what each one does is in [Inventory](#inventory--whats-actually-inside) below.
 - **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
 - **Permissions** — three-tier model (deny / ask / allow) that's strict by default. Some things must never run; some need confirmation; the rest run quietly with logging.
 
-End result the hub aims for: **the same baseline of quality and discipline applied to every project on your machine — without re-configuring Claude each time or babysitting it during a session.** When the baseline is high, day-to-day output is more predictable and bug rate drops.
+End result the hub aims for: **the same baseline of quality and discipline applied to every project on your machine — without re-configuring Claude each time or babysitting it through a long unattended run.** When the baseline is high, day-to-day output is more predictable and bug rate drops.
+
+<p align="center">
+  <img src="assets/divider.png" alt="" width="100%">
+</p>
+
+## Inventory — what's actually inside
+
+The concrete list of everything the hub ships, in plain words. Three groups: **agents** (specialist sub-agents you delegate to), **hooks** (automatic checks on tool events), **skills** (focused playbooks Claude pulls when relevant).
+
+### Agents — 7 specialist sub-agents
+
+Each ships with its model and effort already wired in, calibrated separately so you don't pick at call time. Invoked as `subagent_type: "mainframe:<name>"`.
+
+| Agent | What it's for | Model |
+|---|---|---|
+| `python-backend-engineer` | Python backend work — FastAPI / Django / Flask endpoints, ORM models, auth, background workers | Sonnet |
+| `nestjs-backend-engineer` | Node.js / NestJS backend — endpoints, ORM, auth, WebSocket gateways, queue workers | Sonnet |
+| `nextjs-backend-engineer` | Next.js App Router server layer — route handlers, server actions, RSC data, caching, auth | Sonnet |
+| `react-frontend-engineer` | React + Vite frontend — pages, components, forms, data fetching, API integration | Sonnet |
+| `devops-engineer` | Deploys, CI/CD, containers, infra config, managed databases, Dokploy | Opus |
+| `decision-reviewer` | Adversarial, evidence-grounded second look at a high-stakes design or approach before you commit | Opus |
+| `web-search` | Authoritative source lookup — Context7 docs + live web, returns cited quotes | Sonnet (low) |
+
+### Hooks — small checks that fire on their own
+
+The core design: **warn early, block at the end.** When you edit a file, the advisory scanners flag a problem immediately as a note. If it's still unresolved when Claude tries to finish the turn, the matching **Stop-gate** blocks the finish until it's fixed. So a real issue can't quietly slip through to the end of an unattended run.
+
+**When you edit a file** (advisory — a note, never blocks):
+
+| Hook | What it does |
+|---|---|
+| `scan-suppression-markers.py` | Flags freshly added `TODO` / `FIXME` / `.skip` / `@ts-ignore` and leftover debug prints |
+| `comment-discipline-reminder.py` | Flags process-narration and redundant comments you just added |
+| `python-security-scan.py` | Runs `ruff` security rules over changed Python; notes risky patterns |
+| `python-deps-audit.py` | Runs `pip-audit`; notes known CVEs in Python dependencies |
+| `nodejs-security-scan.py` | Runs `oxlint` over changed JS / TS; notes dangerous patterns (RCE, unsafe React) |
+| `nodejs-deps-audit.py` | Runs `osv-scanner`; notes known CVEs in Node dependencies |
+
+**Before a Bash command** (`PreToolUse`):
+
+| Hook | What it does | Type |
+|---|---|---|
+| `secret-commit-gate.py` | **Blocks** a `git commit` when a high-confidence secret is staged | gate |
+| `path-validation.py` | **Asks** before a recursive `rm -rf` whose target is outside the project | gate |
+| `bash-pattern-reminder.py` | Reminds about commands that would silently stall a hands-off auto-mode run | advisory |
+| `commit-conventional-reminder.py` | Reminds about Conventional Commits format on `git commit` | advisory |
+
+**Before the turn ends** (`Stop` — the final gate):
+
+| Hook | What it does | Type |
+|---|---|---|
+| `stop-gate-suppression-markers.py` | **Blocks** finishing while suppression markers or debug residue remain | gate |
+| `stop-gate-comment-discipline.py` | **Blocks** finishing while banned narration comments remain | gate |
+| `python-security-stop-gate.py` | **Blocks** finishing on unresolved `ruff` security findings | gate |
+| `nodejs-security-stop-gate.py` | **Blocks** finishing on unresolved `semgrep` security findings | gate |
+| `frontend-fsd-gate.py` | **Blocks** finishing on Feature-Sliced-Design import-direction violations (`dependency-cruiser`) | gate |
+| `frontend-dead-code.py` | Advisory note on dead files (`knip`); opt-in per project | advisory |
+| `fallow-quality-note.py` | Advisory note on dead code, over-complexity and copy-paste in TS / JS | advisory |
+| `memory-reminder.py` | Gentle nudge to save a durable fact to Claude's native cross-session memory | advisory |
+
+**At session start** (`SessionStart`):
+
+| Hook | What it does |
+|---|---|
+| `session-posture.py` | Injects the working posture — engage the process, plan-then-execute, orchestrate by default |
+| `hooklib-smoke-check.py` | Self-test that the shared hook library imports cleanly |
+
+**Always-on, silent:** `telemetry.py` logs local-only usage counters (event metadata — no prompts, code, or paths), and only when the `--dev` instrumentation is installed. Three shared libraries back the rest: `_hooklib.py` (common scaffolding), `_markers.py` (the marker / debug-residue detector sets), `comment_extract.py` (false-positive-free comment extraction).
+
+### Skills — 18 focused playbooks
+
+Pulled automatically when the situation matches, or invoked as `/mainframe:<name>`.
+
+| Group | Skills |
+|---|---|
+| **Process & quality** | `task-workflow` (the universal task cycle), `surface-ticket` (file deferred problems as tickets), `no-suppression-markers` (completion gate), `testing-strategy` (which test tier + level), `severity-calibration` (rank findings honestly), `code-audit` (parallel multi-aspect review), `decision-review` (validate an approach), `git-conventional-commits` (commit message grammar) |
+| **Backend** | `python-backend-patterns`, `nestjs-backend-patterns`, `nextjs-backend-patterns` — stack recon + ORM / validation / auth / observability patterns |
+| **Frontend** | `react-frontend-patterns` (FSD, state, data fetching), `frontend-design` (colour, type, a11y, motion, layout), `shadcn` (shadcn/ui composition) |
+| **Ops & misc** | `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (Dokploy PaaS HTTP API), `curl-requests` (HTTP request templates), `secrets-handling` (credentials layout + pre-reply secret scan) |
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -202,7 +283,7 @@ What I have actually verified this hub on:
 
 - **Claude Code CLI** — the primary surface I use daily.
 - **Claude Code IDE extension** — also in active use.
-- **Main thread model**: Claude **Opus 4.7+** at `high` or `xhigh` effort. This is what I run every day and what all the discipline is tuned against.
+- **Main thread model**: Claude **Opus 4.7+** at `high` or `xhigh` effort (currently **Opus 4.8** day to day). This is what I run every day and what all the discipline is tuned against.
 - **Sub-agents** — each one calibrated separately via a small empirical tournament so the right model + effort sits inside the agent file itself. You don't have to think about it at call time.
 
 Other model / effort combinations may work but I haven't verified them. When an agent's prompt body changes in a meaningful way, I re-run its tournament.
@@ -235,17 +316,18 @@ MAINFRAME/
 │
 ├── plugin-dist/                          # the plugin — auto-loads as 'mainframe' after install
 │   ├── .claude-plugin/plugin.json        # plugin manifest (name, version, license)
-│   ├── skills/                           # 17 skills, one folder per skill
+│   ├── skills/                           # 18 skills, one folder per skill
 │   ├── agents/                           # 7 file-based sub-agents (Python, Node.js, Next.js, React, devops, decision-reviewer, web-search)
 │   ├── commands/                         # slash commands (currently empty)
 │   └── hooks/
 │       ├── hooks.json                    # which hook fires on which event
-│       ├── scripts/                      # 19 Python scripts (security scans, marker discipline, ...)
+│       ├── scripts/                      # 24 Python files — 21 hook scripts + 3 shared libs (security scans, marker discipline, ...)
 │       └── rules/                        # Semgrep YAML rules
 │
 ├── export/                               # what the plugin format does NOT carry
 │   ├── CLAUDE.md                         # umbrella operating rules (partnership, evidence, honesty, ...)
 │   ├── settings.json                     # permissions (allow/ask/deny tiers)
+│   ├── output-styles/                    # custom reply styles (e.g. explanatory-concise)
 │   ├── rules/                            # path-scoped guidance (currently empty, future-proof)
 │   ├── scripts/secret                    # credentials helper script
 │   └── templates/credentials-index.md    # starter template for the credentials index
