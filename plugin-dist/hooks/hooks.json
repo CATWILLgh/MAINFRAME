@@ -76,6 +76,11 @@
           {
             "type": "command",
             "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/ticket-id-format-reminder.py"]
+          },
+          {
+            "type": "command",
+            "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-security-scan.py"]
           },
           {
