@@ -46,6 +46,12 @@ Combined `description + when_to_use` truncated at **1536 chars** (hub validator 
 - **Depth = 1**: nested subfolders are not supported.
 - Cross-skill `@import` does not exist. Relationships between skills are expressed by mentioning the skill name in the body; both frontmatter entries are visible at session start.
 
+### 1.2.1. Supporting-file loading — the only signal is an inline link (verified 2026-06-13)
+
+When a skill triggers, only `SKILL.md` is injected (one message, persists for the session). Supporting files are **not** injected — the model must choose to `Read` them on-demand. The **only** pointer is what the author writes inline in `SKILL.md`: a relative link `[file.md](file.md)` plus a one-line *what it holds + when to load it* (docs: *"to ensure Claude knows what each supporting file contains and when to load it, reference these files from SKILL.md"*). There is **no** frontmatter `files:` field, no auto-load, no `@import` in the body, and **no documented fix** for the failure where the model stops at `SKILL.md` and skips the link — Anthropic treats link+description as sufficient. Empirically it is not always (a hub agent skipped `surface-ticket/template.md` and produced a wrong-scheme ticket, 2026-06-13).
+
+Escape hatches for a must-load-every-time file: fold it into `SKILL.md` if small, or name it imperatively from an external hook (POSTURE does this for `task-workflow/flow.md`). A bash placeholder `` !`cat ${CLAUDE_SKILL_DIR}/file.md` `` can force-inject eagerly, but it is unverified for plugin skills and costs tokens every load — not used. Practical rule: classify each supporting file **conditional** (link + what/when/why is enough) vs **mandatory-every-run** (do not trust a link). Source caveat: `claude-code-guide` (CLI) + `web-search` both rest on `code.claude.com/docs/en/skills` — corroborated by two paths, not an independent binary inspection.
+
 ### 1.3. Eval — when the model loads a skill
 
 1. At session start, the model sees the frontmatter of all symlinked skills (`description` + `when_to_use`).
