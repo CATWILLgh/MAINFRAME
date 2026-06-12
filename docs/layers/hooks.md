@@ -151,16 +151,15 @@ Closes the "unknown functionality" gap before any telemetry is built. Confirmed 
 
 ### 2.1. Current hub hooks
 
-Live registration: `plugin-dist/hooks/hooks.json` (source of truth). As of 2026-06-10 the hub uses **7 of the 30 events**:
+Live registration: `plugin-dist/hooks/hooks.json` (source of truth). As of 2026-06-12 the hub uses **7 of the 30 events**:
 
 | Event | Matcher | Hub scripts |
 |---|---|---|
-| `SessionStart` | `compact` | `feedback-nudge-compact` (harness-feedback nudge after long sessions; dev installs only — silent unless the `harness-feedback` skill is present) |
 | `SessionStart` | `startup\|resume\|clear\|compact` | `session-posture`, `hooklib-smoke-check`, `telemetry` |
 | `PreToolUse` | `Bash` | `path-validation`, `secret-commit-gate` (deny `git commit` that stages a high-confidence vendor token; scans `git diff --cached`/`HEAD`, skips SOPS/git-crypt repos, fail-safe defers; ADR 0079), `bash-pattern-reminder`, `commit-conventional-reminder` |
 | `PreToolUse` | `Skill` | `telemetry` |
 | `PostToolUse` | `Edit\|Write\|MultiEdit` | `scan-suppression-markers`, `comment-discipline-reminder`, `python-security-scan`, `python-deps-audit`, `nodejs-deps-audit`, `nodejs-security-scan`, `telemetry` (ticket-creation rate + `code_edit` domain bucket with `agent_type` attribution — denominator for profile-agent under-use) |
-| `Stop` | `*` | `stop-gate-suppression-markers`, `stop-gate-comment-discipline` (process-narration comments vs HEAD, shared `_markers.flag_comment`), `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code`, `fallow-quality-note` (advisory: fallow analyzer на изменённых TS/JS; throttled 5 min; conservative categories only) — on dev installs every `emit_block` reason carries the `harness-feedback` nudge (`_hooklib.FEEDBACK_NUDGE`; silent on plain installs) |
+| `Stop` | `*` | `stop-gate-suppression-markers`, `stop-gate-comment-discipline` (process-narration comments vs HEAD, shared `_markers.flag_comment`), `python-security-stop-gate`, `nodejs-security-stop-gate`, `frontend-fsd-gate`, `frontend-dead-code`, `fallow-quality-note` (advisory: fallow analyzer на изменённых TS/JS; throttled 5 min; conservative categories only), `memory-reminder` (advisory, non-blocking: nudges the model to persist durable facts to native auto-memory + folds in a `harness-feedback` mention; throttled 30 min, skips trivial sessions; replaces the retired `feedback-nudge-compact`; ADR 0080) — on dev installs every `emit_block` reason carries the `harness-feedback` nudge (`_hooklib.FEEDBACK_NUDGE`; silent on plain installs) |
 | `PermissionDenied` / `SubagentStart` / `SessionEnd` | `*` | `telemetry` |
 
 Shared scaffolding (`_hooklib.py` + `_markers.py`, stdlib-only) underlies them. The other 26 events are unused — see the opportunity map below.
