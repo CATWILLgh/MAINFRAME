@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: tests + validators
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Two hook tests build throwaway git repos; a runner has git but no identity.
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@mainframe.local"
+          git config --global user.name "mainframe-ci"
+
+      # The hook tests are stdlib Python only — they drive each hook's logic with
+      # fixtures/stubs and never shell out to the real linters, so no ruff/oxlint/
+      # fallow/etc. are needed here.
+      - name: Hook test suite
+        run: |
+          fail=0
+          for t in tools/test_*.py; do
+            echo "::group::$t"
+            python3 "$t" || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: Validator dependencies
+        run: pip install tiktoken pyyaml
+
+      - name: Validate skills
+        run: python3 tools/validate-skill.py --all
+
+      # Root CLAUDE.md is gitignored (not in the checkout); validate the shipped one.
+      - name: Validate umbrella CLAUDE.md
+        run: python3 tools/validate-claude-md.py export/CLAUDE.md
