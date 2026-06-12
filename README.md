@@ -133,7 +133,7 @@ The core design: **warn early, block at the end.** When you edit a file, the adv
 | `nodejs-security-stop-gate.py` | **Blocks** finishing on unresolved `semgrep` security findings | gate |
 | `frontend-fsd-gate.py` | **Blocks** finishing on Feature-Sliced-Design import-direction violations (`dependency-cruiser`) | gate |
 | `frontend-dead-code.py` | Advisory note on dead files (`knip`); opt-in per project | advisory |
-| `fallow-quality-note.py` | Advisory note on dead code, over-complexity and copy-paste in TS / JS | advisory |
+| `fallow-quality-note.py` | Advisory note on dead code, over-complexity and copy-paste in TS / JS (`fallow`) | advisory |
 | `memory-reminder.py` | Gentle nudge to save a durable fact to Claude's native cross-session memory | advisory |
 
 **At session start** (`SessionStart`):
@@ -196,7 +196,7 @@ See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
 **Recommended — each unlocks a group of checks; anything missing just stays silent, and `install.sh` prints an OS-specific install hint:**
 
-- **Node.js / npm** — the React and Node.js agents, the shadcn CLI (`npx`), the frontend recon script, and the JS hooks (`oxlint`, `dependency-cruiser`, `knip`).
+- **Node.js / npm** — the React and Node.js agents, the shadcn CLI (`npx`), the frontend recon script, and the JS hooks (`oxlint`, `dependency-cruiser`, `knip`, `fallow`). `install.sh` installs the four hook tools as npm globals for you.
 - **uv or pipx** — installs the Python tooling the hooks call: `ruff`, `semgrep`, `pip-audit`.
 - **osv-scanner** — the dependency-vulnerability hook (`install.sh` can fetch the binary for you).
 
