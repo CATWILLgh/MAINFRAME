@@ -109,6 +109,7 @@ The core design: **warn early, block at the end.** When you edit a file, the adv
 |---|---|
 | `scan-suppression-markers.py` | Flags freshly added `TODO` / `FIXME` / `.skip` / `@ts-ignore` and leftover debug prints |
 | `comment-discipline-reminder.py` | Flags process-narration and redundant comments you just added |
+| `ticket-id-format-reminder.py` | Nudges a new `docs/tickets/` file to use a random hex id, not a sequential `NNN` (which collides across git branches) |
 | `python-security-scan.py` | Runs `ruff` security rules over changed Python; notes risky patterns |
 | `python-deps-audit.py` | Runs `pip-audit`; notes known CVEs in Python dependencies |
 | `nodejs-security-scan.py` | Runs `oxlint` over changed JS / TS; notes dangerous patterns (RCE, unsafe React) |
@@ -321,7 +322,7 @@ MAINFRAME/
 │   ├── commands/                         # slash commands (currently empty)
 │   └── hooks/
 │       ├── hooks.json                    # which hook fires on which event
-│       ├── scripts/                      # 24 Python files — 21 hook scripts + 3 shared libs (security scans, marker discipline, ...)
+│       ├── scripts/                      # 25 Python files — 22 hook scripts + 3 shared libs (security scans, marker discipline, ...)
 │       └── rules/                        # Semgrep YAML rules
 │
 ├── export/                               # what the plugin format does NOT carry
