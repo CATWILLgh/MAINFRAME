@@ -33,7 +33,7 @@ When in doubt during execution — do not block. A frozen unattended run (the us
 
 ## Cycle
 
-The full control-flow map, including every turn-back, is in [flow.md](flow.md).
+Read [flow.md](flow.md) when a step sends you backward — an advisor turn-back, a re-dispatch, the edge-case loop, a stop-condition cap — and you need to know where the cycle resumes. It is the full control-flow map of every turn-back; the numbered steps below are the forward path.
 
 ### 1. Triage (one question)
 
@@ -60,7 +60,7 @@ Recon trades minutes now against hours of regression debugging later. Skipping i
 
 Write an audit file before dispatching execution work when **either** the task decomposes into 3+ dependent phases, OR recon surfaced 3+ edge-cases / risks worth tracking. Below those thresholds — skip it; the cycle still runs.
 
-The format, the two plan-file paths (interactive tool file vs the always-written hub audit copy), and the interactive-vs-auto workflow live in [plan-file.md](plan-file.md). The audit copy persists outside the project (never tracked by git); its value is the diff between plan and reality, filled in at Step 16.
+When this step fires, read [plan-file.md](plan-file.md) for the format, the two plan-file paths (interactive tool file vs the always-written hub audit copy), and the interactive-vs-auto workflow. The audit copy persists outside the project (never tracked by git); its value is the diff between plan and reality, filled in at Step 16.
 
 ### 4. Parallel dispatch of investigation sub-agents
 
