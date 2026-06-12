@@ -193,12 +193,12 @@ See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 - **Claude Code v2.1+** — the host (CLI or IDE extension).
 - **git** — to clone the repo, and for the hooks that diff your working tree.
 - **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
-- **Python 3** — the validators and most hooks are stdlib Python 3. Without it they silently no-op (the installer warns; it does not fail).
+- **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the linters below, but need no Python packages of their own). Without Python 3 they silently no-op (the installer warns; it does not fail).
 
 **Recommended — each unlocks a group of checks; anything missing just stays silent, and `install.sh` prints an OS-specific install hint:**
 
 - **Node.js / npm** — the React and Node.js agents, the shadcn CLI (`npx`), the frontend recon script, and the JS hooks (`oxlint`, `dependency-cruiser`, `knip`, `fallow`). `install.sh` installs the four hook tools as npm globals for you.
-- **uv or pipx** — installs the Python tooling the hooks call: `ruff`, `semgrep`, `pip-audit`.
+- **uv or pipx** — installs the Python-packaged linters the hooks call: `ruff`, `semgrep`, `pip-audit` (`semgrep` powers the JS/TS security stop-gate, but installs as a Python package).
 - **osv-scanner** — the dependency-vulnerability hook (`install.sh` can fetch the binary for you).
 
 Nothing here hard-fails a session: a tool that isn't installed disables only its own hook. Run `./install.sh --dry-run` to preview everything and see exactly what's missing.
