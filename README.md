@@ -99,53 +99,52 @@ Each ships with its model and effort already wired in, calibrated separately so 
 | `decision-reviewer` | Adversarial, evidence-grounded second look at a high-stakes design or approach before you commit | Opus |
 | `web-search` | Authoritative source lookup — Context7 docs + live web, returns cited quotes | Sonnet (low) |
 
-### Hooks — small checks that fire on their own
+### Hooks — what each one checks, and when
 
-The core design: **warn early, block at the end.** When you edit a file, the advisory scanners flag a problem immediately as a note. If it's still unresolved when Claude tries to finish the turn, the matching **Stop-gate** blocks the finish until it's fixed. So a real issue can't quietly slip through to the end of an unattended run.
+Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it stops the action or the turn until something is fixed); an **advisory** only injects a note and never blocks. The core design is **warn early, block at the end** — when you edit a file the advisory scanners flag a problem immediately, and if it's still unresolved when Claude tries to finish, the matching **Stop-gate** blocks the finish. So a real issue can't quietly slip through to the end of an unattended run. Every hook is fail-safe: if it errors, or its tool isn't installed, it exits silently and never breaks your session.
 
-**When you edit a file** (advisory — a note, never blocks):
+#### At session start — `SessionStart` (fresh start, resume, `/clear`, and after every compaction)
 
-| Hook | What it does |
-|---|---|
-| `scan-suppression-markers.py` | Flags freshly added `TODO` / `FIXME` / `.skip` / `@ts-ignore` and leftover debug prints |
-| `comment-discipline-reminder.py` | Flags process-narration and redundant comments you just added |
-| `ticket-id-format-reminder.py` | Nudges a new `docs/tickets/` file to use a random hex id, not a sequential `NNN` (which collides across git branches) |
-| `python-security-scan.py` | Runs `ruff` security rules over changed Python; notes risky patterns |
-| `python-deps-audit.py` | Runs `pip-audit`; notes known CVEs in Python dependencies |
-| `nodejs-security-scan.py` | Runs `oxlint` over changed JS / TS; notes dangerous patterns (RCE, unsafe React) |
-| `nodejs-deps-audit.py` | Runs `osv-scanner`; notes known CVEs in Node dependencies |
+- **`session-posture.py`** — Injects the hub working posture as context: engage the process instead of reasoning past it, work in two phases (plan with the user, then execute autonomously), surface out-of-scope findings as tickets, and delegate broad work to sub-agents. A salient reminder at the moment context is fresh, since a steady `CLAUDE.md` line fades into the background.
+- **`task-workflow-engagement.py`** (reset half) — Resets a per-segment marker tracking whether the `task-workflow` process skill was actively invoked. Its enforcement half fires before your first edit — see below. This reset on every session start (including after a compaction) is what makes it re-fire post-compaction.
+- **`hooklib-smoke-check.py`** — Self-test that the shared hook library imports cleanly. Every other hook silently no-ops if that library is broken, so this one announces the failure loudly at session start instead of letting the whole hook layer go dark unnoticed.
 
-**Before a Bash command** (`PreToolUse`):
+#### Before a Bash command — `PreToolUse` on Bash
 
-| Hook | What it does | Type |
-|---|---|---|
-| `secret-commit-gate.py` | **Blocks** a `git commit` when a high-confidence secret is staged | gate |
-| `path-validation.py` | **Asks** before a recursive `rm -rf` whose target is outside the project | gate |
-| `bash-pattern-reminder.py` | Reminds about commands that would silently stall a hands-off auto-mode run | advisory |
-| `commit-conventional-reminder.py` | Reminds about Conventional Commits format on `git commit` | advisory |
+- **`secret-commit-gate.py`** — *Gate (blocks).* When the command is a `git commit`, scans the staged diff for high-confidence secret shapes (vendor API tokens, private keys) and blocks the commit if one is staged. Skips repos that use SOPS or git-crypt; defers on any error rather than risk a false block.
+- **`path-validation.py`** — *Gate (asks).* Parses a recursive `rm -rf`, resolves every target path, and allows it silently when all targets are inside the project — but asks for confirmation if any path is outside the project, unresolved, or built from a subshell. Anything that isn't a recursive `rm` passes straight through.
+- **`bash-pattern-reminder.py`** — *Advisory.* Catches commands that historically trigger auto-mode permission prompts or stall a hands-off run (literal `rm -rf`, heredoc/redirect into `/tmp`, ad-hoc global installs) and suggests the friction-free alternative (the Write tool, the installer's helper). Non-blocking on purpose — a block would become a freeze in auto-mode.
+- **`commit-conventional-reminder.py`** — *Advisory.* On a `git commit`, reminds about Conventional Commits grammar (type / scope / subject).
 
-**Before the turn ends** (`Stop` — the final gate):
+#### Before you load a skill, or edit a file — `PreToolUse` on Skill / Edit / Write
 
-| Hook | What it does | Type |
-|---|---|---|
-| `stop-gate-suppression-markers.py` | **Blocks** finishing while suppression markers or debug residue remain | gate |
-| `stop-gate-comment-discipline.py` | **Blocks** finishing while banned narration comments remain | gate |
-| `python-security-stop-gate.py` | **Blocks** finishing on unresolved `ruff` security findings | gate |
-| `nodejs-security-stop-gate.py` | **Blocks** finishing on unresolved `semgrep` security findings | gate |
-| `frontend-fsd-gate.py` | **Blocks** finishing on Feature-Sliced-Design import-direction violations (`dependency-cruiser`) | gate |
-| `frontend-dead-code.py` | Advisory note on dead files (`knip`); opt-in per project | advisory |
-| `fallow-quality-note.py` | Advisory note on dead code, over-complexity and copy-paste in TS / JS (`fallow`) | advisory |
-| `memory-reminder.py` | Gentle nudge to save a durable fact to Claude's native cross-session memory | advisory |
+- **`task-workflow-engagement.py`** (enforcement half) — *Advisory.* When the `task-workflow` skill is invoked it marks the segment active; on your first file-modifying call (Edit / Write / MultiEdit) of a segment where it wasn't, it nudges the main agent to invoke `task-workflow` first. A skill survives a compaction (its first 5K tokens get re-attached) but the runtime frames the copy "context only" and the model deprioritises it — so the process can be present yet not actually followed. Fires once per segment, main agent only (sub-agents can't invoke skills).
 
-**At session start** (`SessionStart`):
+#### Right after you edit a file — `PostToolUse` on Edit / Write / MultiEdit (all advisory — the "warn early" half)
 
-| Hook | What it does |
-|---|---|
-| `session-posture.py` | Injects the working posture — engage the process, plan-then-execute, orchestrate by default |
-| `hooklib-smoke-check.py` | Self-test that the shared hook library imports cleanly |
-| `task-workflow-engagement.py` | Before your first file edit of a session segment, nudges you to actually invoke the `task-workflow` process skill — a skill survives a context compaction but gets deprioritised, so it can be present yet not followed. Also fires after each compaction. Advisory, once per segment |
+- **`scan-suppression-markers.py`** — Flags suppression markers (`TODO` / `FIXME` / `HACK`, skipped or focused tests, `@ts-ignore` / `eslint-disable` / `# noqa`) and debug residue (`debugger`, `breakpoint()`, `console.debug`, `var_dump` / `dd`) that the edit just introduced. Diff-aware: it flags only what the change added, not what was already there.
+- **`comment-discipline-reminder.py`** — Flags comments the edit just added that match a banned form — process narration, redundant paraphrase of the code, position / phase markers, journal / byline notes. The "comment the WHY, not the WHAT" rule, surfaced at write time.
+- **`ticket-id-format-reminder.py`** — On a new `docs/tickets/<id>-*.md` whose id is a short sequential number (`NNN`), nudges to use a random 8-hex id instead (`openssl rand -hex 4`). Sequential ids collide when several branches or agents each allocate "the next number" independently; random ones don't. Write-only, so editing a legacy `NNN` ticket doesn't nag.
+- **`python-security-scan.py`** — Runs Ruff's curated S (flake8-bandit, OWASP-aligned) + B (flake8-bugbear) rules over the changed Python and notes high-confidence dangerous patterns and correctness bugs — `pickle.load`, unsafe `yaml.load`, `subprocess(..., shell=True)`, and similar.
+- **`python-deps-audit.py`** — When a Python dependency file changes, runs `pip-audit` and notes known CVEs in the dependency tree.
+- **`nodejs-security-scan.py`** — Runs oxlint's curated dangerous-pattern subset over the changed JS / TS — classic RCE (`eval`, `new Function`), unsafe React, and more — and notes the hits.
+- **`nodejs-deps-audit.py`** — When a Node dependency file changes, runs `osv-scanner` and notes known CVEs.
 
-**Always-on, silent:** `telemetry.py` logs local-only usage counters (event metadata — no prompts, code, or paths), and only when the `--dev` instrumentation is installed. Three shared libraries back the rest: `_hooklib.py` (common scaffolding), `_markers.py` (the marker / debug-residue detector sets), `comment_extract.py` (false-positive-free comment extraction).
+#### Before the turn ends — `Stop` (the final gates, plus a few advisory notes)
+
+- **`stop-gate-suppression-markers.py`** — *Gate (blocks).* Blocks the turn from finishing while suppression markers or debug residue added this session remain unresolved — the hard backstop to the advisory scanner above.
+- **`stop-gate-comment-discipline.py`** — *Gate (blocks).* Blocks finishing while banned narration comments (measured against `git HEAD`) remain.
+- **`python-security-stop-gate.py`** — *Gate (blocks).* Blocks finishing while unresolved Ruff security findings remain in changed Python.
+- **`nodejs-security-stop-gate.py`** — *Gate (blocks).* Blocks finishing while unresolved Semgrep security findings remain in changed JS / TS (using the YAML rules under `hooks/rules/`).
+- **`frontend-fsd-gate.py`** — *Gate (blocks).* Blocks finishing on Feature-Sliced-Design import-direction violations (a lower layer importing an upper one), via dependency-cruiser.
+- **`frontend-dead-code.py`** — *Advisory.* Notes dead / unused files via Knip. Opt-in per project.
+- **`fallow-quality-note.py`** — *Advisory.* Notes quality smells in changed TS / JS — import cycles, layer-boundary breaks, dead files, over-complexity, copy-paste — via the `fallow` analyzer. Throttled, conservative categories only.
+- **`memory-reminder.py`** — *Advisory.* A gentle nudge to save a durable cross-session fact to Claude's native auto-memory after a substantive session. Throttled (~30 min), skips trivial sessions, and is framed so "nothing worth saving" is a fine answer.
+
+#### Always-on, and the plumbing
+
+- **`telemetry.py`** — *(dev-only.)* Fires across many events — session start/end, skill loads, file edits, permission denials, sub-agent starts — and logs local-only event metadata (counts and coarse buckets, never prompts, code, or file paths) into a local SQLite DB. Present only when the `--dev` instrumentation is installed; on a plain install it isn't wired and writes nothing.
+- **Shared libraries** (not hooks themselves): `_hooklib.py` — common scaffolding (payload parsing, the emit / gate helpers, git diffing); `_markers.py` — the suppression-marker and debug-residue detector sets; `comment_extract.py` — false-positive-free comment / docstring extraction.
 
 ### Skills — 18 focused playbooks
 
