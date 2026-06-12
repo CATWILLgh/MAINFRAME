@@ -249,17 +249,20 @@
   },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": false,
-    "context7@claude-plugins-official": true
+    "context7@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": false
   },
+  "outputStyle": "Explanatory Concise",
   "language": "Russian",
-  "outputStyle": "Explanatory",
-  "effortLevel": "xhigh",
-  "advisorModel": "opus",
+  "effortLevel": "high",
+  "advisorModel": "fable",
+  "skipWorkflowUsageWarning": true,
   "editorMode": "normal",
   "verbose": false,
   "preferredNotifChannel": "kitty",
   "autoCompactEnabled": true,
-  "autoCompactWindow": 680000,
+  "autoMemoryEnabled": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": false
+  "remoteControlAtStartup": false,
+  "model": "opus[1m]"
 }
