@@ -18,6 +18,11 @@
             "type": "command",
             "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"]
           }
         ]
       }
@@ -55,6 +60,21 @@
             "type": "command",
             "command": "python3",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
+          },
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"]
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"]
           }
         ]
       }
