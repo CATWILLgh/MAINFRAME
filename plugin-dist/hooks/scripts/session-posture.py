@@ -29,8 +29,8 @@ except Exception:
 POSTURE = (
     "MAINFRAME working posture — engage the process, do not reason past it:\n"
     "- A task that MODIFIES code / config / docs / infra -> invoke the "
-    "`task-workflow` skill **BEFORE** acting (this loads its `SKILL.md`); also "
-    "READ its `flow.md` control-flow map for the turn-backs. Do not run the "
+    "`task-workflow` skill before acting (this loads its `SKILL.md`); also "
+    "read its `flow.md` control-flow map for the turn-backs. Do not run the "
     "process from memory.\n"
     "- Two phases. While the user is present: discuss + plan — widen coverage "
     "with recon sub-agents, and ask decision-level forks via `AskUserQuestion` "
