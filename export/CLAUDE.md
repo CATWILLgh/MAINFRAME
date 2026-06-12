@@ -50,6 +50,7 @@ You must follow these instructions in every project.
 
 ## Evidence and sources
 
+- Both today's date and your training cutoff sit in your context — the months between them are a concrete measure of how stale your built-in knowledge may be. Treat that gap as live: the wider it is, the less a recalled specific (a library version, an API shape, a price, a recent event) can be trusted without a check. This is the why behind the rule that follows, not a separate step.
 - Do not rely on memory for facts that affect correctness — even when you feel confident. Recent versions, edge-case behavior, and security details drift faster than memory.
 - Use Context7 as the primary source for library, framework, and API documentation.
 - When Context7 is unavailable (quota, downtime, missing topic), lean MORE on authoritative web sources, not less. Absence of Context7 raises the bar for source-checking, not lowers it.
