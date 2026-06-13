@@ -261,7 +261,7 @@ Options:
 
 - **`harness-feedback` skill** (`dev/skills/`) — agents file structured friction reports about the hub's own rules/hooks into `~/.claude/mainframe/feedback/` for later triage. Without the skill installed, the related nudges in hook output stay silent.
 - **Usage telemetry** — hooks log event metadata (no prompts, no code, no paths) into a local SQLite DB under `~/.claude/mainframe/telemetry/`, and only while that hub-owned namespace exists. Nothing is ever sent anywhere. Remove the symlink to stop logging.
-- **Local hub map** — a self-contained `workspace/runtime/hub.html` page: every skill, agent, and hook with its description and activation, the hook trigger matrix, a live telemetry/feedback panel, and a relationship graph. Generated on `--dev` install; regenerate any time with `.venv/bin/python3 tools/build_hub_page.py`. Open it straight from disk (no server) — it reads nothing remote.
+- **Local hub map** — a self-contained `workspace/runtime/hub.html` page. A searchable catalog of every skill, agent, and hook — click any card, or any graph node, for its details and what references it; the hook trigger matrix; a **Config** panel showing the permission tiers and key settings; a **Health** panel that surfaces broken cross-references, orphaned skills, and missing hook scripts; a telemetry panel broken down by agent, by day, and by miss type; and a relationship graph. Generated on `--dev` install; regenerate any time with `.venv/bin/python3 tools/build_hub_page.py`. Open it straight from disk (no server) — it reads nothing remote.
 
 To temporarily disable the plugin without uninstalling, use `claude plugin disable mainframe` (and `claude plugin enable mainframe` to re-enable).
 
