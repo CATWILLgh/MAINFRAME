@@ -62,6 +62,8 @@ Write an audit file before dispatching execution work when **either** the task d
 
 When this step fires, read [plan-file.md](plan-file.md) for the format, the two plan-file paths (interactive tool file vs the always-written hub audit copy), and the interactive-vs-auto workflow. The audit copy persists outside the project (never tracked by git); its value is the diff between plan and reality, filled in at Step 16.
 
+At the same threshold, also seed a `TodoWrite` checklist with the cycle's drop-prone checkpoints — recon, advisor #1, TDD, verify, edge-case sweep, advisor #2, out-of-scope tickets, commit — and mark each as it lands. In a long run the persistent, self-maintained list is the guard against silently dropping a mandatory step; it tracks what you have done, where the skill body only states what to do.
+
 ### 4. Parallel dispatch of investigation sub-agents
 
 Independent investigation tasks dispatch in **one message** with multiple `Agent` calls. Sequential calls in main context waste turns and fill the parent context with raw tool output.
