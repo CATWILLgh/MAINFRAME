@@ -6,7 +6,14 @@
   const D = window.HUB_DATA;
   const app = document.getElementById("app");
   const tabsNav = document.getElementById("tabs");
-  if (!D || !app || !tabsNav) return;
+  if (!app) return;
+  if (!D || !tabsNav) {
+    // Never fail silently to a blank page: a visible message beats a white screen
+    // with no devtools open (this is exactly how the const-not-on-window bug hid).
+    app.textContent = "Failed to load hub data — regenerate with "
+      + ".venv/bin/python3 tools/build_hub_page.py";
+    return;
+  }
 
   function el(tag, props, kids) {
     const n = document.createElement(tag);

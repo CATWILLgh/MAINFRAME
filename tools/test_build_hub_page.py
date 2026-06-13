@@ -182,6 +182,10 @@ def test_render_inlines_data_and_is_self_contained():
     assert "src=\"http" not in html
     assert "href=\"http" not in html
     assert "task-workflow" in html
+    # the data must reach app.js as a window property: a top-level `const` is NOT
+    # exposed on window, which silently blanked the page until this was caught.
+    assert "window.HUB_DATA =" in html
+    assert "const HUB_DATA" not in html
 
 
 def _run_all():
