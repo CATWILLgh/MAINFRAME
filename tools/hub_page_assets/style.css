@@ -270,3 +270,11 @@ svg.graph.dimmed .gnode.hot text { fill: var(--text); }
 .kvk { color: var(--muted); }
 .kvv { color: var(--text); word-break: break-all; }
 .badges.wrap { flex-wrap: wrap; margin-left: 0; }
+
+.notice.ok { border-style: solid; border-color: var(--events); color: #9fe0ad; }
+.hlist { list-style: none; margin: 0; padding: 0; }
+.hitem { padding: 6px 2px; border-bottom: 1px solid var(--border); }
+.hitem:last-child { border-bottom: none; }
+.hitem.err { color: #f85149; }
+.missing { color: #f85149; }
+.harrow { color: var(--muted); }

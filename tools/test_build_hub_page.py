@@ -248,6 +248,50 @@ def test_collect_misc_reads_styles_templates_and_empty_layers():
     assert empty == {"rules", "commands"}
 
 
+def _fixture_health(root):
+    """A tree seeded with one broken cross-ref, one orphan, one missing script."""
+    _write(os.path.join(root, "plugin-dist/skills/alpha/SKILL.md"),
+           "---\nname: alpha\n---\n\nSee [`ghost`](../ghost/SKILL.md).\n")
+    _write(os.path.join(root, "plugin-dist/skills/anchor/SKILL.md"),
+           "---\nname: anchor\n---\n\nSee [`alpha`](../alpha/SKILL.md).\n")
+    _write(os.path.join(root, "plugin-dist/skills/beta/SKILL.md"),
+           "---\nname: beta\n---\n\nno refs here\n")
+    _write(os.path.join(root, "plugin-dist/agents/gamma.md"),
+           "---\nname: gamma\nskills:\n  - delta\n---\n\nbody\n")
+    _write(os.path.join(root, "plugin-dist/hooks/hooks.json"), json.dumps({"hooks": {
+        "Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "python3",
+                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/present.py"]}]}],
+        "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "python3",
+                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/absent.py"]}]}],
+    }}))
+    _write(os.path.join(root, "plugin-dist/hooks/scripts/present.py"),
+           '"""Present hook."""\nx = 1\n')
+    return root
+
+
+def test_compute_health_flags_dangling_orphans_and_missing_scripts():
+    root = _fixture_health(tempfile.mkdtemp())
+    skills = bhp.collect_skills(root)
+    agents = bhp.collect_agents(root)
+    hooks = bhp.collect_hooks(root)
+    health = bhp.compute_health(skills, agents, hooks, root)
+    dangling = {(d["source"], d["target"]) for d in health["dangling"]}
+    assert ("alpha", "ghost") in dangling          # skill cross-ref to a non-existent skill
+    assert ("gamma", "delta") in dangling          # agent preloads a non-existent skill
+    assert health["orphans"] == ["beta"]           # no edge in or out
+    assert health["missing_scripts"] == ["absent.py"]
+
+
+def test_compute_health_all_resolved_is_empty():
+    root = tempfile.mkdtemp()
+    _write(os.path.join(root, "plugin-dist/skills/solo/SKILL.md"),
+           "---\nname: solo\n---\n\nSee [`peer`](../peer/SKILL.md).\n")
+    _write(os.path.join(root, "plugin-dist/skills/peer/SKILL.md"),
+           "---\nname: peer\n---\n\nSee [`solo`](../solo/SKILL.md).\n")
+    health = bhp.compute_health(bhp.collect_skills(root), [], [], root)
+    assert health == {"dangling": [], "orphans": [], "missing_scripts": []}
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]

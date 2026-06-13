@@ -261,6 +261,51 @@ def collect_misc(root):
     }
 
 
+def compute_health(skills, agents, hooks, root):
+    """Integrity findings the graph hides: broken refs, orphans, missing scripts.
+
+    build_edges drops any edge whose target is not a node, so a typo'd cross-ref
+    or a `skills:` entry pointing at a deleted skill vanishes silently — this
+    surfaces exactly those, plus skills with no graph connection at all and hook
+    scripts registered in hooks.json but absent from disk.
+    """
+    skill_names = {s["name"] for s in skills}
+    known = skill_names | {a["name"] for a in agents}
+
+    dangling = []
+    for s in skills:
+        for ref in s["crossrefs"]:
+            if ref not in known:
+                dangling.append({"kind": "skill-crossref", "source": s["name"], "target": ref})
+    for a in agents:
+        for sk in a["skills"]:
+            if sk not in skill_names:
+                dangling.append({"kind": "agent-skill", "source": a["name"], "target": sk})
+
+    connected = set()
+    for s in skills:
+        for ref in s["crossrefs"]:
+            if ref in known:
+                connected.add(s["name"])
+                connected.add(ref)
+    for a in agents:
+        for sk in a["skills"]:
+            if sk in skill_names:
+                connected.add(sk)
+    orphans = sorted(s["name"] for s in skills if s["name"] not in connected)
+
+    scripts_dir = os.path.join(root, "plugin-dist/hooks/scripts")
+    missing, seen = [], set()
+    for h in hooks:
+        if h["script"] in seen:
+            continue
+        seen.add(h["script"])
+        if not os.path.isfile(os.path.join(scripts_dir, h["script"])):
+            missing.append(h["script"])
+
+    return {"dangling": dangling, "orphans": orphans, "missing_scripts": missing}
+
+
 def build_nodes(skills, agents, hooks):
     nodes = []
     for s in skills:
@@ -307,6 +352,7 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK):
         "dev_state": collect_dev_state(db_path, feedback_dir),
         "settings": collect_settings(root),
         "misc": collect_misc(root),
+        "health": compute_health(skills, agents, hooks, root),
         "nodes": nodes,
         "layout": compute_layout(nodes, LAYER_ORDER),
         "layer_order": LAYER_ORDER,

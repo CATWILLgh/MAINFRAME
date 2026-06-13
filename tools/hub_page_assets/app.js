@@ -458,10 +458,50 @@
     }
   }
 
+  function renderHealth(root) {
+    const h = D.health || { dangling: [], orphans: [], missing_scripts: [] };
+    const issues = h.dangling.length + h.missing_scripts.length;
+    root.appendChild(el("div", { class: "stat-row" }, [
+      el("div", { class: "stat" }, [el("b", null, String(h.missing_scripts.length)), " missing scripts"]),
+      el("div", { class: "stat" }, [el("b", null, String(h.dangling.length)), " broken refs"]),
+      el("div", { class: "stat" }, [el("b", null, String(h.orphans.length)), " orphan skills"]),
+    ]));
+    if (issues === 0) {
+      root.appendChild(el("div", { class: "notice ok" },
+        "Every cross-ref and preload resolves, and every registered hook script exists on disk."));
+    }
+
+    if (h.missing_scripts.length) {
+      root.appendChild(section("Missing hook scripts", "perm-deny", h.missing_scripts.length,
+        el("ul", { class: "hlist" }, h.missing_scripts.map((s) =>
+          el("li", { class: "hitem err mono" }, s + " — registered in hooks.json but not on disk")))));
+    }
+    if (h.dangling.length) {
+      root.appendChild(section("Broken references", "perm-ask", h.dangling.length,
+        el("ul", { class: "hlist" }, h.dangling.map((d) =>
+          el("li", { class: "hitem" }, [
+            linkChip(d.source, d.kind === "agent-skill" ? "agents" : "skills", d.source),
+            el("span", { class: "harrow" }, " → "),
+            el("span", { class: "mono missing" }, d.target),
+            el("span", { class: "muted small" }, "  (" + d.kind + ", dropped from the graph)"),
+          ])))));
+    }
+    if (h.orphans.length) {
+      root.appendChild(section("Orphan skills", "config", h.orphans.length,
+        el("div", null, [
+          el("p", { class: "muted small" },
+            "No preload or cross-ref edge in or out. Expected for user-invocable skills "
+            + "(triggered directly) and description-auto-triggered ones — not necessarily a problem."),
+          el("div", { class: "chips" }, h.orphans.map((o) => linkChip(o, "skills", o))),
+        ])));
+    }
+  }
+
   const VIEWS = [
     { id: "catalog", label: "Catalog", render: renderCatalog },
     { id: "hooks", label: "Hooks", render: renderHooks },
     { id: "config", label: "Config", render: renderConfig },
+    { id: "health", label: "Health", render: renderHealth },
     { id: "dev", label: "Dev state", render: renderDev },
     { id: "graph", label: "Graph", render: renderGraph },
   ];
