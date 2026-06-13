@@ -119,8 +119,10 @@ table.matrix tr:hover td { background: var(--panel); }
   border: 1px dashed var(--border);
   border-radius: 9px;
   padding: 16px;
+  margin-top: 14px;
   color: var(--muted);
 }
+.notice p { margin: 0 0 9px; }
 .stat-row { display: flex; gap: 12px; margin-bottom: 8px; }
 .stat {
   background: var(--panel);

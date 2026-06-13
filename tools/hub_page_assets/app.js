@@ -495,10 +495,12 @@
 
     const emptyLayers = misc.empty_layers || [];
     if (emptyLayers.length) {
-      root.appendChild(el("div", { class: "notice" },
-        "Reserved but empty layers: "
-        + emptyLayers.map((e) => e.name + " (" + e.path + ")").join(", ")
-        + ". They exist in the architecture but ship no artifacts yet."));
+      root.appendChild(el("div", { class: "notice" }, [
+        el("p", { class: "small" },
+          "Reserved but empty layers — they exist in the architecture but ship no artifacts yet:"),
+        el("div", { class: "chips" }, emptyLayers.map((e) =>
+          el("span", { class: "chip" }, e.name + " · " + e.path))),
+      ]));
     }
   }
 
