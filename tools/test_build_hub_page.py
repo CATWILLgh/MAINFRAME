@@ -188,6 +188,66 @@ def test_render_inlines_data_and_is_self_contained():
     assert "const HUB_DATA" not in html
 
 
+def _fixture_export(root):
+    """Settings + misc-layer artifacts under export/ for the config collectors."""
+    _write(os.path.join(root, "export/settings.json"), json.dumps({
+        "env": {"FOO": "1"},
+        "permissions": {
+            "allow": ["Bash(ls *)", "WebSearch"],
+            "deny": ["Bash(rm -rf /)"],
+            "ask": ["Bash(npm install *)", "Bash(sudo *)", "Bash(pip install *)"],
+            "defaultMode": "auto",
+        },
+        "enabledPlugins": {"context7@official": True, "frontend@official": False},
+        "model": "opus[1m]",
+        "effortLevel": "xhigh",
+        "advisorModel": "opus",
+        "outputStyle": "Explanatory Concise",
+        "language": "Russian",
+    }))
+    _write(os.path.join(root, "export/output-styles/explanatory-concise.md"),
+           "---\nname: Explanatory Concise\n---\n\n# Explanatory Concise\n\n"
+           "Concise with teaching insights.\n")
+    _write(os.path.join(root, "export/templates/credentials-index.md"),
+           "# Credentials index\n\nTemplate for a per-project secrets map.\n")
+    os.makedirs(os.path.join(root, "export/rules"), exist_ok=True)
+    os.makedirs(os.path.join(root, "plugin-dist/commands"), exist_ok=True)
+
+
+def test_collect_settings_reads_permissions_env_and_flags():
+    root = tempfile.mkdtemp()
+    _fixture_export(root)
+    s = bhp.collect_settings(root)
+    assert [len(s["permissions"][k]) for k in ("allow", "deny", "ask")] == [2, 1, 3]
+    assert "Bash(sudo *)" in s["permissions"]["ask"]
+    assert s["mode"] == "auto"
+    assert s["env"] == {"FOO": "1"}
+    assert s["flags"]["model"] == "opus[1m]"
+    assert s["flags"]["effortLevel"] == "xhigh"
+    assert s["plugins"] == {"context7@official": True, "frontend@official": False}
+
+
+def test_collect_settings_absent_file_is_empty_not_crash():
+    s = bhp.collect_settings("/nonexistent-root-xyz")
+    assert s["permissions"] == {"allow": [], "deny": [], "ask": []}
+    assert s["env"] == {}
+    assert s["flags"] == {}
+
+
+def test_collect_misc_reads_styles_templates_and_empty_layers():
+    root = tempfile.mkdtemp()
+    _fixture_export(root)
+    m = bhp.collect_misc(root)
+    styles = {x["name"]: x for x in m["output_styles"]}
+    assert "Explanatory Concise" in styles
+    assert "teaching" in styles["Explanatory Concise"]["summary"].lower()
+    templates = {x["name"]: x for x in m["templates"]}
+    assert "credentials-index" in templates
+    assert "secrets map" in templates["credentials-index"]["summary"].lower()
+    empty = {x["name"] for x in m["empty_layers"]}
+    assert empty == {"rules", "commands"}
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]

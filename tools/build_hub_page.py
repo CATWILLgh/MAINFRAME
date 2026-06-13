@@ -33,6 +33,14 @@ _SKILL_REF = re.compile(r"\]\(\.\./([a-z0-9][a-z0-9-]*)/SKILL\.md\)")
 _AGENT_REF = re.compile(r"\]\(\.\./\.\./agents/([a-z0-9][a-z0-9-]*)\.md\)")
 _SCRIPT_NAME = re.compile(r"([\w-]+\.py)")
 
+# Top-level settings.json keys surfaced on the Config tab (the behaviour-shaping
+# ones); permission lists, env and plugins are pulled out separately.
+_SETTINGS_FLAG_KEYS = ["model", "effortLevel", "advisorModel", "outputStyle",
+                       "language", "autoCompactEnabled", "autoMemoryEnabled",
+                       "teammateMode"]
+# (name, repo-relative path) layers that exist as reserved-but-empty directories.
+_EMPTY_LAYER_PROBES = (("rules", "export/rules"), ("commands", "plugin-dist/commands"))
+
 
 def parse_frontmatter(text):
     """Return (frontmatter dict, body). Empty dict when there is no frontmatter."""
@@ -186,6 +194,73 @@ def collect_dev_state(db_path, feedback_dir):
     return state
 
 
+def collect_settings(root):
+    """Read-only snapshot of export/settings.json: permissions, env, key flags."""
+    empty = {"permissions": {"allow": [], "deny": [], "ask": []},
+             "mode": "", "env": {}, "plugins": {}, "flags": {}}
+    path = os.path.join(root, "export/settings.json")
+    if not os.path.isfile(path):
+        return empty
+    try:
+        data = json.loads(_read(path))
+    except (json.JSONDecodeError, ValueError):
+        return empty
+    perms = data.get("permissions") or {}
+    return {
+        "permissions": {k: list(perms.get(k) or []) for k in ("allow", "deny", "ask")},
+        "mode": perms.get("defaultMode", ""),
+        "env": data.get("env") or {},
+        "plugins": data.get("enabledPlugins") or {},
+        "flags": {k: data[k] for k in _SETTINGS_FLAG_KEYS if k in data},
+    }
+
+
+def _doc_summary(text):
+    """First non-empty non-heading body line; falls back to the heading text."""
+    _, body = parse_frontmatter(text)
+    heading = ""
+    for line in body.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            heading = heading or line.lstrip("#").strip()
+            continue
+        return line
+    return heading
+
+
+def _collect_docs(directory, name_from_frontmatter):
+    out = []
+    if not os.path.isdir(directory):
+        return out
+    for fn in sorted(os.listdir(directory)):
+        if not fn.endswith(".md"):
+            continue
+        text = _read(os.path.join(directory, fn))
+        fm, _ = parse_frontmatter(text)
+        name = (fm.get("name") if name_from_frontmatter else None) or fn[:-3]
+        out.append({"name": name, "summary": _doc_summary(text)})
+    return out
+
+
+def _is_empty_layer(directory):
+    return (not os.path.isdir(directory)) or not any(
+        f.endswith(".md") for f in os.listdir(directory))
+
+
+def collect_misc(root):
+    """Output styles, templates, and explicit markers for reserved-empty layers."""
+    empty = [{"name": name, "path": rel}
+             for name, rel in _EMPTY_LAYER_PROBES
+             if _is_empty_layer(os.path.join(root, rel))]
+    return {
+        "output_styles": _collect_docs(os.path.join(root, "export/output-styles"), True),
+        "templates": _collect_docs(os.path.join(root, "export/templates"), False),
+        "empty_layers": empty,
+    }
+
+
 def build_nodes(skills, agents, hooks):
     nodes = []
     for s in skills:
@@ -230,6 +305,8 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK):
         "hooks": hooks,
         "edges": build_edges(skills, agents, hooks),
         "dev_state": collect_dev_state(db_path, feedback_dir),
+        "settings": collect_settings(root),
+        "misc": collect_misc(root),
         "nodes": nodes,
         "layout": compute_layout(nodes, LAYER_ORDER),
         "layer_order": LAYER_ORDER,

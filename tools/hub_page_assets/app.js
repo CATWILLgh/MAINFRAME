@@ -389,9 +389,79 @@
       [el("span", { class: "muted" }, "drag to pan · scroll to zoom · hover to trace links · click a node for details"), ...items]);
   }
 
+  function kv(k, v) {
+    return el("div", { class: "kv" }, [
+      el("span", { class: "kvk" }, k),
+      el("span", { class: "kvv mono" }, v == null || v === "" ? "—" : String(v)),
+    ]);
+  }
+
+  function renderConfig(root) {
+    const cfg = D.settings || {};
+    const misc = D.misc || {};
+    const perms = cfg.permissions || { allow: [], deny: [], ask: [] };
+
+    root.appendChild(el("h2", { class: "layer-h config" }, "Permissions"));
+    root.appendChild(el("p", { class: "muted" },
+      "What the hub lets an agent do silently, ask about, or refuse — default mode: "
+      + (cfg.mode || "?") + ". Source: export/settings.json."));
+    [["deny", "perm-deny"], ["ask", "perm-ask"], ["allow", "perm-allow"]].forEach(([key, cls]) => {
+      const items = perms[key] || [];
+      if (!items.length) return;
+      const rows = items.map((p) => el("li", { class: "mono perm " + cls }, p));
+      root.appendChild(section(key, cls, items.length, el("ul", { class: "permlist" }, rows)));
+    });
+
+    const flags = cfg.flags || {};
+    const settingsRows = [
+      kv("model", flags.model), kv("effortLevel", flags.effortLevel),
+      kv("advisorModel", flags.advisorModel), kv("outputStyle", flags.outputStyle),
+      kv("language", flags.language), kv("defaultMode", cfg.mode),
+      kv("autoCompact", flags.autoCompactEnabled), kv("autoMemory", flags.autoMemoryEnabled),
+      kv("teammateMode", flags.teammateMode),
+    ];
+    root.appendChild(section("Settings", "config", settingsRows.length,
+      el("div", { class: "kvgrid" }, settingsRows)));
+
+    const env = cfg.env || {};
+    const envKeys = Object.keys(env);
+    if (envKeys.length) {
+      root.appendChild(section("Environment", "config", envKeys.length,
+        el("div", { class: "kvgrid" }, envKeys.map((k) => kv(k, env[k])))));
+    }
+
+    const plugins = cfg.plugins || {};
+    const pkeys = Object.keys(plugins);
+    if (pkeys.length) {
+      root.appendChild(section("Plugins", "config", pkeys.length,
+        el("div", { class: "badges wrap" }, pkeys.map((p) =>
+          badge(p + " · " + (plugins[p] ? "on" : "off"), plugins[p] ? "user" : "muted")))));
+    }
+
+    [["Output styles", misc.output_styles || []], ["Templates", misc.templates || []]]
+      .forEach(([title, items]) => {
+        if (!items.length) return;
+        const grid = el("div", { class: "grid" }, items.map((it) =>
+          el("article", { class: "card" }, [
+            el("div", { class: "card-head" }, [el("span", { class: "card-name" }, it.name)]),
+            el("p", { class: "card-desc" }, it.summary || ""),
+          ])));
+        root.appendChild(section(title, "config", items.length, grid));
+      });
+
+    const emptyLayers = misc.empty_layers || [];
+    if (emptyLayers.length) {
+      root.appendChild(el("div", { class: "notice" },
+        "Reserved but empty layers: "
+        + emptyLayers.map((e) => e.name + " (" + e.path + ")").join(", ")
+        + ". They exist in the architecture but ship no artifacts yet."));
+    }
+  }
+
   const VIEWS = [
     { id: "catalog", label: "Catalog", render: renderCatalog },
     { id: "hooks", label: "Hooks", render: renderHooks },
+    { id: "config", label: "Config", render: renderConfig },
     { id: "dev", label: "Dev state", render: renderDev },
     { id: "graph", label: "Graph", render: renderGraph },
   ];
