@@ -253,7 +253,7 @@
   },
   "outputStyle": "Explanatory Concise",
   "language": "Russian",
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
   "advisorModel": "opus",
   "skipWorkflowUsageWarning": true,
   "editorMode": "normal",
