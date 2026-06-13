@@ -153,7 +153,7 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 
 #### Always-on, and the plumbing
 
-- **`telemetry.py`** — *(dev-only.)* Fires across many events — session start/end, skill loads, file edits, permission denials, sub-agent starts — and logs local-only event metadata (counts and coarse buckets, never prompts, code, or file paths) into a local SQLite DB. Present only when the `--dev` instrumentation is installed; on a plain install it isn't wired and writes nothing.
+- **`telemetry.py`** — *(dev-only.)* Fires across many events — session start/end, skill loads, file edits, todo-list updates, permission denials, sub-agent starts — and logs local-only event metadata (counts and coarse buckets, never prompts, code, todo text, or file paths) into a local SQLite DB. Present only when the `--dev` instrumentation is installed; on a plain install it isn't wired and writes nothing.
 - **Shared libraries** (not hooks themselves): `_hooklib.py` — common scaffolding (payload parsing, the emit / gate helpers, git diffing); `_markers.py` — the suppression-marker and debug-residue detector sets; `comment_extract.py` — false-positive-free comment / docstring extraction.
 
 ### Skills — 18 focused playbooks
