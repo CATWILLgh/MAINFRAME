@@ -87,6 +87,15 @@ def main():
         if tool == "Skill":
             skill = tool_input.get("skill") or tool_input.get("name") or tool_input.get("command") or ""
             log_event("skill_load", {"skill": _norm_skill(skill)}, payload)
+        elif tool == "TodoWrite":
+            # Counts only — never the todo text, which can carry task descriptions.
+            todos = tool_input.get("todos") or []
+            counts = {"pending": 0, "in_progress": 0, "completed": 0}
+            for item in todos:
+                status = (item or {}).get("status")
+                if status in counts:
+                    counts[status] += 1
+            log_event("todo_write", {"n": len(todos), **counts}, payload)
     elif event == "PostToolUse":
         file_path = tool_input.get("file_path") or ""
         if file_path and _TICKET_RE.search(file_path):

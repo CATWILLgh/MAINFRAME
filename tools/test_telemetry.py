@@ -116,6 +116,36 @@ def test_default_path_requires_existing_dir():
         os.environ["HOME"] = old_home
 
 
+def _drive_main(payload):
+    saved = sys.stdin
+    try:
+        sys.stdin = io.StringIO(json.dumps(payload))
+        telemetry.main()
+    finally:
+        sys.stdin = saved
+
+
+def test_todo_write_logs_counts_not_content():
+    db = _fresh_db()
+    _drive_main({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "TodoWrite",
+        "session_id": "s",
+        "tool_input": {"todos": [
+            {"content": "secret task detail", "status": "completed", "activeForm": "a"},
+            {"content": "another", "status": "in_progress", "activeForm": "b"},
+            {"content": "third", "status": "pending", "activeForm": "c"},
+        ]},
+    })
+    rows = _rows(db)
+    assert len(rows) == 1, rows
+    assert rows[0][4] == "todo_write"
+    assert json.loads(rows[0][5]) == {"n": 3, "pending": 1, "in_progress": 1, "completed": 1}
+    # todo content (task descriptions) must never be logged
+    whole = " ".join(str(c) for c in rows[0])
+    assert "secret task detail" not in whole and "another" not in whole
+
+
 def test_concurrency_writers_never_raise_and_write():
     # Telemetry is best-effort by design: under write contention SQLite may fail to
     # acquire the lock within the 50ms busy_timeout, and log_event silently drops
