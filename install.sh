@@ -791,6 +791,21 @@ main() {
         for entry in "${DEV_ARTIFACTS[@]}"; do
             install_one "${entry%%:*}" "${entry##*:}"
         done
+        # Local hub reference page (dev-only, gitignored output). Best-effort:
+        # a missing .venv warns rather than failing the install.
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would generate workspace/runtime/hub.html (local hub map)"
+        elif [[ -x "${PROJECT_ROOT}/.venv/bin/python3" ]]; then
+            if "${PROJECT_ROOT}/.venv/bin/python3" \
+                    "${PROJECT_ROOT}/tools/build_hub_page.py" \
+                    --root "${PROJECT_ROOT}" >/dev/null 2>&1; then
+                log_ok "Generated workspace/runtime/hub.html — open it in a browser for the hub map."
+            else
+                log_warn "Could not generate hub.html (build_hub_page.py failed); skipping."
+            fi
+        else
+            log_warn "Skipped hub.html — .venv missing (python3 -m venv .venv && .venv/bin/pip install pyyaml tiktoken)."
+        fi
     fi
     for entry in "${MANAGED_DIRS[@]}"; do
         install_dir_contents "${entry%%:*}" "${entry##*:}"
