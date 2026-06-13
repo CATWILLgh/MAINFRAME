@@ -371,7 +371,7 @@ def build_nodes(skills, agents, hooks):
 
 def compute_layout(nodes, layer_order):
     """Group nodes into one column per layer: same layer shares x, distinct y."""
-    col_w, row_h, x0, y0 = 280, 64, 90, 90
+    col_w, row_h, x0, y0 = 250, 54, 80, 80
     by_layer = {}
     for n in nodes:
         by_layer.setdefault(n["layer"], []).append(n["id"])

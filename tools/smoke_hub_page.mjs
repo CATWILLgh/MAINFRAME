@@ -122,6 +122,9 @@ ok(q("#view-dev .bars").length >= 2, "activity-by-day and by-agent bar charts pr
 ok(q("#view-dev .bar-row").length > 5, "bar rows rendered (" + q("#view-dev .bar-row").length + ")");
 ok(/by skill|by hook/.test(dev.textContent), "payload breakdowns rendered");
 
+ok(q("#view-config .kvgrid.wide").length >= 1, "environment uses the full-width key/value grid");
+ok(q("#view-graph .graph-ctrls button").length === 3, "graph has on-canvas zoom/reset controls");
+
 console.log("\nconsole/jsdom errors: " + errors.length);
 errors.slice(0, 5).forEach((e) => console.log("  ! " + e.slice(0, 200)));
 console.log(`\n${pass} passed, ${fail} failed`);

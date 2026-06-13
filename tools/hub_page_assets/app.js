@@ -333,6 +333,12 @@
 
   const LAYERS = ["events", "hooks", "agents", "skills", "dev"];
 
+  function ctrlBtn(label, title, onClick) {
+    const b = el("button", { type: "button", title: title }, label);
+    b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+    return b;
+  }
+
   function renderGraph(root) {
     const pos = D.layout;
     const placed = D.nodes.filter((n) => pos[n.id]);
@@ -399,18 +405,25 @@
     }
 
     let scale = 1, tx = 0, ty = 0, drag = null;
+    const Z_MIN = 0.3, Z_MAX = 6;
     function apply() { viewport.setAttribute("transform", "translate(" + tx + "," + ty + ") scale(" + scale + ")"); }
+    function zoomBy(f) { scale = Math.min(Z_MAX, Math.max(Z_MIN, scale * f)); apply(); }
+    function resetView() { scale = 1; tx = 0; ty = 0; apply(); }
     board.addEventListener("wheel", (ev) => {
       ev.preventDefault();
-      scale = Math.min(4, Math.max(0.3, scale * (ev.deltaY < 0 ? 1.1 : 0.9)));
-      apply();
+      zoomBy(ev.deltaY < 0 ? 1.1 : 0.9);
     }, { passive: false });
     board.addEventListener("mousedown", (ev) => { drag = { x: ev.clientX - tx, y: ev.clientY - ty }; });
     window.addEventListener("mousemove", (ev) => { if (drag) { tx = ev.clientX - drag.x; ty = ev.clientY - drag.y; apply(); } });
     window.addEventListener("mouseup", () => { drag = null; });
 
+    const ctrls = el("div", { class: "graph-ctrls" }, [
+      ctrlBtn("+", "zoom in", () => zoomBy(1.25)),
+      ctrlBtn("−", "zoom out", () => zoomBy(0.8)),
+      ctrlBtn("⤢", "reset view", resetView),
+    ]);
     root.appendChild(graphLegend());
-    root.appendChild(board);
+    root.appendChild(el("div", { class: "graph-wrap" }, [board, ctrls]));
   }
 
   function graphLegend() {
@@ -458,7 +471,7 @@
     const envKeys = Object.keys(env);
     if (envKeys.length) {
       root.appendChild(section("Environment", "config", envKeys.length,
-        el("div", { class: "kvgrid" }, envKeys.map((k) => kv(k, env[k])))));
+        el("div", { class: "kvgrid wide" }, envKeys.map((k) => kv(k, env[k])))));
     }
 
     const plugins = cfg.plugins || {};
