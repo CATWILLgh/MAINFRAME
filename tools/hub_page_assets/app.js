@@ -46,13 +46,153 @@
     return n;
   }
 
+  // Indexed by name; the clicked node's layer disambiguates a name shared across layers.
+  const skillByName = {};
+  D.skills.forEach((s) => { skillByName[s.name] = s; });
+  const agentByName = {};
+  D.agents.forEach((a) => { agentByName[a.name] = a; });
+  // reverse edges: who preloads (agent skills:) or references (skill cross-ref) a skill
+  const referencedBy = {};
+  D.agents.forEach((a) => (a.skills || []).forEach((sk) => {
+    (referencedBy[sk] || (referencedBy[sk] = [])).push({ name: a.name, layer: "agents" });
+  }));
+  D.skills.forEach((s) => (s.crossrefs || []).forEach((ref) => {
+    if (skillByName[ref]) {
+      (referencedBy[ref] || (referencedBy[ref] = [])).push({ name: s.name, layer: "skills" });
+    }
+  }));
+  const hooksByScript = {};
+  const hooksByEvent = {};
+  D.hooks.forEach((h) => {
+    (hooksByScript[h.script] || (hooksByScript[h.script] = [])).push(h);
+    (hooksByEvent[h.event] || (hooksByEvent[h.event] = [])).push(h);
+  });
+
+  // Module-level so applyFilter can reach items rendered by different views.
+  const catalogCards = [];     // {el, text}
+  const catalogSections = [];  // {el, cards:[{el,text}]}
+  const graphNodes = [];       // {el, id, text}
+  const graphEdges = [];       // {el, ends:[a,b]}
+
+  function applyFilter(raw) {
+    const q = (raw || "").trim().toLowerCase();
+    catalogCards.forEach((c) => c.el.classList.toggle("filtered", !!q && !c.text.includes(q)));
+    catalogSections.forEach((s) => {
+      const anyVisible = s.cards.some((c) => !q || c.text.includes(q));
+      s.el.classList.toggle("filtered", !anyVisible);
+    });
+    const visibleNodes = new Set();
+    graphNodes.forEach((n) => {
+      const on = !q || n.text.includes(q);
+      n.el.classList.toggle("filtered", !on);
+      if (on) visibleNodes.add(n.id);
+    });
+    graphEdges.forEach((e) => {
+      const on = !q || (visibleNodes.has(e.ends[0]) && visibleNodes.has(e.ends[1]));
+      e.el.classList.toggle("filtered", !on);
+    });
+  }
+
+  const detailBody = el("div", { class: "dbody" });
+  const detailClose = el("button", { type: "button", class: "dclose", "aria-label": "close" }, "×");
+  const detail = el("aside", { class: "detail", id: "detail" }, [detailClose, detailBody]);
+  detail.hidden = true;
+  document.body.appendChild(detail);
+  detailClose.addEventListener("click", closeDetail);
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDetail(); });
+
+  function closeDetail() { detail.hidden = true; detail.classList.remove("open"); }
+
+  function openDetail(layer, id) {
+    let body = null;
+    if (layer === "skills" || layer === "dev") body = skillDetail(id);
+    else if (layer === "agents") body = agentDetail(id);
+    else if (layer === "hooks") body = hookDetail(id);
+    else if (layer === "events") body = eventDetail(id);
+    if (!body) return;
+    while (detailBody.firstChild) detailBody.removeChild(detailBody.firstChild);
+    detailBody.appendChild(body);
+    detail.hidden = false;
+    detail.classList.add("open");
+  }
+
+  function linkChip(label, layer, id) {
+    const resolvable =
+      ((layer === "skills" || layer === "dev") && skillByName[id]) ||
+      (layer === "agents" && agentByName[id]) ||
+      (layer === "hooks" && hooksByScript[id]) ||
+      (layer === "events" && hooksByEvent[id]);
+    const chip = el("span", { class: "chip" + (resolvable ? " link" : "") }, label);
+    if (resolvable) chip.addEventListener("click", (e) => { e.stopPropagation(); openDetail(layer, id); });
+    return chip;
+  }
+
+  function dhead(title, badgeText, cls) {
+    return el("div", { class: "dhead" }, [el("span", { class: "dtitle" }, title), badge(badgeText, cls)]);
+  }
+  function dsec(title, items) {
+    return items.length
+      ? el("div", { class: "dsec" }, [el("h4", null, title), el("div", { class: "chips" }, items)])
+      : null;
+  }
+
+  function skillDetail(id) {
+    const s = skillByName[id];
+    if (!s) return el("div", { class: "notice" }, "Unknown skill: " + id);
+    return el("div", null, [
+      dhead(s.name, s.dev ? "dev" : "skill", s.dev ? "dev" : "skills"),
+      el("p", { class: "muted small" }, s.user_invocable ? "user-invocable: /" + s.name : "auto-triggered (not user-invocable)"),
+      el("p", { class: "card-desc" }, s.description),
+      s.when_to_use ? el("p", { class: "card-when" }, [el("b", null, "when: "), s.when_to_use]) : null,
+      dsec("cross-refs", (s.crossrefs || []).map((r) => linkChip(r, "skills", r))),
+      dsec("referenced / preloaded by", (referencedBy[s.name] || []).map((p) => linkChip(p.name, p.layer, p.name))),
+    ]);
+  }
+
+  function agentDetail(id) {
+    const a = agentByName[id];
+    if (!a) return el("div", { class: "notice" }, "Unknown agent: " + id);
+    return el("div", null, [
+      dhead(a.name, a.model || "agent", "agents"),
+      el("p", { class: "card-desc" }, a.description),
+      a.tools ? el("p", { class: "card-when" }, [el("b", null, "tools: "), String(a.tools)]) : null,
+      dsec("preloads skills", (a.skills || []).map((sk) => linkChip(sk, "skills", sk))),
+    ]);
+  }
+
+  function hookDetail(id) {
+    const hs = hooksByScript[id] || [];
+    const purpose = (hs[0] && hs[0].purpose) || "";
+    const events = [];
+    const seen = new Set();
+    hs.forEach((h) => { if (!seen.has(h.event)) { seen.add(h.event); events.push(linkChip(h.event, "events", h.event)); } });
+    return el("div", null, [
+      dhead(id, "hook", "hooks"),
+      purpose ? el("p", { class: "card-desc" }, purpose) : el("p", { class: "muted small" }, "(no docstring purpose)"),
+      dsec("fires on", events),
+    ]);
+  }
+
+  function eventDetail(id) {
+    const hs = hooksByEvent[id] || [];
+    const rows = hs.map((h) => el("tr", null, [
+      el("td", { class: "mono dim" }, h.matcher || "*"),
+      el("td", null, linkChip(h.script, "hooks", h.script)),
+    ]));
+    return el("div", null, [
+      dhead(id, "event", "events"),
+      el("p", { class: "muted small" }, hs.length + " hook" + (hs.length === 1 ? "" : "s") + " fire on this event."),
+      el("table", { class: "matrix" }, [el("tbody", null, rows)]),
+    ]);
+  }
+
   function skillCard(s) {
     const badges = el("div", { class: "badges" }, [
       badge(s.dev ? "dev" : "skill", s.dev ? "dev" : "skills"),
       badge(s.user_invocable ? "/" + s.name : "auto",
             s.user_invocable ? "user" : "muted"),
     ]);
-    return el("article", { class: "card" }, [
+    return el("article", { class: "card clickable" }, [
       el("div", { class: "card-head" }, [el("span", { class: "card-name" }, s.name), badges]),
       el("p", { class: "card-desc" }, s.description),
       s.when_to_use && el("p", { class: "card-when" }, [el("b", null, "when: "), s.when_to_use]),
@@ -62,7 +202,7 @@
   function agentCard(a) {
     const chips = el("div", { class: "chips" },
       (a.skills || []).map((sk) => el("span", { class: "chip" }, sk)));
-    return el("article", { class: "card" }, [
+    return el("article", { class: "card clickable" }, [
       el("div", { class: "card-head" }, [
         el("span", { class: "card-name" }, a.name),
         el("div", { class: "badges" }, [badge(a.model || "?", "agents")]),
@@ -80,18 +220,35 @@
     ]);
   }
 
+  function cardText(it) {
+    return (it.name + " " + (it.description || "") + " " + (it.when_to_use || "")
+            + " " + ((it.skills || []).join(" "))).toLowerCase();
+  }
+
   function renderCatalog(root) {
     const skills = D.skills.filter((s) => !s.dev);
     const devSkills = D.skills.filter((s) => s.dev);
     const groups = [
-      ["Skills", "skills", skills, skillCard],
-      ["Agents", "agents", D.agents, agentCard],
-      ["Dev skills", "dev", devSkills, skillCard],
+      ["Skills", "skills", skills, skillCard, "skills"],
+      ["Agents", "agents", D.agents, agentCard, "agents"],
+      ["Dev skills", "dev", devSkills, skillCard, "dev"],
     ];
-    groups.forEach(([title, cls, items, mk]) => {
+    groups.forEach(([title, cls, items, mk, layer]) => {
       if (!items.length) return;
-      const grid = el("div", { class: "grid" }, items.map(mk));
-      root.appendChild(section(title, cls, items.length, grid));
+      const grid = el("div", { class: "grid" });
+      const sec = section(title, cls, items.length, grid);
+      const cards = [];
+      items.forEach((it) => {
+        const card = mk(it);
+        const text = cardText(it);
+        card.addEventListener("click", () => openDetail(layer, it.name));
+        grid.appendChild(card);
+        const entry = { el: card, text };
+        catalogCards.push(entry);
+        cards.push(entry);
+      });
+      catalogSections.push({ el: sec, cards });
+      root.appendChild(sec);
     });
   }
 
@@ -172,6 +329,7 @@
       line._ends = [e.source, e.target];
       edgeLayer.appendChild(line);
       edgeEls.push(line);
+      graphEdges.push({ el: line, ends: [e.source, e.target] });
     });
 
     const nodeEls = {};
@@ -182,8 +340,16 @@
       g.appendChild(svg("text", { x: 11, y: 4 }, n.label));
       g.addEventListener("mouseenter", () => focus(n.id));
       g.addEventListener("mouseleave", reset);
+      let downXY = null;
+      g.addEventListener("mousedown", (e) => { downXY = [e.clientX, e.clientY]; });
+      g.addEventListener("click", (e) => {
+        // a click that moved is a pan, not a select — don't open the panel
+        if (downXY && Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 4) return;
+        openDetail(n.layer, n.id);
+      });
       nodeLayer.appendChild(g);
       nodeEls[n.id] = g;
+      graphNodes.push({ el: g, id: n.id, text: (n.label || n.id).toLowerCase() });
     });
 
     const board = svg("svg", { class: "graph", viewBox: "0 0 " + w + " " + h,
@@ -220,7 +386,7 @@
     const items = LAYERS.map((L) =>
       el("span", { class: "leg" }, [el("i", { class: "swatch " + L }), L]));
     return el("div", { class: "legend" },
-      [el("span", { class: "muted" }, "drag to pan · scroll to zoom · hover a node to trace its links"), ...items]);
+      [el("span", { class: "muted" }, "drag to pan · scroll to zoom · hover to trace links · click a node for details"), ...items]);
   }
 
   const VIEWS = [
@@ -247,6 +413,21 @@
     app.appendChild(pane);
     panes[v.id] = { pane, btn };
   });
+
+  // Search box lives in the topbar; it filters the catalog and the graph in place
+  // (kept out of the per-view render so the graph keeps its pan/zoom on a keystroke).
+  const topbar = document.querySelector(".topbar");
+  if (topbar) {
+    const search = el("input", { class: "search", type: "search",
+      placeholder: "filter skills, agents, hooks…", autocomplete: "off" });
+    search.addEventListener("input", () => applyFilter(search.value));
+    const stamp = topbar.querySelector(".stamp");
+    topbar.insertBefore(search, stamp || null);
+    // anchor the fixed drawer just under the (sticky) topbar, measured not guessed
+    const top = topbar.offsetHeight || 49;
+    detail.style.top = top + "px";
+    detail.style.height = "calc(100vh - " + top + "px)";
+  }
 
   function show(id) {
     VIEWS.forEach((v) => {
