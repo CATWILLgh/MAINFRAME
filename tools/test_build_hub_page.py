@@ -248,6 +248,56 @@ def test_collect_misc_reads_styles_templates_and_empty_layers():
     assert empty == {"rules", "commands"}
 
 
+def _telemetry_db(rows, columns="ts, session_id, agent_type, event, payload"):
+    """Create a telemetry DB and insert rows; returns the db path."""
+    d = tempfile.mkdtemp()
+    db = os.path.join(d, "telemetry.db")
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, "
+                "session_id TEXT, agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
+    ph = ",".join("?" for _ in columns.split(","))
+    con.executemany(f"INSERT INTO events({columns}) VALUES ({ph})", rows)
+    con.commit()
+    con.close()
+    return db
+
+
+def test_dev_state_breaks_down_by_agent_and_day():
+    db = _telemetry_db([
+        ("2026-06-01T10:00:00", "s1", "Explore", "subagent_start", ""),
+        ("2026-06-01T11:00:00", "s1", "Explore", "subagent_start", ""),
+        ("2026-06-02T09:00:00", "s2", "", "session", ""),
+    ])
+    state = bhp.collect_dev_state(db_path=db, feedback_dir="/nonexistent")
+    by_agent = dict(state["telemetry"]["by_agent"])
+    assert by_agent["Explore"] == 2
+    assert by_agent["(main context)"] == 1
+    by_day = dict(state["telemetry"]["by_day"])
+    assert by_day["2026-06-01"] == 2
+    assert by_day["2026-06-02"] == 1
+
+
+def test_payload_breakdown_groups_by_key_and_degrades_visibly():
+    db = _telemetry_db([
+        ("skill_load", '{"skill":"task-workflow"}'),
+        ("skill_load", '{"skill":"task-workflow"}'),
+        ("skill_load", '{"skill":"surface-ticket"}'),
+        ("skill_load", '{"other":"x"}'),
+        ("skill_load", "not json"),
+    ], columns="event, payload")
+    con = sqlite3.connect(db)
+    try:
+        b = bhp._payload_breakdown(con, "skill_load", "skill")
+    finally:
+        con.close()
+    assert b["total"] == 5
+    items = dict(b["items"])
+    assert items["task-workflow"] == 2
+    assert items["surface-ticket"] == 1
+    # absent key and unparseable payload both degrade to the visible bucket
+    assert b["unrecognized"] == 2
+
+
 def _fixture_health(root):
     """A tree seeded with one broken cross-ref, one orphan, one missing script."""
     _write(os.path.join(root, "plugin-dist/skills/alpha/SKILL.md"),

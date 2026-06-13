@@ -278,3 +278,17 @@ svg.graph.dimmed .gnode.hot text { fill: var(--text); }
 .hitem.err { color: #f85149; }
 .missing { color: #f85149; }
 .harrow { color: var(--muted); }
+
+.bars { display: flex; flex-direction: column; gap: 4px; }
+.bar-row { display: flex; align-items: center; gap: 10px; }
+.bar-label {
+  width: 210px;
+  flex-shrink: 0;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-track { flex: 1; height: 14px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.bar-num { width: 46px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }

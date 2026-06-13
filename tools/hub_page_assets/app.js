@@ -272,6 +272,17 @@
     });
   }
 
+  function barList(rows) {
+    const max = rows.reduce((m, r) => Math.max(m, r[1]), 0) || 1;
+    return el("div", { class: "bars" }, rows.map(([label, n]) =>
+      el("div", { class: "bar-row" }, [
+        el("span", { class: "bar-label mono" }, String(label)),
+        el("span", { class: "bar-track" },
+          el("span", { class: "bar-fill", style: "width:" + Math.max(2, Math.round(100 * n / max)) + "%" })),
+        el("span", { class: "bar-num" }, String(n)),
+      ])));
+  }
+
   function renderDev(root) {
     const ds = D.dev_state;
     if (!ds.active) {
@@ -294,6 +305,26 @@
       el("table", { class: "matrix" }, [
         el("thead", null, el("tr", null, [el("th", null, "event"), el("th", null, "count")])),
         el("tbody", null, rows)])));
+
+    const t = ds.telemetry;
+    if (t.by_day && t.by_day.length) {
+      root.appendChild(section("Activity by day", "events", t.by_day.length, barList(t.by_day)));
+    }
+    if (t.by_agent && t.by_agent.length) {
+      root.appendChild(section("Events by agent", "agents", t.by_agent.length, barList(t.by_agent)));
+    }
+    (t.breakdowns || []).forEach((b) => {
+      const brows = b.items.map(([v, n]) => el("tr", null, [
+        el("td", { class: "mono" }, v), el("td", { class: "num" }, String(n))]));
+      if (b.unrecognized) {
+        brows.push(el("tr", null, [
+          el("td", { class: "mono dim" }, "(payload format unrecognized)"),
+          el("td", { class: "num dim" }, String(b.unrecognized))]));
+      }
+      root.appendChild(section(b.event + " · by " + b.key, "dev", b.total,
+        el("table", { class: "matrix" }, [el("tbody", null, brows)])));
+    });
+
     if (ds.feedback.length) {
       root.appendChild(section("Feedback queue", "dev", ds.feedback.length,
         el("ul", { class: "files" }, ds.feedback.map((f) => el("li", { class: "mono" }, f)))));

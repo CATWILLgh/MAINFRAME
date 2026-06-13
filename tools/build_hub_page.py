@@ -40,6 +40,11 @@ _SETTINGS_FLAG_KEYS = ["model", "effortLevel", "advisorModel", "outputStyle",
                        "teammateMode"]
 # (name, repo-relative path) layers that exist as reserved-but-empty directories.
 _EMPTY_LAYER_PROBES = (("rules", "export/rules"), ("commands", "plugin-dist/commands"))
+# (event, payload-key) miss/usage breakdowns. The page READS payload defensively
+# but does not OWN its schema (telemetry.py does) — a renamed key degrades to the
+# visible "unrecognized" bucket rather than silently vanishing.
+_PAYLOAD_BREAKDOWNS = (("skill_load", "skill"), ("incident", "hook"),
+                       ("permission_denied", "tool_name"), ("secret_block", "types"))
 
 
 def parse_frontmatter(text):
@@ -170,9 +175,36 @@ def build_edges(skills, agents, hooks):
     return edges
 
 
+def _payload_breakdown(con, event, key):
+    """Group an event's rows by one payload key. Unparseable or key-absent rows
+    fall into a visible 'unrecognized' count, so schema drift shows rather than
+    silently emptying the view."""
+    rows = con.execute("SELECT payload FROM events WHERE event = ?", (event,)).fetchall()
+    counts, unrecognized = {}, 0
+    for (payload,) in rows:
+        val = None
+        if payload:
+            try:
+                obj = json.loads(payload)
+                if isinstance(obj, dict):
+                    val = obj.get(key)
+            except (json.JSONDecodeError, ValueError):
+                val = None
+        if isinstance(val, list):
+            val = ", ".join(str(x) for x in val) if val else None
+        if val in (None, ""):
+            unrecognized += 1
+        else:
+            counts[str(val)] = counts.get(str(val), 0) + 1
+    items = sorted(counts.items(), key=lambda kv: -kv[1])
+    return {"event": event, "key": key, "total": len(rows),
+            "items": [list(i) for i in items], "unrecognized": unrecognized}
+
+
 def collect_dev_state(db_path, feedback_dir):
     """Read-only telemetry + feedback snapshot. Absence => dev not active."""
-    state = {"active": False, "telemetry": {"sessions": 0, "events": []}, "feedback": []}
+    empty_tel = {"sessions": 0, "events": [], "by_agent": [], "by_day": [], "breakdowns": []}
+    state = {"active": False, "telemetry": dict(empty_tel), "feedback": []}
     if os.path.isfile(db_path):
         try:
             con = sqlite3.connect(db_path)
@@ -180,11 +212,24 @@ def collect_dev_state(db_path, feedback_dir):
                 sessions = con.execute(
                     "SELECT COUNT(DISTINCT session_id) FROM events").fetchone()[0]
                 events = con.execute(
-                    "SELECT event, COUNT(*) FROM events GROUP BY event ORDER BY 2 DESC"
-                ).fetchall()
+                    "SELECT event, COUNT(*) FROM events GROUP BY event ORDER BY 2 DESC").fetchall()
+                by_agent = con.execute(
+                    "SELECT COALESCE(NULLIF(agent_type, ''), '(main context)'), COUNT(*) "
+                    "FROM events GROUP BY 1 ORDER BY 2 DESC").fetchall()
+                by_day = con.execute(
+                    "SELECT substr(ts, 1, 10) AS day, COUNT(*) FROM events "
+                    "WHERE ts IS NOT NULL AND ts != '' GROUP BY day ORDER BY day").fetchall()
+                breakdowns = [b for b in (_payload_breakdown(con, ev, key)
+                                          for ev, key in _PAYLOAD_BREAKDOWNS) if b["total"]]
             finally:
                 con.close()
-            state["telemetry"] = {"sessions": sessions, "events": [list(r) for r in events]}
+            state["telemetry"] = {
+                "sessions": sessions,
+                "events": [list(r) for r in events],
+                "by_agent": [list(r) for r in by_agent],
+                "by_day": [list(r) for r in by_day],
+                "breakdowns": breakdowns,
+            }
             state["active"] = True
         except sqlite3.Error:
             pass
