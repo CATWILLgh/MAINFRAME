@@ -8,7 +8,7 @@ when_to_use: "A visual-design or UX-quality decision is in flight inside the `re
 
 # frontend-design — design / visual-quality layer
 
-Preloaded into the `react-frontend-engineer` sub-agent. The **third design layer**:
+Preloaded into the `react-frontend-engineer` sub-agent. The third design layer:
 
 - `shadcn` — which component, how to compose it, markup rules.
 - `react-frontend-patterns` — state, validation, data, architecture.
@@ -35,7 +35,7 @@ Preloaded into the `react-frontend-engineer` sub-agent. The **third design layer
 3. **Accessibility is a floor, not a polish pass.** WCAG 2.2 AA contrast, keyboard, labels, target size are requirements — designed in, not retrofitted.
 4. **Hierarchy by size → spacing → contrast → colour.** Never colour alone. One focal point per view.
 5. **Motion is purposeful and reduced-motion-safe.** Subtle, compositor-only, switch-off-able.
-6. **Consistency over novelty.** One spacing rhythm, one type scale, one icon family, one motion vocabulary — and **one component per role** (don't fork a second Button; use variants — see [shadcn](../shadcn/SKILL.md)).
+6. **Consistency over novelty.** One spacing rhythm, one type scale, one icon family, one motion vocabulary — and one component per role (don't fork a second Button; use variants — see [shadcn](../shadcn/SKILL.md)).
 7. **Restraint by count.** Limit how many sizes / radii / accents / font families are in play — the figures live in [distinctiveness.md](distinctiveness.md).
 8. **Cite, don't taste.** Non-trivial design rules trace to WCAG / Material 3 / HIG / shadcn — not memory.
 

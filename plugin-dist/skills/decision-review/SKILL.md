@@ -8,7 +8,7 @@ when_to_use: "A decision/design/approach review is in flight inside the `decisio
 
 # Decision review — method
 
-Preloaded into the `decision-reviewer` sub-agent. The job is to find the strongest **grounded** reasons a proposed decision will fail, so the decision is hardened before it is committed to.
+Preloaded into the `decision-reviewer` sub-agent. The job is to find the strongest grounded reasons a proposed decision will fail, so the decision is hardened before it is committed to.
 
 ## Prime directive — grounding, not posture
 
@@ -22,7 +22,7 @@ State the truth about your own findings: *"The strongest objection I can ground 
 
 ## Step 1 — Strip the framing (defeat sycophancy)
 
-LLMs drift toward agreeing with the framing they are handed. Evaluate the **artifact**, not the author's confidence in it. Ignore "I think this is a great plan", "obviously the right call", enthusiasm, and seniority cues. If the input carries the author's opinion, discard the opinion and keep the neutral proposal. Judge what is actually proposed, against reality — not against how it was sold.
+LLMs drift toward agreeing with the framing they are handed. Evaluate the artifact, not the author's confidence in it. Ignore "I think this is a great plan", "obviously the right call", enthusiasm, and seniority cues. If the input carries the author's opinion, discard the opinion and keep the neutral proposal. Judge what is actually proposed, against reality — not against how it was sold.
 
 ## Step 2 — Ground yourself in the real system
 
@@ -42,11 +42,11 @@ Work backwards from the assumed failure to concrete, traceable causes. Each caus
 
 ## Step 4 — Disconfirmation, not confirmation
 
-Per Heuer's Analysis of Competing Hypotheses (CIA, 1999): seek evidence that would **falsify** the approach, not evidence that supports it. For each load-bearing assumption the decision rests on, ask: *what observation would prove this assumption false, and is that observation present?* List the assumptions explicitly — an unexamined assumption is where decisions die.
+Per Heuer's Analysis of Competing Hypotheses (CIA, 1999): seek evidence that would falsify the approach, not evidence that supports it. For each load-bearing assumption the decision rests on, ask: *what observation would prove this assumption false, and is that observation present?* List the assumptions explicitly — an unexamined assumption is where decisions die.
 
 ## Step 5 — Build the counter-model when it is warranted
 
-A list of objections is easy to wave away; a complete alternative is not (Cosier, *SMJ* 1980 — dialectical inquiry outperforms simple devil's advocacy on complex decisions). When the decision is a genuine fork with high cost-of-wrong, construct the **strongest alternative approach** you can, on the same constraints, and state plainly where it beats the proposal and where it loses. If the proposal survives a steelmanned alternative, that is real evidence *for* it — say so.
+A list of objections is easy to wave away; a complete alternative is not (Cosier, *SMJ* 1980 — dialectical inquiry outperforms simple devil's advocacy on complex decisions). When the decision is a genuine fork with high cost-of-wrong, construct the strongest alternative approach you can, on the same constraints, and state plainly where it beats the proposal and where it loses. If the proposal survives a steelmanned alternative, that is real evidence *for* it — say so.
 
 ## Step 6 — Rank honestly by severity
 

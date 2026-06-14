@@ -9,9 +9,9 @@ allowed-tools: Bash(npx shadcn@latest *), Bash(pnpm dlx shadcn@latest *), Bash(b
 
 # shadcn — composition layer
 
-Preloaded into the `react-frontend-engineer` sub-agent. Companion to `react-frontend-patterns` — that skill owns logic (state, validation, data, architecture); **this** skill owns UI composition (which component, how to compose, markup-level rules).
+Preloaded into the `react-frontend-engineer` sub-agent. Companion to `react-frontend-patterns` — that skill owns logic (state, validation, data, architecture); this skill owns UI composition (which component, how to compose, markup-level rules).
 
-The shadcn primitives are added to the user's project **as source code** via the CLI. The CLI is not installed globally; it is invoked via the project's package runner — `npx shadcn@latest …` / `pnpm dlx shadcn@latest …` / `bunx --bun shadcn@latest …`. Pick the one matching the project's `packageManager` field. Do not install `-g`.
+The shadcn primitives are added to the user's project as source code via the CLI. The CLI is not installed globally; it is invoked via the project's package runner — `npx shadcn@latest …` / `pnpm dlx shadcn@latest …` / `bunx --bun shadcn@latest …`. Pick the one matching the project's `packageManager` field. Do not install `-g`.
 
 ## Workflow
 
@@ -19,7 +19,7 @@ The shadcn primitives are added to the user's project **as source code** via the
 2. **Check what's already installed** — `components` (top-level array) lists installed component names. Don't re-add. Don't import components not in this list.
 3. **Search registries** when looking for something — `npx shadcn@latest search @shadcn -q "sidebar"`. Community registries (`@tailark`, `@magicui`, etc.) require explicit registry name from the user — never default a registry on their behalf.
 4. **View before adding** — `npx shadcn@latest view @shadcn/<name>` for items you haven't installed.
-5. **Get docs and examples live** — `npx shadcn@latest docs <component>` returns the URLs of the upstream docs and examples. Fetch those URLs to get current API and usage patterns. **Always do this before authoring non-trivial markup with a component** — it ensures you're against the current API, not a memorised version.
+5. **Get docs and examples live** — `npx shadcn@latest docs <component>` returns the URLs of the upstream docs and examples. Fetch those URLs to get current API and usage patterns. Always do this before authoring non-trivial markup with a component — it ensures you're against the current API, not a memorised version.
 6. **Add** — `npx shadcn@latest add <component>`. For updates: `--dry-run` and `--diff` first. Never `--overwrite` without explicit user approval.
 7. **Review what the CLI added.** For community registries — check imports inside non-UI files for hardcoded `@/components/ui/...` paths that don't match `config.aliases.ui`. The CLI rewrites paths for its own UI files, third-party registry items often do not.
 

@@ -20,7 +20,7 @@ Size and urgency are not exceptions. "It's a small change", "it's urgent", "just
 The cycle runs in two phases, and the **phase** — not the UI mode flag — decides whether to ask the user.
 
 1. **Discussion / planning** — the user is in the loop (before a `/goal`, an `ExitPlanMode` approval, or an explicit "go"). Widen coverage with recon (dispatch sub-agents), surface forks, and ask **decision-level** questions through `AskUserQuestion`. There is **no cap on the number of questions** — drive by coverage, not a count (5 for a narrow task, 15-20 over hours for a deep one are both right). The phase stays open while a decision-level unknown remains — a fork that changes the outcome and only the user can resolve — and closes when only engineering details are left; those resolve during execution or become tickets. Recon sub-agents exist to surface the decision-level unknowns before execution starts.
-2. **Execution** — after the boundary. Work to the goal autonomously, no questions. An out-of-scope or postponable finding → `surface-ticket` and continue. **STOP and surface** only an un-discussed business-logic / functionality / user-facing change that needs the user's decision — test: "if I choose wrong here, did I commit the product to something the user did not sign off on?" Engineering decisions inside the agreed scope — proceed; never stop for those.
+2. **Execution** — after the boundary. Work to the goal autonomously, no questions. An out-of-scope or postponable finding → `surface-ticket` and continue. Stop and surface only an un-discussed business-logic / functionality / user-facing change that needs the user's decision — test: "if I choose wrong here, did I commit the product to something the user did not sign off on?" Engineering decisions inside the agreed scope — proceed; never stop for those.
 
 **Boundary** = `/goal` set, plan approved via `ExitPlanMode`, or an explicit "go / run it". Discussion can happen even with the auto-mode UI selected — what matters is whether the user is present to answer, not the mode flag.
 
@@ -98,7 +98,7 @@ Once a leading approach exists from synthesis, gate it before any writing or lar
 
 ### 7. Approval (interactive) / proceed (auto)
 
-- **Interactive + plan file exists:** wait for `ExitPlanMode` approval. The approval IS the execution authorization — no extra "when to start?" turn. `ExitPlanMode`'s `allowedPrompts` already captures the granted permissions.
+- **Interactive + plan file exists:** wait for `ExitPlanMode` approval. The approval is the execution authorization — no extra "when to start?" turn. `ExitPlanMode`'s `allowedPrompts` already captures the granted permissions.
 - **Interactive + no plan file:** the synthesised plan is presented inline; proceed unless the user objects within the same turn.
 - **Auto-mode:** proceed.
 
@@ -131,7 +131,7 @@ Mismatch → targeted follow-up to the same agent with the specific gap, not "tr
 
 ### 10. Out-of-scope findings → ticket
 
-Any problem the agent (or recon) found that is **not** being fixed in this change → ticket via [`surface-ticket`](../surface-ticket/SKILL.md) before declare-done. This covers adjacent bugs, anti-patterns, postponed refactors, partial implementations left in place. The decision to not fix now IS the trigger.
+Any problem the agent (or recon) found that is **not** being fixed in this change → ticket via [`surface-ticket`](../surface-ticket/SKILL.md) before declare-done. This covers adjacent bugs, anti-patterns, postponed refactors, partial implementations left in place. The decision to not fix now is the trigger.
 
 Fixed inline within scope — no ticket. Trivially safe cosmetic fixes (typo in comment, single rename) may apply inline — say so afterwards.
 

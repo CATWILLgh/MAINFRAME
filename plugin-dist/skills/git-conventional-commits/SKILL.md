@@ -9,13 +9,13 @@ when_to_use: "Trigger when a change is staged and ready to commit — an explici
 
 ## Commit language — resolve in this order
 
-The commit language is **not** the conversation language. Resolve it, highest priority first:
+The commit language is not the conversation language. Resolve it, highest priority first:
 
 1. **Explicit repo directive** — a project `CLAUDE.md` (or equivalent) stating the commit language (e.g. "commits here are in English"). Obey it.
 2. **The repo's existing convention** — `git log -n 20`; if recent commits are consistently in one language, match it.
 3. **English** — the default when there is neither a directive nor an established history.
 
-You may be talking with the user in one language while the repo commits in another — **match the repo, not the chat**. `type` / `scope` / `!` / footer tokens stay English regardless of the resolved language.
+You may be talking with the user in one language while the repo commits in another — match the repo, not the chat. `type` / `scope` / `!` / footer tokens stay English regardless of the resolved language.
 
 ## Workflow when a commit is requested
 

@@ -21,9 +21,9 @@ Classify first by what the test must stand up to run. This is primary because it
 | **Tier 2 — local environment** | local DB / services / `docker compose` up | only when those are running | integration against real local services, local smoke |
 | **Tier 3 — test / staging environment** | a deployed real-ish environment | generally not mid-change | e2e against staging, contracts against real externals |
 
-The tiers are **isolation by purpose, not a priority ranking**. A higher tier catches a class of failure the lower ones structurally cannot — real env config, deployment wiring, real external contracts — so it is not "less important", only outside the autonomous loop. Development lives in Tier 1; **Tier 1 green is the gate every change must pass**. Reach up a tier only when the risk being closed exists only there.
+The tiers are isolation by purpose, not a priority ranking. A higher tier catches a class of failure the lower ones structurally cannot — real env config, deployment wiring, real external contracts — so it is not "less important", only outside the autonomous loop. Development lives in Tier 1; Tier 1 green is the gate every change must pass. Reach up a tier only when the risk being closed exists only there.
 
-Tier and level do **not** map one-to-one: an in-memory integration test or a contract test is Tier 1 despite being integration-level. Place by infra-need first, then pick the level below.
+Tier and level do not map one-to-one: an in-memory integration test or a contract test is Tier 1 despite being integration-level. Place by infra-need first, then pick the level below.
 
 ## Triage — which level fits this change
 

@@ -60,7 +60,7 @@ When the user says "go to vps-store, check the nginx logs":
 
 When the user mentions a service that is **not in the index**:
 - Ask the user whether it should be added, or proceed without persistent storage (one-shot value passed inline).
-- Do **not** invent credentials; do **not** assume short-names.
+- Do not invent credentials; do not assume short-names.
 
 ## Auto-mode caveat
 

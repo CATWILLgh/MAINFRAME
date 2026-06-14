@@ -17,7 +17,7 @@ Dokploy is a self-hostable PaaS (Docker + Traefik) — a Heroku/Vercel/Netlify a
 - **Base URL:** `<DOKPLOY_URL>/api` — every endpoint lives under the `/api` prefix.
 - **Auth header:** `x-api-key: <key>`.
 
-> Spec caveat: every endpoint's `security` requirement is labelled `Authorization`, but the only scheme actually defined in the OpenAPI (`components.securitySchemes`) is an API key in the `x-api-key` header. The label is a known `trpc-to-openapi` generator artifact — **send `x-api-key`**, not an `Authorization` header. A missing/invalid key returns `401` with body `{"message":"Authorization not provided", ...}`.
+> Spec caveat: every endpoint's `security` requirement is labelled `Authorization`, but the only scheme actually defined in the OpenAPI (`components.securitySchemes`) is an API key in the `x-api-key` header. The label is a known `trpc-to-openapi` generator artifact — send `x-api-key`, not an `Authorization` header. A missing/invalid key returns `401` with body `{"message":"Authorization not provided", ...}`.
 
 Generate the key in the Dokploy dashboard (user/profile → API keys); it maps to `user.*` API-key endpoints. Store it in the project's secret source, load via env.
 
@@ -27,7 +27,7 @@ The API is tRPC exposed as OpenAPI. Paths are RPC-style `/<resource>.<action>`, 
 
 - **GET = query.** Parameters are **flat query params** (e.g. `?applicationId=abc`), not a JSON `?input=` wrapper. Read actions: `*.one`, `*.all`, `*.readLogs`, `*.getServerMetrics`.
 - **POST = mutation.** Body is **bare JSON** matching the endpoint's `requestBody` schema. Write actions: `*.create`, `*.update`, `*.save*`, `*.deploy`, `*.remove`.
-- **Responses are bare JSON** per each endpoint's own schema — there is **no** `{result:{data:{json}}}` wrapper (that envelope only appears at the raw tRPC layer, not on these OpenAPI endpoints).
+- **Responses are bare JSON** per each endpoint's own schema — there is no `{result:{data:{json}}}` wrapper (that envelope only appears at the raw tRPC layer, not on these OpenAPI endpoints).
 - **Errors:** HTTP `400` `BAD_REQUEST`, `401` `UNAUTHORIZED`, `403` `FORBIDDEN`, `404` `NOT_FOUND`, `500` `INTERNAL_SERVER_ERROR`, each with body `{"message": string, "code": string, "issues"?: [{"message": string}]}`. Always gate on the status code with `--fail-with-body` so failures surface (see [`curl-requests`](../curl-requests/SKILL.md)).
 
 ```bash
@@ -57,7 +57,7 @@ Project            (required: name)
        └─ Database      (required: name, environmentId, + db credentials)
 ```
 
-Resolve or create the `environmentId` **before** creating an Application/Compose/Database. (In Dokploy ≥ v0.29 the `environment` layer is mandatory; older versions attached apps directly to projects — do not assume the old shape.)
+Resolve or create the `environmentId` before creating an Application/Compose/Database. (In Dokploy ≥ v0.29 the `environment` layer is mandatory; older versions attached apps directly to projects — do not assume the old shape.)
 
 ## Discover existing resources
 
@@ -73,11 +73,11 @@ curl -sS --fail-with-body -G -H "x-api-key: $DOKPLOY_API_KEY" \
   --data-urlencode "name=web" "$DOKPLOY_URL/api/application.search"                                    # find apps (also q/appName/owner/repository)
 ```
 
-Create endpoints return the new resource — read its id (e.g. `projectId`) to chain the next call. If a create returns an empty body, resolve the id with these reads (match by `name`). Capture the id you need **before** any update / deploy / destructive call.
+Create endpoints return the new resource — read its id (e.g. `projectId`) to chain the next call. If a create returns an empty body, resolve the id with these reads (match by `name`). Capture the id you need before any update / deploy / destructive call.
 
 ## Safety first
 
-~80 endpoints are destructive (delete, data-loss, infra-level, deploy-disruption, self-lockout). Default to read-only; confirm before any destructive call, especially in autonomous runs. **Before any `*.remove` / `*.delete` / `*.destroy` / `server.remove` / `*.reload` — read [`safety.md`](safety.md).**
+~80 endpoints are destructive (delete, data-loss, infra-level, deploy-disruption, self-lockout). Default to read-only; confirm before any destructive call, especially in autonomous runs. Before any `*.remove` / `*.delete` / `*.destroy` / `server.remove` / `*.reload` — read [`safety.md`](safety.md).
 
 ## Live-spec navigation (the long tail)
 
