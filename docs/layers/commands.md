@@ -1,16 +1,16 @@
 # Layer: Commands
 
-> Custom slash commands (`/<name>`), explicitly invoked by the user. In the hub: `export/commands/<name>.md` (currently **empty**).
+> Custom slash commands (`/<name>`), explicitly invoked by the user. In the hub: `plugin-dist/commands/<name>.md` (currently **empty**), shipped via the `mainframe` plugin.
 
-> Last updated: 2026-05-28 (3-section rewrite). Layer is reserved; no artifacts yet.
+> Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-28 (3-section rewrite). Layer is reserved; no artifacts yet.
 
 ---
 
 ## Where it lives / How to install
 
-- In the hub: `export/commands/<name>.md` — one file per command.
-- On the machine: `~/.claude/commands/<name>.md` (symlinked via `install.sh`).
-- Activation: once symlinked, the command is available as `/<name>` in chat.
+- In the hub: `plugin-dist/commands/<name>.md` — one file per command.
+- On the machine: delivered via the `mainframe` plugin (`plugin-dist/` symlinked as one plugin).
+- Activation: once the plugin is loaded, the command is available in chat — as a plugin command it carries the plugin prefix `/mainframe:<name>` (see §1.4).
 
 ---
 
@@ -53,7 +53,7 @@ A command is for operations with **a visible external effect** that the user mus
 
 ### 1.4. Plugin namespacing
 
-Commands inside plugins carry the plugin prefix (e.g. `/plugin:context7:query`). With a direct user-level hub (no plugin), there is no prefix.
+Commands inside plugins carry the plugin prefix (e.g. `/plugin:context7:query`). The hub ships as the `mainframe` plugin, so a hub command would be invoked as `/mainframe:<name>`.
 
 ---
 

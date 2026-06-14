@@ -141,7 +141,7 @@ All signals are **observable**, not "by feel". If a rule is phrased as "when it 
 | Signal (what is observed) | Where to look |
 |---|---|
 | A rule in CLAUDE.md contains conditional language ("when X — do Y", "in case Z", "on trigger") | Grep in `export/CLAUDE.md` |
-| A rule in CLAUDE.md or a skill contains **path-specific language** (mentions specific extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) and applies only when such a file is actually in use | Grep in `export/CLAUDE.md` and `export/skills/**/SKILL.md` for extensions and pattern-keywords |
+| A rule in CLAUDE.md or a skill contains **path-specific language** (mentions specific extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) and applies only when such a file is actually in use | Grep in `export/CLAUDE.md` and `plugin-dist/skills/**/SKILL.md` for extensions and pattern-keywords |
 | SKILL.md exceeds the validator limit — body > 500 lines OR > 5K tokens | `validate-skill.py` report |
 | SKILL.md covers 2+ topics (multiple `## ` sections with different domains) | Grep on headers in SKILL.md |
 | Two skills have overlapping `when_to_use` phrases (the same trigger words) | Compare frontmatter of all skills |
@@ -199,7 +199,7 @@ Template migrations; the same 4 axes of the decision tree are walked as during i
 **Trigger:** domain-specific content in CLAUDE.md or a broad skill (e.g., framework patterns, perf procedures).
 
 **Action:**
-1. Create a subagent (`export/agents/<domain>.md`) with a `description` scoped to the domain.
+1. Create a subagent (`plugin-dist/agents/<domain>.md`) with a `description` scoped to the domain.
 2. Domain knowledge → skill with `disable-model-invocation: true`, so main context does not pick it up.
 3. In subagent frontmatter: `skills: [<domain-skill>]` — preload.
 4. Remove domain fragments from CLAUDE.md / the broad skill.

@@ -1,16 +1,16 @@
 # Layer: Agents (sub-agents)
 
-> Isolated subagents with their own context. In the hub: `export/agents/<name>.md` (currently **empty** — reserved layer).
+> Isolated subagents with their own context. In the hub: `plugin-dist/agents/<name>.md` (7 agents), shipped via the `mainframe` plugin.
 
-> Last updated: 2026-05-29 (research + launch discipline).
+> Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-29 (research + launch discipline).
 
 ---
 
 ## Where it lives
 
-- In the hub: `export/agents/<name>.md` — one markdown file per agent.
-- On the machine: `~/.claude/agents/<name>.md` (file symlink, via [install.sh](../../install.sh)).
-- Activation: after the symlink, a sub-agent is invoked via `Agent(subagent_type: "<name>")`.
+- In the hub: `plugin-dist/agents/<name>.md` — one markdown file per agent.
+- On the machine: delivered via the `mainframe` plugin (`plugin-dist/` symlinked as one plugin), not an individual per-agent symlink.
+- Activation: once the plugin is loaded, a sub-agent is invoked via `Agent(subagent_type: "<name>")`.
 
 ---
 
@@ -89,7 +89,7 @@ Attributes live in the schema of the Agent tool itself (visible to the main Clau
 |---|---|
 | `description` | Short (3-5 words) task description — appears in UI and telemetry |
 | `prompt` | Full prompt to the subagent. In English (see §2.2.1) |
-| `subagent_type` | Name of a custom agent (from `export/agents/`) or built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
+| `subagent_type` | Name of a custom agent (from `plugin-dist/agents/`) or built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
 | `model` | Model override per-call: `opus` / `sonnet` / `haiku`. Without the field — inherit |
 | `isolation` | `"worktree"` — fresh git worktree (≈200–500 ms overhead + disk). Use only when parallel agents mutate files |
 | `mode` | Permission mode override: `plan` / `acceptEdits` / `auto` / `default` / `dontAsk` / `bypassPermissions` |
@@ -135,11 +135,19 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 
 ## 2. Hub usage
 
-### 2.1. Current agents in `export/agents/`
+### 2.1. Current agents in `plugin-dist/agents/`
+
+7 agents as of 2026-06-14, shipped via the `mainframe` plugin.
 
 | Agent | Purpose | Activation |
 |---|---|---|
-| `web-search` (model: sonnet, effort: low) | Search for authoritative information via Context7 + WebSearch/Fetch. Returns structured citations with verbatim quotes. Selected via a 108-data-point tournament — 18/18 perfect runs, zero drift across 6 verification queries. | `Agent(subagent_type: "web-search")` |
+| `decision-reviewer` | Independent, evidence-grounded review of a proposed decision / design / approach before it is locked in (architecture, high cost-of-wrong). Read-only. | `Agent(subagent_type: "decision-reviewer")`; also `task-workflow` step 6a |
+| `devops-engineer` | Deployment / infra / ops — Docker Compose, CI/CD, Dockerfiles, managed DBs, domains/TLS, secrets, observability; drives Dokploy via the `dokploy-api` skill. Write-capable, background. | auto-dispatch on a deploy / infra task |
+| `python-backend-engineer` | Python backend (FastAPI / Django / Flask + ORM) via the `python-backend-patterns` skill. Write-capable. | auto-dispatch on a Python backend task |
+| `nestjs-backend-engineer` | Node / TS backend (NestJS / Express / Fastify) via `nestjs-backend-patterns`. Write-capable. | auto-dispatch |
+| `nextjs-backend-engineer` | Next.js App Router backend (Route Handlers, Server Actions, RSC) via `nextjs-backend-patterns`. Write-capable. | auto-dispatch |
+| `react-frontend-engineer` | React / Vite SPA frontend via `react-frontend-patterns` (+ `shadcn`, `frontend-design`). Write-capable. | auto-dispatch |
+| `web-search` (model: sonnet, effort: low) | Authoritative info via Context7 + WebSearch/Fetch; structured citations with verbatim quotes. Tournament-selected — 18/18 perfect runs, zero drift across 6 verification queries. | `Agent(subagent_type: "web-search")` |
 
 Methodology for selecting model + effort for new agents — internal skill `agent-tournament` (project-scoped in MAINFRAME).
 
@@ -149,7 +157,7 @@ Subagent launch discipline was developed through research. Basic rules are in [e
 
 #### 2.2.1. English prompts
 
-All subagent prompts are in English, regardless of the language of the conversation with the user. Hub principle #3 + Anthropic prompt-engineering guidance (models are tuned on English, follow instructions more precisely, fewer tokens for the same content). Applies to the `prompt:` parameter of the Agent tool, the body of `export/agents/<name>.md`, and prompts inside Workflow. User-facing replies remain in the user's language.
+All subagent prompts are in English, regardless of the language of the conversation with the user. Hub principle #3 + Anthropic prompt-engineering guidance (models are tuned on English, follow instructions more precisely, fewer tokens for the same content). Applies to the `prompt:` parameter of the Agent tool, the body of `plugin-dist/agents/<name>.md`, and prompts inside Workflow. User-facing replies remain in the user's language.
 
 #### 2.2.2. Anti-runaway
 
@@ -249,17 +257,17 @@ Direct documented patterns from `code.claude.com/docs/en/sub-agents`:
 
 ### 2.3. Hub principles for agents
 
-When the first artifact appears in `export/agents/`:
+Convention for every `plugin-dist/agents/<name>.md`:
 
 - **Narrow `tools:` allowlist** — the agent does only what it was created for. Structural cap > prompt cap.
-- **The `tools:` allowlist is the mandatory hard knob.** Default convention for every `export/agents/<name>.md`: `tools:` allowlist (only needed tools), plus `permissionMode: plan` / `dontAsk` if needed. It is the baseline minimum and the primary scope guard. `maxTurns` is NOT a default — it is a runaway backstop for genuinely open-ended workers, set generously above the expected turn count; **omit it on write-capable multi-step agents** (a low cap terminates them mid-task — see §3.1). Precedent: the engineer agents had `maxTurns` removed after it killed them mid-task.
+- **The `tools:` allowlist is the mandatory hard knob.** Default convention for every `plugin-dist/agents/<name>.md`: `tools:` allowlist (only needed tools), plus `permissionMode: plan` / `dontAsk` if needed. It is the baseline minimum and the primary scope guard. `maxTurns` is NOT a default — it is a runaway backstop for genuinely open-ended workers, set generously above the expected turn count; **omit it on write-capable multi-step agents** (a low cap terminates them mid-task — see §3.1). Precedent: the engineer agents had `maxTurns` removed after it killed them mid-task.
 - **Soft patterns — supplement, not replacement.** Include the triad (ordinal cap + label + unconditional return) in the prompt as a fallback and for task specifics, not as primary enforcement.
 - **`model:` per task type** — sonnet/haiku by default; opus only if the task genuinely requires its capabilities.
 - **`skills:` preload** for specialized domains — better than pulling domain knowledge into the main CLAUDE.md.
 - **`disable-model-invocation: true`** for domain skills — keeps the main context free of unnecessary load. Pattern: skill `disable-model-invocation: true` + sub-agent `skills: [name]`.
 - **English body** (principle #3).
 - **Project-agnostic** (principle #1) — the agent does not know project names or frameworks as mandatory.
-- **"Use proactively" in `description`** for auto-dispatch agents. Anthropic CLI sub-agents docs explicitly recommend the phrase as a mechanism to strengthen automatic delegation: "To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field" (`code.claude.com/docs/en/sub-agents`). Applies to any `export/agents/<name>.md` whose intended mode is automatic activation on description match, not explicit user invocation.
+- **"Use proactively" in `description`** for auto-dispatch agents. Anthropic CLI sub-agents docs explicitly recommend the phrase as a mechanism to strengthen automatic delegation: "To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field" (`code.claude.com/docs/en/sub-agents`). Applies to any `plugin-dist/agents/<name>.md` whose intended mode is automatic activation on description match, not explicit user invocation.
 
 ---
 

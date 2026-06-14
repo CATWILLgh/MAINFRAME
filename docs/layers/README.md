@@ -1,6 +1,6 @@
 # MAINFRAME Hub Layers
 
-> Canonical list of `export/` layers and a navigator to their specifications.
+> Canonical list of hub layers and a navigator to their specifications.
 > Goal: a shared understanding of "what exactly we have, what each layer is responsible for, how it works, and how to update it" — no half-intuitive moves.
 
 > **Status:** active reference. Created 2026-05-28. Updated as new empirical findings, new ADRs, and new authoritative sources emerge.
@@ -9,7 +9,7 @@
 
 ## What counts as a "layer"
 
-A layer = a type of artifact in `export/` that is delivered to `~/.claude/` via symlink (`install.sh`) and applies across **all** of the user's projects without any per-project edits.
+A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **all** of the user's projects with no per-project edits. Delivery uses two vehicles: **direct `install.sh` symlinks** for the `export/` layers (CLAUDE.md, rules, settings, output-styles, templates, scripts), and **the single `mainframe` plugin** (`plugin-dist/` symlinked as one plugin) for skills, agents, hooks, and commands.
 
 **Not layers:**
 - `docs/layers/` — layer specifications (what you are reading now).
@@ -21,18 +21,18 @@ A layer = a type of artifact in `export/` that is delivered to `~/.claude/` via 
 |---|---|---|---|---|
 | 1 | **CLAUDE.md** (operating instructions) | `export/CLAUDE.md` | `~/.claude/CLAUDE.md` (file symlink) | [claude-md.md](claude-md.md) |
 | 2 | **Rules** (path-scoped) *(planned, empty)* | `export/rules/<name>.md` | `~/.claude/rules/<name>.md` (symlinks) | [rules.md](rules.md) |
-| 3 | **Skills** | `export/skills/<name>/` | `~/.claude/skills/<name>/` (directory symlink) | [skills.md](skills.md) |
-| 4 | **Hooks** | `export/hooks/*.py` + `export/settings.json` `hooks.*` | `~/.claude/hooks/*.py` (symlinks) + registration in settings | [hooks.md](hooks.md) |
+| 3 | **Skills** | `plugin-dist/skills/<name>/` | via the `mainframe` plugin | [skills.md](skills.md) |
+| 4 | **Hooks** | `plugin-dist/hooks/scripts/*.py` + `plugin-dist/hooks/hooks.json` | via the `mainframe` plugin | [hooks.md](hooks.md) |
 | 5 | **Permissions** | `export/settings.json` `permissions.{allow,deny,ask}` | part of `~/.claude/settings.json` (whole-file symlink) | [permissions.md](permissions.md) |
-| 6 | **Settings** (other fields) | `export/settings.json` (everything except permissions/hooks) | part of `~/.claude/settings.json` | [settings.md](settings.md) |
-| 7 | **Agents** *(planned, empty)* | `export/agents/<name>.md` | `~/.claude/agents/<name>.md` (symlinks) | [agents.md](agents.md) |
-| 8 | **Commands** *(planned, empty)* | `export/commands/<name>.md` | `~/.claude/commands/<name>.md` (symlinks) | [commands.md](commands.md) |
-| 9 | **Output styles** *(planned, empty)* | `export/output-styles/<name>.md` | `~/.claude/output-styles/<name>.md` (symlinks) | [output-styles.md](output-styles.md) |
+| 6 | **Settings** (other fields) | `export/settings.json` (everything except permissions) | part of `~/.claude/settings.json` | [settings.md](settings.md) |
+| 7 | **Agents** | `plugin-dist/agents/<name>.md` | via the `mainframe` plugin | [agents.md](agents.md) |
+| 8 | **Commands** *(empty)* | `plugin-dist/commands/<name>.md` | via the `mainframe` plugin | [commands.md](commands.md) |
+| 9 | **Output styles** | `export/output-styles/<name>.md` | `~/.claude/output-styles/<name>.md` (symlink) | [output-styles.md](output-styles.md) |
 
 **Notes:**
 - (4), (5), and (6) technically live in a single file (`settings.json`), but they are **separate layers** — they have different syntax rules, different eval semantics, different failure modes, and different sources of truth. Their specs are kept separate.
-- (2), (7), (8), (9) are reserved in advance; (2) Rules was introduced on 2026-05-29 after empirical verification of paths-activation; no concrete files exist in `export/rules/` yet — they will be added as path-scoped guidance is identified.
-- All symlinks are created by `install.sh` — covering all 8 layers since 2026-05-29. Usage: `./install.sh` (sync), `./install.sh --dry-run` (diagnostics), `./install.sh --uninstall` (remove symlinks).
+- (7) Agents (7 agents) and (9) Output styles (1) are populated; (2) Rules and (8) Commands are reserved (no files yet). Rules was introduced 2026-05-29 after empirical verification of paths-activation; no concrete files exist in `export/rules/` yet.
+- The `export/` layers are symlinked individually by `install.sh`; the `plugin-dist/` layers (skills, agents, hooks, commands) ship together as the `mainframe` plugin (one symlink). Usage: `./install.sh` (sync), `./install.sh --dry-run` (diagnostics), `./install.sh --uninstall` (remove symlinks).
 
 ## External touchpoints (not our layers, but worth knowing)
 
@@ -40,7 +40,7 @@ A layer = a type of artifact in `export/` that is delivered to `~/.claude/` via 
 |---|---|---|
 | **MCP user-scope** | `~/.claude.json` (a separate file!) | This is not `~/.claude/settings.json`, and `.claude.json` stores additional runtime data (credentials, project history). Symlinking it is risky. If we decide to — a separate ADR. |
 | **Runtime memory** | `~/.claude/projects/<id>/memory/` | Claude Code mechanics — index + topic files, accumulated during runs. Not delivered by the hub; this is runtime state. |
-| **Plugins marketplace** | community/official plugins via `enabledPlugins` | We use them (e.g. `context7=true`) but do not create our own plugins — this is a different abstraction (a plugin can contain skills/agents/hooks/MCP inside it). Using existing ones — yes; creating our own — a separate task. |
+| **Community/official plugins** | external plugins via `enabledPlugins` | We use external plugins (e.g. `context7=true`). Distinct from our OWN `mainframe` plugin (`plugin-dist/`) — that one IS a hub delivery vehicle (layers 3/4/7/8), not an external touchpoint. |
 | **Project-scope artifacts** | `<repo>/.claude/` and `<repo>/.mcp.json` | Per-project, not global. The hub does not touch these. |
 
 ## Brief explanation of MCP (Model Context Protocol)

@@ -1,18 +1,18 @@
 # Layer: Hooks
 
-> Scripts executed by Claude Code on specific events (tool-use, stop, session-start, file-change, etc.). In the hub: `export/hooks/*.py` + registration in `export/settings.json` `hooks.*`.
+> Scripts executed by Claude Code on specific events (tool-use, stop, session-start, file-change, etc.). In the hub: `plugin-dist/hooks/scripts/*.py` + registration in `plugin-dist/hooks/hooks.json`, shipped via the `mainframe` plugin.
 
-> Last updated: 2026-06-04 (full event sweep — **exactly 30 events**, ground-truthed against the installed Claude Code v2.1.160 `/hooks` menu; supersedes the stale 16-event May list). Docs lag the CLI — the running CLI is the authority.
+> Last updated: 2026-06-14 (plugin-migration actualization: scripts + registration live in `plugin-dist/hooks/`, not `export/`). Prior: 2026-06-04 (full event sweep — **exactly 30 events**, ground-truthed against the installed Claude Code v2.1.160 `/hooks` menu). Docs lag the CLI — the running CLI is the authority.
 
 ---
 
 ## Where it lives / How to install
 
-- In the hub: `export/hooks/*.py` (scripts) + `export/settings.json` block `hooks.{EventName}` (registration).
-- On the machine: `~/.claude/hooks/*.py` (symlinks) + `~/.claude/settings.json` (part of the symlink as a whole).
+- In the hub: `plugin-dist/hooks/scripts/*.py` (scripts) + `plugin-dist/hooks/hooks.json` block `hooks.{EventName}` (registration). Hook registration moved here with the plugin migration; `export/settings.json` no longer registers hooks (it still carries permissions / env / other settings).
+- On the machine: delivered via the `mainframe` plugin (`plugin-dist/` symlinked as one plugin).
 - Activation:
-  1. Symlink the `export/hooks/` folder → `~/.claude/hooks/` (via `install.sh`).
-  2. Entry in `hooks.<EventName>` inside `export/settings.json`.
+  1. The `mainframe` plugin ships `plugin-dist/hooks/scripts/` + `hooks.json` (loaded when the plugin loads).
+  2. Each script is registered under `hooks.<EventName>` inside `plugin-dist/hooks/hooks.json`.
   3. Claude Code's file watcher picks up changes "with brief delay" without a restart.
 
 ---
@@ -58,7 +58,7 @@
 
 **Cadence (docs framing):** per-session (9, 16, 18), per-turn (7, 10, 11), per-tool (1, 2, 3), async (24–29). The rest are situational — subagent (12/13), compaction (14/15), permission (5/17), task (20/21), elicitation (22/23), expansion (8), display (30), batch (4).
 
-**vs the stale 16-event May list:** the running CLI confirms **exactly 30**. Newly surfaced and hub-relevant: `PermissionDenied` (#5 — fires when the auto-mode classifier blocks a tool → a direct, countable signal of **auto-mode friction**, the user's primary workflow), `UserPromptExpansion` (#8 — slash / skill expansion), `MessageDisplay` (#30). The menu header "**16 hooks configured**" equals the hub's own current registrations (§2.1: 2+3+6+5) — an independent confirmation of our count.
+**vs the stale 16-event May list:** the running CLI confirms **exactly 30**. Newly surfaced and hub-relevant: `PermissionDenied` (#5 — fires when the auto-mode classifier blocks a tool → a direct, countable signal of **auto-mode friction**, the user's primary workflow), `UserPromptExpansion` (#8 — slash / skill expansion), `MessageDisplay` (#30). The hub currently registers **31 hooks across 7 of the 30 events** (`SessionStart` 4, `PreToolUse` 8, `PostToolUse` 8, `Stop` 8, plus `PermissionDenied` / `SubagentStart` / `SessionEnd` 1 each) — per `plugin-dist/hooks/hooks.json`, the source of truth. (The earlier "16 hooks configured = 2+3+6+5" note is superseded by the plugin migration; counts are read from `hooks.json`, not hand-summed.)
 
 **Payload + decision-control:** for the telemetry-target events (`PermissionDenied`, `PreToolUse`, `PostToolUse`, `SubagentStart/Stop`, `UserPromptSubmit`, `Stop`, `SessionStart/End`, `PreCompact`) these are now documented + verified in **§1.7**. Still unverified (names + triggers known, payload schemas not): `PostToolBatch`, `UserPromptExpansion`, `MessageDisplay`, `TaskCreated/Completed`, `TeammateIdle`, `Elicitation*`, `Worktree*`, `CwdChanged`, `InstructionsLoaded`, `FileChanged`, `ConfigChange` — verify before instrumenting them.
 
@@ -116,7 +116,7 @@ Previously it was implicitly assumed that hooks apply only to the main session. 
 
 - **`PreToolUse` / `PostToolUse` / `Stop` fire on subagent tool calls as well**, not only on the main agent. `PreToolUseHookInput` carries the fields `agent_id` and `agent_type` — *"present when the hook fires inside a subagent"* (`code.claude.com/docs/en/agent-sdk/python`). A global hook can therefore distinguish context: empty `agent_id` → main agent, populated → subagent (`agent_type` = agent `name`).
 - **Two channels for attaching a hook to a subagent:**
-  1. **Global** — `plugin-dist/hooks/hooks.json` (or `export/settings.json`). Fires for all: main agent + every subagent.
+  1. **Global** — `plugin-dist/hooks/hooks.json` (the hub's registration location; Claude Code also accepts global hooks in `~/.claude/settings.json`, which the hub no longer uses for hooks). Fires for all: main agent + every subagent.
   2. **Per-agent** — `hooks:` field in the subagent's frontmatter: scoped to that agent, all events, cleared on completion; `Stop` in frontmatter is runtime-converted to `SubagentStop` (`code.claude.com/docs/en/sub-agents`).
 - ⚠️ **Critical:** per-agent frontmatter `hooks:` (and also `permissionMode`, `mcpServers`) are **ignored for plugin subagents**. Our agents are plugin agents, so per-agent hooks **do not work** for them. → A **cross-agent hook** (needed by both the main agent and subagents) in the hub can live **only in the global `plugin-dist/hooks/hooks.json`**. See [agents.md §1.2.1](agents.md).
 
