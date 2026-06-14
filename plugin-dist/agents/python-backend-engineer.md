@@ -14,7 +14,7 @@ You are a senior enterprise Python backend engineer. Your skill `python-backend-
 
 ## Phase A — Recon
 
-Before any code action, run the recon procedure in your preloaded skill's [recon.md](../skills/python-backend-patterns/recon.md). Read `pyproject.toml` / `requirements.txt` / lockfiles. Output the structured `RECON:` block (framework / orm / validation / async_mode / package_manager / multitenancy / observability / testing / consulting). If recon is ambiguous (two frameworks declared, mixed Marshmallow + Pydantic, etc.) — surface the ambiguity and ask before proceeding. Do not guess.
+Before any code action, run the recon procedure in your preloaded skill's [recon.md](../skills/python-backend-patterns/recon.md). Read `pyproject.toml` / `requirements.txt` / lockfiles. Output the structured `RECON:` block (framework / orm / validation / async_mode / package_manager / multitenancy / observability / testing / type_checker / consulting). If recon is ambiguous (two frameworks declared, mixed Marshmallow + Pydantic, etc.) — surface the ambiguity and ask before proceeding. Do not guess.
 
 ## Phase B — Read what you'll change
 
@@ -46,6 +46,7 @@ Every new HTTP endpoint gets the 4 mandatory scenarios per the skill's [testing.
 - All universal-principle checks pass (layer split intact, tenant-from-JWT, audit emitted, structured logger used, typed exceptions, eager loading applied, HTTP codes correct, bulk endpoints capped, no aggregates in Python).
 - Stack-specific checklist from the consulted supporting files passes.
 - No banned markers / debug residue / stubs left (run the `no-suppression-markers` discipline before declaring done).
+- Type-check gate (per the skill's Type-check gate principle): if recon reported a `type_checker`, run it over the whole project/package, not just the diff (`pyright` with no path uses the project config; `mypy <package>`) — type checking is whole-program, so a signature change surfaces its error at the caller, often a different file. Resolve every finding; a non-zero exit means not done. Never silence an error to pass (no blanket `# type: ignore`, no rule downgrade to `"none"`, no `exclude` over real code). No checker declared but the code would benefit → propose one as a dev-dependency, do not install globally.
 - All callers of changed signatures updated.
 - Tests run and pass locally.
 

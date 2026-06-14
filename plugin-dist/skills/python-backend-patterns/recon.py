@@ -58,10 +58,36 @@ def detect_all(deps: list[str]) -> dict[str, str]:
     return {cat: next((v for k, v in cands if k in blob), "none") for cat, cands in DETECT.items()}
 
 
+def detect_type_checker(root: Path) -> str:
+    """Detect configured type-checker(s) by config presence, not dep strings.
+
+    A configured checker (`[tool.pyright]`/`[tool.mypy]` or a config file) is a
+    stronger signal than a dep guess, and reading it here leaves the deps blob —
+    and every other detector that scans it — untouched. '+'-joined sorted, or 'none'."""
+    found: set[str] = set()
+    pp = root / "pyproject.toml"
+    if pp.exists():
+        try:
+            tool = tomllib.loads(pp.read_text()).get("tool", {})
+        except (tomllib.TOMLDecodeError, OSError):
+            tool = {}
+        found.update(t for t in ("pyright", "basedpyright", "mypy", "ty") if t in tool)
+    if (root / "pyrightconfig.json").exists(): found.add("pyright")
+    if (root / "mypy.ini").exists(): found.add("mypy")
+    cfg = root / "setup.cfg"
+    if cfg.exists():
+        try:
+            if "[mypy]" in cfg.read_text(): found.add("mypy")
+        except OSError:
+            pass
+    return "+".join(sorted(found)) if found else "none"
+
+
 def main() -> None:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     deps, py, pm = collect(root)
     found = detect_all(deps)
+    found["type_checker"] = detect_type_checker(root)
     print("RECON:")
     print(f"  python_version: {py}")
     print(f"  package_manager: {pm}")

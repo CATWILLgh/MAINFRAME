@@ -14,9 +14,10 @@ Preloaded into the `python-backend-engineer` sub-agent. Provides a dispatch tabl
 
 1. **Recon first.** Run the script [recon.py](recon.py) — `python3 ~/.claude/skills/mainframe/skills/python-backend-patterns/recon.py [project_root]` — for deterministic parse of `pyproject.toml` + `requirements.txt`. Manual fallback per [recon.md](recon.md) when script unavailable or project is `Pipfile` / `setup.py`-only.
 2. **Apply universal principles** (below) — they hold regardless of stack.
-3. **Dispatch by recon outcome** — read the relevant supporting file(s) from the table below. Do NOT pre-read files irrelevant to the recon outcome (token discipline).
+3. **Dispatch by recon outcome** — read and apply the relevant supporting file(s) from the table below (read its checklist, execute it). Do NOT pre-read files irrelevant to the recon outcome (token discipline).
 4. **For endpoint-specific situational concerns** (idempotency, pagination, rate limiting, health probes, config-from-env) — consult [api-conventions.md](api-conventions.md) when the concern is in scope.
 5. **Test** per [testing.md](testing.md) — the 4-scenario contract for every endpoint is non-negotiable.
+6. **Type-check gate** — if recon reports a `type_checker`, run it before declaring done and resolve every finding; non-negotiable like the test contract. See the Type-check gate principle below for what to run and the no-hiding rules.
 
 ## Dispatch table
 
@@ -92,6 +93,15 @@ Any endpoint that accepts an array of IDs / objects MUST cap input size — `if 
 
 `func.sum`, `func.count`, `func.avg`, `case()` — let the database aggregate. Python loops over fetched result sets are an anti-pattern except when the calculation requires Python-only context (e.g. `datetime.now()` for live active-time).
 
+### Type-check gate
+
+A type error is a defect class `ruff` and `grep` cannot see — wrong argument or return type, `None`-unsafety, undefined names, missing attributes, wrong argument count. When the project declares a type-checker, running it is part of "done", not optional.
+
+- Detect it from the recon `type_checker` field (pyright / mypy, read from a `[tool.*]` section or a config file). If one is declared, run it as a gate before declaring the change done — over the whole project/package, not just the files you changed (`pyright` with no path uses the project config; `mypy <package>`). Type checking is whole-program: a signature change surfaces its error at the call site, often a different file than the one edited — checking only the diff misses it. A non-zero exit means the change is not finished.
+- Adopt the project's existing strictness and only tighten it (ratchet), never loosen to pass. pyright defaults to `standard`; an honest mypy baseline keeps `warn_unused_ignores = true` so stale ignores surface.
+- Do not hide an error to make the gate pass. Off-limits: `typeCheckingMode: "off"`, downgrading a rule to `"none"`, `exclude` / `ignore` globs over real code, a blanket `# type: ignore` or `# pyright: ignore`, mypy `ignore_missing_imports` or `disable_error_code` globally, `strict_optional = false`. The inline forms are already banned by `no-suppression-markers` — resolve the error or raise a `surface-ticket`, never silence it.
+- If no checker is declared and the code would benefit, propose adding one as a dev-dependency (e.g. `uv add --dev pyright`); do not silently install it globally.
+
 ## Out of scope
 
 - Data pipelines (ETL, pandas, polars, dask) — separate `data-engineer` role.
@@ -110,3 +120,6 @@ Per-supporting-file authoritative URLs are at the bottom of each file. Umbrella 
 - OWASP Input Validation Cheat Sheet — https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
 - OWASP Authorization Cheat Sheet — https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
 - MDN Form Validation — https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Form_validation
+- pyright configuration (typeCheckingMode default `standard`, diagnostic rules) — https://github.com/microsoft/pyright/blob/main/docs/configuration.md
+- pyright command-line (CLI gate, exit 1 on errors) — https://github.com/microsoft/pyright/blob/main/docs/command-line.md
+- mypy `warn_unused_ignores` / honest-baseline config — https://mypy.readthedocs.io/en/stable/config_file.html

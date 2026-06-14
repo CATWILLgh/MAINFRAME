@@ -27,6 +27,7 @@ If the script is unavailable, fails (custom layout, malformed TOML), or the proj
 | OpenAPI gen | `flask-smorest` (Flask) / `drf-spectacular` (Django) / built-in (FastAPI) |
 | Config | `pydantic-settings` / `dynaconf` |
 | Testing | `pytest` (+ optional `testcontainers` for real-DB) |
+| Type checker | `[tool.pyright]` / `pyrightconfig.json` → pyright; `[tool.mypy]` / `mypy.ini` / `setup.cfg [mypy]` → mypy (config presence, not a dep string) |
 | Multitenancy | `organization_id` / `tenant_id` columns OR PostgreSQL RLS policies |
 
 ## Output block — same shape either path
@@ -46,6 +47,7 @@ RECON:
   openapi_gen: <flask-smorest|drf-spectacular|apispec|none>
   config: <pydantic-settings|dynaconf|none>
   testing: <pytest+testcontainers|pytest|none>
+  type_checker: <pyright|mypy|basedpyright|ty|none>
   multitenancy: <rls|app-filter|none>
 ```
 
