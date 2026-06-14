@@ -104,7 +104,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 **Sees:**
 - Its own system prompt (frontmatter file body) or delegation prompt.
 - The `prompt` parameter from the parent — **the only channel** for passing context (for modes A/C/E/F).
-- The **full** CLAUDE.md memory hierarchy the main session loads — managed-policy + **user-global `~/.claude/CLAUDE.md`** + project `./CLAUDE.md` + `CLAUDE.local.md`. Named custom/plugin subagents are NOT scoped to project-only; the user-global file (the hub's `export/CLAUDE.md`) IS loaded into them. Explore and Plan are the only two that skip CLAUDE.md (and git status), with no frontmatter knob to change that. So an agent body may rely on the umbrella CLAUDE.md being present — but the markdown link to it is human navigation only; the content arrives as loaded memory, not via the link. Verified: CLI 2.1.177 (empirical probe) + `sub-agents` / `memory` docs, 2026-06-15.
+- The **full** CLAUDE.md memory hierarchy the main session loads — managed-policy + **user-global `~/.claude/CLAUDE.md`** + project `./CLAUDE.md` + `CLAUDE.local.md`. Named custom/plugin subagents are NOT scoped to project-only; the user-global file (the hub's `export/CLAUDE.md`) IS loaded into them. Explore and Plan are the only two that skip CLAUDE.md (and git status), with no frontmatter knob to change that. So an agent body may rely on the umbrella CLAUDE.md being present — but the markdown link to it is human navigation only; the content arrives as loaded memory, not via the link. Source: the `sub-agents` doc ("Explore and Plan are the only subagents that omit CLAUDE.md and git status") + the `memory` doc, corroborated by claude-code-guide (which reports an in-CLI check — relayed, not witnessed here). Checked 2026-06-15.
 - Preloaded skills from `skills:` frontmatter.
 - Git status snapshot (except Explore and Plan).
 
@@ -129,7 +129,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 
 - **Per workflow concurrency**: `min(16, cpu_cores - 2)` concurrent agents (documented in Workflow tool schema).
 - **Per workflow lifetime**: 1000 agents total cap — backstop against runaway loops.
-- **Nesting**: a subagent **cannot** spawn subagents. The Agent tool is unavailable inside a subagent. Workflow inside a child Workflow throws.
+- **Nesting**: since CLI **2.1.172** (2026-06-10) a subagent **can** spawn subagents, up to **5 levels** deep (per the CHANGELOG entry, relayed by claude-code-guide + web-search reading that same line; the exact depth is relayed, not runtime-probed). Before 2.1.172, nesting was blocked — `Agent` / `Task` silently filtered inside a subagent (issue #61993). Gating: an agent whose `tools:` omits `Agent` still cannot spawn, by design (inferred from the same allowlist mechanism verified for `Skill` this session) — e.g. the hub's narrow-tools `*-engineer` agents. Two adjacent mechanisms keep tighter limits, do not conflate: a **Workflow** inside a child Workflow throws (1 level); **agent-teams** teammates cannot spawn teams/teammates (only the lead manages the team). Checked 2026-06-15.
 
 ---
 
