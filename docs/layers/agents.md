@@ -104,7 +104,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 **Sees:**
 - Its own system prompt (frontmatter file body) or delegation prompt.
 - The `prompt` parameter from the parent — **the only channel** for passing context (for modes A/C/E/F).
-- CLAUDE.md hierarchy (except Explore and Plan, which skip it).
+- The **full** CLAUDE.md memory hierarchy the main session loads — managed-policy + **user-global `~/.claude/CLAUDE.md`** + project `./CLAUDE.md` + `CLAUDE.local.md`. Named custom/plugin subagents are NOT scoped to project-only; the user-global file (the hub's `export/CLAUDE.md`) IS loaded into them. Explore and Plan are the only two that skip CLAUDE.md (and git status), with no frontmatter knob to change that. So an agent body may rely on the umbrella CLAUDE.md being present — but the markdown link to it is human navigation only; the content arrives as loaded memory, not via the link. Verified: CLI 2.1.177 (empirical probe) + `sub-agents` / `memory` docs, 2026-06-15.
 - Preloaded skills from `skills:` frontmatter.
 - Git status snapshot (except Explore and Plan).
 
