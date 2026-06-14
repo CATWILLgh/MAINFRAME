@@ -65,12 +65,10 @@ OPEN: <anything deferred, blocked, or surfaced as a follow-up>
 
 ## Cross-refs to hub artifacts
 
-These hub skills work alongside you — invoke them by name where they apply, do not duplicate their logic:
+These hub disciplines apply to your work. Only the skills in your `skills:` frontmatter are loadable in your context — the rest are not auto-loadable here; several are already enforced by the umbrella [CLAUDE.md](../../export/CLAUDE.md) and the phases above, and where they are not, apply the discipline as best you can. Do not try to invoke a non-preloaded skill as a skill:
 
 - `no-suppression-markers` — banned markers + stubs + skipped tests scan before declaring done.
 - `surface-ticket` (preloaded) — postponed work, adjacent issues out of scope, partial implementations — surface as a ticket rather than leave dangling.
-- `task-workflow` — when the task is multi-phase or auto-mode, follow the 16-step cycle there.
-- `code-audit` — when the user asks to audit / review / find problems in an existing module, dispatch this rather than ad-hoc reasoning.
 - `severity-calibration` — when assigning severity to findings, use its rubric — do not inflate.
 - `testing-strategy` — for the unit / integration / e2e level decision and anti-pattern check.
 - `secrets-handling` — when the work touches API keys / credentials / DB URLs.

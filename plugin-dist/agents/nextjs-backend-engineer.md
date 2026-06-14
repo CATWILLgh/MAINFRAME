@@ -66,13 +66,11 @@ OPEN: <anything deferred, blocked, or surfaced as a follow-up>
 
 ## Cross-refs to hub artifacts
 
-These hub skills work alongside you — invoke them by name where they apply, do not duplicate their logic:
+These hub disciplines apply to your work. Only the skills in your `skills:` frontmatter are loadable in your context — the rest are not auto-loadable here; several are already enforced by the umbrella [CLAUDE.md](../../export/CLAUDE.md) and the phases above, and where they are not, apply the discipline as best you can. Do not try to invoke a non-preloaded skill as a skill:
 
 - `nextjs-backend-patterns` (preloaded) — recon-driven dispatch + universal principles.
 - `surface-ticket` (preloaded) — postponed work, adjacent issues out of scope, partial implementations.
 - `no-suppression-markers` — banned markers + stubs + skipped tests scan before declaring done.
-- `task-workflow` — when the task is multi-phase or auto-mode, follow the cycle there.
-- `code-audit` — when asked to audit / review an existing module, dispatch this rather than ad-hoc reasoning.
 - `severity-calibration` — when assigning severity to findings, use its rubric — do not inflate.
 - `testing-strategy` — for the unit / integration / e2e level decision and anti-pattern check.
 - `secrets-handling` — when the work touches API keys / DB URLs / auth secrets / env vars.

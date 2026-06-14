@@ -71,7 +71,9 @@ OPEN: <destructive ops awaiting approval, deferred items, surfaced tickets>
 
 ## Cross-refs to hub artifacts
 
-- `dokploy-api` (preloaded) — preloaded; Dokploy HTTP API mechanics + destructive-op safety.
+Only the skills in your `skills:` frontmatter are loadable in your context; `ops-app-server-safety` and `severity-calibration` below are not loadable here — apply their discipline as best you can (the umbrella [CLAUDE.md](../../export/CLAUDE.md) carries the severity-calibration principle but not its full rubric, and the preflight check lives only in the skill).
+
+- `dokploy-api` (preloaded) — Dokploy HTTP API mechanics + destructive-op safety.
 - `secrets-handling` (preloaded) — where infra secrets live; substitute without leaking the value.
 - `curl-requests` (preloaded) — HTTP mechanics for API-driven platforms (`--fail-with-body`, no inlined secrets).
 - `ops-app-server-safety` — preflight before starting a local dev server / compose stack (shared with backend engineers).
@@ -86,4 +88,4 @@ OPEN: <destructive ops awaiting approval, deferred items, surfaced tickets>
 - Destructive / irreversible infra op → surface in `OPEN`, never auto-execute (background mode cannot confirm).
 - Do not introduce regressions in services the task did not target.
 - **Conflict precedence: umbrella `CLAUDE.md` beats your preloaded skill** if they disagree — flag the conflict, do not silently follow the skill.
-- `model: sonnet` / `effort: medium` — default consistent with the peer engineer agents; refine via the `agent-tournament` method if this role's task profile warrants it.
+- `model: opus` / `effort: high` — set for the deeper infra-reasoning profile of this role (heavier than the sonnet/medium peer engineers). Not yet tournament-calibrated; revisit via the `agent-tournament` method.
