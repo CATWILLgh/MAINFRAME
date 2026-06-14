@@ -8,11 +8,11 @@ when_to_use: "A Next.js App Router backend task is in flight inside the `nextjs-
 
 # Next.js backend patterns — App Router server layer
 
-Preloaded into the `nextjs-backend-engineer` sub-agent. Dispatch from project recon to per-concern files, plus universal principles. **Scope: the server layer of a Next app** — the client React UI is `react-frontend-engineer`'s. This skill covers what is *distinct* to Next (the RSC / Server-Action / caching / Route-Handler model); it does not re-teach generic Node/ORM/validation depth — that lives in the standalone backend skill.
+Preloaded into the `nextjs-backend-engineer` sub-agent. Dispatch from project recon to per-concern files, plus universal principles. Scope: the server layer of a Next app — the client React UI is `react-frontend-engineer`'s. This skill covers what is *distinct* to Next (the RSC / Server-Action / caching / Route-Handler model); it does not re-teach generic Node/ORM/validation depth — that lives in the standalone backend skill.
 
 ## How to use
 
-1. **Recon first.** Run [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/nextjs-backend-patterns/recon.js [project_root]` — for a deterministic parse of `package.json` + Next version + router. Manual fallback per [recon.md](recon.md).
+1. **Recon first.** Run [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/nextjs-backend-patterns/recon.js [project_root]` — for a deterministic parse of `package.json` + Next version + router. Manual fallback — [recon.md](recon.md) holds the by-hand stack-detection steps — when the script is unavailable.
 2. **Apply universal principles** (below) — they hold across the surface.
 3. **Dispatch by recon + task** — read only the relevant supporting file(s). Do NOT pre-read irrelevant ones (token discipline).
 4. **Caching is version-sensitive** — confirm defaults against current docs (Context7); they changed between Next 14 and 15.
@@ -43,16 +43,16 @@ Authority, state transitions, and computed values live server-side. Inbound data
 `Route Handler / Server Action` (entry + HTTP) → `use-case / service` (business logic) → `data-access layer` (`server-only`) → `ORM`. Business logic NEVER lives in a Route Handler, a Server Action body, or a Server Component. Server Components fetch through the data layer, they don't embed queries inline for anything non-trivial.
 
 ### Authorize in the data layer — middleware is NOT the gate
-Every privileged Server Action / Route Handler / data-access function checks the session itself (the **Data Access Layer** pattern: a `server-only` module that calls `await auth()` / `verifySession()` before touching data). **Middleware must never be the sole authorization layer** — it is bypassable (a known middleware auth-bypass class, e.g. CVE-2025-29927) and runs before you know the data. Middleware is for coarse UX redirects; real authz is at the data boundary. Per the Next.js Data Security guide.
+Every privileged Server Action / Route Handler / data-access function checks the session itself (the Data Access Layer pattern: a `server-only` module that calls `await auth()` / `verifySession()` before touching data). Middleware must never be the sole authorization layer — it is bypassable (a known middleware auth-bypass class, e.g. CVE-2025-29927) and runs before you know the data. Middleware is for coarse UX redirects; real authz is at the data boundary. Per the Next.js Data Security guide.
 
 ### Server Actions are public endpoints
 A `'use server'` function compiles to a public POST route. Treat every one as an untrusted HTTP endpoint: validate args (Zod) and authorize inside the action, every time — the caller is not to be trusted, even if a button is hidden in the UI.
 
 ### Secrets are server-only
-Any `NEXT_PUBLIC_`-prefixed env var is **inlined into the client bundle at build** — never put secrets there. Server-only secrets stay unprefixed and are read only in server modules. Mark server data modules with `import 'server-only'` so an accidental client import fails the build instead of leaking server code.
+Any `NEXT_PUBLIC_`-prefixed env var is inlined into the client bundle at build — never put secrets there. Server-only secrets stay unprefixed and are read only in server modules. Mark server data modules with `import 'server-only'` so an accidental client import fails the build instead of leaking server code.
 
 ### Caching is explicit and version-aware
-In Next 15, `fetch` and GET Route Handlers are **not cached by default** (changed from 14). Opt into caching deliberately (`fetch(..., { cache: 'force-cache' })`, segment `export const revalidate`), and invalidate via `revalidatePath` / `revalidateTag`. Never assume a default — confirm against current docs. See [caching.md](caching.md).
+In Next 15, `fetch` and GET Route Handlers are not cached by default (changed from 14). Opt into caching deliberately (`fetch(..., { cache: 'force-cache' })`, segment `export const revalidate`), and invalidate via `revalidatePath` / `revalidateTag`. Never assume a default — confirm against current docs. See [caching.md](caching.md).
 
 ### Standard backend discipline still applies
 Eager-load relations (N+1 is the prime backend regression). Throw typed errors, never leak raw ORM errors to the client. One consistent response/envelope shape. TypeScript strict mode is the floor; `any` / `as` / `@ts-ignore` banned per umbrella CLAUDE.md.

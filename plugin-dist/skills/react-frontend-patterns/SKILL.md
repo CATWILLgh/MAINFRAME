@@ -14,7 +14,7 @@ The companion skill `shadcn` (also preloaded) owns the **UI composition layer** 
 
 ## How to use
 
-1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/react-frontend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + lockfile + `vite.config.*` + `tsconfig*`. The script also tries `npx shadcn@latest info --json` if `components.json` is present (live truth for Tailwind version, framework, aliases). Manual fallback per [recon.md](recon.md).
+1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/react-frontend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + lockfile + `vite.config.*` + `tsconfig*`. The script also tries `npx shadcn@latest info --json` if `components.json` is present (live truth for Tailwind version, framework, aliases). Manual fallback — [recon.md](recon.md) holds the by-hand stack-detection steps — when the script is unavailable.
 2. **Refuse non-Vite stacks early.** If recon detects Next.js (`next` in deps), Remix, Astro, or React Native — surface the mismatch and exit. A separate agent will own those.
 3. **Apply universal principles** (below) — they hold regardless of project size, age, or existing structure.
 4. **Apply the architectural stance** (FSD + Boy Scout) — see the dedicated section. Pull toward FSD on new code; do not avalanche-refactor existing structure.
@@ -41,7 +41,7 @@ These apply regardless of architectural school, project size, or existing layout
 
 ### The server is canonical — clients trust nothing they receive
 
-The frontend is a presenter, not an authority. Whatever the server sends — **validate at the boundary** before the type system is allowed to assume it. The umbrella rule ("data at system boundaries… is untrusted and must be validated") is the floor.
+The frontend is a presenter, not an authority. Whatever the server sends — validate at the boundary before the type system is allowed to assume it. The umbrella rule ("data at system boundaries… is untrusted and must be validated") is the floor.
 
 - **Inbound API response → Zod schema** at the infrastructure-layer mapper / HTTP client. Bare `as ApiResponse` casts on `fetch` results are forbidden — a static type at the boundary is not a contract, runtime validation is.
 - **No business decisions on the client.** Permission checks, status transitions, computed totals — display what the server returned, do not compute or re-decide. If the UI needs to know "can this user click Approve", the server returns a `capabilities: { canApprove: true }` flag; the client renders, it does not compute.
@@ -67,7 +67,7 @@ What is forbidden: storing the loaded server entity in form state and editing it
 
 ### Secrets, PII, tokens
 
-Refresh tokens never in `localStorage` (per OWASP DOM-based XSS Prevention) — `httpOnly` cookies set by the server. Access tokens in memory only if at all possible. `VITE_*` env vars **are bundled into the client** — never put a secret there. PII logged to console / Sentry is a leak — whitelist what is logged, redact what is not.
+Refresh tokens never in `localStorage` (per OWASP DOM-based XSS Prevention) — `httpOnly` cookies set by the server. Access tokens in memory only if at all possible. `VITE_*` env vars are bundled into the client — never put a secret there. PII logged to console / Sentry is a leak — whitelist what is logged, redact what is not.
 
 ### `dangerouslySetInnerHTML` is a tripwire
 
@@ -81,7 +81,7 @@ The pull is gradual, not destructive. Two enforcement levels:
 
 **Level 1 — universal principles** (the section above): always-on, scheme-independent. Apply in every file you touch, regardless of whether the project is on FSD, Clean Architecture, or a flat structure. A new violation here is never acceptable.
 
-**Level 2 — architectural school**: contextual. Detect what is in place via recon. If FSD-shaped — follow it. If Clean Architecture — work within its style for in-scope edits (do not break the layering you find); write *new* features in FSD-shape where they don't conflict; surface the divergence as a ticket via [`surface-ticket`](#cross-refs) so the team has a record. If flat / ad-hoc — propose FSD as the target structure at the **first touch of an area**, do not impose it on the whole codebase in one PR.
+**Level 2 — architectural school**: contextual. Detect what is in place via recon. If FSD-shaped — follow it. If Clean Architecture — work within its style for in-scope edits (do not break the layering you find); write *new* features in FSD-shape where they don't conflict; surface the divergence as a ticket via [`surface-ticket`](#cross-refs) so the team has a record. If flat / ad-hoc — propose FSD as the target structure at the first touch of an area, do not impose it on the whole codebase in one PR.
 
 **Boy Scout Rule applies to both levels**: leave the file cleaner than you found it. New code never repeats the bad pattern even if neighbours do. Existing code in your edit path gets aligned one step closer to the target — not "rewrite all".
 
@@ -93,7 +93,7 @@ The pull is gradual, not destructive. Two enforcement levels:
 
 - Next.js / RSC, Remix, Astro — separate agent (frontends with a Node server in the same project, different file conventions, different rendering model).
 - React Native / Expo — separate agent.
-- Design-system implementation (token systems, theme generators, primitive layer of a UI library) — separate concern. This agent **consumes** a design system (shadcn), it does not **build** one.
+- Design-system implementation (token systems, theme generators, primitive layer of a UI library) — separate concern. This agent consumes a design system (shadcn), it does not build one.
 - E2E test infrastructure (Playwright / Cypress harness setup) — out of scope; unit + integration tests in scope per [`testing-strategy`](#cross-refs).
 - Build pipeline / Vite plugin authoring — out of scope; configuring an existing Vite project is fine.
 

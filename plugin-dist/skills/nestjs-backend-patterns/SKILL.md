@@ -12,7 +12,7 @@ Preloaded into the `nestjs-backend-engineer` sub-agent. Provides a dispatch tabl
 
 ## How to use
 
-1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/nestjs-backend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + tsconfig + lockfile. Manual fallback per [recon.md](recon.md) when the script is unavailable.
+1. **Recon first.** Run the script [recon.js](recon.js) — `node ~/.claude/skills/mainframe/skills/nestjs-backend-patterns/recon.js [project_root]` — for deterministic parse of `package.json` + tsconfig + lockfile. Manual fallback — [recon.md](recon.md) holds the by-hand stack-detection steps — when the script is unavailable.
 2. **Apply universal principles** (below) — they hold regardless of stack.
 3. **Dispatch by recon outcome** — read the relevant supporting file(s) from the table below. Do NOT pre-read files irrelevant to the recon outcome (token discipline).
 4. **For endpoint-specific situational concerns** (idempotency, pagination, rate limiting, health probes, config-from-env) — consult [api-conventions.md](api-conventions.md) when the concern is in scope.
@@ -46,7 +46,7 @@ These hold regardless of framework / ORM / validation choice. Cross-reference th
 
 ### The server is canonical — authority, state, computed values
 
-Validation of inbound request data at the trust boundary is mandatory; that rule lives in the umbrella `CLAUDE.md` Engineering practices ("Trust framework and type-system guarantees": "data at system boundaries… is untrusted and must be validated"). Apply it. This bullet adds the **authority half** beyond schema validation:
+Validation of inbound request data at the trust boundary is mandatory; that rule lives in the umbrella `CLAUDE.md` Engineering practices ("Trust framework and type-system guarantees": "data at system boundaries… is untrusted and must be validated"). Apply it. This bullet adds the authority half beyond schema validation:
 
 - **Authorization on every protected endpoint, server-checked** against actual tenant + role from JWT. Per OWASP Authorization Cheat Sheet: "Access control checks must be performed server-side… client-side checks may be permissible for improving the user experience, they should never be the decisive factor". Guards / decorators alone are not enough for high-stakes operations — re-check ownership in the service layer.
 - **Business state transitions controlled by the server.** Status flow (e.g. `draft → submitted → approved`) is a whitelist defined and enforced in the service layer. Reject unauthorised transitions there, not at the controller.

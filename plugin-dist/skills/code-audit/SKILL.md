@@ -24,9 +24,12 @@ dimensions). If the target is not given, ask; if it is, start without re-asking.
 
 ### 2. Dispatch one subagent per dimension (parallel)
 
-Launch the dimensions from [dimensions.md](dimensions.md) as parallel `Explore` subagents
-(the built-in read-only search agent) in a single message — one per dimension, each scoped
-to the target. Give each the exact path and require this finding format:
+First read [dimensions.md](dimensions.md) — it holds the five audit dimensions with a
+per-dimension checklist; load it every run, do not dispatch from memory. The five:
+security & resilience, architecture & clean code, performance & data, business logic & API,
+testing & observability. Launch one parallel `Explore` subagent (the built-in read-only
+search agent) per dimension in a single message, each scoped to the target. Give each the
+exact path and require this finding format:
 
 - Location: precise `path:line`
 - Severity: critical / high / medium / low
@@ -55,7 +58,9 @@ a library's behavior need no doc check.
 
 ### 5. Report
 
-Produce the report per [report-format.md](report-format.md): statistics, findings grouped by
+First read [report-format.md](report-format.md) — the report skeleton (statistics tables, the
+`{DIM}-{NNN}` finding fields, the "what was done well" section); load it every run. The report
+carries: statistics (a severity table + a dimension × severity matrix), findings grouped by
 severity (each with location, impact, recommendation), and what was done well.
 
 ### 6. Next steps

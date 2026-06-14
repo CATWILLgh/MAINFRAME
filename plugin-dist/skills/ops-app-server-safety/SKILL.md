@@ -25,7 +25,7 @@ Applies to: dev servers like `vite`, `next dev`, `nodemon`, `uvicorn`, `gunicorn
    - macOS / Linux: `ps -ef | grep -E 'vite|next dev|nodemon|uvicorn|gunicorn|flask run|rails s' | grep -v grep`
    - If multiple projects on the host could host similar processes, disambiguate by working directory: `ps -o pid,command -p <PID>` and `lsof -p <PID> | grep cwd`.
 
-PID files are **not** used here — modern dev tools rarely write them, and the twelve-factor app (§VIII Concurrency) explicitly recommends against manual PID-file management.
+PID files are not used here — modern dev tools rarely write them, and the twelve-factor app (§VIII Concurrency) explicitly recommends against manual PID-file management.
 
 ## Preflight — Docker Compose
 
@@ -37,7 +37,7 @@ Applies to any `docker compose up` invocation.
 2. **If running and recreate was not requested** — do not call `docker compose up` again. Use the existing stack (logs, healthchecks, URLs).
 3. **If launching anyway** — prefer `docker compose up --no-recreate` to avoid rebuilds when configuration is unchanged.
 
-Do **not** preflight a Docker stack by host port. Compose orchestrates a network of containers; a port conflict may be unrelated to this stack. `docker compose ps` is the correct probe.
+Do not preflight a Docker stack by host port. Compose orchestrates a network of containers; a port conflict may be unrelated to this stack. `docker compose ps` is the correct probe.
 
 ## When already running
 
@@ -79,5 +79,3 @@ Between preflight and start there is a race window: a third process can grab the
 - The Twelve-Factor App, §VI Processes / §VIII Concurrency / §IX Disposability — https://12factor.net/
 - Docker Compose CLI reference (`up`, `ps`, `down`) — https://docs.docker.com/reference/cli/docker/compose/up/
 - `lsof(8)` man page — https://man7.org/linux/man-pages/man8/lsof.8.html
-
-Internal: §E source check by sub-agent on 2026-05-28.

@@ -12,7 +12,7 @@ Preloaded into the `python-backend-engineer` sub-agent. Provides a dispatch tabl
 
 ## How to use
 
-1. **Recon first.** Run the script [recon.py](recon.py) — `python3 ~/.claude/skills/mainframe/skills/python-backend-patterns/recon.py [project_root]` — for deterministic parse of `pyproject.toml` + `requirements.txt`. Manual fallback per [recon.md](recon.md) when script unavailable or project is `Pipfile` / `setup.py`-only.
+1. **Recon first.** Run the script [recon.py](recon.py) — `python3 ~/.claude/skills/mainframe/skills/python-backend-patterns/recon.py [project_root]` — for deterministic parse of `pyproject.toml` + `requirements.txt`. Manual fallback — [recon.md](recon.md) holds the by-hand stack-detection steps — when the script is unavailable or the project is `Pipfile` / `setup.py`-only.
 2. **Apply universal principles** (below) — they hold regardless of stack.
 3. **Dispatch by recon outcome** — read and apply the relevant supporting file(s) from the table below (read its checklist, execute it). Do NOT pre-read files irrelevant to the recon outcome (token discipline).
 4. **For endpoint-specific situational concerns** (idempotency, pagination, rate limiting, health probes, config-from-env) — consult [api-conventions.md](api-conventions.md) when the concern is in scope.
@@ -45,7 +45,7 @@ These hold regardless of framework / ORM / validation choice. Cross-reference th
 
 ### The server is canonical — authority, state, computed values
 
-Validation of inbound request data at the trust boundary (request → handler) is mandatory; that rule lives in the umbrella `CLAUDE.md` Engineering practices ("Trust framework and type-system guarantees": "data at system boundaries… is untrusted and must be validated"). Apply it. This bullet adds the **authority half** beyond schema validation:
+Validation of inbound request data at the trust boundary (request → handler) is mandatory; that rule lives in the umbrella `CLAUDE.md` Engineering practices ("Trust framework and type-system guarantees": "data at system boundaries… is untrusted and must be validated"). Apply it. This bullet adds the authority half beyond schema validation:
 
 - **Authorization on every protected endpoint, server-checked** against actual tenant + role from JWT. Per OWASP Authorization Cheat Sheet: "Access control checks must be performed server-side, at the gateway, or using serverless function… client-side checks may be permissible for improving the user experience, they should never be the decisive factor". Decorators / route-level auth alone are not enough for high-stakes operations — re-check ownership in the service layer.
 - **Business state transitions controlled by the server.** Status flow (e.g. `draft → submitted → approved`) is a whitelist defined and enforced in the service layer. Reject unauthorised transitions there, not at the route.
