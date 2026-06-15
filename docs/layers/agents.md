@@ -173,7 +173,7 @@ Surface — Claude Code CLI: main session + Agent tool invocation of file-based 
 | `background: true` | frontmatter | Auto-deny any tool call requiring a prompt → cap blast radius. | sub-agents |
 | `PreToolUse` hook with exit code 2 | external layer | Block specific commands inside an allowed tool (e.g. allow Bash but reject SQL writes). | sub-agents #conditional-rules-with-hooks |
 
-**5 tools are structurally unavailable to a subagent** regardless of frontmatter: `Agent` (no nesting), `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode` (unless `permissionMode: plan`), `ScheduleWakeup`, `WaitForMcpServers`. Source: sub-agents #available-tools.
+**5 tools are structurally unavailable to a subagent** regardless of frontmatter: `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode` (unless `permissionMode: plan`), `ScheduleWakeup`, `WaitForMcpServers`. Source: sub-agents #available-tools. (`Agent` is NOT in this list: subagent nesting works since CLI 2.1.172 and is gated by the `tools:` allowlist, not structurally blocked — see §1.6.)
 
 **Not documented:** timeout / parent abort mechanism for runaway. The only hard runtime termination — auto-compaction at ~95% context capacity.
 
