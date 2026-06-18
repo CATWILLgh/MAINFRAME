@@ -103,6 +103,7 @@ Other hook-entry types:
 
 - **Hook `cwd`** = the current directory of the session (may change via `cd`). **Do not use relative paths.**
 - **`${CLAUDE_PROJECT_DIR}`** — the directory from which Claude was launched (stable). Source: `code.claude.com/docs/en/hooks` + hub empirics.
+- **`${CLAUDE_PLUGIN_ROOT}`** — install root of the plugin a hook ships in, substituted per-element in `command`/`args` so plugin hook paths stay portable across machines — the hub registers every script as `${CLAUDE_PLUGIN_ROOT}/hooks/scripts/<name>.py`. Verified: installed bundle 2.1.177.
 
 ### 1.5. File watcher / hot-reload
 
@@ -195,6 +196,8 @@ Two kinds of opportunity per event: **direct** (the hook acts on the session) an
 - **Self-loop guard** for the `Stop` hook: check `stop_hook_active` and exit 0.
 - **Self-exclusion** for marker-detector hooks: `_SELF_FILES` whitelist, otherwise the detector flags itself.
 - **Stdlib only** — no venvs or third-party deps, for fast startup.
+
+**When observed friction warrants a hook (session signals).** A behaviour is hook-worthy when the transcript shows one of: an explicit correction ("don't… / stop… / never…"), a frustrated reaction ("why did you… / I didn't ask for that"), the user reverting or fixing a change, or the same mistake repeated. Exclude false signals: hypotheticals ("what if I `rm -rf`?"), teaching ("here's what NOT to do"), one-time already-fixed accidents, and pure preferences. Severity sets the response, **within the hub's blocking model** — dangerous / security / data-loss → a `Stop`-gate block (NOT a `PreToolUse` block: those degrade to *defer* in auto-mode and stall the run, so hub blocking lives in the Stop-gates while PreToolUse / PostToolUse stay advisory); style / wrong-target → advisory note; preference → leave it. Adapted from the `hookify` conversation-analyzer; pairs with the `harness-feedback` intake.
 
 ---
 
