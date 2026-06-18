@@ -263,5 +263,5 @@
   "autoMemoryEnabled": true,
   "teammateMode": "in-process",
   "remoteControlAtStartup": false,
-  "model": "opus[1m]"
+  "model": "opus"
 }
