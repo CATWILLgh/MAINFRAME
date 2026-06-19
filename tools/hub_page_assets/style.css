@@ -10,6 +10,7 @@
   --hooks: #f0883e;
   --events: #56d364;
   --dev: #db61a2;
+  --usage: #e3b341;
 }
 * { box-sizing: border-box; }
 body {
@@ -60,6 +61,7 @@ body {
 .layer-h.hooks { border-color: var(--hooks); }
 .layer-h.events { border-color: var(--events); }
 .layer-h.dev { border-color: var(--dev); }
+.layer-h.usage { border-color: var(--usage); }
 
 .grid {
   display: grid;
@@ -306,6 +308,27 @@ svg.graph.dimmed .gnode.hot text { fill: var(--text); }
 .bar-track { flex: 1; height: 14px; background: var(--bg); border-radius: 4px; overflow: hidden; }
 .bar-fill { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .bar-num { width: 46px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.stat-row.wrap { flex-wrap: wrap; }
+.share { display: flex; align-items: center; gap: 9px; }
+.share .bar-track { flex: 0 0 140px; height: 12px; }
+.share .bar-fill { background: var(--usage); }
+.share-pct { width: 46px; text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+
+.heatmap {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 12px);
+  grid-auto-columns: 12px;
+  gap: 3px;
+  overflow-x: auto;
+  padding: 6px 0;
+}
+.hm-cell { width: 12px; height: 12px; border-radius: 2px; background: #1b2128; }
+.hm-cell.l1 { background: #0e4429; }
+.hm-cell.l2 { background: #006d32; }
+.hm-cell.l3 { background: #26a641; }
+.hm-cell.l4 { background: #39d353; }
 
 .graph-wrap { position: relative; }
 .graph-ctrls {

@@ -331,6 +331,112 @@
     }
   }
 
+  function fmtTok(n) {
+    n = n || 0;
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+    return String(n);
+  }
+
+  function fmtHour(h) {
+    if (h == null) return "—";
+    const ap = h < 12 ? "AM" : "PM";
+    return (h % 12 === 0 ? 12 : h % 12) + " " + ap + " UTC";
+  }
+
+  function usageHeatmap(byDay) {
+    // GitHub-style calendar: 7 rows (Mon..Sun), one column per week.
+    const map = {};
+    byDay.forEach(([d, n]) => { map[d] = n; });
+    const dates = byDay.map(([d]) => d).sort();
+    if (!dates.length) return el("div", { class: "muted small" }, "no activity");
+    const last = new Date(dates[dates.length - 1] + "T00:00:00Z");
+    const start = new Date(dates[0] + "T00:00:00Z");
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7)); // back to Monday
+    const max = byDay.reduce((m, r) => Math.max(m, r[1]), 0) || 1;
+    const level = (n) => (!n ? 0 : n / max > 0.66 ? 4 : n / max > 0.33 ? 3 : n / max > 0.1 ? 2 : 1);
+    const cells = [];
+    for (let d = new Date(start); d <= last; d.setUTCDate(d.getUTCDate() + 1)) {
+      const iso = d.toISOString().slice(0, 10);
+      const n = map[iso] || 0;
+      cells.push(el("div", { class: "hm-cell l" + level(n),
+        title: iso + ": " + n + (n === 1 ? " message" : " messages") }));
+    }
+    return el("div", { class: "heatmap" }, cells);
+  }
+
+  function renderUsage(root) {
+    const u = D.usage;
+    if (!u || !u.active) {
+      root.appendChild(el("div", { class: "notice" },
+        "No local session transcripts found at ~/.claude/projects — usage stats "
+        + "are computed from those (independent of --dev telemetry)."));
+      return;
+    }
+    if (!u.messages) {
+      root.appendChild(el("div", { class: "notice" },
+        "Transcripts found, but no assistant messages with token usage yet."));
+      return;
+    }
+    root.appendChild(el("p", { class: "muted" },
+      "Aggregated from " + u.files + " local session transcripts (~/.claude/projects). "
+      + "Counts only — no prompt content is read. Streaming snapshots are de-duplicated "
+      + "by message id; subagent turns are excluded from the totals."));
+
+    root.appendChild(el("div", { class: "stat-row wrap" }, [
+      el("div", { class: "stat" }, [el("b", null, String(u.sessions)), " sessions"]),
+      el("div", { class: "stat" }, [el("b", null, u.messages.toLocaleString()), " assistant replies"]),
+      el("div", { class: "stat" }, [el("b", null, fmtTok(u.tokens.total)), " tokens (in+out)"]),
+      el("div", { class: "stat" }, [el("b", null, String(u.active_days)), " active days"]),
+      el("div", { class: "stat" }, [el("b", null, u.current_streak + "d"), " current streak"]),
+      el("div", { class: "stat" }, [el("b", null, u.longest_streak + "d"), " longest streak"]),
+      el("div", { class: "stat" }, [el("b", null, fmtHour(u.peak_hour)), " peak hour"]),
+      el("div", { class: "stat" }, [el("b", { class: "mono" }, u.favorite_model || "—"), " top model"]),
+    ]));
+
+    const tk = u.tokens;
+    root.appendChild(el("div", { class: "notice ok small" }, [
+      el("b", null, fmtTok(tk["in"])), " in · ", el("b", null, fmtTok(tk.out)), " out · ",
+      el("b", null, fmtTok(tk.total)), " total. ",
+      el("span", { class: "muted" }, "Cache (excluded from total — the real cost driver): "
+        + fmtTok(tk.cache_read) + " read + " + fmtTok(tk.cache_creation) + " write."),
+    ]));
+
+    const grand = u.tokens.total || 1;
+    const rows = u.models.map((m) => el("tr", null, [
+      el("td", { class: "mono" }, m.model),
+      el("td", { class: "num" }, fmtTok(m["in"])),
+      el("td", { class: "num" }, fmtTok(m.out)),
+      el("td", { class: "num" }, fmtTok(m.total)),
+      el("td", null, el("div", { class: "share" }, [
+        el("span", { class: "bar-track" }, el("span", { class: "bar-fill",
+          style: "width:" + Math.max(2, Math.round(100 * m.total / grand)) + "%" })),
+        el("span", { class: "share-pct" }, (m.share * 100).toFixed(1) + "%"),
+      ])),
+    ]));
+    root.appendChild(section("Tokens by model", "usage", u.models.length,
+      el("table", { class: "matrix" }, [
+        el("thead", null, el("tr", null, [el("th", null, "model"),
+          el("th", { class: "num" }, "in"), el("th", { class: "num" }, "out"),
+          el("th", { class: "num" }, "total"), el("th", null, "share")])),
+        el("tbody", null, rows)])));
+
+    root.appendChild(section("Activity calendar", "usage", u.active_days,
+      usageHeatmap(u.by_day)));
+
+    if (u.by_hour && u.by_hour.some((r) => r[1])) {
+      root.appendChild(section("By hour of day (UTC)", "usage", 24,
+        barList(u.by_hour.map(([h, n]) => [String(h).padStart(2, "0") + ":00", n]))));
+    }
+
+    if (u.sidechain_msgs || u.no_usage) {
+      root.appendChild(el("p", { class: "muted small" },
+        u.sidechain_msgs.toLocaleString() + " subagent turns excluded from totals · "
+        + u.no_usage.toLocaleString() + " replies had no usage record."));
+    }
+  }
+
   const LAYERS = ["events", "hooks", "agents", "skills", "dev"];
 
   function ctrlBtn(label, title, onClick) {
@@ -549,6 +655,7 @@
     { id: "config", label: "Config", render: renderConfig },
     { id: "health", label: "Health", render: renderHealth },
     { id: "dev", label: "Dev state", render: renderDev },
+    { id: "usage", label: "Usage", render: renderUsage },
     { id: "graph", label: "Graph", render: renderGraph },
   ];
 

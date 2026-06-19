@@ -25,6 +25,8 @@ import yaml
 _ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hub_page_assets")
 _DEFAULT_DB = os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db")
 _DEFAULT_FEEDBACK = os.path.expanduser("~/.claude/mainframe/feedback")
+_DEFAULT_PROJECTS = os.path.expanduser("~/.claude/projects")
+_DEFAULT_USAGE_CACHE = os.path.expanduser("~/.claude/mainframe/usage-cache/usage-cache.json")
 
 # Layer columns, left to right, in the grouped graph layout.
 LAYER_ORDER = ["events", "hooks", "agents", "skills", "dev"]
@@ -239,6 +241,185 @@ def collect_dev_state(db_path, feedback_dir):
     return state
 
 
+def _iter_jsonl(projects_dir):
+    for dirpath, _dirs, files in os.walk(projects_dir):
+        for fn in files:
+            if fn.endswith(".jsonl"):
+                yield os.path.join(dirpath, fn)
+
+
+def _parse_transcript(path):
+    """Per-file usage aggregate with the fixes a naive line-sum misses.
+
+    An assistant reply is written as many streaming JSONL snapshots sharing one
+    `message.id`; summing every line inflates output ~5-6x. So keep ONE row per
+    id — the terminal snapshot (max `output_tokens`) — and read only top-level
+    `message.usage`, never `usage.iterations[]` (it restates the same numbers).
+    `isSidechain` lines are subagent turns: counted separately, excluded from
+    totals. A kept message with no `usage` lands in a visible `no_usage` bucket.
+    """
+    try:
+        fh = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    main, side = {}, set()
+    with fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue  # tolerate a truncated trailing line on a live session
+            if not isinstance(e, dict) or e.get("type") != "assistant":
+                continue
+            msg = e.get("message") or {}
+            key = msg.get("id") or e.get("uuid")
+            if key is None:
+                continue
+            if e.get("isSidechain"):
+                side.add(key)
+                continue
+            out = (msg.get("usage") or {}).get("output_tokens") or 0
+            prev = main.get(key)
+            if prev is None or out >= prev["out"]:
+                main[key] = {"out": out, "usage": msg.get("usage"),
+                             "model": msg.get("model") or "",
+                             "ts": e.get("timestamp") or "",
+                             "sid": e.get("sessionId") or ""}
+    models, days, hours, sessions = {}, {}, {}, set()
+    no_usage = 0
+    for row in main.values():
+        if row["sid"]:
+            sessions.add(row["sid"])
+        ts = row["ts"]
+        if ts:
+            days[ts[:10]] = days.get(ts[:10], 0) + 1
+            try:
+                h = str(int(ts[11:13]))
+                hours[h] = hours.get(h, 0) + 1
+            except (ValueError, IndexError):
+                pass
+        usage = row["usage"]
+        if not usage:
+            no_usage += 1
+            continue
+        m = models.setdefault(row["model"], {"in": 0, "out": 0,
+                              "cache_read": 0, "cache_creation": 0, "msgs": 0})
+        m["in"] += usage.get("input_tokens") or 0
+        m["out"] += usage.get("output_tokens") or 0
+        m["cache_read"] += usage.get("cache_read_input_tokens") or 0
+        m["cache_creation"] += usage.get("cache_creation_input_tokens") or 0
+        m["msgs"] += 1
+    return {"models": models, "days": days, "hours": hours,
+            "sessions": sorted(sessions), "sidechain_msgs": len(side),
+            "no_usage": no_usage, "msgs": len(main)}
+
+
+def _streaks(days):
+    """(current, longest) consecutive-day runs over 'YYYY-MM-DD' strings;
+    'current' is the run ending at the most recent active day."""
+    uniq = sorted(set(days))
+    if not uniq:
+        return 0, 0
+    dates = [datetime.date.fromisoformat(d) for d in uniq]
+    longest = run = 1
+    for i in range(1, len(dates)):
+        run = run + 1 if (dates[i] - dates[i - 1]).days == 1 else 1
+        longest = max(longest, run)
+    return run, longest
+
+
+def _aggregate_usage(aggs):
+    """Merge per-file aggregates into the manifest's usage block. 'in' is raw
+    input_tokens, 'total' = in+out (cache EXCLUDED, matching the Desktop UI);
+    cache is surfaced separately because it dwarfs the headline by ~100x."""
+    models, days, hours, sessions = {}, {}, {}, set()
+    side = nousage = msgs = 0
+    for agg in aggs:
+        msgs += agg.get("msgs", 0)
+        side += agg.get("sidechain_msgs", 0)
+        nousage += agg.get("no_usage", 0)
+        sessions.update(agg.get("sessions", []))
+        for model, mm in agg.get("models", {}).items():
+            t = models.setdefault(model, {"in": 0, "out": 0, "cache_read": 0,
+                                          "cache_creation": 0, "msgs": 0})
+            for k in t:
+                t[k] += mm.get(k, 0)
+        for d, n in agg.get("days", {}).items():
+            days[d] = days.get(d, 0) + n
+        for h, n in agg.get("hours", {}).items():
+            hours[h] = hours.get(h, 0) + n
+    tin = sum(m["in"] for m in models.values())
+    tout = sum(m["out"] for m in models.values())
+    grand = tin + tout
+    model_list = [{"model": name, "in": m["in"], "out": m["out"],
+                   "total": m["in"] + m["out"],
+                   "cache": m["cache_read"] + m["cache_creation"], "msgs": m["msgs"],
+                   "share": round((m["in"] + m["out"]) / grand, 4) if grand else 0}
+                  for name, m in models.items()]
+    model_list.sort(key=lambda x: -x["total"])
+    return {
+        "active": True,
+        "sessions": len(sessions),
+        "messages": msgs,
+        "tokens": {"in": tin, "out": tout, "total": grand,
+                   "cache_read": sum(m["cache_read"] for m in models.values()),
+                   "cache_creation": sum(m["cache_creation"] for m in models.values())},
+        "models": model_list,
+        "by_day": sorted([d, n] for d, n in days.items()),
+        "by_hour": [[h, hours.get(str(h), 0)] for h in range(24)],
+        "active_days": len(days),
+        "peak_hour": (max(range(24), key=lambda h: hours.get(str(h), 0))
+                      if hours else None),
+        "current_streak": _streaks(list(days))[0],
+        "longest_streak": _streaks(list(days))[1],
+        "favorite_model": model_list[0]["model"] if model_list else "",
+        "sidechain_msgs": side,
+        "no_usage": nousage,
+        "files": len(aggs),
+    }
+
+
+def collect_usage(projects_dir=_DEFAULT_PROJECTS, cache_path=_DEFAULT_USAGE_CACHE):
+    """Token/usage stats from local session transcripts, with a per-file
+    mtime+size cache so a rebuild reparses only new/changed files (cold ~8s over
+    ~2600 files; warm sub-second). Absent projects dir => not active, like
+    collect_dev_state."""
+    if not os.path.isdir(projects_dir):
+        return {"active": False}
+    old = {}
+    try:
+        with open(cache_path) as fh:
+            old = json.load(fh)
+    except (OSError, json.JSONDecodeError, ValueError):
+        old = {}
+    new_cache, aggs = {}, []
+    for path in _iter_jsonl(projects_dir):
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        prev = old.get(path)
+        if (isinstance(prev, dict) and "agg" in prev
+                and prev.get("mtime") == st.st_mtime and prev.get("size") == st.st_size):
+            agg = prev["agg"]
+        else:
+            agg = _parse_transcript(path)
+            if agg is None:
+                continue
+        new_cache[path] = {"mtime": st.st_mtime, "size": st.st_size, "agg": agg}
+        aggs.append(agg)
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, "w") as fh:
+            json.dump(new_cache, fh)
+    except OSError:
+        pass
+    return _aggregate_usage(aggs)
+
+
 def collect_settings(root):
     """Read-only snapshot of export/settings.json: permissions, env, key flags."""
     empty = {"permissions": {"allow": [], "deny": [], "ask": []},
@@ -384,7 +565,8 @@ def compute_layout(nodes, layer_order):
     return pos
 
 
-def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK):
+def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
+                   projects_dir=_DEFAULT_PROJECTS, usage_cache=_DEFAULT_USAGE_CACHE):
     skills = collect_skills(root)
     agents = collect_agents(root)
     hooks = collect_hooks(root)
@@ -395,6 +577,7 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK):
         "hooks": hooks,
         "edges": build_edges(skills, agents, hooks),
         "dev_state": collect_dev_state(db_path, feedback_dir),
+        "usage": collect_usage(projects_dir, usage_cache),
         "settings": collect_settings(root),
         "misc": collect_misc(root),
         "health": compute_health(skills, agents, hooks, root),
@@ -424,19 +607,25 @@ def main():
                         help="output path (default: <root>/workspace/runtime/hub.html)")
     parser.add_argument("--db", default=_DEFAULT_DB)
     parser.add_argument("--feedback", default=_DEFAULT_FEEDBACK)
+    parser.add_argument("--projects", default=_DEFAULT_PROJECTS)
+    parser.add_argument("--usage-cache", default=_DEFAULT_USAGE_CACHE)
     args = parser.parse_args()
 
     root = os.path.abspath(args.root)
     out = args.out or os.path.join(root, "workspace/runtime/hub.html")
-    manifest = build_manifest(root, db_path=args.db, feedback_dir=args.feedback)
+    manifest = build_manifest(root, db_path=args.db, feedback_dir=args.feedback,
+                              projects_dir=args.projects, usage_cache=args.usage_cache)
     stamp = datetime.datetime.now().isoformat(timespec="seconds")
     html = render(manifest, build_stamp=stamp)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w") as f:
         f.write(html)
     dev = "active" if manifest["dev_state"]["active"] else "not active"
+    usage = manifest["usage"]
+    usage_note = (f", usage {usage['sessions']} sessions / "
+                  f"{usage['tokens']['total']:,} tokens" if usage.get("active") else "")
     print(f"wrote {out}  ({len(manifest['nodes'])} nodes, "
-          f"{len(manifest['edges'])} edges, dev {dev})")
+          f"{len(manifest['edges'])} edges, dev {dev}{usage_note})")
     return 0
 
 

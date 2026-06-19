@@ -44,7 +44,7 @@ const visibleNodes = () => q(".gnode").filter((n) => !n.classList.contains("filt
 const fire = (elm, type, init) => elm.dispatchEvent(new window.Event(type, { bubbles: true, ...init }));
 const esc = () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
 
-ok(q("#tabs button").length === 6, "6 tabs rendered");
+ok(q("#tabs button").length === 7, "7 tabs rendered");
 const totalCards = q("#view-catalog .card").length;
 ok(totalCards > 20, "catalog cards rendered (" + totalCards + ")");
 const totalNodes = q(".gnode").length;
@@ -121,6 +121,13 @@ ok(!!dev, "dev pane rendered");
 ok(q("#view-dev .bars").length >= 2, "activity-by-day and by-agent bar charts present");
 ok(q("#view-dev .bar-row").length > 5, "bar rows rendered (" + q("#view-dev .bar-row").length + ")");
 ok(/by skill|by hook/.test(dev.textContent), "payload breakdowns rendered");
+
+const usage = doc.querySelector("#view-usage");
+ok(!!usage, "usage pane rendered");
+ok(q("#view-usage .stat").length >= 6, "usage stat tiles present (" + q("#view-usage .stat").length + ")");
+ok(q("#view-usage table.matrix").length >= 1, "per-model token table present");
+ok(q("#view-usage .heatmap").length === 1, "activity-calendar heatmap present");
+ok(q("#view-usage .hm-cell").length > 0, "heatmap day cells rendered (" + q("#view-usage .hm-cell").length + ")");
 
 ok(q("#view-config .kvgrid.wide").length >= 1, "environment uses the full-width key/value grid");
 ok(q("#view-graph .graph-ctrls button").length === 3, "graph has on-canvas zoom/reset controls");

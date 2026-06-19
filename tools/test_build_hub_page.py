@@ -342,6 +342,97 @@ def test_compute_health_all_resolved_is_empty():
     assert health == {"dangling": [], "orphans": [], "missing_scripts": []}
 
 
+def _usage_fixture():
+    """A temp projects dir with one transcript covering every correctness trap:
+    streaming partials sharing one message.id, an iterations[] that restates the
+    usage, a sidechain (subagent) line, and an assistant line with no usage."""
+    proj = tempfile.mkdtemp()
+    sess = os.path.join(proj, "demo-project")
+    lines = [
+        {"type": "assistant", "timestamp": "2026-06-01T03:00:00.000Z", "sessionId": "s1",
+         "message": {"id": "mA", "model": "claude-opus-4-8",
+                     "usage": {"input_tokens": 10, "output_tokens": 100,
+                               "cache_read_input_tokens": 1000,
+                               "cache_creation_input_tokens": 50}}},
+        {"type": "assistant", "timestamp": "2026-06-01T03:00:01.000Z", "sessionId": "s1",
+         "message": {"id": "mA", "model": "claude-opus-4-8",
+                     "usage": {"input_tokens": 10, "output_tokens": 500,
+                               "cache_read_input_tokens": 1000,
+                               "cache_creation_input_tokens": 50,
+                               "iterations": [{"output_tokens": 500, "input_tokens": 10}]}}},
+        {"type": "user", "timestamp": "2026-06-01T03:00:02.000Z", "sessionId": "s1",
+         "message": {"role": "user", "content": "hi"}},
+        {"type": "assistant", "timestamp": "2026-06-02T05:00:00.000Z", "sessionId": "s1",
+         "message": {"id": "mB", "model": "claude-sonnet-4-6",
+                     "usage": {"input_tokens": 20, "output_tokens": 200,
+                               "cache_read_input_tokens": 0,
+                               "cache_creation_input_tokens": 0}}},
+        {"type": "assistant", "timestamp": "2026-06-02T05:01:00.000Z", "sessionId": "s1",
+         "isSidechain": True,
+         "message": {"id": "mC", "model": "claude-haiku-4-5",
+                     "usage": {"input_tokens": 5, "output_tokens": 900}}},
+        {"type": "assistant", "timestamp": "2026-06-02T06:00:00.000Z", "sessionId": "s1",
+         "message": {"id": "mD", "model": "claude-opus-4-8"}},
+    ]
+    _write(os.path.join(sess, "s1.jsonl"),
+           "\n".join(json.dumps(l) for l in lines) + "\n")
+    return proj
+
+
+def test_collect_usage_dedups_streaming_and_excludes_sidechain():
+    proj = _usage_fixture()
+    cache = os.path.join(tempfile.mkdtemp(), "usage-cache.json")
+    u = bhp.collect_usage(projects_dir=proj, cache_path=cache)
+    assert u["active"] is True
+    # out = mA terminal 500 (NOT 100+500) + mB 200 = 700; sidechain mC 900 excluded
+    assert u["tokens"]["out"] == 700
+    assert u["tokens"]["in"] == 30           # mA 10 + mB 20 (mD no usage; mC sidechain)
+    assert u["tokens"]["total"] == 730
+    assert u["tokens"]["cache_read"] == 1000 and u["tokens"]["cache_creation"] == 50
+    assert u["messages"] == 3                # mA, mB, mD deduped, main only
+    assert u["sidechain_msgs"] == 1          # mC
+    assert u["no_usage"] == 1                # mD
+    assert u["sessions"] == 1
+
+
+def test_collect_usage_per_model_days_and_favorite():
+    proj = _usage_fixture()
+    cache = os.path.join(tempfile.mkdtemp(), "usage-cache.json")
+    u = bhp.collect_usage(projects_dir=proj, cache_path=cache)
+    models = {m["model"]: m for m in u["models"]}
+    assert models["claude-opus-4-8"]["out"] == 500
+    assert models["claude-opus-4-8"]["total"] == 510
+    assert models["claude-sonnet-4-6"]["total"] == 220
+    assert "claude-haiku-4-5" not in models   # sidechain-only model never appears
+    assert u["favorite_model"] == "claude-opus-4-8"
+    assert u["active_days"] == 2
+    assert dict((d, n) for d, n in u["by_day"]) == {"2026-06-01": 1, "2026-06-02": 2}
+
+
+def test_collect_usage_absent_projects_degrades():
+    u = bhp.collect_usage(projects_dir="/no/such/dir",
+                          cache_path=os.path.join(tempfile.mkdtemp(), "c.json"))
+    assert u == {"active": False}
+
+
+def test_collect_usage_cache_written_and_reused():
+    proj = _usage_fixture()
+    cache = os.path.join(tempfile.mkdtemp(), "usage-cache.json")
+    first = bhp.collect_usage(projects_dir=proj, cache_path=cache)
+    assert os.path.isfile(cache)
+    second = bhp.collect_usage(projects_dir=proj, cache_path=cache)  # cache hit
+    assert first == second
+
+
+def test_streaks_current_and_longest():
+    assert bhp._streaks([]) == (0, 0)
+    assert bhp._streaks(["2026-06-01"]) == (1, 1)
+    # 3 consecutive, gap, 1 → longest 3, current (run ending at latest) 1
+    assert bhp._streaks(["2026-06-01", "2026-06-02", "2026-06-03",
+                         "2026-06-07"]) == (1, 3)
+    assert bhp._streaks(["2026-06-01", "2026-06-02", "2026-06-03"]) == (3, 3)
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]
