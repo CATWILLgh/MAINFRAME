@@ -346,24 +346,36 @@
   }
 
   function usageHeatmap(byDay) {
-    // GitHub-style calendar: 7 rows (Mon..Sun), one column per week.
+    // GitHub-style rolling year: 7 rows (Mon..Sun), one column per week, ending
+    // today. by_day rows are [date, messages, tokens]; level scales on messages.
     const map = {};
-    byDay.forEach(([d, n]) => { map[d] = n; });
-    const dates = byDay.map(([d]) => d).sort();
-    if (!dates.length) return el("div", { class: "muted small" }, "no activity");
-    const last = new Date(dates[dates.length - 1] + "T00:00:00Z");
-    const start = new Date(dates[0] + "T00:00:00Z");
+    byDay.forEach(([d, msgs, tok]) => { map[d] = { msgs: msgs, tok: tok }; });
+    const end = new Date();
+    end.setUTCHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - 364);
     start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7)); // back to Monday
     const max = byDay.reduce((m, r) => Math.max(m, r[1]), 0) || 1;
     const level = (n) => (!n ? 0 : n / max > 0.66 ? 4 : n / max > 0.33 ? 3 : n / max > 0.1 ? 2 : 1);
-    const cells = [];
-    for (let d = new Date(start); d <= last; d.setUTCDate(d.getUTCDate() + 1)) {
+    const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const cells = [], months = [];
+    let i = 0, lastMonth = -1;
+    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
       const iso = d.toISOString().slice(0, 10);
-      const n = map[iso] || 0;
-      cells.push(el("div", { class: "hm-cell l" + level(n),
-        title: iso + ": " + n + (n === 1 ? " message" : " messages") }));
+      const e = map[iso] || { msgs: 0, tok: 0 };
+      cells.push(el("div", { class: "hm-cell l" + level(e.msgs),
+        title: iso + " · " + e.msgs + " msg · " + fmtTok(e.tok) + " tok" }));
+      // a month label sits at the column where that month's first Monday lands
+      if ((d.getUTCDay() + 6) % 7 === 0 && d.getUTCMonth() !== lastMonth) {
+        lastMonth = d.getUTCMonth();
+        months.push(el("span", { style: "grid-column-start:" + (Math.floor(i / 7) + 1) }, MON[lastMonth]));
+      }
+      i++;
     }
-    return el("div", { class: "heatmap" }, cells);
+    return el("div", { class: "hm-wrap" }, [
+      el("div", { class: "hm-months" }, months),
+      el("div", { class: "heatmap" }, cells),
+    ]);
   }
 
   function renderUsage(root) {
@@ -382,7 +394,8 @@
     root.appendChild(el("p", { class: "muted" },
       "Aggregated from " + u.files + " local session transcripts (~/.claude/projects). "
       + "Counts only — no prompt content is read. Streaming snapshots are de-duplicated "
-      + "by message id; subagent turns are excluded from the totals."));
+      + "by message id; main and subagent turns are combined (same runs, same limits) "
+      + "— a main/subagent split is below."));
 
     root.appendChild(el("div", { class: "stat-row wrap" }, [
       el("div", { class: "stat" }, [el("b", null, String(u.sessions)), " sessions"]),
@@ -402,6 +415,21 @@
       el("span", { class: "muted" }, "Cache (excluded from total — the real cost driver): "
         + fmtTok(tk.cache_read) + " read + " + fmtTok(tk.cache_creation) + " write."),
     ]));
+
+    const sp = u.split || { main: {}, sub: {} };
+    const splitRow = (label, s) => el("tr", null, [
+      el("td", null, label),
+      el("td", { class: "num" }, (s.messages || 0).toLocaleString()),
+      el("td", { class: "num" }, fmtTok(s["in"])),
+      el("td", { class: "num" }, fmtTok(s.out)),
+      el("td", { class: "num" }, fmtTok(s.total)),
+    ]);
+    root.appendChild(section("Main window vs subagents", "usage", 2,
+      el("table", { class: "matrix" }, [
+        el("thead", null, el("tr", null, [el("th", null, "scope"),
+          el("th", { class: "num" }, "messages"), el("th", { class: "num" }, "in"),
+          el("th", { class: "num" }, "out"), el("th", { class: "num" }, "total")])),
+        el("tbody", null, [splitRow("main window", sp.main), splitRow("subagents", sp.sub)])])));
 
     const grand = u.tokens.total || 1;
     const rows = u.models.map((m) => el("tr", null, [
@@ -430,10 +458,9 @@
         barList(u.by_hour.map(([h, n]) => [String(h).padStart(2, "0") + ":00", n]))));
     }
 
-    if (u.sidechain_msgs || u.no_usage) {
+    if (u.no_usage) {
       root.appendChild(el("p", { class: "muted small" },
-        u.sidechain_msgs.toLocaleString() + " subagent turns excluded from totals · "
-        + u.no_usage.toLocaleString() + " replies had no usage record."));
+        u.no_usage.toLocaleString() + " replies had no usage record (counted, no token data)."));
     }
   }
 

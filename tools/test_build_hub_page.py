@@ -379,34 +379,38 @@ def _usage_fixture():
     return proj
 
 
-def test_collect_usage_dedups_streaming_and_excludes_sidechain():
+def test_collect_usage_combines_main_and_subagents_with_split():
     proj = _usage_fixture()
     cache = os.path.join(tempfile.mkdtemp(), "usage-cache.json")
     u = bhp.collect_usage(projects_dir=proj, cache_path=cache)
     assert u["active"] is True
-    # out = mA terminal 500 (NOT 100+500) + mB 200 = 700; sidechain mC 900 excluded
-    assert u["tokens"]["out"] == 700
-    assert u["tokens"]["in"] == 30           # mA 10 + mB 20 (mD no usage; mC sidechain)
-    assert u["tokens"]["total"] == 730
+    # combined: streaming still deduped (mA out=500, not 600); subagent mC INCLUDED
+    assert u["tokens"]["out"] == 1600        # main 700 + subagent 900
+    assert u["tokens"]["in"] == 35           # mA 10 + mB 20 + mC 5
+    assert u["tokens"]["total"] == 1635
     assert u["tokens"]["cache_read"] == 1000 and u["tokens"]["cache_creation"] == 50
-    assert u["messages"] == 3                # mA, mB, mD deduped, main only
-    assert u["sidechain_msgs"] == 1          # mC
+    assert u["messages"] == 4                # mA, mB, mD (main) + mC (subagent)
     assert u["no_usage"] == 1                # mD
     assert u["sessions"] == 1
+    # split surfaces main vs subagents separately
+    assert u["split"]["main"]["messages"] == 3 and u["split"]["main"]["total"] == 730
+    assert u["split"]["sub"]["messages"] == 1 and u["split"]["sub"]["total"] == 905
 
 
-def test_collect_usage_per_model_days_and_favorite():
+def test_collect_usage_per_model_includes_subagents_and_by_day_tokens():
     proj = _usage_fixture()
     cache = os.path.join(tempfile.mkdtemp(), "usage-cache.json")
     u = bhp.collect_usage(projects_dir=proj, cache_path=cache)
     models = {m["model"]: m for m in u["models"]}
-    assert models["claude-opus-4-8"]["out"] == 500
     assert models["claude-opus-4-8"]["total"] == 510
     assert models["claude-sonnet-4-6"]["total"] == 220
-    assert "claude-haiku-4-5" not in models   # sidechain-only model never appears
-    assert u["favorite_model"] == "claude-opus-4-8"
+    assert models["claude-haiku-4-5"]["total"] == 905   # subagent model now counted
+    assert u["favorite_model"] == "claude-haiku-4-5"
     assert u["active_days"] == 2
-    assert dict((d, n) for d, n in u["by_day"]) == {"2026-06-01": 1, "2026-06-02": 2}
+    # by_day now carries [date, messages, tokens]
+    byday = {d: (msgs, tok) for d, msgs, tok in u["by_day"]}
+    assert byday["2026-06-01"] == (1, 510)
+    assert byday["2026-06-02"] == (3, 1125)   # mB 220 + mC 905 + mD 0 (no-usage)
 
 
 def test_collect_usage_absent_projects_degrades():

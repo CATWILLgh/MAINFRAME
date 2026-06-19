@@ -127,7 +127,9 @@ ok(!!usage, "usage pane rendered");
 ok(q("#view-usage .stat").length >= 6, "usage stat tiles present (" + q("#view-usage .stat").length + ")");
 ok(q("#view-usage table.matrix").length >= 1, "per-model token table present");
 ok(q("#view-usage .heatmap").length === 1, "activity-calendar heatmap present");
-ok(q("#view-usage .hm-cell").length > 0, "heatmap day cells rendered (" + q("#view-usage .hm-cell").length + ")");
+ok(q("#view-usage .hm-cell").length > 300, "rolling-year heatmap cells rendered (" + q("#view-usage .hm-cell").length + ")");
+ok(q("#view-usage .hm-months span").length >= 1, "heatmap month labels present");
+ok(/Main window vs subagents/.test(usage.textContent), "main/subagent split section present");
 
 ok(q("#view-config .kvgrid.wide").length >= 1, "environment uses the full-width key/value grid");
 ok(q("#view-graph .graph-ctrls button").length === 3, "graph has on-canvas zoom/reset controls");

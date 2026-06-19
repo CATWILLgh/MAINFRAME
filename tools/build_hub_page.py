@@ -249,20 +249,20 @@ def _iter_jsonl(projects_dir):
 
 
 def _parse_transcript(path):
-    """Per-file usage aggregate with the fixes a naive line-sum misses.
-
-    An assistant reply is written as many streaming JSONL snapshots sharing one
-    `message.id`; summing every line inflates output ~5-6x. So keep ONE row per
-    id — the terminal snapshot (max `output_tokens`) — and read only top-level
-    `message.usage`, never `usage.iterations[]` (it restates the same numbers).
-    `isSidechain` lines are subagent turns: counted separately, excluded from
-    totals. A kept message with no `usage` lands in a visible `no_usage` bucket.
+    """Per-file usage split into main vs subagent scopes, each with the fixes a
+    naive line-sum misses. An assistant reply is many streaming JSONL snapshots
+    sharing one `message.id`; keep ONE row per id (terminal max-`output_tokens`)
+    and read only top-level `message.usage`, never `usage.iterations[]` (it
+    restates the same numbers). `isSidechain` lines are subagent turns, kept in a
+    separate scope so the page can show a combined total AND a main/subagent
+    split — they are the same runs against the same limits. A kept message with
+    no `usage` lands in a visible `no_usage` bucket.
     """
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except OSError:
         return None
-    main, side = {}, set()
+    main, sub = {}, {}
     with fh:
         for line in fh:
             line = line.strip()
@@ -278,30 +278,38 @@ def _parse_transcript(path):
             key = msg.get("id") or e.get("uuid")
             if key is None:
                 continue
-            if e.get("isSidechain"):
-                side.add(key)
-                continue
+            bucket = sub if e.get("isSidechain") else main
             out = (msg.get("usage") or {}).get("output_tokens") or 0
-            prev = main.get(key)
+            prev = bucket.get(key)
             if prev is None or out >= prev["out"]:
-                main[key] = {"out": out, "usage": msg.get("usage"),
-                             "model": msg.get("model") or "",
-                             "ts": e.get("timestamp") or "",
-                             "sid": e.get("sessionId") or ""}
+                bucket[key] = {"out": out, "usage": msg.get("usage"),
+                               "model": msg.get("model") or "",
+                               "ts": e.get("timestamp") or "",
+                               "sid": e.get("sessionId") or ""}
+    return {"main": _scope_agg(main), "sub": _scope_agg(sub)}
+
+
+def _scope_agg(rows):
+    """Aggregate one scope's de-duplicated rows: per-model totals, per-day
+    {msgs, tok}, per-hour msgs, sessions, no-usage count, and message count."""
     models, days, hours, sessions = {}, {}, {}, set()
     no_usage = 0
-    for row in main.values():
+    for row in rows.values():
         if row["sid"]:
             sessions.add(row["sid"])
+        usage = row["usage"]
+        tok = ((usage.get("input_tokens") or 0)
+               + (usage.get("output_tokens") or 0)) if usage else 0
         ts = row["ts"]
         if ts:
-            days[ts[:10]] = days.get(ts[:10], 0) + 1
+            d = days.setdefault(ts[:10], {"msgs": 0, "tok": 0})
+            d["msgs"] += 1
+            d["tok"] += tok
             try:
                 h = str(int(ts[11:13]))
                 hours[h] = hours.get(h, 0) + 1
             except (ValueError, IndexError):
                 pass
-        usage = row["usage"]
         if not usage:
             no_usage += 1
             continue
@@ -313,8 +321,7 @@ def _parse_transcript(path):
         m["cache_creation"] += usage.get("cache_creation_input_tokens") or 0
         m["msgs"] += 1
     return {"models": models, "days": days, "hours": hours,
-            "sessions": sorted(sessions), "sidechain_msgs": len(side),
-            "no_usage": no_usage, "msgs": len(main)}
+            "sessions": sorted(sessions), "no_usage": no_usage, "msgs": len(rows)}
 
 
 def _streaks(days):
@@ -332,52 +339,72 @@ def _streaks(days):
 
 
 def _aggregate_usage(aggs):
-    """Merge per-file aggregates into the manifest's usage block. 'in' is raw
-    input_tokens, 'total' = in+out (cache EXCLUDED, matching the Desktop UI);
-    cache is surfaced separately because it dwarfs the headline by ~100x."""
-    models, days, hours, sessions = {}, {}, {}, set()
-    side = nousage = msgs = 0
-    for agg in aggs:
-        msgs += agg.get("msgs", 0)
-        side += agg.get("sidechain_msgs", 0)
-        nousage += agg.get("no_usage", 0)
-        sessions.update(agg.get("sessions", []))
-        for model, mm in agg.get("models", {}).items():
-            t = models.setdefault(model, {"in": 0, "out": 0, "cache_read": 0,
-                                          "cache_creation": 0, "msgs": 0})
+    """Merge per-file scope aggregates into the manifest usage block: a combined
+    headline (main + subagents — same runs, same limits) PLUS a main/subagent
+    split. 'in' is raw input_tokens, 'total' = in+out (cache EXCLUDED, matching
+    the Desktop UI); cache is surfaced separately because it dwarfs the headline."""
+    def blank():
+        return {"models": {}, "days": {}, "hours": {}, "sessions": set(),
+                "no_usage": 0, "msgs": 0}
+
+    def merge(into, s):
+        into["msgs"] += s["msgs"]
+        into["no_usage"] += s["no_usage"]
+        into["sessions"].update(s["sessions"])
+        for model, mm in s["models"].items():
+            t = into["models"].setdefault(model, {"in": 0, "out": 0,
+                                "cache_read": 0, "cache_creation": 0, "msgs": 0})
             for k in t:
                 t[k] += mm.get(k, 0)
-        for d, n in agg.get("days", {}).items():
-            days[d] = days.get(d, 0) + n
-        for h, n in agg.get("hours", {}).items():
-            hours[h] = hours.get(h, 0) + n
-    tin = sum(m["in"] for m in models.values())
-    tout = sum(m["out"] for m in models.values())
+        for d, dd in s["days"].items():
+            x = into["days"].setdefault(d, {"msgs": 0, "tok": 0})
+            x["msgs"] += dd["msgs"]
+            x["tok"] += dd["tok"]
+        for h, n in s["hours"].items():
+            into["hours"][h] = into["hours"].get(h, 0) + n
+
+    main, sub, comb = blank(), blank(), blank()
+    for agg in aggs:
+        merge(main, agg["main"])
+        merge(sub, agg["sub"])
+        merge(comb, agg["main"])
+        merge(comb, agg["sub"])
+
+    def scope_totals(s):
+        tin = sum(m["in"] for m in s["models"].values())
+        tout = sum(m["out"] for m in s["models"].values())
+        return {"messages": s["msgs"], "in": tin, "out": tout, "total": tin + tout,
+                "cache": sum(m["cache_read"] + m["cache_creation"]
+                             for m in s["models"].values())}
+
+    tin = sum(m["in"] for m in comb["models"].values())
+    tout = sum(m["out"] for m in comb["models"].values())
     grand = tin + tout
     model_list = [{"model": name, "in": m["in"], "out": m["out"],
                    "total": m["in"] + m["out"],
                    "cache": m["cache_read"] + m["cache_creation"], "msgs": m["msgs"],
                    "share": round((m["in"] + m["out"]) / grand, 4) if grand else 0}
-                  for name, m in models.items()]
+                  for name, m in comb["models"].items()]
     model_list.sort(key=lambda x: -x["total"])
+    hours = comb["hours"]
     return {
         "active": True,
-        "sessions": len(sessions),
-        "messages": msgs,
+        "sessions": len(comb["sessions"]),
+        "messages": comb["msgs"],
         "tokens": {"in": tin, "out": tout, "total": grand,
-                   "cache_read": sum(m["cache_read"] for m in models.values()),
-                   "cache_creation": sum(m["cache_creation"] for m in models.values())},
+                   "cache_read": sum(m["cache_read"] for m in comb["models"].values()),
+                   "cache_creation": sum(m["cache_creation"] for m in comb["models"].values())},
+        "split": {"main": scope_totals(main), "sub": scope_totals(sub)},
         "models": model_list,
-        "by_day": sorted([d, n] for d, n in days.items()),
+        "by_day": sorted([d, dd["msgs"], dd["tok"]] for d, dd in comb["days"].items()),
         "by_hour": [[h, hours.get(str(h), 0)] for h in range(24)],
-        "active_days": len(days),
+        "active_days": len(comb["days"]),
         "peak_hour": (max(range(24), key=lambda h: hours.get(str(h), 0))
                       if hours else None),
-        "current_streak": _streaks(list(days))[0],
-        "longest_streak": _streaks(list(days))[1],
+        "current_streak": _streaks(list(comb["days"]))[0],
+        "longest_streak": _streaks(list(comb["days"]))[1],
         "favorite_model": model_list[0]["model"] if model_list else "",
-        "sidechain_msgs": side,
-        "no_usage": nousage,
+        "no_usage": comb["no_usage"],
         "files": len(aggs),
     }
 
@@ -402,9 +429,12 @@ def collect_usage(projects_dir=_DEFAULT_PROJECTS, cache_path=_DEFAULT_USAGE_CACH
         except OSError:
             continue
         prev = old.get(path)
-        if (isinstance(prev, dict) and "agg" in prev
+        prev_agg = prev.get("agg") if isinstance(prev, dict) else None
+        # "main" gates the cache schema: a stale-shape entry (pre-split) misses
+        # and is reparsed, so the cache self-migrates without a manual wipe.
+        if (isinstance(prev_agg, dict) and "main" in prev_agg
                 and prev.get("mtime") == st.st_mtime and prev.get("size") == st.st_size):
-            agg = prev["agg"]
+            agg = prev_agg
         else:
             agg = _parse_transcript(path)
             if agg is None:
