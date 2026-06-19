@@ -113,6 +113,7 @@ table.matrix th {
   border-bottom: 1px solid var(--border);
 }
 table.matrix td { padding: 5px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.matrix th.num { text-align: right; }
 table.matrix td.num { text-align: right; color: var(--accent); font-variant-numeric: tabular-nums; }
 table.matrix tr:hover td { background: var(--panel); }
 

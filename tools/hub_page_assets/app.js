@@ -355,8 +355,12 @@
     const start = new Date(end);
     start.setUTCDate(start.getUTCDate() - 364);
     start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7)); // back to Monday
-    const max = byDay.reduce((m, r) => Math.max(m, r[1]), 0) || 1;
-    const level = (n) => (!n ? 0 : n / max > 0.66 ? 4 : n / max > 0.33 ? 3 : n / max > 0.1 ? 2 : 1);
+    // Quantile thresholds over active days, so a single huge day can't wash out
+    // a linear scale and low-activity days stay visibly green (n>0 => level>=1).
+    const nz = byDay.map((r) => r[1]).filter((n) => n > 0).sort((a, b) => a - b);
+    const q = (p) => (nz.length ? nz[Math.min(nz.length - 1, Math.floor(p * nz.length))] : 1);
+    const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
+    const level = (n) => (!n ? 0 : n >= t3 ? 4 : n >= t2 ? 3 : n >= t1 ? 2 : 1);
     const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const cells = [], months = [];
     let i = 0, lastMonth = -1;
@@ -432,7 +436,8 @@
         el("tbody", null, [splitRow("main window", sp.main), splitRow("subagents", sp.sub)])])));
 
     const grand = u.tokens.total || 1;
-    const rows = u.models.map((m) => el("tr", null, [
+    const shown = u.models.filter((m) => m.total > 0);
+    const rows = shown.map((m) => el("tr", null, [
       el("td", { class: "mono" }, m.model),
       el("td", { class: "num" }, fmtTok(m["in"])),
       el("td", { class: "num" }, fmtTok(m.out)),
@@ -443,7 +448,7 @@
         el("span", { class: "share-pct" }, (m.share * 100).toFixed(1) + "%"),
       ])),
     ]));
-    root.appendChild(section("Tokens by model", "usage", u.models.length,
+    root.appendChild(section("Tokens by model", "usage", shown.length,
       el("table", { class: "matrix" }, [
         el("thead", null, el("tr", null, [el("th", null, "model"),
           el("th", { class: "num" }, "in"), el("th", { class: "num" }, "out"),
