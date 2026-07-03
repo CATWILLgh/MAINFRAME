@@ -115,6 +115,10 @@ def main():
         )
         emit_note("PostToolUse", note)
         return
+    # Parser diagnostics arrive with code=None regardless of -D rule selection
+    # (a mid-edit-cluster file is transiently broken JSX); syntax belongs to
+    # tsc/build, not this scan — only rule-coded findings pass.
+    diags = [d for d in diags if d.get("code")]
     if not diags:
         return
 

@@ -290,6 +290,28 @@ def test_node_scan_delta_finding_keeps_strong_note():
     assert "changed this session" in out and "no-eval" in out
 
 
+def test_node_scan_parse_errors_are_dropped():
+    # oxlint emits parser diagnostics (code: None) regardless of -D rule
+    # selection; a mid-edit-cluster file is transiently broken JSX, and those
+    # phantoms must not surface — syntax belongs to tsc/build, not this scan.
+    root = _mk_repo()
+    path = os.path.join(root, "web", "broken.tsx")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("export function B() {\n"
+                 "  return (\n"
+                 "    <div>\n"
+                 "      {items.map((x) => (\n"
+                 "        <span key={x}>{x}</span>\n"
+                 "      )}\n"
+                 "    </div>\n"
+                 "  );\n"
+                 "}\n")
+    out = _run_hook("nodejs-security-scan.py",
+                    {"cwd": root, "tool_input": {"file_path": path}})
+    assert out.strip() == ""
+
+
 def _load_node_gate():
     gate_spec = importlib.util.spec_from_file_location(
         "node_gate", os.path.join(_SCRIPTS, "nodejs-security-stop-gate.py"))
