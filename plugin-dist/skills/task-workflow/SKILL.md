@@ -48,13 +48,15 @@ Do not confuse "ambiguous" with "small". A small change with one obvious approac
 
 ### 2. Recon-first (always)
 
-Before any tool dispatch or substantive write:
+Before any tool dispatch or substantive write, know the dependency chain — model → schema → service → API → frontend; or token → component → page for UI. Not only the file you will edit: most regressions start from an incomplete picture. How the knowledge arrives matters as much as having it:
 
-- Read 3-5 files along the dependency chain — model → schema → service → API → frontend; or token → component → page for UI. Not only the file you will edit. Most regressions start from an incomplete picture.
+- Read yourself, in targeted slices, only the file(s) you are about to edit — an edit needs first-hand contact with the exact lines; editing from a second-hand digest is its own regression source.
+- The surrounding chain (callers, schemas, configs, usage sites) arrives as an `Explore` sub-agent digest with `file:line` citations. Wholesale self-reading parks thousands of raw lines in the main context until compaction; the digest carries the same decisions at a fraction of the weight. One quick targeted read may stay inline; two or more exploration reads is already a dispatch.
+- In an iterative review / validation session (the user feeds items one by one), measure the threshold per session, not per item: small items aggregate into exactly the broad search the Orchestration rule delegates, so per-item recon goes to sub-agents by default and the main context stays at validation altitude.
 - If the change touches a library / framework / API / language syntax (including regex flavours, JSON / TOML parsers, datetime libraries, build tool flags) — query Context7 first (`resolve-library-id` → `query-docs`). Memory drifts; verify.
-- If recon needs more than 5 files or more than 3 search angles — dispatch `Explore` sub-agents in parallel, one per angle, in one message.
+- More than 3 independent search angles — parallel `Explore` sub-agents, one per angle, in one message.
 
-Recon trades minutes now against hours of regression debugging later. Skipping is the most expensive optimisation.
+Recon trades minutes now against hours of regression debugging later. Skipping is the most expensive optimisation — but so is doing it wholesale in the orchestrator's own context.
 
 ### 3. Plan — audit file when ≥ 3 phases or ≥ 3 edge-cases
 

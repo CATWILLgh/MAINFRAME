@@ -103,7 +103,7 @@ You must follow these instructions in every project.
 ## Problem-solving
 
 Before modifying existing code:
-- Read 3–5 related files along the dependency chain — not just the file you are editing. Most regressions start from acting on an incomplete picture of how the code is used.
+- Know the dependency chain (3–5 related files) — not just the file you are editing. Most regressions start from acting on an incomplete picture of how the code is used. Read yourself only the file(s) you will edit; the surrounding chain arrives as an `Explore` sub-agent digest with `file:line` citations — wholesale self-reading parks the raw text in main context until compaction (see Orchestration).
 - Read targeted slices (specific functions or line ranges) rather than whole files; do not re-read the same file in one session without cause. Small files (under ~100 lines) may be read fully; re-reading is justified after the file was edited or its content has changed.
 
 When encountering an error or unexpected behavior:
