@@ -44,21 +44,47 @@ AI_TRAILER_RE = re.compile(
 )
 
 
+# `-\w*m` covers bundled short flags (`-am`, `-qm`), not just bare `-m`.
+_M_QUOTED_RE = re.compile(r"(?<!\w)-\w*m\s+(['\"])(.*?)\1", re.DOTALL)
+_M_UNQUOTED_RE = re.compile(r"(?<!\w)-\w*m\s+([^\s'\";|&<>]+)")
+_HEREDOC_OPEN_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_]\w*)\1")
+_COMMIT_STDIN_RE = re.compile(r"git\s+commit.*(?:-F|--file)[=\s]*(?:/dev/stdin|-)(?:\s|$)")
+
+
 def extract_subject(cmd):
-    """Best-effort extraction of the commit subject from `-m` or a heredoc."""
-    m = re.search(r"-m\s+(['\"])(.*?)\1", cmd, re.DOTALL)
+    """Best-effort extraction of the commit subject from `-m` or the heredoc
+    that feeds `git commit -F /dev/stdin` — never from text owned by another
+    command in the same compound (the false-positive class in harness feedback
+    20260610-162716 / 20260611-141832). One line-walk splits the command into
+    plain lines and heredoc bodies: `-m` is searched in plain text only (a body
+    mentioning `-m '…'` must not hijack extraction), and a body is read as the
+    message only when its opener line is the `git commit … -F /dev/stdin`."""
+    lines = cmd.splitlines()
+    plain, heredoc_subject, i = [], None, 0
+    while i < len(lines):
+        line = lines[i]
+        plain.append(line)
+        opener = _HEREDOC_OPEN_RE.search(line)
+        if not opener:
+            i += 1
+            continue
+        delim = opener.group(2)
+        end = i + 1
+        while end < len(lines) and lines[end].strip() != delim:
+            end += 1
+        if heredoc_subject is None and _COMMIT_STDIN_RE.search(line):
+            heredoc_subject = next(
+                (b.strip() for b in lines[i + 1:end] if b.strip()), None)
+        i = end + 1  # skip the body: its lines are data, not command text
+    plain_text = "\n".join(plain)
+    m = _M_QUOTED_RE.search(plain_text)
     if m:
         msg = m.group(2).strip()
         return msg.splitlines()[0].strip() if msg else None
-    if "<<" in cmd:
-        lines = cmd.splitlines()
-        for i, line in enumerate(lines):
-            if re.search(r"<<-?\s*['\"]?[A-Za-z_]\w*", line):
-                for nxt in lines[i + 1:]:
-                    if nxt.strip():
-                        return nxt.strip()
-                break
-    return None
+    m = _M_UNQUOTED_RE.search(plain_text)
+    if m:
+        return m.group(1)
+    return heredoc_subject
 
 
 def main():
