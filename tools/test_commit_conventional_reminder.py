@@ -129,6 +129,41 @@ def test_no_message_returns_none():
     assert extract_subject("git commit") is None
 
 
+def _drive_main(command):
+    import io
+    import json as _json
+    import sys as _sys
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+               "tool_input": {"command": command}, "session_id": "t"}
+    out = io.StringIO()
+    saved = (_sys.stdin, _sys.stdout)
+    try:
+        _sys.stdin = io.StringIO(_json.dumps(payload))
+        _sys.stdout = out
+        ccr.main()
+    finally:
+        (_sys.stdin, _sys.stdout) = saved
+    return out.getvalue()
+
+
+def test_quoted_git_commit_in_heredoc_body_does_not_engage():
+    # Feedback 2026-07-03: the gate matched "git commit" QUOTED inside a
+    # feedback body heredoc — data, not command — and fired on a python3 call.
+    cmd = (
+        "python3 feedback.py --artifact x --type friction <<'EOF'\n"
+        "## Trigger\n"
+        "git commit -q -F /dev/stdin <<'COMMITEOF' truncated the body\n"
+        "EOF"
+    )
+    assert _drive_main(cmd).strip() == ""
+
+
+def test_real_commit_with_bad_subject_still_engages():
+    cmd = "git commit -F /dev/stdin <<'EOF'\nnot a conventional subject\nEOF"
+    out = _drive_main(cmd)
+    assert "commit-convention reminder" in out
+
+
 def _run_all():
     import sys
     failures = 0

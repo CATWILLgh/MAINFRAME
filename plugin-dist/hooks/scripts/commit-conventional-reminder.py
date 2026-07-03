@@ -51,14 +51,11 @@ _HEREDOC_OPEN_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_]\w*)\1")
 _COMMIT_STDIN_RE = re.compile(r"git\s+commit.*(?:-F|--file)[=\s]*(?:/dev/stdin|-)(?:\s|$)")
 
 
-def extract_subject(cmd):
-    """Best-effort extraction of the commit subject from `-m` or the heredoc
-    that feeds `git commit -F /dev/stdin` — never from text owned by another
-    command in the same compound (the false-positive class in harness feedback
-    20260610-162716 / 20260611-141832). One line-walk splits the command into
-    plain lines and heredoc bodies: `-m` is searched in plain text only (a body
-    mentioning `-m '…'` must not hijack extraction), and a body is read as the
-    message only when its opener line is the `git commit … -F /dev/stdin`."""
+def _split_command(cmd):
+    """One line-walk: (plain command text with heredoc bodies removed, first
+    body line of the heredoc owned by `git commit … -F /dev/stdin`). Body lines
+    are data, not command text — they must sway neither the git-commit gate nor
+    `-m` extraction (harness feedback 20260610/20260611/20260703)."""
     lines = cmd.splitlines()
     plain, heredoc_subject, i = [], None, 0
     while i < len(lines):
@@ -75,8 +72,11 @@ def extract_subject(cmd):
         if heredoc_subject is None and _COMMIT_STDIN_RE.search(line):
             heredoc_subject = next(
                 (b.strip() for b in lines[i + 1:end] if b.strip()), None)
-        i = end + 1  # skip the body: its lines are data, not command text
-    plain_text = "\n".join(plain)
+        i = end + 1
+    return "\n".join(plain), heredoc_subject
+
+
+def _subject_from(plain_text, heredoc_subject):
     m = _M_QUOTED_RE.search(plain_text)
     if m:
         msg = m.group(2).strip()
@@ -87,15 +87,28 @@ def extract_subject(cmd):
     return heredoc_subject
 
 
+def extract_subject(cmd):
+    """Best-effort extraction of the commit subject from `-m` (plain command
+    text only) or the heredoc that feeds `git commit -F /dev/stdin`."""
+    return _subject_from(*_split_command(cmd))
+
+
 def main():
     payload = load_payload()
     if payload.get("tool_name") != "Bash":
         return
     command = (payload.get("tool_input") or {}).get("command", "")
-    if not command or not is_git_commit(command):
+    if not command:
+        return
+    # The gate reads command text only: "git commit" QUOTED in a heredoc body
+    # (a feedback report, a doc snippet) must not engage the reminder. The
+    # trailer scan stays command-wide on purpose — a commit's message IS its
+    # heredoc body, and that is where a banned trailer would live.
+    plain_text, heredoc_subject = _split_command(command)
+    if not is_git_commit(plain_text):
         return
 
-    subject = extract_subject(command)
+    subject = _subject_from(plain_text, heredoc_subject)
     has_trailer = bool(AI_TRAILER_RE.search(command))
     already_conventional = bool(subject and CONV_RE.match(subject))
 
