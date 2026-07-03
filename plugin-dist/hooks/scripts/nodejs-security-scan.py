@@ -5,7 +5,10 @@ dangerous patterns via oxlint's curated rule subsets.
 Reads the PostToolUse hook payload from stdin (JSON), filters to .js/.ts/.mjs/
 .cjs/.jsx/.tsx edits, runs `oxlint -A all -D <subset> --format=json` on the
 file (with extension-aware rule set + plugin flags), and emits a non-blocking
-`additionalContext` note with the findings.
+`additionalContext` note. Findings are split by changed-line overlap: delta
+findings get the resolve-now note; inherited (untouched-line) findings only
+nudge toward a ticket, and only while no ticket names the file. Ambiguous
+classification counts as delta.
 
 Design (honestly framed — partial coverage, NOT a full Node-security gate):
 - BASE_RULES (all JS/TS): `eslint/no-eval`, `eslint/no-new-func` — classic RCE
@@ -40,7 +43,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import emit_note, ext, load_payload, run
+    from _hooklib import (changed_line_ranges, emit_note, ext, finding_is_delta,
+                          load_payload, run, tickets_mentioning)
 except Exception:
     sys.exit(0)
 
@@ -114,6 +118,33 @@ def main():
     if not diags:
         return
 
+    # Delta vs inherited mirrors python-security-scan: only findings on lines
+    # changed this session demand fixing now; untouched-line debt routes to
+    # ticket discipline. Ambiguity always classifies as delta (strict).
+    cwd = payload.get("cwd") or os.getcwd()
+    ranges, git_ok = changed_line_ranges(cwd)
+    delta, inherited = [], []
+    for d in diags:
+        labels = d.get("labels") or []
+        span = labels[0].get("span", {}) if labels else {}
+        ln = span.get("line") or 0
+        target = delta if finding_is_delta(file_path, ln, ln, ranges, git_ok) \
+            else inherited
+        target.append(d)
+
+    if inherited and not tickets_mentioning(cwd, file_path):
+        codes = sorted({(d.get("code", "?")).replace("eslint(", "").rstrip(")")
+                        for d in inherited})
+        emit_note("PostToolUse",
+                  f"{len(inherited)} inherited finding(s) on untouched lines in "
+                  f"{file_path} ({', '.join(codes)}) — pre-existing debt, not "
+                  "this edit's job to fix, but no ticket covers this file: "
+                  "create or update one via the `surface-ticket` skill, "
+                  "mentioning the file's repo-relative path and the codes.")
+    if not delta:
+        return
+    diags = delta
+
     lines = []
     for d in diags[:10]:
         code = d.get("code", "?").replace("eslint(", "").rstrip(")")
@@ -137,7 +168,8 @@ def main():
             "(no-new-func)."
         )
     note = (
-        f"nodejs-security-scan caught {len(diags)} finding(s) in {file_path}:\n"
+        f"nodejs-security-scan caught {len(diags)} finding(s) on lines changed "
+        f"this session in {file_path}:\n"
         + "\n".join(lines) + more +
         f"\n{coverage} NOT covered by this per-edit hook: weak crypto (md5/sha1), "
         "TLS `rejectUnauthorized: false`, YAML unsafe load, hardcoded credentials, "

@@ -2,8 +2,11 @@
 """Stop hook: hard gate against unresolved Python security findings.
 
 Fires when Claude is about to stop a turn. Collects .py files modified in the
-session's working-tree diff vs `git HEAD`, runs Ruff's curated S-rule subset
-on the union, and blocks the stop with a reason if any findings remain.
+session's working-tree diff vs `git HEAD`, runs Ruff's curated S-rule subset on
+the union, and splits findings by changed-line overlap: delta findings always
+block; inherited (untouched-line) findings block only while no ticket under
+docs/tickets/ names the file — the ticket, not an inline fix, is the required
+outlet for pre-existing debt. Ambiguous classification counts as delta.
 
 Design mirrors `stop-gate-suppression-markers.py`:
 - Block via `{"decision": "block", "reason": ...}` on stdout, exit 0.
@@ -28,7 +31,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import changed_files, emit_block, load_payload, run, stop_guard_cwd
+    from _hooklib import (changed_files, changed_line_ranges, emit_block,
+                          finding_is_delta, load_payload, run, stop_guard_cwd,
+                          tickets_mentioning)
 except Exception:
     sys.exit(0)
 
@@ -71,26 +76,55 @@ def main():
     if not findings:
         return
 
-    lines = []
-    for f in findings[:15]:
-        code = f.get("code", "?")
-        fn = f.get("filename") or "?"
-        ln = (f.get("location") or {}).get("row", "?")
-        msg = (f.get("message") or "").strip()
-        lines.append(f"  {fn}:{ln} — {code}: {msg}")
-    more = f"\n  …and {len(findings) - 15} more" if len(findings) > 15 else ""
+    # Delta findings always block; inherited (untouched-line) debt blocks only
+    # while no ticket names the file — the ticket, not an inline fix, is the
+    # required outlet for pre-existing findings (harness feedback 2026-06-23).
+    ranges, git_ok = changed_line_ranges(cwd)
+    delta, inherited_by_file = [], {}
+    for f in findings:
+        fn = f.get("filename") or ""
+        row = (f.get("location") or {}).get("row") or 0
+        end = (f.get("end_location") or {}).get("row") or row
+        if finding_is_delta(fn, row, end, ranges, git_ok):
+            delta.append(f)
+        else:
+            inherited_by_file.setdefault(fn, []).append(f)
+    unticketed = {fn: fs for fn, fs in inherited_by_file.items()
+                  if not tickets_mentioning(cwd, fn)}
+    if not delta and not unticketed:
+        return
 
-    reason = (
-        f"python-security-stop-gate: {len(findings)} unresolved finding(s) "
-        f"in this session's modified .py files:\n" +
-        "\n".join(lines) + more +
-        "\nThese are OWASP/Bandit-aligned dangerous patterns (S-rules) and "
-        "zero-FP correctness bugs (B-rules) via Ruff curated subset. Resolve "
-        "before declaring the turn done. If a finding is a genuine exception "
-        "(rare), surface via the `surface-ticket` skill — `# noqa` is not "
-        "honored by this gate."
-    )
-    emit_block(reason)
+    sections = []
+    if delta:
+        lines = []
+        for f in delta[:15]:
+            code = f.get("code", "?")
+            fn = f.get("filename") or "?"
+            ln = (f.get("location") or {}).get("row", "?")
+            msg = (f.get("message") or "").strip()
+            lines.append(f"  {fn}:{ln} — {code}: {msg}")
+        more = f"\n  …and {len(delta) - 15} more" if len(delta) > 15 else ""
+        sections.append(
+            f"{len(delta)} finding(s) on lines changed this session:\n" +
+            "\n".join(lines) + more +
+            "\nOWASP/Bandit-aligned patterns (S-rules) and zero-FP correctness "
+            "bugs (B-rules) via Ruff curated subset. Resolve before declaring "
+            "the turn done — `# noqa` is not honored by this gate."
+        )
+    if unticketed:
+        lines = []
+        for fn, fs in sorted(unticketed.items()):
+            codes = sorted({f.get("code", "?") for f in fs})
+            lines.append(f"  {fn} — {len(fs)} inherited finding(s) "
+                         f"({', '.join(codes)})")
+        sections.append(
+            "Inherited findings on untouched lines with NO ticket naming the "
+            "file:\n" + "\n".join(lines) +
+            "\nFixing them now is NOT required — create or update a ticket via "
+            "the `surface-ticket` skill (mention the file's repo-relative path "
+            "and the codes), then finish the turn."
+        )
+    emit_block("python-security-stop-gate: " + "\n".join(sections))
 
 
 if __name__ == "__main__":

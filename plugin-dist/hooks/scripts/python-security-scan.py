@@ -5,7 +5,10 @@ curated S (flake8-bandit) + B (flake8-bugbear) rule subsets.
 
 Reads the PostToolUse hook payload from stdin (JSON), filters to .py edits,
 runs `ruff check --select <subset> --output-format json` on the file, and emits
-a non-blocking `additionalContext` note with the findings.
+a non-blocking `additionalContext` note. Findings are split by changed-line
+overlap: delta findings get the resolve-now note; inherited (untouched-line)
+findings only nudge toward a ticket, and only while no ticket names the file.
+Ambiguous classification counts as delta.
 
 Design:
 - Curated subset (not `--select S` wholesale): S-rules — S102 exec, S307 eval,
@@ -40,7 +43,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import emit_note, ext, load_payload, run
+    from _hooklib import (changed_line_ranges, emit_note, ext, finding_is_delta,
+                          load_payload, run, tickets_mentioning)
 except Exception:
     sys.exit(0)
 
@@ -115,25 +119,49 @@ def main():
     if not findings:
         return
 
-    lines = []
-    for f in findings[:10]:
-        code = f.get("code", "?")
-        ln = (f.get("location") or {}).get("row", "?")
-        msg = (f.get("message") or "").strip()
-        label = RULE_LABELS.get(code, "")
-        lines.append(f"  L{ln} — {code} {label}: {msg}")
-    more = f"\n  …and {len(findings) - 10} more" if len(findings) > 10 else ""
+    # Delta vs inherited: only findings overlapping this session's changed
+    # lines demand fixing now; untouched-line debt routes to ticket discipline
+    # (harness feedback 2026-06-14/23). Every ambiguity classifies as delta.
+    cwd = payload.get("cwd") or os.getcwd()
+    ranges, git_ok = changed_line_ranges(cwd)
+    delta, inherited = [], []
+    for f in findings:
+        row = (f.get("location") or {}).get("row") or 0
+        end = (f.get("end_location") or {}).get("row") or row
+        target = delta if finding_is_delta(file_path, row, end, ranges, git_ok) \
+            else inherited
+        target.append(f)
 
-    note = (
-        f"python-security-scan caught {len(findings)} finding(s) in "
-        f"{file_path}:\n" + "\n".join(lines) + more +
-        "\nThese are OWASP/Bandit-aligned dangerous patterns (S-rules) and "
-        "zero-FP correctness bugs (B-rules) enforced via the ruff curated "
-        "subset. Inline `# noqa` is NOT honored — a genuine exception "
-        "surfaces via the `surface-ticket` skill, not as a silenced marker. "
-        "Resolve before declaring done."
-    )
-    emit_note("PostToolUse", note)
+    parts = []
+    if delta:
+        lines = []
+        for f in delta[:10]:
+            code = f.get("code", "?")
+            ln = (f.get("location") or {}).get("row", "?")
+            msg = (f.get("message") or "").strip()
+            label = RULE_LABELS.get(code, "")
+            lines.append(f"  L{ln} — {code} {label}: {msg}")
+        more = f"\n  …and {len(delta) - 10} more" if len(delta) > 10 else ""
+        parts.append(
+            f"python-security-scan caught {len(delta)} finding(s) on lines "
+            f"changed this session in {file_path}:\n" + "\n".join(lines) + more +
+            "\nThese are OWASP/Bandit-aligned dangerous patterns (S-rules) and "
+            "zero-FP correctness bugs (B-rules) enforced via the ruff curated "
+            "subset. Inline `# noqa` is NOT honored — a genuine exception "
+            "surfaces via the `surface-ticket` skill, not as a silenced marker. "
+            "Resolve before declaring done."
+        )
+    if inherited and not tickets_mentioning(cwd, file_path):
+        codes = sorted({f.get("code", "?") for f in inherited})
+        parts.append(
+            f"{len(inherited)} inherited finding(s) on untouched lines in "
+            f"{file_path} ({', '.join(codes)}) — pre-existing debt, not this "
+            "edit's job to fix, but no ticket covers this file: create or "
+            "update one via the `surface-ticket` skill, mentioning the file's "
+            "repo-relative path and the finding codes."
+        )
+    if parts:
+        emit_note("PostToolUse", "\n".join(parts))
 
 
 if __name__ == "__main__":

@@ -187,6 +187,93 @@ def changed_files(cwd, exts):
     return files
 
 
+_HUNK_NEW_SIDE_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+
+def changed_line_ranges(cwd):
+    """(ranges, ok): new-side line numbers changed vs HEAD, per absolute path.
+
+    `ranges[path]` is a set of line numbers, or None for untracked files (every
+    line is new). `ok=False` means git gave no answer — callers must then treat
+    every finding as delta (the strict branch): ambiguity may never widen the
+    inherited (weakened) branch. Deletion-only hunks contribute no lines, so a
+    file edited purely by deletion keeps an empty set — `finding_is_delta`
+    reads that as ambiguous, again toward strict.
+    """
+    try:
+        diff = subprocess.check_output(
+            ["git", "diff", "HEAD", "-U0", "--no-color", "--diff-filter=AM"],
+            cwd=cwd, stderr=subprocess.DEVNULL, timeout=10).decode(errors="replace")
+        untracked = subprocess.check_output(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=cwd, stderr=subprocess.DEVNULL, timeout=10).decode(errors="replace")
+    except Exception:
+        return {}, False
+    ranges, current = {}, None
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            target = line[4:].strip()
+            if target.startswith("b/"):
+                target = target[2:]
+            current = (None if target == "/dev/null"
+                       else os.path.realpath(os.path.join(cwd, target)))
+            if current is not None:
+                ranges.setdefault(current, set())
+        elif current is not None and line.startswith("@@"):
+            m = _HUNK_NEW_SIDE_RE.match(line)
+            if not m:
+                continue
+            start = int(m.group(1))
+            count = 1 if m.group(2) is None else int(m.group(2))
+            ranges[current].update(range(start, start + count))
+    for rel in untracked.splitlines():
+        rel = rel.strip()
+        if rel:
+            ranges[os.path.realpath(os.path.join(cwd, rel))] = None
+    return ranges, True
+
+
+def finding_is_delta(file_path, start_row, end_row, ranges, git_ok):
+    """True when a finding overlaps this session's changed lines — or when the
+    classification is ambiguous (no git, file absent from ranges, empty entry).
+    Security gates weaken only on a PROVEN inherited finding, never by default."""
+    if not git_ok:
+        return True
+    lines = ranges.get(os.path.realpath(file_path), ())
+    if lines is None:
+        return True
+    if not lines:
+        return True
+    lo = min(start_row or 0, end_row or start_row or 0)
+    hi = max(start_row or 0, end_row or start_row or 0)
+    return any(n in lines for n in range(lo, hi + 1))
+
+
+def tickets_mentioning(cwd, file_path, max_bytes=262144):
+    """Ticket files under docs/tickets/ whose text contains the repo-relative
+    path of `file_path`. Path anchor, never the basename — `auth.py` is a
+    substring of `oauth.py`, and utils.py recurs across any repo."""
+    tickets_dir = os.path.join(cwd, "docs", "tickets")
+    rel = os.path.relpath(os.path.realpath(file_path), os.path.realpath(cwd))
+    rel = rel.replace(os.sep, "/")
+    if rel.startswith("..") or not os.path.isdir(tickets_dir):
+        return []
+    hits = []
+    for name in sorted(os.listdir(tickets_dir)):
+        if not name.endswith(".md") or name == "README.md":
+            continue
+        path = os.path.join(tickets_dir, name)
+        try:
+            if os.path.getsize(path) > max_bytes:
+                continue
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                if rel in fh.read():
+                    hits.append(name)
+        except OSError:
+            continue
+    return hits
+
+
 def added_lines_by_file(cwd, self_files=HUB_HOOK_FILES):
     """List of (ext, added_line_body) for `+` lines in `git diff HEAD` across
     source-code files, skipping the hub's own detector files.

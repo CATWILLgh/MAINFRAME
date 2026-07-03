@@ -3,8 +3,10 @@
 
 Fires when Claude is about to stop a turn. Collects .ts/.tsx/.js/.jsx/.mjs/.cjs
 files modified in the session's working-tree diff vs `git HEAD`, runs Semgrep's
-`p/security-audit` ruleset on the union, and blocks the stop with a reason if
-any findings remain.
+`p/security-audit` ruleset on the union, and splits findings by changed-line
+overlap: delta findings always block; inherited (untouched-line) findings block
+only while no ticket under docs/tickets/ names the file. Ambiguous
+classification counts as delta.
 
 Design (honestly framed — NOT a mirror of Python's ruff-fast per-edit + Stop combo):
 - Stop-only, not PostToolUse. Semgrep is a Python tool with multi-second
@@ -38,7 +40,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import changed_files, emit_block, load_payload, run, stop_guard_cwd
+    from _hooklib import (changed_files, changed_line_ranges, emit_block,
+                          finding_is_delta, load_payload, run, stop_guard_cwd,
+                          tickets_mentioning)
 except Exception:
     sys.exit(0)
 
@@ -93,28 +97,59 @@ def main():
     if not findings:
         return
 
-    lines = []
-    for f in findings[:15]:
-        code = f.get("check_id", "?").split(".")[-1]
-        path = f.get("path", "?")
-        ln = (f.get("start") or {}).get("line", "?")
-        msg = ((f.get("extra") or {}).get("message") or "").strip()[:120]
-        lines.append(f"  {path}:{ln} — {code}: {msg}")
-    more = f"\n  …and {len(findings) - 15} more" if len(findings) > 15 else ""
+    # Delta always blocks; inherited (untouched-line) debt blocks only while no
+    # ticket names the file. Semgrep anchors multiline findings unpredictably,
+    # so classification checks the WHOLE start..end span for overlap (reviewer
+    # mitigation) — any span touching a changed line is delta.
+    ranges, git_ok = changed_line_ranges(cwd)
+    delta, inherited_by_file = [], {}
+    for f in findings:
+        path = f.get("path") or ""
+        start = (f.get("start") or {}).get("line") or 0
+        end = (f.get("end") or {}).get("line") or start
+        if finding_is_delta(path, start, end, ranges, git_ok):
+            delta.append(f)
+        else:
+            inherited_by_file.setdefault(path, []).append(f)
+    unticketed = {p: fs for p, fs in inherited_by_file.items()
+                  if not tickets_mentioning(cwd, p)}
+    if not delta and not unticketed:
+        return
 
-    reason = (
-        f"nodejs-security-stop-gate: Semgrep flagged {len(findings)} "
-        f"security finding(s) in this session's modified .ts/.js files:\n" +
-        "\n".join(lines) + more +
-        "\nSources: Semgrep `p/security-audit` ruleset (high-confidence low-FP "
-        "patterns, NOT zero-FP wholesale OWASP — finding absence is not a clean "
-        "bill of health) + hub `frontend-token-storage.yml` (localStorage / "
-        "sessionStorage token-storage XSS exposure, per OWASP DOM-based XSS "
-        "Prevention). Resolve before declaring done. If a finding is a genuine "
-        "exception, surface via the `surface-ticket` skill — Semgrep does not "
-        "honor inline suppression markers in this gate."
-    )
-    emit_block(reason)
+    sections = []
+    if delta:
+        lines = []
+        for f in delta[:15]:
+            code = f.get("check_id", "?").split(".")[-1]
+            path = f.get("path", "?")
+            ln = (f.get("start") or {}).get("line", "?")
+            msg = ((f.get("extra") or {}).get("message") or "").strip()[:120]
+            lines.append(f"  {path}:{ln} — {code}: {msg}")
+        more = f"\n  …and {len(delta) - 15} more" if len(delta) > 15 else ""
+        sections.append(
+            f"Semgrep flagged {len(delta)} finding(s) on lines changed this "
+            "session:\n" + "\n".join(lines) + more +
+            "\nSources: Semgrep `p/security-audit` ruleset (high-confidence "
+            "low-FP patterns, NOT zero-FP wholesale OWASP — finding absence is "
+            "not a clean bill of health) + hub `frontend-token-storage.yml` "
+            "(localStorage / sessionStorage token-storage XSS exposure, per "
+            "OWASP DOM-based XSS Prevention). Resolve before declaring done — "
+            "Semgrep does not honor inline suppression markers in this gate."
+        )
+    if unticketed:
+        lines = []
+        for path, fs in sorted(unticketed.items()):
+            codes = sorted({f.get("check_id", "?").split(".")[-1] for f in fs})
+            lines.append(f"  {path} — {len(fs)} inherited finding(s) "
+                         f"({', '.join(codes)})")
+        sections.append(
+            "Inherited findings on untouched lines with NO ticket naming the "
+            "file:\n" + "\n".join(lines) +
+            "\nFixing them now is NOT required — create or update a ticket via "
+            "the `surface-ticket` skill (mention the file's repo-relative path "
+            "and the codes), then finish the turn."
+        )
+    emit_block("nodejs-security-stop-gate: " + "\n".join(sections))
 
 
 if __name__ == "__main__":
