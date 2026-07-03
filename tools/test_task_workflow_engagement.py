@@ -117,6 +117,35 @@ def test_note_is_non_blocking():
     assert "decision" not in obj
 
 
+def test_out_of_project_write_is_silent_and_keeps_the_nudge_armed():
+    # A false nudge on housekeeping would also burn the once-per-segment
+    # reminder before the first real project edit (feedback 2026-06-18).
+    proj = tempfile.mkdtemp(prefix="tw-proj-")
+    outside = os.path.join(tempfile.mkdtemp(prefix="tw-mem-"), "note.md")
+    _drive(_ss("s10"))
+    out = _drive(_edit("s10", cwd=proj, tool_input={"file_path": outside}))
+    assert out.strip() == ""
+    assert _state("s10") == "fresh", "out-of-project write must not consume the nudge"
+    inside = _drive(_edit("s10", cwd=proj,
+                          tool_input={"file_path": os.path.join(proj, "x.py")}))
+    assert inside.strip(), "the real in-project edit still gets the reminder"
+
+
+def test_tmp_write_is_silent():
+    proj = tempfile.mkdtemp(prefix="tw-proj-")
+    _drive(_ss("s11"))
+    out = _drive(_edit("s11", cwd=proj,
+                       tool_input={"file_path": "/tmp/tw-scratch/probe.js"}))
+    assert out.strip() == ""
+
+
+def test_in_project_relative_path_reminds():
+    proj = tempfile.mkdtemp(prefix="tw-proj-")
+    _drive(_ss("s12"))
+    out = _drive(_edit("s12", cwd=proj, tool_input={"file_path": "src/app.py"}))
+    assert out.strip()
+
+
 def test_compaction_clears_active_then_reminds():
     _drive(_ss("s9"))
     _drive(_skill("s9", "task-workflow"))

@@ -77,6 +77,23 @@ def _norm_skill(raw):
     return name.split(":")[-1]
 
 
+def _in_project(file_path, cwd):
+    """True unless the target provably resolves outside the project cwd. The
+    cycle governs project modifications only — and a false nudge on
+    housekeeping (auto-memory, /tmp) would also burn the once-per-segment
+    reminder before the first real project edit. Missing path or cwd keeps
+    today's behavior (fail-open)."""
+    if not file_path or not cwd:
+        return True
+    try:
+        root = os.path.realpath(os.path.expanduser(cwd))
+        target = os.path.realpath(
+            os.path.join(root, os.path.expanduser(file_path)))
+    except (OSError, ValueError):
+        return True
+    return target == root or target.startswith(root + os.sep)
+
+
 def main():
     payload = load_payload()
     event = payload.get("hook_event_name") or ""
@@ -102,6 +119,9 @@ def main():
         return
 
     if tool in MODIFY_TOOLS:
+        if not _in_project(tool_input.get("file_path") or "",
+                           payload.get("cwd") or ""):
+            return
         if _read_state(path) in ("active", "reminded"):
             return
         emit_note("PreToolUse", NOTE)
