@@ -61,6 +61,17 @@ PATTERNS = [
      "`uv tool install` is a global tool install. Hub-scoped tools belong in install.sh `_install_tool` helper. Ad-hoc installs should surface to the user first."),
     ("pipx", re.compile(r"\bpipx\s+install\b"),
      "`pipx install` is a global tool install. Hub-scoped tools belong in install.sh `_install_tool` helper. Ad-hoc installs should surface to the user first."),
+    # grep muscle memory: in ripgrep -r takes a value, so a cluster with r
+    # silently rewrites matched output (-rln = --replace=ln) or, ending in r,
+    # swallows the next token; bare `-r value` / --replace stay deliberate.
+    ("rg-replace-cluster",
+     re.compile(r"\brg\b[^;&|]*?\s-(?:[a-qs-z]*r[a-z]+|[a-z]+r)(?=\s|$)"),
+     "`rg` short-flag cluster containing `r`: in ripgrep `-r` takes a "
+     "REPLACEMENT value — grep-style `-rln` means `--replace=ln` and silently "
+     "rewrites the matched text in the output (reads as corruption), and a "
+     "cluster ending in `r` swallows the NEXT token as the replacement. Write "
+     "flags separately (`-l -n`); for a real replacement use explicit "
+     "`--replace=...`."),
 ]
 
 
