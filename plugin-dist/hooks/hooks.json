@@ -6,28 +6,48 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-posture.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SessionStart",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-posture.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooklib-smoke-check.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SessionStart",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooklib-smoke-check.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SessionStart",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SessionStart",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/concise-reminder.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SessionStart",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/concise-reminder.py"
+            ]
           }
         ]
       }
@@ -38,23 +58,39 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/path-validation.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/path-validation.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-commit-gate.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-commit-gate.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/bash-pattern-reminder.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/bash-pattern-reminder.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/commit-conventional-reminder.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/commit-conventional-reminder.py"
+            ]
           }
         ]
       },
@@ -63,13 +99,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"
+            ]
           }
         ]
       },
@@ -78,8 +122,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"
+            ]
           }
         ]
       },
@@ -88,8 +136,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
           }
         ]
       }
@@ -100,43 +152,75 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-suppression-markers.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-suppression-markers.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/comment-discipline-reminder.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/comment-discipline-reminder.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/ticket-id-format-reminder.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/ticket-id-format-reminder.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-security-scan.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-security-scan.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-deps-audit.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-deps-audit.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/nodejs-deps-audit.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/nodejs-deps-audit.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/nodejs-security-scan.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/nodejs-security-scan.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
           }
         ]
       }
@@ -147,60 +231,135 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop-gate-suppression-markers.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop-gate-suppression-markers.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop-gate-comment-discipline.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop-gate-comment-discipline.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-security-stop-gate.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-security-stop-gate.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/nodejs-security-stop-gate.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/nodejs-security-stop-gate.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/frontend-fsd-gate.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/frontend-fsd-gate.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/frontend-dead-code.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/frontend-dead-code.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/fallow-quality-note.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/fallow-quality-note.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-reminder.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-reminder.py"
+            ]
           },
           {
             "type": "command",
-            "command": "python3",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/concise-reminder.py"]
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/concise-reminder.py"
+            ]
           }
         ]
       }
     ],
     "PermissionDenied": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"] } ] }
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PermissionDenied",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
+          }
+        ]
+      }
     ],
     "SubagentStart": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"] } ] }
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SubagentStart",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
+          }
+        ]
+      }
     ],
     "SessionEnd": [
-      { "matcher": "*", "hooks": [ { "type": "command", "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"] } ] }
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SessionEnd",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
+          }
+        ]
+      }
     ]
   }
 }
