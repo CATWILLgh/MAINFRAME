@@ -92,6 +92,8 @@ EOF
 
 `-F /dev/stdin` + a single-quoted heredoc preserves non-ASCII, multi-line bodies, and backticked identifiers verbatim. `-m "…"` mangles all three on most shells.
 
+Verify the message landed intact — immediately after the commit, run `git log -1 --format=%B` and compare against what you wrote. Rarely, the heredoc stream truncates mid-write in a compound `&&` command (witnessed once: a 13-line body committed as 19 bytes, no error — silent, and permanent in history). On any mismatch: write the message to a scratch file with the Write tool and repair via `git commit --amend -F <file>`.
+
 ## Splitting rule
 
 A staged diff often contains more than one logical change. Split before committing:
