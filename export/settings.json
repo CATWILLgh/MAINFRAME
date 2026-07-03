@@ -1,5 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "cleanupPeriodDays": 3650,
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
@@ -170,9 +171,6 @@
       "Bash(systemctl stop auditd*)",
       "Bash(systemctl disable auditd*)",
       "Bash(unset HISTFILE*)",
-      "Bash(*DROP DATABASE*)",
-      "Bash(*DROP SCHEMA*)",
-      "Bash(*TRUNCATE TABLE*)",
       "Read(**/.env.production)",
       "Read(**/.env.production.*)",
       "Read(**/.env.prod)",
@@ -227,6 +225,9 @@
       "Bash(*chmod 777*)",
       "Bash(*chown *)",
       "Bash(sudo *)",
+      "Bash(*DROP DATABASE*)",
+      "Bash(*DROP SCHEMA*)",
+      "Bash(*TRUNCATE TABLE*)",
       "Bash(curl *> ~/*)",
       "Bash(curl *> /etc/*)",
       "Bash(curl *> /usr/*)",
@@ -247,6 +248,7 @@
     "defaultMode": "auto",
     "disableBypassPermissionsMode": "disable"
   },
+  "model": "claude-fable-5[1m]",
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": false
@@ -255,14 +257,12 @@
   "language": "Russian",
   "effortLevel": "xhigh",
   "advisorModel": "opus",
+  "autoMemoryEnabled": true,
   "skipWorkflowUsageWarning": true,
   "editorMode": "normal",
   "verbose": false,
   "preferredNotifChannel": "kitty",
   "autoCompactEnabled": true,
-  "autoMemoryEnabled": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": false,
-  "model": "opus",
-  "cleanupPeriodDays": 3650
+  "remoteControlAtStartup": false
 }
