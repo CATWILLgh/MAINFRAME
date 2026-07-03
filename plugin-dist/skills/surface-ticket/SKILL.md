@@ -86,6 +86,10 @@ What the template enforces, called out here so it is not lost:
 - **Never omit a frontmatter key.** Empty values are `[]` for lists, `null` / empty string otherwise.
 - If the ticket starts as `needs-refinement`, the body may be a one-line stub plus a "Context needed" section; full sections are filled in when status moves to `open`.
 
+## Legacy `NNN-` catalogs
+
+A project that predates the hex convention may hold sequential `NNN-` tickets and a project README that still documents them. The hex rule applies to NEW tickets there too — sequential allocation is what collides across branches and agents, and a large legacy catalog is where the next collision is most likely. So: allocate hex for the new ticket, leave every legacy `NNN-` file untouched (ids are stable), and refresh the stale project `docs/tickets/README.md` to the bootstrap text above so it stops prescribing NNN. A mixed catalog is expected and harmless: order comes from frontmatter `discovered`, not from the filename. Do not renumber old tickets and do not revert to NNN for consistency — a stale local README or the visual pattern of existing files does not override this convention.
+
 ## Status lifecycle
 
 | From → To | When |
