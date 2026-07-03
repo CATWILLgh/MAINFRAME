@@ -34,6 +34,8 @@ EOF
 
 The script validates the type, requires the `## Trigger` section, and prints the written path. It warns (but still writes) past 5 reports from one project per day — consolidate instead of repeating.
 
+**Body quotes a flagged keyword?** Permission rules glob the whole Bash command string, data included — a body QUOTING a destructive pattern (SQL drop/truncate statements, recursive-delete commands) gets the heredoc call itself denied. Do not reword the quote away; write the body to a scratch file with the Write tool first, then feed it by path: `python3 "<skill dir>/feedback.py" --artifact ... < /path/to/body.md` — the command line then carries only the path.
+
 ## Types
 
 | type | use when |
