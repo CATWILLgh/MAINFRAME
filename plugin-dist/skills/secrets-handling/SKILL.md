@@ -62,6 +62,8 @@ When the user mentions a service that is **not in the index**:
 - Ask the user whether it should be added, or proceed without persistent storage (one-shot value passed inline).
 - Do not invent credentials; do not assume short-names.
 
+When the user points at a credential living **outside the store** — another project's notes or memory files, a chat paste, a config comment — migrate first, then consume: `secret set NAME` (value entered through the shell, never the transcript), one line into `~/.claude/credentials-index.md`, then Pattern A/B as usual. Do not wire the foreign location into commands directly, even with the user's blessing: the auto-mode classifier evaluates each tool call in isolation, cannot see conversational authorization, and hard-denies cross-project credential reads (witnessed 2026-06-15); and every copy consumed outside the store re-creates the sprawl this layout exists to end.
+
 ## Auto-mode caveat
 
 The store is sourced by `~/.zshenv` at shell start. Claude Code's Bash subprocess always reads `~/.zshenv` (not `.zshrc`), so the secrets are present in env for all commands you run, including unattended auto-runs.
