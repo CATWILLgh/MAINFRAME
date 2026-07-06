@@ -298,6 +298,15 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/length-quality-note.py"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory-reminder.py"
             ]
           },
