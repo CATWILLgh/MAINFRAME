@@ -99,7 +99,8 @@ def derive_agent_permission(tools):
 
 # OpenCode-native levers a machine-local enrich file may set per agent —
 # these have no hub-source equivalent, so they arrive as user preferences.
-ENRICH_KEYS = ("model", "temperature", "mode", "color", "steps")
+ENRICH_KEYS = ("model", "temperature", "mode", "color", "steps",
+               "variant", "options")
 
 
 def project_agent(meta, body, enrich=None):

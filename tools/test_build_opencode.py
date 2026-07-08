@@ -192,6 +192,16 @@ def test_enrichment_merges_model_color_and_mode():
     assert fm["steps"] == 50  # untouched keys survive
 
 
+def test_enrichment_passes_variant_and_options():
+    meta, body = bo.parse_frontmatter(READONLY_AGENT)
+    out = bo.project_agent(meta, body, enrich={"agents": {
+        "decision-reviewer": {"variant": "xhigh",
+                              "options": {"reasoningEffort": "xhigh"}}}})
+    fm, _ = bo.parse_frontmatter(out)
+    assert fm["variant"] == "xhigh"
+    assert fm["options"] == {"reasoningEffort": "xhigh"}
+
+
 def test_enrichment_absent_and_unknown_keys_are_safe():
     meta, body = bo.parse_frontmatter(READONLY_AGENT)
     plain = bo.project_agent(meta, body)
