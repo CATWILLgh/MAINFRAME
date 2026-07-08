@@ -36,8 +36,12 @@ READONLY_AGENT = (
     "background: true\n"
     "maxTurns: 50\n"
     "permissionMode: plan\n"
-    "skills:\n  - decision-review\n---\n\n"
-    "You are an independent reviewer.\n"
+    "skills:\n  - decision-review\n  - severity-calibration\n---\n\n"
+    "You are an independent reviewer. Your skills `decision-review` and "
+    "`severity-calibration` are preloaded — [SKILL.md](../skills/decision-review/SKILL.md) "
+    "holds the method; consult `severity-calibration` (preloaded) for ratings. "
+    "Run your preloaded skill's checklist first. "
+    "The umbrella [CLAUDE.md](../../export/CLAUDE.md) rules apply.\n"
 )
 
 WRITE_AGENT = (
@@ -110,7 +114,7 @@ def test_derive_permission_readonly_denies_side_effect_tools():
     assert perm["bash"] == "deny"
     assert perm["edit"] == "deny"
     assert perm["task"] == "deny"
-    assert perm["skill"] == "deny"
+    assert "skill" not in perm  # skills are the agent's method, not a side effect
     assert "webfetch" not in perm
     assert "websearch" not in perm
 
@@ -120,7 +124,7 @@ def test_derive_permission_write_capable_keeps_bash_and_edit():
         ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "TodoWrite"])
     assert "bash" not in perm
     assert "edit" not in perm
-    assert "task" not in perm
+    assert perm["task"] == "deny"  # no hub agent carries Task; unbounded nesting otherwise
     assert "skill" not in perm
     assert perm["webfetch"] == "deny"
     assert perm["websearch"] == "deny"
@@ -130,8 +134,9 @@ def test_project_agent_maps_frontmatter_and_drops_hub_keys():
     meta, body = bo.parse_frontmatter(READONLY_AGENT)
     out = bo.project_agent(meta, body)
     fm, out_body = bo.parse_frontmatter(out)
-    assert set(fm) == {"description", "mode", "permission"}
+    assert set(fm) == {"description", "mode", "steps", "permission"}
     assert fm["mode"] == "subagent"
+    assert fm["steps"] == 50  # maxTurns maps to OpenCode's soft step cap
     assert fm["description"] == "Adversarial review of a proposed decision."
     assert fm["permission"]["bash"] == "deny"
 
@@ -141,6 +146,36 @@ def test_project_agent_preserves_body_and_marks_generated():
     out = bo.project_agent(meta, body)
     assert "You are an independent reviewer." in out
     assert bo.GENERATED_MARKER in out
+
+
+def test_project_agent_rewrites_skill_links_and_preload_phrase():
+    import os
+    meta, body = bo.parse_frontmatter(READONLY_AGENT)
+    out = bo.project_agent(meta, body)
+    assert "](../skills/" not in out
+    assert "](../../export/CLAUDE.md" not in out
+    home = os.path.expanduser("~")
+    assert f"]({home}/.claude/skills/mainframe/skills/decision-review/SKILL.md" in out
+    assert f"]({home}/.claude/CLAUDE.md" in out
+    assert "preloaded" not in out  # every phrasing rewritten, incl. the note
+    assert "available via the `skill` tool" in out
+    assert "(load via the `skill` tool)" in out
+    assert "your loaded skill's" in out
+
+
+def test_project_agent_adds_runtime_skill_note():
+    meta, body = bo.parse_frontmatter(READONLY_AGENT)
+    out = bo.project_agent(meta, body)
+    assert 'skill({ name: "decision-review" })' in out
+    assert 'skill({ name: "severity-calibration" })' in out
+
+
+def test_project_agent_without_skills_has_no_skill_note():
+    meta, body = bo.parse_frontmatter(WRITE_AGENT)
+    out = bo.project_agent(meta, body)
+    assert "skill({" not in out
+    fm, _ = bo.parse_frontmatter(out)
+    assert "steps" not in fm  # no maxTurns in the source
 
 
 def test_project_permissions_maps_bash_and_read():

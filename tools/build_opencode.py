@@ -20,6 +20,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -30,11 +31,36 @@ GENERATED_MARKER = "Generated from MAINFRAME hub"
 _GENERATED_NOTE = (
     "<!-- {marker} (plugin-dist/agents/{name}.md) — do not edit;"
     " regenerate via ./install.sh --opencode.\n"
-    "     Hub-only keys are dropped here: model tier, effort, background,"
-    " skills preload, maxTurns,\n"
-    "     and Claude-Code-specific tool names (mcp__*, TodoWrite) — the"
-    " agent runs on OpenCode defaults for those. -->"
+    "     Hub-only keys dropped here: model tier, effort, background, and"
+    " Claude-Code tool names (mcp__*, TodoWrite);\n"
+    "     maxTurns maps to `steps`, frontmatter skills become the runtime"
+    " note below. -->"
 )
+
+_SKILL_NOTE = (
+    "Runtime note (OpenCode): nothing is loaded for you automatically here."
+    " Before starting, load your method with the `skill` tool: {calls}."
+)
+
+# Hub prose says skills are "preloaded" in several phrasings — none true on
+# OpenCode. Targeted rewrites first, then a catch-all so no variant survives.
+_PRELOAD_REWRITES = [
+    (re.compile(r"\bis preloaded\b"), "is available via the `skill` tool"),
+    (re.compile(r"\bare preloaded\b"), "are available via the `skill` tool"),
+    (re.compile(r"\(preloaded\)"), "(load via the `skill` tool)"),
+    (re.compile(r"\bpreloaded\b"), "loaded"),
+]
+
+
+def _rewrite_runtime_prose(text, home):
+    """Adapt Claude-Code-runtime prose (links, preload claims) for OpenCode."""
+    text = text.replace("](../skills/",
+                        f"]({home}/.claude/skills/mainframe/skills/")
+    text = text.replace("](../../export/CLAUDE.md",
+                        f"]({home}/.claude/CLAUDE.md")
+    for rx, replacement in _PRELOAD_REWRITES:
+        text = rx.sub(replacement, text)
+    return text
 
 _CC_TOOLS_TO_OPENCODE = {"Bash": "bash", "Read": "read"}
 
@@ -62,11 +88,12 @@ def derive_agent_permission(tools):
         perm["webfetch"] = "deny"
     if "WebSearch" not in toolset:
         perm["websearch"] = "deny"
-    # A read-only agent must not regain side effects through sub-tasks or
-    # skills — OpenCode defaults both to allow.
-    if "bash" in perm and "edit" in perm:
+    # No hub agent grants Task, and OpenCode's task tool allows unbounded
+    # nested dispatch — deny unless the source allowlist opts in. The skill
+    # tool stays allowed: skills are the agent's method text, and side
+    # effects are already fenced by the tool denies above.
+    if "Task" not in toolset:
         perm["task"] = "deny"
-        perm["skill"] = "deny"
     return perm
 
 
@@ -75,16 +102,28 @@ def project_agent(meta, body):
     description = meta.get("description")
     if not description:
         return None
+    home = os.path.expanduser("~")
     tools = [t.strip() for t in str(meta.get("tools", "")).split(",")
              if t.strip()]
-    fm = {"description": description, "mode": "subagent"}
+    fm = {"description": _rewrite_runtime_prose(description, home),
+          "mode": "subagent"}
+    if meta.get("maxTurns"):
+        fm["steps"] = int(meta["maxTurns"])
     perm = derive_agent_permission(tools)
     if perm:
         fm["permission"] = perm
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True,
                            width=100000).rstrip("\n")
+
+    body = _rewrite_runtime_prose(body, home)
+
     note = _GENERATED_NOTE.format(marker=GENERATED_MARKER,
                                   name=meta.get("name", "unknown"))
+    skills = meta.get("skills") or []
+    if skills:
+        safe = [re.sub(r"[^A-Za-z0-9_-]", "", str(s)) for s in skills]
+        calls = ", ".join(f'skill({{ name: "{s}" }})' for s in safe)
+        note += "\n\n" + _SKILL_NOTE.format(calls=calls)
     return f"---\n{front}\n---\n\n{note}\n\n{body}"
 
 
