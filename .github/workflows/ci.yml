@@ -28,11 +28,12 @@ jobs:
         run: |
           fail=0
           for t in tools/test_*.py; do
-            # test_build_hub_page / test_build_opencode / test_render_core /
+            # test_build_hub_page / test_build_opencode(_config) / test_render_core /
             # test_render_reminder / test_validate_skill need pyyaml (the
             # last also tiktoken); they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
+            [ "$t" = "tools/test_build_opencode_config.py" ] && continue
             [ "$t" = "tools/test_render_core.py" ] && continue
             [ "$t" = "tools/test_render_reminder.py" ] && continue
             [ "$t" = "tools/test_validate_skill.py" ] && continue
@@ -66,7 +67,9 @@ jobs:
         run: python3 tools/test_build_hub_page.py
 
       - name: OpenCode projection generator tests
-        run: python3 tools/test_build_opencode.py
+        run: |
+          python3 tools/test_build_opencode.py
+          python3 tools/test_build_opencode_config.py
 
       # The dispatcher plugin is plain ESM JS precisely so stock node (present
       # on the runner) can test it — the Bun shell is faked inside the test.
