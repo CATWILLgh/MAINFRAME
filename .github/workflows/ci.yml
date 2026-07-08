@@ -28,8 +28,10 @@ jobs:
         run: |
           fail=0
           for t in tools/test_*.py; do
-            # test_build_hub_page needs pyyaml; it runs after Validator dependencies.
+            # test_build_hub_page / test_build_opencode need pyyaml; they run
+            # after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
+            [ "$t" = "tools/test_build_opencode.py" ] && continue
             echo "::group::$t"
             python3 "$t" || fail=1
             echo "::endgroup::"
@@ -39,10 +41,13 @@ jobs:
       - name: Validator dependencies
         run: pip install tiktoken pyyaml
 
-      # The hub-page generator parses YAML frontmatter, so its test needs pyyaml
+      # Both generators parse YAML frontmatter, so their tests need pyyaml
       # (installed just above) — unlike the stdlib-only hook tests.
       - name: Hub page generator tests
         run: python3 tools/test_build_hub_page.py
+
+      - name: OpenCode projection generator tests
+        run: python3 tools/test_build_opencode.py
 
       - name: Validate skills
         run: python3 tools/validate-skill.py --all

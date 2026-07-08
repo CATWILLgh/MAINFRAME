@@ -54,6 +54,7 @@ log_action()  { echo "${BOLD}→${NC} $1"; }
 DRY_RUN=0
 UNINSTALL=0
 DEV=0
+OPENCODE=0
 
 usage() {
     cat <<EOF
@@ -81,9 +82,20 @@ Usage:
                       (feedback/) and local usage telemetry (telemetry/ —
                       a local SQLite DB; nothing leaves the machine).
                       Ordinary users do not need this.
+  $0 --opencode       Install PLUS the OpenCode projection: generates
+                      OpenCode-format agents from plugin-dist/agents/ (via
+                      tools/build_opencode.py, needs the repo .venv), links
+                      them into ~/.config/opencode/agents/, and merges the
+                      hub-managed 'permission' + secret-free 'mcp' keys into
+                      ~/.config/opencode/opencode.json (one rolling backup
+                      at opencode.json.backup). CLAUDE.md and skills need no
+                      projection — OpenCode picks them up from ~/.claude
+                      natively. NOTE: hub hooks do not transfer; OpenCode
+                      runs have thinner guardrails than Claude Code.
   $0 --dry-run        Show what would happen, no changes.
   $0 --uninstall      Remove symlinks created by this script (incl. --dev
-                      ones; telemetry/feedback data is left in place).
+                      and --opencode ones; telemetry/feedback data and
+                      opencode.json edits are left in place).
   $0 --help           Show this message.
 
 Idempotent: re-running is safe — already-correct symlinks are left alone.
@@ -98,6 +110,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run)   DRY_RUN=1 ;;
         --dev)       DEV=1 ;;
+        --opencode)  OPENCODE=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)   usage; exit 0 ;;
         *) log_error "Unknown argument: $1"; usage; exit 2 ;;
@@ -590,6 +603,51 @@ bootstrap_frontend_quality_tools() {
     _install_npm_global fallow || true
 }
 
+# OpenCode dual-target layer (--opencode). The generator owns all format
+# translation; this function only runs it and links its output. Generated
+# agents live in workspace/runtime/opencode/agents/ (gitignored, derived)
+# so ~/.config/opencode/agents/ gets the same item-by-item symlink treatment
+# as the other managed dirs.
+OPENCODE_AGENTS_SRC="workspace/runtime/opencode/agents"
+opencode_config_dir() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; }
+
+install_opencode() {
+    local py="${PROJECT_ROOT}/.venv/bin/python3"
+    local cfg_dir
+    cfg_dir="$(opencode_config_dir)"
+
+    if ! command -v opencode >/dev/null 2>&1; then
+        log_warn "opencode not found on PATH — skipping the OpenCode layer."
+        return 0
+    fi
+    if [[ ! -x "$py" ]]; then
+        log_warn "Skipped OpenCode projection — .venv missing"
+        log_warn "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
+        return 0
+    fi
+
+    local gen_args=(--root "${PROJECT_ROOT}")
+    [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
+    if ! "$py" "${PROJECT_ROOT}/tools/build_opencode.py" "${gen_args[@]}"; then
+        log_error "build_opencode.py failed; OpenCode layer not installed."
+        return 1
+    fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would link generated agents into $(opencode_config_dir)/agents/"
+        return 0
+    fi
+    install_dir_contents "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
+    cleanup_stale_in_dir "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
+    log_ok "OpenCode layer installed. Restart OpenCode sessions to pick it up."
+}
+
+uninstall_opencode() {
+    uninstall_dir_contents "$OPENCODE_AGENTS_SRC" "$(opencode_config_dir)/agents"
+    log_warn "opencode.json is left as-is (hub-managed 'permission'/'mcp' keys"
+    log_warn "included); previous version, if any, is at opencode.json.backup."
+}
+
 # Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
 # export/ no longer exist. Leaves user-created real files/folders untouched.
 # Backups go to the safe per-run dir, NOT in-place.
@@ -752,6 +810,7 @@ main() {
         for entry in "${MANAGED_DIRS[@]}"; do
             uninstall_dir_contents "${entry%%:*}" "${entry##*:}"
         done
+        uninstall_opencode
         uninstall_one "export/scripts/secret" "$HOME/.local/bin/secret"
         log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
@@ -815,6 +874,15 @@ main() {
     for entry in "${MANAGED_DIRS[@]}"; do
         cleanup_stale_in_dir "${entry%%:*}" "${entry##*:}"
     done
+
+    if [[ $OPENCODE -eq 1 ]]; then
+        echo
+        # Guarded call: under `set -e` a bare failing call here would abort
+        # the remaining install phases (secrets, tooling) silently.
+        if ! install_opencode; then
+            log_warn "OpenCode layer failed; continuing with the rest of the install."
+        fi
+    fi
 
     echo
     bootstrap_secrets
