@@ -30,9 +30,10 @@ self-references in core sources.
   divergence goes into a per-agent override
   `adapters/claude-code/agents/<name>.yml` (key-merge over derived values).
   Landed (wave 1).
-- `skills/` — SKILL.md-standard skills; probes confirmed foreign parsers
-  tolerate the hub's extra frontmatter keys, so skills migrate as-is and the
-  render only injects tool bindings. Pending (wave 1).
+- `skills/` — SKILL.md-standard skills; foreign parsers tolerate the hub's
+  extra frontmatter keys (verified on OpenCode), so skills render as pure
+  byte-copies — no frontmatter split, bodies verbatim. `validate-skill.py`
+  treats this directory as the source of truth. Landed (wave 1).
 
 Deferred until needed: `instructions/`, `permissions/`.
 
