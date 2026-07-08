@@ -609,6 +609,9 @@ bootstrap_frontend_quality_tools() {
 # so ~/.config/opencode/agents/ gets the same item-by-item symlink treatment
 # as the other managed dirs.
 OPENCODE_AGENTS_SRC="workspace/runtime/opencode/agents"
+# Hand-written OpenCode-native artifacts (not generated) live in the repo's
+# opencode/ dir and symlink out directly, like export/rules.
+OPENCODE_PLUGINS_SRC="opencode/plugins"
 opencode_config_dir() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; }
 
 install_opencode() {
@@ -635,15 +638,19 @@ install_opencode() {
 
     if [[ $DRY_RUN -eq 1 ]]; then
         log_action "would link generated agents into $(opencode_config_dir)/agents/"
+        log_action "would link security-gate plugin into $(opencode_config_dir)/plugins/"
         return 0
     fi
     install_dir_contents "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
     cleanup_stale_in_dir "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
+    install_dir_contents "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
+    cleanup_stale_in_dir "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
     log_ok "OpenCode layer installed. Restart OpenCode sessions to pick it up."
 }
 
 uninstall_opencode() {
     uninstall_dir_contents "$OPENCODE_AGENTS_SRC" "$(opencode_config_dir)/agents"
+    uninstall_dir_contents "$OPENCODE_PLUGINS_SRC" "$(opencode_config_dir)/plugins"
     log_warn "opencode.json is left as-is (hub-managed 'permission'/'mcp' keys"
     log_warn "included); previous version, if any, is at opencode.json.backup."
 }

@@ -237,7 +237,9 @@ def main() -> None:
         # Could not parse safely — defer rather than block unrelated commands.
         defer()
 
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    # Payload `project_dir` serves callers without the Claude Code env contract.
+    project_dir = (payload.get("project_dir")
+                   or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     cwd = payload.get("cwd") or project_dir
 
     saw_rm = False
