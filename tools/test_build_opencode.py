@@ -29,14 +29,14 @@ READONLY_AGENT = (
     "---\n"
     "name: decision-reviewer\n"
     'description: "Adversarial review of a proposed decision."\n'
-    "tools: Read, Grep, Glob, WebSearch, WebFetch, "
-    "mcp__plugin_context7_context7__resolve-library-id\n"
-    "model: opus\n"
-    "effort: high\n"
+    "needs-repo-read: true\n"
+    "needs-write: false\n"
+    "needs-web: true\n"
+    "needs-docs-lookup: true\n"
+    "reasoning-tier: deep\n"
+    "turn-budget: 50\n"
     "background: true\n"
-    "maxTurns: 50\n"
-    "permissionMode: plan\n"
-    "skills:\n  - decision-review\n  - severity-calibration\n---\n\n"
+    "method-skills:\n  - decision-review\n  - severity-calibration\n---\n\n"
     "You are an independent reviewer. Your skills `decision-review` and "
     "`severity-calibration` are preloaded — [SKILL.md](../skills/decision-review/SKILL.md) "
     "holds the method; consult `severity-calibration` (preloaded) for ratings. "
@@ -48,9 +48,11 @@ WRITE_AGENT = (
     "---\n"
     "name: python-backend-engineer\n"
     'description: "A Python backend task is in flight."\n'
-    "tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite\n"
-    "model: sonnet\n"
-    "effort: medium\n"
+    "needs-repo-read: true\n"
+    "needs-write: true\n"
+    "needs-web: false\n"
+    "needs-docs-lookup: false\n"
+    "reasoning-tier: standard\n"
     "background: true\n---\n\n"
     "You are a senior Python engineer.\n"
 )
@@ -99,9 +101,9 @@ CLAUDE_JSON = {
 
 def _fixture_root():
     root = tempfile.mkdtemp()
-    _write(os.path.join(root, "plugin-dist/agents/decision-reviewer.md"),
+    _write(os.path.join(root, "core/agents/decision-reviewer.md"),
            READONLY_AGENT)
-    _write(os.path.join(root, "plugin-dist/agents/python-backend-engineer.md"),
+    _write(os.path.join(root, "core/agents/python-backend-engineer.md"),
            WRITE_AGENT)
     _write(os.path.join(root, "export/settings.json"),
            json.dumps({"permissions": CC_PERMISSIONS}))
@@ -109,8 +111,7 @@ def _fixture_root():
 
 
 def test_derive_permission_readonly_denies_side_effect_tools():
-    perm = bo.derive_agent_permission(
-        ["Read", "Grep", "Glob", "WebSearch", "WebFetch"])
+    perm = bo.derive_agent_permission({"needs-write": False, "needs-web": True})
     assert perm["bash"] == "deny"
     assert perm["edit"] == "deny"
     assert perm["task"] == "deny"
@@ -120,11 +121,10 @@ def test_derive_permission_readonly_denies_side_effect_tools():
 
 
 def test_derive_permission_write_capable_keeps_bash_and_edit():
-    perm = bo.derive_agent_permission(
-        ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "TodoWrite"])
+    perm = bo.derive_agent_permission({"needs-write": True, "needs-web": False})
     assert "bash" not in perm
     assert "edit" not in perm
-    assert perm["task"] == "deny"  # no hub agent carries Task; unbounded nesting otherwise
+    assert perm["task"] == "deny"  # no contract axis grants nested dispatch
     assert "skill" not in perm
     assert perm["webfetch"] == "deny"
     assert perm["websearch"] == "deny"
@@ -136,7 +136,7 @@ def test_project_agent_maps_frontmatter_and_drops_hub_keys():
     fm, out_body = bo.parse_frontmatter(out)
     assert set(fm) == {"description", "mode", "steps", "permission"}
     assert fm["mode"] == "subagent"
-    assert fm["steps"] == 50  # maxTurns maps to OpenCode's soft step cap
+    assert fm["steps"] == 50  # turn-budget maps to OpenCode's soft step cap
     assert fm["description"] == "Adversarial review of a proposed decision."
     assert fm["permission"]["bash"] == "deny"
 
@@ -175,7 +175,7 @@ def test_project_agent_without_skills_has_no_skill_note():
     out = bo.project_agent(meta, body)
     assert "skill({" not in out
     fm, _ = bo.parse_frontmatter(out)
-    assert "steps" not in fm  # no maxTurns in the source
+    assert "steps" not in fm  # no turn-budget in the source
 
 
 def test_enrichment_merges_model_color_and_mode():
@@ -391,6 +391,29 @@ def test_main_missing_claude_config_still_succeeds():
     assert rc == 0
     merged = json.load(open(cfg))
     assert "codex" not in merged["mcp"]  # no source — nothing invented
+
+
+def test_real_repo_agents_match_committed_goldens():
+    """OC-side golden: the 7 real contracts render byte-identically.
+
+    Deterministic on any machine: HOME is pinned (prose rewrites embed it)
+    and enrichment is off (the real enrich file is machine-local).
+    """
+    repo = os.path.dirname(_TOOLS)
+    golden_dir = os.path.join(_TOOLS, "goldens", "opencode-agents")
+    old_home = os.environ.get("HOME")
+    os.environ["HOME"] = "/home/u"
+    try:
+        agents = bo._collect_agents(repo, enrich=None)
+    finally:
+        if old_home is None:
+            del os.environ["HOME"]
+        else:
+            os.environ["HOME"] = old_home
+    assert sorted(f for f, _ in agents) == sorted(os.listdir(golden_dir))
+    for fname, rendered in agents:
+        golden = open(os.path.join(golden_dir, fname)).read()
+        assert rendered == golden, f"OC golden drift: {fname}"
 
 
 def _run_all():

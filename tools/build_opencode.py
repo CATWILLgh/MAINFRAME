@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Project MAINFRAME hub artifacts into OpenCode's config layout.
 
-Sources: `plugin-dist/agents/*.md`, `export/settings.json` (permissions),
+Sources: `core/agents/*.md` (neutral capability contracts, ADR 0085),
+`export/settings.json` (permissions),
 `~/.claude.json` (MCP servers). Outputs: OpenCode agent markdown files
 (default `workspace/runtime/opencode/agents/`, symlinked by
 `install.sh --opencode`) and a merge of hub-managed keys into the user's
@@ -29,11 +30,11 @@ import yaml
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 
 _GENERATED_NOTE = (
-    "<!-- {marker} (plugin-dist/agents/{name}.md) — do not edit;"
+    "<!-- {marker} (core/agents/{name}.md) — do not edit;"
     " regenerate via ./install.sh --opencode.\n"
-    "     Hub-only keys dropped here: model tier, effort, background, and"
-    " Claude-Code tool names (mcp__*, TodoWrite);\n"
-    "     maxTurns maps to `steps`, frontmatter skills become the runtime"
+    "     Hub-only contract keys dropped here: reasoning-tier, background;"
+    " needs-* capability flags map to the `permission` denies;\n"
+    "     turn-budget maps to `steps`, method-skills become the runtime"
     " note below. -->"
 )
 
@@ -76,24 +77,20 @@ def parse_frontmatter(text):
     return meta, parts[1].lstrip("\n")
 
 
-def derive_agent_permission(tools):
-    """Deny in OpenCode what the hub agent's tools allowlist never granted."""
-    toolset = set(tools)
+def derive_agent_permission(contract):
+    """Deny in OpenCode what the agent's capability contract never granted."""
     perm = {}
-    if "Bash" not in toolset:
+    if not contract.get("needs-write"):
         perm["bash"] = "deny"
-    if not toolset & {"Edit", "Write"}:
         perm["edit"] = "deny"
-    if "WebFetch" not in toolset:
+    if not contract.get("needs-web"):
         perm["webfetch"] = "deny"
-    if "WebSearch" not in toolset:
         perm["websearch"] = "deny"
-    # No hub agent grants Task, and OpenCode's task tool allows unbounded
-    # nested dispatch — deny unless the source allowlist opts in. The skill
-    # tool stays allowed: skills are the agent's method text, and side
-    # effects are already fenced by the tool denies above.
-    if "Task" not in toolset:
-        perm["task"] = "deny"
+    # No contract axis grants nested dispatch, and OpenCode's task tool allows
+    # unbounded nesting — deny unconditionally. The skill tool stays allowed:
+    # skills are the agent's method text, and side effects are already fenced
+    # by the denies above.
+    perm["task"] = "deny"
     return perm
 
 
@@ -109,18 +106,16 @@ def project_agent(meta, body, enrich=None):
     if not description:
         return None
     home = os.path.expanduser("~")
-    tools = [t.strip() for t in str(meta.get("tools", "")).split(",")
-             if t.strip()]
     fm = {"description": _rewrite_runtime_prose(description, home),
           "mode": "subagent"}
-    if meta.get("maxTurns"):
-        fm["steps"] = int(meta["maxTurns"])
+    if meta.get("turn-budget"):
+        fm["steps"] = int(meta["turn-budget"])
     overrides = ((enrich or {}).get("agents") or {}).get(
         meta.get("name", ""), {})
     for key in ENRICH_KEYS:
         if key in overrides:
             fm[key] = overrides[key]
-    perm = derive_agent_permission(tools)
+    perm = derive_agent_permission(meta)
     if perm:
         fm["permission"] = perm
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True,
@@ -130,7 +125,7 @@ def project_agent(meta, body, enrich=None):
 
     note = _GENERATED_NOTE.format(marker=GENERATED_MARKER,
                                   name=meta.get("name", "unknown"))
-    skills = meta.get("skills") or []
+    skills = meta.get("method-skills") or []
     if skills:
         safe = [re.sub(r"[^A-Za-z0-9_-]", "", str(s)) for s in skills]
         calls = ", ".join(f'skill({{ name: "{s}" }})' for s in safe)
@@ -241,7 +236,7 @@ def _load_json(path):
 
 
 def _collect_agents(root, enrich=None):
-    agents_dir = os.path.join(root, "plugin-dist", "agents")
+    agents_dir = os.path.join(root, "core", "agents")
     out = []
     for fname in sorted(os.listdir(agents_dir)) if os.path.isdir(agents_dir) else []:
         if not fname.endswith(".md"):
