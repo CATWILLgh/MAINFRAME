@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Validator for skills in MAINFRAME hub (plugin-dist/skills/**).
+Validator for skills in MAINFRAME hub (core/skills/** — the source of truth —
+plus dev/skills/**; per-edit validation also accepts the plugin-dist render).
 
 Checks Anthropic spec + hub discipline limits (see docs/layers/skills.md).
 
@@ -47,8 +48,15 @@ except ImportError as e:
 
 # ---- Configuration ----
 
+# core/skills is the source of truth (ADR 0085); plugin-dist/skills is its
+# byte-copy render target, so validating core covers the render. Live per-edit
+# validation still accepts render paths — a hand edit there deserves the same
+# signal even though `render_core.py --check` is the drift guard.
+CORE_SKILLS_DIR = PROJECT_ROOT / "core" / "skills"
 SKILLS_DIR = PROJECT_ROOT / "plugin-dist" / "skills"
 DEV_SKILLS_DIR = PROJECT_ROOT / "dev" / "skills"
+LIVE_ROOTS = (CORE_SKILLS_DIR, SKILLS_DIR, DEV_SKILLS_DIR)
+SUMMARY_ROOTS = (CORE_SKILLS_DIR, DEV_SKILLS_DIR)
 
 # Limits (see docs/layers/skills.md)
 MAX_SKILL_TOKENS = 5000          # body that survives auto-compaction in full
@@ -253,8 +261,10 @@ def validate_skill(skill_dir: Path) -> list[dict]:
         supp_resolved = supp.resolve()
         if supp_resolved == skill_md.resolve():
             continue
-        # Skip hidden files / system trash
+        # Skip hidden files / system trash / interpreter byte-code caches
         if supp.name.startswith(".") or supp.name == "Thumbs.db":
+            continue
+        if "__pycache__" in supp.parts or supp.suffix == ".pyc":
             continue
 
         # Check size only for text-like extensions
@@ -320,8 +330,8 @@ def format_human(target: Path, issues: list[dict]) -> str:
 
 def find_skill_dir_for_file(file_path: Path) -> Path | None:
     """Find the enclosing skill directory — an immediate child of
-    plugin-dist/skills/ or dev/skills/. None if outside both roots."""
-    for root in (SKILLS_DIR, DEV_SKILLS_DIR):
+    core/skills/, plugin-dist/skills/ or dev/skills/. None if outside."""
+    for root in LIVE_ROOTS:
         try:
             rel = file_path.resolve().relative_to(root.resolve())
         except ValueError:
@@ -333,7 +343,7 @@ def find_skill_dir_for_file(file_path: Path) -> Path | None:
 
 def all_skill_dirs() -> list[Path]:
     dirs = []
-    for root in (SKILLS_DIR, DEV_SKILLS_DIR):
+    for root in SUMMARY_ROOTS:
         if root.exists():
             dirs += [p for p in root.iterdir()
                      if p.is_dir() and not p.name.startswith(".")]
@@ -345,9 +355,9 @@ def all_skill_dirs() -> list[Path]:
 def run_session_start() -> int:
     skills = all_skill_dirs()
     if not skills:
-        print("## Skills (plugin-dist/skills/ + dev/skills/) — no skills yet")
+        print("## Skills (core/skills/ + dev/skills/) — no skills yet")
         return 0
-    print("## Skills validation (plugin-dist/skills/ + dev/skills/)")
+    print("## Skills validation (core/skills/ + dev/skills/)")
     for s in skills:
         iss = validate_skill(s)
         errors = [i for i in iss if i["level"] == "error"]
@@ -377,7 +387,7 @@ def run_from_hook() -> int:
 
     skill_dir = find_skill_dir_for_file(Path(file_path))
     if skill_dir is None:
-        return 0  # not under plugin-dist/skills/, exit instantly
+        return 0  # not under a skills root, exit instantly
 
     issues = validate_skill(skill_dir)
     if not issues:
@@ -388,9 +398,9 @@ def run_from_hook() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validator for skills in plugin-dist/skills/.")
+    parser = argparse.ArgumentParser(description="Validator for hub skills (source of truth: core/skills/).")
     parser.add_argument("path", nargs="?", help="Path to a skill directory or any file inside one.")
-    parser.add_argument("--all", action="store_true", help="Validate every skill under plugin-dist/skills/.")
+    parser.add_argument("--all", action="store_true", help="Validate every skill under core/skills/ and dev/skills/.")
     parser.add_argument("--json", action="store_true", help="JSON output (CLI mode).")
     parser.add_argument("--from-hook", action="store_true", help="PostToolUse hook mode (reads stdin).")
     parser.add_argument("--session-start", action="store_true", help="SessionStart hook mode (short summary).")
