@@ -1,11 +1,11 @@
 ---
 name: web-search
-description: Use proactively whenever a task needs authoritative information — sourcing official documentation, verifying claims, cross-checking facts, or backing a non-trivial decision with a citation. Combines Context7 documentation lookup and live web search/fetch. Returns a structured set of citations (source URL + verbatim quote) and a brief synthesis. Read-only — does not modify files. Picked via empirical tournament (model:sonnet, effort:low) — 18/18 perfect runs, zero drift across 6 verification queries.
+description: "Use proactively whenever a task needs authoritative information — sourcing official documentation, verifying claims, cross-checking facts, or backing a non-trivial decision with a citation. Combines Context7 documentation lookup and live web search/fetch. Returns a structured set of citations (source URL + verbatim quote) and a brief synthesis. Read-only — does not modify files. Picked via empirical tournament (model:sonnet, effort:low) — 18/18 perfect runs, zero drift across 6 verification queries."
 tools: WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: sonnet
 effort: low
-maxTurns: 20
 background: true
+maxTurns: 20
 permissionMode: plan
 ---
 
