@@ -98,6 +98,8 @@ Once a leading approach exists from synthesis, gate it before any writing or lar
 - A critical advisor finding → revise plan / approach, re-call.
 - A passed advisor → proceed.
 
+**Advisor unavailable** (absent tool, pairing failure, runtime without it) — substitute and record it: checkpoint #1 → a **fork subagent** as stand-in advisor where forking exists (inherits the conversation, parent model, cost), else `decision-reviewer` with a self-contained prompt (approach, alternatives, assumptions, files — it sees only the prompt); checkpoint #2 → a **fresh reviewer** on the diff (independence is the point, no fork).
+
 ### 7. Approval (interactive) / proceed (auto)
 
 - **Interactive + plan file exists:** wait for `ExitPlanMode` approval. The approval is the execution authorization — no extra "when to start?" turn. `ExitPlanMode`'s `allowedPrompts` already captures the granted permissions.
