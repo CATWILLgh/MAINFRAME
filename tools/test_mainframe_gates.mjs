@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tests for the OpenCode dispatcher plugin (opencode/plugins/mainframe-gates.js).
+// Tests for the OpenCode dispatcher plugin (adapters/opencode/plugins/mainframe-gates.js).
 // Run: `node tools/test_mainframe_gates.mjs` (exit 0 = pass). No deps: the Bun
 // `$` shell is faked, so tests pin the dispatcher's contract without OpenCode.
 //
@@ -9,7 +9,7 @@
 // already landed, and on OpenCode a thrown after-hook marks an executed call
 // as failed (the model may then retry a commit or delete).
 
-import { MainframeGates } from "../opencode/plugins/mainframe-gates.js"
+import { MainframeGates } from "../adapters/opencode/plugins/mainframe-gates.js"
 
 // Fake Bun-shell: a tagged template returning a chainable promise whose
 // response is looked up from `responses` by a substring of the command.

@@ -16,7 +16,9 @@ import sys
 import tempfile
 
 _TOOLS = os.path.dirname(os.path.abspath(__file__))
+_OC_ADAPTER = os.path.join(os.path.dirname(_TOOLS), "adapters", "opencode")
 sys.path.insert(0, _TOOLS)
+sys.path.insert(0, _OC_ADAPTER)
 import build_opencode as bo
 from test_build_opencode import (
     _write, _fixture_root, CC_PERMISSIONS, USER_CONFIG, CLAUDE_JSON,

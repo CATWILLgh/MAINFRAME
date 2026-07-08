@@ -14,7 +14,8 @@ OpenCode resolves permissions last-match-wins and its `ask` degrades to
 emitted last so they win on overlap; the summary lists everything that could
 not be projected.
 
-Run: `.venv/bin/python3 tools/build_opencode.py [--dry-run]` (needs pyyaml).
+Run: `.venv/bin/python3 adapters/opencode/build_opencode.py [--dry-run]`
+(needs pyyaml).
 """
 
 import argparse

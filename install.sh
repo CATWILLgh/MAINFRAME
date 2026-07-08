@@ -83,8 +83,9 @@ Usage:
                       a local SQLite DB; nothing leaves the machine).
                       Ordinary users do not need this.
   $0 --opencode       Install PLUS the OpenCode projection: generates
-                      OpenCode-format agents from plugin-dist/agents/ (via
-                      tools/build_opencode.py, needs the repo .venv), links
+                      OpenCode-format agents from core/agents/ (via
+                      adapters/opencode/build_opencode.py, needs the repo
+                      .venv), links
                       them into ~/.config/opencode/agents/, and merges the
                       hub-managed 'permission' + secret-free 'mcp' keys into
                       ~/.config/opencode/opencode.json (one rolling backup
@@ -609,9 +610,9 @@ bootstrap_frontend_quality_tools() {
 # so ~/.config/opencode/agents/ gets the same item-by-item symlink treatment
 # as the other managed dirs.
 OPENCODE_AGENTS_SRC="workspace/runtime/opencode/agents"
-# Hand-written OpenCode-native artifacts (not generated) live in the repo's
-# opencode/ dir and symlink out directly, like export/rules.
-OPENCODE_PLUGINS_SRC="opencode/plugins"
+# Hand-written OpenCode-native artifacts (not generated) live in the
+# adapters/opencode/ dialect dir and symlink out directly, like export/rules.
+OPENCODE_PLUGINS_SRC="adapters/opencode/plugins"
 opencode_config_dir() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; }
 
 install_opencode() {
@@ -631,7 +632,7 @@ install_opencode() {
 
     local gen_args=(--root "${PROJECT_ROOT}")
     [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
-    if ! "$py" "${PROJECT_ROOT}/tools/build_opencode.py" "${gen_args[@]}"; then
+    if ! "$py" "${PROJECT_ROOT}/adapters/opencode/build_opencode.py" "${gen_args[@]}"; then
         log_error "build_opencode.py failed; OpenCode layer not installed."
         return 1
     fi
