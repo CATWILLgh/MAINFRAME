@@ -269,8 +269,10 @@ def check_agents(root: Path) -> list[str]:
         expected.add(dst)
         try:
             rendered = render_agent_file(core_path.read_text(), override)
-        except ValueError as exc:
-            problems.append(f"{core_path.relative_to(root)}: {exc}")
+        except ImportError:
+            raise
+        except Exception as exc:
+            problems.append(f"{core_path.relative_to(root)}: {exc!r}")
             continue
         if not dst.exists():
             problems.append(f"render missing: {dst.relative_to(root)}")
