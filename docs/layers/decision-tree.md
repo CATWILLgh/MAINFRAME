@@ -1,5 +1,8 @@
 # Decision tree: which layer owns a new artifact
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > When a new rule, skill, check, or process appears — **walk this tree first**, then place it. No ad hoc choices. Otherwise the hub turns into a ball of everything about everything.
 
 > Last updated: 2026-05-29 (added axis: file-path match → Rule).

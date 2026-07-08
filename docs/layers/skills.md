@@ -1,5 +1,8 @@
 # Layer: Skills
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > Optionally activated instruction sets. In the hub: `plugin-dist/skills/<name>/SKILL.md` (+ supporting files), shipped via the `mainframe` plugin.
 
 > Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-28 (full frontmatter spec + `disable-model-invocation`, `context: fork`).

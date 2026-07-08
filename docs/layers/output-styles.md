@@ -1,5 +1,8 @@
 # Layer: Output styles
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `export/output-styles/<name>.md`.
 
 > Last updated: 2026-06-11. First artifact shipped: `explanatory-concise` (verified against CLI bundle 2.1.165).

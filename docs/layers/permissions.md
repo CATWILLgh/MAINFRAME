@@ -1,5 +1,8 @@
 # Layer: Permissions
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > The Claude Code layer that controls which tool calls are allowed, blocked, or require user confirmation. In the hub: the `export/settings.json` block `permissions.{allow, deny, ask}` → symlinked to `~/.claude/settings.json` → takes effect in all projects.
 
 > Last updated: 2026-05-28 (3-section rewrite).

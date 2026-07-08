@@ -1,5 +1,8 @@
 # Layer: Commands
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > Custom slash commands (`/<name>`), explicitly invoked by the user. In the hub: `plugin-dist/commands/<name>.md` (currently **empty**), shipped via the `mainframe` plugin.
 
 > Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-28 (3-section rewrite). Layer is reserved; no artifacts yet.

@@ -1,5 +1,8 @@
 # MAINFRAME Hub Layers
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > Canonical list of hub layers and a navigator to their specifications.
 > Goal: a shared understanding of "what exactly we have, what each layer is responsible for, how it works, and how to update it" — no half-intuitive moves.
 

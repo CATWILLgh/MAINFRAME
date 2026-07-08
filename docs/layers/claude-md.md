@@ -1,5 +1,8 @@
 # Layer: CLAUDE.md (Operating instructions)
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > Global Claude instruction delivered to every session across all projects. In the hub: `export/CLAUDE.md` → symlink `~/.claude/CLAUDE.md`.
 
 > Last updated: 2026-05-28 (3-section rewrite).

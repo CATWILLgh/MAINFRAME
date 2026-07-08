@@ -1,5 +1,8 @@
 # Layer: Hooks
 
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+
+
 > Scripts executed by Claude Code on specific events (tool-use, stop, session-start, file-change, etc.). In the hub: `plugin-dist/hooks/scripts/*.py` + registration in `plugin-dist/hooks/hooks.json`, shipped via the `mainframe` plugin.
 
 > Last updated: 2026-06-14 (plugin-migration actualization: scripts + registration live in `plugin-dist/hooks/`, not `export/`). Prior: 2026-06-04 (full event sweep — **exactly 30 events**, ground-truthed against the installed Claude Code v2.1.160 `/hooks` menu). Docs lag the CLI — the running CLI is the authority.
