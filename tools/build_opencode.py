@@ -226,10 +226,10 @@ def _print_summary(agents, perm_report, mcp_report, replaced_permission):
           "last on purpose.")
     print("  - `ask` hangs a headless run without --auto, and degrades to "
           "allow WITH --auto.")
-    print("  - The `mainframe-gates` plugin ports the two PreToolUse security "
-          "gates (secret-commit, path-validation); Stop-gates, code scanners, "
-          "and quality hooks do NOT transfer — OpenCode runs still carry "
-          "thinner guardrails than Claude Code.")
+    print("  - The `mainframe-gates` plugin ports the two blocking security "
+          "gates plus nine advisory hooks (scanners, reminders) as post-hoc "
+          "notes; Stop-gates do NOT transfer (no blocking turn-end in "
+          "OpenCode) — enforcement there is still thinner than Claude Code.")
 
 
 def main(argv=None):
