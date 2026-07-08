@@ -36,6 +36,22 @@ TARGET_FILES = {
     (PROJECT_ROOT / "CLAUDE.md").resolve(),
 }
 
+# export/CLAUDE.md is composed from these fragment dirs (ADR 0085); an edit
+# to a fragment validates the composed render (freshness is the
+# render-reminder hook's job, correctness is ours).
+FRAGMENT_DIRS = (
+    PROJECT_ROOT / "core" / "instructions",
+    PROJECT_ROOT / "adapters" / "claude-code" / "instructions",
+)
+
+
+def _hook_target_for(path: Path) -> Path | None:
+    if path in TARGET_FILES:
+        return path
+    if any(d in path.parents for d in FRAGMENT_DIRS):
+        return (PROJECT_ROOT / "export" / "CLAUDE.md").resolve()
+    return None
+
 BLACKLIST_FILE = PROJECT_ROOT / "tools" / "agnostic-blacklist.txt"
 
 MAX_LINES = 200
@@ -352,10 +368,9 @@ def run_from_hook() -> int:
     if not file_path:
         return 0
 
-    target = Path(file_path).resolve()
-
     # Early path filtering — if the edit is not our file, exit within a millisecond.
-    if target not in TARGET_FILES:
+    target = _hook_target_for(Path(file_path).resolve())
+    if target is None:
         return 0
 
     issues = validate_target(target)
