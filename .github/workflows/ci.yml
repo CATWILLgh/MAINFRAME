@@ -29,12 +29,13 @@ jobs:
           fail=0
           for t in tools/test_*.py; do
             # test_build_hub_page / test_build_opencode / test_render_core /
-            # test_render_reminder need pyyaml; they run after Validator
-            # dependencies.
+            # test_render_reminder / test_validate_skill need pyyaml (the
+            # last also tiktoken); they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
             [ "$t" = "tools/test_render_core.py" ] && continue
             [ "$t" = "tools/test_render_reminder.py" ] && continue
+            [ "$t" = "tools/test_validate_skill.py" ] && continue
             echo "::group::$t"
             python3 "$t" || fail=1
             echo "::endgroup::"
@@ -55,6 +56,9 @@ jobs:
         run: |
           python3 tools/test_render_core.py
           python3 tools/test_render_reminder.py
+
+      - name: Skill validator tests
+        run: python3 tools/test_validate_skill.py
 
       # Both generators parse YAML frontmatter, so their tests need pyyaml
       # (installed just above) — unlike the stdlib-only hook tests.
