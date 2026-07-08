@@ -21,12 +21,6 @@ jobs:
           git config --global user.email "ci@mainframe.local"
           git config --global user.name "mainframe-ci"
 
-      # ADR 0085: core/ + adapters/ are the source of truth; plugin-dist/ is a
-      # committed render output. The test suites exercise rendered files, so
-      # this check is the sole guard against un-rendered core edits.
-      - name: Neutral-core render check
-        run: python3 tools/render_core.py --check
-
       # The hook tests are stdlib Python only — they drive each hook's logic with
       # fixtures/stubs and never shell out to the real linters, so no ruff/oxlint/
       # fallow/etc. are needed here.
@@ -34,10 +28,11 @@ jobs:
         run: |
           fail=0
           for t in tools/test_*.py; do
-            # test_build_hub_page / test_build_opencode need pyyaml; they run
-            # after Validator dependencies.
+            # test_build_hub_page / test_build_opencode / test_render_core
+            # need pyyaml; they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
+            [ "$t" = "tools/test_render_core.py" ] && continue
             echo "::group::$t"
             python3 "$t" || fail=1
             echo "::endgroup::"
@@ -46,6 +41,16 @@ jobs:
 
       - name: Validator dependencies
         run: pip install tiktoken pyyaml
+
+      # ADR 0085: core/ + adapters/ are the source of truth; plugin-dist/ is a
+      # committed render output. The test suites exercise rendered files, so
+      # this check is the sole guard against un-rendered core edits. Needs
+      # pyyaml (agents section), hence it runs after Validator dependencies.
+      - name: Neutral-core render check
+        run: python3 tools/render_core.py --check
+
+      - name: Neutral-core render tests
+        run: python3 tools/test_render_core.py
 
       # Both generators parse YAML frontmatter, so their tests need pyyaml
       # (installed just above) — unlike the stdlib-only hook tests.

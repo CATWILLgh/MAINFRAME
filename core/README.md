@@ -21,8 +21,15 @@ self-references in core sources.
 
 - `gates/` — gate detectors (Python) + their data; wire contract in
   [gates/CONTRACT.md](gates/CONTRACT.md). Landed (wave 1).
-- `agents/` — neutral agent definitions (role prose + capability contract).
-  Pending (wave 1).
+- `agents/` — neutral agent definitions: capability-contract frontmatter
+  (`needs-repo-read` / `needs-write` / `needs-web` / `needs-docs-lookup`,
+  `reasoning-tier` deep|standard|light, `turn-budget`, `background`,
+  `method-skills`) + role prose passed through verbatim. The renderer derives
+  the Claude Code frontmatter deterministically; `review-only` is folded into
+  `!needs-write` (tracks `permissionMode: plan` on every current agent); rare
+  divergence goes into a per-agent override
+  `adapters/claude-code/agents/<name>.yml` (key-merge over derived values).
+  Landed (wave 1).
 - `skills/` — SKILL.md-standard skills; probes confirmed foreign parsers
   tolerate the hub's extra frontmatter keys, so skills migrate as-is and the
   render only injects tool bindings. Pending (wave 1).

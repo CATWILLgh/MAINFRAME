@@ -169,6 +169,154 @@ def test_real_repo_is_drift_free():
     assert problems == [], problems
 
 
+CORE_AGENT = """---
+name: sample-agent
+description: "Reviews things — read-only (v2)."
+needs-repo-read: true
+needs-write: false
+needs-web: true
+needs-docs-lookup: true
+reasoning-tier: deep
+turn-budget: 50
+background: true
+method-skills:
+  - decision-review
+---
+
+Body stays byte-for-byte.
+"""
+
+EXPECTED_CC = """---
+name: sample-agent
+description: "Reviews things — read-only (v2)."
+tools: Read, Grep, Glob, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
+model: opus
+effort: high
+background: true
+maxTurns: 50
+permissionMode: plan
+skills:
+  - decision-review
+---
+
+Body stays byte-for-byte.
+"""
+
+WRITER_AGENT = """---
+name: writer-agent
+description: "Builds things."
+needs-repo-read: true
+needs-write: true
+needs-web: false
+needs-docs-lookup: true
+reasoning-tier: standard
+background: true
+method-skills:
+  - surface-ticket
+---
+
+Writer body.
+"""
+
+WEB_ONLY_AGENT = """---
+name: web-agent
+description: "Searches things."
+needs-repo-read: false
+needs-write: false
+needs-web: true
+needs-docs-lookup: true
+reasoning-tier: light
+turn-budget: 20
+background: true
+---
+
+Web body.
+"""
+
+
+def test_agent_render_reviewer_shape():
+    assert render_core.render_agent_file(CORE_AGENT, None) == EXPECTED_CC
+
+
+def test_agent_render_writer_shape():
+    rendered = render_core.render_agent_file(WRITER_AGENT, None)
+    assert ("tools: Read, Write, Edit, Glob, Grep, Bash, TodoWrite, "
+            "mcp__plugin_context7_context7__resolve-library-id, "
+            "mcp__plugin_context7_context7__query-docs\n") in rendered
+    assert "model: sonnet\neffort: medium\n" in rendered
+    assert "permissionMode" not in rendered and "maxTurns" not in rendered
+
+
+def test_agent_render_web_only_shape():
+    rendered = render_core.render_agent_file(WEB_ONLY_AGENT, None)
+    assert ("tools: WebSearch, WebFetch, "
+            "mcp__plugin_context7_context7__resolve-library-id, "
+            "mcp__plugin_context7_context7__query-docs\n") in rendered
+    assert "model: sonnet\neffort: low\n" in rendered
+    assert "maxTurns: 20\npermissionMode: plan\n" in rendered
+    assert "skills" not in rendered
+
+
+def test_agent_override_merge():
+    rendered = render_core.render_agent_file(
+        CORE_AGENT, {"model": "haiku", "maxTurns": 5})
+    assert "model: haiku\n" in rendered and "maxTurns: 5\n" in rendered
+    assert "effort: high\n" in rendered
+
+
+def make_agent_tree() -> Path:
+    root = Path(tempfile.mkdtemp(prefix="render-agents-test-"))
+    (root / "core/agents").mkdir(parents=True)
+    (root / "core/agents/sample-agent.md").write_text(CORE_AGENT)
+    (root / "plugin-dist/agents").mkdir(parents=True)
+    return root
+
+
+def test_agents_write_then_check_clean():
+    root = make_agent_tree()
+    written = render_core.write_agents(root)
+    assert [p.name for p in written] == ["sample-agent.md"]
+    assert (root / "plugin-dist/agents/sample-agent.md").read_text() == EXPECTED_CC
+    assert render_core.check_agents(root) == []
+    shutil.rmtree(root)
+
+
+def test_agents_check_flags_drift_orphan_and_stray_override():
+    root = make_agent_tree()
+    (root / "plugin-dist/agents/sample-agent.md").write_text("stale\n")
+    (root / "plugin-dist/agents/ghost.md").write_text("orphan\n")
+    (root / "adapters/claude-code/agents").mkdir(parents=True)
+    (root / "adapters/claude-code/agents/nobody.yml").write_text("model: haiku\n")
+    problems = render_core.check_agents(root)
+    assert any("sample-agent.md" in p and "differs" in p for p in problems), problems
+    assert any("ghost.md" in p and "orphan" in p for p in problems), problems
+    assert any("nobody.yml" in p and "override" in p for p in problems), problems
+    shutil.rmtree(root)
+
+
+def test_agents_check_flags_unknown_contract_key():
+    root = make_agent_tree()
+    (root / "core/agents/sample-agent.md").write_text(
+        CORE_AGENT.replace("background: true", "background: true\nfoo: 1"))
+    problems = render_core.check_agents(root)
+    assert any("sample-agent.md" in p and "foo" in p for p in problems), problems
+    shutil.rmtree(root)
+
+
+def test_main_check_covers_agents():
+    root = make_agent_tree()
+    make_sources(root)
+    render_core.write(root, render_core.GATES_MAPPINGS)
+    assert render_core.main(["--root", str(root), "--check"]) == 1
+    assert render_core.main(["--root", str(root), "--write"]) == 0
+    assert render_core.main(["--root", str(root), "--check"]) == 0
+    shutil.rmtree(root)
+
+
+def test_real_repo_agents_drift_free():
+    assert render_core.check_agents(REPO) == []
+
+
 def _run_all():
     failures = 0
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
