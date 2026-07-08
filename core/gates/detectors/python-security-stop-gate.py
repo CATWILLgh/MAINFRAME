@@ -64,21 +64,13 @@ def _run_ruff(files):
         return []
 
 
-def main():
-    payload = load_payload()
-    cwd = stop_guard_cwd(payload)
-    if cwd is None:
-        return
-    files = changed_files(cwd, PY_EXTS)
-    if not files:
-        return
-    findings = _run_ruff(files)
-    if not findings:
-        return
+def _classify(findings, cwd):
+    """Split findings into (delta, unticketed-inherited-by-file).
 
-    # Delta findings always block; inherited (untouched-line) debt blocks only
-    # while no ticket names the file — the ticket, not an inline fix, is the
-    # required outlet for pre-existing findings (harness feedback 2026-06-23).
+    Delta findings always block; inherited (untouched-line) debt blocks only
+    while no ticket names the file — the ticket, not an inline fix, is the
+    required outlet for pre-existing findings (harness feedback 2026-06-23).
+    """
     ranges, git_ok = changed_line_ranges(cwd)
     delta, inherited_by_file = [], {}
     for f in findings:
@@ -91,39 +83,63 @@ def main():
             inherited_by_file.setdefault(fn, []).append(f)
     unticketed = {fn: fs for fn, fs in inherited_by_file.items()
                   if not tickets_mentioning(cwd, fn)}
+    return delta, unticketed
+
+
+def _delta_section(delta):
+    lines = []
+    for f in delta[:15]:
+        code = f.get("code", "?")
+        fn = f.get("filename") or "?"
+        ln = (f.get("location") or {}).get("row", "?")
+        msg = (f.get("message") or "").strip()
+        lines.append(f"  {fn}:{ln} — {code}: {msg}")
+    more = f"\n  …and {len(delta) - 15} more" if len(delta) > 15 else ""
+    return (
+        f"{len(delta)} finding(s) on lines changed this session:\n" +
+        "\n".join(lines) + more +
+        "\nOWASP/Bandit-aligned patterns (S-rules) and zero-FP correctness "
+        "bugs (B-rules) via Ruff curated subset. Resolve before declaring "
+        "the turn done — `# noqa` is not honored by this gate."
+    )
+
+
+def _inherited_section(unticketed):
+    lines = []
+    for fn, fs in sorted(unticketed.items()):
+        codes = sorted({f.get("code", "?") for f in fs})
+        lines.append(f"  {fn} — {len(fs)} inherited finding(s) "
+                     f"({', '.join(codes)})")
+    return (
+        "Inherited findings on untouched lines with NO ticket naming the "
+        "file:\n" + "\n".join(lines) +
+        "\nFixing them now is NOT required — create or update a ticket via "
+        "the `surface-ticket` skill (mention the file's repo-relative path "
+        "and the codes), then finish the turn."
+    )
+
+
+def main():
+    payload = load_payload()
+    cwd = stop_guard_cwd(payload)
+    if cwd is None:
+        return
+    files = changed_files(cwd, PY_EXTS)
+    if not files:
+        return
+    findings = _run_ruff(files)
+    if not findings:
+        return
+
+    delta, unticketed = _classify(findings, cwd)
     if not delta and not unticketed:
         return
 
     sections = []
     if delta:
-        lines = []
-        for f in delta[:15]:
-            code = f.get("code", "?")
-            fn = f.get("filename") or "?"
-            ln = (f.get("location") or {}).get("row", "?")
-            msg = (f.get("message") or "").strip()
-            lines.append(f"  {fn}:{ln} — {code}: {msg}")
-        more = f"\n  …and {len(delta) - 15} more" if len(delta) > 15 else ""
-        sections.append(
-            f"{len(delta)} finding(s) on lines changed this session:\n" +
-            "\n".join(lines) + more +
-            "\nOWASP/Bandit-aligned patterns (S-rules) and zero-FP correctness "
-            "bugs (B-rules) via Ruff curated subset. Resolve before declaring "
-            "the turn done — `# noqa` is not honored by this gate."
-        )
+        sections.append(_delta_section(delta))
     if unticketed:
-        lines = []
-        for fn, fs in sorted(unticketed.items()):
-            codes = sorted({f.get("code", "?") for f in fs})
-            lines.append(f"  {fn} — {len(fs)} inherited finding(s) "
-                         f"({', '.join(codes)})")
-        sections.append(
-            "Inherited findings on untouched lines with NO ticket naming the "
-            "file:\n" + "\n".join(lines) +
-            "\nFixing them now is NOT required — create or update a ticket via "
-            "the `surface-ticket` skill (mention the file's repo-relative path "
-            "and the codes), then finish the turn."
-        )
+        sections.append(_inherited_section(unticketed))
     emit_block("python-security-stop-gate: " + "\n".join(sections))
 
 

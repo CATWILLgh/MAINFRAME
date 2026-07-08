@@ -20,8 +20,9 @@ Design (honestly framed — NOT a mirror of Python's ruff-fast per-edit + Stop c
   to the model — finding ABSENCE is not a clean bill of health.
 - Hub-shipped rule `frontend-token-storage.yml` adds the
   localStorage / sessionStorage token-storage check that the public ruleset
-  does not cover. Lives next to this script under `rules/`, located via
-  `os.path.realpath(__file__)` so the symlinked deployment still finds it.
+  does not cover. Lives in the `rules/` dir SIBLING to this scripts dir,
+  located via `os.path.realpath(__file__)` so the symlinked deployment still
+  finds it.
 - Self-loop guard: if `stop_hook_active` is true on input, exit 0 silently
   (prevents the gate from blocking forever once Claude is mid-cleanup).
 - Block via `{"decision": "block", "reason": ...}` on stdout, exit 0.
@@ -87,22 +88,14 @@ def _run_semgrep(files):
     return data.get("results", []) or []
 
 
-def main():
-    payload = load_payload()
-    cwd = stop_guard_cwd(payload)
-    if cwd is None:
-        return
-    files = changed_files(cwd, JS_EXTS)
-    if not files:
-        return
-    findings = _run_semgrep(files)
-    if not findings:
-        return
+def _classify(findings, cwd):
+    """Split findings into (delta, unticketed-inherited-by-file).
 
-    # Delta always blocks; inherited (untouched-line) debt blocks only while no
-    # ticket names the file. Semgrep anchors multiline findings unpredictably,
-    # so classification checks the WHOLE start..end span for overlap (reviewer
-    # mitigation) — any span touching a changed line is delta.
+    Delta always blocks; inherited (untouched-line) debt blocks only while no
+    ticket names the file. Semgrep anchors multiline findings unpredictably,
+    so classification checks the WHOLE start..end span for overlap (reviewer
+    mitigation) — any span touching a changed line is delta.
+    """
     ranges, git_ok = changed_line_ranges(cwd)
     delta, inherited_by_file = [], {}
     for f in findings:
@@ -115,42 +108,66 @@ def main():
             inherited_by_file.setdefault(path, []).append(f)
     unticketed = {p: fs for p, fs in inherited_by_file.items()
                   if not tickets_mentioning(cwd, p)}
+    return delta, unticketed
+
+
+def _delta_section(delta):
+    lines = []
+    for f in delta[:15]:
+        code = f.get("check_id", "?").split(".")[-1]
+        path = f.get("path", "?")
+        ln = (f.get("start") or {}).get("line", "?")
+        msg = ((f.get("extra") or {}).get("message") or "").strip()[:120]
+        lines.append(f"  {path}:{ln} — {code}: {msg}")
+    more = f"\n  …and {len(delta) - 15} more" if len(delta) > 15 else ""
+    return (
+        f"Semgrep flagged {len(delta)} finding(s) on lines changed this "
+        "session:\n" + "\n".join(lines) + more +
+        "\nSources: Semgrep `p/security-audit` ruleset (high-confidence "
+        "low-FP patterns, NOT zero-FP wholesale OWASP — finding absence is "
+        "not a clean bill of health) + hub `frontend-token-storage.yml` "
+        "(localStorage / sessionStorage token-storage XSS exposure, per "
+        "OWASP DOM-based XSS Prevention). Resolve before declaring done — "
+        "Semgrep does not honor inline suppression markers in this gate."
+    )
+
+
+def _inherited_section(unticketed):
+    lines = []
+    for path, fs in sorted(unticketed.items()):
+        codes = sorted({f.get("check_id", "?").split(".")[-1] for f in fs})
+        lines.append(f"  {path} — {len(fs)} inherited finding(s) "
+                     f"({', '.join(codes)})")
+    return (
+        "Inherited findings on untouched lines with NO ticket naming the "
+        "file:\n" + "\n".join(lines) +
+        "\nFixing them now is NOT required — create or update a ticket via "
+        "the `surface-ticket` skill (mention the file's repo-relative path "
+        "and the codes), then finish the turn."
+    )
+
+
+def main():
+    payload = load_payload()
+    cwd = stop_guard_cwd(payload)
+    if cwd is None:
+        return
+    files = changed_files(cwd, JS_EXTS)
+    if not files:
+        return
+    findings = _run_semgrep(files)
+    if not findings:
+        return
+
+    delta, unticketed = _classify(findings, cwd)
     if not delta and not unticketed:
         return
 
     sections = []
     if delta:
-        lines = []
-        for f in delta[:15]:
-            code = f.get("check_id", "?").split(".")[-1]
-            path = f.get("path", "?")
-            ln = (f.get("start") or {}).get("line", "?")
-            msg = ((f.get("extra") or {}).get("message") or "").strip()[:120]
-            lines.append(f"  {path}:{ln} — {code}: {msg}")
-        more = f"\n  …and {len(delta) - 15} more" if len(delta) > 15 else ""
-        sections.append(
-            f"Semgrep flagged {len(delta)} finding(s) on lines changed this "
-            "session:\n" + "\n".join(lines) + more +
-            "\nSources: Semgrep `p/security-audit` ruleset (high-confidence "
-            "low-FP patterns, NOT zero-FP wholesale OWASP — finding absence is "
-            "not a clean bill of health) + hub `frontend-token-storage.yml` "
-            "(localStorage / sessionStorage token-storage XSS exposure, per "
-            "OWASP DOM-based XSS Prevention). Resolve before declaring done — "
-            "Semgrep does not honor inline suppression markers in this gate."
-        )
+        sections.append(_delta_section(delta))
     if unticketed:
-        lines = []
-        for path, fs in sorted(unticketed.items()):
-            codes = sorted({f.get("check_id", "?").split(".")[-1] for f in fs})
-            lines.append(f"  {path} — {len(fs)} inherited finding(s) "
-                         f"({', '.join(codes)})")
-        sections.append(
-            "Inherited findings on untouched lines with NO ticket naming the "
-            "file:\n" + "\n".join(lines) +
-            "\nFixing them now is NOT required — create or update a ticket via "
-            "the `surface-ticket` skill (mention the file's repo-relative path "
-            "and the codes), then finish the turn."
-        )
+        sections.append(_inherited_section(unticketed))
     emit_block("nodejs-security-stop-gate: " + "\n".join(sections))
 
 

@@ -102,6 +102,41 @@ def _first_line(text):
     return body.splitlines()[0].strip()[:100] if body else ""
 
 
+def _targeted_note(flagged):
+    quoted = "".join(f"  - {_first_line(t)}\n" for t, _ in flagged[:3])
+    if len(flagged) > 3:
+        quoted += f"  - … {len(flagged) - 3} more\n"
+    return (
+        "Process-leakage in an added comment/docstring — it references "
+        "ephemeral plan / phase / step state that will not exist for a "
+        "future reader (Clean Code \"Nonlocal Information\" + Position/Phase "
+        "Marker, both banned by the engineering rule):\n"
+        + quoted +
+        "Cut the phase/stage/step/plan reference and let the code stand on "
+        "its own. Keep ONLY if it is genuine domain WHY (e.g. a real signal "
+        "\"phase 0\"), not narration of your work plan. A temporary "
+        "workaround belongs in a ticket (surface-ticket skill), not a "
+        "comment. This is a reminder, not a block."
+    )
+
+
+def _generic_note(n):
+    plural = "s" if n > 1 else ""
+    return (
+        f"Heads-up: this change added {n} new comment{plural}. Per the "
+        "engineering rule (default to writing no comments — only comment the WHY "
+        "that is non-obvious), check each against the banned forms: Position/"
+        "Phase Marker (\"// === Phase B ===\", \"// Step 1 of 3\"), Journal/"
+        "Byline (\"// added 2024-01-15 for X\"), Redundant Paraphrase (\"// "
+        "increments i\"), Nonlocal Information (facts about other modules, "
+        "references to a plan/todo not in the repo), Mandated boilerplate, Noise "
+        "(decorative lines, \"// end of if\"). If a comment captures genuine WHY "
+        "(hidden constraint, subtle invariant, workaround for a specific bug) — "
+        "keep it, short: one sentence per non-obvious WHY. Otherwise remove "
+        "before declaring done. This is a reminder, not a block."
+    )
+
+
 def main():
     payload = load_payload()
     tool_name = payload.get("tool_name", "")
@@ -122,22 +157,7 @@ def main():
     before_c = Counter((t, k) for _, t, k in ce.extract(before, file_ext))
     flagged = [(t, k) for (t, k) in (after_c - before_c).elements() if _flag(t, k)]
     if flagged:
-        quoted = "".join(f"  - {_first_line(t)}\n" for t, _ in flagged[:3])
-        if len(flagged) > 3:
-            quoted += f"  - … {len(flagged) - 3} more\n"
-        note = (
-            "Process-leakage in an added comment/docstring — it references "
-            "ephemeral plan / phase / step state that will not exist for a "
-            "future reader (Clean Code \"Nonlocal Information\" + Position/Phase "
-            "Marker, both banned by the engineering rule):\n"
-            + quoted +
-            "Cut the phase/stage/step/plan reference and let the code stand on "
-            "its own. Keep ONLY if it is genuine domain WHY (e.g. a real signal "
-            "\"phase 0\"), not narration of your work plan. A temporary "
-            "workaround belongs in a ticket (surface-ticket skill), not a "
-            "comment. This is a reminder, not a block."
-        )
-        emit_note("PostToolUse", note)
+        emit_note("PostToolUse", _targeted_note(flagged))
         log_event("incident", {"hook": "comment-discipline-reminder",
                                "rule_id": "process-leakage",
                                "count": len(flagged)}, payload)
@@ -151,21 +171,7 @@ def main():
     n = sum((la - lb).values())
     if n == 0:
         return
-    plural = "s" if n > 1 else ""
-    note = (
-        f"Heads-up: this change added {n} new comment{plural}. Per the "
-        "engineering rule (default to writing no comments — only comment the WHY "
-        "that is non-obvious), check each against the banned forms: Position/"
-        "Phase Marker (\"// === Phase B ===\", \"// Step 1 of 3\"), Journal/"
-        "Byline (\"// added 2024-01-15 for X\"), Redundant Paraphrase (\"// "
-        "increments i\"), Nonlocal Information (facts about other modules, "
-        "references to a plan/todo not in the repo), Mandated boilerplate, Noise "
-        "(decorative lines, \"// end of if\"). If a comment captures genuine WHY "
-        "(hidden constraint, subtle invariant, workaround for a specific bug) — "
-        "keep it, short: one sentence per non-obvious WHY. Otherwise remove "
-        "before declaring done. This is a reminder, not a block."
-    )
-    emit_note("PostToolUse", note)
+    emit_note("PostToolUse", _generic_note(n))
 
 
 if __name__ == "__main__":

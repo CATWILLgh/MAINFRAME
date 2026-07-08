@@ -200,126 +200,158 @@ def _extract_python(src):
     return out
 
 
+def _consume_line_comment(src, i, lineno, out):
+    """Append the line comment starting at `i`; return the index of its EOL."""
+    j = src.find("\n", i)
+    if j == -1:
+        j = len(src)
+    out.append((lineno, src[i:j].rstrip(), COMMENT))
+    return j
+
+
+def _consume_block_comment(src, i, lineno, bopen, bclose, nests, out):
+    """Append the block comment starting at `i`; return (new_i, new_lineno)."""
+    n = len(src)
+    start_line = lineno
+    buf = [bopen]
+    i += len(bopen)
+    depth = 1
+    while i < n and depth > 0:
+        if nests and src.startswith(bopen, i):
+            depth += 1
+            buf.append(bopen)
+            i += len(bopen)
+            continue
+        if src.startswith(bclose, i):
+            depth -= 1
+            buf.append(bclose)
+            i += len(bclose)
+            continue
+        if src[i] == "\n":
+            lineno += 1
+        buf.append(src[i])
+        i += 1
+    out.append((start_line, "".join(buf), COMMENT))
+    return i, lineno
+
+
+def _skip_backtick(src, i, lineno):
+    """Skip a `...` construct opening at `i`; return (new_i, new_lineno)."""
+    n = len(src)
+    i += 1
+    while i < n:
+        ch = src[i]
+        if ch == "\\":
+            i += 2
+            continue
+        if ch == "\n":
+            lineno += 1
+        if ch == "`":
+            i += 1
+            break
+        i += 1
+    return i, lineno
+
+
+def _skip_char_or_lifetime(src, i, lineno, lifetime):
+    """Skip past the ' at `i` (char literal or bare quote); return (i, lineno)."""
+    m = _CHAR_LIT_RE.match(src, i)
+    if m:
+        return m.end(), lineno
+    if lifetime:
+        # a lone ' is a Rust lifetime, not a string — treat as ordinary
+        return i + 1, lineno
+    # non-lifetime language: ' that is not a char literal — ordinary char
+    return i + 1, lineno
+
+
+def _skip_string(src, i, lineno, delim, esc, sql_double):
+    """Skip the string opening at `i`; return (new_i, new_lineno)."""
+    n = len(src)
+    i += 1
+    while i < n:
+        ch = src[i]
+        if esc and ch == "\\":
+            i += 2
+            continue
+        if sql_double and ch == delim and i + 1 < n and src[i + 1] == delim:
+            i += 2
+            continue
+        if ch == delim:
+            i += 1
+            break
+        if ch == "\n":
+            lineno += 1
+        i += 1
+    return i, lineno
+
+
+def _consume_construct(src, i, lineno, c, p, out):
+    """Handle a block comment / backtick / char literal / string starting at
+    `i`; return (new_i, new_lineno), or None when none of them starts here."""
+    block = p["block"]
+    # block comment
+    if block and src.startswith(block[0], i):
+        return _consume_block_comment(src, i, lineno, block[0], block[1],
+                                      p["nests"], out)
+    # backtick: opaque skip (JS template / Go raw / Kotlin identifier)
+    if p["backtick"] and c == "`":
+        return _skip_backtick(src, i, lineno)
+    # char literal (C-family) — and Rust lifetime disambiguation
+    if p["char"] and c == "'":
+        return _skip_char_or_lifetime(src, i, lineno, p["lifetime"])
+    # string
+    if c in p["strings"]:
+        return _skip_string(src, i, lineno, c, c not in p["no_escape"],
+                            p["sql_double"])
+    return None
+
+
+def _skip_heredoc_body(src, i, lineno, sentinel, mode):
+    """Skip lines until the heredoc `sentinel`; return (new_i, new_lineno)."""
+    n = len(src)
+    while i < n:
+        eol = src.find("\n", i)
+        end = eol if eol != -1 else n
+        seg = src[i:end]
+        term = (seg.lstrip("\t") if mode == "-"
+                else seg.strip() if mode == "~" else seg)
+        i = end + 1 if eol != -1 else n
+        if eol != -1:
+            lineno += 1
+        if term == sentinel:
+            break
+    return i, lineno
+
+
 def _extract_generic(src, p):
     out = []
     n = len(src)
     i = 0
     lineno = 1
-    line_delims = p["line"]
-    block = p["block"]
-    bopen, bclose = (block if block else (None, None))
-    nests = p["nests"]
-    backtick = p["backtick"]
-    strings = p["strings"]
-    char = p["char"]
-    lifetime = p["lifetime"]
-    sql_double = p["sql_double"]
-    no_escape = p["no_escape"]
     heredoc = p["heredoc"]
     pending_hd = None
-
-    def starts(s):
-        return src.startswith(s, i)
 
     while i < n:
         c = src[i]
 
         # line comment -> to end of line
-        hit = None
-        for d in line_delims:
-            if starts(d):
-                hit = d
-                break
-        if hit is not None:
-            j = src.find("\n", i)
-            if j == -1:
-                j = n
-            out.append((lineno, src[i:j].rstrip(), COMMENT))
-            i = j
+        if any(src.startswith(d, i) for d in p["line"]):
+            i = _consume_line_comment(src, i, lineno, out)
             continue
 
         # heredoc operator — remember the sentinel; the body is skipped at the
         # next newline (the rest of this line is still ordinary command text).
-        if heredoc and c == "<" and starts("<<"):
+        if heredoc and c == "<" and src.startswith("<<", i):
             mh = _HEREDOC_RE.match(src, i)
             if mh:
                 pending_hd = (mh.group(3), mh.group(1))
                 i = mh.end()
                 continue
 
-        # block comment
-        if bopen and starts(bopen):
-            start_line = lineno
-            buf = [bopen]
-            i += len(bopen)
-            depth = 1
-            while i < n and depth > 0:
-                if nests and starts(bopen):
-                    depth += 1
-                    buf.append(bopen)
-                    i += len(bopen)
-                    continue
-                if starts(bclose):
-                    depth -= 1
-                    buf.append(bclose)
-                    i += len(bclose)
-                    continue
-                if src[i] == "\n":
-                    lineno += 1
-                buf.append(src[i])
-                i += 1
-            out.append((start_line, "".join(buf), COMMENT))
-            continue
-
-        # backtick: opaque skip (JS template / Go raw / Kotlin identifier)
-        if backtick and c == "`":
-            i += 1
-            while i < n:
-                ch = src[i]
-                if ch == "\\":
-                    i += 2
-                    continue
-                if ch == "\n":
-                    lineno += 1
-                if ch == "`":
-                    i += 1
-                    break
-                i += 1
-            continue
-
-        # char literal (C-family) — and Rust lifetime disambiguation
-        if char and c == "'":
-            m = _CHAR_LIT_RE.match(src, i)
-            if m:
-                i = m.end()
-                continue
-            if lifetime:
-                # a lone ' is a Rust lifetime, not a string — treat as ordinary
-                i += 1
-                continue
-            # non-lifetime language: ' that is not a char literal — ordinary char
-            i += 1
-            continue
-
-        # string
-        if c in strings:
-            delim = c
-            esc = delim not in no_escape
-            i += 1
-            while i < n:
-                ch = src[i]
-                if esc and ch == "\\":
-                    i += 2
-                    continue
-                if sql_double and ch == delim and i + 1 < n and src[i + 1] == delim:
-                    i += 2
-                    continue
-                if ch == delim:
-                    i += 1
-                    break
-                if ch == "\n":
-                    lineno += 1
-                i += 1
+        step = _consume_construct(src, i, lineno, c, p, out)
+        if step is not None:
+            i, lineno = step
             continue
 
         # Backslash escapes the next char even in code: this keeps an escaped
@@ -338,17 +370,7 @@ def _extract_generic(src, p):
             if pending_hd:
                 sentinel, mode = pending_hd
                 pending_hd = None
-                while i < n:
-                    eol = src.find("\n", i)
-                    end = eol if eol != -1 else n
-                    seg = src[i:end]
-                    term = (seg.lstrip("\t") if mode == "-"
-                            else seg.strip() if mode == "~" else seg)
-                    i = end + 1 if eol != -1 else n
-                    if eol != -1:
-                        lineno += 1
-                    if term == sentinel:
-                        break
+                i, lineno = _skip_heredoc_body(src, i, lineno, sentinel, mode)
             continue
         i += 1
 

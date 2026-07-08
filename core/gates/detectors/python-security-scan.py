@@ -95,6 +95,58 @@ def _run_ruff(file_path):
         return None
 
 
+_MISSING_NOTE = (
+    "python-security-scan: `ruff` is not installed; Python security "
+    "scanning is OFF. Install via `uv tool install ruff@latest` (or "
+    "`pipx install ruff`) for OWASP/Bandit-aligned high-confidence "
+    "anti-pattern detection on Python edits."
+)
+
+
+def _split_delta(findings, file_path, cwd):
+    """Split findings into (delta, inherited) by changed-line overlap."""
+    ranges, git_ok = changed_line_ranges(cwd)
+    delta, inherited = [], []
+    for f in findings:
+        row = (f.get("location") or {}).get("row") or 0
+        end = (f.get("end_location") or {}).get("row") or row
+        target = delta if finding_is_delta(file_path, row, end, ranges, git_ok) \
+            else inherited
+        target.append(f)
+    return delta, inherited
+
+
+def _delta_part(file_path, delta):
+    lines = []
+    for f in delta[:10]:
+        code = f.get("code", "?")
+        ln = (f.get("location") or {}).get("row", "?")
+        msg = (f.get("message") or "").strip()
+        label = RULE_LABELS.get(code, "")
+        lines.append(f"  L{ln} — {code} {label}: {msg}")
+    more = f"\n  …and {len(delta) - 10} more" if len(delta) > 10 else ""
+    return (
+        f"python-security-scan caught {len(delta)} finding(s) on lines "
+        f"changed this session in {file_path}:\n" + "\n".join(lines) + more +
+        "\nThese are OWASP/Bandit-aligned dangerous patterns (S-rules) and "
+        "zero-FP correctness bugs (B-rules) enforced via the ruff curated "
+        "subset. Inline `# noqa` is NOT honored — a genuine exception "
+        "surfaces via the `surface-ticket` skill, not as a silenced marker. "
+        "Resolve before declaring done."
+    )
+
+
+def _inherited_part(file_path, inherited):
+    codes = sorted({f.get("code", "?") for f in inherited})
+    return (
+        f"{len(inherited)} inherited finding(s) on untouched lines in "
+        f"{file_path} ({', '.join(codes)}) — pre-existing debt, not this "
+        "edit's job to fix, but no ticket covers this file: create or "
+        "update one via the `surface-ticket` skill, mentioning the file's "
+        "repo-relative path and the finding codes."
+    )
+
+
 def main():
     payload = load_payload()
     tool_input = payload.get("tool_input", {}) or {}
@@ -108,13 +160,7 @@ def main():
     if findings is None:
         return
     if findings == "RUFF_MISSING":
-        note = (
-            "python-security-scan: `ruff` is not installed; Python security "
-            "scanning is OFF. Install via `uv tool install ruff@latest` (or "
-            "`pipx install ruff`) for OWASP/Bandit-aligned high-confidence "
-            "anti-pattern detection on Python edits."
-        )
-        emit_note("PostToolUse", note)
+        emit_note("PostToolUse", _MISSING_NOTE)
         return
     if not findings:
         return
@@ -123,43 +169,13 @@ def main():
     # lines demand fixing now; untouched-line debt routes to ticket discipline
     # (harness feedback 2026-06-14/23). Every ambiguity classifies as delta.
     cwd = payload.get("cwd") or os.getcwd()
-    ranges, git_ok = changed_line_ranges(cwd)
-    delta, inherited = [], []
-    for f in findings:
-        row = (f.get("location") or {}).get("row") or 0
-        end = (f.get("end_location") or {}).get("row") or row
-        target = delta if finding_is_delta(file_path, row, end, ranges, git_ok) \
-            else inherited
-        target.append(f)
+    delta, inherited = _split_delta(findings, file_path, cwd)
 
     parts = []
     if delta:
-        lines = []
-        for f in delta[:10]:
-            code = f.get("code", "?")
-            ln = (f.get("location") or {}).get("row", "?")
-            msg = (f.get("message") or "").strip()
-            label = RULE_LABELS.get(code, "")
-            lines.append(f"  L{ln} — {code} {label}: {msg}")
-        more = f"\n  …and {len(delta) - 10} more" if len(delta) > 10 else ""
-        parts.append(
-            f"python-security-scan caught {len(delta)} finding(s) on lines "
-            f"changed this session in {file_path}:\n" + "\n".join(lines) + more +
-            "\nThese are OWASP/Bandit-aligned dangerous patterns (S-rules) and "
-            "zero-FP correctness bugs (B-rules) enforced via the ruff curated "
-            "subset. Inline `# noqa` is NOT honored — a genuine exception "
-            "surfaces via the `surface-ticket` skill, not as a silenced marker. "
-            "Resolve before declaring done."
-        )
+        parts.append(_delta_part(file_path, delta))
     if inherited and not tickets_mentioning(cwd, file_path):
-        codes = sorted({f.get("code", "?") for f in inherited})
-        parts.append(
-            f"{len(inherited)} inherited finding(s) on untouched lines in "
-            f"{file_path} ({', '.join(codes)}) — pre-existing debt, not this "
-            "edit's job to fix, but no ticket covers this file: create or "
-            "update one via the `surface-ticket` skill, mentioning the file's "
-            "repo-relative path and the finding codes."
-        )
+        parts.append(_inherited_part(file_path, inherited))
     if parts:
         emit_note("PostToolUse", "\n".join(parts))
 
