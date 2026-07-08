@@ -50,7 +50,9 @@ SEMGREP_CONFIGS = ["p/security-audit"]
 JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 
 _HOOKS_DIR = os.path.dirname(os.path.realpath(__file__))
-_HUB_RULES_DIR = os.path.join(_HOOKS_DIR, "rules")
+# rules/ ships as a SIBLING of the scripts dir, not inside it — joining
+# against the scripts dir leaves the custom rules silently unloaded.
+_HUB_RULES_DIR = os.path.join(os.path.dirname(_HOOKS_DIR), "rules")
 
 
 def _hub_rule_configs():
