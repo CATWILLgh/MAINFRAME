@@ -17,11 +17,11 @@ covers adapter-owned files, not only `core/`.
 
 Check also lints core-owned sources for naked references to the render path:
 a file mentioning `plugin-dist/` while never mentioning the core layout or the
-render step teaches the exact edit location this scheme forbids. The allow
-tokens are matched file-wide, not per line — wrapped prose splits a reference
-across physical lines, so line-level matching false-positives on legitimate
-"rendered to …" phrasings; the accepted residual is a false-negative when a
-file mixes one naked and one render-aware reference.
+render step teaches the exact edit location this scheme forbids. Allow tokens
+are matched within a ±2-line window around each reference — wrapped prose
+splits a reference across physical lines (same-line matching would
+false-positive on legitimate "rendered to …" phrasings), while a window keeps
+a naked reference elsewhere in the same file flaggable.
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ EXCLUDED_SUFFIXES = {".pyc"}
 LINT_SUFFIXES = {".py", ".sh"}
 LINT_NEEDLE = "plugin-dist/"
 LINT_ALLOW = ("core/gates", "core/skills", "render")
+LINT_WINDOW = 2
 
 
 def _excluded(path: Path) -> bool:
@@ -101,12 +102,17 @@ def lint(root: Path, mappings) -> list[str]:
             if f.suffix not in LINT_SUFFIXES:
                 continue
             text = f.read_text(encoding="utf-8", errors="replace")
-            if LINT_NEEDLE in text and not any(tok in text for tok in LINT_ALLOW):
-                line_no = next(
-                    i for i, line in enumerate(text.splitlines(), 1) if LINT_NEEDLE in line
-                )
+            if LINT_NEEDLE not in text:
+                continue
+            lines = text.splitlines()
+            for i, line in enumerate(lines):
+                if LINT_NEEDLE not in line:
+                    continue
+                window = lines[max(0, i - LINT_WINDOW):i + LINT_WINDOW + 1]
+                if any(tok in w for tok in LINT_ALLOW for w in window):
+                    continue
                 problems.append(
-                    f"naked render-path self-reference in {f.relative_to(root)}:{line_no} — "
+                    f"naked render-path self-reference in {f.relative_to(root)}:{i + 1} — "
                     f"mention the core source or the render step, or drop the reference"
                 )
     return problems
@@ -125,11 +131,22 @@ def check(root: Path, mappings) -> list[str]:
             problems.append(f"render missing: {dst.relative_to(root)}")
         elif src.read_bytes() != dst.read_bytes():
             problems.append(f"render differs from source: {dst.relative_to(root)}")
-    for managed in _managed_target_dirs(root, mappings):
-        if not managed.is_dir():
-            continue
+    managed_dirs = [d for d in _managed_target_dirs(root, mappings) if d.is_dir()]
+    for managed in managed_dirs:
         for f in _dir_files(managed):
             if f not in expected:
+                problems.append(f"orphan render (no core/adapter source): {f.relative_to(root)}")
+    # Parents of file-mapped targets (e.g. the hooks/ root holding hooks.json)
+    # are managed too, but only their immediate files — subdirectories there
+    # are either dir-managed above or out of scope.
+    file_parents = {
+        (root / dst).parent for src, dst in mappings if (root / src).is_file()
+    } - set(managed_dirs)
+    for parent in file_parents:
+        if not parent.is_dir():
+            continue
+        for f in sorted(parent.iterdir()):
+            if f.is_file() and not _excluded(f) and f not in expected:
                 problems.append(f"orphan render (no core/adapter source): {f.relative_to(root)}")
     problems.extend(lint(root, mappings))
     return problems

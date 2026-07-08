@@ -151,6 +151,29 @@ def test_lint_allows_render_aware_phrasing():
     shutil.rmtree(root)
 
 
+def test_lint_flags_naked_line_even_with_aware_reference_elsewhere():
+    root = rendered_tree()
+    mixed = root / "core/gates/detectors/mixed.py"
+    mixed.write_text(
+        '"""Source of truth here; rendered to\nplugin-dist/hooks/scripts by render_core."""\n'
+        "\n\n\n\n"
+        "# hand-edit plugin-dist/hooks/scripts/mixed.py directly\n"
+    )
+    render_core.write(root, MAPPINGS)
+    problems = render_core.check(root, MAPPINGS)
+    assert any("mixed.py:7" in p and "self-reference" in p for p in problems), problems
+    shutil.rmtree(root)
+
+
+def test_stray_file_at_file_mapping_root_is_orphan():
+    root = rendered_tree()
+    (root / "plugin-dist/hooks/stray.txt").write_text("junk\n")
+    problems = render_core.check(root, MAPPINGS)
+    assert any("stray.txt" in p and "orphan" in p for p in problems), problems
+    assert not any("hooks.json" in p for p in problems), problems
+    shutil.rmtree(root)
+
+
 def test_check_flags_missing_source_dir():
     root = fresh_tree()
     render_core.write(root, MAPPINGS)
