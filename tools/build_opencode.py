@@ -97,7 +97,12 @@ def derive_agent_permission(tools):
     return perm
 
 
-def project_agent(meta, body):
+# OpenCode-native levers a machine-local enrich file may set per agent —
+# these have no hub-source equivalent, so they arrive as user preferences.
+ENRICH_KEYS = ("model", "temperature", "mode", "color", "steps")
+
+
+def project_agent(meta, body, enrich=None):
     """Render one hub agent as OpenCode agent markdown, or None to skip."""
     description = meta.get("description")
     if not description:
@@ -109,6 +114,11 @@ def project_agent(meta, body):
           "mode": "subagent"}
     if meta.get("maxTurns"):
         fm["steps"] = int(meta["maxTurns"])
+    overrides = ((enrich or {}).get("agents") or {}).get(
+        meta.get("name", ""), {})
+    for key in ENRICH_KEYS:
+        if key in overrides:
+            fm[key] = overrides[key]
     perm = derive_agent_permission(tools)
     if perm:
         fm["permission"] = perm
@@ -229,7 +239,7 @@ def _load_json(path):
                 f"written — fix or remove the file and re-run") from e
 
 
-def _collect_agents(root):
+def _collect_agents(root, enrich=None):
     agents_dir = os.path.join(root, "plugin-dist", "agents")
     out = []
     for fname in sorted(os.listdir(agents_dir)) if os.path.isdir(agents_dir) else []:
@@ -237,7 +247,7 @@ def _collect_agents(root):
             continue
         with open(os.path.join(agents_dir, fname)) as f:
             meta, body = parse_frontmatter(f.read())
-        rendered = project_agent(meta, body)
+        rendered = project_agent(meta, body, enrich=enrich)
         if rendered is None:
             print(f"[skip] {fname}: no description in frontmatter")
             continue
@@ -281,12 +291,21 @@ def main(argv=None):
         "~/.config/opencode/opencode.json"))
     parser.add_argument("--claude-config", default=os.path.expanduser(
         "~/.claude.json"))
+    parser.add_argument("--enrich", default=None,
+                        help="default: <root>/workspace/opencode-enrich.json")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
+    enrich_path = args.enrich or os.path.join(
+        args.root, "workspace", "opencode-enrich.json")
+    enrich = _load_json(enrich_path)
+    if enrich:
+        print(f"enrichment applied from {enrich_path}: "
+              + ", ".join(sorted(enrich.get("agents") or {})))
+
     agents_out = args.agents_out or os.path.join(
         args.root, "workspace", "runtime", "opencode", "agents")
-    agents = _collect_agents(args.root)
+    agents = _collect_agents(args.root, enrich=enrich)
 
     settings = _load_json(os.path.join(args.root, "export", "settings.json"))
     permission, perm_report = project_permissions(

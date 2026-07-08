@@ -178,6 +178,49 @@ def test_project_agent_without_skills_has_no_skill_note():
     assert "steps" not in fm  # no maxTurns in the source
 
 
+def test_enrichment_merges_model_color_and_mode():
+    meta, body = bo.parse_frontmatter(READONLY_AGENT)
+    enrich = {"agents": {"decision-reviewer": {
+        "model": "openai/gpt-5.5", "color": "#d94f4f", "mode": "all",
+        "temperature": 0.2}}}
+    out = bo.project_agent(meta, body, enrich=enrich)
+    fm, _ = bo.parse_frontmatter(out)
+    assert fm["model"] == "openai/gpt-5.5"
+    assert fm["color"] == "#d94f4f"
+    assert fm["mode"] == "all"  # enrichment overrides the subagent default
+    assert fm["temperature"] == 0.2
+    assert fm["steps"] == 50  # untouched keys survive
+
+
+def test_enrichment_absent_and_unknown_keys_are_safe():
+    meta, body = bo.parse_frontmatter(READONLY_AGENT)
+    plain = bo.project_agent(meta, body)
+    assert plain == bo.project_agent(meta, body, enrich=None)
+    out = bo.project_agent(meta, body, enrich={"agents": {
+        "decision-reviewer": {"model": "x/y", "typo_key": "boom"}}})
+    fm, _ = bo.parse_frontmatter(out)
+    assert fm["model"] == "x/y"
+    assert "typo_key" not in fm  # unknown keys never reach the frontmatter
+
+
+def test_main_applies_enrichment_file():
+    root = _fixture_root()
+    out = os.path.join(root, "out-agents")
+    cfg = os.path.join(root, "opencode.json")
+    _write(cfg, json.dumps(USER_CONFIG))
+    _write(os.path.join(root, "workspace/opencode-enrich.json"), json.dumps(
+        {"agents": {"python-backend-engineer": {"model": "z/m",
+                                                "color": "#3b82f6"}}}))
+    rc = bo.main(["--root", root, "--agents-out", out, "--config", cfg])
+    assert rc == 0
+    fm, _ = bo.parse_frontmatter(
+        open(os.path.join(out, "python-backend-engineer.md")).read())
+    assert fm["model"] == "z/m" and fm["color"] == "#3b82f6"
+    fm2, _ = bo.parse_frontmatter(
+        open(os.path.join(out, "decision-reviewer.md")).read())
+    assert "model" not in fm2  # agents not in the file stay untouched
+
+
 def test_project_permissions_maps_bash_and_read():
     perm, report = bo.project_permissions(CC_PERMISSIONS)
     assert perm["bash"]["rm -rf /"] == "deny"
