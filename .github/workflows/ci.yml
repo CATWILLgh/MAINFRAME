@@ -21,6 +21,12 @@ jobs:
           git config --global user.email "ci@mainframe.local"
           git config --global user.name "mainframe-ci"
 
+      # ADR 0085: core/ + adapters/ are the source of truth; plugin-dist/ is a
+      # committed render output. The test suites exercise rendered files, so
+      # this check is the sole guard against un-rendered core edits.
+      - name: Neutral-core render check
+        run: python3 tools/render_core.py --check
+
       # The hook tests are stdlib Python only — they drive each hook's logic with
       # fixtures/stubs and never shell out to the real linters, so no ruff/oxlint/
       # fallow/etc. are needed here.
