@@ -355,6 +355,10 @@ def log_event(event, payload=None, hook_payload=None):
             _telemetry_project_key(hp.get("cwd") or ""),
             str(event),
             json.dumps(safe, separators=(",", ":")),
+            # Which harness emitted the event: Claude Code hooks omit the
+            # key; the OpenCode dispatcher sets it. Keeps CC/OC behavior
+            # separable in every analysis.
+            str(hp.get("source") or "claude-code"),
         )
         db = _telemetry_db_path()
         if os.environ.get("MAINFRAME_TELEMETRY_DB"):
@@ -368,12 +372,19 @@ def log_event(event, payload=None, hook_payload=None):
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS events ("
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, session_id TEXT, "
-                "agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
+                "agent_type TEXT, project TEXT, event TEXT, payload TEXT, "
+                "source TEXT DEFAULT 'claude-code')")
+            try:
+                # Pre-source DBs: constant default backfills existing rows.
+                conn.execute("ALTER TABLE events ADD COLUMN source TEXT "
+                             "DEFAULT 'claude-code'")
+            except sqlite3.OperationalError:
+                pass
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_events_event_ts ON events(event, ts)")
             conn.execute(
-                "INSERT INTO events(ts, session_id, agent_type, project, event, payload) "
-                "VALUES (?,?,?,?,?,?)", row)
+                "INSERT INTO events(ts, session_id, agent_type, project, event, "
+                "payload, source) VALUES (?,?,?,?,?,?,?)", row)
             conn.commit()
         finally:
             conn.close()

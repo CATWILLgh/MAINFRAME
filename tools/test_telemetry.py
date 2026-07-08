@@ -54,6 +54,47 @@ def test_writes_row():
     assert body["rule_id"] == "r" and body["file_ext"] == ".py"
 
 
+def test_source_defaults_to_claude_code():
+    db = _fresh_db()
+    _hooklib.log_event("e", {}, {"session_id": "s"})
+    con = sqlite3.connect(db)
+    try:
+        assert con.execute("SELECT source FROM events").fetchone()[0] == "claude-code"
+    finally:
+        con.close()
+
+
+def test_source_from_hook_payload():
+    db = _fresh_db()
+    _hooklib.log_event("e", {}, {"session_id": "s", "source": "opencode"})
+    con = sqlite3.connect(db)
+    try:
+        assert con.execute("SELECT source FROM events").fetchone()[0] == "opencode"
+    finally:
+        con.close()
+
+
+def test_migration_backfills_legacy_rows_as_claude_code():
+    db = _fresh_db()
+    con = sqlite3.connect(db)
+    con.execute(
+        "CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, "
+        "session_id TEXT, agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
+    con.execute(
+        "INSERT INTO events(ts, session_id, agent_type, project, event, payload) "
+        "VALUES ('t','legacy','','p','old','{}')")
+    con.commit()
+    con.close()
+    _hooklib.log_event("new", {}, {"session_id": "s", "source": "opencode"})
+    con = sqlite3.connect(db)
+    try:
+        rows = dict(con.execute("SELECT event, source FROM events").fetchall())
+        assert rows["old"] == "claude-code", rows
+        assert rows["new"] == "opencode", rows
+    finally:
+        con.close()
+
+
 def test_schema_and_wal():
     db = _fresh_db()
     _hooklib.log_event("e", {}, {})
@@ -62,7 +103,7 @@ def test_schema_and_wal():
         mode = con.execute("PRAGMA journal_mode").fetchone()[0]
         assert mode.lower() == "wal", mode
         cols = [r[1] for r in con.execute("PRAGMA table_info(events)").fetchall()]
-        assert cols == ["id", "ts", "session_id", "agent_type", "project", "event", "payload"], cols
+        assert cols == ["id", "ts", "session_id", "agent_type", "project", "event", "payload", "source"], cols
     finally:
         con.close()
 
