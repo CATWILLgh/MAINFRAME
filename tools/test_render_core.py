@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for tools/render_core.py (stdlib only, hand-rolled runner).
+"""Tests for tools/render_core.py (hand-rolled runner; agents need pyyaml).
 
 Fixture trees are built in a tmp dir shaped like the repo (core/ + adapters/
-sources, plugin-dist/ render targets); one integration test runs `check`
+sources, plugin-dist/ render targets); integration tests run `check`
 against the real repo, which must be drift-free on a clean tree.
 """
 
@@ -22,9 +22,11 @@ MAPPINGS = [
     ("adapters/claude-code/gates/run-hook.sh", "plugin-dist/hooks/scripts/run-hook.sh"),
     ("core/gates/rules", "plugin-dist/hooks/rules"),
     ("adapters/claude-code/gates/hooks.json", "plugin-dist/hooks/hooks.json"),
+    ("core/skills", "plugin-dist/skills"),
 ]
 
 DETECTOR_BODY = "import sys\n# guarded by core/gates conventions\nsys.exit(0)\n"
+SKILL_BODY = "---\nname: sample-skill\ndescription: Sample.\n---\n\nBody.\n"
 LIB_BODY = "VERSION = 1\n"
 RULE_BODY = "rules: []\n"
 WRAPPER_BODY = "#!/bin/sh\nexit 0\n"
@@ -43,6 +45,9 @@ def make_sources(root: Path) -> None:
     adapter.mkdir(parents=True)
     (adapter / "run-hook.sh").write_text(WRAPPER_BODY)
     (adapter / "hooks.json").write_text(HOOKS_JSON_BODY)
+    skill = root / "core/skills/sample-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(SKILL_BODY)
 
 
 def fresh_tree() -> Path:
@@ -65,7 +70,8 @@ def test_write_materializes_targets():
     assert (root / "plugin-dist/hooks/scripts/run-hook.sh").read_text() == WRAPPER_BODY
     assert (root / "plugin-dist/hooks/rules/rule.yml").read_text() == RULE_BODY
     assert (root / "plugin-dist/hooks/hooks.json").read_text() == HOOKS_JSON_BODY
-    assert len(copied) == 5, copied
+    assert (root / "plugin-dist/skills/sample-skill/SKILL.md").read_text() == SKILL_BODY
+    assert len(copied) == 6, copied
     shutil.rmtree(root)
 
 
@@ -165,7 +171,7 @@ def test_main_exit_codes():
 
 
 def test_real_repo_is_drift_free():
-    problems = render_core.check(REPO, render_core.GATES_MAPPINGS)
+    problems = render_core.check(REPO, render_core.MAPPINGS)
     assert problems == [], problems
 
 

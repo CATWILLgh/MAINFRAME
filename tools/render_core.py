@@ -44,11 +44,22 @@ GATES_MAPPINGS = [
     ("adapters/claude-code/gates/hooks.json", "plugin-dist/hooks/hooks.json"),
 ]
 
+# Skills render as byte-copies: SKILL.md is a cross-tool standard and foreign
+# parsers tolerate the hub's extra frontmatter keys (verified empirically on
+# OpenCode). If a future render TRANSFORMS skills, validating core/ stops
+# being equivalent to validating the render — revisit validate-skill.py
+# targeting then.
+SKILLS_MAPPINGS = [
+    ("core/skills", "plugin-dist/skills"),
+]
+
+MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS
+
 EXCLUDED_NAMES = {"__pycache__", ".DS_Store"}
 EXCLUDED_SUFFIXES = {".pyc"}
 LINT_SUFFIXES = {".py", ".sh"}
 LINT_NEEDLE = "plugin-dist/"
-LINT_ALLOW = ("core/gates", "render")
+LINT_ALLOW = ("core/gates", "core/skills", "render")
 
 
 def _excluded(path: Path) -> bool:
@@ -316,11 +327,11 @@ def main(argv=None) -> int:
 
 def _run(args) -> int:
     if args.write:
-        for path in write(args.root, GATES_MAPPINGS) + write_agents(args.root):
+        for path in write(args.root, MAPPINGS) + write_agents(args.root):
             print(f"rendered {path.relative_to(args.root)}")
         return 0
 
-    problems = check(args.root, GATES_MAPPINGS) + check_agents(args.root)
+    problems = check(args.root, MAPPINGS) + check_agents(args.root)
     for problem in problems:
         print(problem)
     if problems:
