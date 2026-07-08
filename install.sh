@@ -640,18 +640,27 @@ install_opencode() {
     if [[ $DRY_RUN -eq 1 ]]; then
         log_action "would link generated agents into $(opencode_config_dir)/agents/"
         log_action "would link security-gate plugin into $(opencode_config_dir)/plugins/"
+        log_action "would link export/AGENTS.md to $(opencode_config_dir)/AGENTS.md"
         return 0
     fi
     install_dir_contents "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
     cleanup_stale_in_dir "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
     install_dir_contents "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
     cleanup_stale_in_dir "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
+    # Global instructions: beats OpenCode's ~/.claude/CLAUDE.md fallback in its
+    # resolution order, replacing CC-flavored text with the composed render.
+    ln -sfn "${PROJECT_ROOT}/export/AGENTS.md" "${cfg_dir}/AGENTS.md"
     log_ok "OpenCode layer installed. Restart OpenCode sessions to pick it up."
 }
 
 uninstall_opencode() {
     uninstall_dir_contents "$OPENCODE_AGENTS_SRC" "$(opencode_config_dir)/agents"
     uninstall_dir_contents "$OPENCODE_PLUGINS_SRC" "$(opencode_config_dir)/plugins"
+    local agents_md="$(opencode_config_dir)/AGENTS.md"
+    if [[ -L "$agents_md" && "$(readlink "$agents_md")" == "${PROJECT_ROOT}/export/AGENTS.md" ]]; then
+        rm "$agents_md"
+        log_ok "Removed AGENTS.md symlink."
+    fi
     log_warn "opencode.json is left as-is (hub-managed 'permission'/'mcp' keys"
     log_warn "included); previous version, if any, is at opencode.json.backup."
 }

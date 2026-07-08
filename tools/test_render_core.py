@@ -346,6 +346,49 @@ def test_real_repo_agents_drift_free():
     assert render_core.check_agents(REPO) == []
 
 
+def make_compose_tree() -> tuple[Path, list]:
+    root = Path(tempfile.mkdtemp(prefix="render-compose-test-"))
+    (root / "core/instructions").mkdir(parents=True)
+    (root / "core/instructions/10-a.md").write_text("## A\n\nalpha\n")
+    (root / "adapters/x/instructions").mkdir(parents=True)
+    (root / "adapters/x/instructions/20-b.md").write_text("## B\n\nbeta\n")
+    mappings = [("export/OUT.md", ["core/instructions/10-a.md",
+                                   "adapters/x/instructions/20-b.md"])]
+    return root, mappings
+
+
+def test_compose_write_then_check_clean():
+    root, mappings = make_compose_tree()
+    written = render_core.write_compose(root, mappings)
+    assert [p.name for p in written] == ["OUT.md"]
+    assert (root / "export/OUT.md").read_text() == "## A\n\nalpha\n## B\n\nbeta\n"
+    assert render_core.check_compose(root, mappings) == []
+    shutil.rmtree(root)
+
+
+def test_compose_check_flags_drift_and_missing_part():
+    root, mappings = make_compose_tree()
+    render_core.write_compose(root, mappings)
+    (root / "export/OUT.md").write_text("tampered\n")
+    problems = render_core.check_compose(root, mappings)
+    assert any("OUT.md" in p and "differs" in p for p in problems), problems
+    (root / "core/instructions/10-a.md").unlink()
+    problems = render_core.check_compose(root, mappings)
+    assert any("10-a.md" in p and "missing" in p for p in problems), problems
+    shutil.rmtree(root)
+
+
+def test_compose_skips_tree_without_instructions():
+    root = fresh_tree()
+    assert render_core.check_compose(root, render_core.COMPOSE_MAPPINGS) == []
+    shutil.rmtree(root)
+
+
+def test_real_repo_instructions_drift_free():
+    problems = render_core.check_compose(REPO, render_core.COMPOSE_MAPPINGS)
+    assert problems == [], problems
+
+
 def _run_all():
     failures = 0
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

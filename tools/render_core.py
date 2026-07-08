@@ -55,6 +55,42 @@ SKILLS_MAPPINGS = [
 
 MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS
 
+# Instructions render by ordered concatenation: core sections + per-tool
+# wrapper/mechanics fragments, one shared ordering namespace (the numeric
+# prefixes). Both targets are committed renders guarded by --check.
+_CORE_SECTIONS = [
+    "core/instructions/05-title.md",
+    "core/instructions/10-partnership.md",
+    "core/instructions/15-communication.md",
+    "core/instructions/20-honesty.md",
+    "core/instructions/25-no-flattery.md",
+    "core/instructions/30-thinking-decisions.md",
+    "core/instructions/35-evidence-sources.md",
+    "core/instructions/40-verification.md",
+    "core/instructions/45-output-format.md",
+    "core/instructions/50-engineering-practices.md",
+    "core/instructions/55-problem-solving.md",
+    "core/instructions/60-orchestration.md",
+]
+_CORE_TAIL = [
+    "core/instructions/80-git-commits.md",
+    "core/instructions/85-destructive-actions.md",
+]
+COMPOSE_MAPPINGS = [
+    ("export/CLAUDE.md",
+     ["adapters/claude-code/instructions/00-preamble.md"]
+     + _CORE_SECTIONS
+     + ["adapters/claude-code/instructions/62-orchestration-claude-code.md",
+        "adapters/claude-code/instructions/70-memory.md",
+        "adapters/claude-code/instructions/75-advisor.md"]
+     + _CORE_TAIL),
+    ("export/AGENTS.md",
+     ["adapters/opencode/instructions/00-preamble.md"]
+     + _CORE_SECTIONS
+     + _CORE_TAIL
+     + ["adapters/opencode/instructions/90-runtime-opencode.md"]),
+]
+
 EXCLUDED_NAMES = {"__pycache__", ".DS_Store"}
 EXCLUDED_SUFFIXES = {".pyc"}
 LINT_SUFFIXES = {".py", ".sh"}
@@ -161,6 +197,49 @@ def write(root: Path, mappings) -> list[Path]:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         written.append(dst)
+    return written
+
+
+def _compose(root: Path, parts) -> tuple[str | None, list[str]]:
+    missing = [p for p in parts if not (root / p).is_file()]
+    if missing:
+        return None, [f"compose part missing: {p}" for p in missing]
+    return "".join((root / p).read_text() for p in parts), []
+
+
+def check_compose(root: Path, mappings) -> list[str]:
+    problems = []
+    for target_rel, parts in mappings:
+        target = root / target_rel
+        # A tree with neither target nor parts has no instructions layer
+        # (fixture trees) — silence is correct; anything partial is a problem.
+        if not target.exists() and not any((root / p).exists() for p in parts):
+            continue
+        composed, missing = _compose(root, parts)
+        problems.extend(missing)
+        if composed is None:
+            continue
+        if not target.exists():
+            problems.append(f"render missing: {target_rel}")
+        elif target.read_text() != composed:
+            problems.append(f"render differs from source: {target_rel}")
+    return problems
+
+
+def write_compose(root: Path, mappings) -> list[Path]:
+    written = []
+    for target_rel, parts in mappings:
+        if not any((root / p).exists() for p in parts):
+            continue
+        composed, missing = _compose(root, parts)
+        if missing:
+            raise FileNotFoundError("; ".join(missing))
+        target = root / target_rel
+        if target.exists() and target.read_text() == composed:
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(composed)
+        written.append(target)
     return written
 
 
@@ -344,11 +423,14 @@ def main(argv=None) -> int:
 
 def _run(args) -> int:
     if args.write:
-        for path in write(args.root, MAPPINGS) + write_agents(args.root):
+        written = (write(args.root, MAPPINGS) + write_agents(args.root)
+                   + write_compose(args.root, COMPOSE_MAPPINGS))
+        for path in written:
             print(f"rendered {path.relative_to(args.root)}")
         return 0
 
-    problems = check(args.root, MAPPINGS) + check_agents(args.root)
+    problems = (check(args.root, MAPPINGS) + check_agents(args.root)
+                + check_compose(args.root, COMPOSE_MAPPINGS))
     for problem in problems:
         print(problem)
     if problems:

@@ -35,7 +35,16 @@ self-references in core sources.
   byte-copies — no frontmatter split, bodies verbatim. `validate-skill.py`
   treats this directory as the source of truth. Landed (wave 1).
 
-Deferred until needed: `instructions/`, `permissions/`.
+- `instructions/` — the umbrella behavioral rules as ordered section
+  fragments (numeric prefixes = the shared compose order). Rendered by
+  concatenation: + `adapters/claude-code/instructions/` → `export/CLAUDE.md`
+  (byte-identical to the pre-split file); + `adapters/opencode/instructions/`
+  → `export/AGENTS.md` (delivered to `~/.config/opencode/AGENTS.md` by
+  `install.sh --opencode`, superseding OpenCode's CLAUDE.md fallback).
+  Landed (wave 1).
+
+Deferred until needed: `permissions/` (blocked on the uncommitted
+`export/settings.json` state).
 
 ## Assembly rules (mirror overlay)
 
