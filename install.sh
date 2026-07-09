@@ -613,6 +613,10 @@ OPENCODE_AGENTS_SRC="workspace/runtime/opencode/agents"
 # Hand-written OpenCode-native artifacts (not generated) live in the
 # adapters/opencode/ dialect dir and symlink out directly, like export/rules.
 OPENCODE_PLUGINS_SRC="adapters/opencode/plugins"
+# Skills also reach OpenCode via its ~/.claude compat scan; the native links
+# are insurance against that scan changing — duplicate names dedupe to a
+# single listing (verified empirically), so double discovery is harmless.
+OPENCODE_SKILLS_SRC="plugin-dist/skills"
 opencode_config_dir() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; }
 
 install_opencode() {
@@ -640,6 +644,7 @@ install_opencode() {
     if [[ $DRY_RUN -eq 1 ]]; then
         log_action "would link generated agents into $(opencode_config_dir)/agents/"
         log_action "would link security-gate plugin into $(opencode_config_dir)/plugins/"
+        log_action "would link hub skills into $(opencode_config_dir)/skills/"
         log_action "would link export/AGENTS.md to $(opencode_config_dir)/AGENTS.md"
         return 0
     fi
@@ -647,6 +652,8 @@ install_opencode() {
     cleanup_stale_in_dir "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
     install_dir_contents "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
     cleanup_stale_in_dir "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
+    install_dir_contents "$OPENCODE_SKILLS_SRC" "${cfg_dir}/skills"
+    cleanup_stale_in_dir "$OPENCODE_SKILLS_SRC" "${cfg_dir}/skills"
     # Global instructions: beats OpenCode's ~/.claude/CLAUDE.md fallback in its
     # resolution order, replacing CC-flavored text with the composed render.
     ln -sfn "${PROJECT_ROOT}/export/AGENTS.md" "${cfg_dir}/AGENTS.md"
@@ -656,6 +663,7 @@ install_opencode() {
 uninstall_opencode() {
     uninstall_dir_contents "$OPENCODE_AGENTS_SRC" "$(opencode_config_dir)/agents"
     uninstall_dir_contents "$OPENCODE_PLUGINS_SRC" "$(opencode_config_dir)/plugins"
+    uninstall_dir_contents "$OPENCODE_SKILLS_SRC" "$(opencode_config_dir)/skills"
     local agents_md="$(opencode_config_dir)/AGENTS.md"
     if [[ -L "$agents_md" && "$(readlink "$agents_md")" == "${PROJECT_ROOT}/export/AGENTS.md" ]]; then
         rm "$agents_md"
