@@ -167,6 +167,15 @@ def test_main_missing_claude_config_still_succeeds():
     assert "codex" not in merged["mcp"]  # no source — nothing invented
 
 
+def test_default_root_resolves_to_repo_root_not_adapters():
+    # Regression: after the tools/ -> adapters/opencode/ relocation the default
+    # root must still be the repo root (three levels up), or a bare run reads
+    # no agents/permissions and clobbers the user's config with empties.
+    repo = bo._default_root()
+    assert os.path.isdir(os.path.join(repo, "core", "agents")), repo
+    assert os.path.basename(repo) != "adapters", repo
+
+
 def _run_all():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]

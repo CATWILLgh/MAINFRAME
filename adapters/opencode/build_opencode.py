@@ -278,10 +278,16 @@ def _print_summary(agents, perm_report, mcp_report, replaced_permission):
           "OpenCode) — enforcement there is still thinner than Claude Code.")
 
 
+def _default_root():
+    # This script lives at <repo>/adapters/opencode/, so the repo root is three
+    # levels up (was two before the ADR 0085 relocation from tools/).
+    here = os.path.abspath(__file__)
+    return os.path.dirname(os.path.dirname(os.path.dirname(here)))
+
+
 def main(argv=None):
-    default_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", default=default_root)
+    parser.add_argument("--root", default=_default_root())
     parser.add_argument("--agents-out", default=None,
                         help="default: <root>/workspace/runtime/opencode/agents")
     parser.add_argument("--config", default=os.path.expanduser(
