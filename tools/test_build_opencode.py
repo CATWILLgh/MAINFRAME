@@ -105,8 +105,8 @@ def _fixture_root():
            READONLY_AGENT)
     _write(os.path.join(root, "core/agents/python-backend-engineer.md"),
            WRITE_AGENT)
-    _write(os.path.join(root, "export/settings.json"),
-           json.dumps({"permissions": CC_PERMISSIONS}))
+    _write(os.path.join(root, "core/permissions/rules.json"),
+           json.dumps(CC_PERMISSIONS))
     return root
 
 

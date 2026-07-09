@@ -200,6 +200,66 @@ def write(root: Path, mappings) -> list[Path]:
     return written
 
 
+# Permissions render by KEY-MERGE, not byte-copy: settings.json is BOTH
+# hub-owned policy (the allow/deny/ask rules) and a live user-editable config
+# surface (model, language, permissions.defaultMode). The hub owns only the
+# three rule lists; the render splices them into the file in place, leaving
+# every other key as the user left it, and --check compares only those lists.
+PERMISSIONS_SOURCE = "core/permissions/rules.json"
+PERMISSIONS_TARGET = "export/settings.json"
+PERMISSIONS_KEY = "permissions"
+PERMISSIONS_RULE_KEYS = ("allow", "deny", "ask")
+
+
+def _settings_dumps(data: dict) -> str:
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def _load_rules(source: Path) -> dict:
+    """Load the hub rule lists; a source missing any of the three keys is a
+    malformed security file, not silent drift — fail loud in both paths."""
+    rules = json.loads(source.read_text())
+    missing = [k for k in PERMISSIONS_RULE_KEYS if k not in rules]
+    if missing:
+        raise ValueError(f"{PERMISSIONS_SOURCE} is missing rule key(s): "
+                         f"{', '.join(missing)}")
+    return rules
+
+
+def check_permissions(root: Path) -> list[str]:
+    source = root / PERMISSIONS_SOURCE
+    target = root / PERMISSIONS_TARGET
+    if not source.exists() and not target.exists():
+        return []
+    if not source.exists():
+        return [f"source missing: {PERMISSIONS_SOURCE}"]
+    if not target.exists():
+        return [f"render missing: {PERMISSIONS_TARGET}"]
+    rules = _load_rules(source)
+    perms = json.loads(target.read_text()).get(PERMISSIONS_KEY, {})
+    drifted = [k for k in PERMISSIONS_RULE_KEYS if perms.get(k) != rules[k]]
+    if drifted:
+        return [f"permissions rules ({', '.join(drifted)}) differ from "
+                f"{PERMISSIONS_SOURCE}: {PERMISSIONS_TARGET}"]
+    return []
+
+
+def write_permissions(root: Path) -> list[Path]:
+    source = root / PERMISSIONS_SOURCE
+    target = root / PERMISSIONS_TARGET
+    if not source.exists() or not target.exists():
+        return []
+    rules = _load_rules(source)
+    data = json.loads(target.read_text())
+    perms = data.setdefault(PERMISSIONS_KEY, {})
+    if all(perms.get(k) == rules[k] for k in PERMISSIONS_RULE_KEYS):
+        return []
+    for k in PERMISSIONS_RULE_KEYS:
+        perms[k] = rules[k]
+    target.write_text(_settings_dumps(data))
+    return [target]
+
+
 def _compose(root: Path, parts) -> tuple[str | None, list[str]]:
     missing = [p for p in parts if not (root / p).is_file()]
     if missing:
@@ -424,13 +484,15 @@ def main(argv=None) -> int:
 def _run(args) -> int:
     if args.write:
         written = (write(args.root, MAPPINGS) + write_agents(args.root)
-                   + write_compose(args.root, COMPOSE_MAPPINGS))
+                   + write_compose(args.root, COMPOSE_MAPPINGS)
+                   + write_permissions(args.root))
         for path in written:
             print(f"rendered {path.relative_to(args.root)}")
         return 0
 
     problems = (check(args.root, MAPPINGS) + check_agents(args.root)
-                + check_compose(args.root, COMPOSE_MAPPINGS))
+                + check_compose(args.root, COMPOSE_MAPPINGS)
+                + check_permissions(args.root))
     for problem in problems:
         print(problem)
     if problems:

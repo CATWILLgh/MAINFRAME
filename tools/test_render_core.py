@@ -389,6 +389,104 @@ def test_real_repo_instructions_drift_free():
     assert problems == [], problems
 
 
+import json as _json
+
+
+def make_permissions_tree() -> Path:
+    root = Path(tempfile.mkdtemp(prefix="render-perm-test-"))
+    (root / "core/permissions").mkdir(parents=True)
+    (root / "core/permissions/rules.json").write_text(_json.dumps(
+        {"allow": ["Bash(git add *)"], "deny": ["Bash(rm -rf /)"],
+         "ask": ["Bash(sudo *)"]}, indent=2) + "\n")
+    (root / "export").mkdir(parents=True)
+    settings = {
+        "$schema": "x",
+        "permissions": {"allow": ["Bash(git add *)"], "deny": ["Bash(rm -rf /)"],
+                        "ask": ["Bash(sudo *)"], "defaultMode": "auto"},
+        "model": "user-choice",
+    }
+    (root / "export/settings.json").write_text(
+        _json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    return root
+
+
+def test_permissions_check_clean_when_synced():
+    root = make_permissions_tree()
+    assert render_core.check_permissions(root) == []
+    shutil.rmtree(root)
+
+
+def test_permissions_check_ignores_user_edits_outside_the_rules():
+    root = make_permissions_tree()
+    target = root / "export/settings.json"
+    data = _json.loads(target.read_text())
+    data["model"] = "changed-by-user"
+    data["permissions"]["defaultMode"] = "default"
+    target.write_text(_json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    assert render_core.check_permissions(root) == []
+    shutil.rmtree(root)
+
+
+def test_permissions_check_flags_rule_drift():
+    # Every rule list is security-critical — assert drift is caught on each,
+    # not only allow (deny is the one that matters most).
+    for key, injected in (("allow", "Bash(curl *)"),
+                          ("deny", "Bash(rm -rf /home)"),
+                          ("ask", "Bash(chmod *)")):
+        root = make_permissions_tree()
+        target = root / "export/settings.json"
+        data = _json.loads(target.read_text())
+        data["permissions"][key].append(injected)
+        target.write_text(_json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        problems = render_core.check_permissions(root)
+        assert any(key in p and "settings.json" in p for p in problems), (key, problems)
+        shutil.rmtree(root)
+
+
+def test_permissions_malformed_source_fails_loud_in_both_paths():
+    root = make_permissions_tree()
+    (root / "core/permissions/rules.json").write_text(
+        _json.dumps({"allow": [], "deny": []}) + "\n")  # missing "ask"
+    for fn in (render_core.check_permissions, render_core.write_permissions):
+        try:
+            fn(root)
+            raise AssertionError(f"{fn.__name__} did not raise on malformed rules.json")
+        except ValueError as exc:
+            assert "ask" in str(exc), exc
+    shutil.rmtree(root)
+
+
+def test_permissions_write_swaps_rules_and_preserves_everything_else():
+    root = make_permissions_tree()
+    target = root / "export/settings.json"
+    data = _json.loads(target.read_text())
+    data["model"] = "user-picked-later"
+    data["permissions"]["defaultMode"] = "default"
+    data["permissions"]["allow"] = ["Bash(stale)"]
+    target.write_text(_json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    written = render_core.write_permissions(root)
+    assert written == [target]
+    after = _json.loads(target.read_text())
+    assert after["permissions"]["allow"] == ["Bash(git add *)"]  # restored from core
+    assert after["model"] == "user-picked-later"                 # user key untouched
+    assert after["permissions"]["defaultMode"] == "default"      # user sub-key untouched
+    assert render_core.check_permissions(root) == []
+    shutil.rmtree(root)
+
+
+def test_permissions_write_noop_when_synced_does_not_rewrite():
+    root = make_permissions_tree()
+    target = root / "export/settings.json"
+    before = target.read_text()
+    assert render_core.write_permissions(root) == []
+    assert target.read_text() == before  # untouched, no gratuitous reformat
+    shutil.rmtree(root)
+
+
+def test_real_repo_permissions_drift_free():
+    assert render_core.check_permissions(REPO) == []
+
+
 def _run_all():
     failures = 0
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

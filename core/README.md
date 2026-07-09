@@ -43,8 +43,16 @@ self-references in core sources.
   `install.sh --opencode`, superseding OpenCode's CLAUDE.md fallback).
   Landed (wave 1).
 
-Deferred until needed: `permissions/` (blocked on the uncommitted
-`export/settings.json` state).
+- `permissions/rules.json` — the hub-owned allow/deny/ask rules. Rendered by
+  KEY-MERGE, not byte-copy: `settings.json` is both hub policy and a live
+  user-editable config surface (model, language, `permissions.defaultMode`),
+  so the render splices ONLY the three rule lists into `export/settings.json`
+  in place and `--check` compares only those lists — user keys are never
+  touched or checked. The OpenCode generator reads this file directly.
+  Landed.
+
+Deferred: layer-6 (the non-permission `settings.json` keys — model, language,
+etc.) stays user-owned in `export/settings.json`, by design.
 
 ## Assembly rules (mirror overlay)
 

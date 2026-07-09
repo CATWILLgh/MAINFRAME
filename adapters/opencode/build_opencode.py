@@ -2,7 +2,7 @@
 """Project MAINFRAME hub artifacts into OpenCode's config layout.
 
 Sources: `core/agents/*.md` (neutral capability contracts, ADR 0085),
-`export/settings.json` (permissions),
+`core/permissions/rules.json` (the neutral allow/deny/ask rules),
 `~/.claude.json` (MCP servers). Outputs: OpenCode agent markdown files
 (default `workspace/runtime/opencode/agents/`, symlinked by
 `install.sh --opencode`) and a merge of hub-managed keys into the user's
@@ -310,9 +310,9 @@ def main(argv=None):
         args.root, "workspace", "runtime", "opencode", "agents")
     agents = _collect_agents(args.root, enrich=enrich)
 
-    settings = _load_json(os.path.join(args.root, "export", "settings.json"))
-    permission, perm_report = project_permissions(
-        (settings or {}).get("permissions", {}))
+    rules = _load_json(os.path.join(
+        args.root, "core", "permissions", "rules.json"))
+    permission, perm_report = project_permissions(rules or {})
 
     claude_cfg = _load_json(args.claude_config)
     if claude_cfg is None:
