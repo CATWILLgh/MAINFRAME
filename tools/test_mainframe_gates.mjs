@@ -214,5 +214,18 @@ await test("not-ready plugin no-ops both handlers", async () => {
   assert(msg1 === null && msg2 === null && output.output === "x", "not-ready leaked behavior")
 })
 
+await test("telemetry row spawns tagged with source/session/event", async () => {
+  const { hooks, $ } = await plugin({})
+  await hooks["tool.execute.after"](
+    { tool: "bash", args: { command: "ls" }, sessionID: "ses_123" },
+    { output: "x" })
+  const spawn = $.calls.find((c) => c.includes("telemetry.py"))
+  assert(spawn, "telemetry.py was not spawned on an after event")
+  for (const marker of ['"source":"opencode"', '"session_id":"ses_123"',
+                        '"hook_event_name":"PostToolUse"']) {
+    assert(spawn.includes(marker), `payload missing ${marker}`)
+  }
+})
+
 console.log(failures.length ? `${failures.length} FAILED` : "all passed")
 process.exit(failures.length ? 1 : 0)

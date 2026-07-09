@@ -58,30 +58,37 @@ const ROWS = [
   { script: "python-deps-audit.py", event: "after", tools: ["edit", "write"], filter: baseIn(["requirements", "pyproject.toml", "poetry.lock", "Pipfile", "uv.lock"]) },
   { script: "nodejs-deps-audit.py", event: "after", tools: ["edit", "write"], filter: baseIn(["package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lock", "bun.lockb"]) },
   { script: "nodejs-security-scan.py", event: "after", tools: ["edit", "write"], filter: hasExt([".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte"]) },
+  // Passive telemetry sink: emits nothing to stdout, so the advisory-note
+  // parsing sees null; rows tagged source=opencode via ccPayload.
+  { script: "telemetry.py", event: "after", tools: ["bash", "edit", "write"], filter: CODE_HINT },
 ]
 
 const ASK_SUFFIX =
   " [mainframe-gates: this action needs the user's explicit go-ahead;" +
   " relay the reason above and wait for their answer in chat.]"
 
-function ccPayload(tool, args, directory) {
+function ccPayload(tool, args, directory, sessionID) {
   const a = args || {}
+  // source/session_id feed the telemetry sink's harness dimension; the gate
+  // detectors ignore them.
+  const common = { cwd: directory, project_dir: directory,
+                   session_id: String(sessionID ?? ""), source: "opencode" }
   if (tool === "bash") {
     return { tool_name: "Bash", tool_input: { command: String(a.command ?? "") },
-             cwd: directory, project_dir: directory }
+             ...common }
   }
   if (tool === "edit") {
     return { tool_name: "Edit",
              tool_input: { file_path: String(a.filePath ?? ""),
                            old_string: String(a.oldString ?? ""),
                            new_string: String(a.newString ?? "") },
-             cwd: directory, project_dir: directory }
+             ...common }
   }
   if (tool === "write") {
     return { tool_name: "Write",
              tool_input: { file_path: String(a.filePath ?? ""),
                            content: String(a.content ?? "") },
-             cwd: directory, project_dir: directory }
+             ...common }
   }
   return null
 }
@@ -140,8 +147,10 @@ export const MainframeGates = async ({ $, directory }) => {
       let block = null
       try {
         if (!ready) return
-        const payload = ccPayload(input.tool, output?.args, directory)
+        const payload = ccPayload(input.tool, output?.args, directory,
+                                  input?.sessionID)
         if (!payload || input.tool !== "bash") return
+        payload.hook_event_name = "PreToolUse"
         for (const row of matching("before", input.tool, payload)) {
           const out = await runRow(row, payload, { capped: false })
           const verdict = out?.permissionDecision
@@ -163,8 +172,10 @@ export const MainframeGates = async ({ $, directory }) => {
     "tool.execute.after": async (input, output) => {
       try {
         if (!ready) return
-        const payload = ccPayload(input.tool, input?.args, directory)
+        const payload = ccPayload(input.tool, input?.args, directory,
+                                  input?.sessionID)
         if (!payload) return
+        payload.hook_event_name = "PostToolUse"
         const rows = matching("after", input.tool, payload)
         if (!rows.length) return
         const notes = (await Promise.all(rows.map(async (row) => {
