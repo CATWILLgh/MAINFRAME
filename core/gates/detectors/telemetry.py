@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import load_payload, log_event, run
+    from _hooklib import load_payload, log_event, run, tw_engagement_state
 except Exception:
     sys.exit(0)
 
@@ -97,7 +97,10 @@ def main():
                 status = (item or {}).get("status")
                 if status in counts:
                     counts[status] += 1
-            log_event("todo_write", {"n": len(todos), **counts}, payload)
+            tw_state = tw_engagement_state(str(payload.get("session_id") or ""))
+            log_event("todo_write",
+                      {"n": len(todos), **counts,
+                       "tw_active": tw_state == "active"}, payload)
     elif event == "PostToolUse":
         file_path = tool_input.get("file_path") or ""
         if file_path and _TICKET_RE.search(file_path):

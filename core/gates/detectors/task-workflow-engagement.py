@@ -22,20 +22,19 @@ Edit/Write/MultiEdit (check + remind). Main agent only — subagents cannot invo
 skills. Advisory (additionalContext only), fail-safe (any error -> exit 0), stdlib.
 """
 
-import hashlib
 import os
 import sys
-import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import load_payload, emit_note, run
+    import _hooklib
+    from _hooklib import (load_payload, emit_note, run, tw_engagement_path,
+                          tw_engagement_state)
 except Exception:
     sys.exit(0)
 
 SKILL_NAME = "task-workflow"
 MODIFY_TOOLS = ("Edit", "Write", "MultiEdit")
-_STATE_DIR = os.path.join(tempfile.gettempdir(), "mainframe-tw-engage")
 
 NOTE = (
     "Before modifying files: invoke the `task-workflow` skill now if you have not "
@@ -50,26 +49,13 @@ NOTE = (
 )
 
 
-def _state_path(session_id):
-    key = hashlib.sha256((session_id or "nosession").encode("utf-8")).hexdigest()[:16]
-    return os.path.join(_STATE_DIR, key)
-
-
 def _write_state(path, value):
     try:
-        os.makedirs(_STATE_DIR, exist_ok=True)
+        os.makedirs(_hooklib.TW_ENGAGE_STATE_DIR, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(value)
     except Exception:
         pass
-
-
-def _read_state(path):
-    try:
-        with open(path, encoding="utf-8") as fh:
-            return fh.read().strip()
-    except Exception:
-        return ""
 
 
 def _norm_skill(raw):
@@ -97,7 +83,8 @@ def _in_project(file_path, cwd):
 def main():
     payload = load_payload()
     event = payload.get("hook_event_name") or ""
-    path = _state_path(str(payload.get("session_id") or ""))
+    session_id = str(payload.get("session_id") or "")
+    path = tw_engagement_path(session_id)
 
     if event == "SessionStart":
         _write_state(path, "fresh")
@@ -122,7 +109,7 @@ def main():
         if not _in_project(tool_input.get("file_path") or "",
                            payload.get("cwd") or ""):
             return
-        if _read_state(path) in ("active", "reminded"):
+        if tw_engagement_state(session_id) in ("active", "reminded"):
             return
         emit_note("PreToolUse", NOTE)
         _write_state(path, "reminded")

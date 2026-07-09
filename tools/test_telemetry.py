@@ -181,10 +181,35 @@ def test_todo_write_logs_counts_not_content():
     rows = _rows(db)
     assert len(rows) == 1, rows
     assert rows[0][4] == "todo_write"
-    assert json.loads(rows[0][5]) == {"n": 3, "pending": 1, "in_progress": 1, "completed": 1}
+    assert json.loads(rows[0][5]) == {"n": 3, "pending": 1, "in_progress": 1,
+                                      "completed": 1, "tw_active": False}
     # todo content (task descriptions) must never be logged
     whole = " ".join(str(c) for c in rows[0])
     assert "secret task detail" not in whole and "another" not in whole
+
+
+def test_todo_write_tagged_tw_active_when_marker_says_active():
+    import _hooklib
+    db = _fresh_db()
+    old_dir = _hooklib.TW_ENGAGE_STATE_DIR
+    _hooklib.TW_ENGAGE_STATE_DIR = tempfile.mkdtemp(prefix="tw-tag-test-")
+    try:
+        marker = _hooklib.tw_engagement_path("s")
+        os.makedirs(os.path.dirname(marker), exist_ok=True)
+        with open(marker, "w") as fh:
+            fh.write("active")
+        _drive_main({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "TodoWrite",
+            "session_id": "s",
+            "tool_input": {"todos": [
+                {"content": "x", "status": "pending", "activeForm": "y"}]},
+        })
+    finally:
+        _hooklib.TW_ENGAGE_STATE_DIR = old_dir
+    rows = _rows(db)
+    assert len(rows) == 1, rows
+    assert json.loads(rows[0][5])["tw_active"] is True
 
 
 def test_concurrency_writers_never_raise_and_write():

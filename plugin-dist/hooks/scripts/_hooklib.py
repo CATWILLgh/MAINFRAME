@@ -18,6 +18,7 @@ keeps its own smaller self-set locally — do NOT merge it into this one.
 
 import datetime
 import hashlib
+import tempfile
 import json
 import os
 import re
@@ -315,6 +316,26 @@ _TELEMETRY_BANNED_KEYS = frozenset({
     "tool_input", "prompt", "command", "content", "code", "text",
     "path", "file_path", "cwd", "transcript_path",
 })
+
+# Single owner of the task-workflow engagement marker format: the engagement
+# gate writes it, the telemetry sink reads it — a duplicated path computation
+# would be a silent cross-hook dependency.
+TW_ENGAGE_STATE_DIR = os.path.join(tempfile.gettempdir(), "mainframe-tw-engage")
+
+
+def tw_engagement_path(session_id):
+    key = hashlib.sha256(
+        (session_id or "nosession").encode("utf-8")).hexdigest()[:16]
+    return os.path.join(TW_ENGAGE_STATE_DIR, key)
+
+
+def tw_engagement_state(session_id):
+    """Per-session-segment marker: 'active' / 'reminded' / 'fresh' / ''."""
+    try:
+        with open(tw_engagement_path(session_id), encoding="utf-8") as fh:
+            return fh.read().strip()
+    except Exception:
+        return ""
 
 
 def _telemetry_db_path():

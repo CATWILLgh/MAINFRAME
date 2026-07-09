@@ -26,7 +26,8 @@ def _load():
 
 
 gate = _load()
-gate._STATE_DIR = tempfile.mkdtemp(prefix="tw-engage-test-")
+# The marker format lives in _hooklib (single owner); patch the dir there.
+gate._hooklib.TW_ENGAGE_STATE_DIR = tempfile.mkdtemp(prefix="tw-engage-test-")
 
 
 def _drive(payload):
@@ -42,7 +43,7 @@ def _drive(payload):
 
 
 def _state(sid):
-    return gate._read_state(gate._state_path(sid))
+    return gate.tw_engagement_state(sid)
 
 
 def _ss(sid):
