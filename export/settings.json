@@ -245,8 +245,7 @@
       "Bash(docker system prune *)",
       "Bash(docker run *--privileged*)"
     ],
-    "defaultMode": "auto",
-    "disableBypassPermissionsMode": "disable"
+    "defaultMode": "auto"
   },
   "model": "claude-fable-5[1m]",
   "enabledPlugins": {
