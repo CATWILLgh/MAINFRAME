@@ -64,6 +64,12 @@ def test_pep621_project_without_poetry_is_not_labeled_poetry():
     assert pm == "unknown", pm
 
 
+def test_poetry_section_without_dependencies_table_still_poetry():
+    root = _project({"pyproject.toml": '[tool.poetry]\nname = "x"\n'})
+    _deps, _py, pm = recon.collect(root)
+    assert pm == "poetry", pm
+
+
 def test_poetry_section_still_detected():
     root = _project({"pyproject.toml":
                      '[tool.poetry]\nname = "x"\n\n'

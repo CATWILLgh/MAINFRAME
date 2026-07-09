@@ -188,6 +188,40 @@ def test_todo_write_logs_counts_not_content():
     assert "secret task detail" not in whole and "another" not in whole
 
 
+def test_gate_written_marker_reaches_telemetry_end_to_end():
+    """Cross-hook seam: the engagement gate WRITES the marker, telemetry
+    READS it — one shared path function, pinned here across the boundary."""
+    import importlib.util
+    import _hooklib
+    db = _fresh_db()
+    old_dir = _hooklib.TW_ENGAGE_STATE_DIR
+    _hooklib.TW_ENGAGE_STATE_DIR = tempfile.mkdtemp(prefix="tw-e2e-test-")
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "tw_gate", os.path.join(_SCRIPTS, "task-workflow-engagement.py"))
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        saved = sys.stdin
+        sys.stdin = io.StringIO(json.dumps({
+            "hook_event_name": "PreToolUse", "tool_name": "Skill",
+            "session_id": "e2e", "tool_input": {"skill": "task-workflow"}}))
+        try:
+            gate.main()
+        finally:
+            sys.stdin = saved
+        _drive_main({
+            "hook_event_name": "PreToolUse", "tool_name": "TodoWrite",
+            "session_id": "e2e",
+            "tool_input": {"todos": [
+                {"content": "x", "status": "pending", "activeForm": "y"}]},
+        })
+    finally:
+        _hooklib.TW_ENGAGE_STATE_DIR = old_dir
+    rows = _rows(db)
+    assert len(rows) == 1, rows
+    assert json.loads(rows[0][5])["tw_active"] is True
+
+
 def test_todo_write_tagged_tw_active_when_marker_says_active():
     import _hooklib
     db = _fresh_db()
