@@ -205,7 +205,8 @@ def _payload_breakdown(con, event, key):
 
 def collect_dev_state(db_path, feedback_dir):
     """Read-only telemetry + feedback snapshot. Absence => dev not active."""
-    empty_tel = {"sessions": 0, "events": [], "by_agent": [], "by_day": [], "breakdowns": []}
+    empty_tel = {"sessions": 0, "events": [], "by_agent": [], "by_day": [],
+                 "by_source": [], "breakdowns": []}
     state = {"active": False, "telemetry": dict(empty_tel), "feedback": []}
     if os.path.isfile(db_path):
         try:
@@ -221,6 +222,12 @@ def collect_dev_state(db_path, feedback_dir):
                 by_day = con.execute(
                     "SELECT substr(ts, 1, 10) AS day, COUNT(*) FROM events "
                     "WHERE ts IS NOT NULL AND ts != '' GROUP BY day ORDER BY day").fetchall()
+                try:
+                    by_source = con.execute(
+                        "SELECT COALESCE(NULLIF(source, ''), 'claude-code'), COUNT(*) "
+                        "FROM events GROUP BY 1 ORDER BY 2 DESC").fetchall()
+                except sqlite3.OperationalError:
+                    by_source = []  # pre-migration DB without the source column
                 breakdowns = [b for b in (_payload_breakdown(con, ev, key)
                                           for ev, key in _PAYLOAD_BREAKDOWNS) if b["total"]]
             finally:
@@ -230,6 +237,7 @@ def collect_dev_state(db_path, feedback_dir):
                 "events": [list(r) for r in events],
                 "by_agent": [list(r) for r in by_agent],
                 "by_day": [list(r) for r in by_day],
+                "by_source": [list(r) for r in by_source],
                 "breakdowns": breakdowns,
             }
             state["active"] = True

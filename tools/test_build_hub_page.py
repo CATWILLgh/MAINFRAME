@@ -249,17 +249,36 @@ def test_collect_misc_reads_styles_templates_and_empty_layers():
 
 
 def _telemetry_db(rows, columns="ts, session_id, agent_type, event, payload"):
-    """Create a telemetry DB and insert rows; returns the db path."""
+    """Create a telemetry DB and insert rows; returns the db path.
+
+    The table gets a `source` column only when `columns` asks for it, so the
+    default fixture doubles as the pre-migration legacy schema."""
     d = tempfile.mkdtemp()
     db = os.path.join(d, "telemetry.db")
     con = sqlite3.connect(db)
+    source_col = ", source TEXT" if "source" in columns else ""
     con.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, "
-                "session_id TEXT, agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
+                f"session_id TEXT, agent_type TEXT, project TEXT, event TEXT, payload TEXT{source_col})")
     ph = ",".join("?" for _ in columns.split(","))
     con.executemany(f"INSERT INTO events({columns}) VALUES ({ph})", rows)
     con.commit()
     con.close()
     return db
+
+
+def test_dev_state_breaks_down_by_source_and_survives_legacy_db():
+    legacy = _telemetry_db([("2026-06-01T10:00:00", "s1", "", "session", "")])
+    state = bhp.collect_dev_state(db_path=legacy, feedback_dir="/nonexistent")
+    assert state["active"] and state["telemetry"]["by_source"] == []
+
+    tagged = _telemetry_db(
+        [("2026-06-01T10:00:00", "s1", "", "session", "", "claude-code"),
+         ("2026-06-01T11:00:00", "s2", "", "session", "", "opencode"),
+         ("2026-06-02T09:00:00", "s2", "", "tool_call", "", "opencode")],
+        columns="ts,session_id,agent_type,event,payload,source")
+    state = bhp.collect_dev_state(db_path=tagged, feedback_dir="/nonexistent")
+    by_source = dict(state["telemetry"]["by_source"])
+    assert by_source == {"claude-code": 1, "opencode": 2}, by_source
 
 
 def test_dev_state_breaks_down_by_agent_and_day():

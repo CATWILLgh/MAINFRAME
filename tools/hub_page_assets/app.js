@@ -313,6 +313,9 @@
     if (t.by_agent && t.by_agent.length) {
       root.appendChild(section("Events by agent", "agents", t.by_agent.length, barList(t.by_agent)));
     }
+    if (t.by_source && t.by_source.length) {
+      root.appendChild(section("Events by source", "events", t.by_source.length, barList(t.by_source)));
+    }
     (t.breakdowns || []).forEach((b) => {
       const brows = b.items.map(([v, n]) => el("tr", null, [
         el("td", { class: "mono" }, v), el("td", { class: "num" }, String(n))]));
