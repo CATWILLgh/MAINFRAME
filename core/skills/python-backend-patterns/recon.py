@@ -36,9 +36,14 @@ def collect(root: Path) -> tuple[list[str], str, str]:
         proj = data.get("project", {})
         deps.extend(proj.get("dependencies", []))
         py = proj.get("requires-python", py)
-        poetry_deps = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
-        if isinstance(poetry_deps, dict):
-            deps.extend(poetry_deps.keys())
+        # Keyed on the SECTION, not on the .get(...) chain — the chained
+        # default dict is always truthy-typed, which mislabeled every
+        # pyproject project as poetry.
+        poetry = data.get("tool", {}).get("poetry")
+        if isinstance(poetry, dict):
+            poetry_deps = poetry.get("dependencies")
+            if isinstance(poetry_deps, dict):
+                deps.extend(poetry_deps.keys())
             pm = "poetry"
         if "uv" in data.get("tool", {}):
             pm = "uv"
