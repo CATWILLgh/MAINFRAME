@@ -46,3 +46,12 @@ Verified against Claude Code plan mode (2026-05-30): the tool path is flat with 
 
 - **Interactive** — tool plan mode's 5 phases: `EnterPlanMode` → Explore agents (1-3) → Plan agents (1-3) → Review (read critical files, `AskUserQuestion`) → Write (into **both** the tool plan file and the hub audit copy) → `ExitPlanMode` for approval.
 - **Auto** — same Phase 1-4 without the tool: skip `EnterPlanMode`; Explore + Plan still run; Review is internal reasoning; Write only the hub audit copy; then proceed (no `ExitPlanMode`).
+
+## Runtime note
+
+The five-phase interactive flow above and the audit-copy home
+(`~/.claude/plans/<project>/`) are Claude Code conventions. On a runtime
+without the plan-mode tools, run the same phases as ordinary reasoning +
+sub-agent dispatches, treat an explicit user "go" as the approval gate, and
+keep the plan (and its final "what actually happened" retro) inside the
+report instead of the audit copy.

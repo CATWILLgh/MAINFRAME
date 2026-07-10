@@ -26,7 +26,7 @@ The cycle runs in two phases, and the **phase** — not the UI mode flag — dec
 
 **Can the user answer? — gate on phase and presence, not the UI mode flag.**
 
-- **Ask** while you are responding to the user in an active exchange and no boundary has launched execution yet — *even when the auto-mode UI is selected*. Discussion in auto mode is normal; the auto-mode reminder alone does not mean "unattended", and `AskUserQuestion` / `EnterPlanMode` are appropriate here.
+- **Ask** while you are responding to the user in an active exchange and no boundary has launched execution yet — *even when the auto-mode UI is selected*. Discussion in auto mode is normal; the auto-mode reminder alone does not mean "unattended" — structured questions and plan mode are appropriate here.
 - **Do not ask** once execution has launched (post-boundary, running autonomously), or the run is genuinely unattended — headless `claude -p`, a scheduled run, or many turns deep with no human turn. Then pick the most plausible interpretation, record the assumption (plan file, or the report if none), and proceed; reserve a hard stop for an un-discussed business-logic change.
 
 When in doubt during execution — do not block. A frozen unattended run (the user's primary workflow) costs far more than a recorded assumption.
@@ -51,10 +51,10 @@ Do not confuse "ambiguous" with "small". A small change with one obvious approac
 Before any tool dispatch or substantive write, know the dependency chain — model → schema → service → API → frontend; or token → component → page for UI. Not only the file you will edit: most regressions start from an incomplete picture. How the knowledge arrives matters as much as having it:
 
 - Read yourself, in targeted slices, only the file(s) you are about to edit — an edit needs first-hand contact with the exact lines; editing from a second-hand digest is its own regression source.
-- The surrounding chain (callers, schemas, configs, usage sites) arrives as an `Explore` sub-agent digest with `file:line` citations. Wholesale self-reading parks thousands of raw lines in the main context until compaction; the digest carries the same decisions at a fraction of the weight. One quick targeted read may stay inline; two or more exploration reads is already a dispatch.
+- The surrounding chain (callers, schemas, configs, usage sites) arrives as a read-only search sub-agent digest (Claude Code: `Explore`) with `file:line` citations. Wholesale self-reading parks thousands of raw lines in the main context until compaction; the digest carries the same decisions at a fraction of the weight. One quick targeted read may stay inline; two or more exploration reads is already a dispatch.
 - In an iterative review / validation session (the user feeds items one by one), measure the threshold per session, not per item: small items aggregate into exactly the broad search the Orchestration rule delegates, so per-item recon goes to sub-agents by default and the main context stays at validation altitude.
-- If the change touches a library / framework / API / language syntax (including regex flavours, JSON / TOML parsers, datetime libraries, build tool flags) — query Context7 first (`resolve-library-id` → `query-docs`). Memory drifts; verify.
-- More than 3 independent search angles — parallel `Explore` sub-agents, one per angle, in one message.
+- A change touching a library / framework / API / language syntax (regex flavours, JSON / TOML parsers, datetime libraries, build tool flags) → Context7 first (umbrella Evidence rules). Memory drifts; verify.
+- More than 3 independent search angles — parallel read-only search sub-agents, one per angle, in one message.
 
 Recon trades minutes now against hours of regression debugging later. Skipping is the most expensive optimisation — but so is doing it wholesale in the orchestrator's own context.
 
@@ -64,21 +64,19 @@ Write an audit file before dispatching execution work when **either** the task d
 
 When this step fires, read [plan-file.md](plan-file.md) for the format, the two plan-file paths (interactive tool file vs the always-written hub audit copy), and the interactive-vs-auto workflow. The audit copy persists outside the project (never tracked by git); its value is the diff between plan and reality, filled in at Step 16.
 
-At the same threshold, also seed a `TodoWrite` checklist with the cycle's drop-prone checkpoints — recon, advisor #1, TDD, verify, edge-case sweep, advisor #2, out-of-scope tickets, commit — and mark each as it lands. In a long run the persistent, self-maintained list is the guard against silently dropping a mandatory step; it tracks what you have done, where the skill body only states what to do.
+At the same threshold, also seed a persistent todo checklist (Claude Code: `TodoWrite`) with the cycle's drop-prone checkpoints — recon, advisor #1, TDD, verify, edge-case sweep, advisor #2, out-of-scope tickets, commit — and mark each as it lands. In a long run the persistent, self-maintained list is the guard against silently dropping a mandatory step; it tracks what you have done, where the skill body only states what to do.
 
 ### 4. Parallel dispatch of investigation sub-agents
 
-Independent investigation tasks dispatch in **one message** with multiple `Agent` calls. Sequential calls in main context waste turns and fill the parent context with raw tool output.
+Independent investigation tasks dispatch in **one message** with multiple sub-agent calls (Claude Code: the `Agent` tool). Sequential calls in main context waste turns and fill the parent context with raw tool output.
 
-Default to `run_in_background: true` when fanning out (several agents, or any long-running one): interleaved foreground replies in the chat are hard to trace afterwards; read each result on its completion notification. Keep foreground only for a single quick agent whose result gates the very next step.
+Default to background fan-out where offered (Claude Code: `run_in_background: true`) — several agents, or any long-running one: interleaved foreground replies are hard to trace; read each result on its completion notification. Keep foreground only for a single quick agent whose result gates the very next step.
 
 In every sub-agent prompt — required fields:
 - **Path restriction:** "Operate inside `<cwd>` only. Do not Read / Glob / Grep outside that root."
 - **Return cap:** "Reply in ≤ N words / lines" (pick N by depth: 200 for quick recon, 600 for deep dive).
 - **Format:** exact structure expected — sections, headers, `file:line` citations.
 - **Concrete deliverable:** "Return paths with line ranges, not generalities" / "Return the failing assertion, not a description of it".
-
-Prompts to sub-agents are English regardless of conversation language — models follow English more precisely and spend fewer tokens.
 
 ### 5. Synthesis in main context
 
@@ -102,11 +100,11 @@ Once a leading approach exists from synthesis, gate it before any writing or lar
 
 ### 7. Approval (interactive) / proceed (auto)
 
-- **Interactive + plan file exists:** wait for `ExitPlanMode` approval. The approval is the execution authorization — no extra "when to start?" turn. `ExitPlanMode`'s `allowedPrompts` already captures the granted permissions.
+- **Interactive + plan file exists:** wait for the plan-approval gate (Claude Code: `ExitPlanMode`, whose `allowedPrompts` captures the granted permissions); without such a gate, present the plan and await an explicit go. The approval is the execution authorization — no extra "when to start?" turn.
 - **Interactive + no plan file:** the synthesised plan is presented inline; proceed unless the user objects within the same turn.
 - **Auto-mode:** proceed.
 
-A casual "ok / sounds good" in regular chat is not a substitute for `ExitPlanMode` approval on a non-trivial change with a written plan. If a plan file exists in interactive mode, route through the gate.
+A casual "ok / sounds good" in regular chat is not a substitute for the plan-approval gate on a non-trivial change with a written plan. If a plan file exists in interactive mode, route through the gate.
 
 ### 8. Execution
 
@@ -118,7 +116,7 @@ Dispatch specialised sub-agents for the work itself — one per independent piec
 - **Anti-regression scope:** "do not change `<list of adjacent files>` even if you spot opportunities" — those are tickets, not edits.
 - **Verification command:** "after the edit, run `<lint | typecheck | test>` and report the result".
 
-Independent execution phases dispatch in parallel (one message, multiple `Agent` calls). Dependent phases run sequentially.
+Independent execution phases dispatch in parallel (one message, multiple sub-agent calls). Dependent phases run sequentially.
 
 Specialised agents — pick by the project's stack. If the project has a `CLAUDE.md` listing specialised agents (e.g. `backend-python-developer`, `enterprise-react-developer`), use those. Otherwise dispatch a `general-purpose` sub-agent with explicit constraints.
 
