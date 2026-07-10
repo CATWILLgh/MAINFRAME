@@ -6,6 +6,11 @@ permission:
   bash: deny
   edit: deny
   task: deny
+tools:
+  bash: false
+  edit: false
+  write: false
+  task: false
 ---
 
 <!-- Generated from MAINFRAME hub (core/agents/web-search.md) — do not edit; regenerate via ./install.sh --opencode.

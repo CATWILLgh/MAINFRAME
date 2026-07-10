@@ -5,6 +5,10 @@ permission:
   webfetch: deny
   websearch: deny
   task: deny
+tools:
+  webfetch: false
+  websearch: false
+  task: false
 ---
 
 <!-- Generated from MAINFRAME hub (core/agents/nextjs-backend-engineer.md) — do not edit; regenerate via ./install.sh --opencode.

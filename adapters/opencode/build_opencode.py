@@ -95,6 +95,26 @@ def derive_agent_permission(contract):
     return perm
 
 
+def derive_agent_tools(contract):
+    """Hard-disable ungranted tools (they vanish from the model's toolset).
+
+    Mirrors the permission denies — belt and suspenders: `tools: false`
+    removes the schema from context entirely, the deny still guards anything
+    a future OpenCode version might route differently. Bash disappears too
+    for read-only agents: `write: false` alone would leave shell writes open.
+    """
+    tools = {}
+    if not contract.get("needs-write"):
+        tools["bash"] = False
+        tools["edit"] = False
+        tools["write"] = False
+    if not contract.get("needs-web"):
+        tools["webfetch"] = False
+        tools["websearch"] = False
+    tools["task"] = False
+    return tools
+
+
 # OpenCode-native levers a machine-local enrich file may set per agent —
 # these have no hub-source equivalent, so they arrive as user preferences.
 ENRICH_KEYS = ("model", "temperature", "mode", "color", "steps",
@@ -119,6 +139,7 @@ def project_agent(meta, body, enrich=None):
     perm = derive_agent_permission(meta)
     if perm:
         fm["permission"] = perm
+    fm["tools"] = derive_agent_tools(meta)
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True,
                            width=100000).rstrip("\n")
 

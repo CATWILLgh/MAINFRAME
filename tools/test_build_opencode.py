@@ -130,11 +130,19 @@ def test_derive_permission_write_capable_keeps_bash_and_edit():
     assert perm["websearch"] == "deny"
 
 
+def test_derive_tools_disable_mirrors_permission_denies():
+    tools = bo.derive_agent_tools({"needs-write": False, "needs-web": True})
+    assert tools == {"bash": False, "edit": False, "write": False, "task": False}
+    tools = bo.derive_agent_tools({"needs-write": True, "needs-web": False})
+    assert tools == {"webfetch": False, "websearch": False, "task": False}
+
+
 def test_project_agent_maps_frontmatter_and_drops_hub_keys():
     meta, body = bo.parse_frontmatter(READONLY_AGENT)
     out = bo.project_agent(meta, body)
     fm, out_body = bo.parse_frontmatter(out)
-    assert set(fm) == {"description", "mode", "steps", "permission"}
+    assert set(fm) == {"description", "mode", "steps", "permission", "tools"}
+    assert fm["tools"]["bash"] is False and fm["tools"]["task"] is False
     assert fm["mode"] == "subagent"
     assert fm["steps"] == 50  # turn-budget maps to OpenCode's soft step cap
     assert fm["description"] == "Adversarial review of a proposed decision."
