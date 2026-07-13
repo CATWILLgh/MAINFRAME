@@ -91,6 +91,40 @@ async function test(name, fn) {
 }
 const assert = (cond, msg) => { if (!cond) throw new Error(msg) }
 
+await test("effectiveCwd: no workdir, no cd → project root", async () => {
+  const f = MainframeGates.effectiveCwd
+  assert(f("git commit -m x", undefined, "/proj") === "/proj", f("git commit -m x", undefined, "/proj"))
+})
+
+await test("effectiveCwd: workdir param resolves against the project root", async () => {
+  const f = MainframeGates.effectiveCwd
+  assert(f("git commit", "sub/pkg", "/proj") === "/proj/sub/pkg", f("git commit", "sub/pkg", "/proj"))
+  assert(f("git commit", "/abs/repo", "/proj") === "/abs/repo", f("git commit", "/abs/repo", "/proj"))
+})
+
+await test("effectiveCwd: leading cd is applied to the command's cwd", async () => {
+  const f = MainframeGates.effectiveCwd
+  assert(f("cd sub && git commit -m x", undefined, "/proj") === "/proj/sub", f("cd sub && git commit -m x", undefined, "/proj"))
+  assert(f("cd /other/repo && git commit", undefined, "/proj") === "/other/repo", f("cd /other/repo && git commit", undefined, "/proj"))
+})
+
+await test("effectiveCwd: chained leading cd segments compose, stop at the real command", async () => {
+  const f = MainframeGates.effectiveCwd
+  assert(f("cd a && cd b && git commit", undefined, "/proj") === "/proj/a/b", f("cd a && cd b && git commit", undefined, "/proj"))
+})
+
+await test("effectiveCwd: cd applies on top of workdir", async () => {
+  const f = MainframeGates.effectiveCwd
+  assert(f("cd nested && git commit", "pkg", "/proj") === "/proj/pkg/nested", f("cd nested && git commit", "pkg", "/proj"))
+})
+
+await test("effectiveCwd: unsafe constructs fall back to the start cwd", async () => {
+  const f = MainframeGates.effectiveCwd
+  // subshell / command-substitution — do not attempt to reason about cwd
+  assert(f("cd $(mktemp -d) && git commit", undefined, "/proj") === "/proj", f("cd $(mktemp -d) && git commit", undefined, "/proj"))
+  assert(f("(cd sub && git commit)", undefined, "/proj") === "/proj", f("(cd sub && git commit)", undefined, "/proj"))
+})
+
 await test("every module export is a function (legacy loader contract)", async () => {
   for (const [name, value] of Object.entries(pluginModule)) {
     assert(typeof value === "function",
@@ -108,6 +142,32 @@ await test("no Bun $ (desktop Node runtime): plugin stays active and blocks", as
     hooks["tool.execute.before"]({ tool: "bash" }, { args: { command: "git commit -m x" } }))
   assert(msg && msg.includes("Commit blocked — secret"), `got: ${msg}`)
   assert(fake.calls.some((c) => c.cmdline.includes("secret-commit-gate.py")), "gate not spawned")
+})
+
+await test("before-hook runs the secret gate in the command's effective cwd", async () => {
+  const { hooks, calls } = await plugin({
+    "secret-commit-gate.py": { exitCode: 0, stdout: "" },
+  })
+  await hooks["tool.execute.before"](
+    { tool: "bash" }, { args: { command: "cd packages/api && git commit -m x" } })
+  const spawn = calls.find((c) => c.cmdline.includes("secret-commit-gate.py"))
+  assert(spawn, "secret gate not spawned")
+  assert(spawn.cwd === "/tmp/proj/packages/api", `wrong cwd: ${spawn.cwd}`)
+  assert(spawn.stdin.includes('"project_dir":"/tmp/proj"'), "project_dir must stay the root")
+})
+
+await test("a non-existent computed cwd falls back to the project root (no wrong-repo miss)", async () => {
+  const { hooks, calls } = await plugin({
+    "secret-commit-gate.py": { exitCode: 0, stdout: "" },
+  })
+  // `cd $VAR` resolves literally to a path that does not exist; the real shell
+  // would land in a real repo, so falling back to root keeps the pre-fix floor.
+  runtime.existsSync = () => false
+  await hooks["tool.execute.before"](
+    { tool: "bash" }, { args: { command: "cd $VAR && git commit -m x" } })
+  const spawn = calls.find((c) => c.cmdline.includes("secret-commit-gate.py"))
+  assert(spawn, "secret gate not spawned")
+  assert(spawn.cwd === "/tmp/proj", `expected root fallback, got: ${spawn.cwd}`)
 })
 
 await test("deny from secret gate throws with the script reason", async () => {

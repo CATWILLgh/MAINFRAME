@@ -36,6 +36,7 @@
 
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
+import path from "node:path"
 
 // Seam for the stock-node test suite: tests override these properties.
 // Attached to the factory below, NOT module-exported: OpenCode's legacy
@@ -100,6 +101,34 @@ const baseIn = (names) => (cc) => {
 const cmdHas = (needle) => (cc) =>
   String(cc.tool_input.command || "").includes(needle)
 
+function resolveDir(p, base) {
+  if (!p) return base
+  let s = String(p).trim()
+  if ((s.startsWith('"') && s.endsWith('"')) ||
+      (s.startsWith("'") && s.endsWith("'"))) s = s.slice(1, -1)
+  if (s === "~" || s.startsWith("~/")) s = (process.env.HOME || "") + s.slice(1)
+  return path.resolve(base, s)
+}
+
+// The cwd a bash command effectively runs in, so a gate scanning the git
+// index (secret-commit-gate) sees the RIGHT repo. OpenCode's bash tool takes
+// a `workdir` param (its own recommended alternative to `cd`) and does NOT
+// persist cwd across calls — so start = workdir-or-project-root, then apply
+// any LEADING `cd`/`pushd` in the same command. Best-effort: a subshell or
+// command-substitution bails to the start cwd. Precision beyond "inside the
+// target repo" is unneeded — the gate runs `git rev-parse --show-toplevel`.
+function effectiveCwd(command, workdir, projectRoot) {
+  let cwd = resolveDir(workdir, projectRoot)
+  const cmd = String(command || "")
+  if (/[()`]|\$\(/.test(cmd)) return cwd
+  for (const seg of cmd.split(/&&|;/)) {
+    const m = seg.match(/^\s*(?:cd|pushd)\s+([^\s&|;]+)/)
+    if (!m) break
+    cwd = resolveDir(m[1], cwd)
+  }
+  return cwd
+}
+
 // Spawn filters over-approximate on purpose; each script re-filters exactly.
 const ROWS = [
   { script: "secret-commit-gate.py", event: "before", tools: ["bash"], filter: cmdHas("commit") },
@@ -126,7 +155,17 @@ function ccPayload(tool, args, directory, sessionID) {
   const a = args || {}
   // source/session_id feed the telemetry sink's harness dimension; the gate
   // detectors ignore them.
-  const common = { cwd: directory, project_dir: directory,
+  // project_dir stays the project root (the boundary anchor); cwd is where the
+  // command effectively runs, so a git-index gate scans the right repo. A
+  // computed cwd that does not exist (e.g. `cd $VAR` — a var the literal parse
+  // can't expand) falls back to root: the real shell lands in a real repo, so
+  // root is never worse than the pre-fix always-root behavior.
+  let cwd = directory
+  if (tool === "bash") {
+    const eff = effectiveCwd(a.command, a.workdir, directory)
+    cwd = runtime.existsSync(eff) ? eff : directory
+  }
+  const common = { cwd, project_dir: directory,
                    session_id: String(sessionID ?? ""), source: "opencode" }
   if (tool === "bash") {
     return { tool_name: "Bash", tool_input: { command: String(a.command ?? "") },
@@ -258,3 +297,4 @@ export const MainframeGates = async ({ directory }) => {
 }
 
 MainframeGates.runtime = runtime
+MainframeGates.effectiveCwd = effectiveCwd
