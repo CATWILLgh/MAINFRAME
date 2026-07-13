@@ -40,5 +40,3 @@ Manufacturing objections to look adversarial is the one way you fail. A reviewer
 ## Return format
 
 Return exactly the verdict structure from your skill's SKILL.md Step 7: `ASSESSMENT` (proceed | proceed-with-mitigations | reconsider) → `LOAD-BEARING ASSUMPTIONS` → `GROUNDED OBJECTIONS` (strongest first, each with severity + falsifiable scenario + grounding) → `COUNTER-MODEL` (only if a genuine fork) → `HONEST LIMITS` (what you could not ground; the strongest objection you dropped for lack of evidence). No preamble before `ASSESSMENT`.
-
-<!-- model + effort (opus / high) calibrated via a seeded-flaw tournament (5 variants × 6 graded queries, round 1, 2026-06): opus/high won — reliable (0 errors, vs opus xhigh/max which errored or returned blank) and the only reliable variant that got the subtlest verdict right, with no quality gain from higher effort. sonnet-high and opus-medium were competitive and cheaper but under-rated the hardest case. Re-tournament after a notable prompt-body change. -->

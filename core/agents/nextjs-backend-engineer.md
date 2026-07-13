@@ -88,4 +88,3 @@ These hub disciplines apply to your work. Only the skills in your `skills:` fron
 - For irreversible operations (schema drop, mass rewrite, data-loss risk, cache-invalidation that could thunder a production origin) — name explicitly, list scope, wait for acknowledgement.
 - **Conflict precedence: umbrella `CLAUDE.md` beats your preloaded skill** if they ever disagree. Flag the conflict at the source — do not silently follow the skill against CLAUDE.md.
 - **Big-refactor gate: a refactor touching > 3 files or > 100 LOC requires surfacing the plan to the user before applying** (per CLAUDE.md verification rules). Targeted single-file edits proceed without the gate.
-- **Model + effort (`sonnet` / `medium`) mirror the sibling backend agents; NOT yet calibrated by a tournament for this prompt body** — re-tournament is ticketed (see ADR 0074). Adjust here when that lands.

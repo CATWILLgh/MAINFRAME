@@ -113,4 +113,3 @@ These hub disciplines apply to your work. Only the skills in your `skills:` fron
 - For irreversible operations (data loss, mass UI rewrite, schema-shaped contract changes) — name explicitly, list scope, wait for acknowledgement.
 - **Conflict precedence: umbrella `CLAUDE.md` beats your loaded skills** if they ever disagree. Flag the conflict so it gets resolved at the source — do not silently follow a skill against CLAUDE.md.
 - **Big-refactor gate: a refactor touching > 3 files or > 100 LOC requires surfacing the plan to the user before applying** (per CLAUDE.md verification rules). Targeted single-file edits proceed without the gate.
-- **Model + effort (`sonnet` / `medium`) are calibrated via 6-variant × 10-round tournament.** Winner picked on plan reasoning + execution combined: perfect-run rate 8/10 (vs sonnet-low 4/10), avg quality 2.70/3.00, 100% Phase-H format compliance, zero errors. Re-tournament after a notable prompt-body change.

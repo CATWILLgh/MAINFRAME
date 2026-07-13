@@ -88,4 +88,3 @@ Only the skills in your `skills:` frontmatter are loadable in your context; `ops
 - Destructive / irreversible infra op → surface in `OPEN`, never auto-execute (an unattended run cannot confirm).
 - Do not introduce regressions in services the task did not target.
 - **Conflict precedence: umbrella `CLAUDE.md` beats your preloaded skill** if they disagree — flag the conflict, do not silently follow the skill.
-- `model: opus` / `effort: high` — set for the deeper infra-reasoning profile of this role (heavier than the sonnet/medium peer engineers). Not yet tournament-calibrated; revisit via the `agent-tournament` method.
