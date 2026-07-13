@@ -340,6 +340,166 @@ await test("telemetry row spawns tagged with source/session/event", async () => 
   }
 })
 
+// Stop-gates emit `{"decision":"block","reason":...}` (not hookSpecificOutput).
+function block(reason) {
+  return JSON.stringify({ decision: "block", reason })
+}
+
+function fakeClient(promptImpl) {
+  const prompt = []
+  const toast = []
+  return {
+    _calls: { prompt, toast },
+    session: {
+      prompt: async (a) => {
+        prompt.push(a)
+        if (promptImpl) return promptImpl(a)
+        return {}
+      },
+    },
+    tui: { showToast: async (a) => { toast.push(a); return true } },
+  }
+}
+
+// Shared (not spread-copied) responses so a test can mutate the finding set
+// between consecutive idles.
+async function idlePlugin(responses, client) {
+  const fake = fakeRuntime(responses)
+  const hooks = await MainframeGates({ client, directory: "/tmp/proj" })
+  return { hooks, calls: fake.calls, prompt: client._calls.prompt,
+           toast: client._calls.toast }
+}
+
+const idle = (sid = "ses_1") =>
+  ({ event: { type: "session.idle", properties: { sessionID: sid } } })
+
+const nudgeText = (p) => p.body.parts[0].text
+
+const CHANGED = { "git diff": { exitCode: 1, stdout: "" } }   // uncommitted work present
+const SEC = "python-security-stop-gate.py"
+const SEC2 = "nodejs-security-stop-gate.py"
+const QUAL = "frontend-fsd-gate.py"
+
+await test("idle with no git changes: no gate spawn, no nudge, no toast", async () => {
+  const c = fakeClient()
+  const { hooks, calls, prompt, toast } = await idlePlugin(
+    { "git diff": { exitCode: 0, stdout: "" } }, c)
+  await hooks.event(idle())
+  assert(!calls.some((x) => x.cmdline.includes("stop-gate") || x.cmdline.includes("security-stop")),
+         "gates spawned on a clean tree")
+  assert(prompt.length === 0 && toast.length === 0, "nudge/toast on clean tree")
+})
+
+await test("security finding: one aggregated nudge to the idling session + one toast", async () => {
+  const c = fakeClient()
+  const { hooks, prompt, toast } = await idlePlugin(
+    { ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-A") } }, c)
+  await hooks.event(idle("ses_9"))
+  assert(prompt.length === 1, `expected 1 nudge, got ${prompt.length}`)
+  assert(prompt[0].path.id === "ses_9", "nudge went to the wrong session")
+  assert(nudgeText(prompt[0]).includes("SEC-A"), nudgeText(prompt[0]))
+  assert(toast.length === 1, "human toast missing")
+})
+
+await test("a quality finding also nudges the model (all gates, CC-parity)", async () => {
+  const c = fakeClient()
+  const { hooks, prompt, toast } = await idlePlugin(
+    { ...CHANGED, [QUAL]: { exitCode: 0, stdout: block("Q-FSD") } }, c)
+  await hooks.event(idle())
+  assert(prompt.length === 1 && nudgeText(prompt[0]).includes("Q-FSD"),
+         "quality finding must nudge under the widened scope")
+  assert(toast.length === 1, "toast missing")
+})
+
+await test("nudge aggregates security AND quality findings into one message", async () => {
+  const c = fakeClient()
+  const { hooks, prompt, toast } = await idlePlugin(
+    { ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-A") },
+      [QUAL]: { exitCode: 0, stdout: block("Q-FSD") } }, c)
+  await hooks.event(idle())
+  assert(prompt.length === 1, "must aggregate into one message")
+  const t = nudgeText(prompt[0])
+  assert(t.includes("SEC-A") && t.includes("Q-FSD"), "both findings must be in the nudge")
+  assert(toast.length === 1, "toast missing")
+})
+
+await test("aggregation: two security findings become ONE nudge message", async () => {
+  const c = fakeClient()
+  const { hooks, prompt } = await idlePlugin(
+    { ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-A") },
+      [SEC2]: { exitCode: 0, stdout: block("SEC-B") } }, c)
+  await hooks.event(idle())
+  assert(prompt.length === 1, `mass firing must aggregate, got ${prompt.length} messages`)
+  const t = nudgeText(prompt[0])
+  assert(t.includes("SEC-A") && t.includes("SEC-B"), "both findings must be in the one message")
+})
+
+await test("loop guard: an unchanged finding set does not re-nudge on the next idle", async () => {
+  const c = fakeClient()
+  const { hooks, prompt } = await idlePlugin(
+    { ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-A") } }, c)
+  await hooks.event(idle())
+  await hooks.event(idle())
+  assert(prompt.length === 1, `re-nudged on unchanged set: ${prompt.length}`)
+})
+
+await test("MAX_NUDGES caps repeated nudging even as the finding set changes", async () => {
+  const c = fakeClient()
+  const responses = { ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-1") } }
+  const { hooks, prompt } = await idlePlugin(responses, c)
+  for (let i = 1; i <= 5; i++) {
+    responses[SEC] = { exitCode: 0, stdout: block("SEC-" + i) }
+    await hooks.event(idle())
+  }
+  assert(prompt.length === 3, `expected cap at 3, got ${prompt.length}`)
+})
+
+await test("a fully-clean scan re-arms the nudge for a finding that returns", async () => {
+  const c = fakeClient()
+  const responses = { ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-X") } }
+  const { hooks, prompt } = await idlePlugin(responses, c)
+  await hooks.event(idle())                       // nudge 1 (SEC-X)
+  await hooks.event(idle())                       // guarded (same set)
+  responses[SEC] = { exitCode: 0, stdout: "" }     // all gates clean now
+  await hooks.event(idle())                       // clean → session state deleted
+  responses[SEC] = { exitCode: 0, stdout: block("SEC-X") }  // finding returns
+  await hooks.event(idle())                       // nudge 2 — clean scan re-armed it
+  assert(prompt.length === 2, `clean scan did not re-arm: ${prompt.length}`)
+})
+
+const scanned = (calls) =>
+  calls.some((x) => x.cmdline.includes("git diff") ||
+    x.cmdline.includes("stop-gate") || x.cmdline.includes("security-stop"))
+
+await test("non-idle event is ignored", async () => {
+  const c = fakeClient()
+  const { hooks, calls, prompt, toast } = await idlePlugin({ ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-A") } }, c)
+  await hooks.event({ event: { type: "session.updated", properties: { sessionID: "x" } } })
+  assert(!scanned(calls) && prompt.length === 0 && toast.length === 0, "acted on a non-idle event")
+})
+
+await test("missing sessionID is a no-op", async () => {
+  const c = fakeClient()
+  const { hooks, calls, prompt } = await idlePlugin({ ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-A") } }, c)
+  await hooks.event({ event: { type: "session.idle", properties: {} } })
+  assert(!scanned(calls) && prompt.length === 0, "acted without a sessionID")
+})
+
+await test("not-ready plugin ignores idle", async () => {
+  const c = fakeClient()
+  fakeRuntime({ "python3 -c": { exitCode: 1, stdout: "" } })
+  const hooks = await MainframeGates({ client: c, directory: "/tmp/proj" })
+  await hooks.event(idle())
+  assert(c._calls.prompt.length === 0 && c._calls.toast.length === 0, "not-ready acted on idle")
+})
+
+await test("idle handler never throws when the injection rejects", async () => {
+  const c = fakeClient(() => { throw new Error("prompt boom") })
+  const { hooks } = await idlePlugin({ ...CHANGED, [SEC]: { exitCode: 0, stdout: block("SEC-A") } }, c)
+  const msg = await expectThrow(() => hooks.event(idle()))
+  assert(msg === null, `idle handler threw: ${msg}`)
+})
+
 // The two tests below spawn a real python3 child: a stubbed spawn can verify
 // dispatch but not that the payload actually crosses the process boundary.
 

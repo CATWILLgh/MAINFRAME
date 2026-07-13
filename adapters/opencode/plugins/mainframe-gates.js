@@ -58,11 +58,11 @@ const PAYLOAD_MAX_BYTES = 5_000_000
 // handlers keep their fail-open / never-throw contracts. Stream `error`
 // listeners are mandatory — an unhandled EPIPE (script exits before reading
 // stdin) would crash the host engine, not just this plugin.
-const runProcess = (args, opts, stdinData) =>
+const runProcess = (cmd, args, opts, stdinData) =>
   new Promise((resolve) => {
     let child
     try {
-      child = runtime.spawn("python3", args,
+      child = runtime.spawn(cmd, args,
                             { ...opts, stdio: ["pipe", "pipe", "ignore"] })
     } catch (e) {
       resolve({ exitCode: 1, stdout: "" })
@@ -151,6 +151,25 @@ const ASK_SUFFIX =
   " [mainframe-gates: this action needs the user's explicit go-ahead;" +
   " relay the reason above and wait for their answer in chat.]"
 
+// End-of-turn (session.idle) stop-gate emulation. OpenCode has no blocking
+// turn-end (upstream #16626 unshipped) and its event handler is fire-and-forget
+// (#16879, benign on the persistent desktop session; the target surface).
+// All stop-gates nudge the model (CC-parity: in Claude Code every Stop-gate
+// blocks) AND the human gets a summary toast. The nudge is an injected, engaged
+// turn a passive per-edit note cannot match, and it also catches code written
+// via bash — which the edit/write-only advisory rows structurally miss.
+const STOP_GATES = [
+  "python-security-stop-gate.py", "nodejs-security-stop-gate.py",
+  "stop-gate-suppression-markers.py", "stop-gate-comment-discipline.py",
+  "frontend-fsd-gate.py",
+]
+const MAX_NUDGES = 3
+const NUDGE_PREFIX =
+  "⚙️ [mainframe auto-check] Automated harness message, not the user. " +
+  "Unresolved before you finish this turn:\n"
+const NUDGE_SUFFIX =
+  "\nResolve them, or reply explaining why they are acceptable."
+
 function ccPayload(tool, args, directory, sessionID) {
   const a = args || {}
   // source/session_id feed the telemetry sink's harness dimension; the gate
@@ -187,11 +206,11 @@ function ccPayload(tool, args, directory, sessionID) {
   return null
 }
 
-export const MainframeGates = async ({ directory }) => {
+export const MainframeGates = async ({ client, directory }) => {
   let ready = false
   try {
     const probe = await runProcess(
-      ["-c", "import sys; print(sys.version_info[0])"], {}, "")
+      "python3", ["-c", "import sys; print(sys.version_info[0])"], {}, "")
     ready = probe.exitCode === 0 &&
       ["secret-commit-gate.py", "path-validation.py"]
         .every((s) => runtime.existsSync(`${runtime.scriptsDir}/${s}`))
@@ -216,7 +235,7 @@ export const MainframeGates = async ({ directory }) => {
       return null
     }
     const spawned = runProcess(
-      [`${runtime.scriptsDir}/${row.script}`],
+      "python3", [`${runtime.scriptsDir}/${row.script}`],
       { cwd: payload.cwd,
         env: { ...process.env, CLAUDE_PROJECT_DIR: payload.project_dir } },
       json)
@@ -235,6 +254,39 @@ export const MainframeGates = async ({ directory }) => {
   const matching = (event, tool, payload) =>
     ROWS.filter((r) => r.event === event && r.tools.includes(tool) &&
                        r.filter(payload))
+
+  // Per-session idle state: { lastNudgedSec, nudgeCount, lastToast }. Bounded
+  // by deletion on a fully-clean scan; keyed by sessionID (many sessions can
+  // share one instance/directory).
+  const sessionState = new Map()
+
+  // Run one stop-gate over `cwd`'s working-tree diff (the script self-scans
+  // `git diff HEAD`). Returns the block reason or null. Capped like advisory
+  // rows — the turn has already ended, a late finding is worthless.
+  const runStopGate = async (script, cwd) => {
+    const payload = JSON.stringify({
+      cwd, project_dir: cwd, stop_hook_active: false,
+      source: "opencode", hook_event_name: "Stop" })
+    const spawned = runProcess(
+      "python3", [`${runtime.scriptsDir}/${script}`],
+      { cwd, env: { ...process.env, CLAUDE_PROJECT_DIR: cwd } }, payload)
+    const res = await Promise.race([
+      spawned, new Promise((r) => setTimeout(r, ROW_TIMEOUT_MS, null))])
+    if (!res || res.exitCode !== 0) return null
+    const text = res.stdout.toString().trim()
+    if (!text) return null
+    try {
+      const p = JSON.parse(text)
+      return p && p.decision === "block" ? String(p.reason || script) : null
+    } catch (e) {
+      return null
+    }
+  }
+
+  const scanGates = async (scripts, cwd) =>
+    (await Promise.all(scripts.map((s) => runStopGate(s, cwd)))).filter(Boolean)
+
+  const setKey = (arr) => JSON.stringify(arr.slice().sort())
 
   return {
     "tool.execute.before": async (input, output) => {
@@ -291,6 +343,55 @@ export const MainframeGates = async ({ directory }) => {
           notes.map((n) => `\n[mainframe] ${n}`).join("")
       } catch (e) {
         console.error("[mainframe-gates] advisory error, skipping notes: " + e)
+      }
+    },
+
+    // End-of-turn stop-gate emulation. Never throws (fire-and-forget host).
+    event: async ({ event }) => {
+      try {
+        if (!ready || !event || event.type !== "session.idle") return
+        const sid = event.properties && event.properties.sessionID
+        if (!sid) return
+        // The host delivers only this instance's directory's events, so the
+        // idling session's repo IS `directory`. `git diff --quiet HEAD` exits
+        // 1 iff there is uncommitted work; 0 (clean) or an error skips.
+        const changed = await runProcess(
+          "git", ["diff", "--quiet", "HEAD"], { cwd: directory }, "")
+        if (changed.exitCode !== 1) { sessionState.delete(sid); return }
+
+        const findings = await scanGates(STOP_GATES, directory)
+        if (!findings.length) { sessionState.delete(sid); return }
+
+        const st = sessionState.get(sid) || { nudgeCount: 0 }
+        const key = setKey(findings)
+
+        if (st.lastToast !== key) {
+          st.lastToast = key
+          try {
+            await client.tui.showToast({ body: {
+              message: `mainframe: ${findings.length} unresolved finding(s) ` +
+                `before finishing this turn`,
+              variant: "warning" } })
+          } catch (e) { /* toast is best-effort */ }
+        }
+
+        // Re-nudge only when the finding set CHANGES, capped at MAX_NUDGES so a
+        // model that keeps editing (shifting line numbers) or ignoring cannot
+        // be nagged forever. A fully-clean scan deletes the key (above),
+        // re-arming the budget for genuinely new findings later.
+        if (key !== st.lastNudged && (st.nudgeCount || 0) < MAX_NUDGES) {
+          st.lastNudged = key
+          st.nudgeCount = (st.nudgeCount || 0) + 1
+          const text = NUDGE_PREFIX +
+            findings.map((r) => `- ${r}`).join("\n") + NUDGE_SUFFIX
+          try {
+            await client.session.prompt(
+              { path: { id: sid }, body: { parts: [{ type: "text", text }] } })
+          } catch (e) { /* injection is best-effort on a fire-and-forget host */ }
+        }
+        sessionState.set(sid, st)
+      } catch (e) {
+        console.error("[mainframe-gates] idle handler error: " + e)
       }
     },
   }
