@@ -25,13 +25,68 @@
  * notes arrive after execution, not before (teaches the next call); notes
  * share the tool-output channel instead of a separate context channel, so a
  * parsed-by-the-agent stdout may carry a trailing note on hinted commands.
+ *
+ * Spawning goes through node:child_process, never the host-provided Bun `$`:
+ * the desktop app runs the engine on Node, where OpenCode hands plugins
+ * `$ = undefined` (plugin host: `typeof Bun === "undefined" ? undefined :
+ * Bun.$`) — a `$`-based plugin silently self-disables there. One portable
+ * path serves both runtimes; the payload travels via child stdin, which the
+ * detector scripts already read.
  */
 
-const SCRIPTS_DIR = `${process.env.HOME}/.claude/skills/mainframe/hooks/scripts`
+import { spawn } from "node:child_process"
+import { existsSync } from "node:fs"
+
+// Seam for the stock-node test suite: tests override these properties.
+// Attached to the factory below, NOT module-exported: OpenCode's legacy
+// loader treats every module export as a plugin factory and throws on any
+// non-function export, killing the whole plugin.
+const runtime = {
+  spawn,
+  existsSync,
+  scriptsDir: `${process.env.HOME}/.claude/skills/mainframe/hooks/scripts`,
+}
 
 const CODE_HINT = () => true
 const ROW_TIMEOUT_MS = 8000
 const MAX_SEEN_NOTES = 500
+// Stdin has no ARG_MAX; this bounds only pathological payloads.
+const PAYLOAD_MAX_BYTES = 5_000_000
+
+// Never rejects: any spawn/stream failure resolves { exitCode: 1 } so both
+// handlers keep their fail-open / never-throw contracts. Stream `error`
+// listeners are mandatory — an unhandled EPIPE (script exits before reading
+// stdin) would crash the host engine, not just this plugin.
+const runProcess = (args, opts, stdinData) =>
+  new Promise((resolve) => {
+    let child
+    try {
+      child = runtime.spawn("python3", args,
+                            { ...opts, stdio: ["pipe", "pipe", "ignore"] })
+    } catch (e) {
+      resolve({ exitCode: 1, stdout: "" })
+      return
+    }
+    const chunks = []
+    let settled = false
+    const finish = (code) => {
+      if (!settled) {
+        settled = true
+        resolve({ exitCode: code,
+                  stdout: Buffer.concat(chunks).toString() })
+      }
+    }
+    child.on("error", () => finish(1))
+    // Concat once at the end: per-chunk decoding corrupts a multibyte
+    // character split across chunk boundaries (gate reasons carry em-dashes).
+    child.stdout.on("data", (d) => {
+      chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(String(d)))
+    })
+    child.stdout.on("error", () => {})
+    child.on("close", (code) => finish(code ?? 1))
+    child.stdin.on("error", () => {})
+    try { child.stdin.end(stdinData ?? "") } catch (e) { /* stream already gone */ }
+  })
 
 const hasExt = (exts) => (cc) => {
   const p = String(cc.tool_input.file_path || "")
@@ -93,21 +148,21 @@ function ccPayload(tool, args, directory, sessionID) {
   return null
 }
 
-export const MainframeGates = async ({ $, directory }) => {
+export const MainframeGates = async ({ directory }) => {
   let ready = false
   try {
-    const probe =
-      await $`python3 -c "import sys; print(sys.version_info[0])"`.quiet().nothrow()
-    const scripts =
-      await $`test -f ${SCRIPTS_DIR}/secret-commit-gate.py && test -f ${SCRIPTS_DIR}/path-validation.py`.nothrow()
-    ready = probe.exitCode === 0 && scripts.exitCode === 0
+    const probe = await runProcess(
+      ["-c", "import sys; print(sys.version_info[0])"], {}, "")
+    ready = probe.exitCode === 0 &&
+      ["secret-commit-gate.py", "path-validation.py"]
+        .every((s) => runtime.existsSync(`${runtime.scriptsDir}/${s}`))
   } catch (e) {
     ready = false
   }
   console.error(ready
     ? `[mainframe-gates] active: ${ROWS.length} hook rows`
     : "[mainframe-gates] DISABLED — python3 or hub scripts not found " +
-      `(${SCRIPTS_DIR}). Hub gates are NOT active in this session.`)
+      `(${runtime.scriptsDir}). Hub gates are NOT active in this session.`)
 
   const seenNotes = new Set()
 
@@ -117,21 +172,21 @@ export const MainframeGates = async ({ $, directory }) => {
   // pass would trade the security guarantee for latency.
   const runRow = async (row, payload, { capped }) => {
     const json = JSON.stringify(payload)
-    // Shell arg length is capped (~1 MB on macOS); a Write of a large file
-    // would fail the spawn anyway — skip loudly instead.
-    if (json.length > 200_000) {
+    if (Buffer.byteLength(json) > PAYLOAD_MAX_BYTES) {
       console.error(`[mainframe-gates] ${row.script} skipped: payload too large`)
       return null
     }
-    const spawn =
-      $`echo ${json} | CLAUDE_PROJECT_DIR=${payload.project_dir} python3 ${SCRIPTS_DIR}/${row.script}`
-        .cwd(payload.cwd).quiet().nothrow()
+    const spawned = runProcess(
+      [`${runtime.scriptsDir}/${row.script}`],
+      { cwd: payload.cwd,
+        env: { ...process.env, CLAUDE_PROJECT_DIR: payload.project_dir } },
+      json)
     const res = capped
       ? await Promise.race([
-          spawn,
+          spawned,
           new Promise((resolve) => setTimeout(resolve, ROW_TIMEOUT_MS, null)),
         ])
-      : await spawn
+      : await spawned
     if (!res || res.exitCode !== 0) return null
     const text = res.stdout.toString().trim()
     if (!text) return null
@@ -201,3 +256,5 @@ export const MainframeGates = async ({ $, directory }) => {
     },
   }
 }
+
+MainframeGates.runtime = runtime
