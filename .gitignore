@@ -38,6 +38,8 @@ tools/agnostic-blacklist.txt
 # Project-internal CLAUDE.md (development context for the hub maintainer)
 # The shipped CLAUDE.md is dist/claude-code/CLAUDE.md and IS published.
 /CLAUDE.md
+# Local Codex mirror of the maintainer CLAUDE.md (symlink → /CLAUDE.md), not published.
+/AGENTS.md
 
 # Private documents (only docs/layers/ is published)
 docs/*
