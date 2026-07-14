@@ -1,9 +1,9 @@
 # Layer: Rules (`~/.claude/rules/`)
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
-> Modular instruction files that load **on demand** when Claude reads a matching file, scoped by `paths:` glob. In the hub: `export/rules/<name>.md` → symlink `~/.claude/rules/<name>.md`. Path-scoped guidance without burdening main context in unrelated projects.
+> Modular instruction files that load **on demand** when Claude reads a matching file, scoped by `paths:` glob. In the hub: `dist/claude-code/rules/<name>.md` → symlink `~/.claude/rules/<name>.md`. Path-scoped guidance without burdening main context in unrelated projects.
 
 > Last updated: 2026-05-29 (layer introduced).
 
@@ -11,7 +11,7 @@
 
 ## Where it lives / How install
 
-- In the hub: `export/rules/<name>.md`.
+- In the hub: `dist/claude-code/rules/<name>.md`.
 - On the machine: `~/.claude/rules/<name>.md` (symlink via `install.sh`).
 - Active across all projects (user-scope).
 - File watcher picks up edits without session restart (paths-rules behaviour: edit takes effect on next Read of a matching file).
@@ -145,7 +145,7 @@ If a rule outgrows these targets, see Recipe M2 in the decision-tree (split by t
 
 ### 2.4. Validator
 
-No validator exists yet for `export/rules/`. When the first rule is added to the hub, evaluate whether `tools/validate-rules.py` is justified by frequency of rule edits. Until then — manual review against §2.2 + §2.3.
+No validator exists yet for `dist/claude-code/rules/`. When the first rule is added to the hub, evaluate whether `tools/validate-rules.py` is justified by frequency of rule edits. Until then — manual review against §2.2 + §2.3.
 
 ---
 

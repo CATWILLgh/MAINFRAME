@@ -19,7 +19,7 @@ You now have an independent hub. Shape it freely. Pull from upstream selectively
 
 ## Principles
 
-Every artifact the hub ships (whether under `plugin-dist/` or `export/`) must hold these:
+Every artifact the hub ships (whether under `dist/claude-code/plugin/` or `dist/`) must hold these:
 
 ### 1. Project-agnostic
 No hardcoded project names, stacks, paths, or domains in any artifact. Stack-specific patterns live in stack-specific skills (e.g. `react-frontend-patterns`), NOT in the umbrella `CLAUDE.md`.
@@ -56,16 +56,16 @@ Always set `model` explicitly in `Agent` calls — never let it default.
 1. **Decide the layer** using [`docs/layers/decision-tree.md`](docs/layers/decision-tree.md). It walks 4 axes (activation, context isolation, kind, cross-layer triggering) plus the bloat-prevention toolkit (`when_to_use`, `disable-model-invocation`, `context: fork`, narrow `tools:`).
 2. **Read the layer spec** at [`docs/layers/<layer>.md`](docs/layers/) — every layer has its own contract.
 3. **Place the artifact** in the correct location:
-   - Skills, agents, commands, hooks → `plugin-dist/<layer>/`
-   - Path-scoped rules → `export/rules/`
-   - Umbrella `CLAUDE.md` and `settings.json` stay at `export/` root
+   - Skills, agents, commands, hooks → `dist/claude-code/plugin/<layer>/`
+   - Path-scoped rules → `dist/claude-code/rules/`
+   - Umbrella `CLAUDE.md` and `settings.json` stay at `dist/claude-code/` root
 4. **Validate**:
    ```bash
    # CLAUDE.md changes
-   python3 tools/validate-claude-md.py export/CLAUDE.md
+   python3 tools/validate-claude-md.py dist/claude-code/CLAUDE.md
    
    # New / changed skills
-   .venv/bin/python3 tools/validate-skill.py plugin-dist/skills/<your-skill>/
+   .venv/bin/python3 tools/validate-skill.py dist/claude-code/plugin/skills/<your-skill>/
    ```
 5. **Test in a fresh Claude Code session** — `./install.sh` then start a new project session and verify activation (the artifact should appear with the `mainframe:` namespace prefix).
 6. **Commit** with conventional format (see below).
@@ -77,10 +77,10 @@ Always set `model` explicitly in `Agent` calls — never let it default.
 Two Python validators ship with the repo. Both also run as `SessionStart` hooks in the live Claude Code environment after install.
 
 ### `tools/validate-claude-md.py`
-Anthropic `CLAUDE.md` spec + project-agnosticism check across the import graph. Targets `CLAUDE.md` (project) and `export/CLAUDE.md` (umbrella). Uses system `python3`, no dependencies.
+Anthropic `CLAUDE.md` spec + project-agnosticism check across the import graph. Targets `CLAUDE.md` (project) and `dist/claude-code/CLAUDE.md` (umbrella). Uses system `python3`, no dependencies.
 
 ```bash
-python3 tools/validate-claude-md.py export/CLAUDE.md
+python3 tools/validate-claude-md.py dist/claude-code/CLAUDE.md
 python3 tools/validate-claude-md.py --session-start
 ```
 
@@ -95,7 +95,7 @@ Skill format rules:
 - No dead supporting files
 
 ```bash
-.venv/bin/python3 tools/validate-skill.py plugin-dist/skills/<your-skill>/
+.venv/bin/python3 tools/validate-skill.py dist/claude-code/plugin/skills/<your-skill>/
 .venv/bin/python3 tools/validate-skill.py --all
 ```
 

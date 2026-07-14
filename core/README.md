@@ -2,7 +2,7 @@
 
 Per ADR 0085: hub sources live here, neutral to any specific AI coding tool.
 Per-tool refinements live in `adapters/<tool>/`, whose directory structure
-MIRRORS this one. Delivered artifacts (`plugin-dist/`, `export/`) are committed
+MIRRORS this one. Delivered artifacts (`dist/claude-code/plugin/`, `dist/`) are committed
 RENDER OUTPUTS — never edit them by hand.
 
 ## Editing rule
@@ -37,22 +37,22 @@ self-references in core sources.
 
 - `instructions/` — the umbrella behavioral rules as ordered section
   fragments (numeric prefixes = the shared compose order). Rendered by
-  concatenation: + `adapters/claude-code/instructions/` → `export/CLAUDE.md`
+  concatenation: + `adapters/claude-code/instructions/` → `dist/claude-code/CLAUDE.md`
   (byte-identical to the pre-split file); + `adapters/opencode/instructions/`
-  → `export/AGENTS.md` (delivered to `~/.config/opencode/AGENTS.md` by
+  → `dist/opencode/AGENTS.md` (delivered to `~/.config/opencode/AGENTS.md` by
   `install.sh --opencode`, superseding OpenCode's CLAUDE.md fallback).
   Landed (wave 1).
 
 - `permissions/rules.json` — the hub-owned allow/deny/ask rules. Rendered by
   KEY-MERGE, not byte-copy: `settings.json` is both hub policy and a live
   user-editable config surface (model, language, `permissions.defaultMode`),
-  so the render splices ONLY the three rule lists into `export/settings.json`
+  so the render splices ONLY the three rule lists into `dist/claude-code/settings.json`
   in place and `--check` compares only those lists — user keys are never
   touched or checked. The OpenCode generator reads this file directly.
   Landed.
 
 Deferred: layer-6 (the non-permission `settings.json` keys — model, language,
-etc.) stays user-owned in `export/settings.json`, by design.
+etc.) stays user-owned in `dist/claude-code/settings.json`, by design.
 
 ## Assembly rules (mirror overlay)
 

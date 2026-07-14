@@ -1,9 +1,9 @@
 # Layer: Settings (other fields)
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
-> Configuration of Claude Code outside `permissions` and `hooks` (which have their own separate specs). In the hub: `export/settings.json` — the remaining fields.
+> Configuration of Claude Code outside `permissions` and `hooks` (which have their own separate specs). In the hub: `dist/claude-code/settings.json` — the remaining fields.
 
 > Last updated: 2026-05-28 (3-section rewrite).
 
@@ -11,9 +11,9 @@
 
 ## Where it lives / How to install
 
-- In the hub: `export/settings.json` — a single file where `permissions`, `hooks`, and other fields coexist.
+- In the hub: `dist/claude-code/settings.json` — a single file where `permissions`, `hooks`, and other fields coexist.
 - On the machine: `~/.claude/settings.json` (symlink of the whole file).
-- Activation: a single symlink; edits to `export/settings.json` are picked up by the file watcher without a restart.
+- Activation: a single symlink; edits to `dist/claude-code/settings.json` are picked up by the file watcher without a restart.
 
 ---
 
@@ -72,7 +72,7 @@ From docs (`code.claude.com/docs/en/settings`):
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Current fields in `export/settings.json` (besides permissions/hooks)
+### 2.1. Current fields in `dist/claude-code/settings.json` (besides permissions/hooks)
 
 | Field | Value | Purpose |
 |---|---|---|
@@ -90,7 +90,7 @@ From docs (`code.claude.com/docs/en/settings`):
 
 ### 2.2. Backups in the repo
 
-On every non-trivial edit to `export/settings.json`, a `export/settings.json.backup-<timestamp>` is created (see the two existing backups from 2026-05-27 and 2026-05-28).
+On every non-trivial edit to `dist/claude-code/settings.json`, a `dist/claude-code/settings.json.backup-<timestamp>` is created (see the two existing backups from 2026-05-27 and 2026-05-28).
 
 ---
 

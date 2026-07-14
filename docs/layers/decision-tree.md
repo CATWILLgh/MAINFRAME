@@ -1,6 +1,6 @@
 # Decision tree: which layer owns a new artifact
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
 > When a new rule, skill, check, or process appears — **walk this tree first**, then place it. No ad hoc choices. Otherwise the hub turns into a ball of everything about everything.
@@ -80,7 +80,7 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 
 > "Always be honest about severity" — applies everywhere, in every project.
 
-→ **CLAUDE.md (export/)**. One bullet in the relevant section.
+→ **CLAUDE.md (dist/claude-code/)**. One bullet in the relevant section.
 
 ### Recipe B: disciplinary self-check
 
@@ -116,7 +116,7 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 
 > "When working with `**/*.{ts,tsx}` remind about strict null-checks" — should fire only when Claude actually reads a TS file; in a Python project — do not load the context.
 
-→ **Rule** (`export/rules/<name>.md` → symlink `~/.claude/rules/`) with `paths:` frontmatter. See [rules.md](rules.md). Body is short, English, project-agnostic globs.
+→ **Rule** (`dist/claude-code/rules/<name>.md` → symlink `~/.claude/rules/`) with `paths:` frontmatter. See [rules.md](rules.md). Body is short, English, project-agnostic globs.
 
 ---
 
@@ -143,8 +143,8 @@ All signals are **observable**, not "by feel". If a rule is phrased as "when it 
 
 | Signal (what is observed) | Where to look |
 |---|---|
-| A rule in CLAUDE.md contains conditional language ("when X — do Y", "in case Z", "on trigger") | Grep in `export/CLAUDE.md` |
-| A rule in CLAUDE.md or a skill contains **path-specific language** (mentions specific extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) and applies only when such a file is actually in use | Grep in `export/CLAUDE.md` and `plugin-dist/skills/**/SKILL.md` for extensions and pattern-keywords |
+| A rule in CLAUDE.md contains conditional language ("when X — do Y", "in case Z", "on trigger") | Grep in `dist/claude-code/CLAUDE.md` |
+| A rule in CLAUDE.md or a skill contains **path-specific language** (mentions specific extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) and applies only when such a file is actually in use | Grep in `dist/claude-code/CLAUDE.md` and `dist/claude-code/plugin/skills/**/SKILL.md` for extensions and pattern-keywords |
 | SKILL.md exceeds the validator limit — body > 500 lines OR > 5K tokens | `validate-skill.py` report |
 | SKILL.md covers 2+ topics (multiple `## ` sections with different domains) | Grep on headers in SKILL.md |
 | Two skills have overlapping `when_to_use` phrases (the same trigger words) | Compare frontmatter of all skills |
@@ -202,7 +202,7 @@ Template migrations; the same 4 axes of the decision tree are walked as during i
 **Trigger:** domain-specific content in CLAUDE.md or a broad skill (e.g., framework patterns, perf procedures).
 
 **Action:**
-1. Create a subagent (`plugin-dist/agents/<domain>.md`) with a `description` scoped to the domain.
+1. Create a subagent (`dist/claude-code/plugin/agents/<domain>.md`) with a `description` scoped to the domain.
 2. Domain knowledge → skill with `disable-model-invocation: true`, so main context does not pick it up.
 3. In subagent frontmatter: `skills: [<domain-skill>]` — preload.
 4. Remove domain fragments from CLAUDE.md / the broad skill.
@@ -219,10 +219,10 @@ Template migrations; the same 4 axes of the decision tree are walked as during i
 
 ### Recipe M7: Path-specific guidance in CLAUDE.md or a skill → Rule with `paths:`
 
-**Trigger:** a rule in `export/CLAUDE.md` or a skill contains path-specific language (see signal in §A) — the knowledge applies only when Claude is actually working with files matching a specific pattern, not in every session/task.
+**Trigger:** a rule in `dist/claude-code/CLAUDE.md` or a skill contains path-specific language (see signal in §A) — the knowledge applies only when Claude is actually working with files matching a specific pattern, not in every session/task.
 
 **Action:**
-1. Knowledge body → new file `export/rules/<name>.md`.
+1. Knowledge body → new file `dist/claude-code/rules/<name>.md`.
 2. Path condition → `paths:` frontmatter with globs; globs must be project-agnostic (`**/*.ts`, not `apps/myproject/**`).
 3. Check for **anti-pattern: over-broad glob** (see [rules.md §2.1](rules.md)): if the glob matches in nearly every session, the migration is not justified — leave it in CLAUDE.md or the skill.
 4. A universal summary phrase stays in the source file (one line), pointing to "details — in rule `<name>`", by analogy with M1.

@@ -11,9 +11,9 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#platforms)
 [![Tuned for](https://img.shields.io/badge/tuned%20for-Opus%204.7%2B-blueviolet.svg)](#tested-configuration)
 [![Last commit](https://img.shields.io/github/last-commit/CATWILLgh/MAINFRAME?label=last%20commit)](https://github.com/CATWILLgh/MAINFRAME/commits)
-[![Skills](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/plugin-dist/skills?type=dir&label=skills&color=blue)](plugin-dist/skills)
-[![Agents](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/plugin-dist/agents?type=file&extension=md&label=agents&color=blue)](plugin-dist/agents)
-[![Hooks](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/plugin-dist/hooks/scripts?type=file&extension=py&label=hooks&color=blue)](plugin-dist/hooks/scripts)
+[![Skills](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/dist/claude-code/plugin/skills?type=dir&label=skills&color=blue)](dist/claude-code/plugin/skills)
+[![Agents](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/dist/claude-code/plugin/agents?type=file&extension=md&label=agents&color=blue)](dist/claude-code/plugin/agents)
+[![Hooks](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/dist/claude-code/plugin/hooks/scripts?type=file&extension=py&label=hooks&color=blue)](dist/claude-code/plugin/hooks/scripts)
 [![Style](https://img.shields.io/badge/principles-agnostic%20%7C%20evidence--based%20%7C%20English-blue.svg)](#principles)
 
 <img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
@@ -176,8 +176,8 @@ Pulled automatically when the situation matches, or invoked as `/mainframe:<name
 ```mermaid
 graph LR
     subgraph repo["MAINFRAME repo (this)"]
-      P[plugin-dist/<br/>skills + agents + hooks + commands]
-      E[export/<br/>CLAUDE.md + settings.json + rules + secret helper]
+      P[dist/claude-code/plugin/<br/>skills + agents + hooks + commands]
+      E[dist/claude-code/<br/>CLAUDE.md + settings.json + rules + secret helper]
     end
 
     P -->|one symlink<br/>~/.claude/skills/mainframe/| home[~/.claude/]
@@ -187,8 +187,8 @@ graph LR
 
 The hub ships in two channels:
 
-- **A plugin** (`plugin-dist/`) carries skills, agents, hooks, and commands. After install, Claude Code auto-loads it as the `mainframe` plugin via the skills-dir mechanism, and everything inside becomes available with the `mainframe:` namespace prefix (e.g. `/mainframe:code-audit`, `subagent_type: "mainframe:python-backend-engineer"`). That namespace is the visible mark that something is coming from this hub, not from your local project setup or another plugin.
-- **Single-file and per-item symlinks** (`export/`) carry the umbrella `CLAUDE.md`, the permission `settings.json`, path-scoped `rules/`, and a small credentials helper — pieces the plugin format does not currently support.
+- **A plugin** (`dist/claude-code/plugin/`) carries skills, agents, hooks, and commands. After install, Claude Code auto-loads it as the `mainframe` plugin via the skills-dir mechanism, and everything inside becomes available with the `mainframe:` namespace prefix (e.g. `/mainframe:code-audit`, `subagent_type: "mainframe:python-backend-engineer"`). That namespace is the visible mark that something is coming from this hub, not from your local project setup or another plugin.
+- **Single-file and per-item symlinks** (`dist/claude-code/`) carry the umbrella `CLAUDE.md`, the permission `settings.json`, path-scoped `rules/`, and a small credentials helper — pieces the plugin format does not currently support.
 
 See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
@@ -228,9 +228,9 @@ cd ~/Documents/projects/MAINFRAME
 ```mermaid
 graph LR
     A[git clone] --> B[./install.sh]
-    B --> C[plugin-dist/ →<br/>~/.claude/skills/mainframe/]
-    B --> D[export/CLAUDE.md & settings.json<br/>→ ~/.claude/ symlinks]
-    B --> E[export/rules/* →<br/>~/.claude/rules/ per-item]
+    B --> C[dist/claude-code/plugin/ →<br/>~/.claude/skills/mainframe/]
+    B --> D[dist/claude-code/CLAUDE.md & settings.json<br/>→ ~/.claude/ symlinks]
+    B --> E[dist/claude-code/rules/* →<br/>~/.claude/rules/ per-item]
     C --> F[Claude auto-loads<br/>'mainframe' plugin]
     D --> G[Umbrella + permissions<br/>active in every session]
     E --> G
@@ -239,10 +239,10 @@ graph LR
 
 What `install.sh` does:
 
-- **One symlink for the plugin** — `plugin-dist/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads it and prefixes everything inside with the `mainframe:` namespace.
+- **One symlink for the plugin** — `dist/claude-code/plugin/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads it and prefixes everything inside with the `mainframe:` namespace.
 - **Single-file symlinks** for the umbrella `CLAUDE.md` and the permission `settings.json` (the plugin format does not provide an equivalent for these).
-- **Per-item symlinks** for `export/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
-- **Credentials helper** — links `export/scripts/secret` into `~/.local/bin/` and seeds `~/.config/credentials/` + `~/.claude/credentials-index.md` from the template.
+- **Per-item symlinks** for `dist/claude-code/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
+- **Credentials helper** — links `dist/claude-code/scripts/secret` into `~/.local/bin/` and seeds `~/.config/credentials/` + `~/.claude/credentials-index.md` from the template.
 - **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
 - **Backs up** any pre-existing real file before replacing it with a symlink.
 - **Idempotent** — re-running is a no-op when state matches.
@@ -276,7 +276,7 @@ cd ~/Documents/projects/MAINFRAME
 git pull
 ```
 
-That's it. Symlinks point to files in this repo — the next Claude Code session sees the latest. Re-run `install.sh` **only** if a new top-level directory appeared under `export/`.
+That's it. Symlinks point to files in this repo — the next Claude Code session sees the latest. Re-run `install.sh` **only** if a new top-level directory appeared under `dist/claude-code/`.
 
 ```mermaid
 graph LR
@@ -326,7 +326,7 @@ MAINFRAME/
 ├── install.sh                            # installer (creates the symlinks into ~/.claude/)
 ├── assets/                               # README images (banner, divider, badge)
 │
-├── plugin-dist/                          # the plugin — auto-loads as 'mainframe' after install
+├── dist/claude-code/plugin/               # the plugin — auto-loads as 'mainframe' after install
 │   ├── .claude-plugin/plugin.json        # plugin manifest (name, version, license)
 │   ├── skills/                           # 18 skills, one folder per skill
 │   ├── agents/                           # 7 file-based sub-agents (Python, Node.js, Next.js, React, devops, decision-reviewer, web-search)
@@ -336,7 +336,7 @@ MAINFRAME/
 │       ├── scripts/                      # 26 Python files — 23 hook scripts + 3 shared libs (security scans, marker discipline, ...)
 │       └── rules/                        # Semgrep YAML rules
 │
-├── export/                               # what the plugin format does NOT carry
+├── dist/claude-code/                      # what the plugin format does NOT carry
 │   ├── CLAUDE.md                         # umbrella operating rules (partnership, evidence, honesty, ...)
 │   ├── settings.json                     # permissions (allow/ask/deny tiers)
 │   ├── output-styles/                    # custom reply styles (e.g. explanatory-concise)
@@ -397,7 +397,7 @@ graph TD
 
 ## Principles
 
-Every artifact shipped by this hub (whether in `plugin-dist/` or `export/`) holds these:
+Every artifact shipped by this hub (whether in `dist/claude-code/plugin/` or `dist/claude-code/`) holds these:
 
 1. **Project-agnostic** — no hardcoded project names, stacks, paths, or domains.
 2. **Evidence-based** — new rules need real experience, an authoritative source, or a measured experiment. Not "feels right".

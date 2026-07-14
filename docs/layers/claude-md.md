@@ -1,9 +1,9 @@
 # Layer: CLAUDE.md (Operating instructions)
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
-> Global Claude instruction delivered to every session across all projects. In the hub: `export/CLAUDE.md` → symlink `~/.claude/CLAUDE.md`.
+> Global Claude instruction delivered to every session across all projects. In the hub: `dist/claude-code/CLAUDE.md` → symlink `~/.claude/CLAUDE.md`.
 
 > Last updated: 2026-05-28 (3-section rewrite).
 
@@ -11,7 +11,7 @@
 
 ## Where it lives / How to install
 
-- In the hub: `export/CLAUDE.md` (132 lines as of 2026-05-28).
+- In the hub: `dist/claude-code/CLAUDE.md` (132 lines as of 2026-05-28).
 - On the machine: `~/.claude/CLAUDE.md` (symlink via `install.sh`).
 - Active in all projects via user-scope.
 - Claude Code's file watcher picks up edits without restarting the session.
@@ -59,7 +59,7 @@ There is no hard limit; the practical target is to keep total volume (user + pro
 
 ## 2. Hub usage
 
-### 2.1. Current `export/CLAUDE.md`
+### 2.1. Current `dist/claude-code/CLAUDE.md`
 
 Structure (as of 2026-05-28, 132 lines):
 

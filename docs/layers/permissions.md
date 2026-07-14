@@ -1,9 +1,9 @@
 # Layer: Permissions
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
-> The Claude Code layer that controls which tool calls are allowed, blocked, or require user confirmation. In the hub: the `export/settings.json` block `permissions.{allow, deny, ask}` → symlinked to `~/.claude/settings.json` → takes effect in all projects.
+> The Claude Code layer that controls which tool calls are allowed, blocked, or require user confirmation. In the hub: the `dist/claude-code/settings.json` block `permissions.{allow, deny, ask}` → symlinked to `~/.claude/settings.json` → takes effect in all projects.
 
 > Last updated: 2026-05-28 (3-section rewrite).
 
@@ -11,10 +11,10 @@
 
 ## Where it lives / How to install
 
-- In the hub: `export/settings.json` — fields `permissions.allow`, `permissions.deny`, `permissions.ask`, plus `permissions.defaultMode`.
+- In the hub: `dist/claude-code/settings.json` — fields `permissions.allow`, `permissions.deny`, `permissions.ask`, plus `permissions.defaultMode`.
 - On the machine: `~/.claude/settings.json` (symlink to the hub file).
 - In any project: `<repo>/.claude/settings.json` (project-scope) and `<repo>/.claude/settings.local.json` (gitignored, local).
-- Activation: simultaneously with all of `export/settings.json` via symlink. There is no separate activation for permissions only. The Claude Code file watcher picks up edits "with brief delay" without a restart.
+- Activation: simultaneously with all of `dist/claude-code/settings.json` via symlink. There is no separate activation for permissions only. The Claude Code file watcher picks up edits "with brief delay" without a restart.
 
 ---
 
@@ -112,7 +112,7 @@ Auto-mode (`defaultMode: "auto"`) adds a 4-step classification algorithm between
 
 ### 1.8. Hub 3-tier model (2026-05-28)
 
-Categorization of rules in `export/settings.json` into 3 tiers with explicit criteria. Sources: OWASP LLM06 (Excessive Agency), NIST SP 800-53 AC-6/CM-7 (least privilege/functionality), Anthropic Auto Mode docs, real-world incidents (Replit 2025-07, PocketOS 2026-04, nx supply chain 2025-08).
+Categorization of rules in `dist/claude-code/settings.json` into 3 tiers with explicit criteria. Sources: OWASP LLM06 (Excessive Agency), NIST SP 800-53 AC-6/CM-7 (least privilege/functionality), Anthropic Auto Mode docs, real-world incidents (Replit 2025-07, PocketOS 2026-04, nx supply chain 2025-08).
 
 **Tier 1 — `deny`** (hard block, no override): irreversible + out-of-scope + undermines security + catastrophic scale. Any single criterion is sufficient.
 
@@ -130,7 +130,7 @@ Caveat: a hook `permissionDecision: "ask"` in auto-mode transitions to `"defer"`
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Current settings in `export/settings.json`
+### 2.1. Current settings in `dist/claude-code/settings.json`
 
 ```json
 "permissions": {

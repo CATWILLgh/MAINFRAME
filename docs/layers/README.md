@@ -1,6 +1,6 @@
 # MAINFRAME Hub Layers
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
 > Canonical list of hub layers and a navigator to their specifications.
@@ -12,7 +12,7 @@
 
 ## What counts as a "layer"
 
-A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **all** of the user's projects with no per-project edits. Delivery uses two vehicles: **direct `install.sh` symlinks** for the `export/` layers (CLAUDE.md, rules, settings, output-styles, templates, scripts), and **the single `mainframe` plugin** (`plugin-dist/` symlinked as one plugin) for skills, agents, hooks, and commands.
+A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **all** of the user's projects with no per-project edits. Delivery uses two vehicles: **direct `install.sh` symlinks** for the `dist/claude-code/` layers (CLAUDE.md, rules, settings, output-styles, templates, scripts), and **the single `mainframe` plugin** (`dist/claude-code/plugin/` symlinked as one plugin) for skills, agents, hooks, and commands.
 
 **Not layers:**
 - `docs/layers/` — layer specifications (what you are reading now).
@@ -22,20 +22,20 @@ A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **
 
 | # | Layer | Where it lives | What is delivered to `~/.claude/` | Spec |
 |---|---|---|---|---|
-| 1 | **CLAUDE.md** (operating instructions) | `export/CLAUDE.md` | `~/.claude/CLAUDE.md` (file symlink) | [claude-md.md](claude-md.md) |
-| 2 | **Rules** (path-scoped) *(planned, empty)* | `export/rules/<name>.md` | `~/.claude/rules/<name>.md` (symlinks) | [rules.md](rules.md) |
-| 3 | **Skills** | `plugin-dist/skills/<name>/` | via the `mainframe` plugin | [skills.md](skills.md) |
-| 4 | **Hooks** | `plugin-dist/hooks/scripts/*.py` + `plugin-dist/hooks/hooks.json` | via the `mainframe` plugin | [hooks.md](hooks.md) |
-| 5 | **Permissions** | `export/settings.json` `permissions.{allow,deny,ask}` | part of `~/.claude/settings.json` (whole-file symlink) | [permissions.md](permissions.md) |
-| 6 | **Settings** (other fields) | `export/settings.json` (everything except permissions) | part of `~/.claude/settings.json` | [settings.md](settings.md) |
-| 7 | **Agents** | `plugin-dist/agents/<name>.md` | via the `mainframe` plugin | [agents.md](agents.md) |
-| 8 | **Commands** *(empty)* | `plugin-dist/commands/<name>.md` | via the `mainframe` plugin | [commands.md](commands.md) |
-| 9 | **Output styles** | `export/output-styles/<name>.md` | `~/.claude/output-styles/<name>.md` (symlink) | [output-styles.md](output-styles.md) |
+| 1 | **CLAUDE.md** (operating instructions) | `dist/claude-code/CLAUDE.md` | `~/.claude/CLAUDE.md` (file symlink) | [claude-md.md](claude-md.md) |
+| 2 | **Rules** (path-scoped) *(planned, empty)* | `dist/claude-code/rules/<name>.md` | `~/.claude/rules/<name>.md` (symlinks) | [rules.md](rules.md) |
+| 3 | **Skills** | `dist/claude-code/plugin/skills/<name>/` | via the `mainframe` plugin | [skills.md](skills.md) |
+| 4 | **Hooks** | `dist/claude-code/plugin/hooks/scripts/*.py` + `dist/claude-code/plugin/hooks/hooks.json` | via the `mainframe` plugin | [hooks.md](hooks.md) |
+| 5 | **Permissions** | `dist/claude-code/settings.json` `permissions.{allow,deny,ask}` | part of `~/.claude/settings.json` (whole-file symlink) | [permissions.md](permissions.md) |
+| 6 | **Settings** (other fields) | `dist/claude-code/settings.json` (everything except permissions) | part of `~/.claude/settings.json` | [settings.md](settings.md) |
+| 7 | **Agents** | `dist/claude-code/plugin/agents/<name>.md` | via the `mainframe` plugin | [agents.md](agents.md) |
+| 8 | **Commands** *(empty)* | `dist/claude-code/plugin/commands/<name>.md` | via the `mainframe` plugin | [commands.md](commands.md) |
+| 9 | **Output styles** | `dist/claude-code/output-styles/<name>.md` | `~/.claude/output-styles/<name>.md` (symlink) | [output-styles.md](output-styles.md) |
 
 **Notes:**
 - (4), (5), and (6) technically live in a single file (`settings.json`), but they are **separate layers** — they have different syntax rules, different eval semantics, different failure modes, and different sources of truth. Their specs are kept separate.
-- (7) Agents (7 agents) and (9) Output styles (1) are populated; (2) Rules and (8) Commands are reserved (no files yet). Rules was introduced 2026-05-29 after empirical verification of paths-activation; no concrete files exist in `export/rules/` yet.
-- The `export/` layers are symlinked individually by `install.sh`; the `plugin-dist/` layers (skills, agents, hooks, commands) ship together as the `mainframe` plugin (one symlink). Usage: `./install.sh` (sync), `./install.sh --dry-run` (diagnostics), `./install.sh --uninstall` (remove symlinks).
+- (7) Agents (7 agents) and (9) Output styles (1) are populated; (2) Rules and (8) Commands are reserved (no files yet). Rules was introduced 2026-05-29 after empirical verification of paths-activation; no concrete files exist in `dist/claude-code/rules/` yet.
+- The `dist/claude-code/` layers are symlinked individually by `install.sh`; the `dist/claude-code/plugin/` layers (skills, agents, hooks, commands) ship together as the `mainframe` plugin (one symlink). Usage: `./install.sh` (sync), `./install.sh --dry-run` (diagnostics), `./install.sh --uninstall` (remove symlinks).
 
 ## External touchpoints (not our layers, but worth knowing)
 
@@ -43,7 +43,7 @@ A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **
 |---|---|---|
 | **MCP user-scope** | `~/.claude.json` (a separate file!) | This is not `~/.claude/settings.json`, and `.claude.json` stores additional runtime data (credentials, project history). Symlinking it is risky. If we decide to — a separate ADR. |
 | **Runtime memory** | `~/.claude/projects/<id>/memory/` | Claude Code mechanics — index + topic files, accumulated during runs. Not delivered by the hub; this is runtime state. |
-| **Community/official plugins** | external plugins via `enabledPlugins` | We use external plugins (e.g. `context7=true`). Distinct from our OWN `mainframe` plugin (`plugin-dist/`) — that one IS a hub delivery vehicle (layers 3/4/7/8), not an external touchpoint. |
+| **Community/official plugins** | external plugins via `enabledPlugins` | We use external plugins (e.g. `context7=true`). Distinct from our OWN `mainframe` plugin (`dist/claude-code/plugin/`) — that one IS a hub delivery vehicle (layers 3/4/7/8), not an external touchpoint. |
 | **Project-scope artifacts** | `<repo>/.claude/` and `<repo>/.mcp.json` | Per-project, not global. The hub does not touch these. |
 
 ## Brief explanation of MCP (Model Context Protocol)

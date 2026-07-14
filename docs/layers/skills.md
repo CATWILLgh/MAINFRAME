@@ -1,9 +1,9 @@
 # Layer: Skills
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
-> Optionally activated instruction sets. In the hub: `plugin-dist/skills/<name>/SKILL.md` (+ supporting files), shipped via the `mainframe` plugin.
+> Optionally activated instruction sets. In the hub: `dist/claude-code/plugin/skills/<name>/SKILL.md` (+ supporting files), shipped via the `mainframe` plugin.
 
 > Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-28 (full frontmatter spec + `disable-model-invocation`, `context: fork`).
 
@@ -11,8 +11,8 @@
 
 ## Where it lives / How to install
 
-- In the hub: `plugin-dist/skills/<name>/SKILL.md` (+ optional `<name>/*.md` supporting files). Depth is strictly = 1.
-- On the machine: delivered via the `mainframe` plugin (`plugin-dist/` symlinked as one plugin), not an individual per-skill symlink.
+- In the hub: `dist/claude-code/plugin/skills/<name>/SKILL.md` (+ optional `<name>/*.md` supporting files). Depth is strictly = 1.
+- On the machine: delivered via the `mainframe` plugin (`dist/claude-code/plugin/` symlinked as one plugin), not an individual per-skill symlink.
 - Activation: once the plugin is loaded, the skill becomes visible to Claude through the frontmatter "showcase".
 
 ---
@@ -104,7 +104,7 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Current skills in `plugin-dist/skills/`
+### 2.1. Current skills in `dist/claude-code/plugin/skills/`
 
 18 skills as of 2026-06-14, shipped via the `mainframe` plugin. The directory is the source of truth — this is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew to 18). Roles:
 

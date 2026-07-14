@@ -1,9 +1,9 @@
 # Layer: Output styles
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `plugin-dist/` / `export/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `plugin-dist/` and `export/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
 
 
-> Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `export/output-styles/<name>.md`.
+> Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `dist/claude-code/output-styles/<name>.md`.
 
 > Last updated: 2026-06-11. First artifact shipped: `explanatory-concise` (verified against CLI bundle 2.1.165).
 
@@ -11,7 +11,7 @@
 
 ## Where it lives / How to install
 
-- In the hub: `export/output-styles/<name>.md` — one file per style.
+- In the hub: `dist/claude-code/output-styles/<name>.md` — one file per style.
 - On the machine: `~/.claude/output-styles/<name>.md` (symlinked via `install.sh`).
 - Activation: via `/config` (selecting the active style) or `outputStyle: "<name>"` in `settings.json`.
 
