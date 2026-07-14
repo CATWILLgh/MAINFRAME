@@ -1,11 +1,11 @@
 # Decision tree: which layer owns a new artifact
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > When a new rule, skill, check, or process appears — **walk this tree first**, then place it. No ad hoc choices. Otherwise the hub turns into a ball of everything about everything.
 
-> Last updated: 2026-05-29 (added axis: file-path match → Rule).
+> Last updated: 2026-07-14 (three-tool source/render ownership and reserved layers).
 
 ---
 
@@ -80,13 +80,13 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 
 > "Always be honest about severity" — applies everywhere, in every project.
 
-→ **CLAUDE.md (dist/claude-code/)**. One bullet in the relevant section.
+→ **CLAUDE.md** ([claude-md.md](claude-md.md)). One bullet in the relevant `core/instructions/` file (or `adapters/<tool>/instructions/` for a tool-specific nuance), then render (`python3 tools/render_core.py --write`) — never edit `dist/`.
 
 ### Recipe B: disciplinary self-check
 
 > "Before declare-done, scan files for TODO/FIXME" — should fire at the end of a task.
 
-→ **Skill** (`user-invocable: false`, without `disable-model-invocation`). Trigger via `when_to_use`. Additionally — a PostToolUse Hook for an immediate reminder per edit.
+→ **Skill** under `core/skills/` (`user-invocable: false`, without `disable-model-invocation`). Trigger via `when_to_use`. Additionally — a detector under `core/gates/detectors/` plus adapter wiring for an immediate reminder per edit.
 
 ### Recipe C: heavy audit of a specific domain
 
@@ -98,25 +98,25 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 
 > "Intercept `git push --force`" — technical protection.
 
-→ **Permissions** (`deny` or `ask`, anywhere-form in deny, prefix-form in ask). NOT a skill, not CLAUDE.md — this is technical protection at the tool-call level.
+→ **Permissions** in `core/permissions/rules.json` (`deny` or `ask`, anywhere-form in deny, prefix-form in ask). NOT a skill, not CLAUDE.md — this is technical protection at the tool-call level.
 
 ### Recipe E: automatic gate before the stop turn
 
 > "Before declare-done — block if there are unresolved markers."
 
-→ **Hook** (`Stop` event, decision-control `block`). Not a skill — this is a blocking reaction to an event.
+→ **Hook/gate**: detector in `core/gates/detectors/` plus runtime adapter wiring (`Stop` event, decision-control `block` where supported). Not a skill — this is a blocking reaction to an event.
 
 ### Recipe F: user-invocable command with side effects
 
 > "`/release` — build the changelog and tag releases."
 
-→ **Command** or **Skill with `user-invocable: true`**. Side effects going outward → visibility in the `/`-menu is mandatory.
+→ **Command** or **Skill with `user-invocable: true`**. Side effects going outward → visibility in the `/`-menu is mandatory. The Commands layer currently has no source/render mapping, so adding its first artifact requires that architecture decision first; use a Skill only when its semantics fit.
 
 ### Recipe G: path-scoped guidance, applicable globally
 
 > "When working with `**/*.{ts,tsx}` remind about strict null-checks" — should fire only when Claude actually reads a TS file; in a Python project — do not load the context.
 
-→ **Rule** (`dist/claude-code/rules/<name>.md` → symlink `~/.claude/rules/`) with `paths:` frontmatter. See [rules.md](rules.md). Body is short, English, project-agnostic globs.
+→ **Rule** (`dist/claude-code/rules/<name>.md` → symlink `~/.claude/rules/`) with `paths:` frontmatter. This is the renderer-unmanaged, direct-authored exception; no `core/rules/` exists, and the directory is currently absent because the layer is empty. See [rules.md](rules.md). Body is short, English, project-agnostic globs.
 
 ---
 
@@ -143,8 +143,8 @@ All signals are **observable**, not "by feel". If a rule is phrased as "when it 
 
 | Signal (what is observed) | Where to look |
 |---|---|
-| A rule in CLAUDE.md contains conditional language ("when X — do Y", "in case Z", "on trigger") | Grep in `dist/claude-code/CLAUDE.md` |
-| A rule in CLAUDE.md or a skill contains **path-specific language** (mentions specific extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) and applies only when such a file is actually in use | Grep in `dist/claude-code/CLAUDE.md` and `dist/claude-code/plugin/skills/**/SKILL.md` for extensions and pattern-keywords |
+| A rule in umbrella instructions contains conditional language ("when X — do Y", "in case Z", "on trigger") | Grep `core/instructions/` and relevant `adapters/<tool>/instructions/`; verify in the rendered umbrella |
+| An umbrella rule or skill contains **path-specific language** (mentions specific extensions, file patterns, directory layouts — `.ts`, `migrations/`, `.env`) and applies only when such a file is actually in use | Grep `core/instructions/`, adapter instruction fragments, and `core/skills/**/SKILL.md` for extensions and pattern-keywords |
 | SKILL.md exceeds the validator limit — body > 500 lines OR > 5K tokens | `validate-skill.py` report |
 | SKILL.md covers 2+ topics (multiple `## ` sections with different domains) | Grep on headers in SKILL.md |
 | Two skills have overlapping `when_to_use` phrases (the same trigger words) | Compare frontmatter of all skills |
@@ -202,7 +202,7 @@ Template migrations; the same 4 axes of the decision tree are walked as during i
 **Trigger:** domain-specific content in CLAUDE.md or a broad skill (e.g., framework patterns, perf procedures).
 
 **Action:**
-1. Create a subagent (`dist/claude-code/plugin/agents/<domain>.md`) with a `description` scoped to the domain.
+1. Create a subagent (`core/agents/<domain>.md`, then render — never `dist/`) with a `description` scoped to the domain.
 2. Domain knowledge → skill with `disable-model-invocation: true`, so main context does not pick it up.
 3. In subagent frontmatter: `skills: [<domain-skill>]` — preload.
 4. Remove domain fragments from CLAUDE.md / the broad skill.
@@ -219,7 +219,7 @@ Template migrations; the same 4 axes of the decision tree are walked as during i
 
 ### Recipe M7: Path-specific guidance in CLAUDE.md or a skill → Rule with `paths:`
 
-**Trigger:** a rule in `dist/claude-code/CLAUDE.md` or a skill contains path-specific language (see signal in §A) — the knowledge applies only when Claude is actually working with files matching a specific pattern, not in every session/task.
+**Trigger:** a rule in `core/instructions/`, a tool adapter instruction fragment, or a skill contains path-specific language (see signal in §A) — the knowledge applies only when Claude Code is actually working with files matching a specific pattern, not in every session/task.
 
 **Action:**
 1. Knowledge body → new file `dist/claude-code/rules/<name>.md`.

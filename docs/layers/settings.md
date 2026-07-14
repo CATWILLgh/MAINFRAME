@@ -1,19 +1,21 @@
 # Layer: Settings (other fields)
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Configuration of Claude Code outside `permissions` and `hooks` (which have their own separate specs). In the hub: `dist/claude-code/settings.json` — the remaining fields.
+> User-owned Claude Code configuration outside the rendered permission lists. Hook registration has moved to the `mainframe` plugin and is not stored in this file.
 
-> Last updated: 2026-05-28 (3-section rewrite).
+> Last updated: 2026-07-14 (hybrid ownership and current fields).
 
 ---
 
 ## Where it lives / How to install
 
-- In the hub: `dist/claude-code/settings.json` — a single file where `permissions`, `hooks`, and other fields coexist.
+- In the hub: `dist/claude-code/settings.json` — a hybrid file containing rendered permission lists and directly maintained user settings.
 - On the machine: `~/.claude/settings.json` (symlink of the whole file).
-- Activation: a single symlink; edits to `dist/claude-code/settings.json` are picked up by the file watcher without a restart.
+- Ownership: `core/permissions/rules.json` owns only `permissions.allow`, `permissions.deny`, and `permissions.ask`. Edit every other field directly in `dist/claude-code/settings.json`; `render_core.py` preserves it.
+- Scope: this general-settings layer is Claude Code only. OpenCode and Codex receive separate permission projections, not copies of these user settings.
+- Activation: a single symlink; Claude Code picks up most edits through its file watcher without a restart.
 
 ---
 
@@ -72,25 +74,33 @@ From docs (`code.claude.com/docs/en/settings`):
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Current fields in `dist/claude-code/settings.json` (besides permissions/hooks)
+### 2.1. Current user-owned fields in `dist/claude-code/settings.json`
 
 | Field | Value | Purpose |
 |---|---|---|
 | `$schema` | `https://json.schemastore.org/claude-code-settings.json` | IDE validation |
+| `cleanupPeriodDays` | `3650` | Retention period |
 | `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `"1"` | Experimental agent teams flag |
-| `permissions.defaultMode` | `"acceptEdits"` | Default session mode |
-| `enabledPlugins.superpowers@claude-plugins-official` | `false` | Disabled |
+| `model` | `"opus[1m]"` | Default model selection |
+| `permissions.defaultMode` | `"auto"` | Default session mode; not part of the rendered rule lists |
 | `enabledPlugins.context7@claude-plugins-official` | `true` | Enabled (Context7 plugin) |
+| `enabledPlugins.frontend-design@claude-plugins-official` | `false` | Disabled |
+| `outputStyle` | `"Explanatory Concise"` | Active output style |
 | `language` | `"Russian"` | Interface/response language |
 | `advisorModel` | `"opus"` | Model used for `advisor()` |
+| `autoMemoryEnabled` | `true` | Native auto-memory toggle |
+| `skipWorkflowUsageWarning` | `true` | Workflow warning toggle |
+| `editorMode` | `"normal"` | Editor interaction mode |
+| `verbose` | `false` | Verbose output toggle |
 | `preferredNotifChannel` | `"kitty"` | Notification channel |
+| `autoCompactEnabled` | `true` | Automatic context compaction |
 | `teammateMode` | `"in-process"` | Mode for teammates |
 | `remoteControlAtStartup` | `false` | Remote control |
-| `effortLevel` | `"max"` | Claude's effort level |
+| `effortLevel` | `"xhigh"` | Claude's effort level |
 
 ### 2.2. Rendering and permissions
 
-`render_core.py` does not create timestamped backups in the repository. Permission lists are rendered into `dist/claude-code/settings.json` by key-merge from `core/permissions/rules.json`; other user-owned settings keys are preserved.
+`render_core.py` does not create timestamped backups in the repository. It key-merges `allow`, `deny`, and `ask` from `core/permissions/rules.json` into `dist/claude-code/settings.json`; `permissions.defaultMode` and every non-permission setting remain untouched. This mixed ownership is intentional, so the usual “do not edit generated `dist/` files” rule applies only to the three rendered lists inside this file.
 
 ---
 

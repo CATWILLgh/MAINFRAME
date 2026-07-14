@@ -1,19 +1,21 @@
 # Layer: Skills
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Optionally activated instruction sets. In the hub: `dist/claude-code/plugin/skills/<name>/SKILL.md` (+ supporting files), shipped via the `mainframe` plugin.
+> Optionally activated instruction sets authored once in `core/skills/` and delivered through each runtime's skill mechanism.
 
-> Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-28 (full frontmatter spec + `disable-model-invocation`, `context: fork`).
+> Last updated: 2026-07-14 (three-tool sources and delivery). Prior: 2026-05-28 (full frontmatter spec + `disable-model-invocation`, `context: fork`).
 
 ---
 
 ## Where it lives / How to install
 
-- In the hub: `dist/claude-code/plugin/skills/<name>/SKILL.md` (+ optional `<name>/*.md` supporting files). Depth is strictly = 1.
-- On the machine: delivered via the `mainframe` plugin (`dist/claude-code/plugin/` symlinked as one plugin), not an individual per-skill symlink.
-- Activation: once the plugin is loaded, the skill becomes visible to Claude through the frontmatter "showcase".
+- Source of truth: `core/skills/<name>/SKILL.md` plus same-directory supporting files. Depth is strictly = 1.
+- Claude Code: byte-copied to `dist/claude-code/plugin/skills/<name>/` by `render_core.py` and delivered through the `mainframe` plugin.
+- OpenCode: `install.sh --opencode` links the Claude-rendered skill directories item-by-item into `~/.config/opencode/skills/`; there is no separate OpenCode skill render.
+- Codex: `adapters/codex/build_codex.py` transforms each projectable skill into `dist/codex/skills/<name>/`, including Codex-native metadata, then `install.sh --codex` links it into `${CODEX_HOME:-~/.codex}/skills/`.
+- Runtime activation semantics differ; §1 below documents Claude Code's canonical behavior.
 
 ---
 
@@ -106,7 +108,7 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
 
 ### 2.1. Current skills in `core/skills/`
 
-18 skills as of 2026-06-14, shipped via the `mainframe` plugin. `core/skills/` is the source of truth; `dist/claude-code/plugin/skills/` is its rendered byte-copy, guarded by `python3 tools/render_core.py --check` and `python3 tools/validate-skill.py`. This is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew to 18). Roles:
+18 skills as verified in `core/skills/` on 2026-07-14. Claude Code receives the rendered byte-copy through the `mainframe` plugin; OpenCode links that copy; Codex receives its transformed native projection. `core/skills/` is the single source of truth, guarded by `python3 tools/render_core.py --check` for the Claude copy and `.venv/bin/python3 tools/validate-skill.py --all` for source validation. Roles:
 
 - **Process / workflow:** `task-workflow`, `code-audit`, `decision-review`, `git-conventional-commits`.
 - **Quality discipline (gates / self-checks):** `no-suppression-markers`, `severity-calibration`, `surface-ticket`, `testing-strategy`, `secrets-handling`.

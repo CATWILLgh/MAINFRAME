@@ -1,20 +1,21 @@
 # Layer: Rules (`~/.claude/rules/`)
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > Modular instruction files that load **on demand** when Claude reads a matching file, scoped by `paths:` glob. In the hub: `dist/claude-code/rules/<name>.md` → symlink `~/.claude/rules/<name>.md`. Path-scoped guidance without burdening main context in unrelated projects.
 
-> Last updated: 2026-05-29 (layer introduced).
+> Last updated: 2026-07-14 (direct-authored exception and current empty state clarified).
 
 ---
 
 ## Where it lives / How install
 
-- In the hub: `dist/claude-code/rules/<name>.md`.
-- On the machine: `~/.claude/rules/<name>.md` (symlink via `install.sh`).
+- This is the one whole artifact layer authored directly in `dist/`: `dist/claude-code/rules/<name>.md`. There is no `core/rules/` or renderer mapping.
+- The directory is currently absent because no hub path rule exists yet. `install.sh` skips it while absent and links its children item-by-item into `~/.claude/rules/` once files are added.
 - Active across all projects (user-scope).
 - File watcher picks up edits without session restart (paths-rules behaviour: edit takes effect on next Read of a matching file).
+- Scope: Claude Code only. Codex's `dist/codex/rules/mainframe.rules` is a command-permission projection, not this path-scoped instruction layer; OpenCode has no equivalent hub layer.
 
 ---
 
@@ -145,7 +146,7 @@ If a rule outgrows these targets, see Recipe M2 in the decision-tree (split by t
 
 ### 2.4. Validator
 
-No validator exists yet for `dist/claude-code/rules/`. When the first rule is added to the hub, evaluate whether `tools/validate-rules.py` is justified by frequency of rule edits. Until then — manual review against §2.2 + §2.3.
+No validator exists yet because `dist/claude-code/rules/` has no files. When the first rule is added to the hub, evaluate whether a validator is justified by frequency of rule edits. Until then — manual review against §2.2 + §2.3.
 
 ---
 

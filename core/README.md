@@ -1,64 +1,81 @@
 # core/ — the tool-agnostic source of truth
 
 Per ADR 0085: hub sources live here, neutral to any specific AI coding tool.
-Per-tool refinements live in `adapters/<tool>/`, whose directory structure
-MIRRORS this one. Delivered artifacts (`dist/claude-code/plugin/`, `dist/`) are committed
-RENDER OUTPUTS — never edit them by hand.
+Per-tool refinements and projection code live in `adapters/<tool>/`. Delivered
+artifacts live under `dist/<tool>/`; generated files there are outputs, not
+authoring locations.
 
 ## Editing rule
 
-1. Edit files under `core/` (or the owning `adapters/<tool>/`).
+1. Edit files under `core/` or the owning `adapters/<tool>/`.
 2. Render: `python3 tools/render_core.py --write`.
-3. Commit sources and render outputs together.
+3. Commit sources with the committed render outputs and golden fixtures they affect. OpenCode agents and most Codex native projections are regenerated locally and remain gitignored.
 
-CI runs `python3 tools/render_core.py --check` on every push. That check is
-the sole mechanical drift guard: the test suites exercise the rendered output
-and stay green on an un-rendered core edit, so only `--check` catches a
-source↔render divergence, orphan render files, and naked render-path
-self-references in core sources.
+The path-scoped Claude Code Rules layer is the direct-authored exception:
+`install.sh` consumes `dist/claude-code/rules/`, and no `core/rules/` mapping
+exists. `dist/claude-code/settings.json` is also a hybrid live configuration:
+the renderer owns only `permissions.{allow,deny,ask}`; its other keys remain
+user-owned in that file. OpenCode and Codex native projections are generated
+by their adapter builders during `install.sh --opencode` and
+`install.sh --codex`.
+
+The Claude plugin manifest and committed OpenCode/Codex golden fixtures are
+direct-owned delivery metadata and tests, not additional artifact layers.
+
+CI runs `python3 tools/render_core.py --check` on every push. That check guards
+the mappings owned by this renderer: source↔render divergence, orphan render
+files, and naked render-path self-references in core sources. The OpenCode and
+Codex builder test suites separately guard their native projections and
+committed goldens.
 
 ## Sections
 
 - `gates/` — gate detectors (Python) + their data; wire contract in
-  [gates/CONTRACT.md](gates/CONTRACT.md). Landed (wave 1).
+  [gates/CONTRACT.md](gates/CONTRACT.md). Claude Code wiring lives in
+  `adapters/claude-code/gates/`; OpenCode dispatches through
+  `adapters/opencode/plugins/mainframe-gates.js`; Codex maps a supported subset
+  through `adapters/codex/build_codex.py` and
+  `adapters/codex/gates/mainframe-hook.sh`.
 - `agents/` — neutral agent definitions: capability-contract frontmatter
   (`needs-repo-read` / `needs-write` / `needs-web` / `needs-docs-lookup`,
   `reasoning-tier` deep|standard|light, `turn-budget`, `background`,
   `method-skills`) + role prose passed through verbatim. The renderer derives
   the Claude Code frontmatter deterministically; `review-only` is folded into
   `!needs-write` (tracks `permissionMode: plan` on every current agent); rare
-  divergence goes into a per-agent override
-  `adapters/claude-code/agents/<name>.yml` (key-merge over derived values).
-  Landed (wave 1).
+  divergence can be supplied through the renderer's optional Claude Code
+  override mechanism. OpenCode and Codex builders project the same contracts
+  into their native agent formats.
 - `skills/` — SKILL.md-standard skills; foreign parsers tolerate the hub's
   extra frontmatter keys (verified on OpenCode), so skills render as pure
-  byte-copies — no frontmatter split, bodies verbatim. `validate-skill.py`
-  treats this directory as the source of truth. Landed (wave 1).
+  byte-copies for Claude Code — no frontmatter split, bodies verbatim.
+  OpenCode links that same rendered copy; Codex generates a native projection.
+  `validate-skill.py` treats this directory as the source of truth.
 
 - `instructions/` — the umbrella behavioral rules as ordered section
   fragments (numeric prefixes = the shared compose order). Rendered by
-  concatenation: + `adapters/claude-code/instructions/` → `dist/claude-code/CLAUDE.md`
-  (byte-identical to the pre-split file); + `adapters/opencode/instructions/`
+  concatenation: + `adapters/claude-code/instructions/` → `dist/claude-code/CLAUDE.md`;
+  + `adapters/opencode/instructions/`
   → `dist/opencode/AGENTS.md` (delivered to `~/.config/opencode/AGENTS.md` by
-  `install.sh --opencode`, superseding OpenCode's CLAUDE.md fallback).
-  Landed (wave 1).
+  `install.sh --opencode`, superseding OpenCode's CLAUDE.md fallback); +
+  `adapters/codex/instructions/` → `dist/codex/AGENTS.md` (delivered to
+  `${CODEX_HOME:-~/.codex}/AGENTS.md` by `install.sh --codex`).
 
 - `permissions/rules.json` — the hub-owned allow/deny/ask rules. Rendered by
   KEY-MERGE, not byte-copy: `settings.json` is both hub policy and a live
   user-editable config surface (model, language, `permissions.defaultMode`),
   so the render splices ONLY the three rule lists into `dist/claude-code/settings.json`
   in place and `--check` compares only those lists — user keys are never
-  touched or checked. The OpenCode generator reads this file directly.
-  Landed.
+  touched or checked. The OpenCode and Codex generators read this file
+  directly and project only the rules their runtimes can represent.
 
 - `adapters/claude-code/files/` — hand-authored Claude Code delivery files:
   `output-styles/`, `scripts/`, and `templates/`. `render_core.py` copies them
   into the corresponding `dist/claude-code/` paths.
 
-Deferred: layer-6 (the non-permission `settings.json` keys — model, language,
-etc.) stays user-owned in `dist/claude-code/settings.json`, by design.
+Layer 6 (the non-permission `settings.json` keys — model, language, etc.)
+stays user-owned in `dist/claude-code/settings.json`, by design.
 
-## Assembly rules (mirror overlay)
+## Assembly rules (adapter overlay)
 
 An adapter overlay refines, never duplicates:
 
@@ -66,8 +83,8 @@ An adapter overlay refines, never duplicates:
   conditional markup inside paragraphs.
 - **Structures** (frontmatter, permission tables, configs) — key-merge; the
   adapter adds or overrides keys.
-- **Code** — core detectors are untouchable; an adapter contributes wiring
-  only (e.g. `adapters/claude-code/gates/run-hook.sh`, `hooks.json`).
+- **Code** — core detector logic stays tool-neutral; adapters contribute
+  runtime wiring and format projection without duplicating the detectors.
 - **Thin-layer discipline** — copied core content inside an overlay is a
   defect (it re-creates version drift); overlays carry only deltas.
 

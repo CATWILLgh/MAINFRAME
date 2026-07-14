@@ -1,11 +1,11 @@
 # Layer: Agents (sub-agents)
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Isolated subagents with their own context. The source of truth is `core/agents/` (capability contracts); it renders to Claude Code and projects to OpenCode.
+> Isolated subagents with their own context. Neutral capability contracts in `core/agents/` project into Claude Code, OpenCode, and Codex agent formats.
 
-> Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-29 (research + launch discipline).
+> Last updated: 2026-07-14 (three-tool sources and projections). Prior: 2026-05-29 (research + launch discipline).
 
 ---
 
@@ -14,8 +14,9 @@
 - Source of truth: `core/agents/<name>.md` — one capability contract per agent.
 - Claude Code target: `dist/claude-code/plugin/agents/<name>.md`, shipped via the `mainframe` plugin.
 - OpenCode target: `dist/opencode/agents/<name>.md`, projected from the contracts by `adapters/opencode/build_opencode.py`.
-- On the machine: delivered via the `mainframe` plugin (`dist/claude-code/plugin/` symlinked as one plugin), not an individual per-agent symlink.
-- Activation: once the plugin is loaded, a sub-agent is invoked via `Agent(subagent_type: "<name>")`.
+- Codex target: `dist/codex/agents/<name>.toml`, projected by `adapters/codex/build_codex.py`.
+- Runtime delivery: the Claude agents ship inside the plugin; OpenCode and Codex agents are linked item-by-item into `~/.config/opencode/agents/` and `${CODEX_HOME:-~/.codex}/agents/`.
+- §1 documents Claude Code's invocation and frontmatter semantics. OpenCode and Codex use their native agent interfaces.
 
 ---
 
@@ -142,7 +143,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 
 ### 2.1. Current agents from `core/agents/`
 
-7 agents as of 2026-06-14, shipped via the `mainframe` plugin.
+7 neutral agent contracts as verified in `core/agents/` on 2026-07-14. Claude Code ships them through the `mainframe` plugin; OpenCode and Codex install native projections.
 
 | Agent | Purpose | Activation |
 |---|---|---|
@@ -158,7 +159,7 @@ Methodology for selecting model + effort for new agents — internal skill `agen
 
 ### 2.2. Subagent discipline (research 2026-05-29)
 
-Subagent launch discipline was developed through research. Basic rules are in [dist/claude-code/CLAUDE.md](../../dist/claude-code/CLAUDE.md) Orchestration; details here.
+Subagent launch discipline was developed through research. Shared authored rules are in `core/instructions/60-orchestration.md`; Claude-specific additions are in `adapters/claude-code/instructions/62-orchestration-claude-code.md`. The rendered Claude Code umbrella is a verification target, not an edit location.
 
 #### 2.2.1. English prompts
 
@@ -262,13 +263,13 @@ Direct documented patterns from `code.claude.com/docs/en/sub-agents`:
 
 ### 2.3. Hub principles for agents
 
-Convention for every `core/agents/<name>.md`:
+Convention for every `core/agents/<name>.md` capability contract:
 
-- **Narrow `tools:` allowlist** — the agent does only what it was created for. Structural cap > prompt cap.
-- **The `tools:` allowlist is the mandatory hard knob.** Default convention for every `core/agents/<name>.md`: `tools:` allowlist (only needed tools), plus `permissionMode: plan` / `dontAsk` if needed. It is the baseline minimum and the primary scope guard. `maxTurns` is NOT a default — it is a runaway backstop for genuinely open-ended workers, set generously above the expected turn count; **omit it on write-capable multi-step agents** (a low cap terminates them mid-task — see §3.1). Precedent: the engineer agents had `maxTurns` removed after it killed them mid-task.
+- **Declare capabilities, not runtime tool syntax.** Use `needs-repo-read`, `needs-write`, `needs-web`, and `needs-docs-lookup`; adapters derive each runtime's tools, permissions, web access, and sandbox restrictions.
+- **Narrow capability grants are the mandatory hard knob.** A missing capability must restrict the projection; adapters never widen the parent session. `turn-budget` is reserved for genuinely open-ended workers and omitted on write-capable multi-step agents when a cap would terminate useful work mid-task.
 - **Soft patterns — supplement, not replacement.** Include the triad (ordinal cap + label + unconditional return) in the prompt as a fallback and for task specifics, not as primary enforcement.
-- **`model:` per task type** — sonnet/haiku by default; opus only if the task genuinely requires its capabilities.
-- **`skills:` preload** for specialized domains — better than pulling domain knowledge into the main CLAUDE.md.
+- **`reasoning-tier` per task type** — `light`, `standard`, or `deep`; each adapter maps the tier into its runtime's model/effort controls.
+- **`method-skills` for specialized domains** — adapters translate this into their runtime's skill-loading mechanism.
 - **`disable-model-invocation: true`** for domain skills — keeps the main context free of unnecessary load. Pattern: skill `disable-model-invocation: true` + sub-agent `skills: [name]`.
 - **English body** (principle #3).
 - **Project-agnostic** (principle #1) — the agent does not know project names or frameworks as mandatory.

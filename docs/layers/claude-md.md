@@ -1,20 +1,21 @@
-# Layer: CLAUDE.md (Operating instructions)
+# Layer: Umbrella operating instructions (`CLAUDE.md` / `AGENTS.md`)
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Global Claude instruction delivered to every session across all projects. In the hub: `dist/claude-code/CLAUDE.md` → symlink `~/.claude/CLAUDE.md`.
+> Shared global instructions delivered to every session across all projects, with thin runtime-specific wrappers for Claude Code, OpenCode, and Codex.
 
-> Last updated: 2026-05-28 (3-section rewrite).
+> Last updated: 2026-07-14 (three-tool sources, outputs, and delivery).
 
 ---
 
 ## Where it lives / How to install
 
-- In the hub: `dist/claude-code/CLAUDE.md` (132 lines as of 2026-05-28).
-- On the machine: `~/.claude/CLAUDE.md` (symlink via `install.sh`).
-- Active in all projects via user-scope.
-- Claude Code's file watcher picks up edits without restarting the session.
+- Shared source: ordered fragments in `core/instructions/`.
+- Tool-specific source: `adapters/claude-code/instructions/`, `adapters/opencode/instructions/`, and `adapters/codex/instructions/`.
+- Rendered targets: `dist/claude-code/CLAUDE.md` (159 lines), `dist/opencode/AGENTS.md` (149 lines), and `dist/codex/AGENTS.md` (149 lines), verified 2026-07-14 with `wc -l`.
+- Runtime delivery: `~/.claude/CLAUDE.md`, `~/.config/opencode/AGENTS.md`, and `${CODEX_HOME:-~/.codex}/AGENTS.md` through the corresponding installer path.
+- `python3 tools/render_core.py --write` composes all three targets. Edit the fragments, not the rendered files.
 
 ---
 
@@ -59,9 +60,9 @@ There is no hard limit; the practical target is to keep total volume (user + pro
 
 ## 2. Hub usage
 
-### 2.1. Current `dist/claude-code/CLAUDE.md`
+### 2.1. Current rendered instructions
 
-Structure (as of 2026-05-28, 132 lines):
+The shared core supplies the common sections below. Claude Code inserts its orchestration, memory, and advisor sections before the common Git/destructive-action tail; OpenCode and Codex append their runtime notes after that tail.
 
 | Section | Contents |
 |---|---|
@@ -76,13 +77,14 @@ Structure (as of 2026-05-28, 132 lines):
 | Engineering practices | DRY/SOLID/KISS, no suppression markers, supersede-not-append, 400/60 file/fn limits |
 | Problem-solving | Read 3-5 files; error-handling 5-step; do-not list (stop conditions, pre-flight) |
 | Orchestration | Subagents for broad work |
-| Advisor | Before substantive work / before declaring done |
 | Git and commits | No Claude attribution |
 | Destructive actions | Name explicitly, wait for ack |
 
+Claude Code additionally renders `Orchestration — Claude Code`, `Memory`, and `Advisor`. OpenCode and Codex each render a final runtime-specific section from their adapter.
+
 ### 2.2. Validator
 
-[`tools/validate-claude-md.py`](../../tools/validate-claude-md.py) — checks the Anthropic spec (R1-R5) + the project agnosticism principle (R6). Triggered on `SessionStart` (summary) + `PostToolUse` (Edit/Write/MultiEdit; exits instantly otherwise). Uses system `python3`, no dependencies.
+[`tools/validate-claude-md.py`](../../tools/validate-claude-md.py) checks the Anthropic format and project-agnosticism rules for the Claude Code umbrella and its source fragments. `python3 tools/render_core.py --check` is the composition/drift check covering all three rendered instruction targets.
 
 ---
 

@@ -1,6 +1,6 @@
 # Layer: Output styles
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `adapters/claude-code/files/output-styles/<name>.md`, rendered to `dist/claude-code/output-styles/<name>.md`.
@@ -15,6 +15,7 @@
 - Rendered target: `dist/claude-code/output-styles/<name>.md`.
 - On the machine: `~/.claude/output-styles/<name>.md` (symlinked via `install.sh`).
 - Activation: via `/config` (selecting the active style) or `outputStyle: "<name>"` in `settings.json`.
+- Scope: Claude Code only. No OpenCode or Codex output-style source, render mapping, or installer target exists.
 
 ---
 

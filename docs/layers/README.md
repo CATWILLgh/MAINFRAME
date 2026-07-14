@@ -1,6 +1,6 @@
 # MAINFRAME Hub Layers
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > Canonical list of hub layers and a navigator to their specifications.
@@ -12,7 +12,7 @@
 
 ## What counts as a "layer"
 
-A layer = a type of artifact the hub delivers to a target runtime, applied across **all** of the user's projects with no per-project edits. Claude Code delivery uses **direct `install.sh` symlinks** for the `dist/claude-code/` layers (CLAUDE.md, rules, settings, output-styles, templates, scripts) and **the single `mainframe` plugin** (`dist/claude-code/plugin/` symlinked as one plugin) for skills, agents, hooks, and commands. OpenCode delivery uses the `dist/opencode/` surface via `install.sh --opencode`.
+A layer = a type of artifact the hub delivers to a target runtime, applied across **all** of the user's projects with no per-project edits. Claude Code uses direct symlinks for files under `dist/claude-code/` and one `mainframe` plugin symlink for skills, agents, and hooks. `install.sh --opencode` generates and links the OpenCode projection; `install.sh --codex` does the same for Codex. Both flags are additive to the base Claude Code install.
 
 **Not layers:**
 - `docs/layers/` — layer specifications (what you are reading now).
@@ -20,29 +20,28 @@ A layer = a type of artifact the hub delivers to a target runtime, applied acros
 
 ## Canonical layer list
 
-| # | Layer | Rendered output | Runtime delivery | Spec |
+| # | Layer | Authored source | Delivery outputs | Spec |
 |---|---|---|---|---|
-| 1 | **CLAUDE.md** (operating instructions) | `dist/claude-code/CLAUDE.md` | `~/.claude/CLAUDE.md` (file symlink) | [claude-md.md](claude-md.md) |
-| 2 | **Rules** (path-scoped) *(planned, empty)* | `dist/claude-code/rules/<name>.md` | `~/.claude/rules/<name>.md` (symlinks) | [rules.md](rules.md) |
-| 3 | **Skills** | `dist/claude-code/plugin/skills/<name>/` | via the `mainframe` plugin | [skills.md](skills.md) |
-| 4 | **Hooks** | `dist/claude-code/plugin/hooks/scripts/*.py` + `dist/claude-code/plugin/hooks/hooks.json` | via the `mainframe` plugin | [hooks.md](hooks.md) |
-| 5 | **Permissions** | `dist/claude-code/settings.json` `permissions.{allow,deny,ask}` | part of `~/.claude/settings.json` (whole-file symlink) | [permissions.md](permissions.md) |
-| 6 | **Settings** (other fields) | `dist/claude-code/settings.json` (everything except permissions) | part of `~/.claude/settings.json` | [settings.md](settings.md) |
-| 7 | **Agents** | `dist/claude-code/plugin/agents/<name>.md` | via the `mainframe` plugin | [agents.md](agents.md) |
-| 8 | **Commands** *(empty)* | `dist/claude-code/plugin/commands/<name>.md` | via the `mainframe` plugin | [commands.md](commands.md) |
-| 9 | **Output styles** | `dist/claude-code/output-styles/<name>.md` | `~/.claude/output-styles/<name>.md` (symlink) | [output-styles.md](output-styles.md) |
-| 10 | **OpenCode delivery surface** | `dist/opencode/AGENTS.md`, `dist/opencode/agents/<name>.md` | `~/.config/opencode/AGENTS.md` and projected agents via `install.sh --opencode` | [claude-md.md](claude-md.md), [agents.md](agents.md) |
+| 1 | **Umbrella instructions** | `core/instructions/` + `adapters/<tool>/instructions/` | `dist/claude-code/CLAUDE.md`, `dist/opencode/AGENTS.md`, `dist/codex/AGENTS.md` | [claude-md.md](claude-md.md) |
+| 2 | **Rules** (path-scoped) *(planned, empty)* | Direct exception: `dist/claude-code/rules/<name>.md` | Claude Code only: `~/.claude/rules/<name>.md` | [rules.md](rules.md) |
+| 3 | **Skills** | `core/skills/<name>/` | Claude plugin byte-copy; shared links for OpenCode; native `dist/codex/skills/<name>/` projection | [skills.md](skills.md) |
+| 4 | **Hooks / gates** | `core/gates/` + tool wiring under `adapters/<tool>/` | Claude plugin hooks; OpenCode adapter plugin; Codex `hooks.json` + launcher | [hooks.md](hooks.md) |
+| 5 | **Permissions** | `core/permissions/rules.json` | Claude `settings.json`; OpenCode `opencode.json` merge; Codex `mainframe.rules` | [permissions.md](permissions.md) |
+| 6 | **Settings** (other fields) | User-owned fields in `dist/claude-code/settings.json` | Claude Code only: `~/.claude/settings.json` | [settings.md](settings.md) |
+| 7 | **Agents** | `core/agents/<name>.md` | Claude Markdown, OpenCode Markdown, and Codex TOML projections | [agents.md](agents.md) |
+| 8 | **Commands** *(reserved, empty)* | No source mapping yet | No current output or runtime delivery | [commands.md](commands.md) |
+| 9 | **Output styles** | `adapters/claude-code/files/output-styles/<name>.md` | Claude Code only: `dist/claude-code/output-styles/<name>.md` | [output-styles.md](output-styles.md) |
 
 **Notes:**
-- (4), (5), and (6) technically live in a single file (`settings.json`), but they are **separate layers** — they have different syntax rules, different eval semantics, different failure modes, and different sources of truth. Their specs are kept separate.
+- (5) and (6) share Claude Code's `settings.json`, but they are **separate layers** with different ownership: the renderer key-merges permission lists from `core/permissions/rules.json`; other settings fields are edited in place. Hook registration lives in the Claude plugin, not in `settings.json`.
 - (7) Agents (7 agents) and (9) Output styles (1) are populated; (2) Rules and (8) Commands are reserved (no files yet). Rules was introduced 2026-05-29 after empirical verification of paths-activation; no concrete files exist in `dist/claude-code/rules/` yet.
-- The `dist/claude-code/` layers are symlinked individually by `install.sh`; the `dist/claude-code/plugin/` layers (skills, agents, hooks, commands) ship together as the `mainframe` plugin (one symlink). Usage: `./install.sh` (sync), `./install.sh --dry-run` (diagnostics), `./install.sh --uninstall` (remove symlinks).
+- Run `python3 tools/render_core.py --write` after source edits. OpenCode and Codex native projections are generated by their adapter builders during `./install.sh --opencode` and `./install.sh --codex`. `./install.sh --dry-run` previews changes; `./install.sh --uninstall` removes managed symlinks.
 
 ## External touchpoints (not our layers, but worth knowing)
 
 | Touchpoint | Where it lives | Why it is not a layer |
 |---|---|---|
-| **MCP user-scope** | `~/.claude.json` (a separate file!) | This is not `~/.claude/settings.json`, and `.claude.json` stores additional runtime data (credentials, project history). Symlinking it is risky. If we decide to — a separate ADR. |
+| **MCP user-scope** | `~/.claude.json` (a separate file!) | The hub does not own or symlink it. The OpenCode builder reads it and projects only compatible secret-free MCP entries into `opencode.json`. |
 | **Runtime memory** | `~/.claude/projects/<id>/memory/` | Claude Code mechanics — index + topic files, accumulated during runs. Not delivered by the hub; this is runtime state. |
 | **Community/official plugins** | external plugins via `enabledPlugins` | We use external plugins (e.g. `context7=true`). Distinct from our OWN `mainframe` plugin (`dist/claude-code/plugin/`) — that one IS a hub delivery vehicle (layers 3/4/7/8), not an external touchpoint. |
 | **Project-scope artifacts** | `<repo>/.claude/` and `<repo>/.mcp.json` | Per-project, not global. The hub does not touch these. |
@@ -53,7 +52,7 @@ MCP is an Anthropic standard that allows Claude to connect to external tools and
 - **Project-scope:** `<repo>/.mcp.json` (for a single project).
 - **User-scope:** `~/.claude.json` (for all projects).
 
-The hub does not currently manage `~/.claude.json` (it is a separate file outside `~/.claude/`). Specific MCP servers (including Context7, which we use) are connected by the user via `claude mcp add` or configured previously. If we later want to standardize a set of user-scope MCP servers through the hub — we will formalize that in a separate ADR.
+The hub does not manage `~/.claude.json` (it is a separate file outside `~/.claude/`). Specific MCP servers are connected by the user through the relevant runtime. The OpenCode installer reads Claude Code's user-scope file only to copy compatible secret-free definitions; it never takes ownership of the source file.
 
 ## Decision tree — which layer a new artifact belongs to + how to migrate an existing one
 

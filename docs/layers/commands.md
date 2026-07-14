@@ -1,19 +1,19 @@
 # Layer: Commands
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Custom slash commands (`/<name>`), explicitly invoked by the user. In the hub: `dist/claude-code/plugin/commands/<name>.md` (currently **empty**), shipped via the `mainframe` plugin.
+> Custom slash commands (`/<name>`), explicitly invoked by the user. This is a reserved Claude Code layer: no command artifact, source directory, renderer mapping, or runtime output exists yet.
 
-> Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-28 (3-section rewrite). Layer is reserved; no artifacts yet.
+> Last updated: 2026-07-14 (reserved-layer ownership clarified). Layer is reserved; no artifacts yet.
 
 ---
 
 ## Where it lives / How to install
 
-- In the hub: `dist/claude-code/plugin/commands/<name>.md` — one file per command.
-- On the machine: delivered via the `mainframe` plugin (`dist/claude-code/plugin/` symlinked as one plugin).
-- Activation: once the plugin is loaded, the command is available in chat — as a plugin command it carries the plugin prefix `/mainframe:<name>` (see §1.4).
+- No `core/commands/`, adapter command directory, `dist/claude-code/plugin/commands/`, or OpenCode/Codex projection exists.
+- Before the first command is added, define an authored source and renderer mapping. Do not create a command directly under generated `dist/` output.
+- The expected Claude Code runtime destination would be the `mainframe` plugin, where plugin commands carry the `/mainframe:<name>` prefix (see §1.4); this is a future contract, not current delivery.
 
 ---
 
@@ -62,7 +62,7 @@ Commands inside plugins carry the plugin prefix (e.g. `/plugin:context7:query`).
 
 ## 2. Hub usage & ADRs
 
-**No artifacts.** Layer is reserved. Candidates — see backlog (e.g. `/release`, `/ticket`).
+**No artifacts.** The layer is reserved. Its first use requires an explicit source/render decision before an artifact is created.
 
 Hub principles (when the first command is added):
 - **Command = side-effect action** — if not, it belongs in a skill.

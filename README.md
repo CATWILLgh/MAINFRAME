@@ -18,7 +18,7 @@
 
 <img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
 
-A baseline of operating rules, focused sub-agents, and small automatic checks I want to apply in **every** Claude Code session on my machine. Set up once — every project, every session, inherits the same discipline.
+A baseline of operating rules, focused sub-agents, and small automatic checks I want to apply in **every** Claude Code, OpenCode, and Codex session on my machine. Set up once — every project, every session, inherits the same discipline.
 
 It's shaped for one workflow in particular: long **auto-mode** runs — hours, sometimes days, where Claude and I plan a larger feature up front, then it executes on its own with no one watching each step. Every rule, hook, and permission tier here is built to hold quality through exactly that: an unattended run where a missed check turns into a bug nobody catches until later.
 
@@ -78,14 +78,14 @@ And here's the part that's easy to miss. It looks like just a folder of Markdown
 
 In plain words — what each piece is for:
 
-- **Umbrella `CLAUDE.md`** — a tight set of working rules Claude follows in every project on your machine. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, no leftover `TODO`/`FIXME` markers, and so on. Around 160 lines, intentionally short to stay in focus.
+- **Umbrella instructions** — one shared set of working rules, rendered as `CLAUDE.md` for Claude Code and `AGENTS.md` for OpenCode and Codex. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, no leftover `TODO`/`FIXME` markers, and so on. The tool-specific wrappers stay thin so the shared rules remain the owner.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like "audit this code carefully", "format this commit message in Conventional Commits style", "scan this diff for forgotten secrets" — instead of one giant document trying to cover everything.
-- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
-- **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan diffs for security issues with `ruff`/`semgrep`/`osv-scanner`. Block a finished turn when a real problem is still unresolved. Things that fire without you having to remember to fire them — the full list with what each one does is in [Inventory](#inventory--whats-actually-inside) below.
-- **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
-- **Permissions** — three-tier model (deny / ask / allow) that's strict by default. Some things must never run; some need confirmation; the rest run quietly with logging.
+- **Agents (sub-agents)** — neutral specialist contracts with capability and reasoning tiers that each adapter translates into its runtime's agent controls. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking.
+- **Hooks** — shared automatic checks with runtime-specific wiring. They catch leftover `TODO`/`FIXME` markers, warn on risky shell patterns, scan diffs for security issues, and gate unresolved problems where the runtime supports it. Claude Code carries the full set; OpenCode and Codex receive documented subsets.
+- **Rules** — a reserved Claude Code layer for small path-scoped guidance files that load on demand when Claude reads a matching path. It is currently empty.
+- **Permissions** — one neutral policy source projected into each runtime's available controls. Claude Code receives the full deny / ask / allow lists; OpenCode and Codex receive conservative, explicitly limited projections.
 
-End result the hub aims for: **the same baseline of quality and discipline applied to every project on your machine — without re-configuring Claude each time or babysitting it through a long unattended run.** When the baseline is high, day-to-day output is more predictable and bug rate drops.
+End result the hub aims for: **the same baseline of quality and discipline applied to every project on your machine — without re-configuring each coding agent or babysitting it through a long unattended run.** When the baseline is high, day-to-day output is more predictable and bug rate drops.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -93,11 +93,11 @@ End result the hub aims for: **the same baseline of quality and discipline appli
 
 ## Inventory — what's actually inside
 
-The concrete list of everything the hub ships, in plain words. Three groups: **agents** (specialist sub-agents you delegate to), **hooks** (automatic checks on tool events), **skills** (focused playbooks Claude pulls when relevant).
+The concrete list of the shared hub capabilities, in plain words. Three groups: **agents** (specialist sub-agents you delegate to), **hooks** (automatic checks on tool events), **skills** (focused playbooks the runtime loads when relevant). Invocation syntax, model mapping, and hook coverage below describe the Claude Code target; OpenCode and Codex receive the projections summarized in [Architecture](#architecture).
 
 ### Agents — 7 specialist sub-agents
 
-Each ships with its model and effort already wired in, calibrated separately so you don't pick at call time. Invoked as `subagent_type: "mainframe:<name>"`.
+The neutral contracts carry capability and reasoning tiers; each adapter maps them to its runtime. In Claude Code they are invoked as `subagent_type: "mainframe:<name>"` and use the model shown below.
 
 | Agent | What it's for | Model |
 |---|---|---|
@@ -158,7 +158,7 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 
 ### Skills — 18 focused playbooks
 
-Pulled automatically when the situation matches, or invoked as `/mainframe:<name>`.
+In Claude Code, pulled automatically when the situation matches or invoked as `/mainframe:<name>`. OpenCode and Codex use their native skill-loading mechanisms.
 
 | Group | Skills |
 |---|---|
@@ -176,19 +176,48 @@ Pulled automatically when the situation matches, or invoked as `/mainframe:<name
 ```mermaid
 graph LR
     subgraph repo["MAINFRAME repo (this)"]
-      P[dist/claude-code/plugin/<br/>skills + agents + hooks + commands]
-      E[dist/claude-code/<br/>CLAUDE.md + settings.json + rules + secret helper]
+      C[core/<br/>neutral sources]
+      A[adapters/<br/>claude-code + opencode + codex]
+      R[python3 tools/render_core.py --write]
+      BO[adapters/opencode/build_opencode.py]
+      BC[adapters/codex/build_codex.py]
+      P[dist/claude-code/plugin/<br/>skills + agents + hooks]
+      E[dist/claude-code/<br/>CLAUDE.md + settings.json + files]
+      O[dist/opencode/]
+      X[dist/codex/]
     end
 
+    C --> R
+    A --> R
+    R --> P
+    R --> E
+    R --> O
+    R --> X
+    C --> BO
+    A --> BO
+    BO --> O
+    C --> BC
+    A --> BC
+    BC --> X
     P -->|one symlink<br/>~/.claude/skills/mainframe/| home[~/.claude/]
     E -->|per-item symlinks| home
     home -->|Claude auto-loads<br/>as 'mainframe' plugin| any[Any project<br/>on the machine]
+    O -->|./install.sh --opencode| opencode[~/.config/opencode/]
+    X -->|./install.sh --codex| codex[~/.codex/]
 ```
 
-The hub ships in two channels:
+The hub is tool-agnostic at its core: shared artifacts live in `core/`, and thin tool refinements live in `adapters/{claude-code,opencode,codex}/`. `python3 tools/render_core.py --write` renders the Claude Code artifacts and composes the umbrella instructions for all three tools. The installer also runs `adapters/opencode/build_opencode.py` and `adapters/codex/build_codex.py` for their native projections.
 
-- **A plugin** (`dist/claude-code/plugin/`) carries skills, agents, hooks, and commands. After install, Claude Code auto-loads it as the `mainframe` plugin via the skills-dir mechanism, and everything inside becomes available with the `mainframe:` namespace prefix (e.g. `/mainframe:code-audit`, `subagent_type: "mainframe:python-backend-engineer"`). That namespace is the visible mark that something is coming from this hub, not from your local project setup or another plugin.
-- **Single-file and per-item symlinks** (`dist/claude-code/`) carry the umbrella `CLAUDE.md`, the permission `settings.json`, path-scoped `rules/`, and a small credentials helper — pieces the plugin format does not currently support.
+Edit source files, not generated delivery files. Two narrowly defined cases live in `dist/`: future path-scoped Claude Code rules are authored directly in `dist/claude-code/rules/` because no `core/rules/` mapping exists, and the non-permission fields in `dist/claude-code/settings.json` remain user-owned while the renderer key-merges only `permissions.{allow,deny,ask}`. CI checks the mappings owned by `render_core.py` with `python3 tools/render_core.py --check`.
+
+The direct-owned plugin manifest and committed golden fixtures also live under `dist/`, but they are delivery metadata and tests rather than artifact layers.
+
+The Claude Code target ships in two channels:
+
+- **A plugin** (`dist/claude-code/plugin/`) carries skills, agents, and hooks. After install, Claude Code auto-loads it as the `mainframe` plugin via the skills-dir mechanism, and everything inside becomes available with the `mainframe:` namespace prefix (e.g. `/mainframe:code-audit`, `subagent_type: "mainframe:python-backend-engineer"`). That namespace is the visible mark that something is coming from this hub, not from your local project setup or another plugin.
+- **Single-file and per-item symlinks** (`dist/claude-code/`) carry the umbrella `CLAUDE.md`, the hybrid `settings.json`, output styles, and a small credentials helper. The installer is also prepared to link direct-authored path-scoped rules if that currently empty layer gains files.
+
+OpenCode uses its composed instructions and generated agents under `dist/opencode/`, plus the direct adapter plugin and shared Claude-rendered skills. Codex uses generated native artifacts under `dist/codex/`. The installer delivers them into `~/.config/opencode/` and `${CODEX_HOME:-~/.codex}` respectively. OpenCode agents and most Codex projections are gitignored build output; committed goldens test representative transformations.
 
 See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
@@ -200,10 +229,11 @@ See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
 **Required:**
 
-- **Claude Code v2.1+** — the host (CLI or IDE extension).
+- **The target runtime** — Claude Code v2.1+ for the default install, OpenCode for `--opencode`, or Codex for `--codex`. The OpenCode and Codex flags are additive to the Claude Code baseline.
 - **git** — to clone the repo, and for the hooks that diff your working tree.
 - **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
 - **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the linters below, but need no Python packages of their own). Without Python 3 they silently no-op (the installer warns; it does not fail).
+- **The repository `.venv` for alternate targets** — OpenCode and Codex projections require PyYAML. Bootstrap once with `python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml`.
 
 **Recommended — each unlocks a group of checks; anything missing just stays silent, and `install.sh` prints an OS-specific install hint:**
 
@@ -211,7 +241,7 @@ See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 - **uv or pipx** — installs the Python-packaged linters the hooks call: `ruff`, `semgrep`, `pip-audit` (`semgrep` powers the JS/TS security stop-gate, but installs as a Python package).
 - **osv-scanner** — the dependency-vulnerability hook (`install.sh` can fetch the binary for you).
 
-Nothing here hard-fails a session: a tool that isn't installed disables only its own hook. Run `./install.sh --dry-run` to preview everything and see exactly what's missing.
+A missing optional scanner disables only the check that depends on it; the installer reports what is unavailable. Run `./install.sh --dry-run` to preview everything and see exactly what's missing.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -225,12 +255,19 @@ cd ~/Documents/projects/MAINFRAME
 ./install.sh
 ```
 
+Use an additive target flag for OpenCode or Codex; each command also installs the Claude Code baseline:
+
+```bash
+./install.sh --opencode
+./install.sh --codex
+```
+
 ```mermaid
 graph LR
     A[git clone] --> B[./install.sh]
     B --> C[dist/claude-code/plugin/ →<br/>~/.claude/skills/mainframe/]
     B --> D[dist/claude-code/CLAUDE.md & settings.json<br/>→ ~/.claude/ symlinks]
-    B --> E[dist/claude-code/rules/* →<br/>~/.claude/rules/ per-item]
+    B --> E[future dist/claude-code/rules/* →<br/>~/.claude/rules/ per-item]
     C --> F[Claude auto-loads<br/>'mainframe' plugin]
     D --> G[Umbrella + permissions<br/>active in every session]
     E --> G
@@ -241,8 +278,10 @@ What `install.sh` does:
 
 - **One symlink for the plugin** — `dist/claude-code/plugin/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads it and prefixes everything inside with the `mainframe:` namespace.
 - **Single-file symlinks** for the umbrella `CLAUDE.md` and the permission `settings.json` (the plugin format does not provide an equivalent for these).
-- **Per-item symlinks** for `dist/claude-code/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
+- **Per-item rule symlinks when present** — the Rules layer is currently empty; once a direct-authored file exists under `dist/claude-code/rules/`, it is linked into `~/.claude/rules/` without replacing the whole directory.
 - **Credentials helper** — links `dist/claude-code/scripts/secret` into `~/.local/bin/` and seeds `~/.config/credentials/` + `~/.claude/credentials-index.md` from the template.
+- **OpenCode target** — `--opencode` installs `AGENTS.md`, projected agents, shared skills, and the adapter-owned `mainframe-gates.js` plugin into `~/.config/opencode/`; it also merges the hub permission map and compatible secret-free MCP entries into `opencode.json`. Its permission mapping and turn-end enforcement are thinner than Claude Code's.
+- **Codex target** — `--codex` installs `AGENTS.md`, projected skills, `mainframe.rules`, gate hooks, and agents into `${CODEX_HOME:-~/.codex}`. Hook gates require one-time per-project trust through `/hooks`, renewed after gate changes, and reuse detectors from the base Claude Code plugin install.
 - **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
 - **Backs up** any pre-existing real file before replacing it with a symlink.
 - **Idempotent** — re-running is a no-op when state matches.
@@ -251,6 +290,8 @@ Options:
 
 ```
 ./install.sh              # install (with backups)
+./install.sh --opencode   # install the OpenCode target
+./install.sh --codex      # install the Codex target
 ./install.sh --dev        # install + hub-development instrumentation (see below)
 ./install.sh --dry-run    # preview, no changes
 ./install.sh --uninstall  # remove managed symlinks (incl. --dev ones)
@@ -276,7 +317,7 @@ cd ~/Documents/projects/MAINFRAME
 git pull
 ```
 
-That's it. Symlinks point to files in this repo — the next Claude Code session sees the latest. Re-run `install.sh` **only** if a new top-level directory appeared under `dist/claude-code/`.
+Existing file symlinks see pulled changes immediately. Re-run `./install.sh` when the Claude Code delivery tree gains a newly linked item; re-run `./install.sh --opencode` or `./install.sh --codex` after changes to those projections so their generators, per-item links, and runtime configuration are refreshed.
 
 ```mermaid
 graph LR
@@ -295,14 +336,14 @@ What I have actually verified this hub on:
 
 - **Claude Code CLI** — the primary surface I use daily.
 - **Claude Code IDE extension** — also in active use.
+- **OpenCode** — supported through the `--opencode` projection and installer path.
+- **OpenAI Codex** — supported through the `--codex` projection and installer path.
 - **Main thread model**: Claude **Opus 4.7+** at `high` or `xhigh` effort (currently **Opus 4.8** day to day). This is what I run every day and what all the discipline is tuned against.
 - **Sub-agents** — each one calibrated separately via a small empirical tournament so the right model + effort sits inside the agent file itself. You don't have to think about it at call time.
 
 Other model / effort combinations may work but I haven't verified them. When an agent's prompt body changes in a meaningful way, I re-run its tournament.
 
 **Trying the hub on other models or effort levels is very welcome** — Sonnet, Haiku, lower or higher effort, different IDEs. Share what you observe (open an issue or a PR with notes); empirical results on configurations I don't run daily are exactly the kind of feedback the hub gets better from.
-
-**OpenAI Codex** support is in the future-list, not in scope yet.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -323,7 +364,7 @@ Other model / effort combinations may work but I haven't verified them. When an 
 ```
 MAINFRAME/
 ├── README.md, LICENSE, CONTRIBUTING.md   # project meta
-├── install.sh                            # installer (creates the symlinks into ~/.claude/)
+├── install.sh                            # installer for Claude Code plus optional OpenCode/Codex targets
 ├── assets/                               # README images (banner, divider, badge)
 │
 ├── core/                                  # TOOL-NEUTRAL SOURCES (source of truth)
@@ -336,31 +377,35 @@ MAINFRAME/
 ├── adapters/                              # PER-TOOL SOURCE REFINEMENTS
 │   ├── claude-code/                       # Claude Code refinements + hand-authored files
 │   │   └── files/                         # output-styles, scripts, and templates
-│   └── opencode/                          # OpenCode refinements and projection generator
+│   ├── opencode/                          # OpenCode refinements and projection generator
+│   └── codex/                             # Codex refinements and projection generator
 │
-├── dist/                                  # GENERATED render output (committed; never hand-edited)
-│   ├── claude-code/plugin/               # the Claude Code plugin — auto-loads as 'mainframe' after install
-│   │   ├── .claude-plugin/plugin.json    # plugin manifest (name, version, license)
-│   │   ├── skills/                       # 18 skills, one folder per skill
-│   │   ├── agents/                       # 7 file-based sub-agents (Python, Node.js, Next.js, React, devops, decision-reviewer, web-search)
-│   │   ├── commands/                     # slash commands (currently empty)
-│   │   └── hooks/
-│   │       ├── hooks.json                # which hook fires on which event
-│   │       ├── scripts/                  # 29 Python files — hook scripts + shared libs (security scans, marker discipline, ...)
-│   │       └── rules/                    # Semgrep YAML rules
+├── dist/                                  # delivery output; generated except documented direct-owned files
+│   ├── claude-code/
+│   │   ├── plugin/                       # installed as the 'mainframe' plugin
+│   │   │   ├── .claude-plugin/plugin.json # plugin manifest
+│   │   │   ├── skills/                   # rendered from core/skills/
+│   │   │   ├── agents/                   # rendered from core/agents/
+│   │   │   └── hooks/                    # rendered detectors, rules, launcher, and registration
+│   │   ├── CLAUDE.md                     # composed umbrella instructions
+│   │   ├── settings.json                 # rendered permission lists + user-owned settings
+│   │   ├── output-styles/                # rendered Claude Code styles
+│   │   ├── scripts/secret                # rendered credentials helper
+│   │   └── templates/credentials-index.md # rendered starter template
 │
-│   └── claude-code/                      # what the plugin format does NOT carry
-│       ├── CLAUDE.md                     # umbrella operating rules (partnership, evidence, honesty, ...)
-│       ├── settings.json                 # permissions (allow/ask/deny tiers)
-│       ├── output-styles/                # custom reply styles (e.g. explanatory-concise)
-│       ├── rules/                        # path-scoped guidance (currently empty, future-proof)
-│       ├── scripts/secret                # credentials helper script
-│       └── templates/credentials-index.md # starter template for the credentials index
+│   ├── opencode/                         # OpenCode render output
+│   │   ├── AGENTS.md                     # OpenCode umbrella instructions
+│   │   ├── agents-golden/                # golden agent projections
+│   │   └── agents/                       # generated projected agents (gitignored)
 │
-│   └── opencode/                         # OpenCode render output
-│       ├── AGENTS.md                     # OpenCode umbrella instructions
-│       ├── agents-golden/                # golden agent projections
-│       └── agents/                       # projected agents
+│   └── codex/                            # Codex render output
+│       ├── AGENTS.md                     # Codex umbrella instructions
+│       ├── skills-golden/                # committed representative projection fixtures
+│       ├── skills/                       # generated skills (gitignored)
+│       ├── rules/mainframe.rules         # permission rules
+│       ├── hooks.json                    # gate hook configuration
+│       ├── mainframe-hook.sh             # gate hook dispatcher
+│       └── agents/<name>.toml            # projected agent definitions
 │
 ├── tools/                                # Python validators (used by hooks; runnable manually)
 │   ├── validate-claude-md.py             # umbrella spec + project-agnosticism check
@@ -371,9 +416,9 @@ MAINFRAME/
     └── layers/                           # architecture spec per layer (skills, agents, hooks, rules, ...)
 ```
 
-MAINFRAME is dual-target: `./install.sh` delivers Claude Code, while `./install.sh --opencode` additionally delivers the OpenCode `AGENTS.md`, projected agents, skills, and gate dispatcher.
+MAINFRAME supports three targets: `./install.sh` delivers Claude Code, `./install.sh --opencode` delivers OpenCode, and `./install.sh --codex` delivers Codex.
 
-Anything you do not see here lives outside the repo by design — internal ADRs, working notes, the maintainer's inbox of unprocessed candidates, and per-machine memory are all gitignored. The published artifact is the hub itself, not the maintainer's working files.
+Internal ADRs, maintainer working notes, the inbox of unprocessed candidates, runtime telemetry, and per-machine memory are gitignored. The published artifact is the hub plus the contributor-facing layer specifications under `docs/layers/`.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -400,7 +445,7 @@ graph TD
 
 | Layer | Spec |
 |---|---|
-| Umbrella `CLAUDE.md` | [`docs/layers/claude-md.md`](docs/layers/claude-md.md) |
+| Umbrella instructions (`CLAUDE.md` / `AGENTS.md`) | [`docs/layers/claude-md.md`](docs/layers/claude-md.md) |
 | Skills | [`docs/layers/skills.md`](docs/layers/skills.md) |
 | Agents | [`docs/layers/agents.md`](docs/layers/agents.md) |
 | Hooks | [`docs/layers/hooks.md`](docs/layers/hooks.md) |
@@ -417,7 +462,7 @@ graph TD
 
 ## Principles
 
-Every artifact shipped by this hub (whether in `dist/claude-code/plugin/` or `dist/claude-code/`) holds these:
+Every artifact shipped by this hub holds these:
 
 1. **Project-agnostic** — no hardcoded project names, stacks, paths, or domains.
 2. **Evidence-based** — new rules need real experience, an authoritative source, or a measured experiment. Not "feels right".

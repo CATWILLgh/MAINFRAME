@@ -1,11 +1,11 @@
 # Layer: Permissions
 
-> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
+> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> The Claude Code layer that controls which tool calls are allowed, blocked, or require user confirmation. The source is `core/permissions/rules.json`; it renders into the `dist/claude-code/settings.json` block `permissions.{allow, deny, ask}` → symlinked to `~/.claude/settings.json` → takes effect in all projects.
+> Shared allow/deny/ask policy authored in `core/permissions/rules.json`, then rendered or conservatively projected into the controls each of the three runtimes can express.
 
-> Last updated: 2026-05-28 (3-section rewrite).
+> Last updated: 2026-07-14 (three-tool projection and current policy summary).
 
 ---
 
@@ -13,10 +13,11 @@
 
 - Source of truth: `core/permissions/rules.json` — hub-owned `allow`, `deny`, and `ask` rules.
 - Claude Code target: `dist/claude-code/settings.json` — the permission lists are rendered by key-merge; `permissions.defaultMode` remains in the target settings.
-- OpenCode: `adapters/opencode/build_opencode.py` reads `core/permissions/rules.json` directly.
-- On the machine: `~/.claude/settings.json` (symlink to the hub file).
+- OpenCode target: `adapters/opencode/build_opencode.py` projects representable entries and merges the `permission` block into `~/.config/opencode/opencode.json`. This is best-effort and is not a safety boundary.
+- Codex target: `adapters/codex/build_codex.py` emits only exact safe shell-prefix projections to `dist/codex/rules/mainframe.rules`, installed at `${CODEX_HOME:-~/.codex}/rules/mainframe.rules`; unrepresentable rules are omitted and reported.
+- Claude Code runtime: `~/.claude/settings.json` (symlink to the hub file).
 - In any project: `<repo>/.claude/settings.json` (project-scope) and `<repo>/.claude/settings.local.json` (gitignored, local).
-- Activation: simultaneously with all of `dist/claude-code/settings.json` via symlink. There is no separate activation for permissions only. The Claude Code file watcher picks up edits "with brief delay" without a restart.
+- Run `python3 tools/render_core.py --write` for the Claude projection; the OpenCode and Codex builders run during `install.sh --opencode` and `install.sh --codex`.
 
 ---
 
@@ -114,7 +115,7 @@ Auto-mode (`defaultMode: "auto"`) adds a 4-step classification algorithm between
 
 ### 1.8. Hub 3-tier model (2026-05-28)
 
-Categorization of rules in `dist/claude-code/settings.json` into 3 tiers with explicit criteria. Sources: OWASP LLM06 (Excessive Agency), NIST SP 800-53 AC-6/CM-7 (least privilege/functionality), Anthropic Auto Mode docs, real-world incidents (Replit 2025-07, PocketOS 2026-04, nx supply chain 2025-08).
+Categorization of rules in `core/permissions/rules.json` into 3 tiers with explicit criteria. Sources: OWASP LLM06 (Excessive Agency), NIST SP 800-53 AC-6/CM-7 (least privilege/functionality), Anthropic Auto Mode docs, real-world incidents (Replit 2025-07, PocketOS 2026-04, nx supply chain 2025-08).
 
 **Tier 1 — `deny`** (hard block, no override): irreversible + out-of-scope + undermines security + catastrophic scale. Any single criterion is sufficient.
 
@@ -132,24 +133,11 @@ Caveat: a hook `permissionDecision: "ask"` in auto-mode transitions to `"defer"`
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Current settings in `dist/claude-code/settings.json`
+### 2.1. Current authored policy
 
-```json
-"permissions": {
-  "defaultMode": "acceptEdits",
-  "deny": [
-    "Bash(rm -rf /)", "Bash(rm -rf /*)", "Bash(rm -rf ~)", "Bash(rm -rf ~/)", "Bash(rm -rf ~/*)",
-    "Bash(*git push --force*)", "Bash(*git push -f *)",
-    "Bash(*mkfs*)", "Bash(*dd if=*)"
-  ],
-  "ask": [
-    "Bash(rm -rf *)",
-    "Bash(git commit --no-verify*)", "Bash(git push --no-verify*)", "Bash(git rebase --no-verify*)",
-    "Bash(npm install --no-verify*)", "Bash(pnpm install --no-verify*)"
-  ],
-  "allow": [ /* ~80 prefix-form rules, mostly `Bash(cmd:*)` */ ]
-}
-```
+As verified from `core/permissions/rules.json` on 2026-07-14, the policy contains 100 `allow`, 88 `deny`, and 46 `ask` entries. Claude Code's `permissions.defaultMode` is separately user-owned in `dist/claude-code/settings.json` and is currently `auto`. Do not duplicate the full lists here: inspect the authored JSON for the current policy, then use the runtime-specific builder report to see which entries were projectable.
+
+The current Codex projection contains 79 `prefix_rule` entries. A lower count is expected because Codex rules express shell argv prefixes only; omission is safer than broadening an untranslatable source rule.
 
 ### 2.2. Canonical claim vs hub empirical — discrepancies
 
