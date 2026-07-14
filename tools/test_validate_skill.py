@@ -123,7 +123,8 @@ def test_supp_line_cap_and_format():
 
 def test_live_roots_accept_three_and_reject_outside():
     base = Path(tempfile.mkdtemp(prefix="vs-roots-"))
-    roots = [base / n for n in ("core/skills", "plugin-dist/skills", "dev/skills")]
+    roots = [base / n for n in (
+        "core/skills", "dist/claude-code/plugin/skills", "dev/skills")]
     for r in roots:
         (r / "sk").mkdir(parents=True)
     old_live, old_summary = vs.LIVE_ROOTS, vs.SUMMARY_ROOTS

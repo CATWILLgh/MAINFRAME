@@ -15,7 +15,7 @@ import importlib.util
 import os
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                       "plugin-dist", "hooks", "scripts", "comment_extract.py")
+                       "dist", "claude-code", "plugin", "hooks", "scripts", "comment_extract.py")
 spec = importlib.util.spec_from_file_location("comment_extract", _SCRIPT)
 ce = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ce)

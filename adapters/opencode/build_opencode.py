@@ -4,7 +4,7 @@
 Sources: `core/agents/*.md` (neutral capability contracts, ADR 0085),
 `core/permissions/rules.json` (the neutral allow/deny/ask rules),
 `~/.claude.json` (MCP servers). Outputs: OpenCode agent markdown files
-(default `workspace/runtime/opencode/agents/`, symlinked by
+(default `dist/opencode/agents/`, symlinked by
 `install.sh --opencode`) and a merge of hub-managed keys into the user's
 `~/.config/opencode/opencode.json`.
 
@@ -58,8 +58,8 @@ def _rewrite_runtime_prose(text, home):
     """Adapt Claude-Code-runtime prose (links, preload claims) for OpenCode."""
     text = text.replace("](../skills/",
                         f"]({home}/.claude/skills/mainframe/skills/")
-    text = text.replace("](../../export/CLAUDE.md",
-                        f"]({home}/.claude/CLAUDE.md")
+    text = re.sub(r"]\((?:\.\./)+[^)]*CLAUDE\.md",
+                  f"]({home}/.claude/CLAUDE.md", text)
     for rx, replacement in _PRELOAD_REWRITES:
         text = rx.sub(replacement, text)
     return text
@@ -310,7 +310,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=_default_root())
     parser.add_argument("--agents-out", default=None,
-                        help="default: <root>/workspace/runtime/opencode/agents")
+                        help="default: <root>/dist/opencode/agents")
     parser.add_argument("--config", default=os.path.expanduser(
         "~/.config/opencode/opencode.json"))
     parser.add_argument("--claude-config", default=os.path.expanduser(
@@ -328,7 +328,7 @@ def main(argv=None):
               + ", ".join(sorted(enrich.get("agents") or {})))
 
     agents_out = args.agents_out or os.path.join(
-        args.root, "workspace", "runtime", "opencode", "agents")
+        args.root, "dist", "opencode", "agents")
     agents = _collect_agents(args.root, enrich=enrich)
 
     rules = _load_json(os.path.join(

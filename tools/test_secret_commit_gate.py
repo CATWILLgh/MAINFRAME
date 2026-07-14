@@ -17,7 +17,7 @@ import os
 import sys
 
 _SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "..", "plugin-dist", "hooks", "scripts")
+                        "..", "dist", "claude-code", "plugin", "hooks", "scripts")
 sys.path.insert(0, _SCRIPTS)
 import _hooklib
 

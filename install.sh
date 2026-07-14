@@ -4,14 +4,14 @@
 # Safe by default: backs up any existing target before linking.
 #
 # Linked:
-#   - plugin:       plugin-dist/  →  ~/.claude/skills/mainframe/
+#   - plugin:       dist/claude-code/plugin/  →  ~/.claude/skills/mainframe/
 #                   Claude Code auto-loads it as the 'mainframe' plugin via
 #                   the skills-dir mechanism. Skills, agents, commands, and
 #                   hooks inside get the `mainframe:` namespace prefix.
-#   - umbrella:     export/CLAUDE.md  →  ~/.claude/CLAUDE.md
-#                   export/settings.json  →  ~/.claude/settings.json
+#   - umbrella:     dist/claude-code/CLAUDE.md  →  ~/.claude/CLAUDE.md
+#                   dist/claude-code/settings.json  →  ~/.claude/settings.json
 #                   (Plugin format does not provide an equivalent for these.)
-#   - rules:        export/rules/* item-by-item  →  ~/.claude/rules/
+#   - rules:        dist/claude-code/rules/* item-by-item  →  ~/.claude/rules/
 #                   (Plugin format does not support path-scoped rules with
 #                   `paths:` frontmatter; per-item keeps the layer composable.)
 #
@@ -61,13 +61,13 @@ usage() {
 MAINFRAME hub installer
 
 Installs the hub as a Claude Code plugin: a single symlink in
-~/.claude/skills/ points to this repo's plugin-dist/ directory, which Claude
+~/.claude/skills/ points to this repo's dist/claude-code/plugin/ directory, which Claude
 Code auto-loads as the 'mainframe' plugin. Skills, agents, commands, and hooks
 inside the plugin become available with the 'mainframe:' namespace prefix.
 
 Single-file artifacts that the plugin format does not support stay as direct
 symlinks: CLAUDE.md (umbrella instructions) and settings.json (permissions
-and user-level config). Path-scoped rules in export/rules/ install per-item.
+and user-level config). Path-scoped rules in dist/claude-code/rules/ install per-item.
 
 The first install after upgrading from the pre-plugin layout also cleans up
 stale per-item symlinks in ~/.claude/{skills,agents,hooks}/ left over from
@@ -127,16 +127,16 @@ TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
 # Single-file (and single-dir) artifacts. Format: "<source-relative-to-project>:<target-absolute>"
 # Layout:
-#   - plugin-dist/ is symlinked as a single directory under ~/.claude/skills/mainframe/.
+#   - dist/claude-code/plugin/ is symlinked as a single directory under ~/.claude/skills/mainframe/.
 #     Claude Code auto-loads it as the 'mainframe' plugin via the skills-dir mechanism,
 #     and skills/agents/commands/hooks inside get the `mainframe:` namespace prefix.
 #   - CLAUDE.md and settings.json stay as direct symlinks because the plugin format
 #     does not provide an equivalent for the umbrella instructions or user-level
 #     permission rules.
 ARTIFACTS=(
-    "export/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md"
-    "export/settings.json:${CLAUDE_DIR}/settings.json"
-    "plugin-dist:${CLAUDE_DIR}/skills/mainframe"
+    "dist/claude-code/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md"
+    "dist/claude-code/settings.json:${CLAUDE_DIR}/settings.json"
+    "dist/claude-code/plugin:${CLAUDE_DIR}/skills/mainframe"
 )
 
 # Hub-development instrumentation, installed ONLY with --dev (see usage).
@@ -156,8 +156,8 @@ DEV_ARTIFACTS=(
 #     the hub's styles sit alongside the user's own.
 # Format: "<source-dir-relative>:<target-dir-absolute>"
 MANAGED_DIRS=(
-    "export/rules:${CLAUDE_DIR}/rules"
-    "export/output-styles:${CLAUDE_DIR}/output-styles"
+    "dist/claude-code/rules:${CLAUDE_DIR}/rules"
+    "dist/claude-code/output-styles:${CLAUDE_DIR}/output-styles"
 )
 
 # Safe backup dir for items inside managed dirs (skills/, hooks/, rules/, etc.).
@@ -168,10 +168,10 @@ SAFE_BACKUP_DIR=""
 
 # ---- Helpers ----
 
-# Verify the script is run from the right repo (export/ must exist).
+# Verify the script is run from the right repo (dist/ must exist).
 check_prerequisites() {
-    if [[ ! -d "${PROJECT_ROOT}/export" ]]; then
-        log_error "export/ directory not found at ${PROJECT_ROOT}"
+    if [[ ! -d "${PROJECT_ROOT}/dist" ]]; then
+        log_error "dist/ directory not found at ${PROJECT_ROOT}"
         log_error "Run this script from the MAINFRAME repo root."
         exit 1
     fi
@@ -367,10 +367,10 @@ _append_secret_source_line() {
 
 bootstrap_secrets() {
     local bin_dir="$HOME/.local/bin"
-    local secret_src="${PROJECT_ROOT}/export/scripts/secret"
+    local secret_src="${PROJECT_ROOT}/dist/claude-code/scripts/secret"
     local secret_link="${bin_dir}/secret"
     local store_dir="${XDG_CONFIG_HOME:-$HOME/.config}/credentials"
-    local index_src="${PROJECT_ROOT}/export/templates/credentials-index.md"
+    local index_src="${PROJECT_ROOT}/dist/claude-code/templates/credentials-index.md"
     local index_dst="${CLAUDE_DIR}/credentials-index.md"
     local zshenv="$HOME/.zshenv"
     local source_line='[ -f ~/.config/credentials/secrets.env ] && set -a && . ~/.config/credentials/secrets.env && set +a'
@@ -403,10 +403,10 @@ bootstrap_secrets() {
             log_warn "${secret_link} exists and is not a symlink; not overwriting"
         else
             if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would link ${secret_link} → export/scripts/secret"
+                log_action "would link ${secret_link} → dist/claude-code/scripts/secret"
             else
                 ln -s "$secret_src" "$secret_link"
-                log_ok "linked ${secret_link} → export/scripts/secret"
+                log_ok "linked ${secret_link} → dist/claude-code/scripts/secret"
             fi
         fi
     fi
@@ -606,17 +606,17 @@ bootstrap_frontend_quality_tools() {
 
 # OpenCode dual-target layer (--opencode). The generator owns all format
 # translation; this function only runs it and links its output. Generated
-# agents live in workspace/runtime/opencode/agents/ (gitignored, derived)
+# agents live in dist/opencode/agents/ (gitignored, derived)
 # so ~/.config/opencode/agents/ gets the same item-by-item symlink treatment
 # as the other managed dirs.
-OPENCODE_AGENTS_SRC="workspace/runtime/opencode/agents"
+OPENCODE_AGENTS_SRC="dist/opencode/agents"
 # Hand-written OpenCode-native artifacts (not generated) live in the
-# adapters/opencode/ dialect dir and symlink out directly, like export/rules.
+# adapters/opencode/ dialect dir and symlink out directly, like dist/claude-code/rules.
 OPENCODE_PLUGINS_SRC="adapters/opencode/plugins"
 # Skills also reach OpenCode via its ~/.claude compat scan; the native links
 # are insurance against that scan changing — duplicate names dedupe to a
 # single listing (verified empirically), so double discovery is harmless.
-OPENCODE_SKILLS_SRC="plugin-dist/skills"
+OPENCODE_SKILLS_SRC="dist/claude-code/plugin/skills"
 opencode_config_dir() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; }
 
 install_opencode() {
@@ -645,7 +645,7 @@ install_opencode() {
         log_action "would link generated agents into $(opencode_config_dir)/agents/"
         log_action "would link security-gate plugin into $(opencode_config_dir)/plugins/"
         log_action "would link hub skills into $(opencode_config_dir)/skills/"
-        log_action "would link export/AGENTS.md to $(opencode_config_dir)/AGENTS.md"
+        log_action "would link dist/opencode/AGENTS.md to $(opencode_config_dir)/AGENTS.md"
         return 0
     fi
     install_dir_contents "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
@@ -656,7 +656,7 @@ install_opencode() {
     cleanup_stale_in_dir "$OPENCODE_SKILLS_SRC" "${cfg_dir}/skills"
     # Global instructions: beats OpenCode's ~/.claude/CLAUDE.md fallback in its
     # resolution order, replacing CC-flavored text with the composed render.
-    ln -sfn "${PROJECT_ROOT}/export/AGENTS.md" "${cfg_dir}/AGENTS.md"
+    ln -sfn "${PROJECT_ROOT}/dist/opencode/AGENTS.md" "${cfg_dir}/AGENTS.md"
     log_ok "OpenCode layer installed. Restart OpenCode sessions to pick it up."
 }
 
@@ -665,7 +665,7 @@ uninstall_opencode() {
     uninstall_dir_contents "$OPENCODE_PLUGINS_SRC" "$(opencode_config_dir)/plugins"
     uninstall_dir_contents "$OPENCODE_SKILLS_SRC" "$(opencode_config_dir)/skills"
     local agents_md="$(opencode_config_dir)/AGENTS.md"
-    if [[ -L "$agents_md" && "$(readlink "$agents_md")" == "${PROJECT_ROOT}/export/AGENTS.md" ]]; then
+    if [[ -L "$agents_md" && "$(readlink "$agents_md")" == "${PROJECT_ROOT}/dist/opencode/AGENTS.md" ]]; then
         rm "$agents_md"
         log_ok "Removed AGENTS.md symlink."
     fi
@@ -674,7 +674,7 @@ uninstall_opencode() {
 }
 
 # Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
-# export/ no longer exist. Leaves user-created real files/folders untouched.
+# dist/ no longer exist. Leaves user-created real files/folders untouched.
 # Backups go to the safe per-run dir, NOT in-place.
 cleanup_stale_in_dir() {
     local src_dir_rel="$1"
@@ -836,7 +836,7 @@ main() {
             uninstall_dir_contents "${entry%%:*}" "${entry##*:}"
         done
         uninstall_opencode
-        uninstall_one "export/scripts/secret" "$HOME/.local/bin/secret"
+        uninstall_one "dist/claude-code/scripts/secret" "$HOME/.local/bin/secret"
         log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
         log_ok "Uninstall complete."
@@ -845,7 +845,7 @@ main() {
     fi
 
     log_info "Installing MAINFRAME hub symlinks into ${CLAUDE_DIR}..."
-    log_info "Source: ${PROJECT_ROOT}/{export,plugin-dist}"
+    log_info "Source: ${PROJECT_ROOT}/dist"
     log_info "Timestamp tag for any backups: ${TIMESTAMP}"
     echo
 

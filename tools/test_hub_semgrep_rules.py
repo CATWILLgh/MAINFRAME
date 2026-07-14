@@ -34,7 +34,7 @@ def test_render_layout_resolves_too():
     copy's derivation as well."""
     spec = importlib.util.spec_from_file_location(
         "rendered_gate",
-        REPO / "plugin-dist/hooks/scripts/nodejs-security-stop-gate.py")
+        REPO / "dist/claude-code/plugin/hooks/scripts/nodejs-security-stop-gate.py")
     rendered = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rendered)
     assert os.path.isdir(rendered._HUB_RULES_DIR), rendered._HUB_RULES_DIR

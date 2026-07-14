@@ -30,7 +30,7 @@ def main():
         f"{'; '.join(broken)}. The suppression-marker and debug-residue gates "
         "(and any hook sharing _hooklib) are SILENTLY DISABLED until this is "
         "fixed in the hub's core/gates/detectors/ (rendered to "
-        "plugin-dist/hooks/scripts/). Fix the core module, re-render, then "
+        "dist/claude-code/plugin/hooks/scripts/). Fix the core module, re-render, then "
         "start a new session to re-enable the gates."
     )
     print(json.dumps({

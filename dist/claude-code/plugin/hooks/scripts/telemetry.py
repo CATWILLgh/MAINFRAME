@@ -3,7 +3,7 @@
 
 Registered on several events (see the CC adapter source
 `adapters/claude-code/gates/hooks.json`, rendered to
-`plugin-dist/hooks/hooks.json`); branches on
+`dist/claude-code/plugin/hooks/hooks.json`); branches on
 `hook_event_name`, writes one metadata row via `_hooklib.log_event`, and emits
 NOTHING to stdout, so it is invisible to the agent. Best-effort and fail-safe:
 any error is swallowed by `run()` / `log_event`. Privacy: only low-risk metadata

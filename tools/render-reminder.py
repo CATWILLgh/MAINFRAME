@@ -37,7 +37,7 @@ def hint_for(file_path: str, root: Path) -> str | None:
     if not problems:
         return None
     return (f"core/adapters edit left {len(problems)} render finding(s); "
-            f"plugin-dist/ and export/ are what actually ships — run: "
+            f"dist/ is what actually ships — run: "
             f"{RENDER_CMD}")
 
 

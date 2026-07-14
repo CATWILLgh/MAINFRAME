@@ -2,7 +2,7 @@
 """Tests for tools/render_core.py (hand-rolled runner; agents need pyyaml).
 
 Fixture trees are built in a tmp dir shaped like the repo (core/ + adapters/
-sources, plugin-dist/ render targets); integration tests run `check`
+sources, dist/ render targets); integration tests run `check`
 against the real repo, which must be drift-free on a clean tree.
 """
 
@@ -18,11 +18,14 @@ sys.path.insert(0, str(TOOLS))
 import render_core
 
 MAPPINGS = [
-    ("core/gates/detectors", "plugin-dist/hooks/scripts"),
-    ("adapters/claude-code/gates/run-hook.sh", "plugin-dist/hooks/scripts/run-hook.sh"),
-    ("core/gates/rules", "plugin-dist/hooks/rules"),
-    ("adapters/claude-code/gates/hooks.json", "plugin-dist/hooks/hooks.json"),
-    ("core/skills", "plugin-dist/skills"),
+    ("core/gates/detectors", "dist/claude-code/plugin/hooks/scripts"),
+    ("adapters/claude-code/gates/run-hook.sh", "dist/claude-code/plugin/hooks/scripts/run-hook.sh"),
+    ("core/gates/rules", "dist/claude-code/plugin/hooks/rules"),
+    ("adapters/claude-code/gates/hooks.json", "dist/claude-code/plugin/hooks/hooks.json"),
+    ("core/skills", "dist/claude-code/plugin/skills"),
+    ("adapters/claude-code/files/output-styles", "dist/claude-code/output-styles"),
+    ("adapters/claude-code/files/scripts", "dist/claude-code/scripts"),
+    ("adapters/claude-code/files/templates", "dist/claude-code/templates"),
 ]
 
 DETECTOR_BODY = "import sys\n# guarded by core/gates conventions\nsys.exit(0)\n"
@@ -48,6 +51,15 @@ def make_sources(root: Path) -> None:
     skill = root / "core/skills/sample-skill"
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text(SKILL_BODY)
+    files = root / "adapters/claude-code/files"
+    (files / "output-styles").mkdir(parents=True)
+    (files / "output-styles/style.md").write_text("style\n")
+    (files / "scripts").mkdir()
+    secret = files / "scripts/secret"
+    secret.write_text("#!/bin/sh\n")
+    secret.chmod(0o755)
+    (files / "templates").mkdir()
+    (files / "templates/template.md").write_text("template\n")
 
 
 def fresh_tree() -> Path:
@@ -65,19 +77,35 @@ def rendered_tree() -> Path:
 def test_write_materializes_targets():
     root = fresh_tree()
     copied = render_core.write(root, MAPPINGS)
-    assert (root / "plugin-dist/hooks/scripts/sample-gate.py").read_text() == DETECTOR_BODY
-    assert (root / "plugin-dist/hooks/scripts/_lib.py").read_text() == LIB_BODY
-    assert (root / "plugin-dist/hooks/scripts/run-hook.sh").read_text() == WRAPPER_BODY
-    assert (root / "plugin-dist/hooks/rules/rule.yml").read_text() == RULE_BODY
-    assert (root / "plugin-dist/hooks/hooks.json").read_text() == HOOKS_JSON_BODY
-    assert (root / "plugin-dist/skills/sample-skill/SKILL.md").read_text() == SKILL_BODY
-    assert len(copied) == 6, copied
+    assert (root / "dist/claude-code/plugin/hooks/scripts/sample-gate.py").read_text() == DETECTOR_BODY
+    assert (root / "dist/claude-code/plugin/hooks/scripts/_lib.py").read_text() == LIB_BODY
+    assert (root / "dist/claude-code/plugin/hooks/scripts/run-hook.sh").read_text() == WRAPPER_BODY
+    assert (root / "dist/claude-code/plugin/hooks/rules/rule.yml").read_text() == RULE_BODY
+    assert (root / "dist/claude-code/plugin/hooks/hooks.json").read_text() == HOOKS_JSON_BODY
+    assert (root / "dist/claude-code/plugin/skills/sample-skill/SKILL.md").read_text() == SKILL_BODY
+    assert (root / "dist/claude-code/output-styles/style.md").read_text() == "style\n"
+    assert (root / "dist/claude-code/scripts/secret").read_text() == "#!/bin/sh\n"
+    assert (root / "dist/claude-code/templates/template.md").read_text() == "template\n"
+    assert (root / "dist/claude-code/scripts/secret").stat().st_mode & 0o111
+    assert len(copied) == 9, copied
     shutil.rmtree(root)
 
 
 def test_write_is_idempotent():
     root = rendered_tree()
     assert render_core.write(root, MAPPINGS) == []
+    shutil.rmtree(root)
+
+
+def test_check_and_write_guard_secret_executable_mode():
+    root = rendered_tree()
+    target = root / "dist/claude-code/scripts/secret"
+    target.chmod(0o644)
+    problems = render_core.check(root, MAPPINGS)
+    assert any("secret" in p and "not executable" in p for p in problems), problems
+    assert render_core.write(root, MAPPINGS) == [target]
+    assert target.stat().st_mode & 0o111
+    assert render_core.check(root, MAPPINGS) == []
     shutil.rmtree(root)
 
 
@@ -89,7 +117,7 @@ def test_check_clean_after_write():
 
 def test_check_flags_content_drift():
     root = rendered_tree()
-    (root / "plugin-dist/hooks/scripts/sample-gate.py").write_text("tampered\n")
+    (root / "dist/claude-code/plugin/hooks/scripts/sample-gate.py").write_text("tampered\n")
     problems = render_core.check(root, MAPPINGS)
     assert any("sample-gate.py" in p and "differs" in p for p in problems), problems
     shutil.rmtree(root)
@@ -97,7 +125,7 @@ def test_check_flags_content_drift():
 
 def test_check_flags_missing_target():
     root = rendered_tree()
-    (root / "plugin-dist/hooks/scripts/_lib.py").unlink()
+    (root / "dist/claude-code/plugin/hooks/scripts/_lib.py").unlink()
     problems = render_core.check(root, MAPPINGS)
     assert any("_lib.py" in p and "missing" in p for p in problems), problems
     shutil.rmtree(root)
@@ -105,7 +133,7 @@ def test_check_flags_missing_target():
 
 def test_check_flags_orphan_target():
     root = rendered_tree()
-    (root / "plugin-dist/hooks/scripts/stray.py").write_text("orphan\n")
+    (root / "dist/claude-code/plugin/hooks/scripts/stray.py").write_text("orphan\n")
     problems = render_core.check(root, MAPPINGS)
     assert any("stray.py" in p and "orphan" in p for p in problems), problems
     shutil.rmtree(root)
@@ -124,8 +152,8 @@ def test_excluded_artifacts_are_ignored():
     cache = root / "core/gates/detectors/__pycache__"
     cache.mkdir()
     (cache / "sample-gate.cpython-312.pyc").write_bytes(b"\x00")
-    (root / "plugin-dist/hooks/scripts/.DS_Store").write_bytes(b"\x00")
-    (root / "plugin-dist/hooks/scripts/x.pyc").write_bytes(b"\x00")
+    (root / "dist/claude-code/plugin/hooks/scripts/.DS_Store").write_bytes(b"\x00")
+    (root / "dist/claude-code/plugin/hooks/scripts/x.pyc").write_bytes(b"\x00")
     assert render_core.check(root, MAPPINGS) == []
     shutil.rmtree(root)
 
@@ -133,7 +161,7 @@ def test_excluded_artifacts_are_ignored():
 def test_lint_flags_naked_render_path_reference():
     root = rendered_tree()
     naked = root / "core/gates/detectors/naked.py"
-    naked.write_text("# see plugin-dist/hooks/scripts for the deployed copy\n")
+    naked.write_text("# see dist/claude-code/plugin/hooks/scripts for the deployed copy\n")
     render_core.write(root, MAPPINGS)
     problems = render_core.check(root, MAPPINGS)
     assert any("naked.py" in p and "self-reference" in p for p in problems), problems
@@ -144,7 +172,7 @@ def test_lint_allows_render_aware_phrasing():
     root = rendered_tree()
     aware = root / "core/gates/detectors/aware.py"
     aware.write_text(
-        '"""Source of truth here; rendered to\nplugin-dist/hooks/scripts by render_core."""\n'
+        '"""Source of truth here; rendered to\ndist/claude-code/plugin/hooks/scripts by render_core."""\n'
     )
     render_core.write(root, MAPPINGS)
     assert render_core.check(root, MAPPINGS) == []
@@ -155,9 +183,9 @@ def test_lint_flags_naked_line_even_with_aware_reference_elsewhere():
     root = rendered_tree()
     mixed = root / "core/gates/detectors/mixed.py"
     mixed.write_text(
-        '"""Source of truth here; rendered to\nplugin-dist/hooks/scripts by render_core."""\n'
+        '"""Source of truth here; rendered to\ndist/claude-code/plugin/hooks/scripts by render_core."""\n'
         "\n\n\n\n"
-        "# hand-edit plugin-dist/hooks/scripts/mixed.py directly\n"
+        "# hand-edit dist/claude-code/plugin/hooks/scripts/mixed.py directly\n"
     )
     render_core.write(root, MAPPINGS)
     problems = render_core.check(root, MAPPINGS)
@@ -167,7 +195,7 @@ def test_lint_flags_naked_line_even_with_aware_reference_elsewhere():
 
 def test_stray_file_at_file_mapping_root_is_orphan():
     root = rendered_tree()
-    (root / "plugin-dist/hooks/stray.txt").write_text("junk\n")
+    (root / "dist/claude-code/plugin/hooks/stray.txt").write_text("junk\n")
     problems = render_core.check(root, MAPPINGS)
     assert any("stray.txt" in p and "orphan" in p for p in problems), problems
     assert not any("hooks.json" in p for p in problems), problems
@@ -186,7 +214,7 @@ def test_check_flags_missing_source_dir():
 def test_main_exit_codes():
     root = rendered_tree()
     assert render_core.main(["--root", str(root), "--check"]) == 0
-    (root / "plugin-dist/hooks/scripts/sample-gate.py").write_text("tampered\n")
+    (root / "dist/claude-code/plugin/hooks/scripts/sample-gate.py").write_text("tampered\n")
     assert render_core.main(["--root", str(root), "--check"]) == 1
     assert render_core.main(["--root", str(root), "--write"]) == 0
     assert render_core.main(["--root", str(root), "--check"]) == 0
@@ -297,7 +325,7 @@ def make_agent_tree() -> Path:
     root = Path(tempfile.mkdtemp(prefix="render-agents-test-"))
     (root / "core/agents").mkdir(parents=True)
     (root / "core/agents/sample-agent.md").write_text(CORE_AGENT)
-    (root / "plugin-dist/agents").mkdir(parents=True)
+    (root / "dist/claude-code/plugin/agents").mkdir(parents=True)
     return root
 
 
@@ -305,15 +333,15 @@ def test_agents_write_then_check_clean():
     root = make_agent_tree()
     written = render_core.write_agents(root)
     assert [p.name for p in written] == ["sample-agent.md"]
-    assert (root / "plugin-dist/agents/sample-agent.md").read_text() == EXPECTED_CC
+    assert (root / "dist/claude-code/plugin/agents/sample-agent.md").read_text() == EXPECTED_CC
     assert render_core.check_agents(root) == []
     shutil.rmtree(root)
 
 
 def test_agents_check_flags_drift_orphan_and_stray_override():
     root = make_agent_tree()
-    (root / "plugin-dist/agents/sample-agent.md").write_text("stale\n")
-    (root / "plugin-dist/agents/ghost.md").write_text("orphan\n")
+    (root / "dist/claude-code/plugin/agents/sample-agent.md").write_text("stale\n")
+    (root / "dist/claude-code/plugin/agents/ghost.md").write_text("orphan\n")
     (root / "adapters/claude-code/agents").mkdir(parents=True)
     (root / "adapters/claude-code/agents/nobody.yml").write_text("model: haiku\n")
     problems = render_core.check_agents(root)
@@ -352,8 +380,8 @@ def make_compose_tree() -> tuple[Path, list]:
     (root / "core/instructions/10-a.md").write_text("## A\n\nalpha\n")
     (root / "adapters/x/instructions").mkdir(parents=True)
     (root / "adapters/x/instructions/20-b.md").write_text("## B\n\nbeta\n")
-    mappings = [("export/OUT.md", ["core/instructions/10-a.md",
-                                   "adapters/x/instructions/20-b.md"])]
+    mappings = [("dist/x/OUT.md", ["core/instructions/10-a.md",
+                                    "adapters/x/instructions/20-b.md"])]
     return root, mappings
 
 
@@ -361,7 +389,7 @@ def test_compose_write_then_check_clean():
     root, mappings = make_compose_tree()
     written = render_core.write_compose(root, mappings)
     assert [p.name for p in written] == ["OUT.md"]
-    assert (root / "export/OUT.md").read_text() == "## A\n\nalpha\n## B\n\nbeta\n"
+    assert (root / "dist/x/OUT.md").read_text() == "## A\n\nalpha\n## B\n\nbeta\n"
     assert render_core.check_compose(root, mappings) == []
     shutil.rmtree(root)
 
@@ -369,7 +397,7 @@ def test_compose_write_then_check_clean():
 def test_compose_check_flags_drift_and_missing_part():
     root, mappings = make_compose_tree()
     render_core.write_compose(root, mappings)
-    (root / "export/OUT.md").write_text("tampered\n")
+    (root / "dist/x/OUT.md").write_text("tampered\n")
     problems = render_core.check_compose(root, mappings)
     assert any("OUT.md" in p and "differs" in p for p in problems), problems
     (root / "core/instructions/10-a.md").unlink()
@@ -398,14 +426,14 @@ def make_permissions_tree() -> Path:
     (root / "core/permissions/rules.json").write_text(_json.dumps(
         {"allow": ["Bash(git add *)"], "deny": ["Bash(rm -rf /)"],
          "ask": ["Bash(sudo *)"]}, indent=2) + "\n")
-    (root / "export").mkdir(parents=True)
+    (root / "dist/claude-code").mkdir(parents=True)
     settings = {
         "$schema": "x",
         "permissions": {"allow": ["Bash(git add *)"], "deny": ["Bash(rm -rf /)"],
                         "ask": ["Bash(sudo *)"], "defaultMode": "auto"},
         "model": "user-choice",
     }
-    (root / "export/settings.json").write_text(
+    (root / "dist/claude-code/settings.json").write_text(
         _json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     return root
 
@@ -418,7 +446,7 @@ def test_permissions_check_clean_when_synced():
 
 def test_permissions_check_ignores_user_edits_outside_the_rules():
     root = make_permissions_tree()
-    target = root / "export/settings.json"
+    target = root / "dist/claude-code/settings.json"
     data = _json.loads(target.read_text())
     data["model"] = "changed-by-user"
     data["permissions"]["defaultMode"] = "default"
@@ -434,7 +462,7 @@ def test_permissions_check_flags_rule_drift():
                           ("deny", "Bash(rm -rf /home)"),
                           ("ask", "Bash(chmod *)")):
         root = make_permissions_tree()
-        target = root / "export/settings.json"
+        target = root / "dist/claude-code/settings.json"
         data = _json.loads(target.read_text())
         data["permissions"][key].append(injected)
         target.write_text(_json.dumps(data, indent=2, ensure_ascii=False) + "\n")
@@ -458,7 +486,7 @@ def test_permissions_malformed_source_fails_loud_in_both_paths():
 
 def test_permissions_write_swaps_rules_and_preserves_everything_else():
     root = make_permissions_tree()
-    target = root / "export/settings.json"
+    target = root / "dist/claude-code/settings.json"
     data = _json.loads(target.read_text())
     data["model"] = "user-picked-later"
     data["permissions"]["defaultMode"] = "default"
@@ -476,7 +504,7 @@ def test_permissions_write_swaps_rules_and_preserves_everything_else():
 
 def test_permissions_write_noop_when_synced_does_not_rewrite():
     root = make_permissions_tree()
-    target = root / "export/settings.json"
+    target = root / "dist/claude-code/settings.json"
     before = target.read_text()
     assert render_core.write_permissions(root) == []
     assert target.read_text() == before  # untouched, no gratuitous reformat

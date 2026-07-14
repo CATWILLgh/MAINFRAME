@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Validator for skills in MAINFRAME hub (core/skills/** — the source of truth —
-plus dev/skills/**; per-edit validation also accepts the plugin-dist render).
+plus dev/skills/**; per-edit validation also accepts the dist render).
 
 Checks Anthropic spec + hub discipline limits (see docs/layers/skills.md).
 
@@ -48,12 +48,12 @@ except ImportError as e:
 
 # ---- Configuration ----
 
-# core/skills is the source of truth (ADR 0085); plugin-dist/skills is its
+# core/skills is the source of truth (ADR 0085); dist/claude-code/plugin/skills is its
 # byte-copy render target, so validating core covers the render. Live per-edit
 # validation still accepts render paths — a hand edit there deserves the same
 # signal even though `render_core.py --check` is the drift guard.
 CORE_SKILLS_DIR = PROJECT_ROOT / "core" / "skills"
-SKILLS_DIR = PROJECT_ROOT / "plugin-dist" / "skills"
+SKILLS_DIR = PROJECT_ROOT / "dist" / "claude-code" / "plugin" / "skills"
 DEV_SKILLS_DIR = PROJECT_ROOT / "dev" / "skills"
 LIVE_ROOTS = (CORE_SKILLS_DIR, SKILLS_DIR, DEV_SKILLS_DIR)
 SUMMARY_ROOTS = (CORE_SKILLS_DIR, DEV_SKILLS_DIR)
@@ -330,7 +330,7 @@ def format_human(target: Path, issues: list[dict]) -> str:
 
 def find_skill_dir_for_file(file_path: Path) -> Path | None:
     """Find the enclosing skill directory — an immediate child of
-    core/skills/, plugin-dist/skills/ or dev/skills/. None if outside."""
+    core/skills/, dist/claude-code/plugin/skills/ or dev/skills/. None if outside."""
     for root in LIVE_ROOTS:
         try:
             rel = file_path.resolve().relative_to(root.resolve())

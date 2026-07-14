@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stop hook: advisory note when a changed file or Python function exceeds
-export/CLAUDE.md's length rule ("files under 400 lines, functions under 60
+CLAUDE.md's length rule ("files under 400 lines, functions under 60
 lines").
 
 Design (decision-reviewer + advisor, 2026-07-06): no before/after size
@@ -125,7 +125,7 @@ def _format_note(file_over, func_over):
             f"{len(func_over)} function(s) over {FUNCTION_LENGTH_THRESHOLD} "
             "lines:\n" + "\n".join(lines) + more)
     return (
-        "length-quality-note (advisory): export/CLAUDE.md's length rule "
+        "length-quality-note (advisory): CLAUDE.md's length rule "
         "(\"files under 400 lines, functions under 60 lines\") flags:\n\n"
         + "\n\n".join(parts) +
         "\n\nNo ticket currently names these files. This is a reminder, not "

@@ -589,7 +589,7 @@
     root.appendChild(el("h2", { class: "layer-h config" }, "Permissions"));
     root.appendChild(el("p", { class: "muted" },
       "What the hub lets an agent do silently, ask about, or refuse — default mode: "
-      + (cfg.mode || "?") + ". Source: export/settings.json."));
+      + (cfg.mode || "?") + ". Source: dist/claude-code/settings.json."));
     [["deny", "perm-deny"], ["ask", "perm-ask"], ["allow", "perm-allow"]].forEach(([key, cls]) => {
       const items = perms[key] || [];
       if (!items.length) return;

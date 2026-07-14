@@ -7,7 +7,7 @@
 # Format: one pattern per line. Case-insensitive substring match.
 # Lines starting with # are comments. Empty lines are ignored.
 #
-# Purpose: keep project-specific terms from leaking into export/CLAUDE.md
+# Purpose: keep project-specific terms from leaking into dist/claude-code/CLAUDE.md
 # and its import graph. The hook fires at the warning level — it is a safety net,
 # not a block. The final decision stays with the human.
 #

@@ -41,7 +41,7 @@ READONLY_AGENT = (
     "`severity-calibration` are preloaded — [SKILL.md](../skills/decision-review/SKILL.md) "
     "holds the method; consult `severity-calibration` (preloaded) for ratings. "
     "Run your preloaded skill's checklist first. "
-    "The umbrella [CLAUDE.md](../../export/CLAUDE.md) rules apply.\n"
+    "The umbrella [CLAUDE.md](../../dist/claude-code/CLAUDE.md) rules apply.\n"
 )
 
 WRITE_AGENT = (
@@ -161,7 +161,7 @@ def test_project_agent_rewrites_skill_links_and_preload_phrase():
     meta, body = bo.parse_frontmatter(READONLY_AGENT)
     out = bo.project_agent(meta, body)
     assert "](../skills/" not in out
-    assert "](../../export/CLAUDE.md" not in out
+    assert "](../../dist/claude-code/CLAUDE.md" not in out
     home = os.path.expanduser("~")
     assert f"]({home}/.claude/skills/mainframe/skills/decision-review/SKILL.md" in out
     assert f"]({home}/.claude/CLAUDE.md" in out
@@ -266,7 +266,7 @@ def test_real_repo_agents_match_committed_goldens():
     and enrichment is off (the real enrich file is machine-local).
     """
     repo = os.path.dirname(_TOOLS)
-    golden_dir = os.path.join(_TOOLS, "goldens", "opencode-agents")
+    golden_dir = os.path.join(_TOOLS, "..", "dist", "opencode", "agents-golden")
     old_home = os.environ.get("HOME")
     os.environ["HOME"] = "/home/u"
     try:

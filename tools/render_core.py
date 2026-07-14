@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render neutral-core sources into their committed render targets (ADR 0085).
 
-`core/` + `adapters/<tool>/` are the source of truth; `plugin-dist/` (and
-later `export/`) stay committed render outputs consumed via the live
-`~/.claude` symlinks. Wave 1 sections: gates (byte-copy) and agents
+`core/` + `adapters/<tool>/` are the source of truth; `dist/<tool>/` holds
+the committed render outputs consumed via the live `~/.claude` symlinks.
+Wave 1 sections: gates (byte-copy) and agents
 (capability contract → deterministic Claude Code frontmatter + verbatim body,
 with optional per-agent overrides in `adapters/claude-code/agents/*.yml`).
 Requires pyyaml for the agents section (`.venv` locally, installed in CI);
@@ -16,8 +16,8 @@ It is bidirectional (a render file with no core source is an orphan) and
 covers adapter-owned files, not only `core/`.
 
 Check also lints core-owned sources for naked references to the render path:
-a file mentioning `plugin-dist/` while never mentioning the core layout or the
-render step teaches the exact edit location this scheme forbids. Allow tokens
+a file mentioning `dist/claude-code/plugin/` while never mentioning the core
+layout or the render step teaches the exact edit location this scheme forbids. Allow tokens
 are matched within a ±2-line window around each reference — wrapped prose
 splits a reference across physical lines (same-line matching would
 false-positive on legitimate "rendered to …" phrasings), while a window keeps
@@ -38,10 +38,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # into the target directory; a file maps 1:1. Every target directory named
 # here is fully managed: files in it that no mapping produces are orphans.
 GATES_MAPPINGS = [
-    ("core/gates/detectors", "plugin-dist/hooks/scripts"),
-    ("adapters/claude-code/gates/run-hook.sh", "plugin-dist/hooks/scripts/run-hook.sh"),
-    ("core/gates/rules", "plugin-dist/hooks/rules"),
-    ("adapters/claude-code/gates/hooks.json", "plugin-dist/hooks/hooks.json"),
+    ("core/gates/detectors", "dist/claude-code/plugin/hooks/scripts"),
+    ("adapters/claude-code/gates/run-hook.sh", "dist/claude-code/plugin/hooks/scripts/run-hook.sh"),
+    ("core/gates/rules", "dist/claude-code/plugin/hooks/rules"),
+    ("adapters/claude-code/gates/hooks.json", "dist/claude-code/plugin/hooks/hooks.json"),
 ]
 
 # Skills render as byte-copies: SKILL.md is a cross-tool standard and foreign
@@ -50,10 +50,19 @@ GATES_MAPPINGS = [
 # being equivalent to validating the render — revisit validate-skill.py
 # targeting then.
 SKILLS_MAPPINGS = [
-    ("core/skills", "plugin-dist/skills"),
+    ("core/skills", "dist/claude-code/plugin/skills"),
 ]
 
-MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS
+FILES_MAPPINGS = [
+    ("adapters/claude-code/files/output-styles", "dist/claude-code/output-styles"),
+    ("adapters/claude-code/files/scripts", "dist/claude-code/scripts"),
+    ("adapters/claude-code/files/templates", "dist/claude-code/templates"),
+]
+
+MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS + FILES_MAPPINGS
+EXECUTABLE_MAPPINGS = {
+    ("adapters/claude-code/files/scripts/secret", "dist/claude-code/scripts/secret"),
+}
 
 # Instructions render by ordered concatenation: core sections + per-tool
 # wrapper/mechanics fragments, one shared ordering namespace (the numeric
@@ -77,14 +86,14 @@ _CORE_TAIL = [
     "core/instructions/85-destructive-actions.md",
 ]
 COMPOSE_MAPPINGS = [
-    ("export/CLAUDE.md",
+    ("dist/claude-code/CLAUDE.md",
      ["adapters/claude-code/instructions/00-preamble.md"]
      + _CORE_SECTIONS
      + ["adapters/claude-code/instructions/62-orchestration-claude-code.md",
         "adapters/claude-code/instructions/70-memory.md",
         "adapters/claude-code/instructions/75-advisor.md"]
      + _CORE_TAIL),
-    ("export/AGENTS.md",
+    ("dist/opencode/AGENTS.md",
      ["adapters/opencode/instructions/00-preamble.md"]
      + _CORE_SECTIONS
      + _CORE_TAIL
@@ -94,7 +103,7 @@ COMPOSE_MAPPINGS = [
 EXCLUDED_NAMES = {"__pycache__", ".DS_Store"}
 EXCLUDED_SUFFIXES = {".pyc"}
 LINT_SUFFIXES = {".py", ".sh"}
-LINT_NEEDLE = "plugin-dist/"
+LINT_NEEDLE = "dist/claude-code/plugin/"
 LINT_ALLOW = ("core/gates", "core/skills", "render")
 LINT_WINDOW = 2
 
@@ -167,6 +176,15 @@ def check(root: Path, mappings) -> list[str]:
             problems.append(f"render missing: {dst.relative_to(root)}")
         elif src.read_bytes() != dst.read_bytes():
             problems.append(f"render differs from source: {dst.relative_to(root)}")
+        if (str(src.relative_to(root)), str(dst.relative_to(root))) in EXECUTABLE_MAPPINGS:
+            src_mode = src.stat().st_mode & 0o111
+            dst_mode = dst.stat().st_mode & 0o111 if dst.exists() else 0
+            if not src_mode:
+                problems.append(f"source is not executable: {src.relative_to(root)}")
+            if dst.exists() and not dst_mode:
+                problems.append(f"render is not executable: {dst.relative_to(root)}")
+            elif dst.exists() and src_mode != dst_mode:
+                problems.append(f"render executable mode differs from source: {dst.relative_to(root)}")
     managed_dirs = [d for d in _managed_target_dirs(root, mappings) if d.is_dir()]
     for managed in managed_dirs:
         for f in _dir_files(managed):
@@ -193,7 +211,9 @@ def write(root: Path, mappings) -> list[Path]:
     written = []
     for src, dst in plan(root, mappings):
         if dst.exists() and src.read_bytes() == dst.read_bytes():
-            continue
+            pair = (str(src.relative_to(root)), str(dst.relative_to(root)))
+            if pair not in EXECUTABLE_MAPPINGS or (src.stat().st_mode & 0o111) == (dst.stat().st_mode & 0o111):
+                continue
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         written.append(dst)
@@ -206,7 +226,7 @@ def write(root: Path, mappings) -> list[Path]:
 # three rule lists; the render splices them into the file in place, leaving
 # every other key as the user left it, and --check compares only those lists.
 PERMISSIONS_SOURCE = "core/permissions/rules.json"
-PERMISSIONS_TARGET = "export/settings.json"
+PERMISSIONS_TARGET = "dist/claude-code/settings.json"
 PERMISSIONS_KEY = "permissions"
 PERMISSIONS_RULE_KEYS = ("allow", "deny", "ask")
 
@@ -305,7 +325,7 @@ def write_compose(root: Path, mappings) -> list[Path]:
 
 AGENTS_CORE_DIR = "core/agents"
 AGENTS_OVERRIDES_DIR = "adapters/claude-code/agents"
-AGENTS_DST_DIR = "plugin-dist/agents"
+AGENTS_DST_DIR = "dist/claude-code/plugin/agents"
 
 CONTRACT_KEYS = {
     "name", "description", "needs-repo-read", "needs-write", "needs-web",

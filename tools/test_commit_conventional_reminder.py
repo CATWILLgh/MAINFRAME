@@ -11,7 +11,7 @@ import importlib.util
 import os
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                       "plugin-dist", "hooks", "scripts",
+                       "dist", "claude-code", "plugin", "hooks", "scripts",
                        "commit-conventional-reminder.py")
 spec = importlib.util.spec_from_file_location("commit_conventional_reminder", _SCRIPT)
 ccr = importlib.util.module_from_spec(spec)

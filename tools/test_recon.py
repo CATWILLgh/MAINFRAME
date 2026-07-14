@@ -15,7 +15,8 @@ import tempfile
 from pathlib import Path
 
 _RECON_PATH = (Path(__file__).resolve().parent.parent
-               / "plugin-dist" / "skills" / "python-backend-patterns" / "recon.py")
+               / "dist" / "claude-code" / "plugin" / "skills"
+               / "python-backend-patterns" / "recon.py")
 _spec = importlib.util.spec_from_file_location("recon", _RECON_PATH)
 recon = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(recon)

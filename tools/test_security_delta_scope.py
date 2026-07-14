@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                       "plugin-dist", "hooks", "scripts", "_hooklib.py")
+                       "dist", "claude-code", "plugin", "hooks", "scripts", "_hooklib.py")
 spec = importlib.util.spec_from_file_location("hooklib_ds", _SCRIPT)
 hooklib = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hooklib)
@@ -165,7 +165,7 @@ def test_tickets_readme_ignored():
 
 
 _SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                        "plugin-dist", "hooks", "scripts")
+                        "dist", "claude-code", "plugin", "hooks", "scripts")
 
 
 def _run_hook(script, payload_dict):

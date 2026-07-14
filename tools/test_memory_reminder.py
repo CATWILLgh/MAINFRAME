@@ -17,7 +17,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(
-    HERE, "..", "plugin-dist", "hooks", "scripts", "memory-reminder.py")
+    HERE, "..", "dist", "claude-code", "plugin", "hooks", "scripts", "memory-reminder.py")
 
 
 def _load():

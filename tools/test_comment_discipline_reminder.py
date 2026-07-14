@@ -18,7 +18,7 @@ import sys
 import tempfile
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                       "plugin-dist", "hooks", "scripts",
+                       "dist", "claude-code", "plugin", "hooks", "scripts",
                        "comment-discipline-reminder.py")
 
 

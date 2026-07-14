@@ -32,11 +32,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Files we validate. Any edit outside this set
 # the hook skips instantly.
 TARGET_FILES = {
-    (PROJECT_ROOT / "export" / "CLAUDE.md").resolve(),
+    (PROJECT_ROOT / "dist" / "claude-code" / "CLAUDE.md").resolve(),
     (PROJECT_ROOT / "CLAUDE.md").resolve(),
 }
 
-# export/CLAUDE.md is composed from these fragment dirs (ADR 0085); an edit
+# dist/claude-code/CLAUDE.md is composed from these fragment dirs (ADR 0085); an edit
 # to a fragment validates the composed render (freshness is the
 # render-reminder hook's job, correctness is ours).
 FRAGMENT_DIRS = (
@@ -49,7 +49,7 @@ def _hook_target_for(path: Path) -> Path | None:
     if path in TARGET_FILES:
         return path
     if any(d in path.parents for d in FRAGMENT_DIRS):
-        return (PROJECT_ROOT / "export" / "CLAUDE.md").resolve()
+        return (PROJECT_ROOT / "dist" / "claude-code" / "CLAUDE.md").resolve()
     return None
 
 BLACKLIST_FILE = PROJECT_ROOT / "tools" / "agnostic-blacklist.txt"

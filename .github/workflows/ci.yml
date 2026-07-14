@@ -46,7 +46,7 @@ jobs:
       - name: Validator dependencies
         run: pip install tiktoken pyyaml
 
-      # ADR 0085: core/ + adapters/ are the source of truth; plugin-dist/ is a
+      # ADR 0085: core/ + adapters/ are the source of truth; dist/ is a
       # committed render output. The test suites exercise rendered files, so
       # this check is the sole guard against un-rendered core edits. Needs
       # pyyaml (agents section), hence it runs after Validator dependencies.
@@ -81,4 +81,4 @@ jobs:
 
       # Root CLAUDE.md is gitignored (not in the checkout); validate the shipped one.
       - name: Validate umbrella CLAUDE.md
-        run: python3 tools/validate-claude-md.py export/CLAUDE.md
+        run: python3 tools/validate-claude-md.py dist/claude-code/CLAUDE.md
