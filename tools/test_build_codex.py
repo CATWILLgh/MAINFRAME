@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import tempfile
+import tomllib
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -294,6 +295,107 @@ def test_main_writes_hooks_json_and_executable_launcher():
     assert "PreToolUse" in json.loads(hooks_out.read_text())["hooks"]
     assert launcher_out.is_file()
     assert os.access(launcher_out, os.X_OK)
+
+
+AGENT_RO = """---
+name: sample-reviewer
+description: "An independent review of a proposed decision. Read-only."
+needs-repo-read: true
+needs-write: false
+needs-web: true
+needs-docs-lookup: true
+reasoning-tier: deep
+turn-budget: 50
+method-skills:
+  - decision-review
+  - severity-calibration
+---
+
+You are a reviewer. Your skill `decision-review` is preloaded — its [SKILL.md](../skills/decision-review/SKILL.md) holds the method. Follow the umbrella [CLAUDE.md](../../dist/claude-code/CLAUDE.md). Ground objections with (`Read`/`Grep`/`Glob`).
+"""
+
+AGENT_WRITE = """---
+name: sample-engineer
+description: "A Python backend task is in flight. Write-capable."
+needs-repo-read: true
+needs-write: true
+needs-web: false
+needs-docs-lookup: true
+reasoning-tier: standard
+method-skills:
+  - python-backend-patterns
+---
+
+Implement the endpoint. Recon first via [recon.md](../skills/python-backend-patterns/recon.md).
+"""
+
+
+def test_agent_toml_read_only_restricts_and_maps_effort():
+    meta, body = bc.parse_frontmatter(AGENT_RO)
+    data = tomllib.loads(bc.render_agent(meta, body))
+    assert data["name"] == "sample-reviewer"
+    assert data["model_reasoning_effort"] == "high"        # deep -> high
+    assert data["sandbox_mode"] == "read-only"             # needs-write:false -> restrict
+    assert "web_search" not in data                        # needs-web:true -> never elevate
+    di = data["developer_instructions"]
+    assert "$decision-review" in di and "$severity-calibration" in di
+    assert "within roughly 50 steps" in di                 # turn-budget -> soft cap (only cost lever on Codex)
+
+
+def test_agent_toml_write_agent_omits_sandbox_and_denies_web():
+    meta, body = bc.parse_frontmatter(AGENT_WRITE)
+    data = tomllib.loads(bc.render_agent(meta, body))
+    assert "sandbox_mode" not in data                      # needs-write:true -> inherit, never elevate
+    assert data["web_search"] == "disabled"                # needs-web:false -> restrict
+    assert data["model_reasoning_effort"] == "medium"      # standard -> medium
+    assert "within roughly" not in data["developer_instructions"]  # no turn-budget -> no soft cap
+
+
+def test_agent_developer_instructions_have_no_repo_relative_paths():
+    for src in (AGENT_RO, AGENT_WRITE):
+        meta, body = bc.parse_frontmatter(src)
+        di = tomllib.loads(bc.render_agent(meta, body))["developer_instructions"]
+        assert "../" not in di, f"dead repo path leaked: {di}"
+        assert "CLAUDE.md" not in di                        # rewritten to AGENTS.md
+        assert "dist/claude-code" not in di
+
+
+def test_reasoning_tier_effort_map_is_low_medium_high():
+    assert bc._REASONING_EFFORT == {"light": "low", "standard": "medium", "deep": "high"}
+
+
+def test_collect_agents_real_repo_all_valid_toml():
+    agents = bc.collect_agents(_TOOLS.parent)
+    names = [n for n, _ in agents]
+    assert "decision-reviewer" in names and "web-search" in names
+    assert len(names) == 7
+    for name, toml_text in agents:
+        data = tomllib.loads(toml_text)                    # must be well-formed TOML
+        assert data["name"] == name
+        assert data["description"] and data["developer_instructions"]
+        assert "../" not in data["developer_instructions"]
+
+
+def test_agents_have_no_false_codex_tool_attributions():
+    blob = "\n".join(t for _, t in bc.collect_agents(_TOOLS.parent))
+    assert not re.search(r"\bCodex:\s*`[^`]+`", blob)
+    for tool in ("AskUserQuestion", "TodoWrite", "ExitPlanMode"):
+        assert f"Codex: `{tool}`" not in blob
+
+
+def test_main_writes_agents():
+    root = _fixture_root()
+    _write(root / "core/agents/sample-reviewer.md", AGENT_RO)
+    agents_out = root / "out/agents"
+    rc = bc.main(["--root", str(root),
+                  "--skills-out", str(root / "out/skills"),
+                  "--rules-out", str(root / "out/rules/mainframe.rules"),
+                  "--hooks-out", str(root / "out/hooks.json"),
+                  "--launcher-out", str(root / "out/mainframe-hook.sh"),
+                  "--agents-out", str(agents_out)])
+    assert rc == 0
+    data = tomllib.loads((agents_out / "sample-reviewer.toml").read_text())
+    assert data["name"] == "sample-reviewer"
 
 
 def _run_all() -> int:

@@ -144,6 +144,6 @@ Do not:
 ## Runtime notes (Codex)
 
 - Skills are NOT preloaded into context. Invoke a method explicitly by name with `$<name>`; Codex loads that skill body on demand.
-- Sub-agent dispatch is explicit. Do not expect an agent description to auto-match a task; choose and dispatch a sub-agent deliberately with a self-contained prompt.
-- There is no `advisor` tool. Use a fresh reviewer sub-agent for review checkpoints and give it the decision or finished artifact, alternatives, assumptions, and relevant paths.
+- Sub-agent delegation IS authorized (Codex is conservative by default; this overrides that for the hub's agents). The hub ships specialized sub-agents in `~/.codex/agents/`, each with a `description` naming when it applies. When a task matches a sub-agent's description — a stack-specific implementation it owns, a review it specializes in, an authoritative-source lookup — spawn it via `spawn_agent` with a self-contained `message` (the sub-agent sees only that message and its own instructions), following the orchestration discipline: delegate broad or independent work, keep the main thread for decisions and synthesis. When no description matches — a stackless or unrelated task — handle it directly; do not spawn for its own sake.
+- There is no `advisor` tool. For a review checkpoint, spawn the `decision-reviewer` sub-agent (read-only) and give it the decision or finished artifact, the alternatives weighed, the load-bearing assumptions, and the relevant paths — it sees only your prompt.
 - Permission and safety policy is loaded from `~/.codex/rules/*.rules`. The hub owns `mainframe.rules`; it coexists with the user's `default.rules`.

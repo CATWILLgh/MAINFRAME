@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Project MAINFRAME skills, permissions, and gates into Codex's native layout.
+"""Project MAINFRAME skills, permissions, gates, and agents into Codex's layout.
 
 Sources: ``core/skills/*``, ``core/permissions/rules.json``, ``core/gates`` (via
-``GATE_HOOKS``), and ``adapters/codex/gates/mainframe-hook.sh``. Outputs:
-``dist/codex/skills/<name>/``, ``dist/codex/rules/mainframe.rules``,
-``dist/codex/hooks.json`` and ``dist/codex/mainframe-hook.sh``. The installer
-links those artifacts item-by-item into ``$CODEX_HOME``. Gate detectors
-themselves are reused from the base Claude Code plugin install (the launcher
-resolves them at ``~/.claude/skills/mainframe/hooks/scripts``).
+``GATE_HOOKS``), ``adapters/codex/gates/mainframe-hook.sh``, and
+``core/agents/*.md``. Outputs: ``dist/codex/skills/<name>/``,
+``dist/codex/rules/mainframe.rules``, ``dist/codex/hooks.json``,
+``dist/codex/mainframe-hook.sh`` and ``dist/codex/agents/<name>.toml``. The
+installer links those artifacts item-by-item into ``$CODEX_HOME``. Gate
+detectors themselves are reused from the base Claude Code plugin install (the
+launcher resolves them at ``~/.claude/skills/mainframe/hooks/scripts``). Agent
+TOMLs map the capability contract by only RESTRICTING (read-only sandbox,
+disabled web) — never widening the session default.
 
 The permission projection is deliberately conservative. Codex rules match
 shell-command argv prefixes only, so every source rule without an exact,
@@ -108,6 +111,9 @@ GATE_HOOKS: dict[str, list[str]] = {
 # The launcher is symlinked into $CODEX_HOME; Codex sets CODEX_HOME in the hook
 # env, and the ``:-`` fallback covers a shell that does not.
 _HOOK_LAUNCHER = "${CODEX_HOME:-$HOME/.codex}/mainframe-hook.sh"
+
+# Hub reasoning tier → Codex `model_reasoning_effort`.
+_REASONING_EFFORT = {"light": "low", "standard": "medium", "deep": "high"}
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -444,6 +450,78 @@ def collect_skills(root: Path) -> tuple[list[tuple[str, dict[Path, bytes]]], lis
     return rendered, dropped
 
 
+def _strip_repo_links(text: str) -> str:
+    """Collapse repo-relative markdown links to their text.
+
+    Agent bodies link sibling files by relative path; those targets are dead in a
+    Codex ``developer_instructions`` string, so keep the visible text and drop the
+    path. External (``://``) links are preserved.
+    """
+    def repl(match: "re.Match[str]") -> str:
+        return match.group(0) if "://" in match.group(2) else match.group(1)
+    return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", repl, text)
+
+
+def _agent_developer_instructions(body: str, contract: dict, name: str) -> str:
+    text = _strip_repo_links(_rewrite_codex_prose(body, name)).strip()
+    lead = []
+    skills = contract.get("method-skills") or []
+    if skills:
+        refs = ", ".join(f"${s}" for s in skills)
+        lead.append(f"Load and apply these hub skills as your method: {refs}.")
+    # Codex has no per-agent turn cap and its [agents] limits live in the
+    # user-owned config.toml the hub does not touch, so a soft cap in the
+    # instructions is the only spawn/run bound expressible here.
+    budget = contract.get("turn-budget")
+    if budget:
+        lead.append(f"Work within roughly {int(budget)} steps; do not run open-endedly.")
+    if lead:
+        text = "\n\n".join(lead) + "\n\n" + text
+    return text
+
+
+def render_agent(meta: dict, body: str) -> str:
+    """Render one hub agent contract as a Codex agent TOML.
+
+    Only RESTRICTS, never elevates: a capability the contract withholds maps to a
+    tighter Codex default (read-only sandbox, disabled web search); a granted one
+    is omitted so the agent inherits the session default rather than widening it.
+    """
+    name = str(meta["name"])
+    lines = [
+        f"# {GENERATED_MARKER} (core/agents/{name}.md) — do not edit; "
+        "regenerate via ./install.sh --codex.",
+        f"name = {json.dumps(name, ensure_ascii=False)}",
+        "description = "
+        f"{json.dumps(_rewrite_codex_prose(str(meta['description']), name), ensure_ascii=False)}",
+    ]
+    effort = _REASONING_EFFORT.get(str(meta.get("reasoning-tier") or "").lower())
+    if effort:
+        lines.append(f'model_reasoning_effort = "{effort}"')
+    if not meta.get("needs-write"):
+        lines.append('sandbox_mode = "read-only"')
+    if not meta.get("needs-web"):
+        lines.append('web_search = "disabled"')
+    di = _agent_developer_instructions(body, meta, name)
+    lines.append(f"developer_instructions = {json.dumps(di, ensure_ascii=False)}")
+    return "\n".join(lines) + "\n"
+
+
+def collect_agents(root: Path) -> list[tuple[str, str]]:
+    agents_dir = root / "core" / "agents"
+    rendered: list[tuple[str, str]] = []
+    if not agents_dir.is_dir():
+        return rendered
+    for path in sorted(agents_dir.glob("*.md")):
+        meta, body = parse_frontmatter(path.read_text())
+        name = meta.get("name")
+        description = str(meta.get("description") or "").strip()
+        if not name or not description:
+            raise ValueError(f"{path}: agent missing name or description")
+        rendered.append((str(name), render_agent(meta, body)))
+    return rendered
+
+
 def _split_bash(entry: str) -> str | None:
     if not entry.startswith("Bash(") or not entry.endswith(")"):
         return None
@@ -639,6 +717,16 @@ def _write_skills(out: Path, skills: list[tuple[str, dict[Path, bytes]]]) -> Non
             path.write_bytes(content)
 
 
+def _write_agents(out: Path, agents: list[tuple[str, str]]) -> None:
+    expected = {f"{name}.toml" for name, _ in agents}
+    out.mkdir(parents=True, exist_ok=True)
+    for existing in out.iterdir():
+        if existing.name not in expected and not existing.is_dir():
+            existing.unlink()
+    for name, toml_text in agents:
+        (out / f"{name}.toml").write_text(toml_text)
+
+
 def _print_summary(skills, dropped, projected, omitted) -> None:
     print(f"skills rendered: {len(skills)}")
     print(f"skills dropped by projectability filter: {len(dropped)}")
@@ -661,6 +749,7 @@ def main(argv=None) -> int:
     parser.add_argument("--rules-out", type=Path, default=None)
     parser.add_argument("--hooks-out", type=Path, default=None)
     parser.add_argument("--launcher-out", type=Path, default=None)
+    parser.add_argument("--agents-out", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
@@ -669,16 +758,19 @@ def main(argv=None) -> int:
     hooks_out = args.hooks_out or root / "dist" / "codex" / "hooks.json"
     launcher_src = root / "adapters" / "codex" / "gates" / "mainframe-hook.sh"
     launcher_out = args.launcher_out or root / "dist" / "codex" / "mainframe-hook.sh"
+    agents_out = args.agents_out or root / "dist" / "codex" / "agents"
 
     skills, dropped = collect_skills(root)
     projected, omitted = project_permissions(_load_rules(root))
     _validate_gate_detectors(root)
     hooks_json = render_hooks_json()
+    agents = collect_agents(root)
     if args.dry_run:
         print(f"[dry-run] would write skills to {skills_out}")
         print(f"[dry-run] would write rules to {rules_out}")
         print(f"[dry-run] would write hooks to {hooks_out}")
         print(f"[dry-run] would copy launcher to {launcher_out}")
+        print(f"[dry-run] would write {len(agents)} agents to {agents_out}")
     else:
         _write_skills(skills_out, skills)
         rules_out.parent.mkdir(parents=True, exist_ok=True)
@@ -688,13 +780,16 @@ def main(argv=None) -> int:
         if not launcher_src.is_file():
             raise FileNotFoundError(f"hook launcher missing: {launcher_src}")
         _copy_launcher(launcher_src, launcher_out)
+        _write_agents(agents_out, agents)
         print(f"wrote skills to {skills_out}")
         print(f"wrote rules to {rules_out}")
         print(f"wrote hooks to {hooks_out}")
         print(f"copied launcher to {launcher_out}")
+        print(f"wrote {len(agents)} agents to {agents_out}")
     _print_summary(skills, dropped, projected, omitted)
     print(f"hook events mapped: {len(GATE_HOOKS)} "
           f"({sum(len(v) for v in GATE_HOOKS.values())} detectors)")
+    print(f"agents rendered: {len(agents)}")
     return 0
 
 
