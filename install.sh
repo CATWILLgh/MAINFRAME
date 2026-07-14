@@ -94,12 +94,14 @@ Usage:
                       projection — OpenCode picks them up from ~/.claude
                       natively. NOTE: hub hooks do not transfer; OpenCode
                       runs have thinner guardrails than Claude Code.
-  $0 --codex          Install PLUS the Codex Phase-1 projection: generates
-                      Codex-native skills and mainframe.rules, then links
-                      AGENTS.md, hub skill directories, and mainframe.rules
-                      into ${CODEX_HOME:-~/.codex}. Existing AGENTS.md is
-                      backed up first; default.rules and non-hub skills are
-                      left untouched.
+  $0 --codex          Install PLUS the Codex projection: generates Codex-native
+                      skills, mainframe.rules, and gate hooks.json, then links
+                      AGENTS.md, hub skill directories, mainframe.rules,
+                      hooks.json, and the gate launcher into ${CODEX_HOME:-~/.codex}.
+                      Existing AGENTS.md and hooks.json are backed up first;
+                      default.rules and non-hub skills are left untouched. Gate
+                      hooks need a one-time per-project /hooks trust and reuse the
+                      base Claude Code plugin's detectors.
   $0 --dry-run        Show what would happen, no changes.
   $0 --uninstall      Remove symlinks created by this script (incl. --dev
                       --opencode, and --codex ones; telemetry/feedback data,
@@ -687,6 +689,8 @@ uninstall_opencode() {
 CODEX_SKILLS_SRC="dist/codex/skills"
 CODEX_RULES_SRC="dist/codex/rules/mainframe.rules"
 CODEX_AGENTS_SRC="dist/codex/AGENTS.md"
+CODEX_HOOKS_SRC="dist/codex/hooks.json"
+CODEX_LAUNCHER_SRC="dist/codex/mainframe-hook.sh"
 codex_config_dir() { echo "${CODEX_HOME:-$HOME/.codex}"; }
 
 codex_backup_target() {
@@ -804,6 +808,7 @@ install_codex() {
         log_action "would back up and link dist/codex/AGENTS.md to ${cfg_dir}/AGENTS.md"
         log_action "would link hub skills item-by-item into ${cfg_dir}/skills/"
         log_action "would link mainframe.rules to ${cfg_dir}/rules/mainframe.rules"
+        log_action "would link hooks.json + mainframe-hook.sh into ${cfg_dir}/ (gate hooks; personal hooks.json backed up)"
         return 0
     fi
 
@@ -812,13 +817,21 @@ install_codex() {
     install_dir_contents "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
     cleanup_stale_codex_in_dir "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
     install_codex_file "$CODEX_RULES_SRC" "${cfg_dir}/rules/mainframe.rules"
+    install_codex_file "$CODEX_HOOKS_SRC" "${cfg_dir}/hooks.json"
+    install_codex_file "$CODEX_LAUNCHER_SRC" "${cfg_dir}/mainframe-hook.sh"
     log_ok "Codex layer installed. Restart Codex sessions to pick it up."
+    log_warn "Codex gate hooks need per-project trust (content-pinned):"
+    log_warn "  run /hooks in each Codex project once to trust them — until then gates SILENTLY do not fire."
+    log_warn "  re-run /hooks after any hub gates update (the trust hash changes)."
+    log_warn "  gate detectors are reused from the base Claude Code plugin — install that too (./install.sh) or gates no-op."
 }
 
 uninstall_codex() {
     uninstall_dir_contents "$CODEX_SKILLS_SRC" "$(codex_config_dir)/skills"
     uninstall_one "$CODEX_AGENTS_SRC" "$(codex_config_dir)/AGENTS.md"
     uninstall_one "$CODEX_RULES_SRC" "$(codex_config_dir)/rules/mainframe.rules"
+    uninstall_one "$CODEX_HOOKS_SRC" "$(codex_config_dir)/hooks.json"
+    uninstall_one "$CODEX_LAUNCHER_SRC" "$(codex_config_dir)/mainframe-hook.sh"
     log_warn "Codex backups are left in place; default.rules and user skills were not modified."
 }
 

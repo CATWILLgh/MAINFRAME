@@ -56,6 +56,7 @@ def _fixture_root() -> Path:
                  "Bash(*git push --force*)"],
         "ask": ["Bash(sudo *)"],
     }))
+    _write(root / "adapters/codex/gates/mainframe-hook.sh", "#!/bin/sh\nexit 0\n")
     return root
 
 
@@ -244,6 +245,55 @@ def test_real_repo_subset_matches_committed_goldens():
         for rel in (Path("SKILL.md"), Path("agents/openai.yaml")):
             expected = (golden / name / rel).read_bytes()
             assert rendered[name][rel] == expected, f"Codex golden drift: {name}/{rel}"
+
+
+def test_hooks_json_shape_events_and_launcher():
+    data = json.loads(bc.render_hooks_json())
+    assert set(data) == {"hooks"}
+    hooks = data["hooks"]
+    assert set(hooks) == {"PreToolUse", "PostToolUse", "Stop"}
+    for event, groups in hooks.items():
+        assert isinstance(groups, list) and len(groups) == 1
+        group = groups[0]
+        assert group["matcher"] == ".*"
+        assert group["hooks"], f"{event} has no hook entries"
+        for entry in group["hooks"]:
+            assert entry["type"] == "command"
+            assert entry["async"] is False
+            assert "${CODEX_HOME:-$HOME/.codex}/mainframe-hook.sh" in entry["command"]
+            assert f" {event} " in entry["command"]
+
+
+def test_hooks_json_blocking_gates_are_pretooluse_only():
+    data = json.loads(bc.render_hooks_json())
+    pre = " ".join(e["command"] for e in data["hooks"]["PreToolUse"][0]["hooks"])
+    assert "secret-commit-gate.py" in pre
+    assert "path-validation.py" in pre
+    # A stop-gate on the pre-tool path would fire a turn-end check per tool call.
+    assert "stop-gate-suppression-markers.py" not in pre
+
+
+def test_hooks_json_mapped_detectors_exist_in_core():
+    detectors = _TOOLS.parent / "core/gates/detectors"
+    for event, names in bc.GATE_HOOKS.items():
+        for name in names:
+            assert (detectors / name).is_file(), \
+                f"{event}: {name} missing in core/gates/detectors"
+
+
+def test_main_writes_hooks_json_and_executable_launcher():
+    root = _fixture_root()
+    hooks_out = root / "out/hooks.json"
+    launcher_out = root / "out/mainframe-hook.sh"
+    rc = bc.main(["--root", str(root),
+                  "--skills-out", str(root / "out/skills"),
+                  "--rules-out", str(root / "out/rules/mainframe.rules"),
+                  "--hooks-out", str(hooks_out),
+                  "--launcher-out", str(launcher_out)])
+    assert rc == 0
+    assert "PreToolUse" in json.loads(hooks_out.read_text())["hooks"]
+    assert launcher_out.is_file()
+    assert os.access(launcher_out, os.X_OK)
 
 
 def _run_all() -> int:

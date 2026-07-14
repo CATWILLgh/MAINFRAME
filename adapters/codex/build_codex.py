@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Project MAINFRAME skills and permissions into Codex's native layout.
+"""Project MAINFRAME skills, permissions, and gates into Codex's native layout.
 
-Sources: ``core/skills/*`` and ``core/permissions/rules.json``. Outputs:
-``dist/codex/skills/<name>/`` and ``dist/codex/rules/mainframe.rules``.
-The installer links those artifacts item-by-item into ``$CODEX_HOME``.
+Sources: ``core/skills/*``, ``core/permissions/rules.json``, ``core/gates`` (via
+``GATE_HOOKS``), and ``adapters/codex/gates/mainframe-hook.sh``. Outputs:
+``dist/codex/skills/<name>/``, ``dist/codex/rules/mainframe.rules``,
+``dist/codex/hooks.json`` and ``dist/codex/mainframe-hook.sh``. The installer
+links those artifacts item-by-item into ``$CODEX_HOME``. Gate detectors
+themselves are reused from the base Claude Code plugin install (the launcher
+resolves them at ``~/.claude/skills/mainframe/hooks/scripts``).
 
 The permission projection is deliberately conservative. Codex rules match
 shell-command argv prefixes only, so every source rule without an exact,
@@ -67,6 +71,43 @@ _CLAUDE_CODE_BINDING_REWRITES = [
     (r"`Explore`", "a read-only search sub-agent"),
     (r"`run_in_background: true`", "background sub-agent dispatch"),
 ]
+
+# Core gate detectors → Codex hook event. Codex hooks are command + stdin with a
+# Claude-Code-compatible payload, and Codex honors a stdout ``permissionDecision``
+# verdict, so the SAME core detectors run unchanged. Each detector self-filters
+# on tool_name/paths (core/gates/CONTRACT.md), so a broad
+# ".*" matcher per event is correct; per-tool matchers are an efficiency
+# refinement, not a correctness fix. Blocking detectors (deny verdict) sit on
+# PreToolUse; the rest are advisory (PostToolUse) or turn-end (Stop). Response-
+# style/telemetry/session-lifecycle CC hooks are intentionally excluded here.
+GATE_HOOKS: dict[str, list[str]] = {
+    "PreToolUse": [
+        "path-validation.py",
+        "secret-commit-gate.py",
+        "bash-pattern-reminder.py",
+        "commit-conventional-reminder.py",
+    ],
+    "PostToolUse": [
+        "scan-suppression-markers.py",
+        "comment-discipline-reminder.py",
+        "ticket-id-format-reminder.py",
+        "python-security-scan.py",
+        "python-deps-audit.py",
+        "nodejs-deps-audit.py",
+        "nodejs-security-scan.py",
+    ],
+    "Stop": [
+        "stop-gate-suppression-markers.py",
+        "stop-gate-comment-discipline.py",
+        "python-security-stop-gate.py",
+        "nodejs-security-stop-gate.py",
+        "frontend-fsd-gate.py",
+    ],
+}
+
+# The launcher is symlinked into $CODEX_HOME; Codex sets CODEX_HOME in the hook
+# env, and the ``:-`` fallback covers a shell that does not.
+_HOOK_LAUNCHER = "${CODEX_HOME:-$HOME/.codex}/mainframe-hook.sh"
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -518,6 +559,51 @@ def render_rules(projected: list[tuple[list[str], str]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _hook_command(event: str, detector: str) -> str:
+    return f"sh -c 'exec \"{_HOOK_LAUNCHER}\" {event} {detector}'"
+
+
+def render_hooks_json(mapping: dict[str, list[str]] | None = None) -> str:
+    """Render the Codex hooks manifest routing each event to core detectors."""
+    hooks: dict[str, list[dict]] = {}
+    for event, detectors in (mapping or GATE_HOOKS).items():
+        entries = [
+            {"type": "command",
+             "command": _hook_command(event, detector),
+             "async": False}
+            for detector in detectors
+        ]
+        hooks[event] = [{"matcher": ".*", "hooks": entries}]
+    return json.dumps({"hooks": hooks}, indent=2, ensure_ascii=False) + "\n"
+
+
+def _validate_gate_detectors(root: Path) -> None:
+    """Fail the build if the gate map points at a detector that is not present.
+
+    A typo would otherwise ship a hooks.json whose launcher silently no-ops on
+    the missing script, leaving the gate quietly absent.
+    """
+    detectors = root / "core" / "gates" / "detectors"
+    if not detectors.is_dir():
+        return
+    missing = [
+        f"{event}:{name}"
+        for event, names in GATE_HOOKS.items()
+        for name in names
+        if not (detectors / name).is_file()
+    ]
+    if missing:
+        raise ValueError(
+            f"GATE_HOOKS references detectors missing from {detectors}: "
+            + ", ".join(missing))
+
+
+def _copy_launcher(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dest)
+    dest.chmod(0o755)
+
+
 def _load_rules(root: Path) -> dict:
     path = root / "core" / "permissions" / "rules.json"
     data = json.loads(path.read_text())
@@ -573,24 +659,42 @@ def main(argv=None) -> int:
     parser.add_argument("--root", type=Path, default=_default_root())
     parser.add_argument("--skills-out", type=Path, default=None)
     parser.add_argument("--rules-out", type=Path, default=None)
+    parser.add_argument("--hooks-out", type=Path, default=None)
+    parser.add_argument("--launcher-out", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     skills_out = args.skills_out or root / "dist" / "codex" / "skills"
     rules_out = args.rules_out or root / "dist" / "codex" / "rules" / "mainframe.rules"
+    hooks_out = args.hooks_out or root / "dist" / "codex" / "hooks.json"
+    launcher_src = root / "adapters" / "codex" / "gates" / "mainframe-hook.sh"
+    launcher_out = args.launcher_out or root / "dist" / "codex" / "mainframe-hook.sh"
 
     skills, dropped = collect_skills(root)
     projected, omitted = project_permissions(_load_rules(root))
+    _validate_gate_detectors(root)
+    hooks_json = render_hooks_json()
     if args.dry_run:
         print(f"[dry-run] would write skills to {skills_out}")
         print(f"[dry-run] would write rules to {rules_out}")
+        print(f"[dry-run] would write hooks to {hooks_out}")
+        print(f"[dry-run] would copy launcher to {launcher_out}")
     else:
         _write_skills(skills_out, skills)
         rules_out.parent.mkdir(parents=True, exist_ok=True)
         rules_out.write_text(render_rules(projected))
+        hooks_out.parent.mkdir(parents=True, exist_ok=True)
+        hooks_out.write_text(hooks_json)
+        if not launcher_src.is_file():
+            raise FileNotFoundError(f"hook launcher missing: {launcher_src}")
+        _copy_launcher(launcher_src, launcher_out)
         print(f"wrote skills to {skills_out}")
         print(f"wrote rules to {rules_out}")
+        print(f"wrote hooks to {hooks_out}")
+        print(f"copied launcher to {launcher_out}")
     _print_summary(skills, dropped, projected, omitted)
+    print(f"hook events mapped: {len(GATE_HOOKS)} "
+          f"({sum(len(v) for v in GATE_HOOKS.values())} detectors)")
     return 0
 
 
