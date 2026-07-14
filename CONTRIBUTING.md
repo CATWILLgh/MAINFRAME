@@ -56,9 +56,11 @@ Always set `model` explicitly in `Agent` calls — never let it default.
 1. **Decide the layer** using [`docs/layers/decision-tree.md`](docs/layers/decision-tree.md). It walks 4 axes (activation, context isolation, kind, cross-layer triggering) plus the bloat-prevention toolkit (`when_to_use`, `disable-model-invocation`, `context: fork`, narrow `tools:`).
 2. **Read the layer spec** at [`docs/layers/<layer>.md`](docs/layers/) — every layer has its own contract.
 3. **Place the artifact** in the correct location:
-   - Skills, agents, commands, hooks → `dist/claude-code/plugin/<layer>/`
-   - Path-scoped rules → `dist/claude-code/rules/`
-   - Umbrella `CLAUDE.md` and `settings.json` stay at `dist/claude-code/` root
+   - Tool-neutral artifacts (skills, agents, hooks, commands, path-scoped rules) → `core/<layer>/`
+   - Per-tool refinements → `adapters/<tool>/`
+   - Hand-authored Claude Code files (output-styles, scripts, templates) → `adapters/claude-code/files/<layer>/`
+   - Permission rules → `core/permissions/rules.json`
+   - Render the sources with `python3 tools/render_core.py --write` into `dist/`; never hand-edit `dist/`
 4. **Validate**:
    ```bash
    # CLAUDE.md changes

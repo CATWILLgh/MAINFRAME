@@ -1,6 +1,6 @@
 # Layer: Hooks
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
 
 
 > Scripts executed by Claude Code on specific events (tool-use, stop, session-start, file-change, etc.). In the hub: `dist/claude-code/plugin/hooks/scripts/*.py` + registration in `dist/claude-code/plugin/hooks/hooks.json`, shipped via the `mainframe` plugin.
@@ -13,6 +13,7 @@
 
 - In the hub: `dist/claude-code/plugin/hooks/scripts/*.py` (scripts) + `dist/claude-code/plugin/hooks/hooks.json` block `hooks.{EventName}` (registration). Hook registration moved here with the plugin migration; `dist/claude-code/settings.json` no longer registers hooks (it still carries permissions / env / other settings).
 - On the machine: delivered via the `mainframe` plugin (`dist/claude-code/plugin/` symlinked as one plugin).
+- OpenCode analog: `adapters/opencode/plugins/mainframe-gates.js` is the advisory gate dispatcher, providing the equivalent gate-dispatch surface for OpenCode.
 - Activation:
   1. The `mainframe` plugin ships `dist/claude-code/plugin/hooks/scripts/` + `hooks.json` (loaded when the plugin loads).
   2. Each script is registered under `hooks.<EventName>` inside `dist/claude-code/plugin/hooks/hooks.json`.

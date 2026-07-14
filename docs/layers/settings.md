@@ -1,6 +1,6 @@
 # Layer: Settings (other fields)
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
 
 
 > Configuration of Claude Code outside `permissions` and `hooks` (which have their own separate specs). In the hub: `dist/claude-code/settings.json` — the remaining fields.
@@ -88,9 +88,9 @@ From docs (`code.claude.com/docs/en/settings`):
 | `remoteControlAtStartup` | `false` | Remote control |
 | `effortLevel` | `"max"` | Claude's effort level |
 
-### 2.2. Backups in the repo
+### 2.2. Rendering and permissions
 
-On every non-trivial edit to `dist/claude-code/settings.json`, a `dist/claude-code/settings.json.backup-<timestamp>` is created (see the two existing backups from 2026-05-27 and 2026-05-28).
+`render_core.py` does not create timestamped backups in the repository. Permission lists are rendered into `dist/claude-code/settings.json` by key-merge from `core/permissions/rules.json`; other user-owned settings keys are preserved.
 
 ---
 

@@ -1,6 +1,6 @@
 # Layer: Skills
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
 
 
 > Optionally activated instruction sets. In the hub: `dist/claude-code/plugin/skills/<name>/SKILL.md` (+ supporting files), shipped via the `mainframe` plugin.
@@ -104,9 +104,9 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Current skills in `dist/claude-code/plugin/skills/`
+### 2.1. Current skills in `core/skills/`
 
-18 skills as of 2026-06-14, shipped via the `mainframe` plugin. The directory is the source of truth — this is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew to 18). Roles:
+18 skills as of 2026-06-14, shipped via the `mainframe` plugin. `core/skills/` is the source of truth; `dist/claude-code/plugin/skills/` is its rendered byte-copy, guarded by `python3 tools/render_core.py --check` and `python3 tools/validate-skill.py`. This is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew to 18). Roles:
 
 - **Process / workflow:** `task-workflow`, `code-audit`, `decision-review`, `git-conventional-commits`.
 - **Quality discipline (gates / self-checks):** `no-suppression-markers`, `severity-calibration`, `surface-ticket`, `testing-strategy`, `secrets-handling`.

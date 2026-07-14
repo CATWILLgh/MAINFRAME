@@ -1,6 +1,6 @@
 # Layer: Rules (`~/.claude/rules/`)
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
 
 
 > Modular instruction files that load **on demand** when Claude reads a matching file, scoped by `paths:` glob. In the hub: `dist/claude-code/rules/<name>.md` → symlink `~/.claude/rules/<name>.md`. Path-scoped guidance without burdening main context in unrelated projects.
@@ -170,4 +170,3 @@ No validator exists yet for `dist/claude-code/rules/`. When the first rule is ad
 **Empirical (2026-05-29, Claude Code v2.1.128):**
 - V2 subagent test — pre/post Read differential. PRE=NONE, POST=magic. Confirmed on-demand in subagent.
 - Headless `claude -p` main-session test — same differential, same result. Confirmed on-demand in main session.
-

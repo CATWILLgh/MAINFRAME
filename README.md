@@ -326,23 +326,41 @@ MAINFRAME/
 ├── install.sh                            # installer (creates the symlinks into ~/.claude/)
 ├── assets/                               # README images (banner, divider, badge)
 │
-├── dist/claude-code/plugin/               # the plugin — auto-loads as 'mainframe' after install
-│   ├── .claude-plugin/plugin.json        # plugin manifest (name, version, license)
-│   ├── skills/                           # 18 skills, one folder per skill
-│   ├── agents/                           # 7 file-based sub-agents (Python, Node.js, Next.js, React, devops, decision-reviewer, web-search)
-│   ├── commands/                         # slash commands (currently empty)
-│   └── hooks/
-│       ├── hooks.json                    # which hook fires on which event
-│       ├── scripts/                      # 26 Python files — 23 hook scripts + 3 shared libs (security scans, marker discipline, ...)
-│       └── rules/                        # Semgrep YAML rules
+├── core/                                  # TOOL-NEUTRAL SOURCES (source of truth)
+│   ├── agents/                            # neutral agent capability contracts
+│   ├── gates/                             # neutral gate detectors and data
+│   ├── instructions/                      # shared umbrella instruction fragments
+│   ├── permissions/rules.json             # hub-owned permission rules
+│   └── skills/                            # shared skills and supporting files
 │
-├── dist/claude-code/                      # what the plugin format does NOT carry
-│   ├── CLAUDE.md                         # umbrella operating rules (partnership, evidence, honesty, ...)
-│   ├── settings.json                     # permissions (allow/ask/deny tiers)
-│   ├── output-styles/                    # custom reply styles (e.g. explanatory-concise)
-│   ├── rules/                            # path-scoped guidance (currently empty, future-proof)
-│   ├── scripts/secret                    # credentials helper script
-│   └── templates/credentials-index.md    # starter template for the credentials index
+├── adapters/                              # PER-TOOL SOURCE REFINEMENTS
+│   ├── claude-code/                       # Claude Code refinements + hand-authored files
+│   │   └── files/                         # output-styles, scripts, and templates
+│   └── opencode/                          # OpenCode refinements and projection generator
+│
+├── dist/                                  # GENERATED render output (committed; never hand-edited)
+│   ├── claude-code/plugin/               # the Claude Code plugin — auto-loads as 'mainframe' after install
+│   │   ├── .claude-plugin/plugin.json    # plugin manifest (name, version, license)
+│   │   ├── skills/                       # 18 skills, one folder per skill
+│   │   ├── agents/                       # 7 file-based sub-agents (Python, Node.js, Next.js, React, devops, decision-reviewer, web-search)
+│   │   ├── commands/                     # slash commands (currently empty)
+│   │   └── hooks/
+│   │       ├── hooks.json                # which hook fires on which event
+│   │       ├── scripts/                  # 29 Python files — hook scripts + shared libs (security scans, marker discipline, ...)
+│   │       └── rules/                    # Semgrep YAML rules
+│
+│   └── claude-code/                      # what the plugin format does NOT carry
+│       ├── CLAUDE.md                     # umbrella operating rules (partnership, evidence, honesty, ...)
+│       ├── settings.json                 # permissions (allow/ask/deny tiers)
+│       ├── output-styles/                # custom reply styles (e.g. explanatory-concise)
+│       ├── rules/                        # path-scoped guidance (currently empty, future-proof)
+│       ├── scripts/secret                # credentials helper script
+│       └── templates/credentials-index.md # starter template for the credentials index
+│
+│   └── opencode/                         # OpenCode render output
+│       ├── AGENTS.md                     # OpenCode umbrella instructions
+│       ├── agents-golden/                # golden agent projections
+│       └── agents/                       # projected agents
 │
 ├── tools/                                # Python validators (used by hooks; runnable manually)
 │   ├── validate-claude-md.py             # umbrella spec + project-agnosticism check
@@ -352,6 +370,8 @@ MAINFRAME/
 └── docs/
     └── layers/                           # architecture spec per layer (skills, agents, hooks, rules, ...)
 ```
+
+MAINFRAME is dual-target: `./install.sh` delivers Claude Code, while `./install.sh --opencode` additionally delivers the OpenCode `AGENTS.md`, projected agents, skills, and gate dispatcher.
 
 Anything you do not see here lives outside the repo by design — internal ADRs, working notes, the maintainer's inbox of unprocessed candidates, and per-machine memory are all gitignored. The published artifact is the hub itself, not the maintainer's working files.
 

@@ -1,6 +1,6 @@
 # MAINFRAME Hub Layers
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
 
 
 > Canonical list of hub layers and a navigator to their specifications.
@@ -12,7 +12,7 @@
 
 ## What counts as a "layer"
 
-A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **all** of the user's projects with no per-project edits. Delivery uses two vehicles: **direct `install.sh` symlinks** for the `dist/claude-code/` layers (CLAUDE.md, rules, settings, output-styles, templates, scripts), and **the single `mainframe` plugin** (`dist/claude-code/plugin/` symlinked as one plugin) for skills, agents, hooks, and commands.
+A layer = a type of artifact the hub delivers to a target runtime, applied across **all** of the user's projects with no per-project edits. Claude Code delivery uses **direct `install.sh` symlinks** for the `dist/claude-code/` layers (CLAUDE.md, rules, settings, output-styles, templates, scripts) and **the single `mainframe` plugin** (`dist/claude-code/plugin/` symlinked as one plugin) for skills, agents, hooks, and commands. OpenCode delivery uses the `dist/opencode/` surface via `install.sh --opencode`.
 
 **Not layers:**
 - `docs/layers/` — layer specifications (what you are reading now).
@@ -20,7 +20,7 @@ A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **
 
 ## Canonical layer list
 
-| # | Layer | Where it lives | What is delivered to `~/.claude/` | Spec |
+| # | Layer | Rendered output | Runtime delivery | Spec |
 |---|---|---|---|---|
 | 1 | **CLAUDE.md** (operating instructions) | `dist/claude-code/CLAUDE.md` | `~/.claude/CLAUDE.md` (file symlink) | [claude-md.md](claude-md.md) |
 | 2 | **Rules** (path-scoped) *(planned, empty)* | `dist/claude-code/rules/<name>.md` | `~/.claude/rules/<name>.md` (symlinks) | [rules.md](rules.md) |
@@ -31,6 +31,7 @@ A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **
 | 7 | **Agents** | `dist/claude-code/plugin/agents/<name>.md` | via the `mainframe` plugin | [agents.md](agents.md) |
 | 8 | **Commands** *(empty)* | `dist/claude-code/plugin/commands/<name>.md` | via the `mainframe` plugin | [commands.md](commands.md) |
 | 9 | **Output styles** | `dist/claude-code/output-styles/<name>.md` | `~/.claude/output-styles/<name>.md` (symlink) | [output-styles.md](output-styles.md) |
+| 10 | **OpenCode delivery surface** | `dist/opencode/AGENTS.md`, `dist/opencode/agents/<name>.md` | `~/.config/opencode/AGENTS.md` and projected agents via `install.sh --opencode` | [claude-md.md](claude-md.md), [agents.md](agents.md) |
 
 **Notes:**
 - (4), (5), and (6) technically live in a single file (`settings.json`), but they are **separate layers** — they have different syntax rules, different eval semantics, different failure modes, and different sources of truth. Their specs are kept separate.

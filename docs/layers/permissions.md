@@ -1,9 +1,9 @@
 # Layer: Permissions
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
 
 
-> The Claude Code layer that controls which tool calls are allowed, blocked, or require user confirmation. In the hub: the `dist/claude-code/settings.json` block `permissions.{allow, deny, ask}` → symlinked to `~/.claude/settings.json` → takes effect in all projects.
+> The Claude Code layer that controls which tool calls are allowed, blocked, or require user confirmation. The source is `core/permissions/rules.json`; it renders into the `dist/claude-code/settings.json` block `permissions.{allow, deny, ask}` → symlinked to `~/.claude/settings.json` → takes effect in all projects.
 
 > Last updated: 2026-05-28 (3-section rewrite).
 
@@ -11,7 +11,9 @@
 
 ## Where it lives / How to install
 
-- In the hub: `dist/claude-code/settings.json` — fields `permissions.allow`, `permissions.deny`, `permissions.ask`, plus `permissions.defaultMode`.
+- Source of truth: `core/permissions/rules.json` — hub-owned `allow`, `deny`, and `ask` rules.
+- Claude Code target: `dist/claude-code/settings.json` — the permission lists are rendered by key-merge; `permissions.defaultMode` remains in the target settings.
+- OpenCode: `adapters/opencode/build_opencode.py` reads `core/permissions/rules.json` directly.
 - On the machine: `~/.claude/settings.json` (symlink to the hub file).
 - In any project: `<repo>/.claude/settings.json` (project-scope) and `<repo>/.claude/settings.local.json` (gitignored, local).
 - Activation: simultaneously with all of `dist/claude-code/settings.json` via symlink. There is no separate activation for permissions only. The Claude Code file watcher picks up edits "with brief delay" without a restart.

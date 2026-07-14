@@ -51,6 +51,10 @@ self-references in core sources.
   touched or checked. The OpenCode generator reads this file directly.
   Landed.
 
+- `adapters/claude-code/files/` — hand-authored Claude Code delivery files:
+  `output-styles/`, `scripts/`, and `templates/`. `render_core.py` copies them
+  into the corresponding `dist/claude-code/` paths.
+
 Deferred: layer-6 (the non-permission `settings.json` keys — model, language,
 etc.) stays user-owned in `dist/claude-code/settings.json`, by design.
 

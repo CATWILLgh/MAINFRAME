@@ -1,9 +1,9 @@
 # Layer: Agents (sub-agents)
 
-> **Staleness note (ADR 0085, 2026-07-08):** this spec describes the pre-neutral-core architecture, where files under `dist/claude-code/plugin/` / `dist/` are the source of truth. Sources are migrating to `core/` + `adapters/<tool>/`; `dist/claude-code/plugin/` and `dist/` remain the delivered, committed render targets. The spec is updated wave by wave as its layer lands on the core.
+> **Architecture note (neutral-core migration complete, 2026-07-13):** MAINFRAME is a dual-target hub for Claude Code and OpenCode. Sources of truth live in `core/` and `adapters/<tool>/`; `render_core.py` renders them into the committed, generated-only `dist/<tool>/` outputs. Never hand-edit `dist/`.
 
 
-> Isolated subagents with their own context. In the hub: `dist/claude-code/plugin/agents/<name>.md` (7 agents), shipped via the `mainframe` plugin.
+> Isolated subagents with their own context. The source of truth is `core/agents/` (capability contracts); it renders to Claude Code and projects to OpenCode.
 
 > Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-29 (research + launch discipline).
 
@@ -11,7 +11,9 @@
 
 ## Where it lives
 
-- In the hub: `dist/claude-code/plugin/agents/<name>.md` — one markdown file per agent.
+- Source of truth: `core/agents/<name>.md` — one capability contract per agent.
+- Claude Code target: `dist/claude-code/plugin/agents/<name>.md`, shipped via the `mainframe` plugin.
+- OpenCode target: `dist/opencode/agents/<name>.md`, projected from the contracts by `adapters/opencode/build_opencode.py`.
 - On the machine: delivered via the `mainframe` plugin (`dist/claude-code/plugin/` symlinked as one plugin), not an individual per-agent symlink.
 - Activation: once the plugin is loaded, a sub-agent is invoked via `Agent(subagent_type: "<name>")`.
 
@@ -92,7 +94,7 @@ Attributes live in the schema of the Agent tool itself (visible to the main Clau
 |---|---|
 | `description` | Short (3-5 words) task description — appears in UI and telemetry |
 | `prompt` | Full prompt to the subagent. In English (see §2.2.1) |
-| `subagent_type` | Name of a custom agent (from `dist/claude-code/plugin/agents/`) or built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
+| `subagent_type` | Name of a custom agent (from the rendered Claude Code agents) or built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
 | `model` | Model override per-call: `opus` / `sonnet` / `haiku`. Without the field — inherit |
 | `isolation` | `"worktree"` — fresh git worktree (≈200–500 ms overhead + disk). Use only when parallel agents mutate files |
 | `mode` | Permission mode override: `plan` / `acceptEdits` / `auto` / `default` / `dontAsk` / `bypassPermissions` |
@@ -138,7 +140,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 
 ## 2. Hub usage
 
-### 2.1. Current agents in `dist/claude-code/plugin/agents/`
+### 2.1. Current agents from `core/agents/`
 
 7 agents as of 2026-06-14, shipped via the `mainframe` plugin.
 
@@ -160,7 +162,7 @@ Subagent launch discipline was developed through research. Basic rules are in [d
 
 #### 2.2.1. English prompts
 
-All subagent prompts are in English, regardless of the language of the conversation with the user. Hub principle #3 + Anthropic prompt-engineering guidance (models are tuned on English, follow instructions more precisely, fewer tokens for the same content). Applies to the `prompt:` parameter of the Agent tool, the body of `dist/claude-code/plugin/agents/<name>.md`, and prompts inside Workflow. User-facing replies remain in the user's language.
+All subagent prompts are in English, regardless of the language of the conversation with the user. Hub principle #3 + Anthropic prompt-engineering guidance (models are tuned on English, follow instructions more precisely, fewer tokens for the same content). Applies to the `prompt:` parameter of the Agent tool, the body of `core/agents/<name>.md` and its rendered projections, and prompts inside Workflow. User-facing replies remain in the user's language.
 
 #### 2.2.2. Anti-runaway
 
@@ -260,17 +262,17 @@ Direct documented patterns from `code.claude.com/docs/en/sub-agents`:
 
 ### 2.3. Hub principles for agents
 
-Convention for every `dist/claude-code/plugin/agents/<name>.md`:
+Convention for every `core/agents/<name>.md`:
 
 - **Narrow `tools:` allowlist** — the agent does only what it was created for. Structural cap > prompt cap.
-- **The `tools:` allowlist is the mandatory hard knob.** Default convention for every `dist/claude-code/plugin/agents/<name>.md`: `tools:` allowlist (only needed tools), plus `permissionMode: plan` / `dontAsk` if needed. It is the baseline minimum and the primary scope guard. `maxTurns` is NOT a default — it is a runaway backstop for genuinely open-ended workers, set generously above the expected turn count; **omit it on write-capable multi-step agents** (a low cap terminates them mid-task — see §3.1). Precedent: the engineer agents had `maxTurns` removed after it killed them mid-task.
+- **The `tools:` allowlist is the mandatory hard knob.** Default convention for every `core/agents/<name>.md`: `tools:` allowlist (only needed tools), plus `permissionMode: plan` / `dontAsk` if needed. It is the baseline minimum and the primary scope guard. `maxTurns` is NOT a default — it is a runaway backstop for genuinely open-ended workers, set generously above the expected turn count; **omit it on write-capable multi-step agents** (a low cap terminates them mid-task — see §3.1). Precedent: the engineer agents had `maxTurns` removed after it killed them mid-task.
 - **Soft patterns — supplement, not replacement.** Include the triad (ordinal cap + label + unconditional return) in the prompt as a fallback and for task specifics, not as primary enforcement.
 - **`model:` per task type** — sonnet/haiku by default; opus only if the task genuinely requires its capabilities.
 - **`skills:` preload** for specialized domains — better than pulling domain knowledge into the main CLAUDE.md.
 - **`disable-model-invocation: true`** for domain skills — keeps the main context free of unnecessary load. Pattern: skill `disable-model-invocation: true` + sub-agent `skills: [name]`.
 - **English body** (principle #3).
 - **Project-agnostic** (principle #1) — the agent does not know project names or frameworks as mandatory.
-- **"Use proactively" in `description`** for auto-dispatch agents. Anthropic CLI sub-agents docs explicitly recommend the phrase as a mechanism to strengthen automatic delegation: "To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field" (`code.claude.com/docs/en/sub-agents`). Applies to any `dist/claude-code/plugin/agents/<name>.md` whose intended mode is automatic activation on description match, not explicit user invocation.
+- **"Use proactively" in `description`** for auto-dispatch agents. Anthropic CLI sub-agents docs explicitly recommend the phrase as a mechanism to strengthen automatic delegation: "To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field" (`code.claude.com/docs/en/sub-agents`). Applies to any `core/agents/<name>.md` whose intended mode is automatic activation on description match, not explicit user invocation.
 
 ---
 
