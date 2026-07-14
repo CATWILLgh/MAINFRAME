@@ -21,19 +21,27 @@ jobs:
           git config --global user.email "ci@mainframe.local"
           git config --global user.name "mainframe-ci"
 
-      # The hook tests are stdlib Python only — they drive each hook's logic with
-      # fixtures/stubs and never shell out to the real linters, so no ruff/oxlint/
-      # fallow/etc. are needed here.
+      # Most hook tests drive each hook with stdlib + fixtures/stubs and never
+      # shell out to the network-bound linters (oxlint/semgrep/fallow). The
+      # python-security-scan delta tests are the exception — they exercise the
+      # real `ruff` integration (a fast, deterministic local binary), so ruff is
+      # installed here, before the suite runs.
+      - name: Install ruff (Python security scanner)
+        # Pinned to the version the delta tests were verified against, so a future
+        # ruff rule/output change can't turn CI red without a deliberate bump.
+        run: pip install ruff==0.15.15
+
       - name: Hook test suite
         run: |
           fail=0
           for t in tools/test_*.py; do
-            # test_build_hub_page / test_build_opencode(_config) / test_render_core /
-            # test_render_reminder / test_validate_skill need pyyaml (the
-            # last also tiktoken); they run after Validator dependencies.
+            # test_build_hub_page / test_build_opencode(_config) / test_build_codex /
+            # test_render_core / test_render_reminder / test_validate_skill need
+            # pyyaml (the last also tiktoken); they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
             [ "$t" = "tools/test_build_opencode_config.py" ] && continue
+            [ "$t" = "tools/test_build_codex.py" ] && continue
             [ "$t" = "tools/test_render_core.py" ] && continue
             [ "$t" = "tools/test_render_reminder.py" ] && continue
             [ "$t" = "tools/test_validate_skill.py" ] && continue
@@ -70,6 +78,9 @@ jobs:
         run: |
           python3 tools/test_build_opencode.py
           python3 tools/test_build_opencode_config.py
+
+      - name: Codex projection generator tests
+        run: python3 tools/test_build_codex.py
 
       # The dispatcher plugin is plain ESM JS precisely so stock node (present
       # on the runner) can test it — the Bun shell is faked inside the test.
