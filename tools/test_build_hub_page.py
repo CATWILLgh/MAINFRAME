@@ -456,6 +456,56 @@ def test_streaks_current_and_longest():
     assert bhp._streaks(["2026-06-01", "2026-06-02", "2026-06-03"]) == (3, 3)
 
 
+def _fixture_delivery(root):
+    """Add the OpenCode delivery-surface artifacts to an existing fixture tree:
+    the gate dispatcher, both umbrella instruction docs, and a non-empty agent
+    projection with its builder."""
+    _write(os.path.join(root, "adapters/opencode/plugins/mainframe-gates.js"),
+           "// OpenCode gate dispatcher\n")
+    _write(os.path.join(root, "adapters/opencode/build_opencode.py"),
+           "# projects core/agents into dist/opencode/agents\n")
+    _write(os.path.join(root, "dist/claude-code/CLAUDE.md"), "# umbrella (cc)\n")
+    _write(os.path.join(root, "dist/opencode/AGENTS.md"), "# umbrella (oc)\n")
+    _write(os.path.join(root, "dist/opencode/agents/decision-reviewer.md"), "body\n")
+    _write(os.path.join(root, "dist/opencode/agents/web-search.md"), "body\n")
+    _write(os.path.join(root, "install.sh"), "#!/bin/sh\n")
+    return root
+
+
+def test_collect_delivery_maps_opencode_surface():
+    root = _fixture_delivery(_fixture_repo())
+    d = bhp.collect_delivery(root)
+    arts = {a["id"]: a for a in d["artifacts"]}
+    # the OpenCode gate dispatcher — analog of the whole Claude Code hooks layer
+    assert arts["opencode-gate-dispatcher"]["tool"] == "opencode"
+    assert arts["opencode-gate-dispatcher"]["layer"] == "hooks"
+    # both umbrella instruction docs, symmetric across tools
+    assert arts["claude-code-umbrella"]["tool"] == "claude-code"
+    assert arts["opencode-umbrella"]["tool"] == "opencode"
+    # the projection counts real .md names, does NOT duplicate agent bodies
+    assert arts["opencode-agent-projection"]["tool"] == "opencode"
+    assert arts["opencode-agent-projection"]["agent_count"] == 2
+    # the OpenCode install path is surfaced
+    assert d["opencode_install"]["command"] == "./install.sh --opencode"
+
+
+def test_collect_delivery_absent_opencode_surface_is_empty():
+    # a Claude-Code-only tree (no adapters/opencode, no dist/opencode, no
+    # umbrella, no install.sh) yields no delivery artifacts — no invented nodes.
+    d = bhp.collect_delivery(_fixture_repo())
+    assert d["artifacts"] == []
+    assert d["opencode_install"] is None
+
+
+def test_collect_skills_and_agents_carry_tool_tag():
+    root = _fixture_repo()
+    skills = {s["name"]: s for s in bhp.collect_skills(root)}
+    # shipped (non-dev) skills are delivered to BOTH tools via install.sh --opencode
+    assert skills["surface-ticket"]["tool"] == "both"
+    agents = {a["name"]: a for a in bhp.collect_agents(root)}
+    assert agents["decision-reviewer"]["tool"] == "both"
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]

@@ -28,8 +28,9 @@ _DEFAULT_FEEDBACK = os.path.expanduser("~/.claude/mainframe/feedback")
 _DEFAULT_PROJECTS = os.path.expanduser("~/.claude/projects")
 _DEFAULT_USAGE_CACHE = os.path.expanduser("~/.claude/mainframe/usage-cache/usage-cache.json")
 
-# Layer columns, left to right, in the grouped graph layout.
-LAYER_ORDER = ["events", "hooks", "agents", "skills", "dev"]
+# Layer columns, left to right, in the grouped graph layout. Delivery contains
+# target-specific projections/instructions, not duplicate skill or agent bodies.
+LAYER_ORDER = ["events", "hooks", "agents", "delivery", "skills", "dev"]
 
 _SKILL_REF = re.compile(r"\]\(\.\./([a-z0-9][a-z0-9-]*)/SKILL\.md\)")
 _AGENT_REF = re.compile(r"\]\(\.\./\.\./agents/([a-z0-9][a-z0-9-]*)\.md\)")
@@ -96,6 +97,9 @@ def collect_skills(root):
                 "user_invocable": bool(fm.get("user-invocable", False)),
                 "crossrefs": _crossrefs(body),
                 "dev": dev,
+                # Shipped skills are linked into both tools by install.sh;
+                # dev/skills remains a Claude Code-only development surface.
+                "tool": "claude-code" if dev else "both",
             })
     return out
 
@@ -118,6 +122,9 @@ def collect_agents(root):
             "model": fm.get("model", ""),
             "tools": fm.get("tools", ""),
             "skills": skills,
+            # One neutral capability is delivered in both dialects; the
+            # OpenCode byte-projection itself is represented separately.
+            "tool": "both",
         })
     return out
 
@@ -156,7 +163,8 @@ def collect_hooks(root):
                 m = _SCRIPT_NAME.search(text)
                 if m:
                     out.append({"event": event, "matcher": matcher, "script": m.group(1),
-                                "purpose": _script_purpose(scripts_dir, m.group(1), cache)})
+                                "purpose": _script_purpose(scripts_dir, m.group(1), cache),
+                                "tool": "claude-code"})
     return out
 
 
@@ -526,6 +534,76 @@ def collect_misc(root):
     }
 
 
+def collect_delivery(root):
+    """Target-specific delivery artifacts that should not duplicate bodies."""
+    artifacts = []
+
+    gate_rel = "adapters/opencode/plugins/mainframe-gates.js"
+    if os.path.isfile(os.path.join(root, gate_rel)):
+        artifacts.append({
+            "id": "opencode-gate-dispatcher",
+            "label": "OpenCode gate dispatcher",
+            "kind": "gate-dispatcher",
+            "layer": "hooks",
+            "tool": "opencode",
+            "paths": [gate_rel],
+            "description": ("Dispatches OpenCode security and quality gates, including "
+                            "end-of-turn Stop-gate emulation on session.idle."),
+        })
+
+    umbrellas = (
+        ("claude-code-umbrella", "Claude Code umbrella instructions",
+         "dist/claude-code/CLAUDE.md", "claude-code"),
+        ("opencode-umbrella", "OpenCode umbrella instructions",
+         "dist/opencode/AGENTS.md", "opencode"),
+    )
+    for aid, label, rel, tool in umbrellas:
+        if os.path.isfile(os.path.join(root, rel)):
+            artifacts.append({
+                "id": aid,
+                "label": label,
+                "kind": "umbrella-instructions",
+                "layer": "delivery",
+                "tool": tool,
+                "paths": [rel],
+                "description": "Global instructions delivered to " + tool + ".",
+            })
+
+    projection_rels = [
+        rel for rel in ("dist/opencode/agents", "dist/opencode/agents-golden")
+        if not _is_empty_layer(os.path.join(root, rel))
+    ]
+    builder_rel = "adapters/opencode/build_opencode.py"
+    if projection_rels and os.path.isfile(os.path.join(root, builder_rel)):
+        names = set()
+        for rel in projection_rels:
+            names.update(fn[:-3] for fn in os.listdir(os.path.join(root, rel))
+                         if fn.endswith(".md"))
+        artifacts.append({
+            "id": "opencode-agent-projection",
+            "label": "OpenCode agent projection",
+            "kind": "agent-projection",
+            "layer": "delivery",
+            "tool": "opencode",
+            "paths": projection_rels + [builder_rel],
+            "agent_count": len(names),
+            "description": ("OpenCode delivery projection of the shared agent "
+                            "capabilities; bodies are not duplicated in this map."),
+        })
+
+    install = None
+    install_rel = "install.sh"
+    if os.path.isfile(os.path.join(root, install_rel)):
+        install = {
+            "command": "./install.sh --opencode",
+            "path": install_rel,
+            "tool": "opencode",
+            "description": ("Delivers AGENTS.md, projected agents, shared skills, "
+                            "and the OpenCode gates plugin."),
+        }
+    return {"artifacts": artifacts, "opencode_install": install}
+
+
 def compute_health(skills, agents, hooks, root):
     """Integrity findings the graph hides: broken refs, orphans, missing scripts.
 
@@ -571,22 +649,37 @@ def compute_health(skills, agents, hooks, root):
     return {"dangling": dangling, "orphans": orphans, "missing_scripts": missing}
 
 
-def build_nodes(skills, agents, hooks):
+def build_nodes(skills, agents, hooks, delivery=None):
     nodes = []
     for s in skills:
         nodes.append({"id": s["name"], "label": s["name"],
-                      "layer": "dev" if s["dev"] else "skills"})
+                      "layer": "dev" if s["dev"] else "skills", "tool": s["tool"]})
     for a in agents:
-        nodes.append({"id": a["name"], "label": a["name"], "layer": "agents"})
+        nodes.append({"id": a["name"], "label": a["name"], "layer": "agents",
+                      "tool": a["tool"]})
     seen_scripts, seen_events = set(), set()
     for h in hooks:
         if h["script"] not in seen_scripts:
             seen_scripts.add(h["script"])
-            nodes.append({"id": h["script"], "label": h["script"], "layer": "hooks"})
+            nodes.append({"id": h["script"], "label": h["script"], "layer": "hooks",
+                          "tool": h["tool"]})
         if h["event"] not in seen_events:
             seen_events.add(h["event"])
-            nodes.append({"id": h["event"], "label": h["event"], "layer": "events"})
+            nodes.append({"id": h["event"], "label": h["event"], "layer": "events",
+                          "tool": h["tool"]})
+    for artifact in (delivery or {}).get("artifacts", []):
+        nodes.append({"id": artifact["id"], "label": artifact["label"],
+                      "layer": artifact["layer"], "tool": artifact["tool"]})
     return nodes
+
+
+def build_delivery_edges(delivery, agents):
+    """Connect the one OpenCode projection surface to shared agent bodies."""
+    ids = {a["id"] for a in delivery.get("artifacts", [])}
+    if "opencode-agent-projection" not in ids:
+        return []
+    return [{"source": "opencode-agent-projection", "target": a["name"],
+             "kind": "agent-projection"} for a in agents]
 
 
 def compute_layout(nodes, layer_order):
@@ -609,16 +702,19 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
     skills = collect_skills(root)
     agents = collect_agents(root)
     hooks = collect_hooks(root)
-    nodes = build_nodes(skills, agents, hooks)
+    delivery = collect_delivery(root)
+    nodes = build_nodes(skills, agents, hooks, delivery)
+    edges = build_edges(skills, agents, hooks) + build_delivery_edges(delivery, agents)
     return {
         "skills": skills,
         "agents": agents,
         "hooks": hooks,
-        "edges": build_edges(skills, agents, hooks),
+        "edges": edges,
         "dev_state": collect_dev_state(db_path, feedback_dir),
         "usage": collect_usage(projects_dir, usage_cache),
         "settings": collect_settings(root),
         "misc": collect_misc(root),
+        "delivery": delivery,
         "health": compute_health(skills, agents, hooks, root),
         "nodes": nodes,
         "layout": compute_layout(nodes, LAYER_ORDER),

@@ -9,8 +9,12 @@
   --agents: #d2a8ff;
   --hooks: #f0883e;
   --events: #56d364;
+  --delivery: #79c0ff;
   --dev: #db61a2;
   --usage: #e3b341;
+  --target-cc: #d2a8ff;
+  --target-oc: #56d364;
+  --target-both: #e3b341;
 }
 * { box-sizing: border-box; }
 body {
@@ -60,6 +64,7 @@ body {
 .layer-h.agents { border-color: var(--agents); }
 .layer-h.hooks { border-color: var(--hooks); }
 .layer-h.events { border-color: var(--events); }
+.layer-h.delivery { border-color: var(--delivery); }
 .layer-h.dev { border-color: var(--dev); }
 .layer-h.usage { border-color: var(--usage); }
 
@@ -74,9 +79,9 @@ body {
   border-radius: 9px;
   padding: 12px 13px;
 }
-.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
 .card-name { font-weight: 600; font-size: 13.5px; }
-.badges { display: flex; gap: 5px; margin-left: auto; }
+.badges { display: flex; flex-wrap: wrap; gap: 5px; margin-left: auto; }
 .card-desc { margin: 0; color: #c9d1d9; font-size: 12.5px; }
 .card-when { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .card-when b { color: #adbac7; font-weight: 600; }
@@ -90,9 +95,16 @@ body {
 }
 .badge.skills { color: var(--skills); border-color: var(--skills); }
 .badge.agents { color: var(--agents); border-color: var(--agents); }
+.badge.hooks { color: var(--hooks); border-color: var(--hooks); }
+.badge.events { color: var(--events); border-color: var(--events); }
+.badge.delivery { color: var(--delivery); border-color: var(--delivery); }
 .badge.dev { color: var(--dev); border-color: var(--dev); }
 .badge.user { color: var(--events); border-color: var(--events); }
 .badge.muted { color: var(--muted); }
+.badge.tool { font-weight: 600; letter-spacing: .15px; }
+.badge.tool-claude-code { color: var(--target-cc); border-color: var(--target-cc); }
+.badge.tool-opencode { color: var(--target-oc); border-color: var(--target-oc); }
+.badge.tool-both { color: var(--target-both); border-color: var(--target-both); }
 
 .chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .chip {
@@ -145,6 +157,7 @@ table.matrix tr:hover td { background: var(--panel); }
 .swatch.agents { background: var(--agents); }
 .swatch.hooks { background: var(--hooks); }
 .swatch.events { background: var(--events); }
+.swatch.delivery { background: var(--delivery); }
 .swatch.dev { background: var(--dev); }
 
 svg.graph {
@@ -161,12 +174,18 @@ svg.graph:active { cursor: grabbing; }
 .edge.skill-ref { stroke: var(--skills); stroke-opacity: .35; }
 .edge.agent-skill { stroke: var(--agents); stroke-opacity: .35; }
 .edge.hook-event { stroke: var(--hooks); stroke-opacity: .3; }
+.edge.agent-projection { stroke: var(--delivery); stroke-opacity: .4; stroke-dasharray: 4 3; }
 .gnode text { fill: var(--muted); font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; pointer-events: none; }
+.gnode text.target-label { font-size: 8px; font-weight: 700; letter-spacing: .7px; }
+.gnode.tool-claude-code text.target-label { fill: var(--target-cc); }
+.gnode.tool-opencode text.target-label { fill: var(--target-oc); }
+.gnode.tool-both text.target-label { fill: var(--target-both); }
 .gnode .dot { stroke: #0b0e14; stroke-width: 1.5; }
 .gnode.skills .dot { fill: var(--skills); }
 .gnode.agents .dot { fill: var(--agents); }
 .gnode.hooks .dot { fill: var(--hooks); }
 .gnode.events .dot { fill: var(--events); }
+.gnode.delivery .dot { fill: var(--delivery); }
 .gnode.dev .dot { fill: var(--dev); }
 .gnode { cursor: pointer; }
 
@@ -197,6 +216,7 @@ svg.graph.dimmed .gnode.hot text { fill: var(--text); }
 .chip.link { cursor: pointer; color: var(--accent); border-color: var(--accent); }
 .chip.link:hover { background: var(--panel); }
 .small { font-size: 11.5px; }
+.delivery-path { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 
 .detail {
   position: fixed;
@@ -225,7 +245,7 @@ svg.graph.dimmed .gnode.hot text { fill: var(--text); }
   cursor: pointer;
 }
 .dclose:hover { color: var(--text); }
-.dhead { display: flex; align-items: center; gap: 9px; margin: 0 26px 12px 0; }
+.dhead { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 0 26px 12px 0; }
 .dtitle { font-weight: 600; font-size: 15px; word-break: break-word; }
 .dbody .card-desc { margin: 8px 0; color: #c9d1d9; }
 .dsec { margin-top: 16px; }

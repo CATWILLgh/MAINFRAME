@@ -36,6 +36,12 @@
     return el("span", { class: "badge " + (cls || "") }, text);
   }
 
+  const TOOL_LABELS = { "claude-code": "Claude Code", opencode: "OpenCode", both: "both" };
+  const TOOL_SHORT = { "claude-code": "CC", opencode: "OC", both: "BOTH" };
+  function toolBadge(tool) {
+    return badge(TOOL_LABELS[tool] || tool || "?", "tool tool-" + (tool || "unknown"));
+  }
+
   const SVGNS = "http://www.w3.org/2000/svg";
   function svg(tag, props, kids) {
     const n = document.createElementNS(SVGNS, tag);
@@ -67,6 +73,10 @@
     (hooksByScript[h.script] || (hooksByScript[h.script] = [])).push(h);
     (hooksByEvent[h.event] || (hooksByEvent[h.event] = [])).push(h);
   });
+  const delivery = D.delivery || { artifacts: [], opencode_install: null };
+  const deliveryArtifacts = delivery.artifacts || [];
+  const artifactById = {};
+  deliveryArtifacts.forEach((a) => { artifactById[a.id] = a; });
 
   // Module-level so applyFilter can reach items rendered by different views.
   const catalogCards = [];     // {el, text}
@@ -105,7 +115,8 @@
 
   function openDetail(layer, id) {
     let body = null;
-    if (layer === "skills" || layer === "dev") body = skillDetail(id);
+    if (artifactById[id]) body = artifactDetail(artifactById[id]);
+    else if (layer === "skills" || layer === "dev") body = skillDetail(id);
     else if (layer === "agents") body = agentDetail(id);
     else if (layer === "hooks") body = hookDetail(id);
     else if (layer === "events") body = eventDetail(id);
@@ -121,14 +132,16 @@
       ((layer === "skills" || layer === "dev") && skillByName[id]) ||
       (layer === "agents" && agentByName[id]) ||
       (layer === "hooks" && hooksByScript[id]) ||
-      (layer === "events" && hooksByEvent[id]);
+      (layer === "events" && hooksByEvent[id]) || artifactById[id];
     const chip = el("span", { class: "chip" + (resolvable ? " link" : "") }, label);
     if (resolvable) chip.addEventListener("click", (e) => { e.stopPropagation(); openDetail(layer, id); });
     return chip;
   }
 
-  function dhead(title, badgeText, cls) {
-    return el("div", { class: "dhead" }, [el("span", { class: "dtitle" }, title), badge(badgeText, cls)]);
+  function dhead(title, badgeText, cls, tool) {
+    return el("div", { class: "dhead" }, [
+      el("span", { class: "dtitle" }, title), badge(badgeText, cls), tool && toolBadge(tool),
+    ]);
   }
   function dsec(title, items) {
     return items.length
@@ -140,7 +153,7 @@
     const s = skillByName[id];
     if (!s) return el("div", { class: "notice" }, "Unknown skill: " + id);
     return el("div", null, [
-      dhead(s.name, s.dev ? "dev" : "skill", s.dev ? "dev" : "skills"),
+      dhead(s.name, s.dev ? "dev" : "skill", s.dev ? "dev" : "skills", s.tool),
       el("p", { class: "muted small" }, s.user_invocable ? "user-invocable: /" + s.name : "auto-triggered (not user-invocable)"),
       el("p", { class: "card-desc" }, s.description),
       s.when_to_use ? el("p", { class: "card-when" }, [el("b", null, "when: "), s.when_to_use]) : null,
@@ -153,7 +166,7 @@
     const a = agentByName[id];
     if (!a) return el("div", { class: "notice" }, "Unknown agent: " + id);
     return el("div", null, [
-      dhead(a.name, a.model || "agent", "agents"),
+      dhead(a.name, a.model || "agent", "agents", a.tool),
       el("p", { class: "card-desc" }, a.description),
       a.tools ? el("p", { class: "card-when" }, [el("b", null, "tools: "), String(a.tools)]) : null,
       dsec("preloads skills", (a.skills || []).map((sk) => linkChip(sk, "skills", sk))),
@@ -167,7 +180,7 @@
     const seen = new Set();
     hs.forEach((h) => { if (!seen.has(h.event)) { seen.add(h.event); events.push(linkChip(h.event, "events", h.event)); } });
     return el("div", null, [
-      dhead(id, "hook", "hooks"),
+      dhead(id, "hook", "hooks", (hs[0] || {}).tool),
       purpose ? el("p", { class: "card-desc" }, purpose) : el("p", { class: "muted small" }, "(no docstring purpose)"),
       dsec("fires on", events),
     ]);
@@ -180,9 +193,20 @@
       el("td", null, linkChip(h.script, "hooks", h.script)),
     ]));
     return el("div", null, [
-      dhead(id, "event", "events"),
+      dhead(id, "event", "events", (hs[0] || {}).tool),
       el("p", { class: "muted small" }, hs.length + " hook" + (hs.length === 1 ? "" : "s") + " fire on this event."),
       el("table", { class: "matrix" }, [el("tbody", null, rows)]),
+    ]);
+  }
+
+  function artifactDetail(a) {
+    const pathChips = (a.paths || []).map((p) => el("span", { class: "chip" }, p));
+    return el("div", null, [
+      dhead(a.label, a.kind.replace(/-/g, " "), a.layer, a.tool),
+      el("p", { class: "card-desc" }, a.description || ""),
+      a.agent_count != null ? el("p", { class: "muted small" },
+        a.agent_count + " shared agent capabilities projected") : null,
+      dsec("real paths", pathChips),
     ]);
   }
 
@@ -191,6 +215,7 @@
       badge(s.dev ? "dev" : "skill", s.dev ? "dev" : "skills"),
       badge(s.user_invocable ? "/" + s.name : "auto",
             s.user_invocable ? "user" : "muted"),
+      toolBadge(s.tool),
     ]);
     return el("article", { class: "card clickable" }, [
       el("div", { class: "card-head" }, [el("span", { class: "card-name" }, s.name), badges]),
@@ -205,11 +230,23 @@
     return el("article", { class: "card clickable" }, [
       el("div", { class: "card-head" }, [
         el("span", { class: "card-name" }, a.name),
-        el("div", { class: "badges" }, [badge(a.model || "?", "agents")]),
+        el("div", { class: "badges" }, [badge(a.model || "?", "agents"), toolBadge(a.tool)]),
       ]),
       el("p", { class: "card-desc" }, a.description),
       (a.skills || []).length ? el("div", { class: "card-when" },
         [el("b", null, "preloads: "), chips]) : null,
+    ]);
+  }
+
+  function artifactCard(a) {
+    return el("article", { class: "card clickable" }, [
+      el("div", { class: "card-head" }, [
+        el("span", { class: "card-name" }, a.label),
+        el("div", { class: "badges" }, [badge(a.kind.replace(/-/g, " "), a.layer), toolBadge(a.tool)]),
+      ]),
+      el("p", { class: "card-desc" }, a.description || ""),
+      el("div", { class: "card-when chips" }, (a.paths || []).map((p) =>
+        el("span", { class: "chip" }, p))),
     ]);
   }
 
@@ -221,8 +258,9 @@
   }
 
   function cardText(it) {
-    return (it.name + " " + (it.description || "") + " " + (it.when_to_use || "")
-            + " " + ((it.skills || []).join(" "))).toLowerCase();
+    return ((it.name || it.label || "") + " " + (it.description || "") + " "
+            + (it.when_to_use || "") + " " + (it.tool || "") + " "
+            + ((it.paths || []).join(" ")) + " " + ((it.skills || []).join(" "))).toLowerCase();
   }
 
   function renderCatalog(root) {
@@ -250,22 +288,57 @@
       catalogSections.push({ el: sec, cards });
       root.appendChild(sec);
     });
+
+    const surfaced = deliveryArtifacts.filter((a) => a.layer === "delivery");
+    if (surfaced.length) {
+      const grid = el("div", { class: "grid" });
+      const sec = section("Delivery surfaces", "delivery", surfaced.length, grid);
+      const cards = [];
+      surfaced.forEach((a) => {
+        const card = artifactCard(a);
+        const entry = { el: card, text: cardText(a) };
+        card.addEventListener("click", () => openDetail(a.layer, a.id));
+        grid.appendChild(card);
+        catalogCards.push(entry);
+        cards.push(entry);
+      });
+      catalogSections.push({ el: sec, cards });
+      root.appendChild(sec);
+    }
+    if (delivery.opencode_install) {
+      const i = delivery.opencode_install;
+      root.appendChild(el("div", { class: "notice delivery-path" }, [
+        toolBadge(i.tool), el("code", { class: "mono" }, i.command), " — ",
+        i.description, " Source: ", el("code", { class: "mono" }, i.path), ".",
+      ]));
+    }
   }
 
   function renderHooks(root) {
     const byEvent = {};
     D.hooks.forEach((h) => (byEvent[h.event] || (byEvent[h.event] = [])).push(h));
     root.appendChild(el("p", { class: "muted" },
-      "Every hook the plugin registers, grouped by the event that fires it."));
+      "Claude Code hooks grouped by event, plus the OpenCode dispatcher that ports the gate layer."));
+    const dispatchers = deliveryArtifacts.filter((a) => a.kind === "gate-dispatcher");
+    if (dispatchers.length) {
+      root.appendChild(section("OpenCode gate dispatcher", "hooks", dispatchers.length,
+        el("div", { class: "grid" }, dispatchers.map((a) => {
+          const card = artifactCard(a);
+          card.addEventListener("click", () => openDetail(a.layer, a.id));
+          return card;
+        }))));
+    }
     Object.keys(byEvent).sort().forEach((ev) => {
       const rows = byEvent[ev].map((h) => el("tr", null, [
         el("td", { class: "mono dim" }, h.matcher || "*"),
         el("td", { class: "mono" }, h.script),
         el("td", null, h.purpose || ""),
+        el("td", null, toolBadge(h.tool)),
       ]));
       const table = el("table", { class: "matrix" }, [
         el("thead", null, el("tr", null, [
-          el("th", null, "matcher"), el("th", null, "script"), el("th", null, "purpose")])),
+          el("th", null, "matcher"), el("th", null, "script"), el("th", null, "purpose"),
+          el("th", null, "target")])),
         el("tbody", null, rows),
       ]);
       root.appendChild(section(ev, "hooks", byEvent[ev].length, table));
@@ -472,7 +545,7 @@
     }
   }
 
-  const LAYERS = ["events", "hooks", "agents", "skills", "dev"];
+  const LAYERS = D.layer_order || ["events", "hooks", "agents", "delivery", "skills", "dev"];
 
   function ctrlBtn(label, title, onClick) {
     const b = el("button", { type: "button", title: title }, label);
@@ -513,9 +586,12 @@
     const nodeEls = {};
     placed.forEach((n) => {
       const p = pos[n.id];
-      const g = svg("g", { class: "gnode " + n.layer, transform: "translate(" + p.x + "," + p.y + ")" });
+      const g = svg("g", { class: "gnode " + n.layer + " tool-" + n.tool,
+        transform: "translate(" + p.x + "," + p.y + ")" });
       g.appendChild(svg("circle", { r: 6, class: "dot" }));
-      g.appendChild(svg("text", { x: 11, y: 4 }, n.label));
+      g.appendChild(svg("text", { x: 11, y: 1 }, n.label));
+      g.appendChild(svg("text", { x: 11, y: 15, class: "target-label" },
+        TOOL_SHORT[n.tool] || String(n.tool || "?").toUpperCase()));
       g.addEventListener("mouseenter", () => focus(n.id));
       g.addEventListener("mouseleave", reset);
       let downXY = null;
@@ -527,7 +603,8 @@
       });
       nodeLayer.appendChild(g);
       nodeEls[n.id] = g;
-      graphNodes.push({ el: g, id: n.id, text: (n.label || n.id).toLowerCase() });
+      graphNodes.push({ el: g, id: n.id,
+        text: ((n.label || n.id) + " " + (n.tool || "")).toLowerCase() });
     });
 
     const board = svg("svg", { class: "graph", viewBox: "0 0 " + w + " " + h,
@@ -571,7 +648,8 @@
     const items = LAYERS.map((L) =>
       el("span", { class: "leg" }, [el("i", { class: "swatch " + L }), L]));
     return el("div", { class: "legend" },
-      [el("span", { class: "muted" }, "drag to pan · scroll to zoom · hover to trace links · click a node for details"), ...items]);
+      [el("span", { class: "muted" }, "drag to pan · scroll to zoom · hover to trace links · click a node for details"),
+        ...items, toolBadge("claude-code"), toolBadge("opencode"), toolBadge("both")]);
   }
 
   function kv(k, v) {
@@ -717,7 +795,7 @@
   const topbar = document.querySelector(".topbar");
   if (topbar) {
     const search = el("input", { class: "search", type: "search",
-      placeholder: "filter skills, agents, hooks…", autocomplete: "off" });
+      placeholder: "filter skills, agents, delivery…", autocomplete: "off" });
     search.addEventListener("input", () => applyFilter(search.value));
     const stamp = topbar.querySelector(".stamp");
     topbar.insertBefore(search, stamp || null);
