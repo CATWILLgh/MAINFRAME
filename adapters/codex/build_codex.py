@@ -43,7 +43,6 @@ _YAML_NOTE = (
 UNPROJECTABLE_SKILLS = {
     "claude-code-research": "research workflow depends on Claude Code-specific harness behavior",
     "keybindings-help": "edits Claude Code keybindings and has no Codex Phase-1 analogue",
-    "task-workflow": "core workflow depends on Claude Code plan mode, advisor, Agent, AskUserQuestion, and TodoWrite",
     "update-config": "mutates Claude Code configuration and has no Codex Phase-1 analogue",
 }
 
@@ -60,6 +59,15 @@ _PRELOAD_REWRITES = [
     (re.compile(r"\bpreloaded\b", re.I), "loaded explicitly"),
 ]
 
+_CLAUDE_CODE_BINDING_REWRITES = [
+    (r"`AskUserQuestion`", "ask the user directly in chat"),
+    (r"`TodoWrite`", "keep a checklist"),
+    (r"`ExitPlanMode`", "present the plan and await an explicit go"),
+    (r"the `Agent` tool", "a sub-agent"),
+    (r"`Explore`", "a read-only search sub-agent"),
+    (r"`run_in_background: true`", "background sub-agent dispatch"),
+]
+
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
     """Split a Markdown document into frontmatter and body."""
@@ -73,6 +81,170 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 def is_projectable(name: str) -> bool:
     return name not in UNPROJECTABLE_SKILLS
+
+
+def _neutralize_claude_code_bindings(text: str) -> str:
+    """Translate labeled Claude Code bindings before the runtime rename."""
+    for binding, replacement in _CLAUDE_CODE_BINDING_REWRITES:
+        text = re.sub(
+            rf"\(Claude Code:\s*{binding}\)",
+            f"({replacement})",
+            text,
+        )
+        text = re.sub(rf"Claude Code:\s*{binding}", replacement, text)
+
+    # Unknown labeled bindings must not become ``Codex: `<tool>` `` claims.
+    # Their surrounding prose still carries the method; only the runtime token
+    # is discarded.
+    text = re.sub(r"\s*\(Claude Code:\s*[^)\n]+\)", "", text)
+    text = re.sub(
+        r"Claude Code:\s*(?:`[^`]+`|[^,.;)\n]+)",
+        "a runtime-specific operation",
+        text,
+    )
+    return text
+
+
+def _rewrite_task_workflow(text: str) -> str:
+    """Keep the workflow discipline while removing Claude-only tool calls."""
+    text = text.replace(
+        "uses `EnterPlanMode` / `ExitPlanMode` when present",
+        "presents the plan and awaits an explicit go",
+    )
+    text = text.replace(
+        "an `ExitPlanMode` approval",
+        "an explicitly approved plan",
+    )
+    text = text.replace(
+        "ask **decision-level** questions through `AskUserQuestion`",
+        "ask **decision-level** questions directly in chat",
+    )
+    text = text.replace(
+        "plan approved via `ExitPlanMode`",
+        "plan presented and approved with an explicit go",
+    )
+    text = text.replace(
+        "structured questions and plan mode are appropriate here",
+        "structured questions and an explicit plan-approval exchange are appropriate here",
+    )
+    text = text.replace(
+        "headless `claude -p`, a scheduled run",
+        "a headless or scheduled run",
+    )
+    text = text.replace(
+        "surface the fork through `AskUserQuestion`, not a free-text chat question",
+        "ask the user about the fork directly in chat",
+    )
+    text = text.replace(
+        "the two plan-file paths (interactive tool file vs the always-written hub audit copy), and the interactive-vs-auto workflow",
+        "the Codex plan/audit workflow and its interactive-vs-auto approval path",
+    )
+    text = text.replace(
+        "- **Interactive + plan file exists:** wait for the plan-approval gate (Claude Code: `ExitPlanMode`, whose `allowedPrompts` captures the granted permissions); without such a gate, present the plan and await an explicit go. The approval is the execution authorization — no extra \"when to start?\" turn.",
+        "- **Interactive + plan file exists:** present the plan and await an explicit go. The approval is the execution authorization — no extra \"when to start?\" turn.",
+    )
+    text = text.replace(
+        "A casual \"ok / sounds good\" in regular chat is not a substitute for the plan-approval gate on a non-trivial change with a written plan. If a plan file exists in interactive mode, route through the gate.",
+        "For a non-trivial change with a written plan, present that plan and await an explicit go before execution.",
+    )
+
+    text = re.sub(
+        r"^\| Tool plan file \(interactive `EnterPlanMode` only\).*\n",
+        "| Interactive plan approval | Present the plan in chat and await an explicit go | Codex conversation | Current session |\n",
+        text,
+        flags=re.M,
+    )
+    text = re.sub(
+        r"^Verified against Claude Code plan mode \(2026-05-30\):.*\n",
+        "Codex has no native plan-mode tool or injected plan-file path. The hub audit copy remains skill-owned, outside the repository, and never tracked by git.\n",
+        text,
+        flags=re.M,
+    )
+    text = re.sub(
+        r"^- \*\*Interactive\*\* — tool plan mode's 5 phases:.*$",
+        "- **Interactive** — run the same five phases with ordinary reasoning and sub-agents: Explore → Plan → Review (read critical files and ask the user directly in chat) → Write the hub audit copy → present the plan and await an explicit go.",
+        text,
+        flags=re.M,
+    )
+    text = re.sub(
+        r"^- \*\*Auto\*\* — same Phase 1-4 without the tool:.*$",
+        "- **Auto** — run the same phases; Review is internal reasoning, write only the hub audit copy, then proceed without a blocking gate.",
+        text,
+        flags=re.M,
+    )
+    text = re.sub(
+        r"## Runtime note\n\nThe five-phase interactive flow above.*\Z",
+        "## Runtime note\n\n"
+        "Codex has no native plan-mode tools. Run the same phases as ordinary reasoning "
+        "and sub-agent dispatches, present the plan, and treat an explicit user \"go\" "
+        "as the approval gate. If the audit-copy path is unavailable, keep the plan and "
+        "its final \"what actually happened\" retro in the report.\n",
+        text,
+        flags=re.S,
+    )
+
+    text = text.replace(
+        "**Advisor unavailable** (absent tool, pairing failure, runtime without it) — substitute and record it: checkpoint #1 → a **fork subagent** as stand-in advisor where forking exists (inherits the conversation, parent model, cost), else `decision-reviewer` with a self-contained prompt (approach, alternatives, assumptions, files — it sees only the prompt); checkpoint #2 → a **fresh reviewer** on the diff (independence is the point, no fork).",
+        "**Independent review implementation:** Codex has no `advisor` tool. Keep both checkpoints and record the reviewer used: checkpoint #1 → a **fresh reviewer** using the `decision-review` skill with a self-contained prompt (approach, alternatives, assumptions, files); checkpoint #2 → a **fresh reviewer** on the diff (independence is the point).",
+    )
+    text = text.replace(
+        "[`decision-reviewer`](../../agents/decision-reviewer.md)",
+        "[`decision-review`](../decision-review/SKILL.md)",
+    )
+    text = text.replace(
+        "the `decision-reviewer` agent",
+        "a fresh reviewer using the `decision-review` skill",
+    )
+    text = text.replace("`decision-reviewer` agent", "fresh reviewer using the `decision-review` skill")
+    text = text.replace("`decision-reviewer`", "`decision-review`")
+
+    text = text.replace("`AskUserQuestion`", "asking the user directly in chat")
+    text = text.replace("`EnterPlanMode`", "starting an explicit planning exchange")
+    text = text.replace("`ExitPlanMode`", "presenting the plan and awaiting an explicit go")
+    text = text.replace("`advisor()`", "an independent review checkpoint")
+    text = text.replace("advisor()", "an independent review checkpoint")
+    text = re.sub(r"\bAdvisor\b", "Independent review checkpoint", text)
+    text = re.sub(r"\badvisor\b", "independent review checkpoint", text)
+    text = text.replace("decision-reviewer", "decision-review skill")
+    text = text.replace(
+        "Codex has no `independent review checkpoint` tool",
+        "Codex has no `advisor` tool",
+    )
+    text = text.replace(
+        "dispatch `decision-review` FIRST",
+        "run the `decision-review` skill FIRST",
+    )
+    text = text.replace(
+        "Call an independent review checkpoint after synthesis",
+        "Run an independent review checkpoint after synthesis",
+    )
+    text = text.replace("→ call it.", "→ run the checkpoint.")
+    text = text.replace(
+        "A critical independent review checkpoint finding → revise plan / approach, re-call.",
+        "A critical reviewer finding → revise the plan / approach and repeat the checkpoint.",
+    )
+    text = text.replace(
+        "A passed independent review checkpoint → proceed.",
+        "A passed review checkpoint → proceed.",
+    )
+    text = text.replace(
+        "Before declaring the task complete — an independent review checkpoint once more",
+        "Before declaring the task complete — run an independent review checkpoint once more",
+    )
+    text = text.replace(
+        "may skip independent review checkpoint entirely",
+        "may skip this review entirely",
+    )
+    text = text.replace(
+        "If the independent review checkpoint surfaces a new issue at this stage — verify it against the actual change. A finding the independent review checkpoint missed during #1 but caught at #2 is worth fixing; a conflict between independent review checkpoint and primary-source evidence is worth one reconcile call.",
+        "If the fresh reviewer surfaces a new issue at this stage — verify it against the actual change. A finding missed during checkpoint #1 but caught at #2 is worth fixing; a conflict between the reviewer and primary-source evidence is worth one reconciliation round.",
+    )
+    text = text.replace(
+        "run the checkpoint. independent review checkpoint #2",
+        "run the checkpoint. Independent review checkpoint #2",
+    )
+    text = text.replace("independent review checkpoint checkpoint", "independent review checkpoint")
+    return text
 
 
 def _rewrite_codex_prose(text: str, name: str) -> str:
@@ -103,6 +275,26 @@ def _rewrite_codex_prose(text: str, name: str) -> str:
     text = text.replace(
         "Claude Code's Bash subprocess always reads `~/.zshenv` (not `.zshrc`), so the secrets are present in env for all commands you run, including unattended auto-runs.",
         "A Codex shell may inherit variables loaded by `~/.zshenv`; verify the variable exists and do not assume every shell startup path sourced it.")
+    if name == "task-workflow":
+        text = _rewrite_task_workflow(text)
+    text = _neutralize_claude_code_bindings(text)
+    if name == "task-workflow":
+        text = text.replace(
+            "read-only search sub-agent digest (a read-only search sub-agent)",
+            "read-only search sub-agent digest",
+        )
+        text = text.replace(
+            "persistent todo checklist (keep a checklist)",
+            "persistent checklist",
+        )
+        text = text.replace(
+            "multiple sub-agent calls (a sub-agent)",
+            "multiple sub-agent calls",
+        )
+        text = text.replace(
+            "Default to background fan-out where offered (background sub-agent dispatch)",
+            "Default to background sub-agent dispatch where offered",
+        )
     text = text.replace("Claude Code", "Codex")
     text = text.replace("current Bash subprocess state", "current shell state")
     text = re.sub(r"`Explore` subagent \(the built-in read-only\s+search agent\)",

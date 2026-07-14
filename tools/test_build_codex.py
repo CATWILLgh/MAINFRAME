@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 from contextlib import redirect_stdout
@@ -100,8 +101,50 @@ def test_projectability_filter_drops_harness_skills_only():
         text = SKILL.replace("sample-skill", name)
         _write(root / f"core/skills/{name}/SKILL.md", text)
     skills, dropped = bc.collect_skills(root)
-    assert [name for name, _ in skills] == ["sample-skill"]
+    assert [name for name, _ in skills] == ["sample-skill", "task-workflow"]
     assert {name for name, _ in dropped} == set(bc.UNPROJECTABLE_SKILLS)
+    assert "task-workflow" not in bc.UNPROJECTABLE_SKILLS
+
+
+def test_real_render_has_no_false_codex_tool_attributions():
+    repo = _TOOLS.parent
+    skills, dropped = bc.collect_skills(repo)
+    rendered = dict(skills)
+    assert len(skills) == 18
+    assert "task-workflow" in rendered
+    assert "task-workflow" not in {name for name, _ in dropped}
+
+    all_markdown = "\n".join(
+        content.decode()
+        for _, files in skills
+        for path, content in files.items()
+        if path.suffix == ".md"
+    )
+    for tool in ("AskUserQuestion", "TodoWrite", "ExitPlanMode"):
+        assert f"Codex: `{tool}`" not in all_markdown
+    assert not re.search(r"\bCodex:\s*`[^`]+`", all_markdown)
+    assert not re.search(
+        r"\bCodex\b[^.\n]*\bAskUserQuestion\b",
+        all_markdown,
+    )
+
+    workflow = "\n".join(
+        content.decode()
+        for path, content in rendered["task-workflow"].items()
+        if path.suffix == ".md"
+    )
+    for claude_only_tool in (
+        "advisor()", "AskUserQuestion", "TodoWrite", "EnterPlanMode", "ExitPlanMode",
+    ):
+        assert claude_only_tool not in workflow
+    assert "Codex has no `advisor` tool" in workflow
+    assert "independent review checkpoint" in workflow.lower()
+    assert "`decision-review` skill" in workflow
+    assert "Context7 first" in workflow
+    assert "MCP tools" in workflow
+    assert "sub-agent" in workflow
+    for stage in ("recon", "verify", "commit"):
+        assert stage in workflow.lower()
 
 
 def test_permissions_map_only_clean_command_prefixes_and_report_omissions():
@@ -158,14 +201,14 @@ def test_rules_render_native_prefix_rule_syntax():
 
 def test_summary_reports_each_dropped_skill_and_omitted_rule():
     output = StringIO()
-    dropped = [("task-workflow", "harness-bound")]
+    dropped = [("update-config", "harness-bound")]
     omitted = [{"tier": "allow", "entry": "WebSearch",
                 "reason": "non-Bash permission"}]
     with redirect_stdout(output):
         bc._print_summary([("sample", {})], dropped,
                           [(["git", "add"], "allow")], omitted)
     text = output.getvalue()
-    assert "task-workflow: harness-bound" in text
+    assert "update-config: harness-bound" in text
     assert "[allow] WebSearch: non-Bash permission" in text
 
 
