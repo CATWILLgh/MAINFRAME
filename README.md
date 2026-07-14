@@ -18,18 +18,18 @@
 
 <img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
 
-A baseline of operating rules, focused sub-agents, and small automatic checks I want to apply in **every** Claude Code, OpenCode, and Codex session on my machine. Set up once — every project, every session, inherits the same discipline.
+A machine-wide baseline of operating rules, focused sub-agents, and small automatic checks for **every** Claude Code, OpenCode, and Codex session.
 
-It's shaped for one workflow in particular: long **auto-mode** runs — hours, sometimes days, where Claude and I plan a larger feature up front, then it executes on its own with no one watching each step. Every rule, hook, and permission tier here is built to hold quality through exactly that: an unattended run where a missed check turns into a bug nobody catches until later.
+It's shaped for long **auto-mode** runs: Claude and I plan a larger feature up front, then it executes unattended for hours or sometimes days. Every rule, hook, and permission tier is built to hold quality when no one is watching each step and a missed check can become a bug nobody catches until later.
 
 ## Engineering at a glance
 
 For the technically curious — the concrete engineering this repo demonstrates, not the motivation behind it:
 
-- **Fail-open hooks.** Every check exits cleanly when its tool is missing or it errors, so the hook layer can never break a session — safety that degrades to silence, never to a stall.
-- **A git-level secret gate.** A `PreToolUse` hook scans the staged diff and blocks `git commit` when a high-confidence credential is present — caught before it ever reaches history, not after.
+- **Fail-open hooks.** Every check exits cleanly when its tool is missing or it errors, so the hook layer degrades to silence rather than stalling a session.
+- **A git-level secret gate.** High-confidence credentials are blocked before they reach history; the hook and trigger are detailed below.
 - **Size budgets against lost-in-the-middle.** Skills, agents, and hooks are capped at ≤5K tokens — a limit calibrated to the runtime's compaction behaviour so the content survives a context compaction intact instead of being truncated.
-- **Covered by tests and CI.** ~90 stdlib-Python tests, zero third-party runtime dependencies, run on every push (the CI badge above) alongside the format/size validators.
+- **Covered by tests and CI.** Hundreds of Python tests run on every push (the CI badge above) alongside the format/size validators; the shipped hooks have zero third-party Python runtime dependencies.
 
 > **Personal-use.** No support, no compatibility guarantees, no backwards-compatibility promises. Forks are welcome under MIT, but this hub is shaped to one engineer's workflow.
 
@@ -42,17 +42,11 @@ For the technically curious — the concrete engineering this repo demonstrates,
 Working with Claude Code (or any AI coding agent) on multiple projects, you keep running into the same friction:
 
 - **Same baseline, every time.** You re-deploy the same useful sub-agents, the same operating rules, the same little safety checks for every new project. Manually. Forever.
-- **Project-level config doesn't scale.** Putting it all into the project's own `CLAUDE.md` works — until that file grows. Then attention scatters, the well-known **lost-in-the-middle** problem kicks in, and important rules quietly stop being followed mid-session.
-- **The agent itself bloats its own config.** Left to its habits, Claude keeps appending new instructions to `CLAUDE.md`. The file grows, focus thins, the rules crumble. And so it grows, slowly, until you notice the discipline you started with is gone.
+- **Project-level config doesn't scale.** Putting it all into the project's own `CLAUDE.md` works until the file grows and the well-known **lost-in-the-middle** problem scatters attention. Claude's habit of appending more instructions accelerates that bloat until important rules quietly stop being followed mid-session and the original discipline is gone.
 
-This repo is my attempt to do that baseline layer **separately** from any specific project, with deliberate size limits and small reminders so things don't drift:
+This repo moves that baseline **outside** any specific project and keeps it bounded. A hook nudges when a skill, agent, or hook exceeds its size budget; granular, narrowly focused skills and agents load only the relevant context instead of a soup of "a little bit of everything". The process that decides what stays or goes is described next.
 
-- Strict file-size budgets on skills, agents, hooks. A file gets too big — a hook nudges me.
-- Skills and agents stay granular and narrowly focused — at any moment, only the most relevant context is loaded, not a soup of "a little bit of everything".
-- Constantly iterating: try a new approach, see what stabilizes Claude's behavior, keep what works, drop what doesn't.
-- Every decision cross-checked against authoritative sources (Anthropic docs, RFCs, well-known engineering material) — not "feels right".
-
-**Honest disclaimer.** I'm not claiming this hub closes every pain. Some friction with AI agents is just current-generation model limits — the best a hub can do is smooth them, not fix them. What I am aiming for: a higher minimum quality of output code by default. On long-running development that pays back many times over — problems caught and prevented up front instead of bugs to chase later, by you or by the agent.
+**Honest disclaimer.** This hub cannot close every pain; some friction is a current-generation model limit that structure can only smooth, not fix. The aim is a higher minimum quality by default: more predictable day-to-day output and problems caught up front instead of bugs for you or the agent to chase later. That pays back many times over on long-running development.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -60,15 +54,14 @@ This repo is my attempt to do that baseline layer **separately** from any specif
 
 ## Where this comes from
 
-This isn't a weekend project or a copied template. It's distilled from thousands of hours of working with AI coding agents, day after day — what consistently helped, what quietly broke, what was worth keeping. Every rule here earned its place by surviving real use.
+This isn't a weekend project or a copied template. It's distilled from thousands of hours with AI coding agents and recurring patterns on real projects — what consistently helped, what quietly broke, what was worth keeping. Every rule earned its place by surviving use, not theory.
 
-Three things shape it:
+Two other inputs keep that experience honest:
 
-- **Hard-won experience.** The rules come from patterns I hit over and over on real projects — not from theory.
 - **Authoritative sources.** I don't ship a rule on a hunch. Each non-trivial decision is checked against primary sources — Anthropic's own docs, RFCs, established engineering material — and validated with a small experiment where I can.
 - **Constant feedback.** I work on this almost every day, together with the agent. When something underperforms in real use, it gets refined or dropped. The hub is never "finished" — it's continuously corrected against what actually happens.
 
-And here's the part that's easy to miss. It looks like just a folder of Markdown files — some skills, a few agents. It isn't. Steering a language model reliably, across many projects and long autonomous runs, is one of the genuinely hard parts of working with agentic systems. The model's inference — how it generates each step — is a kind of *ordered chaos*: powerful, but hard to keep pointed in the right direction at scale. This hub is my standing attempt to put just enough structure around that chaos to make the output dependable, without strangling what the model is good at.
+It looks like a folder of Markdown files — some skills, a few agents — but steering a language model reliably across many projects and the long autonomous runs described above is one of the genuinely hard parts of agentic systems. The model's inference — how it generates each step — is a kind of *ordered chaos*: powerful, but hard to keep pointed in the right direction at scale. This hub puts just enough structure around that chaos to make the output dependable without strangling what the model is good at.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -85,15 +78,13 @@ In plain words — what each piece is for:
 - **Rules** — a reserved Claude Code layer for small path-scoped guidance files that load on demand when Claude reads a matching path. It is currently empty.
 - **Permissions** — one neutral policy source projected into each runtime's available controls. Claude Code receives the full deny / ask / allow lists; OpenCode and Codex receive conservative, explicitly limited projections.
 
-End result the hub aims for: **the same baseline of quality and discipline applied to every project on your machine — without re-configuring each coding agent or babysitting it through a long unattended run.** When the baseline is high, day-to-day output is more predictable and bug rate drops.
-
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
 </p>
 
 ## Inventory — what's actually inside
 
-The concrete list of the shared hub capabilities, in plain words. Three groups: **agents** (specialist sub-agents you delegate to), **hooks** (automatic checks on tool events), **skills** (focused playbooks the runtime loads when relevant). Invocation syntax, model mapping, and hook coverage below describe the Claude Code target; OpenCode and Codex receive the projections summarized in [Architecture](#architecture).
+Below are the shared **agents**, **hooks**, and **skills** in the Claude Code target. OpenCode and Codex receive the projections summarized in [Architecture](#architecture).
 
 ### Agents — 7 specialist sub-agents
 
@@ -111,7 +102,7 @@ The neutral contracts carry capability and reasoning tiers; each adapter maps th
 
 ### Hooks — what each one checks, and when
 
-Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it stops the action or the turn until something is fixed); an **advisory** only injects a note and never blocks. The core design is **warn early, block at the end** — when you edit a file the advisory scanners flag a problem immediately, and if it's still unresolved when Claude tries to finish, the matching **Stop-gate** blocks the finish. So a real issue can't quietly slip through to the end of an unattended run. Every hook is fail-safe: if it errors, or its tool isn't installed, it exits silently and never breaks your session.
+Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it stops the action or the turn until something is fixed); an **advisory** only injects a note and never blocks. The core design is **warn early, block at the end** — when you edit a file the advisory scanners flag a problem immediately, and if it's still unresolved when Claude tries to finish, the matching **Stop-gate** blocks the finish. So a real issue can't quietly slip through to the end of an unattended run. The fail-open behavior summarized above applies to every hook.
 
 #### At session start — `SessionStart` (fresh start, resume, `/clear`, and after every compaction)
 
@@ -416,8 +407,6 @@ MAINFRAME/
     └── layers/                           # architecture spec per layer (skills, agents, hooks, rules, ...)
 ```
 
-MAINFRAME supports three targets: `./install.sh` delivers Claude Code, `./install.sh --opencode` delivers OpenCode, and `./install.sh --codex` delivers Codex.
-
 Internal ADRs, maintainer working notes, the inbox of unprocessed candidates, runtime telemetry, and per-machine memory are gitignored. The published artifact is the hub plus the contributor-facing layer specifications under `docs/layers/`.
 
 <p align="center">
@@ -465,7 +454,7 @@ graph TD
 Every artifact shipped by this hub holds these:
 
 1. **Project-agnostic** — no hardcoded project names, stacks, paths, or domains.
-2. **Evidence-based** — new rules need real experience, an authoritative source, or a measured experiment. Not "feels right".
+2. **Evidence-based** — real experience, an authoritative source, or a measured experiment behind each new rule; never "feels right".
 3. **English in artifacts** — skills, agents, commands, hooks all in English (LLM adherence).
 4. **Single source of truth** — each artifact exists in exactly one location in the repo.
 5. **Sub-agent economy** — pick the right model per task (Haiku for trivial, Sonnet for most research, Opus only for genuine reasoning needs).
@@ -476,7 +465,7 @@ Every artifact shipped by this hub holds these:
 
 ## A personal note
 
-I'm not a scientist or a credentialed engineer. I'm just someone who genuinely enjoys working with AI agents and models — and who has put a *lot* of hours into it over the past couple of years. To put it plainly: this year alone my Git history already shows over 2,300 private commits across 3+ production projects and counting; about 300 the year before; and before that, nothing — I worked entirely on my own machine and didn't even know how Git worked.
+I'm not a scientist or a credentialed engineer. I'm someone who genuinely enjoys working with AI agents and models. To put that experience plainly: this year alone my Git history already shows over 2,300 private commits across 3+ production projects and counting; about 300 the year before; and before that, nothing — I worked entirely on my own machine and didn't even know how Git worked.
 
 I started sharing this for people just getting into all of this, or looking for something new — because I hadn't come across repos quite like it. Maybe they're out there, somewhere at the bottom of GitHub; maybe some are even better than mine. But this one is mine, and I enjoy making it.
 
