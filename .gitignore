@@ -49,3 +49,9 @@ workspace/
 
 # Derived OpenCode agent projection; committed goldens remain tracked.
 dist/opencode/agents/
+
+# Derived Codex projection; composed AGENTS.md and representative goldens are committed.
+dist/codex/*
+!dist/codex/AGENTS.md
+!dist/codex/skills-golden/
+!dist/codex/skills-golden/**

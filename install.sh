@@ -55,6 +55,7 @@ DRY_RUN=0
 UNINSTALL=0
 DEV=0
 OPENCODE=0
+CODEX=0
 
 usage() {
     cat <<EOF
@@ -93,16 +94,23 @@ Usage:
                       projection — OpenCode picks them up from ~/.claude
                       natively. NOTE: hub hooks do not transfer; OpenCode
                       runs have thinner guardrails than Claude Code.
+  $0 --codex          Install PLUS the Codex Phase-1 projection: generates
+                      Codex-native skills and mainframe.rules, then links
+                      AGENTS.md, hub skill directories, and mainframe.rules
+                      into ${CODEX_HOME:-~/.codex}. Existing AGENTS.md is
+                      backed up first; default.rules and non-hub skills are
+                      left untouched.
   $0 --dry-run        Show what would happen, no changes.
   $0 --uninstall      Remove symlinks created by this script (incl. --dev
-                      and --opencode ones; telemetry/feedback data and
-                      opencode.json edits are left in place).
+                      --opencode, and --codex ones; telemetry/feedback data,
+                      backups, and opencode.json edits are left in place).
   $0 --help           Show this message.
 
 Idempotent: re-running is safe — already-correct symlinks are left alone.
 
 Backups (if any) live at:
   ~/.claude/<file>.backup-YYYYMMDD-HHMMSS
+  ${CODEX_HOME:-~/.codex}/<file>.backup-YYYYMMDD-HHMMSS
 
 EOF
 }
@@ -112,6 +120,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run)   DRY_RUN=1 ;;
         --dev)       DEV=1 ;;
         --opencode)  OPENCODE=1 ;;
+        --codex)     CODEX=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)   usage; exit 0 ;;
         *) log_error "Unknown argument: $1"; usage; exit 2 ;;
@@ -673,6 +682,146 @@ uninstall_opencode() {
     log_warn "included); previous version, if any, is at opencode.json.backup."
 }
 
+# Codex Phase-1 layer (--codex). The generator owns format translation;
+# delivery is item-by-item so user skills and default.rules remain composable.
+CODEX_SKILLS_SRC="dist/codex/skills"
+CODEX_RULES_SRC="dist/codex/rules/mainframe.rules"
+CODEX_AGENTS_SRC="dist/codex/AGENTS.md"
+codex_config_dir() { echo "${CODEX_HOME:-$HOME/.codex}"; }
+
+codex_backup_target() {
+    local target="$1"
+    local cfg_dir
+    cfg_dir="$(codex_config_dir)"
+    if [[ "$(dirname "$target")" == "$cfg_dir" ]]; then
+        local backup="${target}.backup-${TIMESTAMP}"
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would back up ${target} → ${backup}"
+        else
+            mv "$target" "$backup"
+            log_ok "backed up ${target} → ${backup}"
+        fi
+        return 0
+    fi
+    local rel="${target#${cfg_dir}/}"
+    local dest="${cfg_dir}/.backup-${TIMESTAMP}/${rel}"
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would move ${target} → ${dest}"
+    else
+        mkdir -p "$(dirname "$dest")"
+        mv "$target" "$dest"
+        log_ok "moved ${target} → ${dest}"
+    fi
+}
+
+# Remove conflicts before calling the shared install_dir_contents helper, so
+# its Claude-specific backup root is never used for a Codex target.
+prepare_codex_dir_targets() {
+    local src_dir_rel="$1"
+    local target_dir="$2"
+    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
+    [[ -d "$src_dir_abs" ]] || return 0
+    local child base target current
+    for child in "$src_dir_abs"/*; do
+        [[ -e "$child" ]] || continue
+        base="$(basename "$child")"
+        target="${target_dir}/${base}"
+        [[ -e "$target" || -L "$target" ]] || continue
+        if [[ -L "$target" ]]; then
+            current="$(readlink_safe "$target")"
+            [[ "$current" == "$child" ]] && continue
+        fi
+        codex_backup_target "$target"
+    done
+}
+
+cleanup_stale_codex_in_dir() {
+    local src_dir_rel="$1"
+    local target_dir="$2"
+    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
+    [[ -d "$target_dir" ]] || return 0
+    local entry resolved
+    for entry in "$target_dir"/*; do
+        [[ -e "$entry" || -L "$entry" ]] || continue
+        [[ -L "$entry" ]] || continue
+        resolved="$(readlink_safe "$entry")"
+        [[ "$resolved" == "${src_dir_abs}/"* ]] || continue
+        [[ -e "$resolved" ]] && continue
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would remove stale symlink ${entry} (target ${resolved} gone)"
+        else
+            codex_backup_target "$entry"
+            log_ok "removed stale Codex symlink ${entry}"
+        fi
+    done
+}
+
+install_codex_file() {
+    local src_rel="$1"
+    local target="$2"
+    local src_abs="${PROJECT_ROOT}/${src_rel}"
+    if [[ ! -e "$src_abs" ]]; then
+        log_warn "skipping: source ${src_rel} does not exist in repo"
+        return 0
+    fi
+    if [[ -L "$target" && "$(readlink_safe "$target")" == "$src_abs" ]]; then
+        log_ok "already linked: ${target} → ${src_rel}"
+        return 0
+    fi
+    if [[ -e "$target" || -L "$target" ]]; then
+        codex_backup_target "$target"
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would link ${target} → ${src_rel}"
+    else
+        mkdir -p "$(dirname "$target")"
+        ln -sfn "$src_abs" "$target"
+        log_ok "linked ${target} → ${src_rel}"
+    fi
+}
+
+install_codex() {
+    local py="${PROJECT_ROOT}/.venv/bin/python3"
+    local cfg_dir
+    cfg_dir="$(codex_config_dir)"
+    if ! command -v codex >/dev/null 2>&1; then
+        log_warn "codex not found on PATH — skipping the Codex layer."
+        return 0
+    fi
+    if [[ ! -x "$py" ]]; then
+        log_warn "Skipped Codex projection — .venv missing"
+        log_warn "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
+        return 0
+    fi
+
+    local gen_args=(--root "${PROJECT_ROOT}")
+    [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
+    if ! "$py" "${PROJECT_ROOT}/adapters/codex/build_codex.py" "${gen_args[@]}"; then
+        log_error "build_codex.py failed; Codex layer not installed."
+        return 1
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would back up and link dist/codex/AGENTS.md to ${cfg_dir}/AGENTS.md"
+        log_action "would link hub skills item-by-item into ${cfg_dir}/skills/"
+        log_action "would link mainframe.rules to ${cfg_dir}/rules/mainframe.rules"
+        return 0
+    fi
+
+    install_codex_file "$CODEX_AGENTS_SRC" "${cfg_dir}/AGENTS.md"
+    prepare_codex_dir_targets "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
+    install_dir_contents "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
+    cleanup_stale_codex_in_dir "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
+    install_codex_file "$CODEX_RULES_SRC" "${cfg_dir}/rules/mainframe.rules"
+    log_ok "Codex layer installed. Restart Codex sessions to pick it up."
+}
+
+uninstall_codex() {
+    uninstall_dir_contents "$CODEX_SKILLS_SRC" "$(codex_config_dir)/skills"
+    uninstall_one "$CODEX_AGENTS_SRC" "$(codex_config_dir)/AGENTS.md"
+    uninstall_one "$CODEX_RULES_SRC" "$(codex_config_dir)/rules/mainframe.rules"
+    log_warn "Codex backups are left in place; default.rules and user skills were not modified."
+}
+
 # Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
 # dist/ no longer exist. Leaves user-created real files/folders untouched.
 # Backups go to the safe per-run dir, NOT in-place.
@@ -836,6 +985,7 @@ main() {
             uninstall_dir_contents "${entry%%:*}" "${entry##*:}"
         done
         uninstall_opencode
+        uninstall_codex
         uninstall_one "dist/claude-code/scripts/secret" "$HOME/.local/bin/secret"
         log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
@@ -906,6 +1056,13 @@ main() {
         # the remaining install phases (secrets, tooling) silently.
         if ! install_opencode; then
             log_warn "OpenCode layer failed; continuing with the rest of the install."
+        fi
+    fi
+
+    if [[ $CODEX -eq 1 ]]; then
+        echo
+        if ! install_codex; then
+            log_warn "Codex layer failed; continuing with the rest of the install."
         fi
     fi
 

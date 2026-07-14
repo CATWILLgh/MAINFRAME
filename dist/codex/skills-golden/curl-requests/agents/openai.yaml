@@ -1,0 +1,5 @@
+# Generated from MAINFRAME hub (core/skills/curl-requests/SKILL.md) — do not edit; regenerate via ./install.sh --codex.
+interface:
+  display_name: "Working with curl"
+  short_description: "HTTP(S) request templates and safe-defaults for `curl`: Bearer / Basic / `.netrc` auth, JSON…"
+  default_prompt: "Use $curl-requests to apply this skill's guidance to the current task."

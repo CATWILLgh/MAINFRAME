@@ -98,6 +98,11 @@ COMPOSE_MAPPINGS = [
      + _CORE_SECTIONS
      + _CORE_TAIL
      + ["adapters/opencode/instructions/90-runtime-opencode.md"]),
+    ("dist/codex/AGENTS.md",
+     ["adapters/codex/instructions/00-preamble.md"]
+     + _CORE_SECTIONS
+     + _CORE_TAIL
+     + ["adapters/codex/instructions/90-runtime-codex.md"]),
 ]
 
 EXCLUDED_NAMES = {"__pycache__", ".DS_Store"}

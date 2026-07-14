@@ -1,0 +1,5 @@
+# Generated from MAINFRAME hub (core/skills/code-audit/SKILL.md) — do not edit; regenerate via ./install.sh --codex.
+interface:
+  display_name: "Code audit"
+  short_description: "Run a structured, multi-aspect code and quality audit of a module, directory, or diff."
+  default_prompt: "Use $code-audit to run a structured, multi-aspect code and quality audit of a module, directory, or diff."
