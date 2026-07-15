@@ -84,7 +84,8 @@ def _install_units(output: Path) -> list[dict]:
 
 
 def _resources() -> list[dict]:
-    lifecycle = {"observation": "unimplemented", "apply": "unimplemented"}
+    supported = {"observation": "supported", "apply": "unimplemented"}
+    unimplemented = {"observation": "unimplemented", "apply": "unimplemented"}
     return [
         {
             "id": "opencode.credentials-index",
@@ -94,14 +95,14 @@ def _resources() -> list[dict]:
                 "root": "opencode-config",
                 "path": "credentials-index.md",
             },
-            **lifecycle,
+            **supported,
         },
         {
             "id": "opencode.permissions",
             "strategy": "json-key-merge",
             "source": "config-fragment.json",
             "target": {"root": "opencode-config", "path": "opencode.json"},
-            **lifecycle,
+            **unimplemented,
         },
     ]
 

@@ -141,7 +141,7 @@ def test_build_materializes_complete_self_contained_codex_bundle():
                 "root": "codex-config",
                 "path": "credentials-index.md",
             },
-            "observation": "unimplemented",
+            "observation": "supported",
             "apply": "unimplemented",
         },
         "codex.hook-trust": {

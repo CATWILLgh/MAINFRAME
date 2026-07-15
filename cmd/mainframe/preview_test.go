@@ -54,13 +54,33 @@ func TestBuildPreviewServiceDiscoversManagedArtifact(t *testing.T) {
 	); err != nil {
 		t.Fatalf("link Codex artifact: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(home, ".zshenv"), []byte("source ~/.config/mainframe/env\n"), 0o600); err != nil {
+		t.Fatalf("write shell profile: %v", err)
+	}
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", codex)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 
 	service, err := buildPreviewServiceFrom(
 		releaseRoot,
-		releasecontract.Release{ID: "test-release", Model: model},
+		releasecontract.Release{
+			ID: "test-release", Model: model,
+			Resources: []releasecontract.Resource{
+				{
+					ID: "codex.credentials-index", ComponentID: domain.ComponentCodex,
+					Strategy:    releasecontract.StrategySeedIfAbsent,
+					Target:      domain.Location{Root: domain.RootCodexConfig, Path: "credentials-index.md"},
+					Observation: releasecontract.SupportSupported, Apply: releasecontract.SupportUnimplemented,
+				},
+				{
+					ID: "codex.zshenv-source", ComponentID: domain.ComponentCodex,
+					Strategy:    releasecontract.StrategyShellLine,
+					Target:      domain.Location{Root: domain.RootHome, Path: ".zshenv"},
+					Observation: releasecontract.SupportSupported, Apply: releasecontract.SupportUnimplemented,
+					DesiredLine: "source ~/.config/mainframe/env",
+				},
+			},
+		},
 	)
 	if err != nil {
 		t.Fatalf("build preview service: %v", err)
@@ -70,6 +90,11 @@ func TestBuildPreviewServiceDiscoversManagedArtifact(t *testing.T) {
 		if target.ID == domain.ComponentCodex {
 			if target.Status != lifecycle.StatusManaged || !target.Selected {
 				t.Fatalf("Codex target = %#v", target)
+			}
+			if len(target.Configuration) != 2 ||
+				target.Configuration[0].Status != lifecycle.ConfigurationNeedsChange ||
+				target.Configuration[1].Status != lifecycle.ConfigurationReady {
+				t.Fatalf("Codex configuration = %#v", target.Configuration)
 			}
 			return
 		}

@@ -114,7 +114,8 @@ def _install_units(root: Path, skills, agents) -> list[dict]:
 
 
 def _resources() -> list[dict]:
-    lifecycle = {"observation": "unimplemented", "apply": "unimplemented"}
+    supported = {"observation": "supported", "apply": "unimplemented"}
+    unimplemented = {"observation": "unimplemented", "apply": "unimplemented"}
     return [
         {
             "id": "codex.credentials-index",
@@ -124,13 +125,13 @@ def _resources() -> list[dict]:
                 "root": "codex-config",
                 "path": "credentials-index.md",
             },
-            **lifecycle,
+            **supported,
         },
         {
             "id": "codex.hook-trust",
             "strategy": "manual-action",
             "target": {"root": "codex-config", "path": "hooks.json"},
-            **lifecycle,
+            **unimplemented,
         },
     ]
 

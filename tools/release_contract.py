@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,13 @@ PAYLOAD_FIELDS = {"path", "mode", "size", "sha256"}
 ENTRY_FIELDS = {"component", "path", "sha256"}
 SOURCE_STRATEGIES = {"json-key-merge", "seed-if-absent", "shell-line", "shell-line-if-present"}
 SOURCELESS_STRATEGIES = {"ensure-directory", "manual-action"}
+OBSERVABLE_STRATEGIES = {
+    "ensure-directory",
+    "seed-if-absent",
+    "shell-line",
+    "shell-line-if-present",
+}
+SHELL_STRATEGIES = {"shell-line", "shell-line-if-present"}
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 ITEM_IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[._/-][a-z0-9_]+)*$")
 ROOT_IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -255,14 +263,47 @@ def _validate_resources(root: Path, resources: Any) -> None:
         if has_source:
             source = _portable_path(resource["source"], f"resource {identifier!r} source")
             _reject_symlink_segments(root, source)
-            _require_regular_file(root / Path(source), f"resource {identifier!r} source")
+            source_path = root / Path(source)
+            _require_regular_file(source_path, f"resource {identifier!r} source")
         if not _sorted_portable_paths(resource.get("legacy_source_suffixes", [])):
             raise ValueError(f"resource {identifier!r} has invalid legacy sources")
         _location(resource["target"], f"resource {identifier!r} target")
-        if resource["observation"] != "unimplemented" or resource["apply"] != "unimplemented":
+        observation = resource["observation"]
+        if resource["apply"] != "unimplemented" or observation not in {
+            "supported",
+            "unimplemented",
+        }:
             raise ValueError(f"resource {identifier!r} overstates lifecycle support")
+        if observation == "supported" and strategy not in OBSERVABLE_STRATEGIES:
+            raise ValueError(f"resource {identifier!r} overstates lifecycle support")
+        if observation == "supported" and strategy in SHELL_STRATEGIES:
+            _validate_shell_source(source_path, identifier)
     if [resource["id"] for resource in resources] != sorted(seen_ids):
         raise ValueError("resources must be sorted by id")
+
+
+def _validate_shell_source(source: Path, identifier: str) -> None:
+    try:
+        content = source.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(
+            f"resource {identifier!r} source must contain one non-empty logical line"
+        ) from exc
+    if content.endswith("\n"):
+        content = content[:-1]
+    unsupported_control = any(
+        character != "\t" and unicodedata.category(character) == "Cc"
+        for character in content
+    )
+    if (
+        not content.strip(" \t")
+        or "\r" in content
+        or "\n" in content
+        or unsupported_control
+    ):
+        raise ValueError(
+            f"resource {identifier!r} source must contain one non-empty logical line"
+        )
 
 
 def _validate_payload_rows(rows: Any) -> None:

@@ -148,7 +148,7 @@ def _expected_resources() -> list[dict]:
             "strategy": "seed-if-absent",
             "source": "credentials-index.md",
             "target": {"root": "claude-config", "path": "credentials-index.md"},
-            "observation": "unimplemented",
+            "observation": "supported",
             "apply": "unimplemented",
         },
         {

@@ -78,6 +78,135 @@ def test_bundle_manifest_records_units_resources_and_payload_integrity():
     assert len(payload["launcher.sh"]["sha256"]) == 64
 
 
+def test_resource_observation_support_matches_strategy_contract():
+    bundle = Path(tempfile.mkdtemp())
+    (bundle / "seed.txt").write_text("seed\n")
+    (bundle / "shell-line").write_text("source ~/.config/example.env\n")
+
+    manifest = release_contract.write_bundle_manifest(
+        bundle,
+        component="alpha",
+        dependencies=[],
+        install_units=[],
+        resources=[
+            {
+                "id": "alpha.directory",
+                "strategy": "ensure-directory",
+                "target": {"root": "alpha-config", "path": "cache"},
+                "observation": "supported",
+                "apply": "unimplemented",
+            },
+            {
+                "id": "alpha.seed",
+                "strategy": "seed-if-absent",
+                "source": "seed.txt",
+                "target": {"root": "alpha-config", "path": "seed.txt"},
+                "observation": "supported",
+                "apply": "unimplemented",
+            },
+            {
+                "id": "alpha.shell",
+                "strategy": "shell-line",
+                "source": "shell-line",
+                "target": {"root": "home", "path": ".zshenv"},
+                "observation": "supported",
+                "apply": "unimplemented",
+            },
+        ],
+    )
+
+    assert {resource["observation"] for resource in manifest["resources"]} == {
+        "supported"
+    }
+
+    (bundle / "shell-line").write_text("source ~/.config/example.env")
+    release_contract.write_bundle_manifest(
+        bundle,
+        component="alpha",
+        dependencies=[],
+        install_units=[],
+        resources=[
+            {
+                "id": "alpha.shell",
+                "strategy": "shell-line",
+                "source": "shell-line",
+                "target": {"root": "home", "path": ".zshenv"},
+                "observation": "supported",
+                "apply": "unimplemented",
+            }
+        ],
+    )
+
+
+def test_resource_observation_rejects_unsupported_strategies_and_apply():
+    cases = [
+        ("json-key-merge", "supported", "unimplemented"),
+        ("manual-action", "supported", "unimplemented"),
+        ("seed-if-absent", "supported", "supported"),
+    ]
+    for strategy, observation, apply in cases:
+        bundle = Path(tempfile.mkdtemp())
+        resource = {
+            "id": "alpha.configuration",
+            "strategy": strategy,
+            "target": {"root": "alpha-config", "path": "config"},
+            "observation": observation,
+            "apply": apply,
+        }
+        if strategy in release_contract.SOURCE_STRATEGIES:
+            (bundle / "source").write_text("value\n")
+            resource["source"] = "source"
+        try:
+            release_contract.write_bundle_manifest(
+                bundle,
+                component="alpha",
+                dependencies=[],
+                install_units=[],
+                resources=[resource],
+            )
+        except ValueError as exc:
+            assert "lifecycle support" in str(exc)
+        else:
+            raise AssertionError(f"unsupported lifecycle was accepted: {strategy}")
+
+
+def test_supported_shell_resource_requires_one_non_empty_logical_line():
+    invalid_payloads = (
+        b"",
+        b"\n",
+        b"   \t\n",
+        b"line\r\n",
+        b"first\nsecond\n",
+        b"\xff",
+        b"source\x00env\n",
+        "\u001c\n".encode(),
+    )
+    for payload in invalid_payloads:
+        bundle = Path(tempfile.mkdtemp())
+        (bundle / "shell-line").write_bytes(payload)
+        try:
+            release_contract.write_bundle_manifest(
+                bundle,
+                component="alpha",
+                dependencies=[],
+                install_units=[],
+                resources=[
+                    {
+                        "id": "alpha.shell",
+                        "strategy": "shell-line-if-present",
+                        "source": "shell-line",
+                        "target": {"root": "home", "path": ".profile"},
+                        "observation": "supported",
+                        "apply": "unimplemented",
+                    }
+                ],
+            )
+        except ValueError as exc:
+            assert "one non-empty logical line" in str(exc)
+        else:
+            raise AssertionError(f"invalid shell source was accepted: {payload!r}")
+
+
 def test_bundle_validation_rejects_tampering_and_unknown_fields():
     root = Path(tempfile.mkdtemp())
     bundle = _bundle(root, "alpha", "alpha-config")

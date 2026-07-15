@@ -8,6 +8,9 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
@@ -188,19 +191,70 @@ func validateResources(
 		if err != nil {
 			return nil, fmt.Errorf("resource %q: %w", record.ID, err)
 		}
-		if record.Observation != string(SupportUnimplemented) || record.Apply != string(SupportUnimplemented) {
+		observation := SupportStatus(record.Observation)
+		if !validObservationSupport(strategy, observation) || record.Apply != string(SupportUnimplemented) {
 			return nil, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
+		}
+		desiredLine, err := loadDesiredLine(bundleRoot, record.Source, strategy, observation)
+		if err != nil {
+			return nil, fmt.Errorf("resource %q: %w", record.ID, err)
 		}
 		resources[index] = Resource{
 			ID: record.ID, ComponentID: component, Strategy: strategy,
 			SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
-			Observation: SupportUnimplemented, Apply: SupportUnimplemented,
+			Observation: observation, Apply: SupportUnimplemented, DesiredLine: desiredLine,
 		}
 	}
 	if !sortedUnique(identifiers) {
 		return nil, fmt.Errorf("component %q resources must be sorted and unique", component)
 	}
 	return resources, nil
+}
+
+func validObservationSupport(strategy ResourceStrategy, support SupportStatus) bool {
+	if support == SupportUnimplemented {
+		return true
+	}
+	if support != SupportSupported {
+		return false
+	}
+	switch strategy {
+	case StrategySeedIfAbsent, StrategyEnsureDir, StrategyShellLine, StrategyShellLineIfPresent:
+		return true
+	default:
+		return false
+	}
+}
+
+func loadDesiredLine(
+	bundleRoot, source string,
+	strategy ResourceStrategy,
+	support SupportStatus,
+) (string, error) {
+	if support != SupportSupported || (strategy != StrategyShellLine && strategy != StrategyShellLineIfPresent) {
+		return "", nil
+	}
+	payload, err := readRegular(bundleRoot, source)
+	if err != nil {
+		return "", err
+	}
+	if !utf8.Valid(payload) {
+		return "", fmt.Errorf("shell source must be valid UTF-8")
+	}
+	line := strings.TrimSuffix(string(payload), "\n")
+	if strings.Trim(line, " \t") == "" || strings.ContainsAny(line, "\r\n") || hasUnsupportedShellControl(line) {
+		return "", fmt.Errorf("shell source must contain exactly one non-empty line")
+	}
+	return line, nil
+}
+
+func hasUnsupportedShellControl(line string) bool {
+	for _, character := range line {
+		if character != '\t' && unicode.IsControl(character) {
+			return true
+		}
+	}
+	return false
 }
 
 func validateSource(bundleRoot, source, kind string) error {

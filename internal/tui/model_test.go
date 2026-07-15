@@ -21,6 +21,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 					ID:       "claude-code.permissions",
 					Strategy: "json-key-merge",
 					Status:   lifecycle.ConfigurationNotAssessed,
+					Reason:   lifecycle.ConfigurationObservationUnsupported,
 				},
 			},
 		},
@@ -32,8 +33,8 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 	view := model.View()
 	for _, text := range []string{
 		"READ-ONLY RELEASE PREVIEW",
-		"Configuration resources are inventoried but not assessed or applied",
-		"Claude Code — installed · configuration not assessed (1)",
+		"Filesystem and supported configuration are inspected. Nothing is applied",
+		"Claude Code — installed · configuration 1 not assessed",
 		"Codex — needs attention",
 		"OpenCode — not detected",
 	} {
@@ -62,6 +63,7 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 						ID:       "claude-code.permissions",
 						Strategy: "json-key-merge",
 						Status:   lifecycle.ConfigurationNotAssessed,
+						Reason:   lifecycle.ConfigurationObservationUnsupported,
 					},
 				},
 			},
@@ -90,8 +92,8 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 		"Claude Code",
 		"Codex",
 		"OpenCode",
-		"Configuration inventory · 1",
-		"claude-code.permissions · json-key-merge · not assessed",
+		"Configuration status · 1",
+		"claude-code.permissions · json-key-merge · not assessed · observation is not implemented",
 		"b back",
 		"q quit",
 	} {
@@ -107,7 +109,7 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 func TestSelectedConfigurationDeduplicatesSharedDependencyResources(t *testing.T) {
 	shared := lifecycle.ConfigurationResource{
 		ID: "credential-tools.secrets-store", Strategy: "seed-if-absent",
-		Status: lifecycle.ConfigurationNotAssessed,
+		Status: lifecycle.ConfigurationNotAssessed, Reason: lifecycle.ConfigurationObservationUnsupported,
 	}
 	targets := []lifecycle.Target{
 		{ID: domain.ComponentClaudeCode, Configuration: []lifecycle.ConfigurationResource{shared}},
@@ -119,6 +121,53 @@ func TestSelectedConfigurationDeduplicatesSharedDependencyResources(t *testing.T
 	})
 	if !reflect.DeepEqual(got, []lifecycle.ConfigurationResource{shared}) {
 		t.Fatalf("configuration = %#v, want one shared resource", got)
+	}
+}
+
+func TestConfigurationStatusSummarizesOnlyActionableAndUnknownStates(t *testing.T) {
+	resources := []lifecycle.ConfigurationResource{
+		{ID: "ready", Status: lifecycle.ConfigurationReady},
+		{ID: "change-a", Status: lifecycle.ConfigurationNeedsChange},
+		{ID: "change-b", Status: lifecycle.ConfigurationNeedsChange},
+		{ID: "attention", Status: lifecycle.ConfigurationAttention},
+		{ID: "unknown", Status: lifecycle.ConfigurationNotAssessed},
+		{ID: "optional", Status: lifecycle.ConfigurationNotApplicable},
+	}
+	if got := configurationStatus(resources); got != " · configuration 2 changes, 1 warning, 1 not assessed" {
+		t.Fatalf("status = %q", got)
+	}
+}
+
+func TestConfigurationLabelsExplainEveryObservationReason(t *testing.T) {
+	reasons := map[lifecycle.ConfigurationReason]string{
+		lifecycle.ConfigurationResourceExists:         "file exists",
+		lifecycle.ConfigurationDirectoryExists:        "directory exists",
+		lifecycle.ConfigurationLinePresent:            "line is present",
+		lifecycle.ConfigurationResourceMissing:        "file is missing",
+		lifecycle.ConfigurationDirectoryMissing:       "directory is missing",
+		lifecycle.ConfigurationLineMissing:            "line is missing",
+		lifecycle.ConfigurationOptionalTargetMissing:  "optional file is absent",
+		lifecycle.ConfigurationSymbolicLink:           "symbolic link is not followed",
+		lifecycle.ConfigurationWrongKind:              "unexpected file type",
+		lifecycle.ConfigurationInspectionFailed:       "inspection failed",
+		lifecycle.ConfigurationObservationUnsupported: "observation is not implemented",
+	}
+	for reason, want := range reasons {
+		if got := configurationReasonName(reason); got != want {
+			t.Fatalf("reason %q = %q, want %q", reason, got, want)
+		}
+	}
+	statuses := map[lifecycle.ConfigurationStatus]string{
+		lifecycle.ConfigurationReady:         "ready",
+		lifecycle.ConfigurationNeedsChange:   "needs change",
+		lifecycle.ConfigurationNotApplicable: "not applicable",
+		lifecycle.ConfigurationAttention:     "needs attention",
+		lifecycle.ConfigurationNotAssessed:   "not assessed",
+	}
+	for status, want := range statuses {
+		if got := configurationStatusName(status); got != want {
+			t.Fatalf("status %q = %q, want %q", status, got, want)
+		}
 	}
 }
 

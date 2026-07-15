@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
@@ -92,10 +93,96 @@ func TestPreviewReportsConfigurationInventoryWithoutCallingItManaged(t *testing.
 			ID:       "claude-code.permissions",
 			Strategy: releasecontract.StrategyJSONKeyMerge,
 			Status:   ConfigurationNotAssessed,
+			Reason:   ConfigurationObservationUnsupported,
 		},
 	}
 	if !reflect.DeepEqual(target.Configuration, want) {
 		t.Fatalf("configuration = %#v, want %#v", target.Configuration, want)
+	}
+}
+
+func TestPreviewUsesValidatedConfigurationObservations(t *testing.T) {
+	model := testModel(t)
+	resources := []releasecontract.Resource{
+		{
+			ID: "claude-code.credentials-index", ComponentID: domain.ComponentClaudeCode,
+			Strategy:    releasecontract.StrategySeedIfAbsent,
+			Observation: releasecontract.SupportSupported, Apply: releasecontract.SupportUnimplemented,
+		},
+	}
+	service, err := NewWithConfiguration(
+		model,
+		domain.ObservedState{},
+		resources,
+		[]configuration.Observation{
+			{
+				ResourceID: "claude-code.credentials-index", ComponentID: domain.ComponentClaudeCode,
+				Status: configuration.NeedsChange, Reason: configuration.ResourceMissing,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+	want := []ConfigurationResource{
+		{
+			ID: "claude-code.credentials-index", Strategy: releasecontract.StrategySeedIfAbsent,
+			Status: ConfigurationNeedsChange, Reason: ConfigurationResourceMissing,
+		},
+	}
+	if got := service.Targets()[0].Configuration; !reflect.DeepEqual(got, want) {
+		t.Fatalf("configuration = %#v, want %#v", got, want)
+	}
+}
+
+func TestPreviewRejectsIncompleteOrInconsistentConfigurationObservations(t *testing.T) {
+	model := testModel(t)
+	resources := []releasecontract.Resource{
+		{
+			ID: "claude-code.credentials-index", ComponentID: domain.ComponentClaudeCode,
+			Strategy:    releasecontract.StrategySeedIfAbsent,
+			Observation: releasecontract.SupportSupported, Apply: releasecontract.SupportUnimplemented,
+		},
+	}
+	tests := map[string][]configuration.Observation{
+		"missing": {},
+		"unknown": {
+			{ResourceID: "unknown", ComponentID: domain.ComponentClaudeCode, Status: configuration.Ready, Reason: configuration.ResourceExists},
+		},
+		"component mismatch": {
+			{ResourceID: "claude-code.credentials-index", ComponentID: domain.ComponentCodex, Status: configuration.Ready, Reason: configuration.ResourceExists},
+		},
+		"impossible status": {
+			{ResourceID: "claude-code.credentials-index", ComponentID: domain.ComponentClaudeCode, Status: configuration.NotAssessed, Reason: configuration.ObservationUnsupported},
+		},
+		"duplicate": {
+			{ResourceID: "claude-code.credentials-index", ComponentID: domain.ComponentClaudeCode, Status: configuration.Ready, Reason: configuration.ResourceExists},
+			{ResourceID: "claude-code.credentials-index", ComponentID: domain.ComponentClaudeCode, Status: configuration.Ready, Reason: configuration.ResourceExists},
+		},
+	}
+	for name, observations := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := NewWithConfiguration(model, domain.ObservedState{}, resources, observations); err == nil {
+				t.Fatal("invalid configuration observations were accepted")
+			}
+		})
+	}
+}
+
+func TestPreviewRequiresObservationsForSupportedConfiguration(t *testing.T) {
+	_, err := NewWithResources(
+		testModel(t),
+		domain.ObservedState{},
+		[]releasecontract.Resource{
+			{
+				ID: "claude-code.credentials-index", ComponentID: domain.ComponentClaudeCode,
+				Strategy:    releasecontract.StrategySeedIfAbsent,
+				Observation: releasecontract.SupportSupported, Apply: releasecontract.SupportUnimplemented,
+			},
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "requires an observation") {
+		t.Fatalf("NewWithResources() error = %v", err)
 	}
 }
 
@@ -145,11 +232,13 @@ func TestPreviewProjectsDependencyHealthAndConfigurationOntoVisibleTarget(t *tes
 		[]releasecontract.Resource{
 			{
 				ID: "claude-code.permissions", ComponentID: domain.ComponentClaudeCode,
-				Strategy: releasecontract.StrategyJSONKeyMerge,
+				Strategy:    releasecontract.StrategyJSONKeyMerge,
+				Observation: releasecontract.SupportUnimplemented, Apply: releasecontract.SupportUnimplemented,
 			},
 			{
 				ID: "credential-tools.secrets-store", ComponentID: "credential-tools",
-				Strategy: releasecontract.StrategySeedIfAbsent,
+				Strategy:    releasecontract.StrategySeedIfAbsent,
+				Observation: releasecontract.SupportUnimplemented, Apply: releasecontract.SupportUnimplemented,
 			},
 		},
 	)
@@ -163,11 +252,11 @@ func TestPreviewProjectsDependencyHealthAndConfigurationOntoVisibleTarget(t *tes
 	wantResources := []ConfigurationResource{
 		{
 			ID: "claude-code.permissions", Strategy: releasecontract.StrategyJSONKeyMerge,
-			Status: ConfigurationNotAssessed,
+			Status: ConfigurationNotAssessed, Reason: ConfigurationObservationUnsupported,
 		},
 		{
 			ID: "credential-tools.secrets-store", Strategy: releasecontract.StrategySeedIfAbsent,
-			Status: ConfigurationNotAssessed,
+			Status: ConfigurationNotAssessed, Reason: ConfigurationObservationUnsupported,
 		},
 	}
 	if !reflect.DeepEqual(target.Configuration, wantResources) {

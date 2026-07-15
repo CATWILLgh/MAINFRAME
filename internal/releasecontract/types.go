@@ -39,7 +39,10 @@ func (strategy ResourceStrategy) valid() bool {
 
 type SupportStatus string
 
-const SupportUnimplemented SupportStatus = "unimplemented"
+const (
+	SupportUnimplemented SupportStatus = "unimplemented"
+	SupportSupported     SupportStatus = "supported"
+)
 
 type Resource struct {
 	ID                   string
@@ -50,6 +53,7 @@ type Resource struct {
 	LegacySourceSuffixes []domain.ArtifactPath
 	Observation          SupportStatus
 	Apply                SupportStatus
+	DesiredLine          string
 }
 
 type Release struct {

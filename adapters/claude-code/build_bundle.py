@@ -129,14 +129,15 @@ def _child_units(children: list[Path], collection: str) -> list[dict[str, Any]]:
 
 
 def _resources() -> list[dict[str, Any]]:
-    common = {"observation": "unimplemented", "apply": "unimplemented"}
+    supported = {"observation": "supported", "apply": "unimplemented"}
+    unimplemented = {"observation": "unimplemented", "apply": "unimplemented"}
     return [
         {
             "id": "claude-code.credentials-index",
             "strategy": "seed-if-absent",
             "source": "credentials-index.md",
             "target": {"root": "claude-config", "path": "credentials-index.md"},
-            **common,
+            **supported,
         },
         {
             "id": "claude-code.settings",
@@ -144,7 +145,7 @@ def _resources() -> list[dict[str, Any]]:
             "source": "settings.json",
             "target": {"root": "claude-config", "path": "settings.json"},
             "legacy_source_suffixes": ["dist/claude-code/settings.json"],
-            **common,
+            **unimplemented,
         },
     ]
 

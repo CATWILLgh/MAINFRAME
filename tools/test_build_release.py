@@ -81,6 +81,14 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
         resource["source"] == "shell-source-line"
         for resource in shell_resources.values()
     )
+    assert all(
+        resource["observation"] == "supported"
+        for resource in credentials["resources"]
+    )
+    assert all(
+        resource["apply"] == "unimplemented"
+        for resource in credentials["resources"]
+    )
     secret_help = subprocess.run(
         [str(output / "common/credential-tools/secret"), "help"],
         text=True,

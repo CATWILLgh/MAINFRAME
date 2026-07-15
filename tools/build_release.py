@@ -50,7 +50,7 @@ def _build_credential_tools(root: Path, output: Path) -> None:
     write_text_file(output / "secrets.env", "")
     (output / "secrets.env").chmod(0o600)
     write_text_file(output / "shell-source-line", SHELL_SOURCE_LINE)
-    lifecycle = {"observation": "unimplemented", "apply": "unimplemented"}
+    lifecycle = {"observation": "supported", "apply": "unimplemented"}
     write_bundle_manifest(
         output,
         component="credential-tools",

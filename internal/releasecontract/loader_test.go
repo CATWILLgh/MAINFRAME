@@ -193,6 +193,85 @@ func TestLoadRejectsMissingRequiredBundleCollections(t *testing.T) {
 	}
 }
 
+func TestLoadAcceptsSupportedShellObservationAndCapturesDesiredLine(t *testing.T) {
+	root := writeFixture(t)
+	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+	manifest := readObject(t, manifestPath)
+	writeFile(t, filepath.Join(root, "bundles/codex/source-line"), "source ~/.config/mainframe/env\n", 0o644)
+	manifest["resources"] = []any{map[string]any{
+		"id":          "codex.shell-source",
+		"strategy":    "shell-line",
+		"source":      "source-line",
+		"target":      map[string]any{"root": "home", "path": ".zshenv"},
+		"observation": "supported",
+		"apply":       "unimplemented",
+	}}
+	manifest["payload_files"] = append(
+		manifest["payload_files"].([]any),
+		payloadRow(t, filepath.Join(root, "bundles/codex/source-line"), "source-line"),
+	)
+	writeJSON(t, manifestPath, manifest, 0o644)
+	rewriteIndexDigest(t, root, manifestPath)
+
+	release, err := releasecontract.Load(root)
+	if err != nil {
+		t.Fatalf("load release: %v", err)
+	}
+	resource := release.Resources[0]
+	if resource.Observation != releasecontract.SupportSupported {
+		t.Fatalf("observation = %q", resource.Observation)
+	}
+	if resource.DesiredLine != "source ~/.config/mainframe/env" {
+		t.Fatalf("desired line = %q", resource.DesiredLine)
+	}
+}
+
+func TestLoadRejectsInvalidSupportedObservationContracts(t *testing.T) {
+	tests := map[string]struct {
+		strategy string
+		source   string
+		payload  string
+		apply    string
+	}{
+		"json strategy":     {strategy: "json-key-merge", source: "config.json", payload: "{}\n", apply: "unimplemented"},
+		"manual strategy":   {strategy: "manual-action", apply: "unimplemented"},
+		"supported apply":   {strategy: "seed-if-absent", source: "config.json", payload: "{}\n", apply: "supported"},
+		"empty shell line":  {strategy: "shell-line", source: "config.json", payload: "", apply: "unimplemented"},
+		"blank shell line":  {strategy: "shell-line", source: "config.json", payload: "  \t\n", apply: "unimplemented"},
+		"CRLF shell line":   {strategy: "shell-line", source: "config.json", payload: "source env\r\n", apply: "unimplemented"},
+		"invalid UTF-8":     {strategy: "shell-line", source: "config.json", payload: string([]byte{0xff}), apply: "unimplemented"},
+		"NUL control":       {strategy: "shell-line", source: "config.json", payload: "source\x00env\n", apply: "unimplemented"},
+		"separator control": {strategy: "shell-line", source: "config.json", payload: "\u001c\n", apply: "unimplemented"},
+		"many shell lines":  {strategy: "shell-line", source: "config.json", payload: "first\nsecond\n", apply: "unimplemented"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			root := writeFixture(t)
+			manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+			manifest := readObject(t, manifestPath)
+			resource := manifest["resources"].([]any)[0].(map[string]any)
+			resource["strategy"] = test.strategy
+			resource["observation"] = "supported"
+			resource["apply"] = test.apply
+			if test.source == "" {
+				delete(resource, "source")
+			} else {
+				resource["source"] = test.source
+				writeFile(t, filepath.Join(root, "bundles/codex", test.source), test.payload, 0o644)
+				manifest["payload_files"] = []any{
+					payloadRow(t, filepath.Join(root, "bundles/codex", test.source), test.source),
+					payloadRow(t, filepath.Join(root, "bundles/codex/payload.txt"), "payload.txt"),
+				}
+			}
+			writeJSON(t, manifestPath, manifest, 0o644)
+			rewriteIndexDigest(t, root, manifestPath)
+			if _, err := releasecontract.Load(root); err == nil {
+				t.Fatal("invalid supported observation contract was accepted")
+			}
+		})
+	}
+}
+
 func writeFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

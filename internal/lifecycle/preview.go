@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/plan"
@@ -31,14 +32,34 @@ type Target struct {
 	Configuration []ConfigurationResource
 }
 
-type ConfigurationStatus string
+type ConfigurationStatus = configuration.Status
+type ConfigurationReason = configuration.Reason
 
-const ConfigurationNotAssessed ConfigurationStatus = "not_assessed"
+const (
+	ConfigurationReady         = configuration.Ready
+	ConfigurationNeedsChange   = configuration.NeedsChange
+	ConfigurationNotApplicable = configuration.NotApplicable
+	ConfigurationAttention     = configuration.Attention
+	ConfigurationNotAssessed   = configuration.NotAssessed
+
+	ConfigurationResourceExists         = configuration.ResourceExists
+	ConfigurationDirectoryExists        = configuration.DirectoryExists
+	ConfigurationLinePresent            = configuration.LinePresent
+	ConfigurationResourceMissing        = configuration.ResourceMissing
+	ConfigurationDirectoryMissing       = configuration.DirectoryMissing
+	ConfigurationLineMissing            = configuration.LineMissing
+	ConfigurationOptionalTargetMissing  = configuration.OptionalTargetMissing
+	ConfigurationSymbolicLink           = configuration.SymbolicLink
+	ConfigurationWrongKind              = configuration.WrongKind
+	ConfigurationInspectionFailed       = configuration.InspectionFailed
+	ConfigurationObservationUnsupported = configuration.ObservationUnsupported
+)
 
 type ConfigurationResource struct {
 	ID       string
 	Strategy releasecontract.ResourceStrategy
 	Status   ConfigurationStatus
+	Reason   ConfigurationReason
 }
 
 type Service struct {
@@ -58,6 +79,41 @@ func NewWithResources(
 	observed domain.ObservedState,
 	resources []releasecontract.Resource,
 ) (Service, error) {
+	observations := make([]configuration.Observation, 0, len(resources))
+	for _, resource := range resources {
+		if resource.Observation != releasecontract.SupportUnimplemented {
+			return Service{}, fmt.Errorf("configuration resource %q requires an observation", resource.ID)
+		}
+		observations = append(observations, configuration.Observation{
+			ResourceID: resource.ID, ComponentID: resource.ComponentID,
+			Status: configuration.NotAssessed, Reason: configuration.ObservationUnsupported,
+		})
+	}
+	return NewWithConfiguration(model, observed, resources, observations)
+}
+
+func NewWithConfiguration(
+	model installmodel.Model,
+	observed domain.ObservedState,
+	resources []releasecontract.Resource,
+	observations []configuration.Observation,
+) (Service, error) {
+	if err := configuration.Validate(resources, observations); err != nil {
+		return Service{}, fmt.Errorf("validate configuration observations: %w", err)
+	}
+	indexed := make(map[string]configuration.Observation, len(observations))
+	for _, observation := range observations {
+		indexed[observation.ResourceID] = observation
+	}
+	return newService(model, observed, resources, indexed)
+}
+
+func newService(
+	model installmodel.Model,
+	observed domain.ObservedState,
+	resources []releasecontract.Resource,
+	observations map[string]configuration.Observation,
+) (Service, error) {
 	planner := plan.New(model.Catalog())
 	if _, err := planner.Plan(domain.PlanRequest{Observed: observed}); err != nil {
 		return Service{}, fmt.Errorf("validate observed state: %w", err)
@@ -66,7 +122,7 @@ func NewWithResources(
 	if err != nil {
 		return Service{}, err
 	}
-	configuration, err := configurationInventory(model, resources, dependencies)
+	configurationInventory, err := configurationInventory(model, resources, dependencies, observations)
 	if err != nil {
 		return Service{}, err
 	}
@@ -75,7 +131,7 @@ func NewWithResources(
 		observed:      cloneObserved(observed),
 		desiredCounts: countDesiredArtifacts(model),
 		dependencies:  dependencies,
-		configuration: configuration,
+		configuration: configurationInventory,
 	}, nil
 }
 
@@ -100,6 +156,7 @@ func configurationInventory(
 	model installmodel.Model,
 	resources []releasecontract.Resource,
 	dependencies map[domain.ComponentID][]domain.ComponentID,
+	observations map[string]configuration.Observation,
 ) (map[domain.ComponentID][]ConfigurationResource, error) {
 	direct := make(map[domain.ComponentID][]ConfigurationResource)
 	seen := make(map[string]bool)
@@ -111,11 +168,12 @@ func configurationInventory(
 			return nil, fmt.Errorf("invalid duplicate configuration resource %q", resource.ID)
 		}
 		seen[resource.ID] = true
+		observation := observations[resource.ID]
 		direct[resource.ComponentID] = append(
 			direct[resource.ComponentID],
 			ConfigurationResource{
 				ID: resource.ID, Strategy: resource.Strategy,
-				Status: ConfigurationNotAssessed,
+				Status: observation.Status, Reason: observation.Reason,
 			},
 		)
 	}

@@ -154,6 +154,8 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
         "root": "opencode-config",
         "path": "credentials-index.md",
     }
+    assert resources["opencode.credentials-index"]["observation"] == "supported"
+    assert resources["opencode.credentials-index"]["apply"] == "unimplemented"
     credentials_index = (output / "credentials-index.md").read_text()
     assert "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/credentials-index.md" in (
         credentials_index

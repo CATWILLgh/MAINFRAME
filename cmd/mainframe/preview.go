@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/discovery"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
@@ -54,10 +55,15 @@ func buildPreviewServiceFrom(
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("discover current installation: %w", err)
 	}
-	service, err := lifecycle.NewWithResources(
+	configurationObservations, err := configuration.Observe(release.Resources, namespace)
+	if err != nil {
+		return lifecycle.Service{}, fmt.Errorf("inspect configuration: %w", err)
+	}
+	service, err := lifecycle.NewWithConfiguration(
 		release.Model,
 		observed,
 		release.Resources,
+		configurationObservations,
 	)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("create lifecycle preview: %w", err)
