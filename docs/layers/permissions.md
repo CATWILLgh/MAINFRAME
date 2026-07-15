@@ -137,7 +137,7 @@ Caveat: a hook `permissionDecision: "ask"` in auto-mode transitions to `"defer"`
 
 As verified from `core/permissions/rules.json` on 2026-07-14, the policy contains 100 `allow`, 88 `deny`, and 46 `ask` entries. Claude Code's `permissions.defaultMode` is separately user-owned in `dist/claude-code/settings.json` and is currently `auto`. Do not duplicate the full lists here: inspect the authored JSON for the current policy, then use the runtime-specific builder report to see which entries were projectable.
 
-The current Codex projection contains 79 `prefix_rule` entries. A lower count is expected because Codex rules express shell argv prefixes only; omission is safer than broadening an untranslatable source rule.
+The current Codex projection contains 101 `prefix_rule` entries: 76 `allow`, 3 `forbidden`, and 22 `prompt`. A lower count than the authored policy is expected because Codex rules express shell argv prefixes only; omission is safer than broadening an untranslatable source rule. The builder validates the three decision classes with the installed `codex execpolicy` parser during `./install.sh --codex` before publishing any generated output.
 
 ### 2.2. Canonical claim vs hub empirical — discrepancies
 

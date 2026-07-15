@@ -800,7 +800,7 @@ install_codex() {
         return 0
     fi
 
-    local gen_args=(--root "${PROJECT_ROOT}")
+    local gen_args=(--root "${PROJECT_ROOT}" --validate-native)
     [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
     if ! "$py" "${PROJECT_ROOT}/adapters/codex/build_codex.py" "${gen_args[@]}"; then
         log_error "build_codex.py failed; Codex layer not installed."
@@ -984,6 +984,7 @@ cleanup_stale_post_migration() {
 # ---- Main ----
 
 main() {
+    local codex_failed=0
     if [[ $DRY_RUN -eq 1 ]]; then
         log_info "${BOLD}DRY RUN${NC} — nothing will be changed."
     fi
@@ -1083,6 +1084,7 @@ main() {
         echo
         if ! install_codex; then
             log_warn "Codex layer failed; continuing with the rest of the install."
+            codex_failed=1
         fi
     fi
 
@@ -1102,6 +1104,10 @@ main() {
     bootstrap_frontend_quality_tools
 
     echo
+    if [[ $codex_failed -eq 1 ]]; then
+        log_error "Install finished with a failed Codex layer."
+        return 1
+    fi
     log_ok "Install complete."
     if [[ $DRY_RUN -eq 0 ]]; then
         list_backups

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import tomllib
@@ -155,8 +156,9 @@ def test_permissions_map_only_clean_command_prefixes_and_report_omissions():
     projected, omitted = bc.project_permissions(rules)
     assert (["git", "add"], "allow") in projected
     assert (["git", "push"], "allow") not in projected
-    assert (["rm", "-rf", "/"], "deny") in projected
-    assert len(omitted) == 6
+    assert (["rm", "-rf", "/"], "forbidden") in projected
+    assert (["sudo"], "prompt") in projected
+    assert len(omitted) == 5
     report = {item["entry"]: item["reason"] for item in omitted}
     assert report["Bash(git push *)"] == (
         "allow-prefix would subsume a deny/ask variant "
@@ -165,7 +167,8 @@ def test_permissions_map_only_clean_command_prefixes_and_report_omissions():
     assert "non-Bash" in report["WebSearch"]
     assert "operators/redirection" in report["Bash(cat > /tmp/*)"]
     assert "glob" in report["Bash(*git push --force*)"]
-    assert "prompts by default" in report["Bash(sudo *)"]
+    assert "non-Bash" in report["Read(**/.env.production)"]
+    assert "Bash(sudo *)" not in report
 
 
 def test_no_allow_prefix_subsumes_a_deny_or_ask_command_family():
@@ -195,10 +198,82 @@ def test_no_allow_prefix_subsumes_a_deny_or_ask_command_family():
 
 def test_rules_render_native_prefix_rule_syntax():
     rendered = bc.render_rules([(["git", "add"], "allow"),
-                                (["rm", "-rf", "/"], "deny")])
+                                (["sudo"], "prompt"),
+                                (["rm", "-rf", "/"], "forbidden")])
     assert 'prefix_rule(pattern=["git", "add"], decision="allow")' in rendered
-    assert 'prefix_rule(pattern=["rm", "-rf", "/"], decision="deny")' in rendered
-    assert "ask" not in rendered
+    assert 'prefix_rule(pattern=["sudo"], decision="prompt")' in rendered
+    assert 'prefix_rule(pattern=["rm", "-rf", "/"], decision="forbidden")' in rendered
+    assert 'decision="deny"' not in rendered
+    assert 'decision="ask"' not in rendered
+
+
+def test_rules_render_rejects_unknown_native_decision():
+    try:
+        bc.render_rules([(["git", "status"], "deny")])
+    except ValueError as error:
+        assert "unsupported Codex decision" in str(error)
+    else:
+        assert False, "render_rules accepted an invalid native decision"
+
+
+def test_native_validation_failure_precedes_all_publication():
+    assert hasattr(bc, "validate_rules_native"), \
+        "native Codex validation is not implemented"
+    root = _fixture_root()
+    fake_bin = root / "bin"
+    fake_codex = fake_bin / "codex"
+    _write(fake_codex, """#!/usr/bin/env python3
+import json
+print(json.dumps({"decision": "allow"}))
+""")
+    fake_codex.chmod(0o755)
+
+    skills_out = root / "out/skills"
+    rules_out = root / "out/rules/mainframe.rules"
+    rules_out.parent.mkdir(parents=True)
+    rules_out.write_text("existing valid rules\n")
+    old_path = os.environ.get("PATH", "")
+    os.environ["PATH"] = f"{fake_bin}{os.pathsep}{old_path}"
+    try:
+        try:
+            bc.main([
+                "--root", str(root),
+                "--skills-out", str(skills_out),
+                "--rules-out", str(rules_out),
+                "--validate-native",
+            ])
+        except ValueError as error:
+            assert "expected prompt" in str(error)
+        else:
+            assert False, "native decision mismatch did not fail the build"
+    finally:
+        os.environ["PATH"] = old_path
+
+    assert rules_out.read_text() == "existing valid rules\n"
+    assert not skills_out.exists()
+
+
+def test_native_validation_rejects_non_object_json():
+    root = _fixture_root()
+    fake_codex = root / "bin/codex"
+    _write(fake_codex, "#!/usr/bin/env python3\nprint('[]')\n")
+    fake_codex.chmod(0o755)
+    try:
+        bc.validate_rules_native("", str(fake_codex))
+    except ValueError as error:
+        assert "non-object validation JSON" in str(error)
+    else:
+        assert False, "non-object native validation JSON was accepted"
+
+
+def test_real_native_parser_when_available():
+    codex_binary = shutil.which("codex")
+    if codex_binary is None:
+        return
+    root = _TOOLS.parent
+    rules = json.loads((root / "core/permissions/rules.json").read_text())
+    projected, _ = bc.project_permissions(rules)
+    bc.validate_rules_native(bc.render_rules(projected), codex_binary)
 
 
 def test_summary_reports_each_dropped_skill_and_omitted_rule():
@@ -225,6 +300,7 @@ def test_main_writes_skill_pair_resources_and_rules():
     assert (skills_out / "sample-skill/agents/openai.yaml").is_file()
     assert (skills_out / "sample-skill/more.md").is_file()
     assert rules_out.is_file()
+    assert rules_out.stat().st_mode & 0o777 == 0o644
 
 
 def test_real_repo_subset_matches_committed_goldens():
