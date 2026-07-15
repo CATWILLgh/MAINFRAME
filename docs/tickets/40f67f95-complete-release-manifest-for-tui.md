@@ -56,8 +56,10 @@ The release now has an indexed, integrity-checked package containing the binary,
 common credential tooling, and complete isolated bundles for Claude Code, Codex,
 and OpenCode. A packaged binary resolves the release through its symlink-resolved
 `bin/mainframe` location, while `MAINFRAME_RELEASE_ROOT` remains an explicit
-development override. The TUI consumes this complete filesystem inventory and
-lists mutable resources separately as not assessed and not applied.
+development override. The TUI consumes this complete filesystem inventory,
+observes seed files, directories, and shell lines through a read-only host
+boundary, and clearly leaves ownership-sensitive JSON and manual actions not
+assessed. No configuration or filesystem change is applied.
 
 This closes complete local package inventory, not selective network delivery.
 Metadata-first selection and dependency-closure downloads are tracked in
