@@ -1,7 +1,7 @@
 ---
 id: f4cf49f6
 title: Aggregate every Antigravity Stop detector result before deciding
-status: open
+status: approved
 priority: high
 component: antigravity-hooks
 discovered: 2026-07-15
@@ -61,3 +61,39 @@ repeat without ever reporting the remaining blockers.
 - `adapters/antigravity-2/gates/mainframe_hook.py:256-285`
 - `tools/test_antigravity_hook.py:181-204`
 - <https://antigravity.google/docs/hooks>
+
+## Resolution (2026-07-15)
+
+**Implementer:** Codex
+**Commits:** 14a67cae5758025a50402518d633bbc73b3e27a3
+**Summary:** The bridge now evaluates every Stop detector before deciding,
+combines all blockers into one deterministic response, reserves an untruncated
+detector manifest, and bounds UTF-8 details to 30,000 bytes. The loop stamp is
+applied once after aggregation, so repeated stops re-run every gate without
+continuing indefinitely.
+**Claims to verify on audit:**
+- Every name in `STOP_DETECTORS` is invoked once before a blocking decision.
+- Empty, non-string, invalid, reordered, and oversized detector outputs retain
+  every valid blocker without exceeding `MAX_STOP_REASON_BYTES`.
+- The same `executionNum` rechecks all gates but continues only once; a new
+  `executionNum` can continue again.
+- `memory-reminder.py` does not run while any Stop gate blocks.
+- `tools/test_antigravity_hook.py` passes 13 tests and all repository Python/Node
+  suites, render checks, and validators remain green.
+
+## Audit (2026-07-15)
+
+**Auditor:** Independent Codex reviewer (`stop_ticket_audit`)
+**Verdict:** Approved
+**Verified:**
+- Commit `14a67ca` invokes all five Stop detectors before deciding and preserves
+  every valid blocker in a deterministic, bounded UTF-8 response.
+- Same-execution and incremented-execution loop behavior matches the resolution
+  claims, and the memory reminder is excluded while blockers exist.
+- Empty, non-string, invalid, reordered, and oversized outputs are covered without
+  weakened assertions or suppression markers.
+**Regression scan:** 41/41 affected checks passed independently: hook 13/13,
+builder 9/9, lifecycle 2/2, installer 17/17, plus a current generated-plugin check.
+The implementer's broader 37-file Python run, both Node suites, render checks, and
+validators were reviewed as session evidence rather than rerun by the auditor.
+**Notes:** No scope creep into detector exception isolation or timeout budgeting.
