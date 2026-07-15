@@ -29,7 +29,13 @@ MAPPINGS = [
 ]
 
 DETECTOR_BODY = "import sys\n# guarded by core/gates conventions\nsys.exit(0)\n"
-SKILL_BODY = "---\nname: sample-skill\ndescription: Sample.\n---\n\nBody.\n"
+SKILL_BODY = (
+    "---\nname: sample-skill\ndescription: Sample.\n---\n\n"
+    "Write to {{mainframe.plans_root}}/audit.\n"
+)
+CLAUDE_SKILL_BODY = SKILL_BODY.replace(
+    "{{mainframe.plans_root}}", "~/.claude/plans"
+)
 LIB_BODY = "VERSION = 1\n"
 RULE_BODY = "rules: []\n"
 WRAPPER_BODY = "#!/bin/sh\nexit 0\n"
@@ -37,6 +43,9 @@ HOOKS_JSON_BODY = '{"hooks": {}}\n'
 
 
 def make_sources(root: Path) -> None:
+    profiles = root / "adapters/runtime-profiles.json"
+    profiles.parent.mkdir(parents=True)
+    profiles.write_text((REPO / "adapters/runtime-profiles.json").read_text())
     det = root / "core/gates/detectors"
     det.mkdir(parents=True)
     (det / "sample-gate.py").write_text(DETECTOR_BODY)
@@ -82,7 +91,9 @@ def test_write_materializes_targets():
     assert (root / "dist/claude-code/plugin/hooks/scripts/run-hook.sh").read_text() == WRAPPER_BODY
     assert (root / "dist/claude-code/plugin/hooks/rules/rule.yml").read_text() == RULE_BODY
     assert (root / "dist/claude-code/plugin/hooks/hooks.json").read_text() == HOOKS_JSON_BODY
-    assert (root / "dist/claude-code/plugin/skills/sample-skill/SKILL.md").read_text() == SKILL_BODY
+    rendered_skill = root / "dist/claude-code/plugin/skills/sample-skill/SKILL.md"
+    assert rendered_skill.read_text() == CLAUDE_SKILL_BODY
+    assert "{{mainframe.plans_root}}" not in rendered_skill.read_text()
     assert (root / "dist/claude-code/output-styles/style.md").read_text() == "style\n"
     assert (root / "dist/claude-code/scripts/secret").read_text() == "#!/bin/sh\n"
     assert (root / "dist/claude-code/templates/template.md").read_text() == "template\n"

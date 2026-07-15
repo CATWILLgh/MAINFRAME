@@ -6,8 +6,8 @@ Loaded from `task-workflow` Step 3 when a task crosses the plan-file threshold (
 
 | Role | Path | Owner | Lifetime |
 |---|---|---|---|
-| Tool plan file (interactive `EnterPlanMode` only) | `~/.claude/plans/<random-kebab-slug>.md` — flat, no date | Claude Code tool (path injected via plan-mode system message) | Single session; tool may reuse / replace |
-| Hub audit copy (always) | `~/.claude/plans/audit/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md` — hierarchical, dated | This skill | Persistent across sessions; audit trail |
+| Tool plan file (interactive `EnterPlanMode` only) | `{{mainframe.plans_root}}/<random-kebab-slug>.md` — flat, no date | Claude Code tool (path injected via plan-mode system message) | Single session; tool may reuse / replace |
+| Hub audit copy (always) | `{{mainframe.plans_root}}/audit/<basename(cwd)>/<YYYY-MM-DD>-<topic>.md` — hierarchical, dated | This skill | Persistent across sessions; audit trail |
 
 Verified against Claude Code plan mode (2026-05-30): the tool path is flat with a random slug; the hub audit copy lives under `audit/` so it never collides. `<basename(cwd)>` from `basename "$(pwd)"` (no per-project config); `<topic>` is a ≤ 6-word kebab slug. `mkdir -p` the dir; the audit copy is never tracked by git.
 
@@ -50,7 +50,7 @@ Verified against Claude Code plan mode (2026-05-30): the tool path is flat with 
 ## Runtime note
 
 The five-phase interactive flow above and the audit-copy home
-(`~/.claude/plans/<project>/`) are Claude Code conventions. On a runtime
+(`{{mainframe.plans_root}}/<project>/`) are Claude Code conventions. On a runtime
 without the plan-mode tools, run the same phases as ordinary reasoning +
 sub-agent dispatches, treat an explicit user "go" as the approval gate, and
 keep the plan (and its final "what actually happened" retro) inside the

@@ -32,6 +32,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from adapter_profiles import load_profiles, project_text
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # (source, target) relative to the repo root. A directory maps file-by-file
@@ -44,11 +46,11 @@ GATES_MAPPINGS = [
     ("adapters/claude-code/gates/hooks.json", "dist/claude-code/plugin/hooks/hooks.json"),
 ]
 
-# Skills render as byte-copies: SKILL.md is a cross-tool standard and foreign
+# Skills preserve their source format, with only semantic runtime-path tokens
+# resolved for the target adapter. SKILL.md is a cross-tool standard and foreign
 # parsers tolerate the hub's extra frontmatter keys (verified empirically on
-# OpenCode). If a future render TRANSFORMS skills, validating core/ stops
-# being equivalent to validating the render — revisit validate-skill.py
-# targeting then.
+# OpenCode). Source validation remains authoritative because path projection
+# changes values, not structure or frontmatter.
 SKILLS_MAPPINGS = [
     ("core/skills", "dist/claude-code/plugin/skills"),
 ]
@@ -141,6 +143,15 @@ def _managed_target_dirs(root: Path, mappings) -> list[Path]:
     return [root / dst for src, dst in mappings if (root / src).is_dir()]
 
 
+def _render_bytes(root: Path, src: Path, dst: Path) -> bytes:
+    content = src.read_bytes()
+    target = dst.relative_to(root).as_posix()
+    if target.startswith("dist/claude-code/plugin/skills/") and src.suffix == ".md":
+        profile = load_profiles(root)["claude-code"]
+        return project_text(content.decode(), profile).encode()
+    return content
+
+
 def lint(root: Path, mappings) -> list[str]:
     problems = []
     for src_rel, _ in mappings:
@@ -179,7 +190,7 @@ def check(root: Path, mappings) -> list[str]:
         expected.add(dst)
         if not dst.exists():
             problems.append(f"render missing: {dst.relative_to(root)}")
-        elif src.read_bytes() != dst.read_bytes():
+        elif _render_bytes(root, src, dst) != dst.read_bytes():
             problems.append(f"render differs from source: {dst.relative_to(root)}")
         if (str(src.relative_to(root)), str(dst.relative_to(root))) in EXECUTABLE_MAPPINGS:
             src_mode = src.stat().st_mode & 0o111
@@ -215,12 +226,15 @@ def write(root: Path, mappings) -> list[Path]:
     """Copy stale/missing targets; returns the list of written target paths."""
     written = []
     for src, dst in plan(root, mappings):
-        if dst.exists() and src.read_bytes() == dst.read_bytes():
+        content = _render_bytes(root, src, dst)
+        if dst.exists() and content == dst.read_bytes():
             pair = (str(src.relative_to(root)), str(dst.relative_to(root)))
             if pair not in EXECUTABLE_MAPPINGS or (src.stat().st_mode & 0o111) == (dst.stat().st_mode & 0o111):
                 continue
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+        if content != src.read_bytes():
+            dst.write_bytes(content)
         written.append(dst)
     return written
 

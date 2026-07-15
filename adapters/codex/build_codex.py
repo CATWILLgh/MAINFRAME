@@ -33,6 +33,11 @@ from pathlib import Path
 
 import yaml
 
+TOOLS = Path(__file__).resolve().parents[2] / "tools"
+sys.path.insert(0, str(TOOLS))
+
+from adapter_profiles import PLAN_ROOT_TOKEN, project_text
+
 
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 _MD_NOTE = (
@@ -393,7 +398,14 @@ def _openai_yaml(name: str, title: str, description: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_skill_dir(skill_dir: Path) -> dict[Path, bytes]:
+def _project_skill_text(text: str, name: str, profile=None) -> str:
+    rewritten = _rewrite_codex_prose(text, name)
+    if profile is None:
+        return rewritten.replace(PLAN_ROOT_TOKEN, "~/.codex/plans")
+    return project_text(rewritten, profile)
+
+
+def render_skill_dir(skill_dir: Path, profile=None) -> dict[Path, bytes]:
     """Render one skill directory, including relative resources it needs."""
     source = skill_dir / "SKILL.md"
     meta, body = parse_frontmatter(source.read_text())
@@ -401,8 +413,8 @@ def render_skill_dir(skill_dir: Path) -> dict[Path, bytes]:
     description = str(meta.get("description") or "").strip()
     if not description:
         raise ValueError(f"{source}: missing description")
-    body = _rewrite_codex_prose(body, name)
-    description = _rewrite_codex_prose(description, name)
+    body = _project_skill_text(body, name, profile)
+    description = _project_skill_text(description, name, profile)
     front = yaml.safe_dump({"name": name, "description": description},
                            sort_keys=False, allow_unicode=True,
                            width=100000).rstrip("\n")
@@ -422,8 +434,9 @@ def render_skill_dir(skill_dir: Path) -> dict[Path, bytes]:
             aux_note = _MD_NOTE.format(
                 marker=GENERATED_MARKER,
                 source=f"core/skills/{skill_dir.name}/{rel.as_posix()}")
-            rendered = aux_note + "\n\n" + _rewrite_codex_prose(
-                path.read_text(), name)
+            rendered = aux_note + "\n\n" + _project_skill_text(
+                path.read_text(), name, profile
+            )
             files[rel] = rendered.encode()
         else:
             files[rel] = path.read_bytes()
@@ -434,7 +447,9 @@ def render_skill_dir(skill_dir: Path) -> dict[Path, bytes]:
     return files
 
 
-def collect_skills(root: Path) -> tuple[list[tuple[str, dict[Path, bytes]]], list[tuple[str, str]]]:
+def collect_skills(
+    root: Path, profile=None
+) -> tuple[list[tuple[str, dict[Path, bytes]]], list[tuple[str, str]]]:
     skills_dir = root / "core" / "skills"
     rendered = []
     dropped = []
@@ -446,7 +461,7 @@ def collect_skills(root: Path) -> tuple[list[tuple[str, dict[Path, bytes]]], lis
         if not is_projectable(skill_dir.name):
             dropped.append((skill_dir.name, UNPROJECTABLE_SKILLS[skill_dir.name]))
             continue
-        rendered.append((skill_dir.name, render_skill_dir(skill_dir)))
+        rendered.append((skill_dir.name, render_skill_dir(skill_dir, profile)))
     return rendered, dropped
 
 
@@ -691,7 +706,7 @@ def _load_rules(root: Path) -> dict:
     return data
 
 
-def _write_skills(out: Path, skills: list[tuple[str, dict[Path, bytes]]]) -> None:
+def write_skills(out: Path, skills: list[tuple[str, dict[Path, bytes]]]) -> None:
     expected = {name for name, _ in skills}
     out.mkdir(parents=True, exist_ok=True)
     for existing in out.iterdir():
@@ -772,7 +787,7 @@ def main(argv=None) -> int:
         print(f"[dry-run] would copy launcher to {launcher_out}")
         print(f"[dry-run] would write {len(agents)} agents to {agents_out}")
     else:
-        _write_skills(skills_out, skills)
+        write_skills(skills_out, skills)
         rules_out.parent.mkdir(parents=True, exist_ok=True)
         rules_out.write_text(render_rules(projected))
         hooks_out.parent.mkdir(parents=True, exist_ok=True)

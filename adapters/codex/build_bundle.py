@@ -7,6 +7,7 @@ import argparse
 import json
 import shutil
 import sys
+import tempfile
 from dataclasses import asdict
 from pathlib import Path
 
@@ -14,6 +15,7 @@ TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from adapter_profiles import load_profiles
+import build_codex
 
 
 def _source_files(source: Path) -> dict[Path, Path]:
@@ -73,7 +75,9 @@ def build(root: Path, output: Path) -> None:
 
     output.mkdir(parents=True, exist_ok=True)
     for child in output.iterdir():
-        if child.name not in {"gates", "mainframe-hook.sh", "bundle.json"}:
+        if child.name not in {
+            "gates", "skills", "mainframe-hook.sh", "bundle.json"
+        }:
             _remove(child)
     gates = output / "gates"
     if gates.is_symlink() or (gates.exists() and not gates.is_dir()):
@@ -81,12 +85,17 @@ def build(root: Path, output: Path) -> None:
 
     _sync_tree(detectors, gates / "detectors")
     _sync_tree(rules, gates / "rules")
+    profile = load_profiles(root)["codex"]
+    skills, _ = build_codex.collect_skills(root, profile)
+    with tempfile.TemporaryDirectory() as temporary:
+        staged_skills = Path(temporary) / "skills"
+        build_codex.write_skills(staged_skills, skills)
+        _sync_tree(staged_skills, output / "skills")
     target = output / "mainframe-hook.sh"
     if target.is_symlink() or (target.exists() and not target.is_file()):
         _remove(target)
     shutil.copy2(launcher, target)
     target.chmod(0o755)
-    profile = load_profiles(root)["codex"]
     manifest = {"adapter": "codex", **asdict(profile)}
     manifest_path = output / "bundle.json"
     if manifest_path.is_symlink() or (

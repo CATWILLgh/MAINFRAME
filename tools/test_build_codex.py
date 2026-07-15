@@ -42,11 +42,16 @@ when_to_use: Loaded by an agent.
 
 Preloaded into the `sample-agent` sub-agent. Read [more](more.md).
 Use (`Read`/`Grep`/`Glob`) and ~/.claude/skills/mainframe/skills/sample-skill/tool.py.
+Write plans below {{mainframe.plans_root}}/audit.
 """
 
 
 def _fixture_root() -> Path:
     root = Path(tempfile.mkdtemp())
+    _write(
+        root / "adapters/runtime-profiles.json",
+        (_TOOLS.parent / "adapters/runtime-profiles.json").read_text(),
+    )
     _write(root / "core/skills/sample-skill/SKILL.md", SKILL)
     _write(root / "core/skills/sample-skill/more.md", "See CLAUDE.md.\n")
     _write(root / "core/skills/sample-skill/tool.py", "print('ok')\n")
@@ -73,6 +78,9 @@ def test_skill_frontmatter_reduced_and_body_rewritten():
     assert "Load explicitly with `$sample-skill`" in body
     assert "file-reading and search tools" in body
     assert "~/.codex/skills/sample-skill/tool.py" in body
+    assert "~/.codex/plans/audit" in body
+    assert "${CODEX_HOME:-$HOME/.codex}/plans/audit" not in body
+    assert "{{mainframe.plans_root}}" not in body
 
 
 def test_openai_yaml_shape_and_trigger():
