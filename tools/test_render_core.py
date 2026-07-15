@@ -26,6 +26,7 @@ MAPPINGS = [
     ("adapters/claude-code/files/scripts", "dist/claude-code/scripts"),
     ("adapters/claude-code/files/templates", "dist/claude-code/templates"),
     ("adapters/claude-code/plugin.json", "dist/claude-code/plugin/.claude-plugin/plugin.json"),
+    ("core/memory", "dist/claude-code/plugin/memory"),
 ]
 
 DETECTOR_BODY = "import sys\n# guarded by core/gates conventions\nsys.exit(0)\n"
@@ -35,6 +36,7 @@ RULE_BODY = "rules: []\n"
 WRAPPER_BODY = "#!/bin/sh\nexit 0\n"
 HOOKS_JSON_BODY = '{"hooks": {}}\n'
 PLUGIN_BODY = '{"name": "fixture"}\n'
+MEMORY_BODY = "STORE_VERSION = 1\n"
 
 
 def make_sources(root: Path) -> None:
@@ -63,6 +65,9 @@ def make_sources(root: Path) -> None:
     (files / "templates/template.md").write_text("template\n")
     plugin = root / "adapters/claude-code/plugin.json"
     plugin.write_text(PLUGIN_BODY)
+    memory = root / "core/memory"
+    memory.mkdir(parents=True)
+    (memory / "store.py").write_text(MEMORY_BODY)
 
 
 def fresh_tree() -> Path:
@@ -86,11 +91,12 @@ def test_write_materializes_targets():
     assert (root / "dist/claude-code/plugin/hooks/rules/rule.yml").read_text() == RULE_BODY
     assert (root / "dist/claude-code/plugin/hooks/hooks.json").read_text() == HOOKS_JSON_BODY
     assert (root / "dist/claude-code/plugin/skills/sample-skill/SKILL.md").read_text() == SKILL_BODY
+    assert (root / "dist/claude-code/plugin/memory/store.py").read_text() == MEMORY_BODY
     assert (root / "dist/claude-code/output-styles/style.md").read_text() == "style\n"
     assert (root / "dist/claude-code/scripts/secret").read_text() == "#!/bin/sh\n"
     assert (root / "dist/claude-code/templates/template.md").read_text() == "template\n"
     assert (root / "dist/claude-code/scripts/secret").stat().st_mode & 0o111
-    assert len(copied) == 10, copied
+    assert len(copied) == 11, copied
     shutil.rmtree(root)
 
 
@@ -413,6 +419,14 @@ def test_compose_skips_tree_without_instructions():
     root = fresh_tree()
     assert render_core.check_compose(root, render_core.COMPOSE_MAPPINGS) == []
     shutil.rmtree(root)
+
+
+def test_opencode_memory_instructions_precede_git_and_runtime_notes():
+    parts = dict(render_core.COMPOSE_MAPPINGS)["dist/opencode/AGENTS.md"]
+    memory = parts.index("adapters/opencode/instructions/70-memory.md")
+    git = parts.index("core/instructions/80-git-commits.md")
+    runtime = parts.index("adapters/opencode/instructions/90-runtime-opencode.md")
+    assert memory < git < runtime
 
 
 def test_real_repo_instructions_drift_free():
