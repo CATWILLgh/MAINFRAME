@@ -16,7 +16,7 @@ The permission projection is deliberately conservative. Codex rules match
 shell-command argv prefixes only, so every source rule without an exact,
 safe prefix projection is omitted and reported.
 
-Run: ``.venv/bin/python3 adapters/codex/build_codex.py --root . [--dry-run]``
+Run: ``.venv/bin/python3 adapters/codex/build_codex.py --root . [--dry-run] [--validate-native]``
 """
 
 from __future__ import annotations
@@ -27,7 +27,9 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -57,6 +59,34 @@ UNPROJECTABLE_SKILLS = {
     "keybindings-help": "edits Claude Code keybindings and has no Codex Phase-1 analogue",
     "update-config": "mutates Claude Code configuration and has no Codex Phase-1 analogue",
 }
+
+_CODEX_DECISION_BY_TIER = {
+    "allow": "allow",
+    "deny": "forbidden",
+    "ask": "prompt",
+}
+_CODEX_DECISIONS = frozenset(_CODEX_DECISION_BY_TIER.values())
+_PERMISSION_RULE_KEYS = frozenset({"allow", "ask", "deny"})
+_NATIVE_RULE_PROBES = (
+    (("git", "add", "."), "allow"),
+    (("sudo", "true"), "prompt"),
+    (("rm", "-rf", "/"), "forbidden"),
+)
+_NATIVE_VALIDATION_TIMEOUT_SECONDS = 10
+_GENERATED_RULES_MODE = 0o644
+
+
+class _DuplicateKey(ValueError):
+    pass
+
+
+def _object_without_duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateKey(f"duplicate key: {key}")
+        result[key] = value
+    return result
 
 _PRELOAD_REWRITES = [
     (re.compile(r"\bPreloaded into the `[^`]+` sub-agent\.?", re.I),
@@ -601,12 +631,8 @@ def project_permissions(rules: dict) -> tuple[list[tuple[list[str], str]], list[
         for entry in rules.get(tier, [])
         if (family := _leading_command_family(entry))
     ]
-    for tier in ("allow", "deny", "ask"):
+    for tier, decision in _CODEX_DECISION_BY_TIER.items():
         for entry in rules.get(tier, []):
-            if tier == "ask":
-                omitted.append({"tier": tier, "entry": entry,
-                                "reason": "ask tier omitted; Codex prompts by default"})
-                continue
             tokens, reason = _argv_prefix(entry)
             if reason:
                 omitted.append({"tier": tier, "entry": entry, "reason": reason})
@@ -628,7 +654,6 @@ def project_permissions(rules: dict) -> tuple[list[tuple[list[str], str]], list[
                         ),
                     })
                     continue
-            decision = tier
             key = tuple(tokens or [])
             previous = seen.get(key)
             if previous and previous != decision:
@@ -647,9 +672,73 @@ def render_rules(projected: list[tuple[list[str], str]]) -> str:
         "# regenerate via ./install.sh --codex.",
     ]
     for tokens, decision in projected:
+        if decision not in _CODEX_DECISIONS:
+            raise ValueError(f"unsupported Codex decision: {decision}")
         pattern = json.dumps(tokens, ensure_ascii=False, separators=(", ", ": "))
         lines.append(f'prefix_rule(pattern={pattern}, decision="{decision}")')
     return "\n".join(lines) + "\n"
+
+
+def validate_rules_native(rules_text: str, codex_binary: str | None = None) -> None:
+    binary = codex_binary or shutil.which("codex")
+    if not binary:
+        raise ValueError("native Codex validation requested but `codex` is not on PATH")
+
+    staged_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".rules", encoding="utf-8", delete=False) as staged:
+            staged.write(rules_text)
+            staged_path = Path(staged.name)
+        for command, expected in _NATIVE_RULE_PROBES:
+            result = subprocess.run(
+                [binary, "execpolicy", "check", "--rules", str(staged_path),
+                 "--", *command],
+                capture_output=True,
+                text=True,
+                timeout=_NATIVE_VALIDATION_TIMEOUT_SECONDS,
+                check=False,
+            )
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout).strip()
+                raise ValueError(f"Codex rejected generated rules: {detail}")
+            try:
+                payload = json.loads(result.stdout)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"Codex returned invalid validation JSON: {result.stdout!r}") from error
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    f"Codex returned non-object validation JSON: {result.stdout!r}")
+            actual = payload.get("decision")
+            if actual != expected:
+                rendered_command = " ".join(command)
+                raise ValueError(
+                    f"Codex decision mismatch for `{rendered_command}`: "
+                    f"expected {expected}, got {actual}")
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("Codex native rule validation timed out") from error
+    except OSError as error:
+        raise ValueError(f"Codex native rule validation could not run: {error}") from error
+    finally:
+        if staged_path is not None:
+            staged_path.unlink(missing_ok=True)
+
+
+def _write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staged_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                mode="w", dir=path.parent, encoding="utf-8", delete=False) as staged:
+            staged.write(text)
+            staged_path = Path(staged.name)
+        staged_path.chmod(_GENERATED_RULES_MODE)
+        os.replace(staged_path, path)
+        staged_path = None
+    finally:
+        if staged_path is not None:
+            staged_path.unlink(missing_ok=True)
 
 
 def _hook_command(event: str, detector: str) -> str:
@@ -699,10 +788,24 @@ def _copy_launcher(src: Path, dest: Path) -> None:
 
 def _load_rules(root: Path) -> dict:
     path = root / "core" / "permissions" / "rules.json"
-    data = json.loads(path.read_text())
-    missing = [key for key in ("allow", "deny", "ask") if key not in data]
-    if missing:
-        raise ValueError(f"{path}: missing rule key(s): {', '.join(missing)}")
+    try:
+        data = json.loads(
+            path.read_text(), object_pairs_hook=_object_without_duplicates
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, _DuplicateKey) as error:
+        raise ValueError(f"cannot load permission rules {path}: {error}") from error
+    if not isinstance(data, dict) or set(data) != _PERMISSION_RULE_KEYS:
+        raise ValueError(
+            f"{path}: permission rules must contain exactly allow, ask, and deny"
+        )
+    for key in ("allow", "ask", "deny"):
+        entries = data[key]
+        if not isinstance(entries, list) or any(
+            not isinstance(entry, str) for entry in entries
+        ):
+            raise ValueError(f"{path}: permission rules `{key}` must be list[str]")
+    if not any(data.values()):
+        raise ValueError(f"{path}: permission rules cannot be empty")
     return data
 
 
@@ -766,6 +869,7 @@ def main(argv=None) -> int:
     parser.add_argument("--launcher-out", type=Path, default=None)
     parser.add_argument("--agents-out", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--validate-native", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     skills_out = args.skills_out or root / "dist" / "codex" / "skills"
@@ -777,9 +881,12 @@ def main(argv=None) -> int:
 
     skills, dropped = collect_skills(root)
     projected, omitted = project_permissions(_load_rules(root))
+    rules_text = render_rules(projected)
     _validate_gate_detectors(root)
     hooks_json = render_hooks_json()
     agents = collect_agents(root)
+    if args.validate_native:
+        validate_rules_native(rules_text)
     if args.dry_run:
         print(f"[dry-run] would write skills to {skills_out}")
         print(f"[dry-run] would write rules to {rules_out}")
@@ -788,8 +895,7 @@ def main(argv=None) -> int:
         print(f"[dry-run] would write {len(agents)} agents to {agents_out}")
     else:
         write_skills(skills_out, skills)
-        rules_out.parent.mkdir(parents=True, exist_ok=True)
-        rules_out.write_text(render_rules(projected))
+        _write_text_atomic(rules_out, rules_text)
         hooks_out.parent.mkdir(parents=True, exist_ok=True)
         hooks_out.write_text(hooks_json)
         if not launcher_src.is_file():

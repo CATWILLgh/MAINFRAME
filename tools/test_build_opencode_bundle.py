@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 import stat
 import subprocess
@@ -21,28 +22,75 @@ def _sandbox() -> Path:
     return Path(tempfile.mkdtemp(prefix="mainframe bundle "))
 
 
-def _run_builder(output: Path, home: Path, xdg: Path) -> None:
+def _run_builder(
+    output: Path,
+    home: Path,
+    xdg: Path,
+    *,
+    root: Path = REPO,
+    check: bool = True,
+) -> subprocess.CompletedProcess:
     env = dict(
         os.environ,
         HOME=str(home),
         XDG_CONFIG_HOME=str(xdg),
         PYTHONPATH=os.pathsep.join(path for path in sys.path if path),
     )
-    subprocess.run(
+    return subprocess.run(
         [
             sys.executable,
             str(BUILDER),
             "--root",
-            str(REPO),
+            str(root),
             "--output",
             str(output),
         ],
-        check=True,
+        check=check,
         text=True,
         capture_output=True,
         env=env,
         timeout=30,
     )
+
+
+def _fixture_root(sandbox: Path, rules: str) -> Path:
+    root = sandbox / "root"
+    for relative in ("core/agents", "core/gates", "core/skills"):
+        shutil.copytree(REPO / relative, root / relative)
+    for relative in (
+        "adapters/runtime-profiles.json",
+        "adapters/opencode/plugins/mainframe-gates.js",
+        "dist/opencode/AGENTS.md",
+    ):
+        source = REPO / relative
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    rules_path = root / "core/permissions/rules.json"
+    rules_path.parent.mkdir(parents=True)
+    rules_path.write_text(rules)
+    return root
+
+
+def _assert_invalid_rules_preserve_output(rules: str) -> None:
+    sandbox = _sandbox()
+    root = _fixture_root(sandbox, rules)
+    output = sandbox / "bundle-v2"
+    output.mkdir()
+    sentinel = output / "sentinel.txt"
+    sentinel.write_text("unchanged")
+
+    result = _run_builder(
+        output,
+        sandbox / "home",
+        sandbox / "xdg",
+        root=root,
+        check=False,
+    )
+
+    assert result.returncode != 0, (result.stdout, result.stderr)
+    assert sentinel.read_text() == "unchanged"
+    assert list(output.iterdir()) == [sentinel]
 
 
 def test_cli_build_is_pure_and_projects_an_isolated_bundle():
@@ -101,6 +149,19 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert "~/.claude" not in projected
     assert str(home) not in projected
     assert "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plans" in projected
+
+
+def test_duplicate_permission_keys_fail_before_bundle_publication():
+    _assert_invalid_rules_preserve_output(
+        '{"allow": [], "allow": [], "ask": [], '
+        '"deny": ["Bash(rm -rf /)"]}\n'
+    )
+
+
+def test_non_restrictive_permissions_fail_before_bundle_publication():
+    _assert_invalid_rules_preserve_output(
+        '{"allow": ["Bash(git status *)"], "ask": [], "deny": []}\n'
+    )
 
 
 def test_bundled_plugin_blocks_and_writes_only_opencode_telemetry():

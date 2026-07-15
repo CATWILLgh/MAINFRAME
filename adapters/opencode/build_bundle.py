@@ -22,6 +22,7 @@ from bundle_sync import (
     write_text_file,
 )
 import build_opencode
+from permission_config import load_permission_rules, require_restrictive_projection
 
 
 PLUGIN_IMPORT = 'import path from "node:path"'
@@ -176,6 +177,9 @@ def build(root: Path, output: Path) -> None:
         if source.is_symlink() or not source.is_file():
             raise ValueError(f"bundle source must be a regular file: {source}")
     _validate_agent_sources(root)
+    rules = load_permission_rules(str(rules_source))
+    permission, report = build_opencode.project_permissions(rules)
+    require_restrictive_projection(permission)
 
     expected = {
         "AGENTS.md",
@@ -197,8 +201,6 @@ def build(root: Path, output: Path) -> None:
     write_text_file(output / "AGENTS.md", agents_text)
     _project_plugin_tree(plugin_source, output / "plugins")
 
-    rules = json.loads(rules_source.read_text())
-    permission, report = build_opencode.project_permissions(rules)
     fragment = {"permission": permission}
     write_text_file(
         output / "config-fragment.json",

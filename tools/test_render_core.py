@@ -6,17 +6,16 @@ sources, dist/ render targets); integration tests run `check`
 against the real repo, which must be drift-free on a clean tree.
 """
 
+import json
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-TOOLS = Path(__file__).resolve().parent
-REPO = TOOLS.parent
-sys.path.insert(0, str(TOOLS))
-
 import render_core
 
+TOOLS = Path(__file__).resolve().parent
+REPO = TOOLS.parent
 MAPPINGS = [
     ("core/gates/detectors", "dist/claude-code/plugin/hooks/scripts"),
     ("adapters/claude-code/gates/run-hook.sh", "dist/claude-code/plugin/hooks/scripts/run-hook.sh"),
@@ -26,6 +25,7 @@ MAPPINGS = [
     ("adapters/claude-code/files/output-styles", "dist/claude-code/output-styles"),
     ("adapters/claude-code/files/scripts", "dist/claude-code/scripts"),
     ("adapters/claude-code/files/templates", "dist/claude-code/templates"),
+    ("adapters/claude-code/plugin.json", "dist/claude-code/plugin/.claude-plugin/plugin.json"),
 ]
 
 DETECTOR_BODY = "import sys\n# guarded by core/gates conventions\nsys.exit(0)\n"
@@ -40,6 +40,7 @@ LIB_BODY = "VERSION = 1\n"
 RULE_BODY = "rules: []\n"
 WRAPPER_BODY = "#!/bin/sh\nexit 0\n"
 HOOKS_JSON_BODY = '{"hooks": {}}\n'
+PLUGIN_BODY = '{"name": "fixture"}\n'
 
 
 def make_sources(root: Path) -> None:
@@ -69,6 +70,8 @@ def make_sources(root: Path) -> None:
     secret.chmod(0o755)
     (files / "templates").mkdir()
     (files / "templates/template.md").write_text("template\n")
+    plugin = root / "adapters/claude-code/plugin.json"
+    plugin.write_text(PLUGIN_BODY)
 
 
 def fresh_tree() -> Path:
@@ -98,7 +101,7 @@ def test_write_materializes_targets():
     assert (root / "dist/claude-code/scripts/secret").read_text() == "#!/bin/sh\n"
     assert (root / "dist/claude-code/templates/template.md").read_text() == "template\n"
     assert (root / "dist/claude-code/scripts/secret").stat().st_mode & 0o111
-    assert len(copied) == 9, copied
+    assert len(copied) == 10, copied
     shutil.rmtree(root)
 
 
@@ -428,13 +431,10 @@ def test_real_repo_instructions_drift_free():
     assert problems == [], problems
 
 
-import json as _json
-
-
 def make_permissions_tree() -> Path:
     root = Path(tempfile.mkdtemp(prefix="render-perm-test-"))
     (root / "core/permissions").mkdir(parents=True)
-    (root / "core/permissions/rules.json").write_text(_json.dumps(
+    (root / "core/permissions/rules.json").write_text(json.dumps(
         {"allow": ["Bash(git add *)"], "deny": ["Bash(rm -rf /)"],
          "ask": ["Bash(sudo *)"]}, indent=2) + "\n")
     (root / "dist/claude-code").mkdir(parents=True)
@@ -445,7 +445,7 @@ def make_permissions_tree() -> Path:
         "model": "user-choice",
     }
     (root / "dist/claude-code/settings.json").write_text(
-        _json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+        json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     return root
 
 
@@ -458,10 +458,10 @@ def test_permissions_check_clean_when_synced():
 def test_permissions_check_ignores_user_edits_outside_the_rules():
     root = make_permissions_tree()
     target = root / "dist/claude-code/settings.json"
-    data = _json.loads(target.read_text())
+    data = json.loads(target.read_text())
     data["model"] = "changed-by-user"
     data["permissions"]["defaultMode"] = "default"
-    target.write_text(_json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    target.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     assert render_core.check_permissions(root) == []
     shutil.rmtree(root)
 
@@ -474,9 +474,9 @@ def test_permissions_check_flags_rule_drift():
                           ("ask", "Bash(chmod *)")):
         root = make_permissions_tree()
         target = root / "dist/claude-code/settings.json"
-        data = _json.loads(target.read_text())
+        data = json.loads(target.read_text())
         data["permissions"][key].append(injected)
-        target.write_text(_json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        target.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
         problems = render_core.check_permissions(root)
         assert any(key in p and "settings.json" in p for p in problems), (key, problems)
         shutil.rmtree(root)
@@ -485,7 +485,7 @@ def test_permissions_check_flags_rule_drift():
 def test_permissions_malformed_source_fails_loud_in_both_paths():
     root = make_permissions_tree()
     (root / "core/permissions/rules.json").write_text(
-        _json.dumps({"allow": [], "deny": []}) + "\n")  # missing "ask"
+        json.dumps({"allow": [], "deny": []}) + "\n")  # missing "ask"
     for fn in (render_core.check_permissions, render_core.write_permissions):
         try:
             fn(root)
@@ -498,14 +498,14 @@ def test_permissions_malformed_source_fails_loud_in_both_paths():
 def test_permissions_write_swaps_rules_and_preserves_everything_else():
     root = make_permissions_tree()
     target = root / "dist/claude-code/settings.json"
-    data = _json.loads(target.read_text())
+    data = json.loads(target.read_text())
     data["model"] = "user-picked-later"
     data["permissions"]["defaultMode"] = "default"
     data["permissions"]["allow"] = ["Bash(stale)"]
-    target.write_text(_json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+    target.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     written = render_core.write_permissions(root)
     assert written == [target]
-    after = _json.loads(target.read_text())
+    after = json.loads(target.read_text())
     assert after["permissions"]["allow"] == ["Bash(git add *)"]  # restored from core
     assert after["model"] == "user-picked-later"                 # user key untouched
     assert after["permissions"]["defaultMode"] == "default"      # user sub-key untouched

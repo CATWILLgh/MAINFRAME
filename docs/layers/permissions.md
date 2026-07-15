@@ -5,7 +5,7 @@
 
 > Shared allow/deny/ask policy authored in `core/permissions/rules.json`, then rendered or conservatively projected into the controls each of the three runtimes can express.
 
-> Last updated: 2026-07-14 (three-tool projection and current policy summary).
+> Last updated: 2026-07-15 (OpenCode ownership-aware permission projection).
 
 ---
 
@@ -13,7 +13,7 @@
 
 - Source of truth: `core/permissions/rules.json` — hub-owned `allow`, `deny`, and `ask` rules.
 - Claude Code target: `dist/claude-code/settings.json` — the permission lists are rendered by key-merge; `permissions.defaultMode` remains in the target settings.
-- OpenCode target: `adapters/opencode/build_opencode.py` projects representable entries and merges the `permission` block into `~/.config/opencode/opencode.json`. This is best-effort and is not a safety boundary.
+- OpenCode target: `adapters/opencode/build_opencode.py` projects representable entries into `~/.config/opencode/opencode.json`. It tracks generated top-level actions in a `0600` ownership sidecar, updates only unchanged actions it previously generated, and preserves scalar, wildcard, modified, deleted, and otherwise user-owned policy. The projection fails before writing when the neutral source is missing, malformed, empty, or contains no representable `ask`/`deny` rule. This remains best-effort and is not a safety boundary.
 - Codex target: `adapters/codex/build_codex.py` emits only exact safe shell-prefix projections to `dist/codex/rules/mainframe.rules`, installed at `${CODEX_HOME:-~/.codex}/rules/mainframe.rules`; unrepresentable rules are omitted and reported.
 - Claude Code runtime: `~/.claude/settings.json` (symlink to the hub file).
 - In any project: `<repo>/.claude/settings.json` (project-scope) and `<repo>/.claude/settings.local.json` (gitignored, local).
@@ -137,7 +137,7 @@ Caveat: a hook `permissionDecision: "ask"` in auto-mode transitions to `"defer"`
 
 As verified from `core/permissions/rules.json` on 2026-07-14, the policy contains 100 `allow`, 88 `deny`, and 46 `ask` entries. Claude Code's `permissions.defaultMode` is separately user-owned in `dist/claude-code/settings.json` and is currently `auto`. Do not duplicate the full lists here: inspect the authored JSON for the current policy, then use the runtime-specific builder report to see which entries were projectable.
 
-The current Codex projection contains 79 `prefix_rule` entries. A lower count is expected because Codex rules express shell argv prefixes only; omission is safer than broadening an untranslatable source rule.
+The current Codex projection contains 101 `prefix_rule` entries: 76 `allow`, 3 `forbidden`, and 22 `prompt`. A lower count than the authored policy is expected because Codex rules express shell argv prefixes only; omission is safer than broadening an untranslatable source rule. The builder validates the three decision classes with the installed `codex execpolicy` parser during `./install.sh --codex` before publishing any generated output.
 
 ### 2.2. Canonical claim vs hub empirical — discrepancies
 

@@ -15,10 +15,9 @@
 #                   (Plugin format does not support path-scoped rules with
 #                   `paths:` frontmatter; per-item keeps the layer composable.)
 #
-# Migration cleanup: removes any stale per-item symlinks in
-# ~/.claude/{skills,agents,hooks}/ left over from the pre-plugin layout. If
-# the per-layer directories end up empty, they are removed (the plugin owns
-# those artifacts now).
+# Migration cleanup: backs up verified per-item symlinks in
+# ~/.claude/{skills,agents,hooks}/ left over from the pre-plugin layout.
+# Same-name links with any other target are preserved.
 #
 # Usage:
 #   ./install.sh              # install (with backup of existing files)
@@ -70,9 +69,10 @@ Single-file artifacts that the plugin format does not support stay as direct
 symlinks: CLAUDE.md (umbrella instructions) and settings.json (permissions
 and user-level config). Path-scoped rules in dist/claude-code/rules/ install per-item.
 
-The first install after upgrading from the pre-plugin layout also cleans up
-stale per-item symlinks in ~/.claude/{skills,agents,hooks}/ left over from
-the old layout, and removes the empty directories if any.
+The first install after upgrading from the pre-plugin layout also backs up
+verified legacy per-item symlinks in ~/.claude/{skills,agents,hooks}/. A
+same-name link is preserved unless its raw target exactly matches the old
+layout in this repository.
 
 Usage:
   $0                  Install (creates symlinks; backs up existing files).
@@ -172,6 +172,17 @@ MANAGED_DIRS=(
     "dist/claude-code/output-styles:${CLAUDE_DIR}/output-styles"
 )
 
+# These source directories are valid when absent or empty. Every other source
+# listed above is part of the default delivery contract.
+OPTIONAL_MANAGED_SOURCES=(
+    "dist/claude-code/rules"
+)
+GENERATED_DEV_SOURCES=(
+    "workspace/runtime"
+)
+SECRET_HELPER_SOURCE="dist/claude-code/scripts/secret"
+CREDENTIALS_INDEX_SOURCE="dist/claude-code/templates/credentials-index.md"
+
 # Safe backup dir for items inside managed dirs (skills/, hooks/, rules/, etc.).
 # Claude Code scans those dirs wholesale, so a sibling .backup-* file there could
 # trip discovery. Top-level files (CLAUDE.md, settings.json) keep the sibling-file
@@ -193,6 +204,62 @@ check_prerequisites() {
             mkdir -p "${CLAUDE_DIR}"
         fi
     fi
+}
+
+_source_list_contains() {
+    local needle="$1"
+    shift
+    local candidate
+    for candidate in "$@"; do
+        [[ "$candidate" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
+_required_source_available() {
+    local src_abs="${PROJECT_ROOT}/$1"
+    local visible_only="${2:-0}"
+    if [[ -d "$src_abs" ]]; then
+        compgen -G "${src_abs}/*" >/dev/null && return 0
+        [[ "$visible_only" -eq 1 ]] && return 1
+        compgen -G "${src_abs}/.[!.]*" >/dev/null ||
+            compgen -G "${src_abs}/..?*" >/dev/null
+        return
+    fi
+    [[ -e "$src_abs" ]]
+}
+
+_check_required_source() {
+    local src_rel="$1"
+    local visible_only="${2:-0}"
+    if _required_source_available "$src_rel" "$visible_only"; then
+        return 0
+    fi
+    log_error "required source missing or empty: ${src_rel}"
+    return 1
+}
+
+check_required_install_sources() {
+    local failed=0 entry src
+    for entry in "${ARTIFACTS[@]}"; do
+        src="${entry%%:*}"
+        _check_required_source "$src" || failed=1
+    done
+    for entry in "${MANAGED_DIRS[@]}"; do
+        src="${entry%%:*}"
+        _source_list_contains "$src" "${OPTIONAL_MANAGED_SOURCES[@]}" && continue
+        _check_required_source "$src" 1 || failed=1
+    done
+    _check_required_source "$SECRET_HELPER_SOURCE" || failed=1
+    _check_required_source "$CREDENTIALS_INDEX_SOURCE" || failed=1
+    if [[ $DEV -eq 1 ]]; then
+        for entry in "${DEV_ARTIFACTS[@]}"; do
+            src="${entry%%:*}"
+            _source_list_contains "$src" "${GENERATED_DEV_SOURCES[@]}" && continue
+            _check_required_source "$src" || failed=1
+        done
+    fi
+    return "$failed"
 }
 
 # Warn (do NOT fail) if python3 is missing. The hub's hooks (CLAUDE.md/skill
@@ -379,10 +446,10 @@ _append_secret_source_line() {
 
 bootstrap_secrets() {
     local bin_dir="$HOME/.local/bin"
-    local secret_src="${PROJECT_ROOT}/dist/claude-code/scripts/secret"
+    local secret_src="${PROJECT_ROOT}/${SECRET_HELPER_SOURCE}"
     local secret_link="${bin_dir}/secret"
     local store_dir="${XDG_CONFIG_HOME:-$HOME/.config}/credentials"
-    local index_src="${PROJECT_ROOT}/dist/claude-code/templates/credentials-index.md"
+    local index_src="${PROJECT_ROOT}/${CREDENTIALS_INDEX_SOURCE}"
     local index_dst="${CLAUDE_DIR}/credentials-index.md"
     local zshenv="$HOME/.zshenv"
     local source_line='[ -f ~/.config/credentials/secrets.env ] && set -a && . ~/.config/credentials/secrets.env && set +a'
@@ -637,13 +704,13 @@ install_opencode() {
     cfg_dir="$(opencode_config_dir)"
 
     if ! command -v opencode >/dev/null 2>&1; then
-        log_warn "opencode not found on PATH — skipping the OpenCode layer."
-        return 0
+        log_error "opencode not found on PATH — requested OpenCode layer cannot be installed."
+        return 1
     fi
     if [[ ! -x "$py" ]]; then
-        log_warn "Skipped OpenCode projection — .venv missing"
-        log_warn "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
-        return 0
+        log_error "OpenCode projection failed — .venv missing"
+        log_error "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
+        return 1
     fi
 
     local gen_args=(--root "${PROJECT_ROOT}")
@@ -678,8 +745,12 @@ uninstall_opencode() {
     uninstall_dir_contents "$OPENCODE_SKILLS_SRC" "$(opencode_config_dir)/skills"
     local agents_md="$(opencode_config_dir)/AGENTS.md"
     if [[ -L "$agents_md" && "$(readlink "$agents_md")" == "${PROJECT_ROOT}/dist/opencode/AGENTS.md" ]]; then
-        rm "$agents_md"
-        log_ok "Removed AGENTS.md symlink."
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would remove symlink ${agents_md}"
+        else
+            rm "$agents_md"
+            log_ok "Removed AGENTS.md symlink."
+        fi
     fi
     log_warn "opencode.json is left as-is (hub-managed 'permission'/'mcp' keys"
     log_warn "included); previous version, if any, is at opencode.json.backup."
@@ -791,16 +862,16 @@ install_codex() {
     local cfg_dir
     cfg_dir="$(codex_config_dir)"
     if ! command -v codex >/dev/null 2>&1; then
-        log_warn "codex not found on PATH — skipping the Codex layer."
-        return 0
+        log_error "codex not found on PATH — requested Codex layer cannot be installed."
+        return 1
     fi
     if [[ ! -x "$py" ]]; then
-        log_warn "Skipped Codex projection — .venv missing"
-        log_warn "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
-        return 0
+        log_error "Codex projection failed — .venv missing"
+        log_error "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
+        return 1
     fi
 
-    local gen_args=(--root "${PROJECT_ROOT}")
+    local gen_args=(--root "${PROJECT_ROOT}" --validate-native)
     [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
     if ! "$py" "${PROJECT_ROOT}/adapters/codex/build_codex.py" "${gen_args[@]}"; then
         log_error "build_codex.py failed; Codex layer not installed."
@@ -876,15 +947,21 @@ uninstall_dir_contents() {
     local target_dir="$2"
     local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
 
-    if [[ ! -d "$src_dir_abs" ]]; then
+    if [[ ! -d "$target_dir" ]]; then
         return 0
     fi
 
-    local child base
-    for child in "$src_dir_abs"/*; do
-        [[ -e "$child" ]] || continue
-        base="$(basename "$child")"
-        uninstall_one "${src_dir_rel}/${base}" "${target_dir}/${base}"
+    local target resolved
+    for target in "$target_dir"/*; do
+        [[ -L "$target" ]] || continue
+        resolved="$(readlink_safe "$target")"
+        [[ "$resolved" == "${src_dir_abs}/"* ]] || continue
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would remove symlink ${target}"
+        else
+            rm "$target"
+            log_ok "removed symlink ${target}"
+        fi
     done
 }
 
@@ -900,98 +977,74 @@ list_backups() {
     fi
 }
 
-# Old per-item symlinks under ~/.claude/{skills,agents,hooks}/ from the
-# pre-plugin install layout dangle after the move; left in place they
-# would shadow the new plugin's namespaced artifacts.
-cleanup_stale_post_migration() {
-    local stale_skills=(
-        code-audit curl-requests git-conventional-commits-ru nestjs-backend-patterns
-        no-suppression-markers ops-app-server-safety python-backend-patterns
-        react-frontend-patterns secrets-handling severity-calibration shadcn
-        surface-ticket task-workflow testing-strategy
-    )
-    local stale_agents=(
-        nestjs-backend-engineer.md python-backend-engineer.md
-        react-frontend-engineer.md web-search.md
-    )
-    local stale_hooks=(
-        bash-pattern-reminder.py comment-discipline-reminder.py frontend-dead-code.py
-        frontend-fsd-gate.py nodejs-deps-audit.py nodejs-security-scan.py
-        nodejs-security-stop-gate.py path-validation.py python-deps-audit.py
-        python-security-scan.py python-security-stop-gate.py scan-suppression-markers.py
-        stop-gate-suppression-markers.py rules
-    )
+_is_verified_legacy_link() {
+    local relative="$1"
+    local target="${CLAUDE_DIR}/${relative}"
+    local expected="${PROJECT_ROOT}/export/${relative}"
+    [[ -L "$target" ]] || return 1
 
-    local removed=0
-    local name target
-
-    for name in "${stale_skills[@]}"; do
-        target="${CLAUDE_DIR}/skills/${name}"
-        if [[ -L "$target" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would remove stale: ${target}"
-            else
-                rm "$target"
-                log_ok "removed stale symlink: ${target}"
-            fi
-            ((removed++))
-        fi
-    done
-    for name in "${stale_agents[@]}"; do
-        target="${CLAUDE_DIR}/agents/${name}"
-        if [[ -L "$target" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would remove stale: ${target}"
-            else
-                rm "$target"
-                log_ok "removed stale symlink: ${target}"
-            fi
-            ((removed++))
-        fi
-    done
-    for name in "${stale_hooks[@]}"; do
-        target="${CLAUDE_DIR}/hooks/${name}"
-        if [[ -L "$target" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would remove stale: ${target}"
-            else
-                rm "$target"
-                log_ok "removed stale symlink: ${target}"
-            fi
-            ((removed++))
-        fi
-    done
-
-    if [[ $removed -gt 0 ]]; then
-        log_info "removed ${removed} stale per-item symlinks from the pre-migration layout"
+    local actual
+    if ! actual="$(readlink "$target")"; then
+        log_warn "preserving unreadable same-name symlink: ${target}"
+        return 1
     fi
+    if [[ "$actual" != "$expected" ]]; then
+        log_warn "preserving unverified same-name symlink: ${target} → ${actual}"
+        return 1
+    fi
+    return 0
+}
 
-    # If agents/ and hooks/ are now empty (all entries were stale and removed),
-    # remove the directories themselves — the plugin owns them now.
-    local dir
-    for dir in "${CLAUDE_DIR}/agents" "${CLAUDE_DIR}/hooks"; do
-        if [[ -d "$dir" && -z "$(ls -A "$dir" 2>/dev/null)" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would rmdir empty ${dir}"
-            else
-                rmdir "$dir"
-                log_ok "removed empty ${dir}"
-            fi
+# Verified links from the pre-plugin layout are reversible migration state.
+cleanup_stale_post_migration() {
+    local legacy_paths=(
+        skills/code-audit skills/curl-requests skills/git-conventional-commits-ru
+        skills/nestjs-backend-patterns skills/no-suppression-markers
+        skills/ops-app-server-safety skills/python-backend-patterns
+        skills/react-frontend-patterns skills/secrets-handling
+        skills/severity-calibration skills/shadcn skills/surface-ticket
+        skills/task-workflow skills/testing-strategy
+        agents/nestjs-backend-engineer.md agents/python-backend-engineer.md
+        agents/react-frontend-engineer.md agents/web-search.md
+        hooks/bash-pattern-reminder.py hooks/comment-discipline-reminder.py
+        hooks/frontend-dead-code.py hooks/frontend-fsd-gate.py
+        hooks/nodejs-deps-audit.py hooks/nodejs-security-scan.py
+        hooks/nodejs-security-stop-gate.py hooks/path-validation.py
+        hooks/python-deps-audit.py hooks/python-security-scan.py
+        hooks/python-security-stop-gate.py hooks/scan-suppression-markers.py
+        hooks/stop-gate-suppression-markers.py hooks/rules
+    )
+    local backed_up=0
+    local relative target
+
+    for relative in "${legacy_paths[@]}"; do
+        if _is_verified_legacy_link "$relative"; then
+            target="${CLAUDE_DIR}/${relative}"
+            backup_target "$target"
+            ((backed_up += 1))
         fi
     done
+
+    if [[ $backed_up -gt 0 ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_info "would back up ${backed_up} verified pre-migration symlinks"
+        else
+            log_info "backed up ${backed_up} verified pre-migration symlinks"
+        fi
+    fi
 }
 
 # ---- Main ----
 
 main() {
+    local required_failed=0
     if [[ $DRY_RUN -eq 1 ]]; then
         log_info "${BOLD}DRY RUN${NC} — nothing will be changed."
     fi
 
-    check_prerequisites
-    check_python
-
     if [[ $UNINSTALL -eq 1 ]]; then
+        check_prerequisites
+        check_python
         log_info "Uninstalling MAINFRAME hub symlinks from ${CLAUDE_DIR}..."
         for entry in "${ARTIFACTS[@]}"; do
             local src="${entry%%:*}"
@@ -1006,13 +1059,21 @@ main() {
         done
         uninstall_opencode
         uninstall_codex
-        uninstall_one "dist/claude-code/scripts/secret" "$HOME/.local/bin/secret"
+        uninstall_one "$SECRET_HELPER_SOURCE" "$HOME/.local/bin/secret"
         log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
         log_ok "Uninstall complete."
         list_backups
         return 0
     fi
+
+    if ! check_required_install_sources; then
+        log_error "Install aborted before changes because required sources are unavailable."
+        return 1
+    fi
+
+    check_prerequisites
+    check_python
 
     log_info "Installing MAINFRAME hub symlinks into ${CLAUDE_DIR}..."
     log_info "Source: ${PROJECT_ROOT}/dist"
@@ -1076,6 +1137,7 @@ main() {
         # the remaining install phases (secrets, tooling) silently.
         if ! install_opencode; then
             log_warn "OpenCode layer failed; continuing with the rest of the install."
+            required_failed=1
         fi
     fi
 
@@ -1083,6 +1145,7 @@ main() {
         echo
         if ! install_codex; then
             log_warn "Codex layer failed; continuing with the rest of the install."
+            required_failed=1
         fi
     fi
 
@@ -1102,6 +1165,10 @@ main() {
     bootstrap_frontend_quality_tools
 
     echo
+    if [[ $required_failed -eq 1 ]]; then
+        log_error "Install finished with one or more failed required layers."
+        return 1
+    fi
     log_ok "Install complete."
     if [[ $DRY_RUN -eq 0 ]]; then
         list_backups
