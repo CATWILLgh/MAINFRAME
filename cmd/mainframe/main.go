@@ -15,17 +15,31 @@ import (
 
 const maxPlanRequestBytes = 1 << 20
 
+type previewLauncher func(io.Reader, io.Writer) error
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 func run(args []string, input io.Reader, output, errorOutput io.Writer) int {
-	if len(args) != 1 || args[0] != "plan" {
-		command := ""
-		if len(args) > 0 {
-			command = args[0]
+	return runWithPreview(args, input, output, errorOutput, runInteractivePreview)
+}
+
+func runWithPreview(
+	args []string,
+	input io.Reader,
+	output, errorOutput io.Writer,
+	launchPreview previewLauncher,
+) int {
+	if len(args) == 0 {
+		if err := launchPreview(input, output); err != nil {
+			fmt.Fprintf(errorOutput, "preview: %v\n", err)
+			return 1
 		}
-		fmt.Fprintf(errorOutput, "unknown command %q; expected plan\n", command)
+		return 0
+	}
+	if len(args) != 1 || args[0] != "plan" {
+		fmt.Fprintf(errorOutput, "unknown command %q; expected plan or no arguments\n", args[0])
 		return 2
 	}
 	if err := runPlan(input, output); err != nil {

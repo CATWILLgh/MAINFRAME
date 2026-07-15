@@ -3,12 +3,62 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
+
+func TestRunWithoutArgumentsLaunchesReadOnlyPreview(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	called := false
+	launcher := func(input io.Reader, output io.Writer) error {
+		called = true
+		if input == nil || output != &stdout {
+			t.Fatal("launcher did not receive command IO")
+		}
+		return nil
+	}
+
+	exitCode := runWithPreview(nil, strings.NewReader(""), &stdout, &stderr, launcher)
+	if exitCode != 0 || !called {
+		t.Fatalf("exit code = %d, called = %v, stderr = %q", exitCode, called, stderr.String())
+	}
+}
+
+func TestRunReportsPreviewStartupFailure(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	launcher := func(io.Reader, io.Writer) error {
+		return errors.New("source root unavailable")
+	}
+
+	exitCode := runWithPreview(nil, strings.NewReader(""), &stdout, &stderr, launcher)
+	if exitCode != 1 || !strings.Contains(stderr.String(), "source root unavailable") {
+		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestPlanCommandDoesNotLaunchPreview(t *testing.T) {
+	input := `{"desired":{"components":[]},"observed":{"components":[]}}`
+	var stdout, stderr bytes.Buffer
+	launcher := func(io.Reader, io.Writer) error {
+		t.Fatal("preview launched for plan command")
+		return nil
+	}
+
+	exitCode := runWithPreview(
+		[]string{"plan"}, strings.NewReader(input), &stdout, &stderr, launcher,
+	)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
+	}
+}
 
 func TestRunPlanJSONContract(t *testing.T) {
 	input := `{"desired":{"components":["claude-code"]},"observed":{"components":[{"id":"codex","artifacts":[{"location":{"root":"codex-config","path":"AGENTS.md"},"ownership":"managed_exact"}]}]}}`
