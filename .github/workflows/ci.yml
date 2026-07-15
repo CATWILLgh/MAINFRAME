@@ -52,6 +52,8 @@ jobs:
             # test_render_core / test_render_reminder / test_validate_skill need
             # pyyaml (the last also tiktoken); they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
+            [ "$t" = "tools/test_build_claude_bundle.py" ] && continue
+            [ "$t" = "tools/test_build_release.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
             [ "$t" = "tools/test_build_opencode_bundle.py" ] && continue
             [ "$t" = "tools/test_build_opencode_config.py" ] && continue
@@ -109,6 +111,12 @@ jobs:
         run: |
           python3 tools/test_build_codex.py
           python3 tools/test_build_codex_bundle.py
+
+      - name: Release bundle contract tests
+        run: |
+          python3 tools/test_release_contract.py
+          python3 tools/test_build_claude_bundle.py
+          python3 tools/test_build_release.py
 
       # The dispatcher plugin is plain ESM JS precisely so stock node (present
       # on the runner) can test it — the Bun shell is faked inside the test.
