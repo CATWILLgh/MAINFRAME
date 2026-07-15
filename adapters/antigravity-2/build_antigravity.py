@@ -15,6 +15,7 @@ from pathlib import Path
 import yaml
 
 from gates.mainframe_runtime import HANDLER_TIMEOUT_SECONDS
+from source_boundary import SourceBoundary, SourcePath
 
 
 ADAPTER_VERSION = "0.1.0"
@@ -118,11 +119,11 @@ def _hooks_manifest() -> bytes:
     return _json_bytes({"mainframe": namespace})
 
 
-def _read_rule(path: Path) -> bytes:
-    text = path.read_text()
+def _read_rule(source: SourcePath) -> bytes:
+    text = source.read_text()
     if len(text) > RULE_MAX_CHARS:
         raise ValueError(
-            f"Antigravity rule exceeds {RULE_MAX_CHARS} characters: {path}"
+            f"Antigravity rule exceeds {RULE_MAX_CHARS} characters: {source.label}"
         )
     return text.encode()
 
@@ -133,35 +134,28 @@ def _collect_rules(root: Path, files: dict[Path, bytes]) -> None:
         ("adapter", root / "adapters" / "antigravity-2" / "instructions"),
     )
     for prefix, directory in sources:
-        if not directory.is_dir():
-            continue
-        for source in sorted(directory.glob("*.md")):
-            files[Path("rules") / f"{prefix}-{source.name}"] = _read_rule(source)
+        for source in SourceBoundary(root, directory).files("*.md"):
+            files[Path("rules") / f"{prefix}-{source.path.name}"] = _read_rule(source)
 
 
-def _projectable_file(path: Path) -> bool:
-    return (
-        path.is_file()
-        and "__pycache__" not in path.parts
-        and path.suffix not in {".pyc", ".pyo"}
-    )
+def _copy_tree(
+    root: Path, source: Path, target: Path, files: dict[Path, bytes]
+) -> None:
+    for item in SourceBoundary(root, source).files():
+        files[target / item.path.relative_to(source)] = item.read_bytes()
 
 
-def _copy_tree(source: Path, target: Path, files: dict[Path, bytes]) -> None:
-    if not source.is_dir():
-        return
-    for path in sorted(item for item in source.rglob("*") if _projectable_file(item)):
-        files[target / path.relative_to(source)] = path.read_bytes()
-
-
-def _copy_skill(source: Path, target: Path, files: dict[Path, bytes]) -> None:
-    for path in sorted(item for item in source.rglob("*") if _projectable_file(item)):
+def _copy_skill(
+    root: Path, source: Path, target: Path, files: dict[Path, bytes]
+) -> None:
+    for item in SourceBoundary(root, source).files():
+        path = item.path
         relative = path.relative_to(source)
         destination = target / relative
         if path.suffix != ".md":
-            files[destination] = path.read_bytes()
+            files[destination] = item.read_bytes()
             continue
-        meta, body = parse_frontmatter(path.read_text())
+        meta, body = parse_frontmatter(item.read_text())
         body = _adapt_markdown(body)
         note = f"<!-- {GENERATED_MARKER} ({path.relative_to(source.parent.parent.parent)}). -->\n\n"
         if relative == Path("SKILL.md"):
@@ -177,9 +171,9 @@ def _copy_skill(source: Path, target: Path, files: dict[Path, bytes]) -> None:
             files[destination] = f"{note}{body}".encode()
 
 
-def _delegate_skill(source: Path) -> tuple[str, bytes] | None:
+def _delegate_skill(source: SourcePath) -> tuple[str, bytes] | None:
     meta, body = parse_frontmatter(source.read_text())
-    name = str(meta.get("name") or source.stem)
+    name = str(meta.get("name") or source.path.stem)
     description = meta.get("description")
     if not description:
         return None
@@ -218,7 +212,7 @@ def _delegate_skill(source: Path) -> tuple[str, bytes] | None:
         )
     rendered = (
         f"---\n{frontmatter}\n---\n\n"
-        f"<!-- {GENERATED_MARKER} (core/agents/{source.name}). -->\n\n"
+        f"<!-- {GENERATED_MARKER} (core/agents/{source.path.name}). -->\n\n"
         f"# Delegate to {name}\n\n"
         "Call `define_subagent` for this conversation, then immediately call "
         "`invoke_subagent` with the user's bounded task. Use only these "
@@ -235,33 +229,35 @@ def _delegate_skill(source: Path) -> tuple[str, bytes] | None:
 
 def _collect_skills_and_agents(root: Path, files: dict[Path, bytes]) -> None:
     skills = root / "core" / "skills"
-    if skills.is_dir():
-        for skill in sorted(path for path in skills.iterdir() if path.is_dir()):
-            _copy_skill(skill, Path("skills") / skill.name, files)
+    for skill in SourceBoundary(root, skills).directories():
+        _copy_skill(root, skill, Path("skills") / skill.name, files)
     agents = root / "core" / "agents"
-    if agents.is_dir():
-        for agent in sorted(agents.glob("*.md")):
-            rendered = _delegate_skill(agent)
-            if rendered is not None:
-                name, content = rendered
-                files[Path("skills") / name / "SKILL.md"] = content
+    for agent in SourceBoundary(root, agents).files("*.md"):
+        rendered = _delegate_skill(agent)
+        if rendered is not None:
+            name, content = rendered
+            files[Path("skills") / name / "SKILL.md"] = content
 
 
 def _collect_runtime(root: Path, files: dict[Path, bytes]) -> None:
     gate_root = root / "core" / "gates"
-    _copy_tree(gate_root / "detectors", Path("scripts/detectors"), files)
-    _copy_tree(gate_root / "rules", Path("scripts/rules"), files)
-    _copy_tree(root / "core" / "memory", Path("memory"), files)
+    _copy_tree(root, gate_root / "detectors", Path("scripts/detectors"), files)
+    _copy_tree(root, gate_root / "rules", Path("scripts/rules"), files)
+    _copy_tree(root, root / "core" / "memory", Path("memory"), files)
     hook = root / "adapters" / "antigravity-2" / "gates" / "mainframe_hook.py"
     runtime = hook.with_name("mainframe_runtime.py")
     state = hook.with_name("mainframe_state.py")
+    boundary = SourceBoundary(root, hook.parent)
     for source in (hook, runtime, state):
-        if not source.is_file():
-            raise ValueError(f"missing Antigravity hook bridge file: {source}")
-        files[Path("scripts") / source.name] = source.read_bytes()
+        if not source.exists() and not source.is_symlink():
+            raise ValueError(
+                f"missing Antigravity hook bridge file: {boundary.label(source)}"
+            )
+        files[Path("scripts") / source.name] = boundary.file(source).read_bytes()
 
 
 def render_plugin(root: Path) -> dict[Path, bytes]:
+    root = root.resolve(strict=True)
     files: dict[Path, bytes] = {
         Path("hooks.json"): _hooks_manifest(),
         Path("plugin.json"): _plugin_manifest(),

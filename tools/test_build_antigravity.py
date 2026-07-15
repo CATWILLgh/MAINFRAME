@@ -102,6 +102,128 @@ def test_projection_excludes_runtime_bytecode_caches() -> None:
     assert not any(path.suffix in {".pyc", ".pyo"} for path in files)
 
 
+def assert_source_rejected(
+    root: Path, source: str, forbidden: tuple[str, ...] = ()
+) -> None:
+    try:
+        build.render_plugin(root)
+    except ValueError as error:
+        message = str(error)
+        assert source in message
+        assert all(value not in message for value in forbidden)
+        assert error.__cause__ is None
+    else:
+        raise AssertionError(f"unsafe Antigravity source was accepted: {source}")
+
+
+def test_contained_file_link_is_copied_by_value() -> None:
+    root = fixture_root()
+    target = root / "core/skills/sample/payload.txt"
+    write(target, b"contained payload")
+    link = target.with_name("linked.txt")
+    link.symlink_to(target.name)
+    markdown_target = target.with_name("payload.md")
+    write(markdown_target, "linked markdown\n")
+    markdown_link = target.with_name("linked.md")
+    markdown_link.symlink_to(markdown_target.name)
+
+    files = build.render_plugin(root)
+
+    assert files[Path("skills/sample/linked.txt")] == b"contained payload"
+    linked_markdown = files[Path("skills/sample/linked.md")].decode()
+    assert "core/skills/sample/linked.md" in linked_markdown
+
+
+def test_external_file_links_are_rejected_at_every_input_boundary() -> None:
+    cases = (
+        ("core/instructions/linked.md", "core/outside-rule.md"),
+        ("core/skills/sample/linked.txt", "core/skills/outside.txt"),
+        ("core/agents/linked.md", "core/outside-agent.md"),
+        ("core/gates/detectors/linked.py", "core/gates/outside.py"),
+        ("core/gates/rules/linked.yml", "core/gates/outside.yml"),
+        ("core/memory/linked.py", "core/outside-memory.py"),
+        (
+            "adapters/antigravity-2/gates/mainframe_runtime.py",
+            "adapters/antigravity-2/outside.py",
+        ),
+    )
+    for source_name, target_name in cases:
+        root = fixture_root()
+        source = root / source_name
+        target = root / target_name
+        write(target, "private external bytes")
+        source.unlink(missing_ok=True)
+        source.symlink_to(target)
+
+        assert_source_rejected(
+            root, source_name, (target_name, "private external bytes")
+        )
+
+
+def test_external_link_error_does_not_expose_absolute_target() -> None:
+    root = fixture_root()
+    outside = Path(tempfile.mkdtemp()) / "private.txt"
+    write(outside, "outside repository secret")
+    source = root / "core/skills/sample/external.txt"
+    source.symlink_to(outside)
+
+    assert_source_rejected(
+        root,
+        "core/skills/sample/external.txt",
+        (str(outside), "outside repository secret"),
+    )
+
+
+def test_broken_and_cyclic_file_links_are_rejected() -> None:
+    root = fixture_root()
+    broken = root / "core/skills/sample/broken.txt"
+    broken.symlink_to("missing.txt")
+    assert_source_rejected(root, "core/skills/sample/broken.txt")
+
+    root = fixture_root()
+    first = root / "core/gates/detectors/cycle-a.py"
+    second = first.with_name("cycle-b.py")
+    first.symlink_to(second.name)
+    second.symlink_to(first.name)
+    assert_source_rejected(root, "core/gates/detectors/cycle-a.py")
+
+
+def test_contained_and_external_directory_links_are_rejected() -> None:
+    cases = (
+        ("linked-directory", "payload"),
+        ("linked-directory", "../outside-payload"),
+        ("linked.pyc", "payload"),
+        ("__pycache__", "payload"),
+    )
+    for link_name, target_name in cases:
+        root = fixture_root()
+        skill = root / "core/skills/sample"
+        target = skill / target_name
+        write(target / "data.txt", "payload")
+        link = skill / link_name
+        link.symlink_to(target, target_is_directory=True)
+
+        assert_source_rejected(root, f"core/skills/sample/{link_name}")
+
+
+def test_source_root_directory_link_is_rejected() -> None:
+    root = fixture_root()
+    skill = root / "core/skills/sample"
+    target = skill.with_name("real-sample")
+    skill.rename(target)
+    skill.symlink_to(target.name, target_is_directory=True)
+
+    assert_source_rejected(root, "core/skills/sample")
+
+
+def test_missing_bridge_error_uses_repository_relative_path() -> None:
+    root = fixture_root()
+    source_name = "adapters/antigravity-2/gates/mainframe_state.py"
+    (root / source_name).unlink()
+
+    assert_source_rejected(root, source_name, (str(root),))
+
+
 def test_hooks_use_stable_desktop_plugin_path_and_all_official_events() -> None:
     hooks = json.loads(build.render_plugin(fixture_root())[Path("hooks.json")].decode())
     assert set(hooks) == {"mainframe"}
@@ -139,6 +261,8 @@ def test_rule_limit_is_measured_in_characters() -> None:
         build.render_plugin(root)
     except ValueError as error:
         assert "characters" in str(error)
+        assert "core/instructions/10-partnership.md" in str(error)
+        assert str(root) not in str(error)
     else:
         raise AssertionError("oversized Antigravity rule was accepted")
 
