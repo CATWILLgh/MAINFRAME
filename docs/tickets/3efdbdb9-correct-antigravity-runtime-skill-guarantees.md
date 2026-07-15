@@ -1,7 +1,7 @@
 ---
 id: 3efdbdb9
 title: Remove Claude-only guarantees from projected Antigravity skills
-status: open
+status: approved
 priority: medium
 component: antigravity-projection
 discovered: 2026-07-15
@@ -56,8 +56,66 @@ Blind substitution makes future Claude-specific claims easy to miss.
 
 ## Sources
 
-- `adapters/antigravity-2/build_antigravity.py:30-75`
-- `adapters/antigravity-2/build_antigravity.py:151-170`
-- `dist/antigravity-2/plugin/skills/secrets-handling/SKILL.md:17-30`
-- `docs/layers/permissions.md:14-21`
-- <https://antigravity.google/docs/ide-settings>
+- `adapters/antigravity-2/skill_projection.py:14-127`
+- `adapters/antigravity-2/skill_projection.py:130-336`
+- `adapters/antigravity-2/build_antigravity.py:117-145`
+- `adapters/antigravity-2/build_antigravity.py:148-224`
+- `tools/test_build_antigravity.py:266-341`
+- [Antigravity permissions](https://antigravity.google/docs/permissions?app=antigravity)
+- [Antigravity 2.0 slash commands](https://antigravity.google/docs/workspaces)
+- [Antigravity settings](https://antigravity.google/docs/settings?app=antigravity)
+- [Antigravity plugins](https://antigravity.google/docs/plugins)
+- [Antigravity skills](https://antigravity.google/docs/skills)
+- [Antigravity hooks](https://antigravity.google/docs/hooks?app=antigravity)
+
+## Resolution (2026-07-15)
+
+**Implementer:** Codex
+**Commit:** f8144307c225924b2237d84d64402329ce2f7137
+**Summary:** Antigravity skill projection now has an explicit inventory and
+per-skill policy. Runtime-sensitive overlays replace unsupported permission,
+shell, plan-mode, and reviewer guarantees with documented Antigravity-native
+bindings. Every Markdown source and delegated skill is validated after
+projection; exact overlay anchors and required files fail closed on source drift.
+
+**Compatibility evidence:** The generated `task-workflow` retains recon, the
+three independent review checkpoints, TDD, verification, ticketing, the
+edge-case sweep, git safety, commit discipline, explicit written-plan approval,
+and the persistent audit copy. Step 6a routes through `delegate-decision-reviewer`, so
+the original specialist methodology and capability restrictions remain intact;
+the native `/goal` command remains an autonomous execution boundary.
+Core skills and the Claude Code, Codex, and OpenCode adapters were not changed.
+
+**Claims to verify on audit:**
+- Known Claude-only guarantees are rejected case-insensitively in both source
+  and delegated skill projections, including uppercase `.MD` inputs.
+- Runtime-sensitive skills cannot appear without an explicit projection policy;
+  overlay targets and source anchors fail closed.
+- Generated `secrets-handling` makes policy claims without claiming installed
+  Antigravity permissions or undocumented shell-startup behavior.
+- The focused builder suite passes 19 tests; all 38 Python test files and both
+  Node.js suites pass with Ruff, render, skill, hook, link, native 2.2.1, and
+  generated-artifact checks green.
+
+## Audit (2026-07-15)
+
+**Auditor:** Independent Codex reviewer (`final_projection_audit_approved`)
+**Verdict:** Approved
+**Verified:**
+- Generated `task-workflow` preserves the original approval distinction:
+  `/goal` automatically approves a written plan, ordinary written plans require
+  an explicit go, and inline plans without a file retain their original path.
+- `/goal` launches the autonomous execution phase without intermediate
+  questions, matching the official Antigravity 2.0 contract.
+- Step 6a routes through `delegate-decision-reviewer`, preserving the specialist
+  methodology, read-only capability contract, and required method skills.
+- Policy inventory, exact overlay anchors, required overlay files, and
+  case-insensitive post-projection validation fail closed for source and
+  delegated skills, including uppercase `.MD` inputs.
+- Commit scope is limited to the Antigravity builder, projection module, and
+  tests; core and the Claude Code, Codex, and OpenCode adapters are unchanged.
+**Regression scan:** The auditor independently passed 19/19 focused tests,
+Ruff, native Antigravity 2.2.1 validation, generated drift checking, and
+`git diff --check`. The implementation run passed all 38 Python test files,
+both Node.js suites, render and skill validators, hook smoke, generated scans,
+and relative-link checks.
