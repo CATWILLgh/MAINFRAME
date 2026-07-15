@@ -28,6 +28,12 @@ import sys
 
 import yaml
 
+TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "tools")
+sys.path.insert(0, TOOLS)
+
+from adapter_profiles import project_text
+
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 
 _GENERATED_NOTE = (
@@ -54,12 +60,28 @@ _PRELOAD_REWRITES = [
 ]
 
 
-def _rewrite_runtime_prose(text, home):
+def project_runtime_text(text, profile):
+    """Resolve neutral runtime references for an autonomous OpenCode bundle."""
+    text = project_text(text, profile)
+    text = text.replace(
+        "~/.claude/skills/mainframe/skills/", f"{profile.skills_root}/")
+    text = text.replace("~/.claude/", f"{profile.config_root}/")
+    text = text.replace("~/.claude", profile.config_root)
+    return text.replace("CLAUDE.md", "AGENTS.md")
+
+
+def _rewrite_runtime_prose(text, home, profile=None):
     """Adapt Claude-Code-runtime prose (links, preload claims) for OpenCode."""
-    text = text.replace("](../skills/",
-                        f"]({home}/.claude/skills/mainframe/skills/")
-    text = re.sub(r"]\((?:\.\./)+[^)]*CLAUDE\.md",
-                  f"]({home}/.claude/CLAUDE.md", text)
+    if profile is None:
+        text = text.replace("](../skills/",
+                            f"]({home}/.claude/skills/mainframe/skills/")
+        text = re.sub(r"]\((?:\.\./)+[^)]*CLAUDE\.md",
+                      f"]({home}/.claude/CLAUDE.md", text)
+    else:
+        text = text.replace("](../skills/", f"]({profile.skills_root}/")
+        text = re.sub(r"]\((?:\.\./)+[^)]*CLAUDE\.md",
+                      f"]({profile.config_root}/AGENTS.md", text)
+        text = project_runtime_text(text, profile)
     for rx, replacement in _PRELOAD_REWRITES:
         text = rx.sub(replacement, text)
     return text
@@ -121,13 +143,13 @@ ENRICH_KEYS = ("model", "temperature", "mode", "color", "steps",
                "variant", "options")
 
 
-def project_agent(meta, body, enrich=None):
+def project_agent(meta, body, enrich=None, profile=None):
     """Render one hub agent as OpenCode agent markdown, or None to skip."""
     description = meta.get("description")
     if not description:
         return None
     home = os.path.expanduser("~")
-    fm = {"description": _rewrite_runtime_prose(description, home),
+    fm = {"description": _rewrite_runtime_prose(description, home, profile),
           "mode": "subagent"}
     if meta.get("turn-budget"):
         fm["steps"] = int(meta["turn-budget"])
@@ -143,7 +165,7 @@ def project_agent(meta, body, enrich=None):
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True,
                            width=100000).rstrip("\n")
 
-    body = _rewrite_runtime_prose(body, home)
+    body = _rewrite_runtime_prose(body, home, profile)
 
     note = _GENERATED_NOTE.format(marker=GENERATED_MARKER,
                                   name=meta.get("name", "unknown"))
@@ -257,7 +279,7 @@ def _load_json(path):
                 f"written — fix or remove the file and re-run") from e
 
 
-def _collect_agents(root, enrich=None):
+def _collect_agents(root, enrich=None, profile=None):
     agents_dir = os.path.join(root, "core", "agents")
     out = []
     for fname in sorted(os.listdir(agents_dir)) if os.path.isdir(agents_dir) else []:
@@ -265,7 +287,7 @@ def _collect_agents(root, enrich=None):
             continue
         with open(os.path.join(agents_dir, fname)) as f:
             meta, body = parse_frontmatter(f.read())
-        rendered = project_agent(meta, body, enrich=enrich)
+        rendered = project_agent(meta, body, enrich=enrich, profile=profile)
         if rendered is None:
             print(f"[skip] {fname}: no description in frontmatter")
             continue

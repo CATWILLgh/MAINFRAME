@@ -91,6 +91,20 @@ def test_emit_note_and_block():
         os.environ.pop("MAINFRAME_FEEDBACK_NUDGE", None)
 
 
+def test_feedback_skill_directory_can_be_adapter_local():
+    root = tempfile.mkdtemp()
+    skill = os.path.join(root, "skills", "harness-feedback")
+    try:
+        os.environ.pop("MAINFRAME_FEEDBACK_NUDGE", None)
+        os.environ["MAINFRAME_FEEDBACK_SKILL_DIR"] = skill
+        assert not _hooklib.feedback_skill_installed()
+        os.makedirs(skill)
+        assert _hooklib.feedback_skill_installed()
+    finally:
+        os.environ.pop("MAINFRAME_FEEDBACK_SKILL_DIR", None)
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_added_lines_by_file():
     d = _repo()
     try:
