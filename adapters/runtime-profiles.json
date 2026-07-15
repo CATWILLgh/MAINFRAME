@@ -1,0 +1,20 @@
+{
+  "claude-code": {
+    "config_root": "~/.claude",
+    "skills_root": "~/.claude/skills/mainframe/skills",
+    "plans_root": "~/.claude/plans",
+    "detectors_root": "~/.claude/skills/mainframe/hooks/scripts"
+  },
+  "codex": {
+    "config_root": "${CODEX_HOME:-$HOME/.codex}",
+    "skills_root": "${CODEX_HOME:-$HOME/.codex}/skills",
+    "plans_root": "${CODEX_HOME:-$HOME/.codex}/plans",
+    "detectors_root": "${CODEX_HOME:-$HOME/.codex}/gates/detectors"
+  },
+  "opencode": {
+    "config_root": "${XDG_CONFIG_HOME:-$HOME/.config}/opencode",
+    "skills_root": "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills",
+    "plans_root": "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plans",
+    "detectors_root": "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/gates/detectors"
+  }
+}
