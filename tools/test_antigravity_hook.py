@@ -3,18 +3,19 @@
 
 from __future__ import annotations
 
-import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
+from importlib import import_module
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
 HOOK_DIR = REPO / "adapters" / "antigravity-2" / "gates"
 sys.path.insert(0, str(HOOK_DIR))
-import mainframe_hook as hook
+hook = import_module("mainframe_hook")
 
 
 def bridge() -> hook.Bridge:
@@ -22,8 +23,8 @@ def bridge() -> hook.Bridge:
     return hook.Bridge(
         plugin_root=REPO,
         state_dir=state,
-        detector_runner=lambda _name, _payload: None,
-        memory_loader=lambda _payload: "",
+        detector_runner=lambda _name, _payload, _timeout: None,
+        memory_loader=lambda _payload, _timeout: "",
     )
 
 
@@ -40,7 +41,7 @@ def desktop_payload(**extra: object) -> dict:
 def test_rejects_cli_and_non_antigravity_transcripts() -> None:
     instance = bridge()
     loaded: list[str] = []
-    instance.memory_loader = lambda payload: loaded.append(
+    instance.memory_loader = lambda payload, _timeout: loaded.append(
         str(payload["transcriptPath"])
     ) or "desktop memory"
     desktop = desktop_payload()
@@ -56,7 +57,7 @@ def test_rejects_cli_and_non_antigravity_transcripts() -> None:
 def test_pre_tool_translates_and_enforces_strongest_verdict() -> None:
     calls: list[tuple[str, dict]] = []
 
-    def detector(name: str, payload: dict) -> dict | None:
+    def detector(name: str, payload: dict, _timeout: float) -> dict | None:
         calls.append((name, payload))
         if name == "path-validation.py":
             return {
@@ -105,7 +106,7 @@ def test_all_official_tool_argument_shapes_are_translated() -> None:
     }
     for index, (name, (args, tool_name, tool_input)) in enumerate(cases.items()):
         seen = []
-        instance.detector_runner = lambda _name, payload: seen.append(payload)
+        instance.detector_runner = lambda _name, payload, _timeout: seen.append(payload)
         instance.handle("PreToolUse", desktop_payload(
             stepIdx=index, toolCall={"name": name, "args": args}
         ))
@@ -116,7 +117,7 @@ def test_all_official_tool_argument_shapes_are_translated() -> None:
 def test_post_tool_restores_cached_args_and_queues_advisory() -> None:
     observed: list[dict] = []
 
-    def detector(_name: str, payload: dict) -> dict | None:
+    def detector(_name: str, payload: dict, _timeout: float) -> dict | None:
         observed.append(payload)
         return {"hookSpecificOutput": {"additionalContext": "Review the changed file."}}
 
@@ -139,7 +140,7 @@ def test_post_tool_restores_cached_args_and_queues_advisory() -> None:
 
 def test_pre_tool_advisory_is_delivered_after_invocation() -> None:
     instance = bridge()
-    instance.detector_runner = lambda _name, _payload: {
+    instance.detector_runner = lambda _name, _payload, _timeout: {
         "hookSpecificOutput": {"additionalContext": "Use the safe command form."}
     }
 
@@ -154,7 +155,7 @@ def test_pre_tool_advisory_is_delivered_after_invocation() -> None:
 
 def test_pre_invocation_injects_bounded_memory_with_stable_sentinel() -> None:
     instance = bridge()
-    instance.memory_loader = lambda _payload: (
+    instance.memory_loader = lambda _payload, _timeout: (
         f"durable fact {hook.MEMORY_SENTINEL_END} injected close"
     )
     result = instance.handle("PreInvocation", desktop_payload())
@@ -171,7 +172,7 @@ def test_stop_continues_once_only_for_substantive_desktop_session() -> None:
     instance = bridge()
     calls = []
 
-    def detector(name: str, payload: dict) -> dict | None:
+    def detector(name: str, payload: dict, _timeout: float) -> dict | None:
         calls.append((name, payload))
         if name == "memory-reminder.py":
             return {"hookSpecificOutput": {"additionalContext": "Persist durable memory."}}
@@ -203,7 +204,7 @@ def test_stop_aggregates_every_blocker_before_deciding() -> None:
         hook.STOP_DETECTORS[4]: 42,
     }
 
-    def detector(name: str, _payload: dict) -> object:
+    def detector(name: str, _payload: dict, _timeout: float) -> object:
         calls.append(name)
         if name in blockers:
             return {"decision": "block", "reason": blockers[name]}
@@ -232,7 +233,7 @@ def test_stop_aggregation_is_order_independent_and_bounded() -> None:
     def run(order: tuple[str, ...]) -> dict:
         hook.STOP_DETECTORS = order
         instance = bridge()
-        instance.detector_runner = lambda name, _payload: {
+        instance.detector_runner = lambda name, _payload, _timeout: {
             "decision": "block", "reason": f"{name}: " + "🙂" * 10_000,
         }
         return instance.handle("Stop", desktop_payload(
@@ -255,7 +256,7 @@ def test_repeated_stop_rechecks_all_blockers_without_looping() -> None:
     instance = bridge()
     calls: list[str] = []
 
-    def detector(name: str, _payload: dict) -> dict:
+    def detector(name: str, _payload: dict, _timeout: float) -> dict:
         calls.append(name)
         if name == "memory-reminder.py":
             raise AssertionError("memory reminder must not run while gates block")
@@ -276,11 +277,41 @@ def test_repeated_stop_rechecks_all_blockers_without_looping() -> None:
 def test_unknown_events_and_infrastructure_failures_are_open() -> None:
     instance = bridge()
     assert instance.handle("FutureEvent", desktop_payload()) == {}
-    instance.detector_runner = lambda _name, _payload: (_ for _ in ()).throw(OSError())
+    instance.detector_runner = lambda _name, _payload, _timeout: (
+        _ for _ in ()
+    ).throw(OSError())
     assert instance.handle("PreToolUse", desktop_payload(
         stepIdx=1,
         toolCall={"name": "replace_file_content", "args": {}},
     )) == {}
+
+
+def test_detector_failure_cannot_erase_other_results() -> None:
+    for index, decision in enumerate(("ask", "deny"), start=31):
+        instance = bridge()
+
+        def detector(name: str, _payload: dict, _timeout: float) -> dict | None:
+            if name == hook.PRE_DETECTORS[0]:
+                return {"hookSpecificOutput": {
+                    "permissionDecision": decision,
+                    "permissionDecisionReason": "unsafe path",
+                }}
+            if name == hook.PRE_DETECTORS[1]:
+                raise subprocess.TimeoutExpired(name, 1)
+            if name == hook.PRE_DETECTORS[2]:
+                return {"hookSpecificOutput": {"additionalContext": "Later advisory."}}
+            return None
+
+        instance.detector_runner = detector
+        result = instance.handle("PreToolUse", desktop_payload(
+            stepIdx=index,
+            toolCall={"name": "run_command", "args": {"CommandLine": "rm -rf /"}},
+        ))
+
+        assert result == {"decision": decision, "reason": "unsafe path"}
+        assert instance.handle("PostInvocation", desktop_payload()) == {
+            "injectSteps": [{"ephemeralMessage": "Later advisory."}]
+        }
 
 
 def test_input_cap_and_invalid_json_emit_empty_object() -> None:

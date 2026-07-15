@@ -8,12 +8,13 @@ import plistlib
 import subprocess
 import sys
 import tempfile
+from importlib import import_module
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 ADAPTER = REPO / "adapters" / "antigravity-2"
 sys.path.insert(0, str(ADAPTER))
-import build_antigravity as build
+build = import_module("build_antigravity")
 
 
 def write(path: Path, content: str | bytes) -> None:
@@ -54,6 +55,7 @@ def fixture_root() -> Path:
     }.items():
         write(root / "adapters/antigravity-2/instructions" / name, body)
     write(root / "adapters/antigravity-2/gates/mainframe_hook.py", "print()\n")
+    write(root / "adapters/antigravity-2/gates/mainframe_runtime.py", "VALUE = 1\n")
     write(root / "adapters/antigravity-2/gates/mainframe_state.py", "VALUE = 1\n")
     return root
 
@@ -73,6 +75,7 @@ def test_plan_is_deterministic_and_self_contained() -> None:
         Path("skills/sample/reference.md"),
         Path("skills/delegate-researcher/SKILL.md"),
         Path("scripts/mainframe_hook.py"),
+        Path("scripts/mainframe_runtime.py"),
         Path("scripts/mainframe_state.py"),
         Path("scripts/detectors/path-validation.py"),
         Path("scripts/detectors/_hooklib.py"),
@@ -114,6 +117,10 @@ def test_hooks_use_stable_desktop_plugin_path_and_all_official_events() -> None:
         else:
             assert all("matcher" not in entry and "hooks" not in entry for entry in entries)
             handlers = entries
+        assert all(
+            handler["timeout"] == build.HANDLER_TIMEOUT_SECONDS[event]
+            for handler in handlers
+        )
         commands.update(handler["command"] for handler in handlers)
     assert commands == {
         "python3 ~/.gemini/config/plugins/mainframe/scripts/mainframe_hook.py " + event

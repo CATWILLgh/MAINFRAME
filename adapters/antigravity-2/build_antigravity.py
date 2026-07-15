@@ -14,6 +14,8 @@ from pathlib import Path
 
 import yaml
 
+from gates.mainframe_runtime import HANDLER_TIMEOUT_SECONDS
+
 
 ADAPTER_VERSION = "0.1.0"
 BUNDLE_IDENTIFIER = "com.google.antigravity"
@@ -104,7 +106,11 @@ def _plugin_manifest() -> bytes:
 def _hooks_manifest() -> bytes:
     namespace = {}
     for event in HOOK_EVENTS:
-        handler = {"type": "command", "command": f"{PLUGIN_COMMAND} {event}"}
+        handler = {
+            "type": "command",
+            "command": f"{PLUGIN_COMMAND} {event}",
+            "timeout": HANDLER_TIMEOUT_SECONDS[event],
+        }
         if event in {"PreToolUse", "PostToolUse"}:
             namespace[event] = [{"matcher": "*", "hooks": [handler]}]
         else:
@@ -247,8 +253,9 @@ def _collect_runtime(root: Path, files: dict[Path, bytes]) -> None:
     _copy_tree(gate_root / "rules", Path("scripts/rules"), files)
     _copy_tree(root / "core" / "memory", Path("memory"), files)
     hook = root / "adapters" / "antigravity-2" / "gates" / "mainframe_hook.py"
+    runtime = hook.with_name("mainframe_runtime.py")
     state = hook.with_name("mainframe_state.py")
-    for source in (hook, state):
+    for source in (hook, runtime, state):
         if not source.is_file():
             raise ValueError(f"missing Antigravity hook bridge file: {source}")
         files[Path("scripts") / source.name] = source.read_bytes()

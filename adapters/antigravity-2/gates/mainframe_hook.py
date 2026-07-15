@@ -6,11 +6,22 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Callable
 
+from mainframe_runtime import (
+    DETECTOR_TIMEOUT_SECONDS,
+    MEMORY_LOADER_TIMEOUT_SECONDS,
+    POST_DETECTORS,
+    PRE_DETECTORS,
+    STOP_DETECTORS,
+    event_deadline,
+    remaining_timeout,
+    run_detector_group,
+    run_json_command,
+)
 from mainframe_state import (
     MAX_STATE_FILES,
     atomic_json as _atomic_json,
@@ -20,7 +31,6 @@ from mainframe_state import (
 
 
 MAX_INPUT_BYTES = 1_048_576
-MAX_DETECTOR_OUTPUT_BYTES = 262_144
 MAX_MEMORY_INJECTION_BYTES = 30_000
 MAX_STOP_REASON_BYTES = 30_000
 MAX_QUEUED_NOTES = 12
@@ -40,19 +50,8 @@ TOOL_NAMES = {
     "replace_file_content": "Edit",
     "multi_replace_file_content": "MultiEdit",
 }
-PRE_DETECTORS = ("path-validation.py", "secret-commit-gate.py",
-                 "bash-pattern-reminder.py", "commit-conventional-reminder.py")
-POST_DETECTORS = (
-    "scan-suppression-markers.py", "comment-discipline-reminder.py",
-    "ticket-id-format-reminder.py", "python-security-scan.py",
-    "python-deps-audit.py", "nodejs-deps-audit.py", "nodejs-security-scan.py",
-)
-STOP_DETECTORS = ("stop-gate-suppression-markers.py",
-                  "stop-gate-comment-discipline.py", "python-security-stop-gate.py",
-                  "nodejs-security-stop-gate.py", "frontend-fsd-gate.py")
-
-DetectorRunner = Callable[[str, dict], dict | None]
-MemoryLoader = Callable[[dict], str]
+DetectorRunner = Callable[[str, dict, float], dict | None]
+MemoryLoader = Callable[[dict, float], str]
 
 
 def _hash(*parts: object) -> str:
@@ -137,7 +136,7 @@ class Bridge:
     ) -> None:
         self.plugin_root = plugin_root
         self.state_dir = state_dir
-        self.detector_runner = detector_runner or self._run_detector
+        self.detector_runner = detector_runner
         self.memory_loader = memory_loader or self._load_memory
 
     def handle(self, event: str, payload: dict) -> dict:
@@ -152,7 +151,7 @@ class Bridge:
                 "Stop": self._stop,
             }
             handler = handlers.get(event)
-            return handler(payload) if handler else {}
+            return handler(payload, event_deadline(event)) if handler else {}
         except Exception:
             return {}
 
@@ -178,19 +177,37 @@ class Bridge:
         key = _hash(payload.get("conversationId"), payload.get("stepIdx"))
         return self.state_dir / "tool-cache" / f"{key}.json"
 
-    def _pre_tool(self, payload: dict) -> dict:
+    def _run_detectors(
+        self, names: tuple[str, ...], payload: dict, deadline: float
+    ) -> list[dict | None]:
+        if self.detector_runner is None:
+            return run_detector_group(self.plugin_root, names, payload, deadline)
+        results = []
+        for name in names:
+            timeout = remaining_timeout(deadline, DETECTOR_TIMEOUT_SECONDS[name])
+            if timeout <= 0:
+                results.append(None)
+                continue
+            try:
+                results.append(self.detector_runner(name, payload, timeout))
+            except Exception:
+                results.append(None)
+        return results
+
+    def _pre_tool(self, payload: dict, deadline: float) -> dict:
         call = payload.get("toolCall")
         if not isinstance(call, dict):
             return {}
         neutral = self._neutral_payload(payload, call)
         _atomic_json(self._cache_path(payload), neutral)
-        verdicts = [
-            result
-            for name in PRE_DETECTORS
-            if (result := self.detector_runner(name, neutral))
-        ]
+        verdicts = [result for result in self._run_detectors(
+            PRE_DETECTORS, neutral, deadline
+        ) if result]
         for result in verdicts:
-            self._queue_result(payload, result)
+            try:
+                self._queue_result(payload, result)
+            except OSError:
+                pass
         return self._pre_verdict(verdicts)
 
     @staticmethod
@@ -208,7 +225,7 @@ class Bridge:
                 selected = candidate
         return {"decision": selected[1], "reason": selected[2]} if selected else {}
 
-    def _post_tool(self, payload: dict) -> dict:
+    def _post_tool(self, payload: dict, deadline: float) -> dict:
         cache = self._cache_path(payload)
         prune_state_directory(cache.parent)
         neutral = _read_json(cache, {})
@@ -220,10 +237,12 @@ class Bridge:
             return {}
         neutral["hook_event_name"] = "PostToolUse"
         neutral["tool_error"] = payload.get("error")
-        for name in POST_DETECTORS:
-            result = self.detector_runner(name, neutral)
+        for result in self._run_detectors(POST_DETECTORS, neutral, deadline):
             if result:
-                self._queue_result(payload, result)
+                try:
+                    self._queue_result(payload, result)
+                except OSError:
+                    pass
         return {}
 
     def _queue_path(self, payload: dict) -> Path:
@@ -243,8 +262,14 @@ class Bridge:
                 queue.append(note)
         _atomic_json(path, queue[-MAX_QUEUED_NOTES:])
 
-    def _pre_invocation(self, payload: dict) -> dict:
-        memory = self.memory_loader(payload)
+    def _pre_invocation(self, payload: dict, deadline: float) -> dict:
+        timeout = remaining_timeout(deadline, MEMORY_LOADER_TIMEOUT_SECONDS)
+        if timeout <= 0:
+            return {}
+        try:
+            memory = self.memory_loader(payload, timeout)
+        except Exception:
+            return {}
         if not memory:
             return {}
         memory = memory.replace(MEMORY_SENTINEL, "[memory delimiter removed]")
@@ -255,7 +280,7 @@ class Bridge:
         bounded = memory.encode()[:budget].decode("utf-8", "ignore")
         return {"injectSteps": [{"ephemeralMessage": prefix + bounded + suffix}]}
 
-    def _post_invocation(self, payload: dict) -> dict:
+    def _post_invocation(self, payload: dict, _deadline: float) -> dict:
         path = self._queue_path(payload)
         prune_state_directory(path.parent)
         notes = _read_json(path, [])
@@ -267,7 +292,7 @@ class Bridge:
             return {}
         return {"injectSteps": [{"ephemeralMessage": "\n\n".join(notes)}]}
 
-    def _stop(self, payload: dict) -> dict:
+    def _stop(self, payload: dict, deadline: float) -> dict:
         roots = _workspace_paths(payload)
         project = roots[0] if roots else ""
         neutral = {
@@ -279,8 +304,8 @@ class Bridge:
             "stop_hook_active": False,
         }
         blockers = []
-        for name in STOP_DETECTORS:
-            result = self.detector_runner(name, neutral)
+        results = self._run_detectors(STOP_DETECTORS, neutral, deadline)
+        for name, result in zip(STOP_DETECTORS, results, strict=True):
             if isinstance(result, dict) and result.get("decision") == "block":
                 blockers.append((name, result.get("reason")))
         if blockers:
@@ -294,7 +319,9 @@ class Bridge:
             "memory_backend": "antigravity-2",
             "memory_note": MEMORY_REMINDER,
         }
-        result = self.detector_runner("memory-reminder.py", memory_payload)
+        result = self._run_detectors(
+            ("memory-reminder.py",), memory_payload, deadline
+        )[0]
         output = result.get("hookSpecificOutput") if result else None
         note = output.get("additionalContext") if isinstance(output, dict) else None
         if not note or self._stop_seen(payload):
@@ -315,27 +342,7 @@ class Bridge:
             stream.write("1")
         return False
 
-    def _run_detector(self, name: str, payload: dict) -> dict | None:
-        script = self.plugin_root / "scripts" / "detectors" / name
-        if not script.is_file():
-            return None
-        result = subprocess.run(
-            [sys.executable, str(script)],
-            input=json.dumps(payload).encode(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=10,
-            check=False,
-        )
-        if result.returncode or not result.stdout or len(result.stdout) > MAX_DETECTOR_OUTPUT_BYTES:
-            return None
-        try:
-            parsed = json.loads(result.stdout)
-            return parsed if isinstance(parsed, dict) else None
-        except json.JSONDecodeError:
-            return None
-
-    def _load_memory(self, payload: dict) -> str:
+    def _load_memory(self, payload: dict, timeout: float) -> str:
         store = self.plugin_root / "memory" / "store.py"
         if not store.is_file():
             return ""
@@ -352,20 +359,8 @@ class Bridge:
         for workspace in workspaces:
             if isinstance(workspace, str) and workspace:
                 command.extend(("--workspace", workspace))
-        result = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=10,
-            check=False,
-        )
-        if result.returncode or len(result.stdout) > MAX_DETECTOR_OUTPUT_BYTES:
-            return ""
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return ""
-        prompt = data.get("prompt") if isinstance(data, dict) else None
+        data = run_json_command(command, time.monotonic() + timeout, timeout)
+        prompt = data.get("prompt") if data else None
         return str(prompt) if prompt else ""
 
 
