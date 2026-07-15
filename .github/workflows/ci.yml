@@ -36,14 +36,12 @@ jobs:
           fail=0
           for t in tools/test_*.py; do
             # test_build_hub_page / test_build_opencode(_config) / test_build_codex /
-            # test_install_codex / test_render_core / test_render_reminder /
-            # test_validate_skill need pyyaml (the last also tiktoken); they run
-            # after Validator dependencies.
+            # test_render_core / test_render_reminder / test_validate_skill need
+            # pyyaml (the last also tiktoken); they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
             [ "$t" = "tools/test_build_opencode_config.py" ] && continue
             [ "$t" = "tools/test_build_codex.py" ] && continue
-            [ "$t" = "tools/test_install_codex.py" ] && continue
             [ "$t" = "tools/test_render_core.py" ] && continue
             [ "$t" = "tools/test_render_reminder.py" ] && continue
             [ "$t" = "tools/test_validate_skill.py" ] && continue
@@ -83,14 +81,6 @@ jobs:
 
       - name: Codex projection generator tests
         run: python3 tools/test_build_codex.py
-
-      # install.sh deliberately uses the repository venv for its generators.
-      # CI creates the same runtime contract before exercising installer status
-      # propagation with a fake native Codex validator.
-      - name: Codex installer validation tests
-        run: |
-          python3 -m venv --system-site-packages .venv
-          python3 tools/test_install_codex.py
 
       # The dispatcher plugin is plain ESM JS precisely so stock node (present
       # on the runner) can test it — the Bun shell is faked inside the test.

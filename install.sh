@@ -172,6 +172,17 @@ MANAGED_DIRS=(
     "dist/claude-code/output-styles:${CLAUDE_DIR}/output-styles"
 )
 
+# These source directories are valid when absent or empty. Every other source
+# listed above is part of the default delivery contract.
+OPTIONAL_MANAGED_SOURCES=(
+    "dist/claude-code/rules"
+)
+GENERATED_DEV_SOURCES=(
+    "workspace/runtime"
+)
+SECRET_HELPER_SOURCE="dist/claude-code/scripts/secret"
+CREDENTIALS_INDEX_SOURCE="dist/claude-code/templates/credentials-index.md"
+
 # Safe backup dir for items inside managed dirs (skills/, hooks/, rules/, etc.).
 # Claude Code scans those dirs wholesale, so a sibling .backup-* file there could
 # trip discovery. Top-level files (CLAUDE.md, settings.json) keep the sibling-file
@@ -193,6 +204,62 @@ check_prerequisites() {
             mkdir -p "${CLAUDE_DIR}"
         fi
     fi
+}
+
+_source_list_contains() {
+    local needle="$1"
+    shift
+    local candidate
+    for candidate in "$@"; do
+        [[ "$candidate" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
+_required_source_available() {
+    local src_abs="${PROJECT_ROOT}/$1"
+    local visible_only="${2:-0}"
+    if [[ -d "$src_abs" ]]; then
+        compgen -G "${src_abs}/*" >/dev/null && return 0
+        [[ "$visible_only" -eq 1 ]] && return 1
+        compgen -G "${src_abs}/.[!.]*" >/dev/null ||
+            compgen -G "${src_abs}/..?*" >/dev/null
+        return
+    fi
+    [[ -e "$src_abs" ]]
+}
+
+_check_required_source() {
+    local src_rel="$1"
+    local visible_only="${2:-0}"
+    if _required_source_available "$src_rel" "$visible_only"; then
+        return 0
+    fi
+    log_error "required source missing or empty: ${src_rel}"
+    return 1
+}
+
+check_required_install_sources() {
+    local failed=0 entry src
+    for entry in "${ARTIFACTS[@]}"; do
+        src="${entry%%:*}"
+        _check_required_source "$src" || failed=1
+    done
+    for entry in "${MANAGED_DIRS[@]}"; do
+        src="${entry%%:*}"
+        _source_list_contains "$src" "${OPTIONAL_MANAGED_SOURCES[@]}" && continue
+        _check_required_source "$src" 1 || failed=1
+    done
+    _check_required_source "$SECRET_HELPER_SOURCE" || failed=1
+    _check_required_source "$CREDENTIALS_INDEX_SOURCE" || failed=1
+    if [[ $DEV -eq 1 ]]; then
+        for entry in "${DEV_ARTIFACTS[@]}"; do
+            src="${entry%%:*}"
+            _source_list_contains "$src" "${GENERATED_DEV_SOURCES[@]}" && continue
+            _check_required_source "$src" || failed=1
+        done
+    fi
+    return "$failed"
 }
 
 # Warn (do NOT fail) if python3 is missing. The hub's hooks (CLAUDE.md/skill
@@ -379,10 +446,10 @@ _append_secret_source_line() {
 
 bootstrap_secrets() {
     local bin_dir="$HOME/.local/bin"
-    local secret_src="${PROJECT_ROOT}/dist/claude-code/scripts/secret"
+    local secret_src="${PROJECT_ROOT}/${SECRET_HELPER_SOURCE}"
     local secret_link="${bin_dir}/secret"
     local store_dir="${XDG_CONFIG_HOME:-$HOME/.config}/credentials"
-    local index_src="${PROJECT_ROOT}/dist/claude-code/templates/credentials-index.md"
+    local index_src="${PROJECT_ROOT}/${CREDENTIALS_INDEX_SOURCE}"
     local index_dst="${CLAUDE_DIR}/credentials-index.md"
     local zshenv="$HOME/.zshenv"
     local source_line='[ -f ~/.config/credentials/secrets.env ] && set -a && . ~/.config/credentials/secrets.env && set +a'
@@ -637,13 +704,13 @@ install_opencode() {
     cfg_dir="$(opencode_config_dir)"
 
     if ! command -v opencode >/dev/null 2>&1; then
-        log_warn "opencode not found on PATH — skipping the OpenCode layer."
-        return 0
+        log_error "opencode not found on PATH — requested OpenCode layer cannot be installed."
+        return 1
     fi
     if [[ ! -x "$py" ]]; then
-        log_warn "Skipped OpenCode projection — .venv missing"
-        log_warn "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
-        return 0
+        log_error "OpenCode projection failed — .venv missing"
+        log_error "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
+        return 1
     fi
 
     local gen_args=(--root "${PROJECT_ROOT}")
@@ -678,8 +745,12 @@ uninstall_opencode() {
     uninstall_dir_contents "$OPENCODE_SKILLS_SRC" "$(opencode_config_dir)/skills"
     local agents_md="$(opencode_config_dir)/AGENTS.md"
     if [[ -L "$agents_md" && "$(readlink "$agents_md")" == "${PROJECT_ROOT}/dist/opencode/AGENTS.md" ]]; then
-        rm "$agents_md"
-        log_ok "Removed AGENTS.md symlink."
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would remove symlink ${agents_md}"
+        else
+            rm "$agents_md"
+            log_ok "Removed AGENTS.md symlink."
+        fi
     fi
     log_warn "opencode.json is left as-is (hub-managed 'permission'/'mcp' keys"
     log_warn "included); previous version, if any, is at opencode.json.backup."
@@ -791,13 +862,13 @@ install_codex() {
     local cfg_dir
     cfg_dir="$(codex_config_dir)"
     if ! command -v codex >/dev/null 2>&1; then
-        log_warn "codex not found on PATH — skipping the Codex layer."
-        return 0
+        log_error "codex not found on PATH — requested Codex layer cannot be installed."
+        return 1
     fi
     if [[ ! -x "$py" ]]; then
-        log_warn "Skipped Codex projection — .venv missing"
-        log_warn "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
-        return 0
+        log_error "Codex projection failed — .venv missing"
+        log_error "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
+        return 1
     fi
 
     local gen_args=(--root "${PROJECT_ROOT}" --validate-native)
@@ -876,15 +947,21 @@ uninstall_dir_contents() {
     local target_dir="$2"
     local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
 
-    if [[ ! -d "$src_dir_abs" ]]; then
+    if [[ ! -d "$target_dir" ]]; then
         return 0
     fi
 
-    local child base
-    for child in "$src_dir_abs"/*; do
-        [[ -e "$child" ]] || continue
-        base="$(basename "$child")"
-        uninstall_one "${src_dir_rel}/${base}" "${target_dir}/${base}"
+    local target resolved
+    for target in "$target_dir"/*; do
+        [[ -L "$target" ]] || continue
+        resolved="$(readlink_safe "$target")"
+        [[ "$resolved" == "${src_dir_abs}/"* ]] || continue
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would remove symlink ${target}"
+        else
+            rm "$target"
+            log_ok "removed symlink ${target}"
+        fi
     done
 }
 
@@ -984,15 +1061,14 @@ cleanup_stale_post_migration() {
 # ---- Main ----
 
 main() {
-    local codex_failed=0
+    local required_failed=0
     if [[ $DRY_RUN -eq 1 ]]; then
         log_info "${BOLD}DRY RUN${NC} — nothing will be changed."
     fi
 
-    check_prerequisites
-    check_python
-
     if [[ $UNINSTALL -eq 1 ]]; then
+        check_prerequisites
+        check_python
         log_info "Uninstalling MAINFRAME hub symlinks from ${CLAUDE_DIR}..."
         for entry in "${ARTIFACTS[@]}"; do
             local src="${entry%%:*}"
@@ -1007,13 +1083,21 @@ main() {
         done
         uninstall_opencode
         uninstall_codex
-        uninstall_one "dist/claude-code/scripts/secret" "$HOME/.local/bin/secret"
+        uninstall_one "$SECRET_HELPER_SOURCE" "$HOME/.local/bin/secret"
         log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
         log_ok "Uninstall complete."
         list_backups
         return 0
     fi
+
+    if ! check_required_install_sources; then
+        log_error "Install aborted before changes because required sources are unavailable."
+        return 1
+    fi
+
+    check_prerequisites
+    check_python
 
     log_info "Installing MAINFRAME hub symlinks into ${CLAUDE_DIR}..."
     log_info "Source: ${PROJECT_ROOT}/dist"
@@ -1077,6 +1161,7 @@ main() {
         # the remaining install phases (secrets, tooling) silently.
         if ! install_opencode; then
             log_warn "OpenCode layer failed; continuing with the rest of the install."
+            required_failed=1
         fi
     fi
 
@@ -1084,7 +1169,7 @@ main() {
         echo
         if ! install_codex; then
             log_warn "Codex layer failed; continuing with the rest of the install."
-            codex_failed=1
+            required_failed=1
         fi
     fi
 
@@ -1104,8 +1189,8 @@ main() {
     bootstrap_frontend_quality_tools
 
     echo
-    if [[ $codex_failed -eq 1 ]]; then
-        log_error "Install finished with a failed Codex layer."
+    if [[ $required_failed -eq 1 ]]; then
+        log_error "Install finished with one or more failed required layers."
         return 1
     fi
     log_ok "Install complete."
