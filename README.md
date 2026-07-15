@@ -18,7 +18,7 @@
 
 <img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
 
-A machine-wide baseline of operating rules, focused sub-agents, and small automatic checks for **every** Claude Code, OpenCode, and Codex session.
+A machine-wide baseline of operating rules, focused sub-agents, and small automatic checks for Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application.
 
 It's shaped for long **auto-mode** runs: Claude and I plan a larger feature up front, then it executes unattended for hours or sometimes days. Every rule, hook, and permission tier is built to hold quality when no one is watching each step and a missed check can become a bug nobody catches until later.
 
@@ -71,12 +71,13 @@ It looks like a folder of Markdown files — some skills, a few agents — but s
 
 In plain words — what each piece is for:
 
-- **Umbrella instructions** — one shared set of working rules, rendered as `CLAUDE.md` for Claude Code and `AGENTS.md` for OpenCode and Codex. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, no leftover `TODO`/`FIXME` markers, and so on. The tool-specific wrappers stay thin so the shared rules remain the owner.
+- **Umbrella instructions** — one shared set of working rules, rendered as `CLAUDE.md` for Claude Code, `AGENTS.md` for OpenCode and Codex, and individual plugin rules for Antigravity 2.x. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, and no leftover suppression markers. The tool-specific wrappers stay thin so the shared rules remain the owner.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like "audit this code carefully", "format this commit message in Conventional Commits style", "scan this diff for forgotten secrets" — instead of one giant document trying to cover everything.
 - **Agents (sub-agents)** — neutral specialist contracts with capability and reasoning tiers that each adapter translates into its runtime's agent controls. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking.
-- **Hooks** — shared automatic checks with runtime-specific wiring. They catch leftover `TODO`/`FIXME` markers, warn on risky shell patterns, scan diffs for security issues, and gate unresolved problems where the runtime supports it. Claude Code carries the full set; OpenCode and Codex receive documented subsets.
+- **Hooks** — shared automatic checks with runtime-specific wiring. They catch leftover suppression markers, warn on risky shell patterns, scan diffs for security issues, and gate unresolved problems where the runtime supports it. Claude Code carries the reference set; OpenCode, Codex, and Antigravity receive documented projections.
 - **Rules** — a reserved Claude Code layer for small path-scoped guidance files that load on demand when Claude reads a matching path. It is currently empty.
-- **Permissions** — one neutral policy source projected into each runtime's available controls. Claude Code receives the full deny / ask / allow lists; OpenCode and Codex receive conservative, explicitly limited projections.
+- **Permissions** — one neutral policy source projected where the runtime exposes a compatible control surface. Claude Code receives the full deny / ask / allow lists; OpenCode and Codex receive conservative, explicitly limited projections. Antigravity keeps user-owned permissions and receives only the shared tool gates described below.
+- **Project memory** — Claude Code keeps its native auto-memory. Antigravity 2.x and OpenCode receive separate emulated stores with the same bounded `MEMORY.md` index, topic files, worktree sharing, and selective write reminder. Memory is injected as untrusted reference data and cannot override instructions.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -84,7 +85,7 @@ In plain words — what each piece is for:
 
 ## Inventory — what's actually inside
 
-Below are the shared **agents**, **hooks**, and **skills** in the Claude Code target. OpenCode and Codex receive the projections summarized in [Architecture](#architecture).
+Below are the shared **agents**, **hooks**, and **skills** in the Claude Code target. OpenCode, Codex, and Antigravity 2.x receive the projections summarized in [Architecture](#architecture).
 
 ### Agents — 7 specialist sub-agents
 
@@ -149,7 +150,7 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 
 ### Skills — 18 focused playbooks
 
-In Claude Code, pulled automatically when the situation matches or invoked as `/mainframe:<name>`. OpenCode and Codex use their native skill-loading mechanisms.
+In Claude Code, pulled automatically when the situation matches or invoked as `/mainframe:<name>`. OpenCode and Codex use their native skill-loading mechanisms; Antigravity loads projected skills from the global `mainframe` plugin.
 
 | Group | Skills |
 |---|---|
@@ -168,14 +169,16 @@ In Claude Code, pulled automatically when the situation matches or invoked as `/
 graph LR
     subgraph repo["MAINFRAME repo (this)"]
       C[core/<br/>neutral sources]
-      A[adapters/<br/>claude-code + opencode + codex]
+      A[adapters/<br/>claude-code + opencode + codex + antigravity-2]
       R[python3 tools/render_core.py --write]
       BO[adapters/opencode/build_opencode.py]
       BC[adapters/codex/build_codex.py]
+      BA[adapters/antigravity-2/build_antigravity.py]
       P[dist/claude-code/plugin/<br/>skills + agents + hooks]
       E[dist/claude-code/<br/>CLAUDE.md + settings.json + files]
       O[dist/opencode/]
       X[dist/codex/]
+      G[dist/antigravity-2/]
     end
 
     C --> R
@@ -190,14 +193,18 @@ graph LR
     C --> BC
     A --> BC
     BC --> X
+    C --> BA
+    A --> BA
+    BA --> G
     P -->|one symlink<br/>~/.claude/skills/mainframe/| home[~/.claude/]
     E -->|per-item symlinks| home
     home -->|Claude auto-loads<br/>as 'mainframe' plugin| any[Any project<br/>on the machine]
     O -->|./install.sh --opencode| opencode[~/.config/opencode/]
     X -->|./install.sh --codex| codex[~/.codex/]
+    G -->|./install.sh --antigravity-2| ag[~/.gemini/config/plugins/mainframe]
 ```
 
-The hub is tool-agnostic at its core: shared artifacts live in `core/`, and thin tool refinements live in `adapters/{claude-code,opencode,codex}/`. `python3 tools/render_core.py --write` renders the Claude Code artifacts and composes the umbrella instructions for all three tools. The installer also runs `adapters/opencode/build_opencode.py` and `adapters/codex/build_codex.py` for their native projections.
+The hub is tool-agnostic at its core: shared artifacts live in `core/`, and thin tool refinements live in `adapters/{claude-code,opencode,codex,antigravity-2}/`. `python3 tools/render_core.py --write` renders the Claude Code artifacts and composes the umbrella instructions. The installer runs the OpenCode, Codex, and Antigravity builders for their native projections.
 
 Edit source files, not generated delivery files. Two narrowly defined cases live in `dist/`: future path-scoped Claude Code rules are authored directly in `dist/claude-code/rules/` because no `core/rules/` mapping exists, and the non-permission fields in `dist/claude-code/settings.json` remain user-owned while the renderer key-merges only `permissions.{allow,deny,ask}`. CI checks the mappings owned by `render_core.py` with `python3 tools/render_core.py --check`.
 
@@ -208,7 +215,7 @@ The Claude Code target ships in two channels:
 - **A plugin** (`dist/claude-code/plugin/`) carries skills, agents, and hooks. After install, Claude Code auto-loads it as the `mainframe` plugin via the skills-dir mechanism, and everything inside becomes available with the `mainframe:` namespace prefix (e.g. `/mainframe:code-audit`, `subagent_type: "mainframe:python-backend-engineer"`). That namespace is the visible mark that something is coming from this hub, not from your local project setup or another plugin.
 - **Single-file and per-item symlinks** (`dist/claude-code/`) carry the umbrella `CLAUDE.md`, the hybrid `settings.json`, output styles, and a small credentials helper. The installer is also prepared to link direct-authored path-scoped rules if that currently empty layer gains files.
 
-OpenCode uses its composed instructions and generated agents under `dist/opencode/`, plus the direct adapter plugin and shared Claude-rendered skills. Codex uses generated native artifacts under `dist/codex/`. The installer delivers them into `~/.config/opencode/` and `${CODEX_HOME:-~/.codex}` respectively. OpenCode agents and most Codex projections are gitignored build output; committed goldens test representative transformations.
+OpenCode uses its composed instructions and generated agents under `dist/opencode/`, plus direct adapter plugins and shared Claude-rendered skills. Codex uses generated native artifacts under `dist/codex/`. Antigravity 2.x receives one self-contained global desktop plugin with rules, skills, generated delegation skills, hooks, and the portable memory helper. Generated projections are gitignored build output; committed goldens test representative transformations.
 
 See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
@@ -220,11 +227,11 @@ See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
 **Required:**
 
-- **The target runtime** — Claude Code v2.1+ for the default install, OpenCode for `--opencode`, or Codex for `--codex`. The OpenCode and Codex flags are additive to the Claude Code baseline.
+- **The target runtime** — Claude Code v2.1+ for the default install, OpenCode for `--opencode`, Codex for `--codex`, or the standalone Antigravity 2.x desktop app for `--antigravity-2`. Target flags are additive to the Claude Code baseline.
 - **git** — to clone the repo, and for the hooks that diff your working tree.
 - **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
 - **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the linters below, but need no Python packages of their own). Without Python 3 they silently no-op (the installer warns; it does not fail).
-- **The repository `.venv` for alternate targets** — OpenCode and Codex projections require PyYAML. Bootstrap once with `python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml`.
+- **The repository `.venv` for alternate targets** — OpenCode, Codex, and Antigravity projections require PyYAML. Bootstrap once with `python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml`.
 
 **Recommended — each unlocks a group of checks; anything missing just stays silent, and `install.sh` prints an OS-specific install hint:**
 
@@ -246,11 +253,12 @@ cd ~/Documents/projects/MAINFRAME
 ./install.sh
 ```
 
-Use an additive target flag for OpenCode or Codex; each command also installs the Claude Code baseline:
+Use an additive target flag for another runtime; each command also installs the Claude Code baseline:
 
 ```bash
 ./install.sh --opencode
 ./install.sh --codex
+./install.sh --antigravity-2
 ```
 
 ```mermaid
@@ -273,6 +281,7 @@ What `install.sh` does:
 - **Credentials helper** — links `dist/claude-code/scripts/secret` into `~/.local/bin/` and seeds `~/.config/credentials/` + `~/.claude/credentials-index.md` from the template.
 - **OpenCode target** — `--opencode` installs `AGENTS.md`, projected agents, shared skills, and the adapter-owned `mainframe-gates.js` plugin into `~/.config/opencode/`; it also merges the hub permission map and compatible secret-free MCP entries into `opencode.json`. Its permission mapping and turn-end enforcement are thinner than Claude Code's.
 - **Codex target** — `--codex` installs `AGENTS.md`, projected skills, `mainframe.rules`, gate hooks, and agents into `${CODEX_HOME:-~/.codex}`. Hook gates require one-time per-project trust through `/hooks`, renewed after gate changes, and reuse detectors from the base Claude Code plugin install.
+- **Antigravity 2.x desktop target** — `--antigravity-2` validates a 2.x desktop application, builds the self-contained plugin, and links it into `~/.gemini/config/plugins/mainframe`. The hook rejects `~/.gemini/antigravity-cli` transcripts, so the adapter does not silently target the CLI.
 - **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
 - **Backs up** any pre-existing real file before replacing it with a symlink.
 - **Idempotent** — re-running is a no-op when state matches.
@@ -283,6 +292,7 @@ Options:
 ./install.sh              # install (with backups)
 ./install.sh --opencode   # install the OpenCode target
 ./install.sh --codex      # install the Codex target
+./install.sh --antigravity-2 # install the standalone Antigravity 2.x desktop target
 ./install.sh --dev        # install + hub-development instrumentation (see below)
 ./install.sh --dry-run    # preview, no changes
 ./install.sh --uninstall  # remove managed symlinks (incl. --dev ones)
@@ -308,7 +318,7 @@ cd ~/Documents/projects/MAINFRAME
 git pull
 ```
 
-Existing file symlinks see pulled changes immediately. Re-run `./install.sh` when the Claude Code delivery tree gains a newly linked item; re-run `./install.sh --opencode` or `./install.sh --codex` after changes to those projections so their generators, per-item links, and runtime configuration are refreshed.
+Existing file symlinks see pulled changes immediately. Re-run `./install.sh` when the Claude Code delivery tree gains a newly linked item; re-run the matching target flag after changes to an OpenCode, Codex, or Antigravity projection so its generator and links are refreshed.
 
 ```mermaid
 graph LR
@@ -329,6 +339,7 @@ What I have actually verified this hub on:
 - **Claude Code IDE extension** — also in active use.
 - **OpenCode** — supported through the `--opencode` projection and installer path.
 - **OpenAI Codex** — supported through the `--codex` projection and installer path.
+- **Antigravity 2.x desktop** — adapter contract checked against the installed 2.2.1 application shape and official hooks/plugins documentation; global activation still requires `--antigravity-2` plus an app restart.
 - **Main thread model**: Claude **Opus 4.7+** at `high` or `xhigh` effort (currently **Opus 4.8** day to day). This is what I run every day and what all the discipline is tuned against.
 - **Sub-agents** — each one calibrated separately via a small empirical tournament so the right model + effort sits inside the agent file itself. You don't have to think about it at call time.
 
@@ -355,13 +366,14 @@ Other model / effort combinations may work but I haven't verified them. When an 
 ```
 MAINFRAME/
 ├── README.md, LICENSE, CONTRIBUTING.md   # project meta
-├── install.sh                            # installer for Claude Code plus optional OpenCode/Codex targets
+├── install.sh                            # installer for Claude Code plus optional runtime targets
 ├── assets/                               # README images (banner, divider, badge)
 │
 ├── core/                                  # TOOL-NEUTRAL SOURCES (source of truth)
 │   ├── agents/                            # neutral agent capability contracts
 │   ├── gates/                             # neutral gate detectors and data
 │   ├── instructions/                      # shared umbrella instruction fragments
+│   ├── memory/                            # portable memory contract and helper
 │   ├── permissions/rules.json             # hub-owned permission rules
 │   └── skills/                            # shared skills and supporting files
 │
@@ -369,7 +381,8 @@ MAINFRAME/
 │   ├── claude-code/                       # Claude Code refinements + hand-authored files
 │   │   └── files/                         # output-styles, scripts, and templates
 │   ├── opencode/                          # OpenCode refinements and projection generator
-│   └── codex/                             # Codex refinements and projection generator
+│   ├── codex/                             # Codex refinements and projection generator
+│   └── antigravity-2/                     # standalone desktop plugin builder and hook bridge
 │
 ├── dist/                                  # delivery output; generated except documented direct-owned files
 │   ├── claude-code/
@@ -389,7 +402,7 @@ MAINFRAME/
 │   │   ├── agents-golden/                # golden agent projections
 │   │   └── agents/                       # generated projected agents (gitignored)
 │
-│   └── codex/                            # Codex render output
+│   ├── codex/                            # Codex render output
 │       ├── AGENTS.md                     # Codex umbrella instructions
 │       ├── skills-golden/                # committed representative projection fixtures
 │       ├── skills/                       # generated skills (gitignored)
@@ -398,13 +411,16 @@ MAINFRAME/
 │       ├── mainframe-hook.sh             # gate hook dispatcher
 │       └── agents/<name>.toml            # projected agent definitions
 │
+│   └── antigravity-2/plugin/             # generated self-contained desktop plugin (gitignored)
+│
 ├── tools/                                # Python validators (used by hooks; runnable manually)
 │   ├── validate-claude-md.py             # umbrella spec + project-agnosticism check
 │   ├── validate-skill.py                 # skill format + size limits
 │   └── agnostic-blacklist.txt.example    # copy to agnostic-blacklist.txt and add your own project names
 │
 └── docs/
-    └── layers/                           # architecture spec per layer (skills, agents, hooks, rules, ...)
+    ├── layers/                           # architecture spec per layer
+    └── tickets/                          # file-based deferred integration work
 ```
 
 Internal ADRs, maintainer working notes, the inbox of unprocessed candidates, runtime telemetry, and per-machine memory are gitignored. The published artifact is the hub plus the contributor-facing layer specifications under `docs/layers/`.
@@ -443,6 +459,7 @@ graph TD
 | Permissions | [`docs/layers/permissions.md`](docs/layers/permissions.md) |
 | Settings | [`docs/layers/settings.md`](docs/layers/settings.md) |
 | Output styles | [`docs/layers/output-styles.md`](docs/layers/output-styles.md) |
+| Portable memory | [`docs/layers/memory.md`](docs/layers/memory.md) |
 | Decision tree | [`docs/layers/decision-tree.md`](docs/layers/decision-tree.md) |
 
 <p align="center">

@@ -1,6 +1,6 @@
 # MAINFRAME Hub Layers
 
-> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > Canonical list of hub layers and a navigator to their specifications.
@@ -12,7 +12,7 @@
 
 ## What counts as a "layer"
 
-A layer = a type of artifact the hub delivers to a target runtime, applied across **all** of the user's projects with no per-project edits. Claude Code uses direct symlinks for files under `dist/claude-code/` and one `mainframe` plugin symlink for skills, agents, and hooks. `install.sh --opencode` generates and links the OpenCode projection; `install.sh --codex` does the same for Codex. Both flags are additive to the base Claude Code install.
+A layer = a type of artifact the hub delivers to a target runtime, applied across **all** of the user's projects with no per-project edits. Claude Code uses direct symlinks for files under `dist/claude-code/` and one `mainframe` plugin symlink for skills, agents, hooks, and the portable memory helper. Target flags generate and link OpenCode, Codex, or standalone Antigravity 2.x projections; every flag is additive to the base Claude Code install.
 
 **Not layers:**
 - `docs/layers/` — layer specifications (what you are reading now).
@@ -22,27 +22,28 @@ A layer = a type of artifact the hub delivers to a target runtime, applied acros
 
 | # | Layer | Authored source | Delivery outputs | Spec |
 |---|---|---|---|---|
-| 1 | **Umbrella instructions** | `core/instructions/` + `adapters/<tool>/instructions/` | `dist/claude-code/CLAUDE.md`, `dist/opencode/AGENTS.md`, `dist/codex/AGENTS.md` | [claude-md.md](claude-md.md) |
+| 1 | **Umbrella instructions** | `core/instructions/` + `adapters/<tool>/instructions/` | Claude `CLAUDE.md`, OpenCode/Codex `AGENTS.md`, Antigravity plugin rules | [claude-md.md](claude-md.md) |
 | 2 | **Rules** (path-scoped) *(planned, empty)* | Direct exception: `dist/claude-code/rules/<name>.md` | Claude Code only: `~/.claude/rules/<name>.md` | [rules.md](rules.md) |
-| 3 | **Skills** | `core/skills/<name>/` | Claude plugin byte-copy; shared links for OpenCode; native `dist/codex/skills/<name>/` projection | [skills.md](skills.md) |
-| 4 | **Hooks / gates** | `core/gates/` + tool wiring under `adapters/<tool>/` | Claude plugin hooks; OpenCode adapter plugin; Codex `hooks.json` + launcher | [hooks.md](hooks.md) |
+| 3 | **Skills** | `core/skills/<name>/` | Claude/Antigravity plugin copies; shared links for OpenCode; native Codex projection | [skills.md](skills.md) |
+| 4 | **Hooks / gates** | `core/gates/` + tool wiring under `adapters/<tool>/` | Claude/Antigravity plugin hooks; OpenCode plugins; Codex `hooks.json` + launcher | [hooks.md](hooks.md) |
 | 5 | **Permissions** | `core/permissions/rules.json` | Claude `settings.json`; OpenCode `opencode.json` merge; Codex `mainframe.rules` | [permissions.md](permissions.md) |
 | 6 | **Settings** (other fields) | User-owned fields in `dist/claude-code/settings.json` | Claude Code only: `~/.claude/settings.json` | [settings.md](settings.md) |
-| 7 | **Agents** | `core/agents/<name>.md` | Claude Markdown, OpenCode Markdown, and Codex TOML projections | [agents.md](agents.md) |
+| 7 | **Agents** | `core/agents/<name>.md` | Claude/OpenCode native agents, Codex TOML, Antigravity delegation skills | [agents.md](agents.md) |
 | 8 | **Commands** *(reserved, empty)* | No source mapping yet | No current output or runtime delivery | [commands.md](commands.md) |
 | 9 | **Output styles** | `adapters/claude-code/files/output-styles/<name>.md` | Claude Code only: `dist/claude-code/output-styles/<name>.md` | [output-styles.md](output-styles.md) |
+| 10 | **Portable memory** | `core/memory/` + runtime wiring | Claude native backend; separate Antigravity/OpenCode emulated stores | [memory.md](memory.md) |
 
 **Notes:**
 - (5) and (6) share Claude Code's `settings.json`, but they are **separate layers** with different ownership: the renderer key-merges permission lists from `core/permissions/rules.json`; other settings fields are edited in place. Hook registration lives in the Claude plugin, not in `settings.json`.
 - (7) Agents (7 agents) and (9) Output styles (1) are populated; (2) Rules and (8) Commands are reserved (no files yet). Rules was introduced 2026-05-29 after empirical verification of paths-activation; no concrete files exist in `dist/claude-code/rules/` yet.
-- Run `python3 tools/render_core.py --write` after source edits. OpenCode and Codex native projections are generated by their adapter builders during `./install.sh --opencode` and `./install.sh --codex`. `./install.sh --dry-run` previews changes; `./install.sh --uninstall` removes managed symlinks.
+- Run `python3 tools/render_core.py --write` after source edits. Native projections are generated by their adapter builders during the corresponding target install. `./install.sh --dry-run` previews changes; `./install.sh --uninstall` removes managed symlinks but preserves memory data.
 
 ## External touchpoints (not our layers, but worth knowing)
 
 | Touchpoint | Where it lives | Why it is not a layer |
 |---|---|---|
 | **MCP user-scope** | `~/.claude.json` (a separate file!) | The hub does not own or symlink it. The OpenCode builder reads it and projects only compatible secret-free MCP entries into `opencode.json`. |
-| **Runtime memory** | `~/.claude/projects/<id>/memory/` | Claude Code mechanics — index + topic files, accumulated during runs. Not delivered by the hub; this is runtime state. |
+| **Claude native memory data** | `~/.claude/projects/<id>/memory/` | Runtime state, not delivered by the hub. MAINFRAME only uses it as the portable contract reference. |
 | **Community/official plugins** | external plugins via `enabledPlugins` | We use external plugins (e.g. `context7=true`). Distinct from our OWN `mainframe` plugin (`dist/claude-code/plugin/`) — that one IS a hub delivery vehicle (layers 3/4/7/8), not an external touchpoint. |
 | **Project-scope artifacts** | `<repo>/.claude/` and `<repo>/.mcp.json` | Per-project, not global. The hub does not touch these. |
 
