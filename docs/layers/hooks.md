@@ -1,11 +1,11 @@
 # Layer: Hooks
 
-> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Shared gate detectors with runtime-specific event wiring. Claude Code receives the full plugin hook set, OpenCode a native plugin projection, and Codex a selected hook projection.
+> Shared gate detectors with runtime-specific event wiring. Claude Code receives the reference plugin hook set; OpenCode, Codex, and Antigravity 2.x receive explicit projections.
 
-> Last updated: 2026-07-14 (three-tool ownership, projections, and current counts). The Claude Code event reference remains ground-truthed against the installed CLI; docs lag the CLI, so the running CLI is the authority.
+> Last updated: 2026-07-15 (Antigravity five-event bridge and portable memory lifecycle).
 
 ---
 
@@ -15,7 +15,8 @@
 - Claude Code wiring source: `adapters/claude-code/gates/hooks.json` and `adapters/claude-code/gates/run-hook.sh`, rendered into `dist/claude-code/plugin/hooks/` and delivered through the `mainframe` plugin.
 - OpenCode wiring source: `adapters/opencode/plugins/mainframe-gates.js`, linked directly into `~/.config/opencode/plugins/`. It ports blocking pre-tool gates plus advisory post-tool checks; the runtime cannot reproduce every Claude Code stop-gate guarantee.
 - Codex projection: `adapters/codex/build_codex.py` maps 16 selected detectors over `PreToolUse`, `PostToolUse`, and `Stop`, renders `dist/codex/hooks.json`, and copies `adapters/codex/gates/mainframe-hook.sh` to `dist/codex/mainframe-hook.sh`.
-- After source changes, run `python3 tools/render_core.py --write` for Claude Code and the relevant target installer for OpenCode/Codex. Codex hooks also require per-project `/hooks` trust and reuse the detectors installed with the base Claude Code plugin.
+- Antigravity projection: `adapters/antigravity-2/` translates the desktop `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop` schemas to the neutral detector contract. It caches pre-tool arguments because the native post-tool payload omits them, and rejects CLI transcript paths.
+- After source changes, render Claude Code and run the relevant target builder. Codex hooks require per-project `/hooks` trust; Antigravity hooks are self-contained in its plugin.
 
 ---
 

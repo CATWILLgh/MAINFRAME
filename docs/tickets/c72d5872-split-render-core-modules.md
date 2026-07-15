@@ -40,3 +40,9 @@ Both files exceed the project's 400-line limit. Renderer planning, instruction c
 - `tools/render_core.py`
 - `tools/test_render_core.py`
 - Project `AGENTS.md` file-size rule
+
+## Re-occurrence noted (2026-07-16)
+
+**Noticed during:** integration of the Antigravity adapter into the installer TUI branch
+**Where:** `tools/render_core.py` and `tools/test_render_core.py`
+**Additional details:** The combined runtime-profile and portable-memory mappings remain semantically compatible and their tests pass, but the merged files are now 562 lines each. Splitting them is still outside the integration scope and remains required before the renderer satisfies the project limit.

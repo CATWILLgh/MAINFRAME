@@ -1,11 +1,11 @@
 # Layer: Skills
 
-> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > Optionally activated instruction sets authored once in `core/skills/` and delivered through each runtime's skill mechanism.
 
-> Last updated: 2026-07-14 (three-tool sources and delivery). Prior: 2026-05-28 (full frontmatter spec + `disable-model-invocation`, `context: fork`).
+> Last updated: 2026-07-15 (Antigravity plugin projection). Prior: 2026-05-28 (full frontmatter spec + `disable-model-invocation`, `context: fork`).
 
 ---
 
@@ -15,6 +15,7 @@
 - Claude Code: byte-copied to `dist/claude-code/plugin/skills/<name>/` by `render_core.py` and delivered through the `mainframe` plugin.
 - OpenCode: `install.sh --opencode` links the Claude-rendered skill directories item-by-item into `~/.config/opencode/skills/`; there is no separate OpenCode skill render.
 - Codex: `adapters/codex/build_codex.py` transforms each projectable skill into `dist/codex/skills/<name>/`, including Codex-native metadata, then `install.sh --codex` links it into `${CODEX_HOME:-~/.codex}/skills/`.
+- Antigravity 2.x: `adapters/antigravity-2/build_antigravity.py` projects supported skill metadata and copies referenced resources into the global desktop plugin.
 - Runtime activation semantics differ; §1 below documents Claude Code's canonical behavior.
 
 ---
@@ -108,7 +109,7 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
 
 ### 2.1. Current skills in `core/skills/`
 
-18 skills as verified in `core/skills/` on 2026-07-14. Claude Code receives the rendered byte-copy through the `mainframe` plugin; OpenCode links that copy; Codex receives its transformed native projection. `core/skills/` is the single source of truth, guarded by `python3 tools/render_core.py --check` for the Claude copy and `.venv/bin/python3 tools/validate-skill.py --all` for source validation. Roles:
+18 skills as verified in `core/skills/` on 2026-07-14. Claude Code receives the rendered byte-copy through the `mainframe` plugin; OpenCode links that copy; Codex receives its transformed native projection; Antigravity receives a plugin-compatible projection. `core/skills/` is the single source of truth, guarded by `python3 tools/render_core.py --check` for the Claude copy and `.venv/bin/python3 tools/validate-skill.py --all` for source validation. Roles:
 
 - **Process / workflow:** `task-workflow`, `code-audit`, `decision-review`, `git-conventional-commits`.
 - **Quality discipline (gates / self-checks):** `no-suppression-markers`, `severity-calibration`, `surface-ticket`, `testing-strategy`, `secrets-handling`.

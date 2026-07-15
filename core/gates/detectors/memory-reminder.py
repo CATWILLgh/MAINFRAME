@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Stop hook: advisory reminder to persist durable facts to Claude Code's
-native auto-memory.
+"""Stop hook: advisory reminder to persist durable facts to project memory.
 
-Recall is automatic (the harness injects relevant memories into context);
-WRITING is model-discretion, and that is the reliability gap this nudges. The
-note is NON-blocking (a Stop `additionalContext`, never a block) so it reminds
-without coercing — "nothing to save" is an expected, fine outcome. A coercive
-nudge that keeps firing on empty sessions trains the model to ignore it (hub
-lesson: the oxlint react-perf false-positive firehose); the opt-out framing is
-the guard against that.
+Claude Code uses the native auto-memory wording below. Adapters without native
+memory may supply normalized `transcript_bytes`, `memory_note`, and
+`memory_backend` fields while retaining the same substantive-session and
+throttle gates. The note is NON-blocking so "nothing to save" remains an
+expected, fine outcome.
 
 Throttled to ~once per THROTTLE_SECONDS per project and silent on trivial
 sessions (transcript below MIN_TRANSCRIPT_BYTES), so it surfaces a handful of
@@ -53,8 +50,10 @@ FEEDBACK_TAIL = (
 )
 
 
-def _note():
-    return MEMORY_NOTE + (FEEDBACK_TAIL if feedback_skill_installed() else "")
+def _note(payload=None):
+    supplied = (payload or {}).get("memory_note")
+    note = supplied.strip() if isinstance(supplied, str) and supplied.strip() else MEMORY_NOTE
+    return note + (FEEDBACK_TAIL if feedback_skill_installed() else "")
 
 
 def _throttled(cwd, stamp_dir=None):
@@ -78,6 +77,9 @@ def _throttled(cwd, stamp_dir=None):
 def _substantive(payload):
     """True when the transcript is large enough to plausibly hold a
     memory-worthy fact — a cheap byte-size proxy that skips trivial sessions."""
+    normalized_bytes = payload.get("transcript_bytes")
+    if isinstance(normalized_bytes, (int, float)) and not isinstance(normalized_bytes, bool):
+        return normalized_bytes >= MIN_TRANSCRIPT_BYTES
     path = payload.get("transcript_path")
     if not path:
         return False
@@ -94,10 +96,15 @@ def main():
         return
     if not _substantive(payload):
         return
-    if _throttled(cwd):
+    backend = payload.get("memory_backend")
+    throttle_scope = f"{backend}\0{cwd}" if isinstance(backend, str) and backend else cwd
+    if _throttled(throttle_scope):
         return
-    emit_note("Stop", _note())
-    log_event("memory_reminder", {"trigger": "stop"}, payload)
+    emit_note("Stop", _note(payload))
+    event = {"trigger": "stop"}
+    if isinstance(backend, str) and backend:
+        event["backend"] = backend
+    log_event("memory_reminder", event, payload)
 
 
 if __name__ == "__main__":

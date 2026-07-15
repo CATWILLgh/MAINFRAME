@@ -1,11 +1,11 @@
 # Decision tree: which layer owns a new artifact
 
-> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the native builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > When a new rule, skill, check, or process appears — **walk this tree first**, then place it. No ad hoc choices. Otherwise the hub turns into a ball of everything about everything.
 
-> Last updated: 2026-07-14 (three-tool source/render ownership and reserved layers).
+> Last updated: 2026-07-15 (Antigravity 2.x projection and portable memory contract).
 
 ---
 
@@ -21,6 +21,7 @@
 | Main agent delegates a heavy task | **Subagent** ([agents.md](agents.md)) |
 | Technical gate on a command / tool call | **Permissions** ([permissions.md](permissions.md)) |
 | Output format / style | **Output style** ([output-styles.md](output-styles.md)) |
+| Durable facts recalled across sessions | **Memory contract** ([memory.md](memory.md)) plus runtime lifecycle hooks |
 
 ## Q2 — Where should the context live?
 
@@ -31,6 +32,7 @@
 | In main context, only on semantic trigger | Skill with a narrow `when_to_use` |
 | In a separate forked context, summary returned | Skill `context: fork` **or** Subagent |
 | Only in a dedicated subagent, main never sees it | Skill `disable-model-invocation: true` + Subagent `skills: [name]` |
+| Bounded, untrusted cross-session reference data | Memory index ([memory.md](memory.md)); never authored instructions |
 
 ## Q3 — What is it, fundamentally?
 
@@ -117,6 +119,17 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 > "When working with `**/*.{ts,tsx}` remind about strict null-checks" — should fire only when Claude actually reads a TS file; in a Python project — do not load the context.
 
 → **Rule** (`dist/claude-code/rules/<name>.md` → symlink `~/.claude/rules/`) with `paths:` frontmatter. This is the renderer-unmanaged, direct-authored exception; no `core/rules/` exists, and the directory is currently absent because the layer is empty. See [rules.md](rules.md). Body is short, English, project-agnostic globs.
+
+### Recipe H: durable cross-session fact
+
+> "This repository's release tags are created only from the protected branch"
+> — useful after the current conversation, but not a behavioral rule for every
+> project.
+
+→ **Memory** ([memory.md](memory.md)): one concise index pointer plus detail in
+a topic file when needed. Do not place task progress, current plans, credentials,
+or a transcript summary there. Claude Code uses its native backend; Antigravity
+2.x and OpenCode use separate MAINFRAME stores with the same bounded contract.
 
 ---
 

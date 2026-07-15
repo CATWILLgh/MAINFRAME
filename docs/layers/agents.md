@@ -1,11 +1,11 @@
 # Layer: Agents (sub-agents)
 
-> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Isolated subagents with their own context. Neutral capability contracts in `core/agents/` project into Claude Code, OpenCode, and Codex agent formats.
+> Isolated subagents with their own context. Neutral capability contracts in `core/agents/` project into native Claude/OpenCode/Codex agents and Antigravity delegation skills.
 
-> Last updated: 2026-07-14 (three-tool sources and projections). Prior: 2026-05-29 (research + launch discipline).
+> Last updated: 2026-07-15 (Antigravity dynamic-subagent projection). Prior: 2026-05-29 (research + launch discipline).
 
 ---
 
@@ -15,8 +15,9 @@
 - Claude Code target: `dist/claude-code/plugin/agents/<name>.md`, shipped via the `mainframe` plugin.
 - OpenCode target: `dist/opencode/agents/<name>.md`, projected from the contracts by `adapters/opencode/build_opencode.py`.
 - Codex target: `dist/codex/agents/<name>.toml`, projected by `adapters/codex/build_codex.py`.
-- Runtime delivery: the Claude agents ship inside the plugin; OpenCode and Codex agents are linked item-by-item into `~/.config/opencode/agents/` and `${CODEX_HOME:-~/.codex}/agents/`.
-- §1 documents Claude Code's invocation and frontmatter semantics. OpenCode and Codex use their native agent interfaces.
+- Antigravity target: generated skills describe a `define_subagent` contract followed by `invoke_subagent`; the public desktop API has no persistent file-agent format.
+- Runtime delivery: Claude agents ship inside the plugin; OpenCode and Codex agents are linked item-by-item; Antigravity delegation skills ship inside its global plugin.
+- §1 documents Claude Code's invocation and frontmatter semantics. Other runtimes use explicit projections rather than pretending unsupported model or effort controls are equivalent.
 
 ---
 
@@ -143,7 +144,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 
 ### 2.1. Current agents from `core/agents/`
 
-7 neutral agent contracts as verified in `core/agents/` on 2026-07-14. Claude Code ships them through the `mainframe` plugin; OpenCode and Codex install native projections.
+7 neutral agent contracts as verified in `core/agents/` on 2026-07-14. Claude Code ships them through the `mainframe` plugin; OpenCode and Codex install native projections; Antigravity receives delegation skills for dynamic subagents.
 
 | Agent | Purpose | Activation |
 |---|---|---|

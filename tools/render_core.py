@@ -66,7 +66,14 @@ PLUGIN_MAPPINGS = [
      "dist/claude-code/plugin/.claude-plugin/plugin.json"),
 ]
 
-MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS + FILES_MAPPINGS + PLUGIN_MAPPINGS
+MEMORY_MAPPINGS = [
+    ("core/memory", "dist/claude-code/plugin/memory"),
+]
+
+MAPPINGS = (
+    GATES_MAPPINGS + SKILLS_MAPPINGS + FILES_MAPPINGS + PLUGIN_MAPPINGS
+    + MEMORY_MAPPINGS
+)
 EXECUTABLE_MAPPINGS = {
     ("core/resources/credential-tools/secret", "dist/claude-code/scripts/secret"),
 }
@@ -103,6 +110,7 @@ COMPOSE_MAPPINGS = [
     ("dist/opencode/AGENTS.md",
      ["adapters/opencode/instructions/00-preamble.md"]
      + _CORE_SECTIONS
+     + ["adapters/opencode/instructions/70-memory.md"]
      + _CORE_TAIL
      + ["adapters/opencode/instructions/90-runtime-opencode.md"]),
     ("dist/codex/AGENTS.md",

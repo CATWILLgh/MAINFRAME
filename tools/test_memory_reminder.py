@@ -30,17 +30,23 @@ def _load():
 gate = _load()
 
 
-def _drive(payload, *, throttled=False, substantive=True):
+def _drive(payload, *, throttled=False, substantive=True, throttle_key_sink=None):
     """Run main() with payload on stdin; stub the gates + telemetry. Returns
     (stdout_text, logged_events)."""
     out = io.StringIO()
     saved = (sys.stdin, sys.stdout,
              gate._throttled, gate._substantive, gate.log_event)
     logged = []
+
+    def throttle(cwd, stamp_dir=None):
+        if throttle_key_sink is not None:
+            throttle_key_sink.append(cwd)
+        return throttled
+
     try:
         sys.stdin = io.StringIO(json.dumps(payload))
         sys.stdout = out
-        gate._throttled = lambda cwd, stamp_dir=None: throttled
+        gate._throttled = throttle
         gate._substantive = lambda p: substantive
         gate.log_event = lambda *a, **k: logged.append((a, k))
         gate.main()
@@ -156,6 +162,35 @@ def test_substantive_unit():
         assert gate._substantive({"transcript_path": big}) is True
         assert gate._substantive({}) is False
         assert gate._substantive({"transcript_path": "/no/such/file"}) is False
+
+
+def test_substantive_accepts_normalized_transcript_byte_count():
+    assert gate._substantive({"transcript_bytes": gate.MIN_TRANSCRIPT_BYTES}) is True
+    assert gate._substantive({"transcript_bytes": gate.MIN_TRANSCRIPT_BYTES - 1}) is False
+    assert gate._substantive({"transcript_bytes": "invalid"}) is False
+
+
+def test_normalized_payload_can_supply_backend_note():
+    custom = "Review durable facts and update the portable project memory."
+    out, logged = _drive(
+        {"cwd": "/p", "transcript_bytes": gate.MIN_TRANSCRIPT_BYTES,
+         "memory_note": custom, "memory_backend": "opencode"},
+    )
+    note = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert custom in note
+    assert "auto-memory" not in note
+    assert logged[0][0][1]["backend"] == "opencode"
+
+
+def test_normalized_backend_isolates_throttle_scope():
+    seen = []
+    _drive(
+        {"cwd": "/p", "transcript_bytes": gate.MIN_TRANSCRIPT_BYTES,
+         "memory_backend": "opencode"},
+        substantive=True,
+        throttle_key_sink=seen,
+    )
+    assert seen == ["opencode\0/p"]
 
 
 if __name__ == "__main__":

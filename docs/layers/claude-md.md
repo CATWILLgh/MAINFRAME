@@ -1,21 +1,21 @@
 # Layer: Umbrella operating instructions (`CLAUDE.md` / `AGENTS.md`)
 
-> **Architecture note (three-tool hub, 2026-07-14):** MAINFRAME targets Claude Code, OpenCode, and Codex. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
-> Shared global instructions delivered to every session across all projects, with thin runtime-specific wrappers for Claude Code, OpenCode, and Codex.
+> Shared global instructions delivered to every session across all projects, with thin runtime-specific wrappers for Claude Code, OpenCode, Codex, and Antigravity 2.x.
 
-> Last updated: 2026-07-14 (three-tool sources, outputs, and delivery).
+> Last updated: 2026-07-15 (Antigravity plugin-rule projection).
 
 ---
 
 ## Where it lives / How to install
 
 - Shared source: ordered fragments in `core/instructions/`.
-- Tool-specific source: `adapters/claude-code/instructions/`, `adapters/opencode/instructions/`, and `adapters/codex/instructions/`.
+- Tool-specific source: instruction fragments under each `adapters/<tool>/instructions/` directory.
 - Rendered targets: `dist/claude-code/CLAUDE.md` (159 lines), `dist/opencode/AGENTS.md` (149 lines), and `dist/codex/AGENTS.md` (149 lines), verified 2026-07-14 with `wc -l`.
-- Runtime delivery: `~/.claude/CLAUDE.md`, `~/.config/opencode/AGENTS.md`, and `${CODEX_HOME:-~/.codex}/AGENTS.md` through the corresponding installer path.
-- `python3 tools/render_core.py --write` composes all three targets. Edit the fragments, not the rendered files.
+- Runtime delivery: `~/.claude/CLAUDE.md`, `~/.config/opencode/AGENTS.md`, `${CODEX_HOME:-~/.codex}/AGENTS.md`, and separate always-on rule files inside the Antigravity global plugin.
+- `python3 tools/render_core.py --write` composes the three umbrella files. The Antigravity builder projects each shared fragment as an individual rule so one oversized file cannot exceed that runtime's rule budget.
 
 ---
 
@@ -62,7 +62,7 @@ There is no hard limit; the practical target is to keep total volume (user + pro
 
 ### 2.1. Current rendered instructions
 
-The shared core supplies the common sections below. Claude Code inserts its orchestration, memory, and advisor sections before the common Git/destructive-action tail; OpenCode and Codex append their runtime notes after that tail.
+The shared core supplies the common sections below. Claude Code inserts its orchestration, memory, and advisor sections before the common Git/destructive-action tail; OpenCode and Codex append runtime notes; Antigravity packages the same sections as ordered plugin rules plus desktop-specific memory and orchestration rules.
 
 | Section | Contents |
 |---|---|
@@ -80,11 +80,11 @@ The shared core supplies the common sections below. Claude Code inserts its orch
 | Git and commits | No Claude attribution |
 | Destructive actions | Name explicitly, wait for ack |
 
-Claude Code additionally renders `Orchestration — Claude Code`, `Memory`, and `Advisor`. OpenCode and Codex each render a final runtime-specific section from their adapter.
+Claude Code additionally renders `Orchestration — Claude Code`, `Memory`, and `Advisor`. Each alternate adapter adds only its runtime mechanics.
 
 ### 2.2. Validator
 
-[`tools/validate-claude-md.py`](../../tools/validate-claude-md.py) checks the Anthropic format and project-agnosticism rules for the Claude Code umbrella and its source fragments. `python3 tools/render_core.py --check` is the composition/drift check covering all three rendered instruction targets.
+[`tools/validate-claude-md.py`](../../tools/validate-claude-md.py) checks the Anthropic format and project-agnosticism rules for the Claude Code umbrella and its source fragments. `python3 tools/render_core.py --check` guards the umbrella renders; the Antigravity builder tests guard its per-rule projection.
 
 ---
 
