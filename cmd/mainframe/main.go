@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/CATWILLgh/MAINFRAME/internal/catalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/plan"
 )
 
@@ -40,11 +40,11 @@ func runPlan(input io.Reader, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	componentCatalog, err := defaultCatalog()
+	model, err := defaultModel()
 	if err != nil {
-		return fmt.Errorf("build catalog: %w", err)
+		return fmt.Errorf("build install model: %w", err)
 	}
-	result, err := plan.New(componentCatalog).Plan(request)
+	result, err := plan.New(model.Catalog()).Plan(request)
 	if err != nil {
 		return err
 	}
@@ -133,8 +133,8 @@ func scanJSONValue(decoder *json.Decoder) error {
 	return err
 }
 
-func defaultCatalog() (catalog.Catalog, error) {
-	return catalog.New([]catalog.Component{
+func defaultModel() (installmodel.Model, error) {
+	return installmodel.New([]installmodel.ComponentSpec{
 		{ID: domain.ComponentClaudeCode},
 		{ID: domain.ComponentCodex},
 		{ID: domain.ComponentOpenCode},

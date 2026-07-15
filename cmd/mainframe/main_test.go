@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -118,5 +119,24 @@ func TestRunRejectsUnknownOwnership(t *testing.T) {
 	exitCode := run([]string{"plan"}, strings.NewReader(input), &stdout, &stderr)
 	if exitCode == 0 || !strings.Contains(stderr.String(), "invalid ownership") {
 		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
+	}
+}
+
+func TestDefaultModelPreservesComponentGraph(t *testing.T) {
+	model, err := defaultModel()
+	if err != nil {
+		t.Fatalf("default model: %v", err)
+	}
+	closure, err := model.Catalog().DependencyClosure([]domain.ComponentID{domain.ComponentCodexGates})
+	if err != nil {
+		t.Fatalf("dependency closure: %v", err)
+	}
+	want := []domain.ComponentID{domain.ComponentCodexGates, domain.ComponentSharedGateDetectors}
+	if !reflect.DeepEqual(closure, want) {
+		t.Fatalf("closure = %v, want %v", closure, want)
+	}
+	codexOnly, err := model.Catalog().DependencyClosure([]domain.ComponentID{domain.ComponentCodex})
+	if err != nil || !reflect.DeepEqual(codexOnly, []domain.ComponentID{domain.ComponentCodex}) {
+		t.Fatalf("codex closure = %v, error = %v", codexOnly, err)
 	}
 }
