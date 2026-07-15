@@ -15,6 +15,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Installer lifecycle planner tests
+        run: |
+          go test -count=1 ./...
+          go test -race -count=1 ./...
+          go vet ./...
+
       # Two hook tests build throwaway git repos; a runner has git but no identity.
       - name: Configure git identity
         run: |
