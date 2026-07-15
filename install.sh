@@ -15,10 +15,9 @@
 #                   (Plugin format does not support path-scoped rules with
 #                   `paths:` frontmatter; per-item keeps the layer composable.)
 #
-# Migration cleanup: removes any stale per-item symlinks in
-# ~/.claude/{skills,agents,hooks}/ left over from the pre-plugin layout. If
-# the per-layer directories end up empty, they are removed (the plugin owns
-# those artifacts now).
+# Migration cleanup: backs up verified per-item symlinks in
+# ~/.claude/{skills,agents,hooks}/ left over from the pre-plugin layout.
+# Same-name links with any other target are preserved.
 #
 # Usage:
 #   ./install.sh              # install (with backup of existing files)
@@ -70,9 +69,10 @@ Single-file artifacts that the plugin format does not support stay as direct
 symlinks: CLAUDE.md (umbrella instructions) and settings.json (permissions
 and user-level config). Path-scoped rules in dist/claude-code/rules/ install per-item.
 
-The first install after upgrading from the pre-plugin layout also cleans up
-stale per-item symlinks in ~/.claude/{skills,agents,hooks}/ left over from
-the old layout, and removes the empty directories if any.
+The first install after upgrading from the pre-plugin layout also backs up
+verified legacy per-item symlinks in ~/.claude/{skills,agents,hooks}/. A
+same-name link is preserved unless its raw target exactly matches the old
+layout in this repository.
 
 Usage:
   $0                  Install (creates symlinks; backs up existing files).
@@ -977,85 +977,61 @@ list_backups() {
     fi
 }
 
-# Old per-item symlinks under ~/.claude/{skills,agents,hooks}/ from the
-# pre-plugin install layout dangle after the move; left in place they
-# would shadow the new plugin's namespaced artifacts.
-cleanup_stale_post_migration() {
-    local stale_skills=(
-        code-audit curl-requests git-conventional-commits-ru nestjs-backend-patterns
-        no-suppression-markers ops-app-server-safety python-backend-patterns
-        react-frontend-patterns secrets-handling severity-calibration shadcn
-        surface-ticket task-workflow testing-strategy
-    )
-    local stale_agents=(
-        nestjs-backend-engineer.md python-backend-engineer.md
-        react-frontend-engineer.md web-search.md
-    )
-    local stale_hooks=(
-        bash-pattern-reminder.py comment-discipline-reminder.py frontend-dead-code.py
-        frontend-fsd-gate.py nodejs-deps-audit.py nodejs-security-scan.py
-        nodejs-security-stop-gate.py path-validation.py python-deps-audit.py
-        python-security-scan.py python-security-stop-gate.py scan-suppression-markers.py
-        stop-gate-suppression-markers.py rules
-    )
+_is_verified_legacy_link() {
+    local relative="$1"
+    local target="${CLAUDE_DIR}/${relative}"
+    local expected="${PROJECT_ROOT}/export/${relative}"
+    [[ -L "$target" ]] || return 1
 
-    local removed=0
-    local name target
-
-    for name in "${stale_skills[@]}"; do
-        target="${CLAUDE_DIR}/skills/${name}"
-        if [[ -L "$target" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would remove stale: ${target}"
-            else
-                rm "$target"
-                log_ok "removed stale symlink: ${target}"
-            fi
-            ((removed++))
-        fi
-    done
-    for name in "${stale_agents[@]}"; do
-        target="${CLAUDE_DIR}/agents/${name}"
-        if [[ -L "$target" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would remove stale: ${target}"
-            else
-                rm "$target"
-                log_ok "removed stale symlink: ${target}"
-            fi
-            ((removed++))
-        fi
-    done
-    for name in "${stale_hooks[@]}"; do
-        target="${CLAUDE_DIR}/hooks/${name}"
-        if [[ -L "$target" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would remove stale: ${target}"
-            else
-                rm "$target"
-                log_ok "removed stale symlink: ${target}"
-            fi
-            ((removed++))
-        fi
-    done
-
-    if [[ $removed -gt 0 ]]; then
-        log_info "removed ${removed} stale per-item symlinks from the pre-migration layout"
+    local actual
+    if ! actual="$(readlink "$target")"; then
+        log_warn "preserving unreadable same-name symlink: ${target}"
+        return 1
     fi
+    if [[ "$actual" != "$expected" ]]; then
+        log_warn "preserving unverified same-name symlink: ${target} → ${actual}"
+        return 1
+    fi
+    return 0
+}
 
-    # If agents/ and hooks/ are now empty (all entries were stale and removed),
-    # remove the directories themselves — the plugin owns them now.
-    local dir
-    for dir in "${CLAUDE_DIR}/agents" "${CLAUDE_DIR}/hooks"; do
-        if [[ -d "$dir" && -z "$(ls -A "$dir" 2>/dev/null)" ]]; then
-            if [[ $DRY_RUN -eq 1 ]]; then
-                log_action "would rmdir empty ${dir}"
-            else
-                rmdir "$dir"
-                log_ok "removed empty ${dir}"
-            fi
+# Verified links from the pre-plugin layout are reversible migration state.
+cleanup_stale_post_migration() {
+    local legacy_paths=(
+        skills/code-audit skills/curl-requests skills/git-conventional-commits-ru
+        skills/nestjs-backend-patterns skills/no-suppression-markers
+        skills/ops-app-server-safety skills/python-backend-patterns
+        skills/react-frontend-patterns skills/secrets-handling
+        skills/severity-calibration skills/shadcn skills/surface-ticket
+        skills/task-workflow skills/testing-strategy
+        agents/nestjs-backend-engineer.md agents/python-backend-engineer.md
+        agents/react-frontend-engineer.md agents/web-search.md
+        hooks/bash-pattern-reminder.py hooks/comment-discipline-reminder.py
+        hooks/frontend-dead-code.py hooks/frontend-fsd-gate.py
+        hooks/nodejs-deps-audit.py hooks/nodejs-security-scan.py
+        hooks/nodejs-security-stop-gate.py hooks/path-validation.py
+        hooks/python-deps-audit.py hooks/python-security-scan.py
+        hooks/python-security-stop-gate.py hooks/scan-suppression-markers.py
+        hooks/stop-gate-suppression-markers.py hooks/rules
+    )
+    local backed_up=0
+    local relative target
+
+    for relative in "${legacy_paths[@]}"; do
+        if _is_verified_legacy_link "$relative"; then
+            target="${CLAUDE_DIR}/${relative}"
+            backup_target "$target"
+            ((backed_up += 1))
         fi
     done
+
+    if [[ $backed_up -gt 0 ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_info "would back up ${backed_up} verified pre-migration symlinks"
+        else
+            log_info "backed up ${backed_up} verified pre-migration symlinks"
+        fi
+    fi
 }
 
 # ---- Main ----
