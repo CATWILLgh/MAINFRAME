@@ -15,6 +15,12 @@ from pathlib import Path
 import yaml
 
 from gates.mainframe_runtime import HANDLER_TIMEOUT_SECONDS
+from skill_projection import (
+    adapt_runtime_markdown,
+    adapt_skill_markdown,
+    validate_skill_projection_inventory,
+    validate_projected_skill_markdown,
+)
 from source_boundary import SourceBoundary, SourcePath
 
 
@@ -31,21 +37,6 @@ HOOK_EVENTS = (
 )
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 
-_RUNTIME_REWRITES = (
-    ("~/.claude/skills/mainframe/skills/", "~/.gemini/config/plugins/mainframe/skills/"),
-    ("~/.claude/plans", "~/.gemini/antigravity/mainframe-plans"),
-    ("`AskUserQuestion`", "ask the user directly in chat"),
-    ("`TodoWrite`", "a persistent checklist"),
-    ("`EnterPlanMode`", "interactive planning"),
-    ("`ExitPlanMode`", "explicit plan approval"),
-    ("the `Agent` tool", "`define_subagent` followed by `invoke_subagent`"),
-    ("`run_in_background: true`", "background subagent execution"),
-    ("`Explore`", "a read-only search subagent"),
-    ("`WebSearch`", "web research tools"),
-    ("`WebFetch`", "web research tools"),
-)
-
-
 def parse_frontmatter(text: str) -> tuple[dict, str]:
     if not text.startswith("---\n"):
         return {}, text
@@ -56,29 +47,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def _adapt_markdown(text: str) -> str:
-    for source, replacement in _RUNTIME_REWRITES:
-        text = text.replace(source, replacement)
-    text = text.replace(
-        "Claude Code's Bash subprocess always reads `~/.zshenv`",
-        "The shell subprocess reads `~/.zshenv`",
-    )
-    text = text.replace(
-        "uses `EnterPlanMode` / `ExitPlanMode` when present",
-        "uses an explicit interactive planning and approval exchange",
-    )
-    text = text.replace("](../skills/", "](~/.gemini/config/plugins/mainframe/skills/")
-    text = text.replace("preloaded skill", "referenced skill")
-    text = text.replace("preloaded `", "referenced `")
-    text = text.replace("is preloaded", "is available")
-    text = re.sub(r"\bpreloaded\b", "available", text, flags=re.IGNORECASE)
-    text = text.replace("`skills:` frontmatter", "delegation contract")
-    text = re.sub(
-        r"\[CLAUDE\.md\]\(\.\./\.\./dist/claude-code/CLAUDE\.md\)",
-        "`MAINFRAME plugin rules`",
-        text,
-    )
-    text = text.replace("CLAUDE.md", "MAINFRAME plugin rules")
-    return text
+    return adapt_runtime_markdown(text)
 
 
 def _adapt_description(text: str) -> str:
@@ -152,16 +121,21 @@ def _copy_skill(
         path = item.path
         relative = path.relative_to(source)
         destination = target / relative
-        if path.suffix != ".md":
+        if path.suffix.casefold() != ".md":
             files[destination] = item.read_bytes()
             continue
-        meta, body = parse_frontmatter(item.read_text())
-        body = _adapt_markdown(body)
+        meta, body = parse_frontmatter(
+            adapt_skill_markdown(source.name, relative, item.read_text())
+        )
         note = f"<!-- {GENERATED_MARKER} ({path.relative_to(source.parent.parent.parent)}). -->\n\n"
         if relative == Path("SKILL.md"):
             projected = {
                 "name": str(meta.get("name") or source.name),
-                "description": _adapt_description(str(meta.get("description") or "")),
+                "description": re.sub(
+                    r"\s*Picked via empirical tournament\s*\([^)]*\)\s*—[^.]*\.",
+                    "",
+                    str(meta.get("description") or ""),
+                ).strip(),
             }
             front = yaml.safe_dump(
                 projected, allow_unicode=True, sort_keys=False, width=100_000
@@ -224,12 +198,23 @@ def _delegate_skill(source: SourcePath) -> tuple[str, bytes] | None:
         "subagent definition.\n\n"
         f"Description: {description}\n\n{method_requirement}{body.rstrip()}\n"
     )
+    validate_projected_skill_markdown(f"core/agents/{source.path.name}", rendered)
     return f"delegate-{name}", rendered.encode()
 
 
 def _collect_skills_and_agents(root: Path, files: dict[Path, bytes]) -> None:
     skills = root / "core" / "skills"
-    for skill in SourceBoundary(root, skills).directories():
+    skill_directories = SourceBoundary(root, skills).directories()
+    skill_texts = {
+        skill.name: {
+            source.path.relative_to(skill).as_posix(): source.read_text()
+            for source in SourceBoundary(root, skill).files()
+            if source.path.suffix.casefold() == ".md"
+        }
+        for skill in skill_directories
+    }
+    validate_skill_projection_inventory(skill_texts)
+    for skill in skill_directories:
         _copy_skill(root, skill, Path("skills") / skill.name, files)
     agents = root / "core" / "agents"
     for agent in SourceBoundary(root, agents).files("*.md"):
