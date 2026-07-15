@@ -233,11 +233,13 @@ func TestPreviewProjectsDependencyHealthAndConfigurationOntoVisibleTarget(t *tes
 			{
 				ID: "claude-code.permissions", ComponentID: domain.ComponentClaudeCode,
 				Strategy:    releasecontract.StrategyJSONKeyMerge,
+				Target:      domain.Location{Root: domain.RootClaudeConfig, Path: "settings.json"},
 				Observation: releasecontract.SupportUnimplemented, Apply: releasecontract.SupportUnimplemented,
 			},
 			{
 				ID: "credential-tools.secrets-store", ComponentID: "credential-tools",
 				Strategy:    releasecontract.StrategySeedIfAbsent,
+				Target:      domain.Location{Root: domain.RootHome, Path: ".config/mainframe/secrets"},
 				Observation: releasecontract.SupportUnimplemented, Apply: releasecontract.SupportUnimplemented,
 			},
 		},

@@ -157,7 +157,12 @@ def _expected_resources() -> list[dict]:
             "source": "settings.json",
             "target": {"root": "claude-config", "path": "settings.json"},
             "legacy_source_suffixes": ["dist/claude-code/settings.json"],
-            "observation": "unimplemented",
+            "owned_json_pointers": [
+                "/permissions/allow",
+                "/permissions/ask",
+                "/permissions/deny",
+            ],
+            "observation": "supported",
             "apply": "unimplemented",
         },
     ]

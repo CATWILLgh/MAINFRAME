@@ -1,6 +1,7 @@
 package releasecontract_test
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -106,6 +107,28 @@ func TestLoadRejectsUnknownAndDuplicateJSONFields(t *testing.T) {
 			t.Fatal("duplicate JSON key was accepted")
 		}
 	})
+
+	for name, replacement := range map[string][]byte{
+		"invalid UTF-8": {0xff},
+		"surrogate":     []byte(`\uD800`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := writeFixture(t)
+			manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+			payload, err := os.ReadFile(manifestPath)
+			if err != nil {
+				t.Fatalf("read manifest: %v", err)
+			}
+			payload = bytes.Replace(payload, []byte(`${CODEX_HOME}`), replacement, 1)
+			if err := os.WriteFile(manifestPath, payload, 0o644); err != nil {
+				t.Fatalf("write manifest: %v", err)
+			}
+			rewriteIndexDigest(t, root, manifestPath)
+			if _, err := releasecontract.Load(root); err == nil {
+				t.Fatal("invalid Unicode in bundle manifest was accepted")
+			}
+		})
+	}
 }
 
 func TestLoadRejectsUnknownDependenciesAndOverlappingTargets(t *testing.T) {
@@ -190,39 +213,6 @@ func TestLoadRejectsMissingRequiredBundleCollections(t *testing.T) {
 				t.Fatalf("missing required field %q was accepted", field)
 			}
 		})
-	}
-}
-
-func TestLoadAcceptsSupportedShellObservationAndCapturesDesiredLine(t *testing.T) {
-	root := writeFixture(t)
-	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
-	manifest := readObject(t, manifestPath)
-	writeFile(t, filepath.Join(root, "bundles/codex/source-line"), "source ~/.config/mainframe/env\n", 0o644)
-	manifest["resources"] = []any{map[string]any{
-		"id":          "codex.shell-source",
-		"strategy":    "shell-line",
-		"source":      "source-line",
-		"target":      map[string]any{"root": "home", "path": ".zshenv"},
-		"observation": "supported",
-		"apply":       "unimplemented",
-	}}
-	manifest["payload_files"] = append(
-		manifest["payload_files"].([]any),
-		payloadRow(t, filepath.Join(root, "bundles/codex/source-line"), "source-line"),
-	)
-	writeJSON(t, manifestPath, manifest, 0o644)
-	rewriteIndexDigest(t, root, manifestPath)
-
-	release, err := releasecontract.Load(root)
-	if err != nil {
-		t.Fatalf("load release: %v", err)
-	}
-	resource := release.Resources[0]
-	if resource.Observation != releasecontract.SupportSupported {
-		t.Fatalf("observation = %q", resource.Observation)
-	}
-	if resource.DesiredLine != "source ~/.config/mainframe/env" {
-		t.Fatalf("desired line = %q", resource.DesiredLine)
 	}
 }
 

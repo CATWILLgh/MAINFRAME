@@ -54,6 +54,12 @@ type Resource struct {
 	Observation          SupportStatus
 	Apply                SupportStatus
 	DesiredLine          string
+	OwnedJSONFields      []JSONField
+}
+
+type JSONField struct {
+	Pointer string
+	Desired string
 }
 
 type Release struct {
@@ -101,13 +107,19 @@ type legacyArtifact struct {
 }
 
 type resourceRecord struct {
-	ID                   string         `json:"id"`
-	Strategy             string         `json:"strategy"`
-	Source               string         `json:"source,omitempty"`
-	Target               locationRecord `json:"target"`
-	LegacySourceSuffixes []string       `json:"legacy_source_suffixes,omitempty"`
-	Observation          string         `json:"observation"`
-	Apply                string         `json:"apply"`
+	ID                   string             `json:"id"`
+	Strategy             string             `json:"strategy"`
+	Source               string             `json:"source,omitempty"`
+	Target               locationRecord     `json:"target"`
+	LegacySourceSuffixes []string           `json:"legacy_source_suffixes,omitempty"`
+	Observation          string             `json:"observation"`
+	Apply                string             `json:"apply"`
+	OwnedJSONPointers    optionalStringList `json:"owned_json_pointers,omitempty"`
+}
+
+type optionalStringList struct {
+	Present bool
+	Values  []string
 }
 
 type locationRecord struct {

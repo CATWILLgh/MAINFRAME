@@ -53,6 +53,9 @@ const (
 	ConfigurationWrongKind              = configuration.WrongKind
 	ConfigurationInspectionFailed       = configuration.InspectionFailed
 	ConfigurationObservationUnsupported = configuration.ObservationUnsupported
+	ConfigurationJSONFieldsMatch        = configuration.JSONFieldsMatch
+	ConfigurationJSONFieldsDrifted      = configuration.JSONFieldsDrifted
+	ConfigurationJSONDocumentInvalid    = configuration.JSONDocumentInvalid
 )
 
 type ConfigurationResource struct {

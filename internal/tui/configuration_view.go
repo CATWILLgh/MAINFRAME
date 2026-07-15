@@ -109,6 +109,12 @@ func configurationReasonName(reason lifecycle.ConfigurationReason) string {
 		return "inspection failed"
 	case lifecycle.ConfigurationObservationUnsupported:
 		return "observation is not implemented"
+	case lifecycle.ConfigurationJSONFieldsMatch:
+		return "owned fields match"
+	case lifecycle.ConfigurationJSONFieldsDrifted:
+		return "owned fields differ"
+	case lifecycle.ConfigurationJSONDocumentInvalid:
+		return "JSON document is invalid"
 	default:
 		return "unknown reason"
 	}

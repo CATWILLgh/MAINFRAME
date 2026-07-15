@@ -72,7 +72,7 @@ func loadBundle(
 	}
 	sourceBase := path.Dir(entry.Path)
 	bundleRoot := filepath.Join(root, filepath.FromSlash(sourceBase))
-	component, resources, err := validateBundle(bundleRoot, sourceBase, manifest)
+	component, resources, err := validateBundle(root, bundleRoot, sourceBase, manifest)
 	if err != nil {
 		return bundleManifest{}, installmodel.ComponentSpec{}, nil,
 			fmt.Errorf("validate bundle %q: %w", entry.Component, err)
@@ -108,5 +108,5 @@ func validateGlobal(manifests []bundleManifest) error {
 			}
 		}
 	}
-	return nil
+	return validateGlobalJSONOwnership(manifests)
 }

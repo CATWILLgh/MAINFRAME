@@ -145,7 +145,12 @@ def _resources() -> list[dict[str, Any]]:
             "source": "settings.json",
             "target": {"root": "claude-config", "path": "settings.json"},
             "legacy_source_suffixes": ["dist/claude-code/settings.json"],
-            **unimplemented,
+            "owned_json_pointers": [
+                "/permissions/allow",
+                "/permissions/ask",
+                "/permissions/deny",
+            ],
+            **supported,
         },
     ]
 

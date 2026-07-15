@@ -43,7 +43,7 @@ func validateIndex(index releaseIndex) error {
 }
 
 func validateBundle(
-	bundleRoot, sourceBase string,
+	releaseRoot, bundleRoot, sourceBase string,
 	manifest bundleManifest,
 ) (installmodel.ComponentSpec, []Resource, error) {
 	component := domain.ComponentID(manifest.Component)
@@ -69,7 +69,14 @@ func validateBundle(
 	if err != nil {
 		return installmodel.ComponentSpec{}, nil, err
 	}
-	resources, err := validateResources(bundleRoot, sourceBase, component, manifest.Resources)
+	resources, err := validateResources(
+		releaseRoot,
+		bundleRoot,
+		sourceBase,
+		component,
+		manifest.Resources,
+		manifest.PayloadFiles,
+	)
 	if err != nil {
 		return installmodel.ComponentSpec{}, nil, err
 	}
@@ -157,58 +164,80 @@ func validateLegacy(
 }
 
 func validateResources(
-	bundleRoot, sourceBase string,
+	releaseRoot, bundleRoot, sourceBase string,
 	component domain.ComponentID,
 	records []resourceRecord,
+	payloadRows []payloadFile,
 ) ([]Resource, error) {
 	identifiers := make([]string, len(records))
 	resources := make([]Resource, len(records))
 	for index, record := range records {
 		identifiers[index] = record.ID
-		strategy := ResourceStrategy(record.Strategy)
-		if !itemPattern.MatchString(record.ID) || !strategy.valid() {
-			return nil, fmt.Errorf("component %q has invalid resource %q", component, record.ID)
-		}
-		requiresSource := strategy == StrategyJSONKeyMerge ||
-			strategy == StrategySeedIfAbsent ||
-			strategy == StrategyShellLine ||
-			strategy == StrategyShellLineIfPresent
-		if requiresSource != (record.Source != "") {
-			return nil, fmt.Errorf("resource %q has inconsistent source", record.ID)
-		}
-		var source domain.ArtifactPath
-		if record.Source != "" {
-			if err := validateSource(bundleRoot, record.Source, "file"); err != nil {
-				return nil, fmt.Errorf("resource %q: %w", record.ID, err)
-			}
-			source = domain.ArtifactPath(path.Join(sourceBase, record.Source))
-		}
-		target, err := location(record.Target)
+		resource, err := validateResourceRecord(
+			releaseRoot, bundleRoot, sourceBase, component, record, payloadRows,
+		)
 		if err != nil {
-			return nil, fmt.Errorf("resource %q: %w", record.ID, err)
+			return nil, err
 		}
-		legacySources, err := portablePaths(record.LegacySourceSuffixes, true)
-		if err != nil {
-			return nil, fmt.Errorf("resource %q: %w", record.ID, err)
-		}
-		observation := SupportStatus(record.Observation)
-		if !validObservationSupport(strategy, observation) || record.Apply != string(SupportUnimplemented) {
-			return nil, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
-		}
-		desiredLine, err := loadDesiredLine(bundleRoot, record.Source, strategy, observation)
-		if err != nil {
-			return nil, fmt.Errorf("resource %q: %w", record.ID, err)
-		}
-		resources[index] = Resource{
-			ID: record.ID, ComponentID: component, Strategy: strategy,
-			SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
-			Observation: observation, Apply: SupportUnimplemented, DesiredLine: desiredLine,
-		}
+		resources[index] = resource
 	}
 	if !sortedUnique(identifiers) {
 		return nil, fmt.Errorf("component %q resources must be sorted and unique", component)
 	}
 	return resources, nil
+}
+
+func validateResourceRecord(
+	releaseRoot, bundleRoot, sourceBase string,
+	component domain.ComponentID,
+	record resourceRecord,
+	payloadRows []payloadFile,
+) (Resource, error) {
+	strategy := ResourceStrategy(record.Strategy)
+	if !itemPattern.MatchString(record.ID) || !strategy.valid() {
+		return Resource{}, fmt.Errorf("component %q has invalid resource %q", component, record.ID)
+	}
+	requiresSource := strategy == StrategyJSONKeyMerge || strategy == StrategySeedIfAbsent ||
+		strategy == StrategyShellLine || strategy == StrategyShellLineIfPresent
+	if requiresSource != (record.Source != "") {
+		return Resource{}, fmt.Errorf("resource %q has inconsistent source", record.ID)
+	}
+	var source domain.ArtifactPath
+	if record.Source != "" {
+		if err := validateSource(bundleRoot, record.Source, "file"); err != nil {
+			return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+		}
+		source = domain.ArtifactPath(path.Join(sourceBase, record.Source))
+	}
+	target, err := location(record.Target)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
+	legacySources, err := portablePaths(record.LegacySourceSuffixes, true)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
+	observation := SupportStatus(record.Observation)
+	if !validObservationSupport(strategy, observation) || record.Apply != string(SupportUnimplemented) {
+		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
+	}
+	desiredLine, err := loadDesiredLine(bundleRoot, record.Source, strategy, observation)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
+	ownedFields, err := loadOwnedJSONFields(
+		releaseRoot, sourceBase, record.Source, strategy, observation,
+		record.OwnedJSONPointers, payloadRows,
+	)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
+	return Resource{
+		ID: record.ID, ComponentID: component, Strategy: strategy,
+		SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
+		Observation: observation, Apply: SupportUnimplemented, DesiredLine: desiredLine,
+		OwnedJSONFields: ownedFields,
+	}, nil
 }
 
 func validObservationSupport(strategy ResourceStrategy, support SupportStatus) bool {
@@ -219,7 +248,11 @@ func validObservationSupport(strategy ResourceStrategy, support SupportStatus) b
 		return false
 	}
 	switch strategy {
-	case StrategySeedIfAbsent, StrategyEnsureDir, StrategyShellLine, StrategyShellLineIfPresent:
+	case StrategyJSONKeyMerge,
+		StrategySeedIfAbsent,
+		StrategyEnsureDir,
+		StrategyShellLine,
+		StrategyShellLineIfPresent:
 		return true
 	default:
 		return false

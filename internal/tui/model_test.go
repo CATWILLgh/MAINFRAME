@@ -151,6 +151,9 @@ func TestConfigurationLabelsExplainEveryObservationReason(t *testing.T) {
 		lifecycle.ConfigurationWrongKind:              "unexpected file type",
 		lifecycle.ConfigurationInspectionFailed:       "inspection failed",
 		lifecycle.ConfigurationObservationUnsupported: "observation is not implemented",
+		lifecycle.ConfigurationJSONFieldsMatch:        "owned fields match",
+		lifecycle.ConfigurationJSONFieldsDrifted:      "owned fields differ",
+		lifecycle.ConfigurationJSONDocumentInvalid:    "JSON document is invalid",
 	}
 	for reason, want := range reasons {
 		if got := configurationReasonName(reason); got != want {

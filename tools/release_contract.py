@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """Versioned manifest and integrity contract for MAINFRAME release bundles."""
-
 from __future__ import annotations
-
 import re
-import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -19,9 +16,8 @@ from release_contract_io import (
     require_regular_file as _require_regular_file,
     write_json as _write_json,
 )
-from release_graph import reject_dependency_cycles
-
-
+from release_global import validate_global_contract, validate_local_target_isolation
+from release_json import validate_owned_json_source, validate_shell_source
 SCHEMA_VERSION = 1
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
@@ -41,7 +37,7 @@ UNIT_REQUIRED_FIELDS = {"id", "kind", "source", "target"}
 UNIT_OPTIONAL_FIELDS = {"legacy_source_suffixes"}
 LEGACY_FIELDS = {"target", "target_suffixes"}
 RESOURCE_REQUIRED_FIELDS = {"id", "strategy", "target", "observation", "apply"}
-RESOURCE_OPTIONAL_FIELDS = {"source", "legacy_source_suffixes"}
+RESOURCE_OPTIONAL_FIELDS = {"source", "legacy_source_suffixes", "owned_json_pointers"}
 PAYLOAD_FIELDS = {"path", "mode", "size", "sha256"}
 ENTRY_FIELDS = {"component", "path", "sha256"}
 SOURCE_STRATEGIES = {"json-key-merge", "seed-if-absent", "shell-line", "shell-line-if-present"}
@@ -149,7 +145,12 @@ def validate_release(release_root: Path) -> dict[str, Any]:
     _require_regular_file(index_path, "release index")
     index = _read_json(index_path)
     manifests = _validate_release_document(root, index)
-    _validate_global_contract(manifests)
+    validate_global_contract(
+        manifests,
+        parse_location=_location,
+        locations_overlap=_locations_overlap,
+        unique_identifier=_unique_identifier,
+    )
     return index
 
 
@@ -172,9 +173,13 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
         raise ValueError("runtime profile values must be strings")
     _validate_units(root, manifest["install_units"])
     _validate_legacy_artifacts(manifest["legacy_artifacts"])
-    _validate_target_isolation(manifest)
-    _validate_resources(root, manifest["resources"])
+    validate_local_target_isolation(
+        manifest,
+        parse_location=_location,
+        locations_overlap=_locations_overlap,
+    )
     _validate_payload_rows(manifest["payload_files"])
+    _validate_resources(root, manifest["resources"], manifest["payload_files"])
 
 
 def _validate_units(root: Path, units: Any) -> None:
@@ -230,25 +235,11 @@ def _validate_legacy_artifacts(artifacts: Any) -> None:
         raise ValueError("legacy_artifacts must be sorted by target")
 
 
-def _validate_target_isolation(manifest: dict[str, Any]) -> None:
-    targets = [
-        _location(unit["target"], "install target")
-        for unit in manifest["install_units"]
-    ]
-    targets.extend(
-        _location(artifact["target"], "legacy target")
-        for artifact in manifest["legacy_artifacts"]
-    )
-    for index, target in enumerate(targets):
-        for previous in targets[:index]:
-            if _locations_overlap(previous, target):
-                raise ValueError(f"bundle targets {previous!r} and {target!r} overlap")
-
-
-def _validate_resources(root: Path, resources: Any) -> None:
+def _validate_resources(root: Path, resources: Any, payload_rows: list[dict[str, Any]]) -> None:
     if not isinstance(resources, list):
         raise ValueError("resources must be a list")
     seen_ids: set[str] = set()
+    payload_by_path = {row["path"]: row for row in payload_rows}
     for resource in resources:
         _require_object(resource, "resource")
         allowed = RESOURCE_REQUIRED_FIELDS | RESOURCE_OPTIONAL_FIELDS
@@ -275,35 +266,21 @@ def _validate_resources(root: Path, resources: Any) -> None:
         }:
             raise ValueError(f"resource {identifier!r} overstates lifecycle support")
         if observation == "supported" and strategy not in OBSERVABLE_STRATEGIES:
-            raise ValueError(f"resource {identifier!r} overstates lifecycle support")
+            if strategy != "json-key-merge":
+                raise ValueError(f"resource {identifier!r} overstates lifecycle support")
         if observation == "supported" and strategy in SHELL_STRATEGIES:
-            _validate_shell_source(source_path, identifier)
+            validate_shell_source(source_path, identifier)
+        if observation == "supported" and strategy == "json-key-merge":
+            expected = payload_by_path.get(source)
+            if expected is None:
+                raise ValueError(f"resource {identifier!r} source is absent from payload inventory")
+            validate_owned_json_source(root, source, expected, resource, identifier)
+        elif "owned_json_pointers" in resource:
+            raise ValueError(
+                f"resource {identifier!r} owned_json_pointers require supported JSON observation"
+            )
     if [resource["id"] for resource in resources] != sorted(seen_ids):
         raise ValueError("resources must be sorted by id")
-
-
-def _validate_shell_source(source: Path, identifier: str) -> None:
-    try:
-        content = source.read_bytes().decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise ValueError(
-            f"resource {identifier!r} source must contain one non-empty logical line"
-        ) from exc
-    if content.endswith("\n"):
-        content = content[:-1]
-    unsupported_control = any(
-        character != "\t" and unicodedata.category(character) == "Cc"
-        for character in content
-    )
-    if (
-        not content.strip(" \t")
-        or "\r" in content
-        or "\n" in content
-        or unsupported_control
-    ):
-        raise ValueError(
-            f"resource {identifier!r} source must contain one non-empty logical line"
-        )
 
 
 def _validate_payload_rows(rows: Any) -> None:
@@ -361,30 +338,6 @@ def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
     if components != sorted(set(components)):
         raise ValueError("release manifests must be sorted with unique components")
     return manifests
-
-
-def _validate_global_contract(manifests: list[dict[str, Any]]) -> None:
-    components = {manifest["component"] for manifest in manifests}
-    identifiers: set[str] = set()
-    targets: list[tuple[str, str]] = []
-    for manifest in manifests:
-        for dependency in manifest["dependencies"]:
-            if dependency not in components:
-                raise ValueError(f"component {manifest['component']!r} has unknown dependency {dependency!r}")
-        for collection in (manifest["install_units"], manifest["resources"]):
-            for item in collection:
-                _unique_identifier(item["id"], identifiers, "release item")
-        target_records = [
-            *manifest["install_units"],
-            *manifest["legacy_artifacts"],
-        ]
-        for record in target_records:
-            target = _location(record["target"], "release target")
-            for previous in targets:
-                if _locations_overlap(previous, target):
-                    raise ValueError(f"release targets {previous!r} and {target!r} overlap")
-            targets.append(target)
-    reject_dependency_cycles(manifests)
 
 
 def _location(value: Any, label: str) -> tuple[str, str]:

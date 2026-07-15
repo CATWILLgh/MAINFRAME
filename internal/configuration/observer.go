@@ -8,6 +8,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
+	"github.com/CATWILLgh/MAINFRAME/internal/jsondocument"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
@@ -35,6 +36,9 @@ const (
 	WrongKind              Reason = "wrong_kind"
 	InspectionFailed       Reason = "inspection_failed"
 	ObservationUnsupported Reason = "observation_unsupported"
+	JSONFieldsMatch        Reason = "json_fields_match"
+	JSONFieldsDrifted      Reason = "json_fields_drifted"
+	JSONDocumentInvalid    Reason = "json_document_invalid"
 )
 
 type Observation struct {
@@ -52,17 +56,13 @@ func Observe(resources []releasecontract.Resource, host Host) ([]Observation, er
 	if host == nil {
 		return nil, fmt.Errorf("host must not be nil")
 	}
-	seen := make(map[string]bool, len(resources))
+	if err := validateResourceSet(resources); err != nil {
+		return nil, err
+	}
 	observations := make([]Observation, 0, len(resources))
+	jsonSnapshots := make(map[domain.Location]jsonSnapshot)
 	for _, resource := range resources {
-		if resource.ID == "" || seen[resource.ID] {
-			return nil, fmt.Errorf("invalid duplicate configuration resource %q", resource.ID)
-		}
-		if err := validateResource(resource); err != nil {
-			return nil, fmt.Errorf("invalid configuration resource %q: %w", resource.ID, err)
-		}
-		seen[resource.ID] = true
-		observation, err := observeResource(resource, host)
+		observation, err := observeResource(resource, host, jsonSnapshots)
 		if err != nil {
 			return nil, fmt.Errorf("observe configuration resource %q: %w", resource.ID, err)
 		}
@@ -75,14 +75,11 @@ func Observe(resources []releasecontract.Resource, host Host) ([]Observation, er
 }
 
 func Validate(resources []releasecontract.Resource, observations []Observation) error {
+	if err := validateResourceSet(resources); err != nil {
+		return err
+	}
 	resourceByID := make(map[string]releasecontract.Resource, len(resources))
 	for _, resource := range resources {
-		if resource.ID == "" || resourceByID[resource.ID].ID != "" {
-			return fmt.Errorf("invalid duplicate configuration resource %q", resource.ID)
-		}
-		if err := validateResource(resource); err != nil {
-			return fmt.Errorf("invalid configuration resource %q: %w", resource.ID, err)
-		}
 		resourceByID[resource.ID] = resource
 	}
 	seen := make(map[string]bool, len(observations))
@@ -108,7 +105,11 @@ func Validate(resources []releasecontract.Resource, observations []Observation) 
 	return nil
 }
 
-func observeResource(resource releasecontract.Resource, host Host) (Observation, error) {
+func observeResource(
+	resource releasecontract.Resource,
+	host Host,
+	jsonSnapshots map[domain.Location]jsonSnapshot,
+) (Observation, error) {
 	result := Observation{ResourceID: resource.ID, ComponentID: resource.ComponentID}
 	if resource.Observation == releasecontract.SupportUnimplemented {
 		result.Status, result.Reason = NotAssessed, ObservationUnsupported
@@ -116,6 +117,9 @@ func observeResource(resource releasecontract.Resource, host Host) (Observation,
 	}
 	if resource.Observation != releasecontract.SupportSupported || !supportedStrategy(resource.Strategy) {
 		return Observation{}, fmt.Errorf("invalid observation support for strategy %q", resource.Strategy)
+	}
+	if resource.Strategy == releasecontract.StrategyJSONKeyMerge {
+		return observeJSONResource(resource, host, jsonSnapshots), nil
 	}
 	readContent := resource.Strategy == releasecontract.StrategyShellLine ||
 		resource.Strategy == releasecontract.StrategyShellLineIfPresent
@@ -136,6 +140,76 @@ func observeResource(resource releasecontract.Resource, host Host) (Observation,
 		return result, nil
 	}
 	return classifyExisting(resource, entry, result), nil
+}
+
+type jsonSnapshot struct {
+	entry    hostfs.Entry
+	err      error
+	document jsondocument.Document
+	parseErr error
+}
+
+func observeJSONResource(
+	resource releasecontract.Resource,
+	host Host,
+	snapshots map[domain.Location]jsonSnapshot,
+) Observation {
+	result := Observation{ResourceID: resource.ID, ComponentID: resource.ComponentID}
+	snapshot, exists := snapshots[resource.Target]
+	if !exists {
+		entry, err := host.Inspect(resource.Target, true)
+		snapshot = jsonSnapshot{entry: entry, err: err}
+		if err == nil && entry.Kind == hostfs.EntryRegular {
+			snapshot.document, snapshot.parseErr = jsondocument.Parse(entry.Content)
+		}
+		snapshots[resource.Target] = snapshot
+	}
+	if errors.Is(snapshot.err, fs.ErrNotExist) {
+		result.Status, result.Reason = NeedsChange, ResourceMissing
+		return result
+	}
+	if snapshot.err != nil {
+		result.Status, result.Reason = Attention, InspectionFailed
+		return result
+	}
+	if snapshot.entry.Kind == hostfs.EntrySymlink {
+		result.Status, result.Reason = Attention, SymbolicLink
+		return result
+	}
+	if snapshot.entry.Kind != hostfs.EntryRegular {
+		result.Status, result.Reason = Attention, WrongKind
+		return result
+	}
+	if snapshot.parseErr != nil {
+		result.Status, result.Reason = Attention, JSONDocumentInvalid
+		return result
+	}
+	return compareJSONFields(resource, snapshot.document, result)
+}
+
+func compareJSONFields(
+	resource releasecontract.Resource,
+	document jsondocument.Document,
+	result Observation,
+) Observation {
+	for _, field := range resource.OwnedJSONFields {
+		pointer, err := jsondocument.ParsePointer(field.Pointer)
+		if err != nil {
+			result.Status, result.Reason = Attention, JSONDocumentInvalid
+			return result
+		}
+		actual, status := document.Lookup(pointer)
+		if status == jsondocument.Incompatible {
+			result.Status, result.Reason = Attention, JSONDocumentInvalid
+			return result
+		}
+		if status == jsondocument.Missing || actual != field.Desired {
+			result.Status, result.Reason = NeedsChange, JSONFieldsDrifted
+			return result
+		}
+	}
+	result.Status, result.Reason = Ready, JSONFieldsMatch
+	return result
 }
 
 func classifyExisting(
@@ -188,71 +262,4 @@ func containsLine(content []byte, desired string) bool {
 		}
 	}
 	return false
-}
-
-func supportedStrategy(strategy releasecontract.ResourceStrategy) bool {
-	switch strategy {
-	case releasecontract.StrategySeedIfAbsent,
-		releasecontract.StrategyEnsureDir,
-		releasecontract.StrategyShellLine,
-		releasecontract.StrategyShellLineIfPresent:
-		return true
-	default:
-		return false
-	}
-}
-
-func validateResource(resource releasecontract.Resource) error {
-	if resource.Apply != releasecontract.SupportUnimplemented {
-		return fmt.Errorf("apply support must remain unimplemented")
-	}
-	if resource.Observation == releasecontract.SupportUnimplemented {
-		return nil
-	}
-	if resource.Observation != releasecontract.SupportSupported || !supportedStrategy(resource.Strategy) {
-		return fmt.Errorf("invalid observation support for strategy %q", resource.Strategy)
-	}
-	if (resource.Strategy == releasecontract.StrategyShellLine ||
-		resource.Strategy == releasecontract.StrategyShellLineIfPresent) && resource.DesiredLine == "" {
-		return fmt.Errorf("supported shell observation has no desired line")
-	}
-	return nil
-}
-
-func validObservation(resource releasecontract.Resource, observation Observation) bool {
-	if resource.Observation == releasecontract.SupportUnimplemented {
-		return observation.Status == NotAssessed && observation.Reason == ObservationUnsupported
-	}
-	valid := map[Status]map[Reason]bool{
-		Ready: {
-			ResourceExists: true, DirectoryExists: true, LinePresent: true,
-		},
-		NeedsChange: {
-			ResourceMissing: true, DirectoryMissing: true, LineMissing: true,
-		},
-		NotApplicable: {OptionalTargetMissing: true},
-		Attention: {
-			SymbolicLink: true, WrongKind: true, InspectionFailed: true,
-		},
-	}
-	if !valid[observation.Status][observation.Reason] {
-		return false
-	}
-	switch resource.Strategy {
-	case releasecontract.StrategySeedIfAbsent:
-		return observation.Reason == ResourceExists || observation.Reason == ResourceMissing ||
-			observation.Reason == SymbolicLink || observation.Reason == WrongKind || observation.Reason == InspectionFailed
-	case releasecontract.StrategyEnsureDir:
-		return observation.Reason == DirectoryExists || observation.Reason == DirectoryMissing ||
-			observation.Reason == SymbolicLink || observation.Reason == WrongKind || observation.Reason == InspectionFailed
-	case releasecontract.StrategyShellLine:
-		return observation.Reason == LinePresent || observation.Reason == LineMissing ||
-			observation.Reason == SymbolicLink || observation.Reason == WrongKind || observation.Reason == InspectionFailed
-	case releasecontract.StrategyShellLineIfPresent:
-		return observation.Reason == LinePresent || observation.Reason == LineMissing ||
-			observation.Reason == OptionalTargetMissing || observation.Reason == SymbolicLink ||
-			observation.Reason == WrongKind || observation.Reason == InspectionFailed
-	default:
-		return false
-	}
 }
