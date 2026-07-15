@@ -1,7 +1,7 @@
 ---
 id: 6b0a68eb
 title: Keep Antigravity builder inputs inside their declared source roots
-status: open
+status: approved
 priority: medium
 component: antigravity-builder
 discovered: 2026-07-15
@@ -51,6 +51,47 @@ indication that bytes came from outside the repository.
 
 ## Sources
 
-- `adapters/antigravity-2/build_antigravity.py:115-148`
-- `adapters/antigravity-2/build_antigravity.py:151-170`
-- `tools/test_build_antigravity.py`
+- `adapters/antigravity-2/source_boundary.py:22-95`
+- `adapters/antigravity-2/build_antigravity.py:122-160`
+- `adapters/antigravity-2/build_antigravity.py:230-268`
+- `tools/test_build_antigravity.py:105-224`
+- [Python `Path.resolve()`](https://docs.python.org/3/library/pathlib.html#pathlib.Path.resolve)
+- [Python `Path.rglob()`](https://docs.python.org/3/library/pathlib.html#pathlib.Path.rglob)
+
+## Resolution (2026-07-15)
+
+**Implementer:** Codex
+**Commit:** 6cc2a37a54b742fc599261e801383ad506ea81c4
+**Summary:** The Antigravity builder now resolves every projected source through
+one adapter-owned boundary before reading. A source must stay inside both the
+repository and its declared tree. Contained file links remain supported and are
+copied by value under their lexical output path; directory, external, broken,
+and cyclic links fail with a repository-relative source error. Rules, each
+individual skill, agents, detector/rule/memory trees, and the shared bridge
+directory all use the same validation path.
+
+**Compatibility evidence:** The ordinary 18-file fixture and the complete
+148-file repository projection were compared with the builder from the parent
+commit and matched byte-for-byte. The Claude Code-derived core and its render
+targets were not changed.
+
+## Audit (2026-07-15)
+
+**Auditor:** Independent Codex reviewer (`builder_ticket_audit`)
+**Verdict:** Approved
+**Verified:**
+- Excluded `__pycache__`, `.pyc`, and `.pyo` entries are validated before they
+  are omitted, so their names cannot hide a directory or external link.
+- Oversized-rule, missing-bridge, invalid-link, and containment errors expose
+  only lexical repository-relative source paths and suppress filesystem causes.
+- Tests cover contained, external, broken, cyclic, file, nested-directory, and
+  source-root links across rules, skills, agents, detectors, runtime rules,
+  memory, and direct bridge files.
+- Resolved paths are used for reads while output names and provenance remain
+  lexical; the remaining concurrent-tree replacement window is proportionate
+  to a local build whose input tree is already writable by the caller.
+
+**Regression scan:** The final implementation passed all 38 Python test files,
+both Node suites, Ruff, the neutral-core render check, the `CLAUDE.md` and skill
+validators, generated Antigravity skill validation, `git diff --check`, and
+native Antigravity 2.2.1 validation. The targeted builder suite passed 16/16.
