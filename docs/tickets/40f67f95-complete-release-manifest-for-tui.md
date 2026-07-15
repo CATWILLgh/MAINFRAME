@@ -1,7 +1,7 @@
 ---
 id: 40f67f95
 title: Complete the release manifest before presenting a full TUI plan
-status: open
+status: closed
 priority: medium
 component: installer
 discovered: 2026-07-15
@@ -40,8 +40,25 @@ No existing ticket queue was present. This ticket is limited to complete release
 
 ## Sources
 
-- `internal/installmanifest/manifest.go:8`
-- `cmd/mainframe/preview.go:28`
-- `internal/tui/model.go:145`
+- `tools/release_contract.py`
+- `tools/build_release.py`
+- `internal/releasecontract/loader.go`
+- `internal/releaselayout/root.go`
+- `cmd/mainframe/preview.go`
+- `internal/tui/model.go`
+- `adapters/claude-code/build_bundle.py`
 - `adapters/codex/build_bundle.py`
 - `adapters/opencode/build_bundle.py`
+
+## Resolution
+
+The release now has an indexed, integrity-checked package containing the binary,
+common credential tooling, and complete isolated bundles for Claude Code, Codex,
+and OpenCode. A packaged binary resolves the release through its symlink-resolved
+`bin/mainframe` location, while `MAINFRAME_RELEASE_ROOT` remains an explicit
+development override. The TUI consumes this complete filesystem inventory and
+lists mutable resources separately as not assessed and not applied.
+
+This closes complete local package inventory, not selective network delivery.
+Metadata-first selection and dependency-closure downloads are tracked in
+[#33930a3b](33930a3b-enable-selective-release-downloads.md).
