@@ -1,7 +1,7 @@
 ---
 id: c2f6d19b
 title: Budget Antigravity hook events and isolate detector failures
-status: open
+status: approved
 priority: high
 component: antigravity-hooks
 discovered: 2026-07-15
@@ -58,8 +58,57 @@ fail-open is acceptable per detector, but not for the entire accumulated event.
 
 ## Sources
 
-- `adapters/antigravity-2/gates/mainframe_hook.py:129-143`
-- `adapters/antigravity-2/gates/mainframe_hook.py:167-180`
-- `adapters/antigravity-2/gates/mainframe_hook.py:301-319`
-- `adapters/antigravity-2/build_antigravity.py:104-112`
-- <https://antigravity.google/docs/hooks>
+- `adapters/antigravity-2/gates/mainframe_hook.py:142-195`
+- `adapters/antigravity-2/gates/mainframe_hook.py:295-329`
+- `adapters/antigravity-2/gates/mainframe_runtime.py:19-89`
+- `adapters/antigravity-2/gates/mainframe_runtime.py:111-237`
+- `adapters/antigravity-2/build_antigravity.py:106-118`
+- [Antigravity hooks](https://antigravity.google/docs/hooks)
+- [Python `subprocess`](https://docs.python.org/3/library/subprocess.html)
+
+## Resolution (2026-07-15)
+
+**Implementer:** Codex
+**Commit:** b857a31f9b9b620f420bc1ac9486958423178cbd
+**Summary:** The adapter now owns one monotonic budget per event, starts each
+independent detector concurrently, and applies results in declared order. Every
+detector has a named allowance; the generated Antigravity handler timeout is
+derived from the same contract with a five-second margin. Timeouts, process
+spawn failures, non-zero exits, malformed or oversized output, and missing
+scripts fail open only for the affected detector. On POSIX, each detector runs
+in its own session and timeout cleanup kills and waits for its process group.
+
+**Measured event shape:** Five controlled runs used every detector slot in each
+event, with every fixture running for 0.25 seconds. Median bridge latency was
+0.301 seconds for four `PreToolUse` detectors, 0.310 seconds for seven
+`PostToolUse` detectors, and 0.309 seconds for five `Stop` detectors, versus
+sequential baselines of 1.00, 1.75, and 1.25 seconds. A separate detector ran
+successfully for 10.2 seconds under its 11-second allowance, proving removal of
+the former blanket 10-second cutoff.
+
+**Deferred bounds:** [#7b65ea21](7b65ea21-bound-detector-input-work.md) owns
+unbounded detector input work; [#e0f591b1](e0f591b1-bound-memory-file-reads.md)
+owns complete memory-file reads; [#f162d529](f162d529-terminate-windows-detector-trees.md)
+owns Windows descendant cleanup. Live installed-plugin discovery remains under
+[#bce23629](bce23629-live-antigravity-plugin-validation.md).
+
+## Audit (2026-07-15)
+
+**Auditor:** Independent Codex reviewer (`final_runtime_audit`)
+**Verdict:** Approved
+**Verified:**
+- `ask` and `deny` survive a later timeout, and later advisory output remains
+  deliverable after an earlier failure.
+- Parallel process execution preserves declared result order and rejects late,
+  unreaped, non-zero, malformed, missing, and oversized results independently.
+- Output storage is bounded to 262,145 bytes and uses pipe backpressure rather
+  than an unbounded temporary file.
+- Cleanup has a two-second total wait budget; the Antigravity handler margin is
+  larger and is emitted from the same runtime contract.
+- A real POSIX detector grandchild is absent after timeout cleanup.
+- The generated plugin includes the runtime module and explicit handler times.
+
+**Regression scan:** The auditor independently passed runtime 6/6, hook 14/14,
+builder 9/9, and `git diff --check`. The implementation run passed all 38 Python
+test files, both Node suites, `Ruff`, the core render check, the `CLAUDE.md` and
+skill validators, and native Antigravity 2.2.1 builder validation.
