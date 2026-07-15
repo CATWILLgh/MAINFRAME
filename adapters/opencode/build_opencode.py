@@ -19,14 +19,17 @@ Run: `.venv/bin/python3 adapters/opencode/build_opencode.py [--dry-run]`
 """
 
 import argparse
-import copy
 import json
 import os
 import re
-import shutil
 import sys
 
 import yaml
+from config_writer import ConfigWriteError, write_config
+from permission_config import (
+    load_permission_rules, load_permission_state, merge_permissions,
+    require_restrictive_projection, write_permission_state,
+)
 
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 
@@ -210,39 +213,25 @@ def project_mcp(mcp_servers):
     return servers, {"skipped": skipped}
 
 
-def merge_config(existing, permission, mcp_servers):
-    """Merge hub-managed keys into the user's config, touching nothing else.
-
-    `mcp.<name>` is only added when absent — a user-customized server of the
-    same name wins. `permission` is hub-managed and replaced wholesale: a
-    per-key merge would put final rule ORDER outside the generator's control,
-    and order decides outcomes under last-match-wins.
-    """
-    merged = copy.deepcopy(existing)
+def merge_config_with_ownership(existing, permission, mcp_servers, owned):
+    """Merge MCP additions with ownership-aware permission actions."""
+    merged = json.loads(json.dumps(existing))
     mcp = merged.setdefault("mcp", {})
     for name, server in mcp_servers.items():
         if name not in mcp:
             mcp[name] = server
-    if permission:
-        merged["permission"] = permission
+    current = existing.get("permission", {})
+    merged_permission, next_owned = merge_permissions(
+        current, permission, owned)
+    if "permission" in existing or merged_permission:
+        merged["permission"] = merged_permission
+    return merged, next_owned
+
+
+def merge_config(existing, permission, mcp_servers):
+    merged, _ = merge_config_with_ownership(
+        existing, permission, mcp_servers, {})
     return merged
-
-
-def write_config(path, data):
-    """Write config JSON with one rolling backup of the previous version.
-
-    A single overwritten `.backup` (0600) instead of timestamped copies: the
-    file carries the user's API keys, so accumulating snapshots of it would
-    multiply plaintext secrets.
-    """
-    if os.path.exists(path):
-        backup = path + ".backup"
-        shutil.copy2(path, backup)
-        os.chmod(backup, 0o600)
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
 
 
 def _load_json(path):
@@ -273,7 +262,7 @@ def _collect_agents(root, enrich=None):
     return out
 
 
-def _print_summary(agents, perm_report, mcp_report, replaced_permission):
+def _print_summary(agents, perm_report, mcp_report, changed_permission):
     print(f"agents projected: {len(agents)}")
     print(f"allow entries omitted by design: {perm_report['allow_omitted']}")
     if perm_report["skipped"]:
@@ -284,9 +273,9 @@ def _print_summary(agents, perm_report, mcp_report, replaced_permission):
     if mcp_report["skipped"]:
         print("MCP servers NOT translated (secret-bearing env or non-stdio): "
               + ", ".join(mcp_report["skipped"]))
-    if replaced_permission:
-        print("NOTE: an existing differing `permission` block was replaced "
-              "(previous version is in opencode.json.backup).")
+    if changed_permission:
+        print("NOTE: generated hub permission actions differ; "
+              "user-owned actions remain preserved.")
     print("Caveats — the projected permission map is best-effort, NOT a "
           "safety boundary:")
     print("  - OpenCode resolves last-match-wins; deny entries are emitted "
@@ -306,7 +295,7 @@ def _default_root():
     return os.path.dirname(os.path.dirname(os.path.dirname(here)))
 
 
-def main(argv=None):
+def _parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=_default_root())
     parser.add_argument("--agents-out", default=None,
@@ -317,8 +306,38 @@ def main(argv=None):
         "~/.claude.json"))
     parser.add_argument("--enrich", default=None,
                         help="default: <root>/workspace/opencode-enrich.json")
+    parser.add_argument("--permission-state", default=None,
+                        help="default: <config>.mainframe-permissions.json")
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def _write_outputs(args, agents_out, agents, merged, permission_state,
+                   next_owned):
+    os.makedirs(agents_out, exist_ok=True)
+    for fname, rendered in agents:
+        with open(os.path.join(agents_out, fname), "w") as f:
+            f.write(rendered)
+    try:
+        write_result = write_config(args.config, merged)
+    except ConfigWriteError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+    write_permission_state(permission_state, next_owned)
+    print(f"wrote {len(agents)} agent file(s) to {agents_out}")
+    print(f"merged hub-managed keys into {args.config}")
+    if write_result.tightened:
+        print("tightened permissions: "
+              f"{write_result.previous_mode:04o} -> "
+              f"{write_result.mode:04o}")
+    if write_result.cleanup_warning:
+        print("WARNING: config published; cleanup incomplete: "
+              + write_result.cleanup_warning)
+
+
+def main(argv=None):
+    args = _parse_args(argv)
+    permission_state = (args.permission_state
+                        or args.config + ".mainframe-permissions.json")
 
     enrich_path = args.enrich or os.path.join(
         args.root, "workspace", "opencode-enrich.json")
@@ -331,9 +350,10 @@ def main(argv=None):
         args.root, "dist", "opencode", "agents")
     agents = _collect_agents(args.root, enrich=enrich)
 
-    rules = _load_json(os.path.join(
+    rules = load_permission_rules(os.path.join(
         args.root, "core", "permissions", "rules.json"))
-    permission, perm_report = project_permissions(rules or {})
+    permission, perm_report = project_permissions(rules)
+    require_restrictive_projection(permission)
 
     claude_cfg = _load_json(args.claude_config)
     if claude_cfg is None:
@@ -343,9 +363,10 @@ def main(argv=None):
         servers, mcp_report = project_mcp(claude_cfg.get("mcpServers", {}))
 
     existing = _load_json(args.config) or {}
-    merged = merge_config(existing, permission, servers)
-    replaced = ("permission" in existing
-                and existing["permission"] != merged.get("permission"))
+    owned = load_permission_state(permission_state)
+    merged, next_owned = merge_config_with_ownership(
+        existing, permission, servers, owned)
+    changed = existing.get("permission") != merged.get("permission")
 
     if args.dry_run:
         print(f"[dry-run] would write {len(agents)} agent file(s) to "
@@ -353,15 +374,10 @@ def main(argv=None):
         print(f"[dry-run] would merge keys into {args.config}: "
               f"permission + mcp({', '.join(servers) or 'none'})")
     else:
-        os.makedirs(agents_out, exist_ok=True)
-        for fname, rendered in agents:
-            with open(os.path.join(agents_out, fname), "w") as f:
-                f.write(rendered)
-        write_config(args.config, merged)
-        print(f"wrote {len(agents)} agent file(s) to {agents_out}")
-        print(f"merged hub-managed keys into {args.config}")
+        _write_outputs(args, agents_out, agents, merged, permission_state,
+                       next_owned)
 
-    _print_summary(agents, perm_report, mcp_report, replaced)
+    _print_summary(agents, perm_report, mcp_report, changed)
     return 0
 
 
