@@ -13,7 +13,7 @@ tags: ["tui", "configuration", "ownership", "opencode", "codex"]
 
 ## What was observed
 
-The read-only observer can safely classify seed-if-absent files, required or optional shell lines, and directories. Claude Code settings, OpenCode permission configuration, and Codex hook trust remain explicitly not assessed because their owned subsets and external state are not encoded in the release contract. OpenCode MCP projection is not represented as a release resource at all.
+The read-only observer can safely classify seed-if-absent files, required or optional shell lines, directories, and the three Claude Code permission arrays owned by MAINFRAME. OpenCode permission configuration and Codex hook trust remain explicitly not assessed because their ownership registry and external state are not encoded in the release contract. OpenCode MCP projection is not represented as a release resource at all.
 
 ## Why it is a problem
 
@@ -25,11 +25,18 @@ The TUI cannot yet explain configuration drift or build a safe configuration pla
 
 ## What probably needs to be done
 
-- Encode owned JSON paths and merge semantics without treating user-owned keys as MAINFRAME state.
+- Extend the owned-JSON contract with OpenCode's separate ownership registry and relinquishment semantics.
 - Represent OpenCode MCP additions and their ownership independently from permission rules.
 - Model Codex hook trust as adapter-local external state instead of inferring it from `hooks.json`.
 - Define observable, plan, apply, and removal contracts for each configuration strategy before exposing an Apply action.
 - Prove that each adapter reads and writes only its own configuration and state projections.
+
+## Progress
+
+- Claude Code observation owns only `/permissions/allow`, `/permissions/ask`, and `/permissions/deny` through strict RFC 6901 pointers.
+- The release contract rejects ambiguous JSON, overlapping ownership, install-target collisions, and source bytes that do not match the payload inventory.
+- The observer reads each JSON target once, ignores unrelated user keys, and distinguishes drift from malformed structure.
+- Apply and removal remain unavailable; OpenCode and Codex still require the adapter-specific contracts above.
 
 ## Acceptance criteria
 
@@ -42,6 +49,7 @@ The TUI cannot yet explain configuration drift or build a safe configuration pla
 ## Sources
 
 - `internal/releasecontract/types.go`
+- `internal/jsondocument/document.go`
 - `internal/configuration/observer.go`
 - `adapters/claude-code/build_bundle.py`
 - `adapters/opencode/build_bundle.py`
