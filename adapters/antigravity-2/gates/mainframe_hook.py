@@ -22,6 +22,7 @@ from mainframe_state import (
 MAX_INPUT_BYTES = 1_048_576
 MAX_DETECTOR_OUTPUT_BYTES = 262_144
 MAX_MEMORY_INJECTION_BYTES = 30_000
+MAX_STOP_REASON_BYTES = 30_000
 MAX_QUEUED_NOTES = 12
 MEMORY_SENTINEL = "<MAINFRAME_PROJECT_MEMORY>"
 MEMORY_SENTINEL_END = "</MAINFRAME_PROJECT_MEMORY>"
@@ -75,6 +76,19 @@ def _workspace_paths(payload: dict) -> list[str]:
     if not isinstance(paths, list):
         return []
     return sorted({path for path in paths if isinstance(path, str) and path})
+
+
+def _combined_stop_reason(blockers: list[tuple[str, object]]) -> str:
+    normalized = []
+    for name, raw_reason in sorted(blockers):
+        reason = raw_reason.strip() if isinstance(raw_reason, str) else ""
+        normalized.append((name, reason or "No reason provided."))
+    names = ", ".join(name for name, _reason in normalized)
+    details = "\n".join(f"[{name}] {reason}" for name, reason in normalized)
+    prefix = f"Blocking detectors: {names}\n"
+    available = MAX_STOP_REASON_BYTES - len(prefix.encode("utf-8"))
+    bounded = details.encode("utf-8")[:max(0, available)].decode("utf-8", "ignore")
+    return prefix + bounded
 
 
 def _value(args: dict, official: str, fallback: str) -> object:
@@ -264,12 +278,15 @@ class Bridge:
             "transcript_bytes": payload.get("transcriptBytes"),
             "stop_hook_active": False,
         }
+        blockers = []
         for name in STOP_DETECTORS:
             result = self.detector_runner(name, neutral)
-            if result and result.get("decision") == "block":
-                if self._stop_seen(payload):
-                    return {}
-                return {"decision": "continue", "reason": str(result.get("reason") or "MAINFRAME gate")}
+            if isinstance(result, dict) and result.get("decision") == "block":
+                blockers.append((name, result.get("reason")))
+        if blockers:
+            if self._stop_seen(payload):
+                return {}
+            return {"decision": "continue", "reason": _combined_stop_reason(blockers)}
         if not payload.get("fullyIdle", False):
             return {}
         memory_payload = {

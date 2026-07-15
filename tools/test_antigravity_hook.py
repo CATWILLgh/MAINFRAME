@@ -194,6 +194,85 @@ def test_stop_continues_once_only_for_substantive_desktop_session() -> None:
     assert memory_call[1]["memory_backend"] == "antigravity-2"
 
 
+def test_stop_aggregates_every_blocker_before_deciding() -> None:
+    instance = bridge()
+    calls: list[str] = []
+    blockers = {
+        hook.STOP_DETECTORS[0]: "Fix suppression markers.",
+        hook.STOP_DETECTORS[2]: "",
+        hook.STOP_DETECTORS[4]: 42,
+    }
+
+    def detector(name: str, _payload: dict) -> object:
+        calls.append(name)
+        if name in blockers:
+            return {"decision": "block", "reason": blockers[name]}
+        if name == hook.STOP_DETECTORS[1]:
+            return {"decision": "allow"}
+        return "invalid detector output"
+
+    instance.detector_runner = detector
+    result = instance.handle("Stop", desktop_payload(
+        executionNum=11, terminationReason="complete", fullyIdle=False,
+    ))
+
+    assert result["decision"] == "continue"
+    assert calls == list(hook.STOP_DETECTORS)
+    assert result["reason"].splitlines()[0] == (
+        "Blocking detectors: " + ", ".join(sorted(blockers))
+    )
+    assert f"[{hook.STOP_DETECTORS[0]}] Fix suppression markers." in result["reason"]
+    assert f"[{hook.STOP_DETECTORS[2]}] No reason provided." in result["reason"]
+    assert f"[{hook.STOP_DETECTORS[4]}] No reason provided." in result["reason"]
+
+
+def test_stop_aggregation_is_order_independent_and_bounded() -> None:
+    original = hook.STOP_DETECTORS
+
+    def run(order: tuple[str, ...]) -> dict:
+        hook.STOP_DETECTORS = order
+        instance = bridge()
+        instance.detector_runner = lambda name, _payload: {
+            "decision": "block", "reason": f"{name}: " + "🙂" * 10_000,
+        }
+        return instance.handle("Stop", desktop_payload(
+            executionNum=12, terminationReason="complete", fullyIdle=True,
+        ))
+
+    try:
+        forward = run(original)
+        reverse = run(tuple(reversed(original)))
+    finally:
+        hook.STOP_DETECTORS = original
+
+    assert forward == reverse
+    assert len(forward["reason"].encode("utf-8")) <= hook.MAX_STOP_REASON_BYTES
+    manifest = forward["reason"].splitlines()[0]
+    assert manifest == "Blocking detectors: " + ", ".join(sorted(original))
+
+
+def test_repeated_stop_rechecks_all_blockers_without_looping() -> None:
+    instance = bridge()
+    calls: list[str] = []
+
+    def detector(name: str, _payload: dict) -> dict:
+        calls.append(name)
+        if name == "memory-reminder.py":
+            raise AssertionError("memory reminder must not run while gates block")
+        return {"decision": "block", "reason": name}
+
+    instance.detector_runner = detector
+    first_payload = desktop_payload(
+        executionNum=13, terminationReason="complete", fullyIdle=True,
+    )
+    next_payload = {**first_payload, "executionNum": 14}
+
+    assert instance.handle("Stop", first_payload)["decision"] == "continue"
+    assert instance.handle("Stop", first_payload) == {}
+    assert instance.handle("Stop", next_payload)["decision"] == "continue"
+    assert calls == list(hook.STOP_DETECTORS) * 3
+
+
 def test_unknown_events_and_infrastructure_failures_are_open() -> None:
     instance = bridge()
     assert instance.handle("FutureEvent", desktop_payload()) == {}
