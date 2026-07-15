@@ -59,7 +59,12 @@ FILES_MAPPINGS = [
     ("adapters/claude-code/files/templates", "dist/claude-code/templates"),
 ]
 
-MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS + FILES_MAPPINGS
+PLUGIN_MAPPINGS = [
+    ("adapters/claude-code/plugin.json",
+     "dist/claude-code/plugin/.claude-plugin/plugin.json"),
+]
+
+MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS + FILES_MAPPINGS + PLUGIN_MAPPINGS
 EXECUTABLE_MAPPINGS = {
     ("adapters/claude-code/files/scripts/secret", "dist/claude-code/scripts/secret"),
 }

@@ -8,6 +8,9 @@ jobs:
   test:
     name: tests + validators
     runs-on: ubuntu-latest
+    env:
+      # Oldest supported local CLI; bump deliberately after compatibility review.
+      CLAUDE_CODE_VERSION: "2.1.177"
     steps:
       - uses: actions/checkout@v6
 
@@ -65,6 +68,16 @@ jobs:
         run: |
           python3 tools/test_render_core.py
           python3 tools/test_render_reminder.py
+
+      - name: Install pinned Claude Code validator
+        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+      - name: Validate Claude Code plugin registration
+        run: |
+          mkdir -p "$RUNNER_TEMP/claude-plugin-home/.claude"
+          HOME="$RUNNER_TEMP/claude-plugin-home" \
+          CLAUDE_CONFIG_DIR="$RUNNER_TEMP/claude-plugin-home/.claude" \
+          claude plugin validate --strict dist/claude-code/plugin
 
       - name: Skill validator tests
         run: python3 tools/test_validate_skill.py

@@ -19,8 +19,12 @@ user-owned in that file. OpenCode and Codex native projections are generated
 by their adapter builders during `install.sh --opencode` and
 `install.sh --codex`.
 
-The Claude plugin manifest and committed OpenCode/Codex golden fixtures are
-direct-owned delivery metadata and tests, not additional artifact layers.
+The Claude plugin manifest is authored at `adapters/claude-code/plugin.json`
+and byte-copied into the plugin root by the renderer. Its explicit version
+remains unchanged for direct skills-directory delivery until the live-session
+parity probe in `#f9d6a8b0` defines the update contract. Committed
+OpenCode/Codex golden fixtures remain direct-owned tests, not additional
+artifact layers.
 
 CI runs `python3 tools/render_core.py --check` on every push. That check guards
 the mappings owned by this renderer: source↔render divergence, orphan render

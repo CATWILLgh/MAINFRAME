@@ -1,0 +1,11 @@
+{
+  "name": "mainframe",
+  "description": "Personal hub of global Claude Code customizations — skills, agents, hooks, commands — that take effect across every project on the machine. Author's personal-use tool, published under MIT.",
+  "version": "0.1.0",
+  "author": {
+    "name": "CATWILLgh",
+    "url": "https://github.com/CATWILLgh"
+  },
+  "homepage": "https://github.com/CATWILLgh/MAINFRAME",
+  "license": "MIT"
+}
