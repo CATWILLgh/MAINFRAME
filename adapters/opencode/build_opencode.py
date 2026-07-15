@@ -22,10 +22,10 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sys
 
 import yaml
+from config_writer import ConfigWriteError, write_config
 from permission_config import (
     load_permission_rules, load_permission_state, merge_permissions,
     require_restrictive_projection, write_permission_state,
@@ -234,23 +234,6 @@ def merge_config(existing, permission, mcp_servers):
     return merged
 
 
-def write_config(path, data):
-    """Write config JSON with one rolling backup of the previous version.
-
-    A single overwritten `.backup` (0600) instead of timestamped copies: the
-    file carries the user's API keys, so accumulating snapshots of it would
-    multiply plaintext secrets.
-    """
-    if os.path.exists(path):
-        backup = path + ".backup"
-        shutil.copy2(path, backup)
-        os.chmod(backup, 0o600)
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-
-
 def _load_json(path):
     if not os.path.isfile(path):
         return None
@@ -329,6 +312,28 @@ def _parse_args(argv):
     return parser.parse_args(argv)
 
 
+def _write_outputs(args, agents_out, agents, merged, permission_state,
+                   next_owned):
+    os.makedirs(agents_out, exist_ok=True)
+    for fname, rendered in agents:
+        with open(os.path.join(agents_out, fname), "w") as f:
+            f.write(rendered)
+    try:
+        write_result = write_config(args.config, merged)
+    except ConfigWriteError as exc:
+        raise SystemExit(f"error: {exc}") from exc
+    write_permission_state(permission_state, next_owned)
+    print(f"wrote {len(agents)} agent file(s) to {agents_out}")
+    print(f"merged hub-managed keys into {args.config}")
+    if write_result.tightened:
+        print("tightened permissions: "
+              f"{write_result.previous_mode:04o} -> "
+              f"{write_result.mode:04o}")
+    if write_result.cleanup_warning:
+        print("WARNING: config published; cleanup incomplete: "
+              + write_result.cleanup_warning)
+
+
 def main(argv=None):
     args = _parse_args(argv)
     permission_state = (args.permission_state
@@ -369,14 +374,8 @@ def main(argv=None):
         print(f"[dry-run] would merge keys into {args.config}: "
               f"permission + mcp({', '.join(servers) or 'none'})")
     else:
-        os.makedirs(agents_out, exist_ok=True)
-        for fname, rendered in agents:
-            with open(os.path.join(agents_out, fname), "w") as f:
-                f.write(rendered)
-        write_config(args.config, merged)
-        write_permission_state(permission_state, next_owned)
-        print(f"wrote {len(agents)} agent file(s) to {agents_out}")
-        print(f"merged hub-managed keys into {args.config}")
+        _write_outputs(args, agents_out, agents, merged, permission_state,
+                       next_owned)
 
     _print_summary(agents, perm_report, mcp_report, changed)
     return 0

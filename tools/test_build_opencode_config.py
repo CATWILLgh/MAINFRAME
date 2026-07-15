@@ -92,34 +92,6 @@ def test_merge_is_idempotent():
     assert once == twice
 
 
-def test_write_config_keeps_single_rolling_backup_mode_0600():
-    d = tempfile.mkdtemp()
-    cfg = os.path.join(d, "opencode.json")
-    _write(cfg, json.dumps({"v": 1}))
-    bo.write_config(cfg, {"v": 2})
-    backup = cfg + ".backup"
-    assert json.load(open(backup)) == {"v": 1}
-    assert stat.S_IMODE(os.stat(backup).st_mode) == 0o600
-    bo.write_config(cfg, {"v": 3})
-    assert json.load(open(backup)) == {"v": 2}  # overwritten, not accumulated
-    assert json.load(open(cfg)) == {"v": 3}
-
-
-def test_write_config_without_existing_file_creates_no_backup():
-    d = tempfile.mkdtemp()
-    cfg = os.path.join(d, "opencode.json")
-    bo.write_config(cfg, {"v": 1})
-    assert json.load(open(cfg)) == {"v": 1}
-    assert not os.path.exists(cfg + ".backup")
-
-
-def test_write_config_creates_missing_target_directory():
-    d = tempfile.mkdtemp()
-    cfg = os.path.join(d, "fresh", "opencode", "opencode.json")
-    bo.write_config(cfg, {"v": 1})
-    assert json.load(open(cfg)) == {"v": 1}
-
-
 def _main_args(root, cfg, out, state=None):
     args = ["--root", root, "--agents-out", out, "--config", cfg,
             "--claude-config", os.path.join(root, "absent-claude.json")]
