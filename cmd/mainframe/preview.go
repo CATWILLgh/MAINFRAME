@@ -4,19 +4,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/discovery"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
-	"github.com/CATWILLgh/MAINFRAME/internal/installmanifest"
-	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
-	"github.com/CATWILLgh/MAINFRAME/internal/installsource"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
+	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
+	"github.com/CATWILLgh/MAINFRAME/internal/releaselayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/tui"
 )
 
-const sourceRootEnvironment = "MAINFRAME_SOURCE_ROOT"
+const releaseRootEnvironment = "MAINFRAME_RELEASE_ROOT"
 
 func runInteractivePreview(input io.Reader, output io.Writer) error {
 	service, err := buildPreviewService()
@@ -27,23 +27,22 @@ func runInteractivePreview(input io.Reader, output io.Writer) error {
 }
 
 func buildPreviewService() (lifecycle.Service, error) {
-	model, err := installmodel.New(installmanifest.StableComponents())
-	if err != nil {
-		return lifecycle.Service{}, fmt.Errorf("build stable install model: %w", err)
-	}
-	candidates, err := sourceRootCandidates()
+	releaseRoot, err := resolveReleaseRoot()
 	if err != nil {
 		return lifecycle.Service{}, err
 	}
-	source, err := installsource.Find(candidates, model, os.Stat, os.Lstat)
+	release, err := releasecontract.Load(releaseRoot)
 	if err != nil {
-		return lifecycle.Service{}, fmt.Errorf(
-			"development preview needs %s or a validated MAINFRAME working directory: %w",
-			sourceRootEnvironment,
-			err,
-		)
+		return lifecycle.Service{}, fmt.Errorf("load release: %w", err)
 	}
-	layout, err := hostlayout.Resolve(hostEnvironment(), source)
+	return buildPreviewServiceFrom(releaseRoot, release)
+}
+
+func buildPreviewServiceFrom(
+	releaseRoot string,
+	release releasecontract.Release,
+) (lifecycle.Service, error) {
+	layout, err := hostlayout.Resolve(hostEnvironment(), releaseRoot)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("resolve host layout: %w", err)
 	}
@@ -51,29 +50,33 @@ func buildPreviewService() (lifecycle.Service, error) {
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("open host namespace: %w", err)
 	}
-	observed, err := discovery.Discover(model, namespace.Filesystem(), namespace.Roots())
+	observed, err := discovery.Discover(release.Model, namespace.Filesystem(), namespace.Roots())
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("discover current installation: %w", err)
 	}
-	service, err := lifecycle.New(model, observed)
+	service, err := lifecycle.NewWithResources(
+		release.Model,
+		observed,
+		release.Resources,
+	)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("create lifecycle preview: %w", err)
 	}
 	return service, nil
 }
 
-func sourceRootCandidates() ([]string, error) {
-	if configured, exists := os.LookupEnv(sourceRootEnvironment); exists {
-		if configured == "" {
-			return nil, fmt.Errorf("%s must not be empty", sourceRootEnvironment)
-		}
-		return []string{configured}, nil
-	}
-	workingDirectory, err := os.Getwd()
+func resolveReleaseRoot() (string, error) {
+	explicit, exists := os.LookupEnv(releaseRootEnvironment)
+	root, err := releaselayout.Resolve(
+		explicit,
+		exists,
+		os.Executable,
+		filepath.EvalSymlinks,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("resolve working directory: %w", err)
+		return "", fmt.Errorf("resolve release root: %w", err)
 	}
-	return []string{workingDirectory}, nil
+	return root, nil
 }
 
 func hostEnvironment() hostlayout.Environment {

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Build the unlinked, self-contained Codex bundle-v2 gate projection."""
+"""Build the unlinked, self-contained Codex bundle-v2 projection."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import tempfile
 from dataclasses import asdict
@@ -13,52 +12,226 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from adapter_profiles import load_profiles
+from adapter_profiles import load_profiles, project_text
 from bundle_sync import (
     copy_regular_file,
     prepare_output_root,
-    remove_path,
+    source_files,
     sync_tree,
+    write_text_file,
 )
+from detector_projection import project_hooklib_fallbacks
 import build_codex
+import release_contract
 
 
-def build(root: Path, output: Path) -> None:
-    """Materialize one authoritative Codex gate bundle without user-state I/O."""
-    detectors = root / "core/gates/detectors"
-    rules = root / "core/gates/rules"
-    launcher = root / "adapters/codex/gates/bundle-hook.sh"
-    for source in (detectors, rules):
-        if not source.is_dir():
-            raise FileNotFoundError(source)
-    if not launcher.is_file():
-        raise FileNotFoundError(launcher)
+CODEX_CONFIG_EXPRESSION = (
+    'os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")'
+)
 
-    prepare_output_root(
-        output, {"gates", "skills", "mainframe-hook.sh", "bundle.json"}
+
+def _unit(
+    identifier: str,
+    kind: str,
+    source: str,
+    target: str,
+    legacy: list[str] | None = None,
+) -> dict:
+    unit = {
+        "id": identifier,
+        "kind": kind,
+        "source": source,
+        "target": {"root": "codex-config", "path": target},
+    }
+    if legacy:
+        unit["legacy_source_suffixes"] = sorted(legacy)
+    return unit
+
+
+def _gate_units(root: Path) -> list[dict]:
+    units = []
+    for group in ("detectors", "rules"):
+        for relative in source_files(root / f"core/gates/{group}"):
+            path = f"gates/{group}/{relative.as_posix()}"
+            identifier = f"codex.gates.{group}.{relative.as_posix()}"
+            units.append(_unit(identifier, "file", path, path))
+    return units
+
+
+def _install_units(root: Path, skills, agents) -> list[dict]:
+    units = [
+        _unit(
+            "codex.instructions",
+            "file",
+            "AGENTS.md",
+            "AGENTS.md",
+            ["dist/codex/AGENTS.md"],
+        ),
+        _unit(
+            "codex.hooks",
+            "file",
+            "hooks.json",
+            "hooks.json",
+            ["dist/codex/hooks.json"],
+        ),
+        _unit(
+            "codex.launcher",
+            "file",
+            "mainframe-hook.sh",
+            "mainframe-hook.sh",
+            ["dist/codex/mainframe-hook.sh"],
+        ),
+        _unit(
+            "codex.rules",
+            "file",
+            "rules/mainframe.rules",
+            "rules/mainframe.rules",
+            ["dist/codex/rules/mainframe.rules"],
+        ),
+    ]
+    units.extend(
+        _unit(
+            f"codex.skills.{name}",
+            "tree",
+            f"skills/{name}",
+            f"skills/{name}",
+            [f"dist/codex/skills/{name}"],
+        )
+        for name, _ in skills
     )
-    gates = output / "gates"
-    if gates.is_symlink() or (gates.exists() and not gates.is_dir()):
-        remove_path(gates)
+    units.extend(
+        _unit(
+            f"codex.agents.{name}",
+            "file",
+            f"agents/{name}.toml",
+            f"agents/{name}.toml",
+            [f"dist/codex/agents/{name}.toml"],
+        )
+        for name, _ in agents
+    )
+    units.extend(_gate_units(root))
+    return units
 
-    sync_tree(detectors, gates / "detectors")
-    sync_tree(rules, gates / "rules")
-    profile = load_profiles(root)["codex"]
-    skills, _ = build_codex.collect_skills(root, profile)
-    with tempfile.TemporaryDirectory() as temporary:
-        staged_skills = Path(temporary) / "skills"
-        build_codex.write_skills(staged_skills, skills)
-        sync_tree(staged_skills, output / "skills")
-    copy_regular_file(launcher, output / "mainframe-hook.sh", executable=True)
-    manifest = {"adapter": "codex", **asdict(profile)}
-    manifest_path = output / "bundle.json"
-    if manifest_path.is_symlink() or (
-        manifest_path.exists() and not manifest_path.is_file()
+
+def _resources() -> list[dict]:
+    lifecycle = {"observation": "unimplemented", "apply": "unimplemented"}
+    return [
+        {
+            "id": "codex.credentials-index",
+            "strategy": "seed-if-absent",
+            "source": "credentials-index.md",
+            "target": {
+                "root": "codex-config",
+                "path": "credentials-index.md",
+            },
+            **lifecycle,
+        },
+        {
+            "id": "codex.hook-trust",
+            "strategy": "manual-action",
+            "target": {"root": "codex-config", "path": "hooks.json"},
+            **lifecycle,
+        },
+    ]
+
+
+def _validate_sources(root: Path) -> None:
+    for relative in (
+        "core/skills",
+        "core/agents",
+        "core/gates/detectors",
+        "core/gates/rules",
     ):
-        remove_path(manifest_path)
-    manifest_path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+        source_files(root / relative)
+    for relative in (
+        "core/permissions/rules.json",
+        "dist/codex/AGENTS.md",
+        "adapters/codex/gates/bundle-hook.sh",
+        "core/resources/credentials-index.md",
+    ):
+        source = root / relative
+        if source.is_symlink() or not source.is_file():
+            raise ValueError(f"bundle source must be a regular file: {source}")
+
+
+def _render_inputs(root: Path, profile, validate_native: bool):
+    skills, _ = build_codex.collect_skills(root, profile)
+    agents = build_codex.collect_agents(root)
+    projected, _ = build_codex.project_permissions(build_codex._load_rules(root))
+    rules_text = build_codex.render_rules(projected)
+    build_codex._validate_gate_detectors(root)
+    if validate_native:
+        build_codex.validate_rules_native(rules_text)
+    return skills, agents, rules_text, build_codex.render_hooks_json()
+
+
+def _project_gates(root: Path, output: Path, profile) -> None:
+    sync_tree(root / "core/gates/detectors", output / "detectors")
+    sync_tree(root / "core/gates/rules", output / "rules")
+    hooklib = output / "detectors/_hooklib.py"
+    feedback = f'os.path.join({CODEX_CONFIG_EXPRESSION}, "skills", "harness-feedback")'
+    telemetry = (
+        f'os.path.join({CODEX_CONFIG_EXPRESSION}, "mainframe", '
+        '"telemetry", "telemetry.db")'
     )
+    projected = project_hooklib_fallbacks(
+        hooklib.read_text(), hooklib, feedback=feedback, telemetry=telemetry
+    ).replace("~/.claude", profile.config_root)
+    write_text_file(hooklib, projected)
+
+
+def _stage_bundle(
+    root: Path,
+    staged: Path,
+    profile,
+    skills,
+    agents,
+    rules_text: str,
+    hooks_text: str,
+) -> None:
+    _project_gates(root, staged / "gates", profile)
+    build_codex.write_skills(staged / "skills", skills)
+    build_codex._write_agents(staged / "agents", agents)
+    write_text_file(staged / "rules/mainframe.rules", rules_text)
+    write_text_file(staged / "hooks.json", hooks_text)
+    copy_regular_file(root / "dist/codex/AGENTS.md", staged / "AGENTS.md")
+    copy_regular_file(
+        root / "adapters/codex/gates/bundle-hook.sh",
+        staged / "mainframe-hook.sh",
+        executable=True,
+    )
+    write_text_file(
+        staged / "credentials-index.md",
+        project_text(
+            (root / "core/resources/credentials-index.md").read_text(), profile
+        ),
+    )
+    release_contract.write_bundle_manifest(
+        staged,
+        component="codex",
+        dependencies=["credential-tools", "mainframe-cli"],
+        install_units=_install_units(root, skills, agents),
+        resources=_resources(),
+        runtime_profile=asdict(profile),
+    )
+    release_contract.validate_bundle(staged)
+
+
+def build(root: Path, output: Path, *, validate_native: bool = False) -> None:
+    """Materialize all immutable Codex delivery without user-state I/O."""
+    if output.is_symlink() or (output.exists() and not output.is_dir()):
+        raise ValueError(f"bundle output must be a real directory: {output}")
+    _validate_sources(root)
+    profile = load_profiles(root)["codex"]
+    inputs = _render_inputs(root, profile, validate_native)
+    with tempfile.TemporaryDirectory() as temporary:
+        staged = Path(temporary) / "bundle-v2"
+        staged.mkdir()
+        _stage_bundle(root, staged, profile, *inputs)
+        expected = {path.name for path in staged.iterdir()}
+        prepare_output_root(output, expected)
+        sync_tree(staged, output)
+    release_contract.validate_bundle(output)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,10 +242,11 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(__file__).resolve().parents[2],
     )
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--validate-native", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     output = args.output or root / "dist/codex/bundle-v2"
-    build(root, output)
+    build(root, output, validate_native=args.validate_native)
     print(f"wrote Codex bundle to {output}")
     return 0
 

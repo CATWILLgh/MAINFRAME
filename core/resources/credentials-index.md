@@ -1,6 +1,6 @@
 # Credentials index
 
-> Personal directory of servers / services / credentials. Lives at `~/.claude/credentials-index.md`.
+> Personal directory of servers / services / credentials. Lives at `{{mainframe.config_root}}/credentials-index.md`.
 >
 > **This file does NOT contain secret values.** Only descriptions and pointers ("get the password via `secret get foo`").
 > The actual secret values live in `~/.config/credentials/secrets.env` and are accessed through the `secret` helper.
@@ -58,4 +58,4 @@ Template for git / package providers.
 
 - Add a server / service here when you add its secret via `secret set NAME value`. The index is your only map — if it is not here, you will forget what `NAME` was for.
 - Remove the section when you delete the secret. Use `secret list` to find orphans (names in the store that are no longer in this index).
-- This file is read by me (Claude) when you reference a service by name. Keep service short-names stable so I can find them.
+- This file is read by the active coding environment when you reference a service by name. Keep service short-names stable so it can find them.

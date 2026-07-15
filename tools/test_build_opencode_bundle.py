@@ -16,6 +16,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 BUILDER = REPO / "adapters/opencode/build_bundle.py"
+sys.path.insert(0, str(REPO / "tools"))
+
+import release_contract
 
 
 def _sandbox() -> Path:
@@ -127,10 +130,44 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     fragment = json.loads((output / "config-fragment.json").read_text())
     assert fragment["permission"]["bash"]["rm -rf /"] == "deny"
     manifest = json.loads((output / "bundle.json").read_text())
-    assert manifest["adapter"] == "opencode"
-    assert manifest["configuration"]["mcp_projection"] == (
-        "retired_cross_adapter_import"
+    assert manifest["component"] == "opencode"
+    assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
+    assert manifest["runtime_profile"]["config_root"] == (
+        "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
     )
+    units = {unit["source"]: unit for unit in manifest["install_units"]}
+    assert units["AGENTS.md"]["target"] == {
+        "root": "opencode-config",
+        "path": "AGENTS.md",
+    }
+    assert units["skills/task-workflow"]["kind"] == "tree"
+    assert units["agents/decision-reviewer.md"]["kind"] == "file"
+    assert units["gates/detectors/path-validation.py"]["kind"] == "file"
+    assert units["plugins/mainframe-gates.js"]["kind"] == "file"
+    assert "bundle.json" not in units
+    assert "config-fragment.json" not in units
+    resources = {resource["id"]: resource for resource in manifest["resources"]}
+    assert resources["opencode.credentials-index"]["strategy"] == (
+        "seed-if-absent"
+    )
+    assert resources["opencode.credentials-index"]["target"] == {
+        "root": "opencode-config",
+        "path": "credentials-index.md",
+    }
+    credentials_index = (output / "credentials-index.md").read_text()
+    assert "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/credentials-index.md" in (
+        credentials_index
+    )
+    assert "~/.claude/credentials-index.md" not in credentials_index
+    assert resources["opencode.permissions"] == {
+        "id": "opencode.permissions",
+        "strategy": "json-key-merge",
+        "source": "config-fragment.json",
+        "target": {"root": "opencode-config", "path": "opencode.json"},
+        "observation": "unimplemented",
+        "apply": "unimplemented",
+    }
+    release_contract.validate_bundle(output)
 
     projected_paths = [output / "AGENTS.md"]
     projected_paths.extend(

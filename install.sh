@@ -452,7 +452,7 @@ bootstrap_secrets() {
     local index_src="${PROJECT_ROOT}/${CREDENTIALS_INDEX_SOURCE}"
     local index_dst="${CLAUDE_DIR}/credentials-index.md"
     local zshenv="$HOME/.zshenv"
-    local source_line='[ -f ~/.config/credentials/secrets.env ] && set -a && . ~/.config/credentials/secrets.env && set +a'
+    local source_line='[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" ] && set -a && . "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" && set +a'
 
     if [[ ! -f "$secret_src" ]]; then
         log_warn "skipping secret helper: source ${secret_src} missing"

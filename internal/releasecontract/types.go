@@ -1,0 +1,119 @@
+package releasecontract
+
+import (
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+)
+
+const schemaVersion = 1
+
+const (
+	bundleKind  = "mainframe-bundle"
+	releaseKind = "mainframe-release"
+)
+
+type ResourceStrategy string
+
+const (
+	StrategyJSONKeyMerge       ResourceStrategy = "json-key-merge"
+	StrategySeedIfAbsent       ResourceStrategy = "seed-if-absent"
+	StrategyEnsureDir          ResourceStrategy = "ensure-directory"
+	StrategyShellLine          ResourceStrategy = "shell-line"
+	StrategyShellLineIfPresent ResourceStrategy = "shell-line-if-present"
+	StrategyManualAction       ResourceStrategy = "manual-action"
+)
+
+func (strategy ResourceStrategy) valid() bool {
+	switch strategy {
+	case StrategyJSONKeyMerge,
+		StrategySeedIfAbsent,
+		StrategyEnsureDir,
+		StrategyShellLine,
+		StrategyShellLineIfPresent,
+		StrategyManualAction:
+		return true
+	default:
+		return false
+	}
+}
+
+type SupportStatus string
+
+const SupportUnimplemented SupportStatus = "unimplemented"
+
+type Resource struct {
+	ID                   string
+	ComponentID          domain.ComponentID
+	Strategy             ResourceStrategy
+	SourcePath           domain.ArtifactPath
+	Target               domain.Location
+	LegacySourceSuffixes []domain.ArtifactPath
+	Observation          SupportStatus
+	Apply                SupportStatus
+}
+
+type Release struct {
+	ID        string
+	Model     installmodel.Model
+	Resources []Resource
+}
+
+type releaseIndex struct {
+	SchemaVersion int             `json:"schema_version"`
+	Kind          string          `json:"kind"`
+	ReleaseID     string          `json:"release_id"`
+	Manifests     []manifestEntry `json:"manifests"`
+}
+
+type manifestEntry struct {
+	Component string `json:"component"`
+	Path      string `json:"path"`
+	SHA256    string `json:"sha256"`
+}
+
+type bundleManifest struct {
+	SchemaVersion   int               `json:"schema_version"`
+	Kind            string            `json:"kind"`
+	Component       string            `json:"component"`
+	Dependencies    []string          `json:"dependencies"`
+	InstallUnits    []installUnit     `json:"install_units"`
+	LegacyArtifacts []legacyArtifact  `json:"legacy_artifacts"`
+	Resources       []resourceRecord  `json:"resources"`
+	PayloadFiles    []payloadFile     `json:"payload_files"`
+	RuntimeProfile  map[string]string `json:"runtime_profile"`
+}
+
+type installUnit struct {
+	ID                   string         `json:"id"`
+	Kind                 string         `json:"kind"`
+	Source               string         `json:"source"`
+	Target               locationRecord `json:"target"`
+	LegacySourceSuffixes []string       `json:"legacy_source_suffixes,omitempty"`
+}
+
+type legacyArtifact struct {
+	Target         locationRecord `json:"target"`
+	TargetSuffixes []string       `json:"target_suffixes"`
+}
+
+type resourceRecord struct {
+	ID                   string         `json:"id"`
+	Strategy             string         `json:"strategy"`
+	Source               string         `json:"source,omitempty"`
+	Target               locationRecord `json:"target"`
+	LegacySourceSuffixes []string       `json:"legacy_source_suffixes,omitempty"`
+	Observation          string         `json:"observation"`
+	Apply                string         `json:"apply"`
+}
+
+type locationRecord struct {
+	Root string `json:"root"`
+	Path string `json:"path"`
+}
+
+type payloadFile struct {
+	Path   string `json:"path"`
+	Mode   string `json:"mode"`
+	Size   int64  `json:"size"`
+	SHA256 string `json:"sha256"`
+}

@@ -57,8 +57,8 @@ SKILLS_MAPPINGS = [
 
 FILES_MAPPINGS = [
     ("adapters/claude-code/files/output-styles", "dist/claude-code/output-styles"),
-    ("adapters/claude-code/files/scripts", "dist/claude-code/scripts"),
-    ("adapters/claude-code/files/templates", "dist/claude-code/templates"),
+    ("core/resources/credential-tools/secret", "dist/claude-code/scripts/secret"),
+    ("core/resources/credentials-index.md", "dist/claude-code/templates/credentials-index.md"),
 ]
 
 PLUGIN_MAPPINGS = [
@@ -68,7 +68,7 @@ PLUGIN_MAPPINGS = [
 
 MAPPINGS = GATES_MAPPINGS + SKILLS_MAPPINGS + FILES_MAPPINGS + PLUGIN_MAPPINGS
 EXECUTABLE_MAPPINGS = {
-    ("adapters/claude-code/files/scripts/secret", "dist/claude-code/scripts/secret"),
+    ("core/resources/credential-tools/secret", "dist/claude-code/scripts/secret"),
 }
 
 # Instructions render by ordered concatenation: core sections + per-tool
@@ -151,7 +151,11 @@ def _managed_target_dirs(root: Path, mappings) -> list[Path]:
 def _render_bytes(root: Path, src: Path, dst: Path) -> bytes:
     content = src.read_bytes()
     target = dst.relative_to(root).as_posix()
-    if target.startswith("dist/claude-code/plugin/skills/") and src.suffix == ".md":
+    projects_runtime_paths = (
+        target.startswith("dist/claude-code/plugin/skills/")
+        or src.relative_to(root).as_posix() == "core/resources/credentials-index.md"
+    )
+    if projects_runtime_paths and src.suffix == ".md":
         profile = load_profiles(root)["claude-code"]
         return project_text(content.decode(), profile).encode()
     return content

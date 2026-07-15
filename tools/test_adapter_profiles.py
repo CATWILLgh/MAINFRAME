@@ -5,7 +5,12 @@ import json
 import tempfile
 from pathlib import Path
 
-from adapter_profiles import PLAN_ROOT_TOKEN, load_profiles, project_text
+from adapter_profiles import (
+    CONFIG_ROOT_TOKEN,
+    PLAN_ROOT_TOKEN,
+    load_profiles,
+    project_text,
+)
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -44,6 +49,15 @@ def test_projection_resolves_semantic_plan_root_without_leaking_token():
         rendered = project_text(source, profiles[name])
         assert path in rendered
         assert PLAN_ROOT_TOKEN not in rendered
+
+
+def test_projection_resolves_semantic_config_root_without_leaking_token():
+    profiles = load_profiles(REPO)
+    source = f"index lives below `{CONFIG_ROOT_TOKEN}/credentials-index.md`"
+    for profile in profiles.values():
+        rendered = project_text(source, profile)
+        assert f"`{profile.config_root}/credentials-index.md`" in rendered
+        assert CONFIG_ROOT_TOKEN not in rendered
 
 
 def test_profile_rejects_a_runtime_root_owned_by_another_adapter():

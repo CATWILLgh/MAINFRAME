@@ -2,10 +2,12 @@ package lifecycle
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/plan"
+	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
 type TargetStatus string
@@ -23,26 +25,57 @@ var visibleTargets = []domain.ComponentID{
 }
 
 type Target struct {
-	ID       domain.ComponentID
-	Status   TargetStatus
-	Selected bool
+	ID            domain.ComponentID
+	Status        TargetStatus
+	Selected      bool
+	Configuration []ConfigurationResource
+}
+
+type ConfigurationStatus string
+
+const ConfigurationNotAssessed ConfigurationStatus = "not_assessed"
+
+type ConfigurationResource struct {
+	ID       string
+	Strategy releasecontract.ResourceStrategy
+	Status   ConfigurationStatus
 }
 
 type Service struct {
 	planner       plan.Planner
 	observed      domain.ObservedState
 	desiredCounts map[domain.ComponentID]int
+	dependencies  map[domain.ComponentID][]domain.ComponentID
+	configuration map[domain.ComponentID][]ConfigurationResource
 }
 
 func New(model installmodel.Model, observed domain.ObservedState) (Service, error) {
+	return NewWithResources(model, observed, nil)
+}
+
+func NewWithResources(
+	model installmodel.Model,
+	observed domain.ObservedState,
+	resources []releasecontract.Resource,
+) (Service, error) {
 	planner := plan.New(model.Catalog())
 	if _, err := planner.Plan(domain.PlanRequest{Observed: observed}); err != nil {
 		return Service{}, fmt.Errorf("validate observed state: %w", err)
+	}
+	dependencies, err := visibleDependencyClosures(model)
+	if err != nil {
+		return Service{}, err
+	}
+	configuration, err := configurationInventory(model, resources, dependencies)
+	if err != nil {
+		return Service{}, err
 	}
 	return Service{
 		planner:       planner,
 		observed:      cloneObserved(observed),
 		desiredCounts: countDesiredArtifacts(model),
+		dependencies:  dependencies,
+		configuration: configuration,
 	}, nil
 }
 
@@ -53,14 +86,61 @@ func (service Service) Targets() []Target {
 	}
 	targets := make([]Target, 0, len(visibleTargets))
 	for _, id := range visibleTargets {
-		component, exists := observed[id]
 		targets = append(targets, Target{
-			ID:       id,
-			Status:   service.status(id, component, exists),
-			Selected: exists,
+			ID:            id,
+			Status:        service.status(id, observed),
+			Selected:      observed[id].ID != "",
+			Configuration: append([]ConfigurationResource(nil), service.configuration[id]...),
 		})
 	}
 	return targets
+}
+
+func configurationInventory(
+	model installmodel.Model,
+	resources []releasecontract.Resource,
+	dependencies map[domain.ComponentID][]domain.ComponentID,
+) (map[domain.ComponentID][]ConfigurationResource, error) {
+	direct := make(map[domain.ComponentID][]ConfigurationResource)
+	seen := make(map[string]bool)
+	for _, resource := range resources {
+		if _, exists := model.Catalog().Component(resource.ComponentID); !exists {
+			return nil, fmt.Errorf("configuration resource %q has unknown component %q", resource.ID, resource.ComponentID)
+		}
+		if resource.ID == "" || seen[resource.ID] {
+			return nil, fmt.Errorf("invalid duplicate configuration resource %q", resource.ID)
+		}
+		seen[resource.ID] = true
+		direct[resource.ComponentID] = append(
+			direct[resource.ComponentID],
+			ConfigurationResource{
+				ID: resource.ID, Strategy: resource.Strategy,
+				Status: ConfigurationNotAssessed,
+			},
+		)
+	}
+	result := make(map[domain.ComponentID][]ConfigurationResource)
+	for visible, components := range dependencies {
+		for _, component := range components {
+			result[visible] = append(result[visible], direct[component]...)
+		}
+		sort.Slice(result[visible], func(i, j int) bool {
+			return result[visible][i].ID < result[visible][j].ID
+		})
+	}
+	return result, nil
+}
+
+func visibleDependencyClosures(model installmodel.Model) (map[domain.ComponentID][]domain.ComponentID, error) {
+	result := make(map[domain.ComponentID][]domain.ComponentID, len(visibleTargets))
+	for _, id := range visibleTargets {
+		closure, err := model.Catalog().DependencyClosure([]domain.ComponentID{id})
+		if err != nil {
+			return nil, fmt.Errorf("resolve dependencies for %q: %w", id, err)
+		}
+		result[id] = closure
+	}
+	return result, nil
 }
 
 func (service Service) Plan(components []domain.ComponentID) (domain.Plan, error) {
@@ -82,18 +162,24 @@ func (service Service) Plan(components []domain.ComponentID) (domain.Plan, error
 
 func (service Service) status(
 	id domain.ComponentID,
-	component domain.ObservedComponent,
-	exists bool,
+	observed map[domain.ComponentID]domain.ObservedComponent,
 ) TargetStatus {
-	if !exists {
+	if observed[id].ID == "" {
 		return StatusAbsent
 	}
-	if len(component.Artifacts) < service.desiredCounts[id] {
-		return StatusAttention
-	}
-	for _, artifact := range component.Artifacts {
-		if artifact.Ownership != domain.OwnershipManagedExact {
+	for _, componentID := range service.dependencies[id] {
+		expected := service.desiredCounts[componentID]
+		if expected == 0 {
+			continue
+		}
+		component, exists := observed[componentID]
+		if !exists || len(component.Artifacts) != expected {
 			return StatusAttention
+		}
+		for _, artifact := range component.Artifacts {
+			if artifact.Ownership != domain.OwnershipManagedExact {
+				return StatusAttention
+			}
 		}
 	}
 	return StatusManaged

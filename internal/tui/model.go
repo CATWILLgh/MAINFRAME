@@ -145,7 +145,7 @@ func (model *Model) selectionView() string {
 }
 
 func (model *Model) previewView() string {
-	sections := []string{header(), headingStyle.Render("Plan preview")}
+	sections := []string{header(), headingStyle.Render("Filesystem plan")}
 	groups := []struct {
 		title string
 		kind  domain.OperationKind
@@ -164,7 +164,11 @@ func (model *Model) previewView() string {
 		sections = append(sections, renderOperations(group.title, operations))
 	}
 	if groupCount == 0 {
-		sections = append(sections, mutedStyle.Render("No changes in the stable artifact set."))
+		sections = append(sections, mutedStyle.Render("No filesystem changes."))
+	}
+	configuration := selectedConfiguration(model.targets, model.selected)
+	if len(configuration) > 0 {
+		sections = append(sections, renderConfiguration(configuration))
 	}
 	sections = append(sections, mutedStyle.Render("b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
@@ -174,7 +178,12 @@ func selectionForm(targets []lifecycle.Target, selected *[]domain.ComponentID) *
 	options := make([]huh.Option[domain.ComponentID], 0, len(targets))
 	for _, target := range targets {
 		options = append(options, huh.NewOption(
-			fmt.Sprintf("%s — %s", componentName(target.ID), statusName(target.Status)),
+			fmt.Sprintf(
+				"%s — %s%s",
+				componentName(target.ID),
+				statusName(target.Status),
+				configurationStatus(target.Configuration),
+			),
 			target.ID,
 		).Selected(contains(*selected, target.ID)))
 	}
@@ -188,9 +197,57 @@ func selectionForm(targets []lifecycle.Target, selected *[]domain.ComponentID) *
 func header() string {
 	return strings.Join([]string{
 		brandStyle.Render("MAINFRAME"),
-		bannerStyle.Render("DEVELOPMENT PREVIEW — stable legacy artifacts only"),
-		mutedStyle.Render("No changes can be applied. bundle-v2 artifacts are not included."),
+		bannerStyle.Render("READ-ONLY RELEASE PREVIEW"),
+		mutedStyle.Render("Filesystem changes only. Configuration resources are inventoried but not assessed or applied."),
 	}, "\n")
+}
+
+func configurationStatus(resources []lifecycle.ConfigurationResource) string {
+	if len(resources) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" · configuration not assessed (%d)", len(resources))
+}
+
+func selectedConfiguration(
+	targets []lifecycle.Target,
+	selected []domain.ComponentID,
+) []lifecycle.ConfigurationResource {
+	resources := make([]lifecycle.ConfigurationResource, 0)
+	seen := make(map[string]bool)
+	for _, target := range targets {
+		if contains(selected, target.ID) {
+			for _, resource := range target.Configuration {
+				if !seen[resource.ID] {
+					resources = append(resources, resource)
+					seen[resource.ID] = true
+				}
+			}
+		}
+	}
+	return resources
+}
+
+func renderConfiguration(resources []lifecycle.ConfigurationResource) string {
+	lines := []string{
+		headingStyle.Render(fmt.Sprintf("Configuration inventory · %d", len(resources))),
+	}
+	for _, resource := range resources {
+		lines = append(lines, fmt.Sprintf(
+			"  !  %s · %s · %s",
+			resource.ID,
+			resource.Strategy,
+			configurationStatusName(resource.Status),
+		))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func configurationStatusName(status lifecycle.ConfigurationStatus) string {
+	if status == lifecycle.ConfigurationNotAssessed {
+		return "not assessed"
+	}
+	return string(status)
 }
 
 func operationsByKind(

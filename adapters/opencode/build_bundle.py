@@ -21,6 +21,8 @@ from bundle_sync import (
     sync_tree,
     write_text_file,
 )
+from detector_projection import project_hooklib_fallbacks
+from release_contract import write_bundle_manifest
 import build_opencode
 from permission_config import load_permission_rules, require_restrictive_projection
 
@@ -35,15 +37,73 @@ PLUGIN_ROW_ENV = (
 PLUGIN_STOP_ENV = (
     "      { cwd, env: { ...process.env, CLAUDE_PROJECT_DIR: cwd } }, payload)"
 )
-FEEDBACK_FALLBACK = (
-    'os.path.expanduser("~/.claude/skills/harness-feedback")'
-)
-TELEMETRY_FALLBACK = (
-    'os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db")'
-)
 OPENCODE_CONFIG_EXPRESSION = (
     'os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")'
 )
+BUNDLE_ENTRIES = {
+    "AGENTS.md", "agents", "bundle.json", "config-fragment.json",
+    "credentials-index.md", "gates", "plugins", "skills",
+}
+
+
+def _legacy_sources(source: str) -> list[str]:
+    if source == "AGENTS.md":
+        return ["dist/opencode/AGENTS.md", "export/AGENTS.md"]
+    if source.startswith("agents/"):
+        return [f"dist/opencode/{source}"]
+    if source.startswith("skills/"):
+        return [f"dist/claude-code/plugin/{source}"]
+    if source == "plugins/mainframe-gates.js":
+        return ["adapters/opencode/plugins/mainframe-gates.js"]
+    return []
+
+
+def _install_unit(source: str, kind: str) -> dict:
+    unit = {
+        "id": f"opencode.{source.lower()}",
+        "kind": kind,
+        "source": source,
+        "target": {"root": "opencode-config", "path": source},
+    }
+    legacy = _legacy_sources(source)
+    if legacy:
+        unit["legacy_source_suffixes"] = legacy
+    return unit
+
+
+def _install_units(output: Path) -> list[dict]:
+    units = [_install_unit("AGENTS.md", "file")]
+    for path in sorted((output / "agents").iterdir()):
+        units.append(_install_unit(path.relative_to(output).as_posix(), "file"))
+    for path in sorted((output / "skills").iterdir()):
+        units.append(_install_unit(path.relative_to(output).as_posix(), "tree"))
+    for directory in (output / "gates", output / "plugins"):
+        for path in sorted(item for item in directory.rglob("*") if item.is_file()):
+            units.append(_install_unit(path.relative_to(output).as_posix(), "file"))
+    return units
+
+
+def _resources() -> list[dict]:
+    lifecycle = {"observation": "unimplemented", "apply": "unimplemented"}
+    return [
+        {
+            "id": "opencode.credentials-index",
+            "strategy": "seed-if-absent",
+            "source": "credentials-index.md",
+            "target": {
+                "root": "opencode-config",
+                "path": "credentials-index.md",
+            },
+            **lifecycle,
+        },
+        {
+            "id": "opencode.permissions",
+            "strategy": "json-key-merge",
+            "source": "config-fragment.json",
+            "target": {"root": "opencode-config", "path": "opencode.json"},
+            **lifecycle,
+        },
+    ]
 
 
 def _replace_once(text: str, needle: str, replacement: str, source: Path) -> str:
@@ -131,8 +191,9 @@ def _project_detector(text: str, source: Path, profile) -> str:
             f"os.path.join({OPENCODE_CONFIG_EXPRESSION}, "
             '"opencode", "mainframe", "telemetry", "telemetry.db")'
         )
-        text = _replace_once(text, FEEDBACK_FALLBACK, feedback, source)
-        text = _replace_once(text, TELEMETRY_FALLBACK, telemetry, source)
+        text = project_hooklib_fallbacks(
+            text, source, feedback=feedback, telemetry=telemetry
+        )
     return build_opencode.project_runtime_text(text, profile)
 
 
@@ -166,6 +227,7 @@ def build(root: Path, output: Path) -> None:
     agents_source = root / "dist/opencode/AGENTS.md"
     plugin_source = root / "adapters/opencode/plugins/mainframe-gates.js"
     rules_source = root / "core/permissions/rules.json"
+    credentials_source = root / "core/resources/credentials-index.md"
     for source in (
         root / "core/skills",
         root / "core/gates/detectors",
@@ -173,24 +235,15 @@ def build(root: Path, output: Path) -> None:
     ):
         if not source.is_dir():
             raise FileNotFoundError(source)
-    for source in (agents_source, plugin_source, rules_source):
+    for source in (agents_source, plugin_source, rules_source, credentials_source):
         if source.is_symlink() or not source.is_file():
             raise ValueError(f"bundle source must be a regular file: {source}")
     _validate_agent_sources(root)
     rules = load_permission_rules(str(rules_source))
-    permission, report = build_opencode.project_permissions(rules)
+    permission, _ = build_opencode.project_permissions(rules)
     require_restrictive_projection(permission)
 
-    expected = {
-        "AGENTS.md",
-        "agents",
-        "bundle.json",
-        "config-fragment.json",
-        "gates",
-        "plugins",
-        "skills",
-    }
-    prepare_output_root(output, expected)
+    prepare_output_root(output, BUNDLE_ENTRIES)
     _project_gates(root, output / "gates", profile)
     _project_skills(root, output / "skills", profile)
     _project_agents(root, output / "agents", profile)
@@ -206,18 +259,17 @@ def build(root: Path, output: Path) -> None:
         output / "config-fragment.json",
         json.dumps(fragment, indent=2, ensure_ascii=False) + "\n",
     )
-    manifest = {
-        "adapter": "opencode",
-        **asdict(profile),
-        "configuration": {
-            "permission_fragment": "config-fragment.json",
-            "permission_projection_skipped": report["skipped"],
-            "mcp_projection": "retired_cross_adapter_import",
-        },
-    }
     write_text_file(
-        output / "bundle.json",
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        output / "credentials-index.md",
+        build_opencode.project_runtime_text(credentials_source.read_text(), profile),
+    )
+    write_bundle_manifest(
+        output,
+        component="opencode",
+        dependencies=["credential-tools", "mainframe-cli"],
+        install_units=_install_units(output),
+        resources=_resources(),
+        runtime_profile=asdict(profile),
     )
 
 

@@ -12,9 +12,18 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
 
-func TestSelectionViewIsExplicitlyPartialAndShowsCurrentStatus(t *testing.T) {
+func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 	model := NewModel(&fakePreviewer{targets: []lifecycle.Target{
-		{ID: domain.ComponentClaudeCode, Status: lifecycle.StatusManaged, Selected: true},
+		{
+			ID: domain.ComponentClaudeCode, Status: lifecycle.StatusManaged, Selected: true,
+			Configuration: []lifecycle.ConfigurationResource{
+				{
+					ID:       "claude-code.permissions",
+					Strategy: "json-key-merge",
+					Status:   lifecycle.ConfigurationNotAssessed,
+				},
+			},
+		},
 		{ID: domain.ComponentCodex, Status: lifecycle.StatusAttention, Selected: true},
 		{ID: domain.ComponentOpenCode, Status: lifecycle.StatusAbsent},
 	}})
@@ -22,10 +31,9 @@ func TestSelectionViewIsExplicitlyPartialAndShowsCurrentStatus(t *testing.T) {
 
 	view := model.View()
 	for _, text := range []string{
-		"DEVELOPMENT PREVIEW",
-		"stable legacy artifacts only",
-		"bundle-v2 artifacts are not included",
-		"Claude Code — installed",
+		"READ-ONLY RELEASE PREVIEW",
+		"Configuration resources are inventoried but not assessed or applied",
+		"Claude Code — installed · configuration not assessed (1)",
 		"Codex — needs attention",
 		"OpenCode — not detected",
 	} {
@@ -47,7 +55,16 @@ func TestSelectionViewIsExplicitlyPartialAndShowsCurrentStatus(t *testing.T) {
 func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 	previewer := &fakePreviewer{
 		targets: []lifecycle.Target{
-			{ID: domain.ComponentClaudeCode, Status: lifecycle.StatusAbsent},
+			{
+				ID: domain.ComponentClaudeCode, Status: lifecycle.StatusAbsent,
+				Configuration: []lifecycle.ConfigurationResource{
+					{
+						ID:       "claude-code.permissions",
+						Strategy: "json-key-merge",
+						Status:   lifecycle.ConfigurationNotAssessed,
+					},
+				},
+			},
 			{ID: domain.ComponentCodex, Status: lifecycle.StatusManaged, Selected: true},
 			{ID: domain.ComponentOpenCode, Status: lifecycle.StatusAbsent},
 		},
@@ -66,13 +83,15 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 	}
 	view := updated.View().Content
 	for _, text := range []string{
-		"Plan preview",
+		"Filesystem plan",
 		"Install · 1",
 		"Remove · 1",
 		"Conflicts · 1",
 		"Claude Code",
 		"Codex",
 		"OpenCode",
+		"Configuration inventory · 1",
+		"claude-code.permissions · json-key-merge · not assessed",
 		"b back",
 		"q quit",
 	} {
@@ -82,6 +101,24 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 	}
 	if !reflect.DeepEqual(previewer.selected, model.selected) {
 		t.Fatalf("preview selection = %v, want %v", previewer.selected, model.selected)
+	}
+}
+
+func TestSelectedConfigurationDeduplicatesSharedDependencyResources(t *testing.T) {
+	shared := lifecycle.ConfigurationResource{
+		ID: "credential-tools.secrets-store", Strategy: "seed-if-absent",
+		Status: lifecycle.ConfigurationNotAssessed,
+	}
+	targets := []lifecycle.Target{
+		{ID: domain.ComponentClaudeCode, Configuration: []lifecycle.ConfigurationResource{shared}},
+		{ID: domain.ComponentCodex, Configuration: []lifecycle.ConfigurationResource{shared}},
+	}
+	got := selectedConfiguration(targets, []domain.ComponentID{
+		domain.ComponentClaudeCode,
+		domain.ComponentCodex,
+	})
+	if !reflect.DeepEqual(got, []lifecycle.ConfigurationResource{shared}) {
+		t.Fatalf("configuration = %#v, want one shared resource", got)
 	}
 }
 
@@ -119,10 +156,10 @@ func TestPreviewBackPreservesSelection(t *testing.T) {
 	}
 }
 
-func TestEmptyPreviewExplainsThatStableArtifactsNeedNoChanges(t *testing.T) {
+func TestEmptyPreviewExplainsThatFilesystemNeedsNoChanges(t *testing.T) {
 	model := NewModel(&fakePreviewer{targets: defaultTargets()})
 	updated, _ := model.openPreview()
-	if !strings.Contains(updated.View().Content, "No changes in the stable artifact set") {
+	if !strings.Contains(updated.View().Content, "No filesystem changes") {
 		t.Fatalf("empty preview is unexplained:\n%s", updated.View().Content)
 	}
 }

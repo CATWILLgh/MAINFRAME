@@ -230,6 +230,41 @@ def test_optional_absences_preserve_success() -> None:
     assert "dev/skills/harness-feedback" not in output
 
 
+def test_secret_bootstrap_sources_the_xdg_credentials_store() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp).resolve()
+        installer = _seed_repo(root)
+        home = root / "home"
+        xdg = root / "custom-config"
+        (home / ".claude").mkdir(parents=True)
+        _write(home / ".bashrc", "bash\n")
+        _write(home / ".profile", "profile\n")
+        text = installer.read_text().replace('\nmain "$@"\n', "\nbootstrap_secrets\n")
+        installer.write_text(text)
+        result = subprocess.run(
+            ["/bin/bash", str(installer)],
+            cwd=installer.parent,
+            env={
+                "HOME": str(home),
+                "XDG_CONFIG_HOME": str(xdg),
+                "PATH": SYSTEM_PATH,
+            },
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        expected = (
+            '[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" ] '
+            '&& set -a && . "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" '
+            "&& set +a"
+        )
+        assert (xdg / "credentials").is_dir()
+        for relative in (".zshenv", ".bashrc", ".profile"):
+            assert expected in (home / relative).read_text()
+
+
 def test_uninstall_bypasses_required_source_preflight() -> None:
     result = _run_install(
         ["--uninstall"], missing="dist/claude-code/output-styles",

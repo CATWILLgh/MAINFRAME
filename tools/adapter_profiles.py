@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 PLAN_ROOT_TOKEN = "{{mainframe.plans_root}}"
+CONFIG_ROOT_TOKEN = "{{mainframe.config_root}}"
 PROFILE_PATH = Path("adapters/runtime-profiles.json")
 
 
@@ -29,7 +30,9 @@ def load_profiles(root: Path) -> dict[str, AdapterProfile]:
 
 
 def project_text(text: str, profile: AdapterProfile) -> str:
-    return text.replace(PLAN_ROOT_TOKEN, profile.plans_root)
+    return text.replace(PLAN_ROOT_TOKEN, profile.plans_root).replace(
+        CONFIG_ROOT_TOKEN, profile.config_root
+    )
 
 
 def _validate_profiles(

@@ -23,8 +23,8 @@ MAPPINGS = [
     ("adapters/claude-code/gates/hooks.json", "dist/claude-code/plugin/hooks/hooks.json"),
     ("core/skills", "dist/claude-code/plugin/skills"),
     ("adapters/claude-code/files/output-styles", "dist/claude-code/output-styles"),
-    ("adapters/claude-code/files/scripts", "dist/claude-code/scripts"),
-    ("adapters/claude-code/files/templates", "dist/claude-code/templates"),
+    ("core/resources/credential-tools/secret", "dist/claude-code/scripts/secret"),
+    ("core/resources/credentials-index.md", "dist/claude-code/templates/credentials-index.md"),
     ("adapters/claude-code/plugin.json", "dist/claude-code/plugin/.claude-plugin/plugin.json"),
 ]
 
@@ -64,12 +64,14 @@ def make_sources(root: Path) -> None:
     files = root / "adapters/claude-code/files"
     (files / "output-styles").mkdir(parents=True)
     (files / "output-styles/style.md").write_text("style\n")
-    (files / "scripts").mkdir()
-    secret = files / "scripts/secret"
+    resources = root / "core/resources"
+    (resources / "credential-tools").mkdir(parents=True)
+    secret = resources / "credential-tools/secret"
     secret.write_text("#!/bin/sh\n")
     secret.chmod(0o755)
-    (files / "templates").mkdir()
-    (files / "templates/template.md").write_text("template\n")
+    (resources / "credentials-index.md").write_text(
+        "Index: {{mainframe.config_root}}/credentials-index.md\n"
+    )
     plugin = root / "adapters/claude-code/plugin.json"
     plugin.write_text(PLUGIN_BODY)
 
@@ -99,7 +101,9 @@ def test_write_materializes_targets():
     assert "{{mainframe.plans_root}}" not in rendered_skill.read_text()
     assert (root / "dist/claude-code/output-styles/style.md").read_text() == "style\n"
     assert (root / "dist/claude-code/scripts/secret").read_text() == "#!/bin/sh\n"
-    assert (root / "dist/claude-code/templates/template.md").read_text() == "template\n"
+    assert (root / "dist/claude-code/templates/credentials-index.md").read_text() == (
+        "Index: ~/.claude/credentials-index.md\n"
+    )
     assert (root / "dist/claude-code/scripts/secret").stat().st_mode & 0o111
     assert len(copied) == 10, copied
     shutil.rmtree(root)

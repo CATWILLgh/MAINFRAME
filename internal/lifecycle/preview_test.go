@@ -7,6 +7,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
 func TestPreviewTargetsReportManagedAttentionAndAbsent(t *testing.T) {
@@ -67,6 +68,113 @@ func TestPreviewBuildsPlanForVisibleTargets(t *testing.T) {
 	}
 }
 
+func TestPreviewReportsConfigurationInventoryWithoutCallingItManaged(t *testing.T) {
+	model := testModel(t)
+	service, err := NewWithResources(
+		model,
+		domain.ObservedState{},
+		[]releasecontract.Resource{
+			{
+				ID:          "claude-code.permissions",
+				ComponentID: domain.ComponentClaudeCode,
+				Strategy:    releasecontract.StrategyJSONKeyMerge,
+				Observation: releasecontract.SupportUnimplemented,
+				Apply:       releasecontract.SupportUnimplemented,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+	target := service.Targets()[0]
+	want := []ConfigurationResource{
+		{
+			ID:       "claude-code.permissions",
+			Strategy: releasecontract.StrategyJSONKeyMerge,
+			Status:   ConfigurationNotAssessed,
+		},
+	}
+	if !reflect.DeepEqual(target.Configuration, want) {
+		t.Fatalf("configuration = %#v, want %#v", target.Configuration, want)
+	}
+}
+
+func TestPreviewProjectsDependencyHealthAndConfigurationOntoVisibleTarget(t *testing.T) {
+	model, err := installmodel.New([]installmodel.ComponentSpec{
+		{
+			ID:           domain.ComponentClaudeCode,
+			Dependencies: []domain.ComponentID{"credential-tools", "mainframe-cli"},
+			Artifacts: []installmodel.ArtifactSpec{
+				desired(domain.RootClaudeConfig, "CLAUDE.md", "claude/CLAUDE.md"),
+			},
+		},
+		{
+			ID: "credential-tools",
+			Artifacts: []installmodel.ArtifactSpec{
+				desired(domain.RootUserBin, "secret", "common/secret"),
+			},
+		},
+		{
+			ID: "mainframe-cli",
+			Artifacts: []installmodel.ArtifactSpec{
+				desired(domain.RootUserBin, "mainframe", "bin/mainframe"),
+			},
+		},
+		{ID: domain.ComponentCodex},
+		{ID: domain.ComponentOpenCode},
+	})
+	if err != nil {
+		t.Fatalf("model: %v", err)
+	}
+	service, err := NewWithResources(
+		model,
+		domain.ObservedState{Components: []domain.ObservedComponent{
+			{
+				ID: domain.ComponentClaudeCode,
+				Artifacts: []domain.Artifact{
+					artifact(domain.RootClaudeConfig, "CLAUDE.md", domain.OwnershipManagedExact),
+				},
+			},
+			{
+				ID: "mainframe-cli",
+				Artifacts: []domain.Artifact{
+					artifact(domain.RootUserBin, "mainframe", domain.OwnershipManagedExact),
+				},
+			},
+		}},
+		[]releasecontract.Resource{
+			{
+				ID: "claude-code.permissions", ComponentID: domain.ComponentClaudeCode,
+				Strategy: releasecontract.StrategyJSONKeyMerge,
+			},
+			{
+				ID: "credential-tools.secrets-store", ComponentID: "credential-tools",
+				Strategy: releasecontract.StrategySeedIfAbsent,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+	target := service.Targets()[0]
+	if target.Status != StatusAttention {
+		t.Fatalf("status = %q, want %q", target.Status, StatusAttention)
+	}
+	wantResources := []ConfigurationResource{
+		{
+			ID: "claude-code.permissions", Strategy: releasecontract.StrategyJSONKeyMerge,
+			Status: ConfigurationNotAssessed,
+		},
+		{
+			ID: "credential-tools.secrets-store", Strategy: releasecontract.StrategySeedIfAbsent,
+			Status: ConfigurationNotAssessed,
+		},
+	}
+	if !reflect.DeepEqual(target.Configuration, wantResources) {
+		t.Fatalf("configuration = %#v, want %#v", target.Configuration, wantResources)
+	}
+}
+
 func TestPreviewRejectsInternalAndDuplicateSelections(t *testing.T) {
 	service := newTestService(t, domain.ObservedState{})
 	tests := []struct {
@@ -100,6 +208,16 @@ func TestPreviewRejectsInternalAndDuplicateSelections(t *testing.T) {
 
 func newTestService(t *testing.T, observed domain.ObservedState) Service {
 	t.Helper()
+	model := testModel(t)
+	service, err := New(model, observed)
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+	return service
+}
+
+func testModel(t *testing.T) installmodel.Model {
+	t.Helper()
 	model, err := installmodel.New([]installmodel.ComponentSpec{
 		{
 			ID: domain.ComponentClaudeCode,
@@ -124,11 +242,7 @@ func newTestService(t *testing.T, observed domain.ObservedState) Service {
 	if err != nil {
 		t.Fatalf("model: %v", err)
 	}
-	service, err := New(model, observed)
-	if err != nil {
-		t.Fatalf("service: %v", err)
-	}
-	return service
+	return model
 }
 
 func desired(root domain.RootID, target, source domain.ArtifactPath) installmodel.ArtifactSpec {
