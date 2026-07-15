@@ -11,7 +11,7 @@ import (
 )
 
 func TestRunPlanJSONContract(t *testing.T) {
-	input := `{"desired":{"components":["claude-code"]},"observed":{"components":[{"id":"codex","artifacts":[{"path":".codex/AGENTS.md","ownership":"managed_exact"}]}]}}`
+	input := `{"desired":{"components":["claude-code"]},"observed":{"components":[{"id":"codex","artifacts":[{"location":{"root":"codex-config","path":"AGENTS.md"},"ownership":"managed_exact"}]}]}}`
 	var stdout, stderr bytes.Buffer
 
 	exitCode := run([]string{"plan"}, strings.NewReader(input), &stdout, &stderr)
@@ -24,6 +24,9 @@ func TestRunPlanJSONContract(t *testing.T) {
 	}
 	if len(got.Operations) != 1 || got.Operations[0].Kind != domain.OperationRemove {
 		t.Fatalf("unexpected plan: %#v", got)
+	}
+	if got.Operations[0].SourcePath != "" {
+		t.Fatalf("remove source path = %q, want empty", got.Operations[0].SourcePath)
 	}
 }
 
@@ -113,7 +116,7 @@ func TestRunRejectsNullRequest(t *testing.T) {
 }
 
 func TestRunRejectsUnknownOwnership(t *testing.T) {
-	input := `{"desired":{"components":[]},"observed":{"components":[{"id":"codex","artifacts":[{"path":"x","ownership":"unknown"}]}]}}`
+	input := `{"desired":{"components":[]},"observed":{"components":[{"id":"codex","artifacts":[{"location":{"root":"codex-config","path":"x"},"ownership":"unknown"}]}]}}`
 	var stdout, stderr bytes.Buffer
 
 	exitCode := run([]string{"plan"}, strings.NewReader(input), &stdout, &stderr)

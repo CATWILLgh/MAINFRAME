@@ -4,9 +4,35 @@ import (
 	"path"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 type ComponentID string
+
+type RootID string
+
+const (
+	RootHome              RootID = "home"
+	RootClaudeConfig      RootID = "claude-config"
+	RootCodexConfig       RootID = "codex-config"
+	RootOpenCodeConfig    RootID = "opencode-config"
+	RootUserBin           RootID = "user-bin"
+	RootCredentialsConfig RootID = "credentials-config"
+	RootCommonData        RootID = "common-data"
+)
+
+func (root RootID) Valid() bool {
+	for index, character := range root {
+		if index == 0 && (character < 'a' || character > 'z') {
+			return false
+		}
+		if index > 0 && (character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') && character != '-' {
+			return false
+		}
+	}
+	return root != ""
+}
 
 const (
 	ComponentClaudeCode          ComponentID = "claude-code"
@@ -33,7 +59,7 @@ type ArtifactPath string
 
 func (artifactPath ArtifactPath) Valid() bool {
 	value := string(artifactPath)
-	if value == "" || value == "." || value == ".." || strings.HasPrefix(value, "../") {
+	if value == "" || !utf8.ValidString(value) || value == "." || value == ".." || strings.HasPrefix(value, "../") {
 		return false
 	}
 	if path.IsAbs(value) || path.Clean(value) != value {
@@ -50,8 +76,29 @@ func (artifactPath ArtifactPath) Valid() bool {
 	return true
 }
 
+func (artifactPath ArtifactPath) Portable() bool {
+	if !artifactPath.Valid() {
+		return false
+	}
+	for _, character := range artifactPath {
+		if character > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
+}
+
+type Location struct {
+	Root RootID       `json:"root"`
+	Path ArtifactPath `json:"path"`
+}
+
+func (location Location) Valid() bool {
+	return location.Root.Valid() && location.Path.Valid()
+}
+
 type Artifact struct {
-	Path      ArtifactPath    `json:"path"`
+	Location  Location        `json:"location"`
 	Ownership OwnershipStatus `json:"ownership,omitempty"`
 }
 
@@ -94,6 +141,7 @@ type Operation struct {
 	ComponentID ComponentID   `json:"component_id"`
 	Kind        OperationKind `json:"kind"`
 	Artifact    Artifact      `json:"artifact"`
+	SourcePath  ArtifactPath  `json:"source_path,omitempty"`
 }
 
 type Plan struct {

@@ -25,8 +25,8 @@ func (planner Planner) Plan(request domain.PlanRequest) (domain.Plan, error) {
 		return domain.Plan{}, err
 	}
 	expectedOwners := planner.expectedOwners(desired)
-	observedByPath := indexObservedArtifacts(request.Observed)
-	operations := planner.operationsForDesired(desired, observedByPath)
+	observedByLocation := indexObservedArtifacts(request.Observed)
+	operations := planner.operationsForDesired(desired, observedByLocation)
 	operations = append(operations, planner.operationsForObserved(request.Observed, expectedOwners)...)
 	sortOperations(operations)
 	return domain.Plan{Operations: operations}, nil
@@ -34,26 +34,29 @@ func (planner Planner) Plan(request domain.PlanRequest) (domain.Plan, error) {
 
 func (planner Planner) operationsForDesired(
 	desired []domain.ComponentID,
-	observedByPath map[domain.ArtifactPath]observedArtifact,
+	observedByLocation map[domain.Location]observedArtifact,
 ) []domain.Operation {
 	operations := make([]domain.Operation, 0)
 	for _, id := range desired {
 		component, _ := planner.catalog.Component(id)
 		for _, expected := range component.Artifacts {
-			observed, exists := observedByPath[expected.Path]
+			observed, exists := observedByLocation[expected.Target]
 			if exists && observed.componentID == id && observed.artifact.Ownership == domain.OwnershipManagedExact {
 				continue
 			}
 			kind := domain.OperationInstall
-			artifact := domain.Artifact{Path: expected.Path}
+			artifact := domain.Artifact{Location: expected.Target}
+			sourcePath := expected.SourcePath
 			if exists {
 				kind = domain.OperationConflict
 				artifact = observed.artifact
+				sourcePath = ""
 			}
 			operations = append(operations, domain.Operation{
 				ComponentID: id,
 				Kind:        kind,
 				Artifact:    artifact,
+				SourcePath:  sourcePath,
 			})
 		}
 	}
@@ -62,12 +65,12 @@ func (planner Planner) operationsForDesired(
 
 func (planner Planner) operationsForObserved(
 	observed domain.ObservedState,
-	expectedOwners map[domain.ArtifactPath]domain.ComponentID,
+	expectedOwners map[domain.Location]domain.ComponentID,
 ) []domain.Operation {
 	operations := make([]domain.Operation, 0)
 	for _, component := range observed.Components {
 		for _, artifact := range component.Artifacts {
-			if _, expected := expectedOwners[artifact.Path]; expected {
+			if _, expected := expectedOwners[artifact.Location]; expected {
 				continue
 			}
 			kind := domain.OperationConflict
@@ -84,12 +87,12 @@ func (planner Planner) operationsForObserved(
 	return operations
 }
 
-func (planner Planner) expectedOwners(desired []domain.ComponentID) map[domain.ArtifactPath]domain.ComponentID {
-	owners := make(map[domain.ArtifactPath]domain.ComponentID)
+func (planner Planner) expectedOwners(desired []domain.ComponentID) map[domain.Location]domain.ComponentID {
+	owners := make(map[domain.Location]domain.ComponentID)
 	for _, id := range desired {
 		component, _ := planner.catalog.Component(id)
 		for _, artifact := range component.Artifacts {
-			owners[artifact.Path] = id
+			owners[artifact.Target] = id
 		}
 	}
 	return owners
@@ -104,10 +107,16 @@ func sortOperations(operations []domain.Operation) {
 		if left.Kind != right.Kind {
 			return left.Kind < right.Kind
 		}
-		if left.Artifact.Path != right.Artifact.Path {
-			return left.Artifact.Path < right.Artifact.Path
+		if left.Artifact.Location.Root != right.Artifact.Location.Root {
+			return left.Artifact.Location.Root < right.Artifact.Location.Root
 		}
-		return left.Artifact.Ownership < right.Artifact.Ownership
+		if left.Artifact.Location.Path != right.Artifact.Location.Path {
+			return left.Artifact.Location.Path < right.Artifact.Location.Path
+		}
+		if left.Artifact.Ownership != right.Artifact.Ownership {
+			return left.Artifact.Ownership < right.Artifact.Ownership
+		}
+		return left.SourcePath < right.SourcePath
 	})
 }
 
@@ -116,11 +125,11 @@ type observedArtifact struct {
 	artifact    domain.Artifact
 }
 
-func indexObservedArtifacts(observed domain.ObservedState) map[domain.ArtifactPath]observedArtifact {
-	artifacts := make(map[domain.ArtifactPath]observedArtifact)
+func indexObservedArtifacts(observed domain.ObservedState) map[domain.Location]observedArtifact {
+	artifacts := make(map[domain.Location]observedArtifact)
 	for _, component := range observed.Components {
 		for _, artifact := range component.Artifacts {
-			artifacts[artifact.Path] = observedArtifact{componentID: component.ID, artifact: artifact}
+			artifacts[artifact.Location] = observedArtifact{componentID: component.ID, artifact: artifact}
 		}
 	}
 	return artifacts
@@ -128,7 +137,7 @@ func indexObservedArtifacts(observed domain.ObservedState) map[domain.ArtifactPa
 
 func validateObserved(observed domain.ObservedState) error {
 	components := make(map[domain.ComponentID]bool, len(observed.Components))
-	paths := make(map[domain.ArtifactPath]bool)
+	locations := make(map[domain.Location]bool)
 	for _, component := range observed.Components {
 		if component.ID == "" {
 			return fmt.Errorf("observed component ID must not be empty")
@@ -138,18 +147,15 @@ func validateObserved(observed domain.ObservedState) error {
 		}
 		components[component.ID] = true
 		for _, artifact := range component.Artifacts {
-			if artifact.Path == "" {
-				return fmt.Errorf("observed artifact path must not be empty for component %q", component.ID)
+			if !artifact.Location.Valid() {
+				return fmt.Errorf("invalid artifact location %#v for observed component %q", artifact.Location, component.ID)
 			}
-			if !artifact.Path.Valid() {
-				return fmt.Errorf("invalid artifact path %q for observed component %q", artifact.Path, component.ID)
+			if locations[artifact.Location] {
+				return fmt.Errorf("duplicate observed artifact location %#v", artifact.Location)
 			}
-			if paths[artifact.Path] {
-				return fmt.Errorf("duplicate observed artifact path %q", artifact.Path)
-			}
-			paths[artifact.Path] = true
+			locations[artifact.Location] = true
 			if !artifact.Ownership.Valid() {
-				return fmt.Errorf("invalid ownership %q for artifact %q", artifact.Ownership, artifact.Path)
+				return fmt.Errorf("invalid ownership %q for artifact %#v", artifact.Ownership, artifact.Location)
 			}
 		}
 	}

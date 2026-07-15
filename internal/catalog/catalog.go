@@ -10,7 +10,12 @@ import (
 type Component struct {
 	ID           domain.ComponentID
 	Dependencies []domain.ComponentID
-	Artifacts    []domain.Artifact
+	Artifacts    []Artifact
+}
+
+type Artifact struct {
+	Target     domain.Location
+	SourcePath domain.ArtifactPath
 }
 
 type Catalog struct {
@@ -19,7 +24,7 @@ type Catalog struct {
 
 func New(components []Component) (Catalog, error) {
 	registry := Catalog{components: make(map[domain.ComponentID]Component, len(components))}
-	artifactOwners := make(map[domain.ArtifactPath]domain.ComponentID)
+	artifactOwners := make(map[domain.Location]domain.ComponentID)
 	for _, component := range components {
 		if component.ID == "" {
 			return Catalog{}, fmt.Errorf("component ID must not be empty")
@@ -28,21 +33,21 @@ func New(components []Component) (Catalog, error) {
 			return Catalog{}, fmt.Errorf("duplicate component %q", component.ID)
 		}
 		for _, artifact := range component.Artifacts {
-			if artifact.Path == "" {
-				return Catalog{}, fmt.Errorf("artifact path must not be empty for component %q", component.ID)
+			if !artifact.Target.Valid() || !artifact.Target.Path.Portable() {
+				return Catalog{}, fmt.Errorf("invalid artifact target %#v for component %q", artifact.Target, component.ID)
 			}
-			if !artifact.Path.Valid() {
-				return Catalog{}, fmt.Errorf("invalid artifact path %q for component %q", artifact.Path, component.ID)
+			if !artifact.SourcePath.Portable() {
+				return Catalog{}, fmt.Errorf("invalid source path %q for component %q", artifact.SourcePath, component.ID)
 			}
-			if owner, exists := artifactOwners[artifact.Path]; exists {
+			if owner, exists := artifactOwners[artifact.Target]; exists {
 				return Catalog{}, fmt.Errorf(
-					"duplicate artifact path %q claimed by %q and %q",
-					artifact.Path,
+					"duplicate artifact target %#v claimed by %q and %q",
+					artifact.Target,
 					owner,
 					component.ID,
 				)
 			}
-			artifactOwners[artifact.Path] = component.ID
+			artifactOwners[artifact.Target] = component.ID
 		}
 		registry.components[component.ID] = cloneComponent(component)
 	}
@@ -142,6 +147,6 @@ func sortedIDs(set map[domain.ComponentID]bool) []domain.ComponentID {
 
 func cloneComponent(component Component) Component {
 	component.Dependencies = append([]domain.ComponentID(nil), component.Dependencies...)
-	component.Artifacts = append([]domain.Artifact(nil), component.Artifacts...)
+	component.Artifacts = append([]Artifact(nil), component.Artifacts...)
 	return component
 }

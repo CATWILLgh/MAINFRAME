@@ -2,32 +2,37 @@ package installmodel
 
 import (
 	"fmt"
-	"io/fs"
 	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/catalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
 type ArtifactSpec struct {
-	HomePath             domain.ArtifactPath
+	Target               domain.Location
 	SourcePath           domain.ArtifactPath
 	LegacyTargetSuffixes []domain.ArtifactPath
 }
 
+type LegacyArtifactSpec struct {
+	Target         domain.Location
+	TargetSuffixes []domain.ArtifactPath
+}
+
 type ComponentSpec struct {
-	ID           domain.ComponentID
-	Dependencies []domain.ComponentID
-	Artifacts    []ArtifactSpec
+	ID              domain.ComponentID
+	Dependencies    []domain.ComponentID
+	Artifacts       []ArtifactSpec
+	LegacyArtifacts []LegacyArtifactSpec
 }
 
 type Artifact struct {
 	ComponentID          domain.ComponentID
-	HomePath             domain.ArtifactPath
+	Target               domain.Location
 	SourcePath           domain.ArtifactPath
 	LegacyTargetSuffixes []domain.ArtifactPath
+	LegacyOnly           bool
 }
 
 type Model struct {
@@ -37,14 +42,14 @@ type Model struct {
 
 func New(components []ComponentSpec) (Model, error) {
 	copied := cloneComponents(components)
-	if err := validateArtifactPaths(copied); err != nil {
+	artifacts, err := validateAndFlatten(copied)
+	if err != nil {
 		return Model{}, err
 	}
 	componentCatalog, err := deriveCatalog(copied)
 	if err != nil {
 		return Model{}, err
 	}
-	artifacts := flattenArtifacts(copied)
 	sortArtifacts(artifacts)
 	return Model{catalog: componentCatalog, artifacts: artifacts}, nil
 }
@@ -57,104 +62,107 @@ func (model Model) Artifacts() []Artifact {
 	return cloneArtifacts(model.artifacts)
 }
 
-func validateArtifactPaths(components []ComponentSpec) error {
-	homeOwners := make(map[domain.ArtifactPath]domain.ComponentID)
-	homePaths := make([]ownedPath, 0)
+func validateAndFlatten(components []ComponentSpec) ([]Artifact, error) {
+	var artifacts []Artifact
 	for _, component := range components {
-		for _, artifact := range component.Artifacts {
-			if !validModelPath(artifact.HomePath) {
-				return fmt.Errorf("component %q has invalid home path %q", component.ID, artifact.HomePath)
+		for _, spec := range component.Artifacts {
+			if err := validateDesired(component.ID, spec); err != nil {
+				return nil, err
 			}
-			if !validModelPath(artifact.SourcePath) {
-				return fmt.Errorf("component %q has invalid source path %q", component.ID, artifact.SourcePath)
+			artifacts = append(artifacts, desiredArtifact(component.ID, spec))
+		}
+		for _, spec := range component.LegacyArtifacts {
+			if err := validateLegacy(component.ID, spec); err != nil {
+				return nil, err
 			}
-			if owner, exists := homeOwners[artifact.HomePath]; exists {
-				return fmt.Errorf("duplicate artifact path %q claimed by %q and %q", artifact.HomePath, owner, component.ID)
-			}
-			homeOwners[artifact.HomePath] = component.ID
-			homePaths = append(homePaths, ownedPath{path: artifact.HomePath, owner: component.ID})
-			for _, suffix := range artifact.LegacyTargetSuffixes {
-				if !validModelPath(suffix) {
-					return fmt.Errorf("component %q has invalid legacy target suffix %q", component.ID, suffix)
-				}
-			}
+			artifacts = append(artifacts, legacyArtifact(component.ID, spec))
 		}
 	}
-	return validateNoOverlappingHomePaths(homePaths)
+	if err := validateTargetOverlap(artifacts); err != nil {
+		return nil, err
+	}
+	return artifacts, nil
 }
 
-func validModelPath(artifactPath domain.ArtifactPath) bool {
-	if !artifactPath.Valid() || !fs.ValidPath(string(artifactPath)) {
-		return false
+func validateDesired(id domain.ComponentID, spec ArtifactSpec) error {
+	if !spec.Target.Valid() || !spec.Target.Path.Portable() {
+		return fmt.Errorf("component %q has invalid artifact target %#v", id, spec.Target)
 	}
-	for _, character := range artifactPath {
-		if character > unicode.MaxASCII {
-			return false
+	if !spec.SourcePath.Portable() {
+		return fmt.Errorf("component %q has invalid source path %q", id, spec.SourcePath)
+	}
+	for _, suffix := range spec.LegacyTargetSuffixes {
+		if !suffix.Portable() {
+			return fmt.Errorf("component %q has invalid legacy target suffix %q", id, suffix)
 		}
 	}
-	return true
+	return nil
 }
 
-type ownedPath struct {
-	path  domain.ArtifactPath
-	owner domain.ComponentID
+func validateLegacy(id domain.ComponentID, spec LegacyArtifactSpec) error {
+	if !spec.Target.Valid() || !spec.Target.Path.Portable() {
+		return fmt.Errorf("component %q has invalid legacy target %#v", id, spec.Target)
+	}
+	if len(spec.TargetSuffixes) == 0 {
+		return fmt.Errorf("component %q legacy artifact requires at least one target suffix", id)
+	}
+	for _, suffix := range spec.TargetSuffixes {
+		if !suffix.Portable() {
+			return fmt.Errorf("component %q has invalid legacy target suffix %q", id, suffix)
+		}
+	}
+	return nil
 }
 
-func validateNoOverlappingHomePaths(paths []ownedPath) error {
-	sort.Slice(paths, func(i, j int) bool { return paths[i].path < paths[j].path })
-	for parentIndex, parent := range paths {
-		for _, child := range paths[parentIndex+1:] {
-			if strings.HasPrefix(string(child.path), string(parent.path)+"/") {
-				return fmt.Errorf(
-					"overlapping artifact paths %q (%q) and %q (%q)",
-					parent.path,
-					parent.owner,
-					child.path,
-					child.owner,
-				)
+func validateTargetOverlap(artifacts []Artifact) error {
+	for i := range artifacts {
+		for j := 0; j < i; j++ {
+			left, right := artifacts[i].Target, artifacts[j].Target
+			if left.Root == right.Root && pathsOverlap(left.Path, right.Path) {
+				return fmt.Errorf("artifact targets %#v and %#v overlap", left, right)
 			}
 		}
 	}
 	return nil
 }
 
+func pathsOverlap(left, right domain.ArtifactPath) bool {
+	leftPath, rightPath := string(left), string(right)
+	return leftPath == rightPath || strings.HasPrefix(leftPath, rightPath+"/") || strings.HasPrefix(rightPath, leftPath+"/")
+}
+
 func deriveCatalog(components []ComponentSpec) (catalog.Catalog, error) {
 	definitions := make([]catalog.Component, 0, len(components))
 	for _, component := range components {
-		artifacts := make([]domain.Artifact, 0, len(component.Artifacts))
-		for _, artifact := range component.Artifacts {
-			artifacts = append(artifacts, domain.Artifact{Path: artifact.HomePath})
+		artifacts := make([]catalog.Artifact, 0, len(component.Artifacts))
+		for _, spec := range component.Artifacts {
+			artifacts = append(artifacts, catalog.Artifact{Target: spec.Target, SourcePath: spec.SourcePath})
 		}
-		definitions = append(definitions, catalog.Component{
-			ID: component.ID, Dependencies: component.Dependencies, Artifacts: artifacts,
-		})
+		definitions = append(definitions, catalog.Component{ID: component.ID, Dependencies: component.Dependencies, Artifacts: artifacts})
 	}
 	return catalog.New(definitions)
 }
 
-func flattenArtifacts(components []ComponentSpec) []Artifact {
-	var artifacts []Artifact
-	for _, component := range components {
-		for _, spec := range component.Artifacts {
-			artifacts = append(artifacts, Artifact{
-				ComponentID:          component.ID,
-				HomePath:             spec.HomePath,
-				SourcePath:           spec.SourcePath,
-				LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...),
-			})
-		}
-	}
-	return artifacts
+func desiredArtifact(id domain.ComponentID, spec ArtifactSpec) Artifact {
+	return Artifact{ComponentID: id, Target: spec.Target, SourcePath: spec.SourcePath, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...)}
+}
+
+func legacyArtifact(id domain.ComponentID, spec LegacyArtifactSpec) Artifact {
+	return Artifact{ComponentID: id, Target: spec.Target, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.TargetSuffixes...), LegacyOnly: true}
 }
 
 func sortArtifacts(artifacts []Artifact) {
 	sort.Slice(artifacts, func(i, j int) bool {
-		if artifacts[i].ComponentID != artifacts[j].ComponentID {
-			return artifacts[i].ComponentID < artifacts[j].ComponentID
+		left, right := artifacts[i], artifacts[j]
+		if left.Target.Root != right.Target.Root {
+			return left.Target.Root < right.Target.Root
 		}
-		if artifacts[i].HomePath != artifacts[j].HomePath {
-			return artifacts[i].HomePath < artifacts[j].HomePath
+		if left.Target.Path != right.Target.Path {
+			return left.Target.Path < right.Target.Path
 		}
-		return artifacts[i].SourcePath < artifacts[j].SourcePath
+		if left.ComponentID != right.ComponentID {
+			return left.ComponentID < right.ComponentID
+		}
+		return !left.LegacyOnly && right.LegacyOnly
 	})
 }
