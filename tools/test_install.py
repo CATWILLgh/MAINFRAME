@@ -93,7 +93,8 @@ def _run_install(
         empty: str | None = None, hidden_only: str | None = None,
         programs: tuple[str, ...] = (), venv_exit: int | None = None,
         venv_requires: str | None = None, seed_dev: bool = False,
-        seed_uninstall_links: bool = False,
+        seed_uninstall_links: bool = False, antigravity_app: bool = False,
+        antigravity_plugin_conflict: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp).resolve()
@@ -111,8 +112,14 @@ def _run_install(
             "HOME": str(home),
             "XDG_CONFIG_HOME": str(root / "config"),
             "CODEX_HOME": str(root / "codex"),
+            "ANTIGRAVITY_APP": str(root / "Antigravity.app"),
             "PATH": f"{fake_bin}:{SYSTEM_PATH}",
         }
+        if antigravity_app:
+            (root / "Antigravity.app/Contents").mkdir(parents=True)
+        if antigravity_plugin_conflict:
+            _write(repo / "dist/antigravity-2/plugin/plugin.json", "{}\n")
+            _write(home / ".gemini/config/plugins/mainframe/plugin.json", "{}\n")
         uninstall_links = None
         if seed_uninstall_links:
             uninstall_links = _seed_uninstall_links(root, repo)
@@ -129,6 +136,10 @@ def _run_install(
             opencode_link, style_link = uninstall_links
             assert opencode_link.is_symlink(), "dry-run removed OpenCode AGENTS.md"
             assert style_link.is_symlink(), "dry-run removed output style"
+        elif antigravity_plugin_conflict:
+            target = home / ".gemini/config/plugins/mainframe/plugin.json"
+            assert target.read_text() == "{}\n", "dry-run changed Antigravity plugin"
+            assert not list((home / ".gemini/config").glob(".mainframe-backup-*"))
         else:
             assert not home.exists(), f"dry-run wrote into HOME: {list(home.rglob('*'))}"
         return result
@@ -186,6 +197,16 @@ def test_requested_adapter_requires_repo_venv() -> None:
         _assert_failed(result, ".venv")
 
 
+def test_antigravity_2_requires_desktop_app() -> None:
+    result = _run_install(["--antigravity-2"], venv_exit=0)
+    _assert_failed(result, "Antigravity 2.x desktop app")
+
+
+def test_antigravity_2_requires_repo_venv() -> None:
+    result = _run_install(["--antigravity-2"], antigravity_app=True)
+    _assert_failed(result, ".venv")
+
+
 def test_requested_adapter_generator_failure_reaches_exit_status() -> None:
     for flag, executable, generator in (
         ("--opencode", "opencode", "build_opencode.py"),
@@ -197,6 +218,10 @@ def test_requested_adapter_generator_failure_reaches_exit_status() -> None:
         output = result.stdout + result.stderr
         assert "would append source-line" in output
         assert "would install ruff" in output
+
+    result = _run_install(
+        ["--antigravity-2"], antigravity_app=True, venv_exit=42)
+    _assert_failed(result, "build_antigravity.py")
 
 
 def test_multiple_requested_failures_are_all_reported() -> None:
@@ -211,6 +236,38 @@ def test_requested_adapter_success_preserves_completion() -> None:
         output = result.stdout + result.stderr
         assert result.returncode == 0, output
         assert "Install complete" in output
+
+    result = _run_install(
+        ["--antigravity-2"], antigravity_app=True, venv_exit=0)
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "Install complete" in output
+
+
+def test_antigravity_2_installer_requests_native_validation() -> None:
+    result = _run_install(
+        ["--antigravity-2"], antigravity_app=True,
+        venv_requires="--validate-native",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_antigravity_2_uses_its_own_backup_boundary() -> None:
+    text = INSTALLER.read_text()
+    function = text[text.index("install_antigravity_2() {"):
+                    text.index("uninstall_antigravity_2() {")]
+    assert "install_antigravity_2_plugin" in function
+    assert 'install_one "$ANTIGRAVITY_2_PLUGIN_SRC"' not in function
+    assert ".mainframe-backup-" in text
+
+    result = _run_install(
+        ["--antigravity-2"], antigravity_app=True, venv_exit=0,
+        antigravity_plugin_conflict=True,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "/.gemini/config/.mainframe-backup-" in output
+    assert "/.gemini/config/plugins/mainframe" in output
 
 
 def test_codex_installer_requests_native_validation() -> None:

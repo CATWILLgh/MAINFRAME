@@ -39,12 +39,14 @@ jobs:
           fail=0
           for t in tools/test_*.py; do
             # test_build_hub_page / test_build_opencode(_config) / test_build_codex /
+            # test_build_antigravity /
             # test_render_core / test_render_reminder / test_validate_skill need
             # pyyaml (the last also tiktoken); they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
             [ "$t" = "tools/test_build_opencode_config.py" ] && continue
             [ "$t" = "tools/test_build_codex.py" ] && continue
+            [ "$t" = "tools/test_build_antigravity.py" ] && continue
             [ "$t" = "tools/test_render_core.py" ] && continue
             [ "$t" = "tools/test_render_reminder.py" ] && continue
             [ "$t" = "tools/test_validate_skill.py" ] && continue
@@ -95,10 +97,21 @@ jobs:
       - name: Codex projection generator tests
         run: python3 tools/test_build_codex.py
 
+      - name: Antigravity 2.x projection generator tests
+        run: |
+          python3 tools/test_build_antigravity.py
+          python3 adapters/antigravity-2/build_antigravity.py \
+            --root . --out "$RUNNER_TEMP/mainframe-antigravity/plugin"
+          for skill_dir in "$RUNNER_TEMP/mainframe-antigravity/plugin/skills"/*; do
+            python3 tools/validate-skill.py "$skill_dir"
+          done
+
       # The dispatcher plugin is plain ESM JS precisely so stock node (present
       # on the runner) can test it — the Bun shell is faked inside the test.
       - name: OpenCode gates dispatcher tests
-        run: node tools/test_mainframe_gates.mjs
+        run: |
+          node tools/test_mainframe_gates.mjs
+          node tools/test_mainframe_memory.mjs
 
       - name: Validate skills
         run: python3 tools/validate-skill.py --all

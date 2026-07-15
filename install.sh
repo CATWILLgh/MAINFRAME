@@ -55,6 +55,7 @@ UNINSTALL=0
 DEV=0
 OPENCODE=0
 CODEX=0
+ANTIGRAVITY_2=0
 
 usage() {
     cat <<EOF
@@ -103,10 +104,16 @@ Usage:
                       agents are left untouched. Gate hooks need a one-time
                       per-project /hooks trust and reuse the base Claude Code
                       plugin's detectors.
+  $0 --antigravity-2  Install PLUS the standalone Antigravity 2.x desktop
+                      projection as the global 'mainframe' plugin under
+                      ~/.gemini/config/plugins/. This is not the Antigravity
+                      CLI adapter: installation verifies the desktop app and
+                      the generated hooks reject CLI transcript paths.
   $0 --dry-run        Show what would happen, no changes.
   $0 --uninstall      Remove symlinks created by this script (incl. --dev
                       --opencode, and --codex ones; telemetry/feedback data,
-                      backups, and opencode.json edits are left in place).
+                      Antigravity/OpenCode memory data, backups, and
+                      opencode.json edits are left in place).
   $0 --help           Show this message.
 
 Idempotent: re-running is safe — already-correct symlinks are left alone.
@@ -124,6 +131,7 @@ while [[ $# -gt 0 ]]; do
         --dev)       DEV=1 ;;
         --opencode)  OPENCODE=1 ;;
         --codex)     CODEX=1 ;;
+        --antigravity-2) ANTIGRAVITY_2=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)   usage; exit 0 ;;
         *) log_error "Unknown argument: $1"; usage; exit 2 ;;
@@ -722,7 +730,7 @@ install_opencode() {
 
     if [[ $DRY_RUN -eq 1 ]]; then
         log_action "would link generated agents into $(opencode_config_dir)/agents/"
-        log_action "would link security-gate plugin into $(opencode_config_dir)/plugins/"
+        log_action "would link OpenCode adapter plugins into $(opencode_config_dir)/plugins/"
         log_action "would link hub skills into $(opencode_config_dir)/skills/"
         log_action "would link dist/opencode/AGENTS.md to $(opencode_config_dir)/AGENTS.md"
         return 0
@@ -913,6 +921,90 @@ uninstall_codex() {
     log_warn "Codex backups are left in place; default.rules and user skills/agents were not modified."
 }
 
+# Standalone Antigravity 2.x desktop layer. Its public global plugin directory
+# is distinct from the CLI's ~/.gemini/antigravity-cli/plugins/ surface.
+ANTIGRAVITY_2_PLUGIN_SRC="dist/antigravity-2/plugin"
+ANTIGRAVITY_2_APP="${ANTIGRAVITY_APP:-/Applications/Antigravity.app}"
+antigravity_2_plugin_dir() { echo "$HOME/.gemini/config/plugins/mainframe"; }
+
+install_antigravity_2_plugin() {
+    local src_abs="${PROJECT_ROOT}/${ANTIGRAVITY_2_PLUGIN_SRC}"
+    local target
+    target="$(antigravity_2_plugin_dir)"
+    local backup="${HOME}/.gemini/config/.mainframe-backup-${TIMESTAMP}/plugins/mainframe"
+
+    if [[ -L "$target" ]] && [[ "$(readlink_safe "$target")" == "$src_abs" ]]; then
+        log_ok "already linked: ${target} → ${ANTIGRAVITY_2_PLUGIN_SRC}"
+        return 0
+    fi
+
+    if [[ -L "$target" || -e "$target" ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would move ${target} → ${backup}"
+        else
+            mkdir -p "$(dirname "$backup")"
+            mv "$target" "$backup"
+            log_ok "moved ${target} → ${backup}"
+        fi
+    fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would link ${target} → ${ANTIGRAVITY_2_PLUGIN_SRC}"
+    else
+        mkdir -p "$(dirname "$target")"
+        ln -s "$src_abs" "$target"
+        log_ok "linked ${target} → ${ANTIGRAVITY_2_PLUGIN_SRC}"
+    fi
+}
+
+uninstall_antigravity_2_plugin() {
+    local src_abs="${PROJECT_ROOT}/${ANTIGRAVITY_2_PLUGIN_SRC}"
+    local target
+    target="$(antigravity_2_plugin_dir)"
+
+    if [[ ! -L "$target" ]] || [[ "$(readlink_safe "$target")" != "$src_abs" ]]; then
+        log_info "skipping: ${target} is not the MAINFRAME Antigravity link"
+        return 0
+    fi
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would remove symlink ${target}"
+    else
+        rm "$target"
+        log_ok "removed symlink ${target}"
+    fi
+}
+
+install_antigravity_2() {
+    local py="${PROJECT_ROOT}/.venv/bin/python3"
+    if [[ ! -d "$ANTIGRAVITY_2_APP" ]]; then
+        log_error "Antigravity 2.x desktop app not found at ${ANTIGRAVITY_2_APP}."
+        log_error "The CLI alone is not a valid target for --antigravity-2."
+        return 1
+    fi
+    if [[ ! -x "$py" ]]; then
+        log_error "Antigravity 2.x projection failed — .venv missing"
+        log_error "(bootstrap: python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml)."
+        return 1
+    fi
+
+    local gen_args=(--root "${PROJECT_ROOT}" --validate-native
+                    --app "$ANTIGRAVITY_2_APP")
+    [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
+    if ! "$py" "${PROJECT_ROOT}/adapters/antigravity-2/build_antigravity.py" \
+            "${gen_args[@]}"; then
+        log_error "build_antigravity.py failed; Antigravity 2.x layer not installed."
+        return 1
+    fi
+    install_antigravity_2_plugin
+    log_ok "Antigravity 2.x desktop layer installed. Restart the app to pick it up."
+}
+
+uninstall_antigravity_2() {
+    uninstall_antigravity_2_plugin
+    log_warn "Antigravity memory data is left in ~/.gemini/antigravity/mainframe-memory/."
+}
+
 # Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
 # dist/ no longer exist. Leaves user-created real files/folders untouched.
 # Backups go to the safe per-run dir, NOT in-place.
@@ -1059,6 +1151,7 @@ main() {
         done
         uninstall_opencode
         uninstall_codex
+        uninstall_antigravity_2
         uninstall_one "$SECRET_HELPER_SOURCE" "$HOME/.local/bin/secret"
         log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
@@ -1145,6 +1238,14 @@ main() {
         echo
         if ! install_codex; then
             log_warn "Codex layer failed; continuing with the rest of the install."
+            required_failed=1
+        fi
+    fi
+
+    if [[ $ANTIGRAVITY_2 -eq 1 ]]; then
+        echo
+        if ! install_antigravity_2; then
+            log_warn "Antigravity 2.x layer failed; continuing with the rest of the install."
             required_failed=1
         fi
     fi
