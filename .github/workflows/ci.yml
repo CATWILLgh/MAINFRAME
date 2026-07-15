@@ -50,6 +50,7 @@ jobs:
             # pyyaml (the last also tiktoken); they run after Validator dependencies.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_opencode.py" ] && continue
+            [ "$t" = "tools/test_build_opencode_bundle.py" ] && continue
             [ "$t" = "tools/test_build_opencode_config.py" ] && continue
             [ "$t" = "tools/test_build_codex.py" ] && continue
             [ "$t" = "tools/test_build_codex_bundle.py" ] && continue
@@ -88,6 +89,7 @@ jobs:
       - name: OpenCode projection generator tests
         run: |
           python3 tools/test_build_opencode.py
+          python3 tools/test_build_opencode_bundle.py
           python3 tools/test_build_opencode_config.py
 
       - name: Codex projection generator tests
