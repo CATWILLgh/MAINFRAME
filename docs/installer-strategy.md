@@ -90,11 +90,41 @@ no-follow traversal, validates the closed staged tree, and publishes by
 platform-native no-replace rename. MAINFRAME never overwrites or removes a
 published version. There is intentionally no mutable `current` pointer.
 
+The `mainframe` launcher is the explicit activation pointer, not a request to
+search the release store. Its symbolic-link target names one exact stored
+release and digest. When invoked without arguments, the executable derives its
+release root from its own resolved path, reopens that exact release, validates
+the index, and then starts the TUI. It never guesses the newest release.
+Several complete releases may coexist without making startup ambiguous.
+
 This is product-level immutability, not an operating-system security boundary:
 another process running as the same user can still alter stored files. Every
 future plan and application must therefore reopen and fully validate the
 selected version immediately before use, then bind the result to both the
 release ID and exact release-index digest.
+
+Link changes use a recoverable sibling workspace in the target parent. The
+journal records the private directory name and inode before publication, then
+records the staged link inode. Installation publishes that exact staged link
+with a no-replace rename. Removal moves the exact managed link into the private
+workspace with a no-replace rename so rollback retains the original inode.
+MAINFRAME never unlinks a public target name. A committed transaction removes
+only verified private entries before it removes its journal; an interrupted
+transaction performs the inverse renames and can safely retry each step.
+
+Every parent and private directory is opened descriptor-relatively without
+following symbolic links and checked against its recorded identity. Detected
+concurrent changes before a namespace transition fail closed. The operating
+systems do not atomically bind a no-replace rename's source name to a previously
+observed inode. Another same-user writer that does not share MAINFRAME's
+transaction lock can therefore replace the source in that narrow interval; the
+replacement inode is retained rather than unlinked, but its public name may be
+moved. All MAINFRAME mutation paths, including `install.sh` while it remains
+supported, must share the transaction lock before Apply is exposed.
+
+Missing target parents are not created implicitly by a link operation.
+Creation and rollback of managed directories require their own journaled plan
+operations, tracked by [#20e75df1](tickets/20e75df1-model-managed-target-directories.md).
 
 Every component must pass an isolated-install scenario in which the other
 runtime directories do not exist. Lifecycle operations must preserve

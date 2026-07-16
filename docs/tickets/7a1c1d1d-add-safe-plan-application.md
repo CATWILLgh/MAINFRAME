@@ -31,9 +31,11 @@ The final product must install, update, remove, and replace selected adapters. A
 - Complete immutable release publication and publisher authentication before
   installed links can target downloaded payloads.
 - Complete configuration ownership and application semantics.
-- Resolve or explicitly accept the portable same-user race between the final
-  link identity check and `unlinkat`; Darwin and Linux do not expose one common
-  compare-and-delete syscall for symbolic links.
+- Model creation and rollback of missing managed target directories before
+  first-install plans may apply link operations.
+- Make every MAINFRAME writer, including the compatibility `install.sh` path,
+  acquire the same transaction lock. A no-replace rename protects its
+  destination but cannot bind its source name to an inode checked earlier.
 - Add a separate confirmation screen that displays the exact final plan and blocks on unresolved conflicts.
 - Exercise interruption after each operation on macOS and Linux fixtures before enabling Apply.
 
@@ -44,6 +46,7 @@ The final product must install, update, remove, and replace selected adapters. A
 - An interrupted operation can be continued or restored without losing user data.
 - Repeated application of the same desired state is idempotent.
 - macOS and Linux lifecycle fixtures cover install, add, remove, replace, conflict, interruption, and recovery.
+- TUI execution and `install.sh` cannot mutate managed links concurrently.
 - Apply remains unavailable until release authenticity, immutable publication,
   configuration lifecycle, and cross-platform executor checks pass independent
   review.
@@ -61,19 +64,34 @@ The final product must install, update, remove, and replace selected adapters. A
   staging, and Darwin/Linux no-replace publication.
 - Documented that stored releases remain mutable by another same-user process;
   future planning and application must revalidate them immediately before use.
-- Withheld the Darwin/Linux production mutator after independent review found
-  that a portable `fstatat`/`readlinkat` check followed by `unlinkat` is not an
-  atomic compare-and-delete operation.
+- Added a Darwin/Linux link workspace that opens paths descriptor-relatively,
+  rejects symbolic-link traversal, pins directory and link identities, and
+  publishes with platform-native no-replace renames.
+- Reworked installation and removal so the public name is never unlinked:
+  installation renames a journaled staged link into place, while removal
+  retains the original link inode in a journaled private directory until
+  commit or rollback.
+- Added retryable recovery for private-directory creation, staging,
+  publication, rollback, committed finalization, and journal cleanup, including
+  a real executor/workspace compatibility test.
+- Made the commit boundary monotonic: once persisting `committed` is attempted,
+  an uncertain save result is left for recovery and the current process never
+  starts rollback.
+- Recorded the remaining same-user source-rename race and the requirement that
+  all supported MAINFRAME mutation paths share one transaction lock.
 - Tightened the planner so removal requires both `managed_exact` ownership and
   a matching artifact declared by the same release component.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),
   [#cd5f584d](cd5f584d-complete-configuration-lifecycle-semantics.md), and
-  [#33930a3b](33930a3b-enable-selective-release-downloads.md).
+  [#33930a3b](33930a3b-enable-selective-release-downloads.md), plus managed
+  target-directory lifecycle in
+  [#20e75df1](20e75df1-model-managed-target-directories.md).
 
 ## Sources
 
 - `internal/tui/model.go:52`
 - `internal/plan/planner.go:19`
-- `internal/domain/types.go:68`
+- `internal/executor/executor.go`
+- `internal/linkworkspace/workspace_unix.go`
