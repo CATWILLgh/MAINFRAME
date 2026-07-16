@@ -87,14 +87,10 @@ Usage:
   $0 --opencode       Install PLUS the OpenCode projection: generates
                       OpenCode-format agents from core/agents/ (via
                       adapters/opencode/build_opencode.py, needs the repo
-                      .venv), links
-                      them into ~/.config/opencode/agents/, and merges the
-                      hub-managed 'permission' + secret-free 'mcp' keys into
-                      ~/.config/opencode/opencode.json (one rolling backup
-                      at opencode.json.backup). CLAUDE.md and skills need no
-                      projection — OpenCode picks them up from ~/.claude
-                      natively. NOTE: hub hooks do not transfer; OpenCode
-                      runs have thinner guardrails than Claude Code.
+                      .venv), builds a self-contained OpenCode bundle, and
+                      links its agents, skills, gates, plugins, and memory
+                      helpers into the OpenCode config directory. Existing
+                      OpenCode config and foreign files are preserved.
   $0 --codex          Install PLUS the Codex projection: generates Codex-native
                       skills, mainframe.rules, gate hooks.json, and agent TOMLs,
                       then links AGENTS.md, hub skill directories, mainframe.rules,
@@ -102,8 +98,7 @@ Usage:
                       ${CODEX_HOME:-~/.codex}. Existing AGENTS.md and hooks.json are
                       backed up first; default.rules, non-hub skills, and non-hub
                       agents are left untouched. Gate hooks need a one-time
-                      per-project /hooks trust and reuse the base Claude Code
-                      plugin's detectors.
+                      per-project /hooks trust and use Codex-owned detectors.
   $0 --antigravity-2  Install PLUS the standalone Antigravity 2.x desktop
                       projection as the global 'mainframe' plugin under
                       ~/.gemini/config/plugins/. This is not the Antigravity
@@ -120,6 +115,7 @@ Idempotent: re-running is safe — already-correct symlinks are left alone.
 
 Backups (if any) live at:
   ~/.claude/<file>.backup-YYYYMMDD-HHMMSS
+  ${XDG_CONFIG_HOME:-~/.config}/opencode/.mainframe-backup-YYYYMMDD-HHMMSS/
   ${CODEX_HOME:-~/.codex}/<file>.backup-YYYYMMDD-HHMMSS
 
 EOF
@@ -691,20 +687,151 @@ bootstrap_frontend_quality_tools() {
     _install_npm_global fallow || true
 }
 
-# OpenCode dual-target layer (--opencode). The generator owns all format
-# translation; this function only runs it and links its output. Generated
-# agents live in dist/opencode/agents/ (gitignored, derived)
-# so ~/.config/opencode/agents/ gets the same item-by-item symlink treatment
-# as the other managed dirs.
-OPENCODE_AGENTS_SRC="dist/opencode/agents"
-# Hand-written OpenCode-native artifacts (not generated) live in the
-# adapters/opencode/ dialect dir and symlink out directly, like dist/claude-code/rules.
-OPENCODE_PLUGINS_SRC="adapters/opencode/plugins"
-# Skills also reach OpenCode via its ~/.claude compat scan; the native links
-# are insurance against that scan changing — duplicate names dedupe to a
-# single listing (verified empirically), so double discovery is harmless.
-OPENCODE_SKILLS_SRC="dist/claude-code/plugin/skills"
+# OpenCode retains the legacy additive install experience, but every runtime
+# artifact comes from its self-contained projection.
+OPENCODE_BUNDLE_SRC="dist/opencode/bundle-v2"
+OPENCODE_AGENTS_SRC="${OPENCODE_BUNDLE_SRC}/agents"
+OPENCODE_GATES_SRC="${OPENCODE_BUNDLE_SRC}/gates"
+OPENCODE_MEMORY_SRC="${OPENCODE_BUNDLE_SRC}/memory"
+OPENCODE_PLUGINS_SRC="${OPENCODE_BUNDLE_SRC}/plugins"
+OPENCODE_SKILLS_SRC="${OPENCODE_BUNDLE_SRC}/skills"
+OPENCODE_CREDENTIALS_INDEX_SRC="${OPENCODE_BUNDLE_SRC}/credentials-index.md"
 opencode_config_dir() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"; }
+
+seed_adapter_credentials_index() {
+    local source="$1"
+    local target="$2"
+    local projected_root="${3:-}"
+    local source_abs="${PROJECT_ROOT}/${source}"
+    if [[ -e "$target" || -L "$target" ]]; then
+        log_ok "credentials index already present: ${target}"
+        return 0
+    fi
+    if [[ ! -f "$source_abs" || -L "$source_abs" ]]; then
+        log_error "credentials index source is unavailable: ${source}"
+        return 1
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would seed adapter credentials index at ${target}"
+        return 0
+    fi
+    mkdir -p "$(dirname "$target")"
+    local temporary="${target}.mainframe-${TIMESTAMP}-$$"
+    if [[ -n "$projected_root" ]]; then
+        if ! sed "s|{{mainframe.config_root}}|${projected_root}|g" \
+                "$source_abs" > "$temporary"; then
+            rm -f "$temporary"
+            log_error "could not project credentials index for ${target}"
+            return 1
+        fi
+    else
+        if ! cp "$source_abs" "$temporary"; then
+            rm -f "$temporary"
+            log_error "could not stage credentials index for ${target}"
+            return 1
+        fi
+    fi
+    if ! chmod 600 "$temporary"; then
+        rm -f "$temporary"
+        log_error "could not secure credentials index for ${target}"
+        return 1
+    fi
+    if ln "$temporary" "$target" 2>/dev/null; then
+        rm "$temporary"
+        log_ok "seeded adapter credentials index: ${target}"
+    elif [[ -e "$target" || -L "$target" ]]; then
+        rm "$temporary"
+        log_ok "credentials index appeared concurrently; preserved: ${target}"
+    else
+        rm "$temporary"
+        log_error "could not publish credentials index: ${target}"
+        return 1
+    fi
+}
+
+opencode_backup_target() {
+    local target="$1"
+    local cfg_dir
+    cfg_dir="$(opencode_config_dir)"
+    local rel="${target#${cfg_dir}/}"
+    local dest="${cfg_dir}/.mainframe-backup-${TIMESTAMP}/${rel}"
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would move ${target} → ${dest}"
+    else
+        mkdir -p "$(dirname "$dest")"
+        mv "$target" "$dest"
+        log_ok "moved ${target} → ${dest}"
+    fi
+}
+
+prepare_opencode_dir_targets() {
+    local src_dir_rel="$1"
+    local target_dir="$2"
+    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
+    [[ -d "$src_dir_abs" ]] || return 0
+    local child base target current
+    for child in "$src_dir_abs"/*; do
+        [[ -e "$child" ]] || continue
+        base="$(basename "$child")"
+        target="${target_dir}/${base}"
+        [[ -e "$target" || -L "$target" ]] || continue
+        if [[ -L "$target" ]]; then
+            current="$(readlink_safe "$target")"
+            [[ "$current" == "$child" ]] && continue
+        fi
+        opencode_backup_target "$target"
+    done
+}
+
+install_opencode_dir() {
+    local source="$1"
+    local target="$2"
+    if [[ -L "$target" || ( -e "$target" && ! -d "$target" ) ]]; then
+        opencode_backup_target "$target"
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would create and populate ${target} from ${source}"
+            return 0
+        fi
+    fi
+    prepare_opencode_dir_targets "$source" "$target"
+    install_dir_contents "$source" "$target"
+}
+
+cleanup_stale_opencode_in_dir() {
+    local src_dir_rel="$1"
+    local target_dir="$2"
+    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
+    [[ -d "$target_dir" ]] || return 0
+    local entry resolved
+    for entry in "$target_dir"/*; do
+        [[ -L "$entry" ]] || continue
+        resolved="$(readlink_safe "$entry")"
+        [[ "$resolved" == "${src_dir_abs}/"* ]] || continue
+        [[ -e "$resolved" ]] && continue
+        opencode_backup_target "$entry"
+    done
+}
+
+install_opencode_file() {
+    local source="$1"
+    local target="$2"
+    local source_abs="${PROJECT_ROOT}/${source}"
+    if [[ -L "$target" ]] &&
+            [[ "$(readlink_safe "$target")" == "$source_abs" ]]; then
+        log_ok "already linked: ${target} → ${source}"
+        return 0
+    fi
+    if [[ -e "$target" || -L "$target" ]]; then
+        opencode_backup_target "$target"
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would link ${target} → ${source}"
+    else
+        mkdir -p "$(dirname "$target")"
+        ln -s "$source_abs" "$target"
+        log_ok "linked ${target} → ${source}"
+    fi
+}
 
 install_opencode() {
     local py="${PROJECT_ROOT}/.venv/bin/python3"
@@ -721,38 +848,52 @@ install_opencode() {
         return 1
     fi
 
-    local gen_args=(--root "${PROJECT_ROOT}")
-    [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
-    if ! "$py" "${PROJECT_ROOT}/adapters/opencode/build_opencode.py" "${gen_args[@]}"; then
+    local bundle_args=(--root "${PROJECT_ROOT}")
+    [[ $DRY_RUN -eq 1 ]] && bundle_args+=(--dry-run)
+    if ! "$py" "${PROJECT_ROOT}/adapters/opencode/build_bundle.py" \
+            "${bundle_args[@]}"; then
+        log_error "OpenCode bundle projection failed; layer not installed."
+        return 1
+    fi
+    local config_args=(--root "${PROJECT_ROOT}")
+    [[ $DRY_RUN -eq 1 ]] && config_args+=(--dry-run)
+    if ! "$py" "${PROJECT_ROOT}/adapters/opencode/build_opencode.py" \
+            "${config_args[@]}"; then
         log_error "build_opencode.py failed; OpenCode layer not installed."
         return 1
     fi
 
     if [[ $DRY_RUN -eq 1 ]]; then
-        log_action "would link generated agents into $(opencode_config_dir)/agents/"
-        log_action "would link OpenCode adapter plugins into $(opencode_config_dir)/plugins/"
-        log_action "would link hub skills into $(opencode_config_dir)/skills/"
-        log_action "would link dist/opencode/AGENTS.md to $(opencode_config_dir)/AGENTS.md"
+        log_action "would link the self-contained OpenCode bundle into ${cfg_dir}"
+        seed_adapter_credentials_index \
+            "$OPENCODE_CREDENTIALS_INDEX_SRC" \
+            "${cfg_dir}/credentials-index.md"
         return 0
     fi
-    install_dir_contents "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
-    cleanup_stale_in_dir "$OPENCODE_AGENTS_SRC" "${cfg_dir}/agents"
-    install_dir_contents "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
-    cleanup_stale_in_dir "$OPENCODE_PLUGINS_SRC" "${cfg_dir}/plugins"
-    install_dir_contents "$OPENCODE_SKILLS_SRC" "${cfg_dir}/skills"
-    cleanup_stale_in_dir "$OPENCODE_SKILLS_SRC" "${cfg_dir}/skills"
-    # Global instructions: beats OpenCode's ~/.claude/CLAUDE.md fallback in its
-    # resolution order, replacing CC-flavored text with the composed render.
-    ln -sfn "${PROJECT_ROOT}/dist/opencode/AGENTS.md" "${cfg_dir}/AGENTS.md"
+    local source target
+    for source in "$OPENCODE_AGENTS_SRC" "$OPENCODE_GATES_SRC" \
+            "$OPENCODE_MEMORY_SRC" "$OPENCODE_PLUGINS_SRC" \
+            "$OPENCODE_SKILLS_SRC"; do
+        target="${cfg_dir}/${source##*/}"
+        install_opencode_dir "$source" "$target"
+        cleanup_stale_opencode_in_dir "$source" "$target"
+    done
+    install_opencode_file "${OPENCODE_BUNDLE_SRC}/AGENTS.md" "${cfg_dir}/AGENTS.md"
+    seed_adapter_credentials_index \
+        "$OPENCODE_CREDENTIALS_INDEX_SRC" \
+        "${cfg_dir}/credentials-index.md"
     log_ok "OpenCode layer installed. Restart OpenCode sessions to pick it up."
 }
 
 uninstall_opencode() {
     uninstall_dir_contents "$OPENCODE_AGENTS_SRC" "$(opencode_config_dir)/agents"
+    uninstall_dir_contents "$OPENCODE_GATES_SRC" "$(opencode_config_dir)/gates"
+    uninstall_dir_contents "$OPENCODE_MEMORY_SRC" "$(opencode_config_dir)/memory"
     uninstall_dir_contents "$OPENCODE_PLUGINS_SRC" "$(opencode_config_dir)/plugins"
     uninstall_dir_contents "$OPENCODE_SKILLS_SRC" "$(opencode_config_dir)/skills"
     local agents_md="$(opencode_config_dir)/AGENTS.md"
-    if [[ -L "$agents_md" && "$(readlink "$agents_md")" == "${PROJECT_ROOT}/dist/opencode/AGENTS.md" ]]; then
+    local agents_src="${PROJECT_ROOT}/${OPENCODE_BUNDLE_SRC}/AGENTS.md"
+    if [[ -L "$agents_md" && "$(readlink_safe "$agents_md")" == "$agents_src" ]]; then
         if [[ $DRY_RUN -eq 1 ]]; then
             log_action "would remove symlink ${agents_md}"
         else
@@ -760,18 +901,20 @@ uninstall_opencode() {
             log_ok "Removed AGENTS.md symlink."
         fi
     fi
-    log_warn "opencode.json is left as-is (hub-managed 'permission'/'mcp' keys"
-    log_warn "included); previous version, if any, is at opencode.json.backup."
+    log_warn "opencode.json and OpenCode memory data are left as-is."
 }
 
-# Codex Phase-1 layer (--codex). The generator owns format translation;
-# delivery is item-by-item so user skills and default.rules remain composable.
-CODEX_SKILLS_SRC="dist/codex/skills"
-CODEX_RULES_SRC="dist/codex/rules/mainframe.rules"
-CODEX_AGENTS_SRC="dist/codex/AGENTS.md"
-CODEX_HOOKS_SRC="dist/codex/hooks.json"
-CODEX_LAUNCHER_SRC="dist/codex/mainframe-hook.sh"
-CODEX_AGENT_DEFS_SRC="dist/codex/agents"
+# Codex delivery remains item-by-item so user skills and rules stay composable,
+# but all runtime artifacts come from Codex's self-contained projection.
+CODEX_BUNDLE_SRC="dist/codex/bundle-v2"
+CODEX_SKILLS_SRC="${CODEX_BUNDLE_SRC}/skills"
+CODEX_RULES_SRC="${CODEX_BUNDLE_SRC}/rules/mainframe.rules"
+CODEX_AGENTS_SRC="${CODEX_BUNDLE_SRC}/AGENTS.md"
+CODEX_HOOKS_SRC="${CODEX_BUNDLE_SRC}/hooks.json"
+CODEX_LAUNCHER_SRC="${CODEX_BUNDLE_SRC}/mainframe-hook.sh"
+CODEX_AGENT_DEFS_SRC="${CODEX_BUNDLE_SRC}/agents"
+CODEX_GATES_SRC="${CODEX_BUNDLE_SRC}/gates"
+CODEX_CREDENTIALS_INDEX_SRC="${CODEX_BUNDLE_SRC}/credentials-index.md"
 codex_config_dir() { echo "${CODEX_HOME:-$HOME/.codex}"; }
 
 codex_backup_target() {
@@ -818,6 +961,20 @@ prepare_codex_dir_targets() {
         fi
         codex_backup_target "$target"
     done
+}
+
+install_codex_dir() {
+    local source="$1"
+    local target="$2"
+    if [[ -L "$target" || ( -e "$target" && ! -d "$target" ) ]]; then
+        codex_backup_target "$target"
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would create and populate ${target} from ${source}"
+            return 0
+        fi
+    fi
+    prepare_codex_dir_targets "$source" "$target"
+    install_dir_contents "$source" "$target"
 }
 
 cleanup_stale_codex_in_dir() {
@@ -881,8 +1038,9 @@ install_codex() {
 
     local gen_args=(--root "${PROJECT_ROOT}" --validate-native)
     [[ $DRY_RUN -eq 1 ]] && gen_args+=(--dry-run)
-    if ! "$py" "${PROJECT_ROOT}/adapters/codex/build_codex.py" "${gen_args[@]}"; then
-        log_error "build_codex.py failed; Codex layer not installed."
+    if ! "$py" "${PROJECT_ROOT}/adapters/codex/build_bundle.py" \
+            "${gen_args[@]}"; then
+        log_error "Codex bundle projection failed; layer not installed."
         return 1
     fi
     if [[ $DRY_RUN -eq 1 ]]; then
@@ -890,25 +1048,31 @@ install_codex() {
         log_action "would link hub skills item-by-item into ${cfg_dir}/skills/"
         log_action "would link mainframe.rules to ${cfg_dir}/rules/mainframe.rules"
         log_action "would link hooks.json + mainframe-hook.sh into ${cfg_dir}/ (gate hooks; personal hooks.json backed up)"
+        log_action "would link Codex-owned gate detectors into ${cfg_dir}/gates/"
         log_action "would link agent definitions item-by-item into ${cfg_dir}/agents/"
+        seed_adapter_credentials_index \
+            "$CODEX_CREDENTIALS_INDEX_SRC" \
+            "${cfg_dir}/credentials-index.md"
         return 0
     fi
 
     install_codex_file "$CODEX_AGENTS_SRC" "${cfg_dir}/AGENTS.md"
-    prepare_codex_dir_targets "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
-    install_dir_contents "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
+    install_codex_dir "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
     cleanup_stale_codex_in_dir "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
     install_codex_file "$CODEX_RULES_SRC" "${cfg_dir}/rules/mainframe.rules"
     install_codex_file "$CODEX_HOOKS_SRC" "${cfg_dir}/hooks.json"
     install_codex_file "$CODEX_LAUNCHER_SRC" "${cfg_dir}/mainframe-hook.sh"
-    prepare_codex_dir_targets "$CODEX_AGENT_DEFS_SRC" "${cfg_dir}/agents"
-    install_dir_contents "$CODEX_AGENT_DEFS_SRC" "${cfg_dir}/agents"
+    install_codex_dir "$CODEX_GATES_SRC" "${cfg_dir}/gates"
+    cleanup_stale_codex_in_dir "$CODEX_GATES_SRC" "${cfg_dir}/gates"
+    install_codex_dir "$CODEX_AGENT_DEFS_SRC" "${cfg_dir}/agents"
     cleanup_stale_codex_in_dir "$CODEX_AGENT_DEFS_SRC" "${cfg_dir}/agents"
+    seed_adapter_credentials_index \
+        "$CODEX_CREDENTIALS_INDEX_SRC" \
+        "${cfg_dir}/credentials-index.md"
     log_ok "Codex layer installed. Restart Codex sessions to pick it up."
     log_warn "Codex gate hooks need per-project trust (content-pinned):"
     log_warn "  run /hooks in each Codex project once to trust them — until then gates SILENTLY do not fire."
     log_warn "  re-run /hooks after any hub gates update (the trust hash changes)."
-    log_warn "  gate detectors are reused from the base Claude Code plugin — install that too (./install.sh) or gates no-op."
 }
 
 uninstall_codex() {
@@ -917,6 +1081,7 @@ uninstall_codex() {
     uninstall_one "$CODEX_RULES_SRC" "$(codex_config_dir)/rules/mainframe.rules"
     uninstall_one "$CODEX_HOOKS_SRC" "$(codex_config_dir)/hooks.json"
     uninstall_one "$CODEX_LAUNCHER_SRC" "$(codex_config_dir)/mainframe-hook.sh"
+    uninstall_dir_contents "$CODEX_GATES_SRC" "$(codex_config_dir)/gates"
     uninstall_dir_contents "$CODEX_AGENT_DEFS_SRC" "$(codex_config_dir)/agents"
     log_warn "Codex backups are left in place; default.rules and user skills/agents were not modified."
 }
@@ -924,6 +1089,7 @@ uninstall_codex() {
 # Standalone Antigravity 2.x desktop layer. Its public global plugin directory
 # is distinct from the CLI's ~/.gemini/antigravity-cli/plugins/ surface.
 ANTIGRAVITY_2_PLUGIN_SRC="dist/antigravity-2/plugin"
+ANTIGRAVITY_2_CREDENTIALS_INDEX_SRC="core/resources/credentials-index.md"
 ANTIGRAVITY_2_APP="${ANTIGRAVITY_APP:-/Applications/Antigravity.app}"
 antigravity_2_plugin_dir() { echo "$HOME/.gemini/config/plugins/mainframe"; }
 
@@ -997,6 +1163,10 @@ install_antigravity_2() {
         return 1
     fi
     install_antigravity_2_plugin
+    seed_adapter_credentials_index \
+        "$ANTIGRAVITY_2_CREDENTIALS_INDEX_SRC" \
+        "${HOME}/.gemini/antigravity/credentials-index.md" \
+        "~/.gemini/antigravity"
     log_ok "Antigravity 2.x desktop layer installed. Restart the app to pick it up."
 }
 
@@ -1013,7 +1183,7 @@ cleanup_stale_in_dir() {
     local target_dir="$2"
     local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
 
-    if [[ ! -d "$target_dir" ]]; then
+    if [[ -L "$target_dir" || ! -d "$target_dir" ]]; then
         return 0
     fi
 
@@ -1039,7 +1209,7 @@ uninstall_dir_contents() {
     local target_dir="$2"
     local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
 
-    if [[ ! -d "$target_dir" ]]; then
+    if [[ -L "$target_dir" || ! -d "$target_dir" ]]; then
         return 0
     fi
 

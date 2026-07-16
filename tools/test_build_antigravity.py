@@ -43,7 +43,12 @@ def fixture_root() -> Path:
         "  - sample\n---\n\nResearch carefully.\n",
     )
     write(root / "core/gates/detectors/path-validation.py", "print()\n")
-    write(root / "core/gates/detectors/_hooklib.py", "VALUE = 1\n")
+    write(
+        root / "core/gates/detectors/_hooklib.py",
+        'FEEDBACK = os.path.expanduser("~/.claude/skills/harness-feedback")\n'
+        'TELEMETRY = os.path.expanduser('
+        '"~/.claude/mainframe/telemetry/telemetry.db")\n',
+    )
     write(root / "core/gates/rules/sample.yml", "rules: []\n")
     write(root / "core/memory/store.py", "print('{}')\n")
     write(root / "core/memory/CONTRACT.md", "# Memory\n")

@@ -7,8 +7,7 @@ Sources: ``core/skills/*``, ``core/permissions/rules.json``, ``core/gates`` (via
 ``dist/codex/rules/mainframe.rules``, ``dist/codex/hooks.json``,
 ``dist/codex/mainframe-hook.sh`` and ``dist/codex/agents/<name>.toml``. The
 installer links those artifacts item-by-item into ``$CODEX_HOME``. Gate
-detectors themselves are reused from the base Claude Code plugin install (the
-launcher resolves them at ``~/.claude/skills/mainframe/hooks/scripts``). Agent
+detectors are projected into Codex's own configuration tree. Agent
 TOMLs map the capability contract by only RESTRICTING (read-only sandbox,
 disabled web) — never widening the session default.
 

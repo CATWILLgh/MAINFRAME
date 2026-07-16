@@ -3,9 +3,8 @@
 #
 # Codex hands a hook the Claude-Code-compatible JSON payload on stdin (no args);
 # this wrapper takes <event> <detector-basename> as args and lets the detector
-# read the payload on stdin. Detectors are shared with the base Claude Code
-# plugin install and the OpenCode adapter (deployed at
-# ~/.claude/skills/mainframe/hooks/scripts), so a missing hub install MUST
+# read the payload on stdin. Detectors live in Codex's own configuration tree,
+# so a missing detector MUST
 # degrade to a no-op, never a block: any nonzero exit here can be read by the
 # host as a deny (a hub install absent for one session would otherwise freeze
 # every tool call). All real blocking is JSON + exit 0 (core/gates/CONTRACT.md),
@@ -14,7 +13,7 @@
 
 EVENT="$1"
 NAME="$2"
-DIR="${HOME}/.claude/skills/mainframe/hooks/scripts"
+DIR="${CODEX_HOME:-$HOME/.codex}/gates/detectors"
 SCRIPT="${DIR}/${NAME}"
 
 [ -f "$SCRIPT" ] || exit 0

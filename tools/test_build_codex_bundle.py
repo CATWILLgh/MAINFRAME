@@ -154,6 +154,17 @@ def test_build_materializes_complete_self_contained_codex_bundle():
     }
 
 
+def test_bundle_gate_tree_has_no_claude_runtime_paths():
+    output = Path(tempfile.mkdtemp()) / "bundle-v2"
+    build_bundle.build(REPO, output)
+
+    detector_text = "\n".join(
+        path.read_text()
+        for path in sorted((output / "gates/detectors").rglob("*.py"))
+    )
+    assert "~/.claude/" not in detector_text
+
+
 def test_build_isolated_from_user_state_and_other_adapter_bundles():
     sandbox = Path(tempfile.mkdtemp())
     output = sandbox / "codex/bundle-v2"

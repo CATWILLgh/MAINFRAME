@@ -1,11 +1,14 @@
 import { execFile } from "node:child_process"
 import { createHash } from "node:crypto"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 const HOME = process.env.HOME || ""
-const HELPER_PATH = `${HOME}/.claude/skills/mainframe/memory/store.py`
-const REMINDER_PATH =
-  `${HOME}/.claude/skills/mainframe/hooks/scripts/memory-reminder.py`
-const STORE_ROOT = `${HOME}/.local/share/opencode/mainframe-memory`
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const HELPER_PATH = path.resolve(MODULE_DIR, "../memory/store.py")
+const REMINDER_PATH = path.resolve(MODULE_DIR, "../memory/memory-reminder.py")
+const DATA_HOME = process.env.XDG_DATA_HOME || path.join(HOME, ".local", "share")
+const STORE_ROOT = path.join(DATA_HOME, "opencode", "mainframe-memory")
 const HELPER_TIMEOUT_MS = 8000
 const HELPER_MAX_STDOUT_BYTES = 128 * 1024
 const MEMORY_SENTINEL = "<!-- mainframe-memory:v1:"
@@ -22,6 +25,7 @@ const OPENCODE_MEMORY_NOTE =
 
 const runtime = {
   execFile,
+  storeRoot: STORE_ROOT,
   loadMemory: async (root, directory) => {
     const stdout = await new Promise((resolve, reject) => {
       runtime.execFile(

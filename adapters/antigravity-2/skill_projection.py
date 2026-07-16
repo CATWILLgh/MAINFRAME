@@ -11,6 +11,7 @@ from typing import Callable
 
 PLAN_ROOT_TOKEN = "{{mainframe.plans_root}}"
 ANTIGRAVITY_PLAN_ROOT = "~/.gemini/antigravity/mainframe-plans"
+ANTIGRAVITY_CREDENTIALS_INDEX = "~/.gemini/antigravity/credentials-index.md"
 
 
 class ProjectionMode(str, Enum):
@@ -72,6 +73,7 @@ _RUNTIME_REWRITES = (
     ("CLAUDE.md verification rules", "MAINFRAME plugin verification rules"),
     ("CLAUDE.md rule", "MAINFRAME plugin rule"),
     ("~/.claude/skills/mainframe/skills/", "~/.gemini/config/plugins/mainframe/skills/"),
+    ("~/.claude/credentials-index.md", ANTIGRAVITY_CREDENTIALS_INDEX),
     ("~/.claude/plans", ANTIGRAVITY_PLAN_ROOT),
     ("`AskUserQuestion`", "ask the user directly in chat"),
     ("`TodoWrite`", "a persistent checklist"),
@@ -299,6 +301,7 @@ _FORBIDDEN_PROJECTED_MARKERS = (
     "denied by hook",
     "auto-mode classifier",
     "enforces denial of direct reads",
+    "~/.claude/",
 )
 
 

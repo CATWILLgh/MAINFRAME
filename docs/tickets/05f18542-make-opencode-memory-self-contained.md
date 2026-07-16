@@ -23,6 +23,19 @@ baseline install from another worktree can leave the OpenCode plugin and its
 helpers on different commits. If the second tree lacks those helper files,
 OpenCode memory silently fails open.
 
+## Progress — 2026-07-16
+
+The isolated `bundle-v2` delivery now packages the plugin, `store.py`, and
+`memory-reminder.py` together. The plugin resolves both helpers relative to its
+own module and stores data below `XDG_DATA_HOME`; the legacy installer also
+links those OpenCode-owned artifacts without using Claude Code's backup tree.
+
+The ticket remains open because the full lifecycle contract still needs a
+second-worktree reinstall test, explicit plugin/helper compatibility
+versioning, and a partial-uninstall scenario. The current test covers migration
+from a legacy helper link, foreign-file preservation, memory-data preservation,
+complete adapter uninstall, and absence of `~/.claude`.
+
 ## Why it is a problem
 
 The OpenCode adapter does not own the dependencies required for recall or

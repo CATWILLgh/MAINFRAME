@@ -65,6 +65,7 @@ jobs:
             [ "$t" = "tools/test_build_codex_bundle.py" ] && continue
             [ "$t" = "tools/test_build_antigravity.py" ] && continue
             [ "$t" = "tools/test_build_antigravity_cli.py" ] && continue
+            [ "$t" = "tools/test_build_antigravity_isolation.py" ] && continue
             [ "$t" = "tools/test_render_core.py" ] && continue
             [ "$t" = "tools/test_render_reminder.py" ] && continue
             [ "$t" = "tools/test_validate_skill.py" ] && continue
@@ -131,6 +132,7 @@ jobs:
         run: |
           python3 tools/test_build_antigravity.py
           python3 tools/test_build_antigravity_cli.py
+          python3 tools/test_build_antigravity_isolation.py
           python3 adapters/antigravity-2/build_antigravity.py \
             --root . --out "$RUNNER_TEMP/mainframe-antigravity/plugin"
           for skill_dir in "$RUNNER_TEMP/mainframe-antigravity/plugin/skills"/*; do

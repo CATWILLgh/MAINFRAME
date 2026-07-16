@@ -2,8 +2,9 @@
 """Project MAINFRAME hub artifacts into OpenCode's config layout.
 
 Sources: `core/agents/*.md` (neutral capability contracts, ADR 0085),
-`core/permissions/rules.json` (the neutral allow/deny/ask rules),
-`~/.claude.json` (MCP servers). Outputs: OpenCode agent markdown files
+`core/permissions/rules.json` (the neutral allow/deny/ask rules). An explicit
+`--claude-config PATH` can migrate safe MCP servers from a Claude Code config.
+Outputs: OpenCode agent markdown files
 (default `dist/opencode/agents/`, symlinked by
 `install.sh --opencode`) and a merge of hub-managed keys into the user's
 `~/.config/opencode/opencode.json`.
@@ -324,8 +325,11 @@ def _parse_args(argv):
                         help="default: <root>/dist/opencode/agents")
     parser.add_argument("--config", default=os.path.expanduser(
         "~/.config/opencode/opencode.json"))
-    parser.add_argument("--claude-config", default=os.path.expanduser(
-        "~/.claude.json"))
+    parser.add_argument(
+        "--claude-config",
+        default=None,
+        help="explicit migration source for safe MCP entries; disabled by default",
+    )
     parser.add_argument("--enrich", default=None,
                         help="default: <root>/workspace/opencode-enrich.json")
     parser.add_argument("--permission-state", default=None,
@@ -377,8 +381,11 @@ def main(argv=None):
     permission, perm_report = project_permissions(rules)
     require_restrictive_projection(permission)
 
-    claude_cfg = _load_json(args.claude_config)
-    if claude_cfg is None:
+    claude_cfg = _load_json(args.claude_config) if args.claude_config else None
+    if args.claude_config is None:
+        print("[skip] Claude MCP migration not requested")
+        servers, mcp_report = {}, {"skipped": []}
+    elif claude_cfg is None:
         print(f"[skip] {args.claude_config} not found — no MCP projection")
         servers, mcp_report = {}, {"skipped": []}
     else:

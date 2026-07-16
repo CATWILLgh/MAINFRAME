@@ -169,16 +169,29 @@ def _render_inputs(root: Path, profile, validate_native: bool):
 def _project_gates(root: Path, output: Path, profile) -> None:
     sync_tree(root / "core/gates/detectors", output / "detectors")
     sync_tree(root / "core/gates/rules", output / "rules")
-    hooklib = output / "detectors/_hooklib.py"
     feedback = f'os.path.join({CODEX_CONFIG_EXPRESSION}, "skills", "harness-feedback")'
     telemetry = (
         f'os.path.join({CODEX_CONFIG_EXPRESSION}, "mainframe", '
         '"telemetry", "telemetry.db")'
     )
-    projected = project_hooklib_fallbacks(
-        hooklib.read_text(), hooklib, feedback=feedback, telemetry=telemetry
-    ).replace("~/.claude", profile.config_root)
-    write_text_file(hooklib, projected)
+    for detector in sorted((output / "detectors").rglob("*.py")):
+        projected = detector.read_text()
+        if detector.name == "_hooklib.py":
+            projected = project_hooklib_fallbacks(
+                projected,
+                detector,
+                feedback=feedback,
+                telemetry=telemetry,
+            )
+        projected = projected.replace(
+            "~/.claude/hooks/path-validation.py",
+            f"{profile.detectors_root}/path-validation.py",
+        ).replace("~/.claude/", f"{profile.config_root}/")
+        if "~/.claude/" in projected:
+            raise ValueError(
+                f"projected Codex detector retains a Claude path: {detector}"
+            )
+        write_text_file(detector, projected)
 
 
 def _stage_bundle(
@@ -244,8 +257,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--validate-native", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
+    if args.dry_run:
+        with tempfile.TemporaryDirectory() as temporary:
+            build(
+                root,
+                Path(temporary) / "bundle-v2",
+                validate_native=args.validate_native,
+            )
+        print("validated Codex bundle without publishing")
+        return 0
     output = args.output or root / "dist/codex/bundle-v2"
     build(root, output, validate_native=args.validate_native)
     print(f"wrote Codex bundle to {output}")

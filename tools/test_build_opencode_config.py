@@ -98,6 +98,11 @@ def _main_args(root, cfg, out, state=None):
     return args + (["--permission-state", state] if state else [])
 
 
+def test_default_cli_does_not_import_claude_mcp():
+    args = bo._parse_args([])
+    assert args.claude_config is None
+
+
 def _assert_main_failure_without_writes(root, patch_open=None, state_text=None):
     cfg = os.path.join(root, "opencode.json")
     out = os.path.join(root, "out-agents")

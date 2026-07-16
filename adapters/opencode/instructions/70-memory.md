@@ -11,8 +11,8 @@ Keep `MEMORY.md` as a concise index. Put detail in narrowly named topic files an
 Use the managed helper rather than editing the store by an inferred path:
 
 ```bash
-python3 ~/.claude/skills/mainframe/memory/store.py path --runtime opencode --store-root ~/.local/share/opencode/mainframe-memory --workspace "$PWD"
-python3 ~/.claude/skills/mainframe/memory/store.py check --runtime opencode --store-root ~/.local/share/opencode/mainframe-memory --workspace "$PWD" --name MEMORY.md
+python3 "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/memory/store.py" path --runtime opencode --store-root "${XDG_DATA_HOME:-$HOME/.local/share}/opencode/mainframe-memory" --workspace "$PWD"
+python3 "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/memory/store.py" check --runtime opencode --store-root "${XDG_DATA_HOME:-$HOME/.local/share}/opencode/mainframe-memory" --workspace "$PWD" --name MEMORY.md
 ```
 
 For a write, pass the complete UTF-8 file on standard input to `write --name MEMORY.md` or a safe topic filename. The helper resolves one project identity across Git worktrees, rejects unsafe names and symbolic links, writes atomically, and reports whether the index exceeds the startup bound. Run `check` after every memory update.

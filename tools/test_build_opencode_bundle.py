@@ -58,11 +58,12 @@ def _run_builder(
 
 def _fixture_root(sandbox: Path, rules: str) -> Path:
     root = sandbox / "root"
-    for relative in ("core/agents", "core/gates", "core/skills"):
+    for relative in ("core/agents", "core/gates", "core/skills", "core/memory"):
         shutil.copytree(REPO / relative, root / relative)
     for relative in (
         "adapters/runtime-profiles.json",
         "adapters/opencode/plugins/mainframe-gates.js",
+        "adapters/opencode/plugins/mainframe-memory.js",
         "dist/opencode/AGENTS.md",
     ):
         source = REPO / relative
@@ -127,6 +128,9 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert (output / "agents/decision-reviewer.md").is_file()
     assert (output / "gates/detectors/path-validation.py").is_file()
     assert (output / "plugins/mainframe-gates.js").is_file()
+    assert (output / "plugins/mainframe-memory.js").is_file()
+    assert (output / "memory/store.py").is_file()
+    assert (output / "memory/memory-reminder.py").is_file()
     fragment = json.loads((output / "config-fragment.json").read_text())
     assert fragment["permission"]["bash"]["rm -rf /"] == "deny"
     manifest = json.loads((output / "bundle.json").read_text())
@@ -144,6 +148,9 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert units["agents/decision-reviewer.md"]["kind"] == "file"
     assert units["gates/detectors/path-validation.py"]["kind"] == "file"
     assert units["plugins/mainframe-gates.js"]["kind"] == "file"
+    assert units["plugins/mainframe-memory.js"]["kind"] == "file"
+    assert units["memory/store.py"]["kind"] == "file"
+    assert units["memory/memory-reminder.py"]["kind"] == "file"
     assert "bundle.json" not in units
     assert "config-fragment.json" not in units
     resources = {resource["id"]: resource for resource in manifest["resources"]}
@@ -179,6 +186,7 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
             output / "agents",
             output / "gates",
             output / "plugins",
+            output / "memory",
         )
         for path in sorted(root.rglob("*"))
         if path.is_file() and path.suffix in {".md", ".js", ".json", ".py"}
@@ -188,6 +196,31 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert "~/.claude" not in projected
     assert str(home) not in projected
     assert "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plans" in projected
+
+    memory_plugin = (output / "plugins/mainframe-memory.js").read_text()
+    assert "import.meta.url" in memory_plugin
+    assert "XDG_DATA_HOME" in memory_plugin
+    assert "~/.claude" not in memory_plugin
+    assert "/.claude/" not in memory_plugin
+    data_home = sandbox / "custom data"
+    runner = """
+import { pathToFileURL } from "node:url"
+const plugin = await import(pathToFileURL(process.argv[1]).href)
+process.stdout.write(plugin.MainframeMemory.runtime.storeRoot)
+"""
+    env = dict(os.environ, HOME=str(home), XDG_DATA_HOME=str(data_home))
+    result = subprocess.run(
+        [
+            "node", "--input-type=module", "-e", runner,
+            str(output / "plugins/mainframe-memory.js"),
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=30,
+    )
+    assert result.stdout == str(data_home / "opencode/mainframe-memory")
 
 
 def test_duplicate_permission_keys_fail_before_bundle_publication():

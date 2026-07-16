@@ -209,8 +209,8 @@ def test_antigravity_2_requires_repo_venv() -> None:
 
 def test_requested_adapter_generator_failure_reaches_exit_status() -> None:
     for flag, executable, generator in (
-        ("--opencode", "opencode", "build_opencode.py"),
-        ("--codex", "codex", "build_codex.py"),
+        ("--opencode", "opencode", "bundle projection"),
+        ("--codex", "codex", "bundle projection"),
     ):
         result = _run_install(
             [flag], programs=(executable,), venv_exit=42)
@@ -276,6 +276,28 @@ def test_codex_installer_requests_native_validation() -> None:
         venv_requires="--validate-native",
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_legacy_adapter_delivery_is_runtime_isolated() -> None:
+    text = INSTALLER.read_text()
+    opencode = text[text.index("OPENCODE_BUNDLE_SRC="):
+                    text.index("# Codex delivery remains")]
+    assert 'OPENCODE_BUNDLE_SRC="dist/opencode/bundle-v2"' in opencode
+    assert "dist/claude-code" not in opencode
+    assert "${CLAUDE_DIR}" not in opencode
+    assert "opencode_backup_target" in opencode
+    assert "\n        backup_target " not in opencode
+
+    codex = text[text.index("CODEX_BUNDLE_SRC="):
+                 text.index("# Standalone Antigravity")]
+    assert 'CODEX_BUNDLE_SRC="dist/codex/bundle-v2"' in codex
+    assert "dist/claude-code" not in codex
+
+
+def test_codex_legacy_launcher_resolves_codex_owned_detectors() -> None:
+    launcher = (ROOT / "adapters/codex/gates/mainframe-hook.sh").read_text()
+    assert '${CODEX_HOME:-$HOME/.codex}/gates/detectors' in launcher
+    assert "~/.claude" not in launcher
 
 
 def test_optional_absences_preserve_success() -> None:

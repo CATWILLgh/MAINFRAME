@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from adapter_profiles import load_profiles
 from bundle_sync import (
+    copy_regular_file,
     prepare_output_root,
     sync_tree,
     write_text_file,
@@ -42,7 +43,7 @@ OPENCODE_CONFIG_EXPRESSION = (
 )
 BUNDLE_ENTRIES = {
     "AGENTS.md", "agents", "bundle.json", "config-fragment.json",
-    "credentials-index.md", "gates", "plugins", "skills",
+    "credentials-index.md", "gates", "memory", "plugins", "skills",
 }
 
 
@@ -55,6 +56,12 @@ def _legacy_sources(source: str) -> list[str]:
         return [f"dist/claude-code/plugin/{source}"]
     if source == "plugins/mainframe-gates.js":
         return ["adapters/opencode/plugins/mainframe-gates.js"]
+    if source == "plugins/mainframe-memory.js":
+        return ["adapters/opencode/plugins/mainframe-memory.js"]
+    if source == "memory/store.py":
+        return ["core/memory/store.py"]
+    if source == "memory/memory-reminder.py":
+        return ["core/gates/detectors/memory-reminder.py"]
     return []
 
 
@@ -77,7 +84,7 @@ def _install_units(output: Path) -> list[dict]:
         units.append(_install_unit(path.relative_to(output).as_posix(), "file"))
     for path in sorted((output / "skills").iterdir()):
         units.append(_install_unit(path.relative_to(output).as_posix(), "tree"))
-    for directory in (output / "gates", output / "plugins"):
+    for directory in (output / "gates", output / "memory", output / "plugins"):
         for path in sorted(item for item in directory.rglob("*") if item.is_file()):
             units.append(_install_unit(path.relative_to(output).as_posix(), "file"))
     return units
@@ -214,19 +221,39 @@ def _project_gates(root: Path, output: Path, profile) -> None:
         sync_tree(staged, output)
 
 
-def _project_plugin_tree(source: Path, output: Path) -> None:
+def _project_plugin_tree(gates_source: Path, memory_source: Path, output: Path) -> None:
     with tempfile.TemporaryDirectory() as temporary:
         staged = Path(temporary) / "plugins"
-        write_text_file(staged / "mainframe-gates.js", _project_plugin(source))
+        write_text_file(
+            staged / "mainframe-gates.js", _project_plugin(gates_source)
+        )
+        memory = memory_source.read_text()
+        if "~/.claude" in memory or "/.claude/" in memory:
+            raise ValueError(
+                f"{memory_source}: memory plugin retains a Claude runtime path"
+            )
+        write_text_file(staged / "mainframe-memory.js", memory)
         write_text_file(staged / "package.json", '{"type":"module"}\n')
         sync_tree(staged, output)
+
+
+def _project_memory(root: Path, output: Path) -> None:
+    sources = {
+        "store.py": root / "core/memory/store.py",
+        "memory-reminder.py": root / "core/gates/detectors/memory-reminder.py",
+    }
+    for name, source in sources.items():
+        if source.is_symlink() or not source.is_file():
+            raise ValueError(f"bundle source must be a regular file: {source}")
+        copy_regular_file(source, output / name, executable=True)
 
 
 def build(root: Path, output: Path) -> None:
     """Materialize OpenCode release inputs without reading user state."""
     profile = load_profiles(root)["opencode"]
     agents_source = root / "dist/opencode/AGENTS.md"
-    plugin_source = root / "adapters/opencode/plugins/mainframe-gates.js"
+    gates_plugin_source = root / "adapters/opencode/plugins/mainframe-gates.js"
+    memory_plugin_source = root / "adapters/opencode/plugins/mainframe-memory.js"
     rules_source = root / "core/permissions/rules.json"
     credentials_source = root / "core/resources/credentials-index.md"
     for source in (
@@ -236,7 +263,13 @@ def build(root: Path, output: Path) -> None:
     ):
         if not source.is_dir():
             raise FileNotFoundError(source)
-    for source in (agents_source, plugin_source, rules_source, credentials_source):
+    for source in (
+        agents_source,
+        gates_plugin_source,
+        memory_plugin_source,
+        rules_source,
+        credentials_source,
+    ):
         if source.is_symlink() or not source.is_file():
             raise ValueError(f"bundle source must be a regular file: {source}")
     _validate_agent_sources(root)
@@ -246,6 +279,7 @@ def build(root: Path, output: Path) -> None:
 
     prepare_output_root(output, BUNDLE_ENTRIES)
     _project_gates(root, output / "gates", profile)
+    _project_memory(root, output / "memory")
     _project_skills(root, output / "skills", profile)
     _project_agents(root, output / "agents", profile)
 
@@ -253,7 +287,9 @@ def build(root: Path, output: Path) -> None:
         agents_source.read_text(), profile
     )
     write_text_file(output / "AGENTS.md", agents_text)
-    _project_plugin_tree(plugin_source, output / "plugins")
+    _project_plugin_tree(
+        gates_plugin_source, memory_plugin_source, output / "plugins"
+    )
 
     fragment = {"permission": permission}
     write_text_file(
@@ -278,8 +314,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
+    if args.dry_run:
+        with tempfile.TemporaryDirectory() as temporary:
+            build(root, Path(temporary) / "bundle-v2")
+        print("validated OpenCode bundle without publishing")
+        return 0
     output = args.output or root / "dist/opencode/bundle-v2"
     build(root, output)
     print(f"wrote OpenCode bundle to {output}")

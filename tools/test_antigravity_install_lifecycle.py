@@ -45,6 +45,7 @@ def _seed_repo(root: Path) -> Path:
         "dist/claude-code/scripts/secret",
         "dist/claude-code/templates/credentials-index.md",
         "dist/antigravity-2/plugin/plugin.json",
+        "core/resources/credentials-index.md",
     ):
         _write(repo / relative)
     _executable(repo / ".venv/bin/python3")
@@ -116,6 +117,9 @@ def test_real_backup_link_idempotency_and_owned_uninstall() -> None:
             "/plugins/mainframe/user-plugin.json"
         )
         assert backup.read_text() == "user data\n"
+        index = fixture.home / ".gemini/antigravity/credentials-index.md"
+        assert index.read_text() == "fixture\n"
+        assert index.stat().st_mode & 0o777 == 0o600
 
         _success(fixture.run("--antigravity-2"))
         assert fixture.plugin.is_symlink()
@@ -126,6 +130,7 @@ def test_real_backup_link_idempotency_and_owned_uninstall() -> None:
         _success(fixture.run("--uninstall"))
         assert fixture.plugin.exists() is False
         assert backup.read_text() == "user data\n"
+        assert index.is_file()
         assert memory.read_text() == "durable\n"
 
 

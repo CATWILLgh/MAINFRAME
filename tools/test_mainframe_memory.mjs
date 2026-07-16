@@ -99,7 +99,7 @@ await test("default reminder bridge sends JSON to the installed detector", async
   const note = await runtime.runReminder(payload)
   assert(note === "detector result", `unexpected note: ${note}`)
   assert(call.command === "python3", `unexpected command: ${call.command}`)
-  assert(call.args[0].endsWith("/hooks/scripts/memory-reminder.py"),
+  assert(call.args[0].endsWith("/memory/memory-reminder.py"),
          `wrong detector: ${call.args[0]}`)
   assert(call.stdin === JSON.stringify(payload), `wrong stdin: ${call.stdin}`)
 })

@@ -14,6 +14,10 @@ from pathlib import Path
 
 import yaml
 
+TOOLS = Path(__file__).resolve().parents[2] / "tools"
+sys.path.insert(0, str(TOOLS))
+
+from detector_projection import project_hooklib_fallbacks
 from gates.mainframe_runtime import HANDLER_TIMEOUT_SECONDS
 from skill_projection import (
     adapt_runtime_markdown,
@@ -36,6 +40,26 @@ HOOK_EVENTS = (
     "Stop",
 )
 GENERATED_MARKER = "Generated from MAINFRAME hub"
+ANTIGRAVITY_FEEDBACK_FALLBACK = (
+    'os.path.expanduser("~/.gemini/config/plugins/mainframe/skills/'
+    'harness-feedback")'
+)
+ANTIGRAVITY_TELEMETRY_FALLBACK = (
+    'os.path.expanduser("~/.gemini/antigravity/mainframe-telemetry/'
+    'telemetry.db")'
+)
+DETECTOR_PATH_REWRITES = (
+    (
+        "~/.claude/hooks/path-validation.py",
+        "~/.gemini/config/plugins/mainframe/scripts/detectors/path-validation.py",
+    ),
+    (
+        "# ~/.claude/mainframe is the hub-OWNED namespace (a --dev symlink into the\n"
+        "    # hub repo). ~/.claude/telemetry is unusable as an opt-in marker: Claude\n"
+        "    # Code itself creates and uses it, so it exists on every machine.",
+        "# Antigravity owns this persistent telemetry path independently of plugin files.",
+    ),
+)
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
     if not text.startswith("---\n"):
@@ -112,6 +136,32 @@ def _copy_tree(
 ) -> None:
     for item in SourceBoundary(root, source).files():
         files[target / item.path.relative_to(source)] = item.read_bytes()
+
+
+def _project_detector(source: SourcePath, destination: Path) -> bytes:
+    text = source.read_text()
+    if source.path.name == "_hooklib.py":
+        text = project_hooklib_fallbacks(
+            text,
+            Path(source.label),
+            feedback=ANTIGRAVITY_FEEDBACK_FALLBACK,
+            telemetry=ANTIGRAVITY_TELEMETRY_FALLBACK,
+        )
+    for claude_path, antigravity_path in DETECTOR_PATH_REWRITES:
+        text = text.replace(claude_path, antigravity_path)
+    if "~/.claude/" in text:
+        raise ValueError(
+            f"projected Antigravity runtime retains a Claude path: {destination}"
+        )
+    return text.encode()
+
+
+def _collect_detectors(root: Path, files: dict[Path, bytes]) -> None:
+    source = root / "core" / "gates" / "detectors"
+    target = Path("scripts/detectors")
+    for item in SourceBoundary(root, source).files():
+        destination = target / item.path.relative_to(source)
+        files[destination] = _project_detector(item, destination)
 
 
 def _copy_skill(
@@ -226,7 +276,7 @@ def _collect_skills_and_agents(root: Path, files: dict[Path, bytes]) -> None:
 
 def _collect_runtime(root: Path, files: dict[Path, bytes]) -> None:
     gate_root = root / "core" / "gates"
-    _copy_tree(root, gate_root / "detectors", Path("scripts/detectors"), files)
+    _collect_detectors(root, files)
     _copy_tree(root, gate_root / "rules", Path("scripts/rules"), files)
     _copy_tree(root, root / "core" / "memory", Path("memory"), files)
     hook = root / "adapters" / "antigravity-2" / "gates" / "mainframe_hook.py"
