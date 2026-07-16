@@ -37,14 +37,13 @@ records link before/after images, not directory creation and emptiness.
 
 ## What probably needs to be done
 
-- Add an explicit managed-directory operation with required mode and ownership.
-- Journal whether each directory existed before the transaction and the exact
-  identity of a directory created by MAINFRAME.
-- Create path components descriptor-relatively without following symbolic
-  links, syncing every new parent entry.
-- Roll back only an exact MAINFRAME-created directory that is still empty;
-  otherwise retain it and report a warning or conflict.
-- Make link operations depend on their required directory operations.
+- Define root-specific modes before exposing Apply. The internal protocol
+  persists mode independently but currently uses `0700` for every created
+  directory.
+- Run the lifecycle fixtures natively on Linux. Linux compilation is covered,
+  but compilation does not exercise filesystem rename and durability behavior.
+- Keep Apply unavailable until those two checks and the remaining executor
+  gates in [#7a1c1d1d](7a1c1d1d-add-safe-plan-application.md) pass.
 
 ## Acceptance criteria
 
@@ -56,6 +55,27 @@ records link before/after images, not directory creation and emptiness.
 - Modes and ownership are verified on macOS and Linux fixtures.
 - Tier-1 tests cover nested creation, partial pre-existence, concurrent
   population, symlink substitution, rollback, and idempotent retry.
+
+## Progress (2026-07-16)
+
+- Added explicit ordered directory actions to the transaction journal together
+  with the original plan and canonical root snapshots.
+- Added pure allowed-path derivation, physical alias deduplication, physical
+  link-target conflict rejection, and strict cross-collection validation.
+- Added lazy configured roots so a workspace can open before `~/.local/bin`,
+  `~/.codex`, or nested adapter parents exist.
+- Added descriptor-relative staging, no-replace publication, exact identity and
+  mode checks, parent-first application, and child-first rollback after links.
+- Added recovery for every journal boundary, including a failed restoration
+  caused by a concurrently occupied public name. Populated directories are
+  retained and restored, never removed.
+- Bound recovery snapshots back to the currently configured physical roots
+  before any mutation and repeated the check inside each filesystem operation.
+- Added native Darwin tests for nested and partially existing paths, symbolic
+  link substitution, physical aliases, no-replace publication, interruption,
+  concurrent population, restoration retry, and end-to-end first installation.
+- Added race-detector coverage and Linux cross-compilation. Native Linux
+  lifecycle execution and root-specific mode policy remain open.
 
 ## Sources
 

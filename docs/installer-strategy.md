@@ -122,9 +122,25 @@ replacement inode is retained rather than unlinked, but its public name may be
 moved. All MAINFRAME mutation paths, including `install.sh` while it remains
 supported, must share the transaction lock before Apply is exposed.
 
-Missing target parents are not created implicitly by a link operation.
-Creation and rollback of managed directories require their own journaled plan
-operations, tracked by [#20e75df1](tickets/20e75df1-model-managed-target-directories.md).
+Missing target parents are not created implicitly by a link operation. The
+executor derives required directories from the saved plan and configured
+roots, records every missing path before the first write, and creates them
+parent-first through hidden sibling directories and no-replace renames. The
+journal binds each path to a canonical existing anchor, the configured
+physical root, the exact parent and created-directory identities, and the
+requested mode.
+
+Rollback processes links first and directories child-first. It moves only the
+exact created directory, checks emptiness before and after the move, and
+restores a directory that another process populated. If restoration collides,
+the populated inode remains retained under its journaled private name and a
+later retry returns it to the public name when that name becomes free. Existing
+directories are never changed or claimed.
+
+The internal foundation currently creates managed directories with mode
+`0700`. Root-specific modes and a native Linux lifecycle run remain required
+before the public Apply action can be enabled; these remaining checks stay in
+[#20e75df1](tickets/20e75df1-model-managed-target-directories.md).
 
 Every component must pass an isolated-install scenario in which the other
 runtime directories do not exist. Lifecycle operations must preserve

@@ -81,12 +81,16 @@ The final product must install, update, remove, and replace selected adapters. A
   all supported MAINFRAME mutation paths share one transaction lock.
 - Tightened the planner so removal requires both `managed_exact` ownership and
   a matching artifact declared by the same release component.
+- Added an explicit recoverable managed-directory lifecycle. Missing roots and
+  nested parents are journaled before writes, created before links, bound to
+  configured physical roots and exact identities, and rolled back child-first
+  without deleting populated or foreign directories.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),
   [#cd5f584d](cd5f584d-complete-configuration-lifecycle-semantics.md), and
-  [#33930a3b](33930a3b-enable-selective-release-downloads.md), plus managed
-  target-directory lifecycle in
+  [#33930a3b](33930a3b-enable-selective-release-downloads.md). Root-specific
+  directory modes and native Linux lifecycle verification remain tracked in
   [#20e75df1](20e75df1-model-managed-target-directories.md).
 
 ## Sources
