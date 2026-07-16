@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -110,6 +111,68 @@ func payloadInventory(bundleRoot string) ([]payloadFile, error) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Path < rows[j].Path })
 	return rows, nil
+}
+
+func validateClosedReleaseTree(
+	root string,
+	index releaseIndex,
+	manifests []bundleManifest,
+) error {
+	expected := expectedReleaseTree(index, manifests)
+	seen := make(map[string]bool, len(expected))
+	err := filepath.WalkDir(root, func(current string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if current == root {
+			return nil
+		}
+		relative, err := filepath.Rel(root, current)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		wantDirectory, exists := expected[relative]
+		if !exists {
+			return fmt.Errorf("release tree contains unindexed entry %q", relative)
+		}
+		if entry.IsDir() != wantDirectory {
+			return fmt.Errorf("release tree entry %q has unexpected kind", relative)
+		}
+		seen[relative] = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for relative := range expected {
+		if !seen[relative] {
+			return fmt.Errorf("release tree is missing indexed entry %q", relative)
+		}
+	}
+	return nil
+}
+
+func expectedReleaseTree(
+	index releaseIndex,
+	manifests []bundleManifest,
+) map[string]bool {
+	expected := map[string]bool{"release.json": false}
+	for position, entry := range index.Manifests {
+		addExpectedFile(expected, entry.Path)
+		base := path.Dir(entry.Path)
+		for _, payload := range manifests[position].PayloadFiles {
+			addExpectedFile(expected, path.Join(base, payload.Path))
+		}
+	}
+	return expected
+}
+
+func addExpectedFile(expected map[string]bool, relative string) {
+	expected[relative] = false
+	for parent := path.Dir(relative); parent != "."; parent = path.Dir(parent) {
+		expected[parent] = true
+	}
 }
 
 func digestPath(path string) (string, error) {

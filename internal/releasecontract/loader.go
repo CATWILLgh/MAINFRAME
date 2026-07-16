@@ -41,6 +41,9 @@ func Load(root string) (Release, error) {
 	if err := validateGlobal(manifests); err != nil {
 		return Release{}, err
 	}
+	if err := validateClosedReleaseTree(canonical, index, manifests); err != nil {
+		return Release{}, err
+	}
 	model, err := installmodel.New(components)
 	if err != nil {
 		return Release{}, fmt.Errorf("build release install model: %w", err)
