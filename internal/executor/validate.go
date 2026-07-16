@@ -13,6 +13,7 @@ import (
 
 var identityPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var privateNamePattern = regexp.MustCompile(`^\.mainframe-[0-9a-f]{32}$`)
 
 func validatePreview(preview Preview) error {
 	if !validRelease(preview.Release) {
@@ -75,7 +76,7 @@ func validateJournal(journal Journal) error {
 		if err := validateJournalStep(step); err != nil {
 			return fmt.Errorf("invalid step %d: %w", index, err)
 		}
-		if journal.Status == TransactionCommitted && step.State != StepApplied {
+		if journal.Status == TransactionCommitted && step.Phase != StepPublished {
 			return fmt.Errorf("committed transaction has non-applied step %d", index)
 		}
 		locations = append(locations, step.Location)
@@ -95,26 +96,73 @@ func validateJournalStep(step JournalMutation) error {
 	if step.Parent.Device == 0 || step.Parent.Inode == 0 {
 		return fmt.Errorf("invalid parent identity")
 	}
-	if step.State != StepPrepared && step.State != StepApplied && step.State != StepRolledBack {
-		return fmt.Errorf("invalid step state %q", step.State)
+	if !validStepPhase(step.Phase) {
+		return fmt.Errorf("invalid step phase %q", step.Phase)
 	}
 	if !validImage(step.Before) || !validImage(step.After) {
 		return fmt.Errorf("invalid link image")
 	}
+	if !privateNamePattern.MatchString(step.Private.Name) ||
+		(step.Private.Identity != (FileIdentity{}) && !validFileIdentity(step.Private.Identity)) {
+		return fmt.Errorf("invalid private directory")
+	}
+	if step.Phase != StepPrepared && !validFileIdentity(step.Private.Identity) {
+		return fmt.Errorf("missing private directory identity")
+	}
+	if step.Finalized && step.Phase != StepPublished && step.Phase != StepRolledBack {
+		return fmt.Errorf("invalid finalized phase")
+	}
 	switch step.Kind {
 	case MutationInstall:
-		if !validRelative(string(step.SourcePath)) || step.Before.Exists ||
-			!step.After.Exists ||
-			(step.State == StepApplied && !validFileIdentity(step.After.Entry)) {
+		if err := validateInstallStep(step); err != nil {
 			return fmt.Errorf("invalid install mutation")
 		}
 	case MutationRemove:
-		if !validRelative(string(step.SourcePath)) || step.After.Exists ||
-			!step.Before.Exists || !validFileIdentity(step.Before.Entry) {
+		if err := validateRemoveStep(step); err != nil {
 			return fmt.Errorf("invalid remove mutation")
 		}
 	default:
 		return fmt.Errorf("invalid mutation kind %q", step.Kind)
+	}
+	return nil
+}
+
+func validStepPhase(phase StepPhase) bool {
+	return phase == StepPrepared || phase == StepStaged ||
+		phase == StepPublished || phase == StepRolledBack
+}
+
+func validateInstallStep(step JournalMutation) error {
+	if !validRelative(string(step.SourcePath)) || step.Before.Exists ||
+		!step.After.Exists || step.StagedName != "staged" ||
+		step.RetainedName != "" {
+		return fmt.Errorf("invalid install fields")
+	}
+	if step.Phase == StepPrepared {
+		if step.StagedIdentity != (FileIdentity{}) || step.After.Entry != (FileIdentity{}) {
+			return fmt.Errorf("prepared install has staged identity")
+		}
+		return nil
+	}
+	if !validFileIdentity(step.StagedIdentity) {
+		return fmt.Errorf("missing staged identity")
+	}
+	if step.After.Entry != (FileIdentity{}) && step.After.Entry != step.StagedIdentity {
+		return fmt.Errorf("after identity differs from staged identity")
+	}
+	if step.Phase == StepPublished &&
+		(step.After.Entry != step.StagedIdentity || !validFileIdentity(step.After.Entry)) {
+		return fmt.Errorf("published identity mismatch")
+	}
+	return nil
+}
+
+func validateRemoveStep(step JournalMutation) error {
+	if !validRelative(string(step.SourcePath)) || step.After.Exists ||
+		!step.Before.Exists || !validFileIdentity(step.Before.Entry) ||
+		step.StagedName != "" || step.StagedIdentity != (FileIdentity{}) ||
+		step.RetainedName != "retained" || step.Phase == StepStaged {
+		return fmt.Errorf("invalid remove fields")
 	}
 	return nil
 }

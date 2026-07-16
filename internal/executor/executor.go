@@ -75,31 +75,28 @@ func (executor Executor) execute(preview Preview) (Result, error) {
 		}
 		journal.Steps = append(journal.Steps, mutation)
 		if err := executor.store.Save(journal); err != nil {
-			return Result{}, executor.abort(&journal, fmt.Errorf("save prepared mutation: %w", err))
-		}
-		actual, applyErr := executor.applyMutation(mutation)
-		if err := confirmMutation(mutation, actual); err != nil {
-			cause := errors.Join(applyErr, fmt.Errorf("confirm mutation: %w", err))
-			return Result{}, executor.abort(&journal, cause)
-		}
-		journal.Steps[len(journal.Steps)-1].After = imageOf(actual)
-		if err := executor.store.Save(journal); err != nil {
-			return Result{}, errors.Join(
-				applyErr,
-				fmt.Errorf("save confirmed mutation: %w", err),
+			return Result{}, executor.abortAfterSaveFailure(
+				&journal,
+				fmt.Errorf("save allocated mutation: %w", err),
 			)
 		}
-		if applyErr != nil {
-			return Result{}, executor.abort(&journal, fmt.Errorf("apply mutation: %w", applyErr))
+		index := len(journal.Steps) - 1
+		if err := executor.executeStep(&journal, index); err != nil {
+			return Result{}, executor.abort(&journal, err)
 		}
-		journal.Steps[len(journal.Steps)-1].State = StepApplied
-		if err := executor.store.Save(journal); err != nil {
-			return Result{}, executor.abort(&journal, fmt.Errorf("save applied mutation: %w", err))
-		}
+	}
+	if len(journal.Steps) == 0 {
+		return Result{}, nil
 	}
 	journal.Status = TransactionCommitted
 	if err := executor.store.Save(journal); err != nil {
-		return Result{}, executor.abort(&journal, fmt.Errorf("commit transaction journal: %w", err))
+		return Result{}, fmt.Errorf(
+			"commit transaction journal; recovery required: %w",
+			err,
+		)
+	}
+	if err := executor.finalizeCommitted(&journal); err != nil {
+		return Result{}, fmt.Errorf("finalize committed transaction: %w", err)
 	}
 	if err := executor.store.Cleanup(); err != nil {
 		return Result{Warnings: []string{fmt.Sprintf("cleanup committed journal: %v", err)}}, nil
@@ -112,49 +109,112 @@ func (executor Executor) prepare(operation domain.Operation) (JournalMutation, e
 	if err != nil {
 		return JournalMutation{}, err
 	}
+	target, err := executor.workspace.ResolveSource(operation.SourcePath)
+	if err != nil {
+		return JournalMutation{}, err
+	}
 	mutation := JournalMutation{
-		Location: operation.Artifact.Location,
-		Before:   imageOf(before),
-		Parent:   before.Parent,
-		State:    StepPrepared,
+		Location:   operation.Artifact.Location,
+		SourcePath: operation.SourcePath,
+		Before:     imageOf(before),
+		Parent:     before.Parent,
+		Phase:      StepPrepared,
 	}
 	switch operation.Kind {
 	case domain.OperationInstall:
 		if before.Exists {
 			return JournalMutation{}, errors.New("install target appeared after preview")
 		}
-		target, err := executor.workspace.ResolveSource(operation.SourcePath)
-		if err != nil {
-			return JournalMutation{}, err
-		}
 		mutation.Kind = MutationInstall
-		mutation.SourcePath = operation.SourcePath
 		mutation.After = LinkImage{Exists: true, RawTarget: target}
+		mutation.StagedName = "staged"
 	case domain.OperationRemove:
-		target, err := executor.workspace.ResolveSource(operation.SourcePath)
-		if err != nil {
-			return JournalMutation{}, err
-		}
 		if !before.Exists || before.RawTarget != target {
 			return JournalMutation{}, errors.New("remove target changed after preview")
 		}
 		mutation.Kind = MutationRemove
-		mutation.SourcePath = operation.SourcePath
+		mutation.RetainedName = "retained"
 	default:
 		return JournalMutation{}, fmt.Errorf("unsupported operation %q", operation.Kind)
 	}
+	privateName, err := executor.workspace.AllocatePrivateName()
+	if err != nil {
+		return JournalMutation{}, err
+	}
+	mutation.Private.Name = privateName
 	return mutation, nil
 }
 
-func (executor Executor) applyMutation(mutation JournalMutation) (LinkState, error) {
-	return executor.workspace.CompareAndSwapLink(
-		mutation.Location,
-		stateOf(mutation.Before, mutation.Parent),
-		stateOf(mutation.After, mutation.Parent),
-	)
+func (executor Executor) executeStep(journal *Journal, index int) error {
+	if err := executor.preparePrivate(journal, index); err != nil {
+		return fmt.Errorf("prepare private workspace: %w", err)
+	}
+	if journal.Steps[index].Kind == MutationInstall {
+		if err := executor.stageInstall(journal, index); err != nil {
+			return fmt.Errorf("stage install: %w", err)
+		}
+	}
+	step := &journal.Steps[index]
+	actual, publishErr := executor.publish(*step)
+	if err := confirmPublished(*step, actual); err != nil {
+		return errors.Join(publishErr, fmt.Errorf("confirm publication: %w", err))
+	}
+	step.After = imageOf(actual)
+	step.Phase = StepPublished
+	if err := executor.store.Save(*journal); err != nil {
+		return executor.persistBeforeAbort(
+			journal,
+			errors.Join(publishErr, fmt.Errorf("save published mutation: %w", err)),
+		)
+	}
+	if publishErr != nil {
+		return fmt.Errorf("publish mutation: %w", publishErr)
+	}
+	return nil
 }
 
-func confirmMutation(mutation JournalMutation, actual LinkState) error {
+func (executor Executor) preparePrivate(journal *Journal, index int) error {
+	step := &journal.Steps[index]
+	identity, err := executor.workspace.PreparePrivate(workspaceMutation(*step))
+	if err != nil {
+		return err
+	}
+	if !validFileIdentity(identity) {
+		return errors.New("workspace returned a private directory without identity")
+	}
+	step.Private.Identity = identity
+	if err := executor.store.Save(*journal); err != nil {
+		return executor.persistBeforeAbort(journal, fmt.Errorf("save private directory identity: %w", err))
+	}
+	return nil
+}
+
+func (executor Executor) stageInstall(journal *Journal, index int) error {
+	step := &journal.Steps[index]
+	identity, err := executor.workspace.StageInstall(workspaceMutation(*step))
+	if err != nil {
+		return err
+	}
+	if !validFileIdentity(identity) {
+		return errors.New("workspace returned a staged link without identity")
+	}
+	step.StagedIdentity = identity
+	step.Phase = StepStaged
+	if err := executor.store.Save(*journal); err != nil {
+		return executor.persistBeforeAbort(journal, fmt.Errorf("save staged link identity: %w", err))
+	}
+	return nil
+}
+
+func (executor Executor) publish(step JournalMutation) (LinkState, error) {
+	mutation := workspaceMutation(step)
+	if step.Kind == MutationInstall {
+		return executor.workspace.PublishInstall(mutation)
+	}
+	return executor.workspace.PublishRemove(mutation)
+}
+
+func confirmPublished(mutation JournalMutation, actual LinkState) error {
 	expected := stateOf(mutation.After, mutation.Parent)
 	if actual.Exists != expected.Exists ||
 		actual.RawTarget != expected.RawTarget ||
@@ -164,10 +224,24 @@ func confirmMutation(mutation JournalMutation, actual LinkState) error {
 	if actual.Exists && !validFileIdentity(actual.Entry) {
 		return errors.New("workspace returned an after-image without identity")
 	}
+	if mutation.Kind == MutationInstall && actual.Entry != mutation.StagedIdentity {
+		return errors.New("published link identity differs from staged link")
+	}
 	if !actual.Exists && actual.Entry != (FileIdentity{}) {
 		return errors.New("absent after-image has an identity")
 	}
 	return nil
+}
+
+func workspaceMutation(step JournalMutation) WorkspaceMutation {
+	return WorkspaceMutation{
+		Kind: step.Kind, Location: step.Location,
+		SourceTarget: step.After.RawTarget,
+		Before:       step.Before, After: step.After, Parent: step.Parent,
+		Private: step.Private, StagedName: step.StagedName,
+		StagedIdentity: step.StagedIdentity, RetainedName: step.RetainedName,
+		Phase: step.Phase,
+	}
 }
 
 func imageOf(state LinkState) LinkImage {

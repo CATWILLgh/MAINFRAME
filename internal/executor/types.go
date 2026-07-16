@@ -40,7 +40,14 @@ type Refresher interface {
 type LinkWorkspace interface {
 	Inspect(domain.Location) (LinkState, error)
 	ResolveSource(domain.ArtifactPath) (string, error)
-	CompareAndSwapLink(domain.Location, LinkState, LinkState) (LinkState, error)
+	AllocatePrivateName() (string, error)
+	PreparePrivate(WorkspaceMutation) (FileIdentity, error)
+	StageInstall(WorkspaceMutation) (FileIdentity, error)
+	PublishInstall(WorkspaceMutation) (LinkState, error)
+	PublishRemove(WorkspaceMutation) (LinkState, error)
+	Rollback(WorkspaceMutation) error
+	Finalize(WorkspaceMutation) error
+	FinalizePrivate(WorkspaceMutation) error
 }
 
 type FileIdentity struct {
@@ -61,6 +68,11 @@ type LinkState struct {
 	Entry     FileIdentity
 }
 
+type PrivateDirectory struct {
+	Name     string       `json:"name"`
+	Identity FileIdentity `json:"identity"`
+}
+
 type MutationKind string
 
 const (
@@ -68,12 +80,13 @@ const (
 	MutationRemove  MutationKind = "remove"
 )
 
-type StepState string
+type StepPhase string
 
 const (
-	StepPrepared   StepState = "prepared"
-	StepApplied    StepState = "applied"
-	StepRolledBack StepState = "rolled_back"
+	StepPrepared   StepPhase = "prepared"
+	StepStaged     StepPhase = "staged"
+	StepPublished  StepPhase = "published"
+	StepRolledBack StepPhase = "rolled_back"
 )
 
 type TransactionStatus string
@@ -84,13 +97,32 @@ const (
 )
 
 type JournalMutation struct {
-	Kind       MutationKind        `json:"kind"`
-	Location   domain.Location     `json:"location"`
-	SourcePath domain.ArtifactPath `json:"source_path,omitempty"`
-	Before     LinkImage           `json:"before"`
-	After      LinkImage           `json:"after"`
-	Parent     FileIdentity        `json:"parent"`
-	State      StepState           `json:"state"`
+	Kind           MutationKind        `json:"kind"`
+	Location       domain.Location     `json:"location"`
+	SourcePath     domain.ArtifactPath `json:"source_path,omitempty"`
+	Before         LinkImage           `json:"before"`
+	After          LinkImage           `json:"after"`
+	Parent         FileIdentity        `json:"parent"`
+	Private        PrivateDirectory    `json:"private"`
+	StagedName     string              `json:"staged_name"`
+	StagedIdentity FileIdentity        `json:"staged_identity"`
+	RetainedName   string              `json:"retained_name"`
+	Phase          StepPhase           `json:"phase"`
+	Finalized      bool                `json:"finalized"`
+}
+
+type WorkspaceMutation struct {
+	Kind           MutationKind
+	Location       domain.Location
+	SourceTarget   string
+	Before         LinkImage
+	After          LinkImage
+	Parent         FileIdentity
+	Private        PrivateDirectory
+	StagedName     string
+	StagedIdentity FileIdentity
+	RetainedName   string
+	Phase          StepPhase
 }
 
 type Journal struct {

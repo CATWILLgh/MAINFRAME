@@ -7,11 +7,10 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
-func TestRecoverTreatsPreparedMutationAsPossiblyApplied(t *testing.T) {
+func TestRecoverStagesPreparedMutationBeforeIdempotentRollback(t *testing.T) {
 	step := installJournalStep("one", StepPrepared)
 	fixture := newFixture(Preview{})
 	fixture.store.journal = journalWith(TransactionInProgress, step)
-	fixture.workspace.links[step.Location] = stateOf(step.After, step.Parent)
 
 	_, err := fixture.executor().Recover()
 
@@ -25,7 +24,7 @@ func TestRecoverTreatsPreparedMutationAsPossiblyApplied(t *testing.T) {
 }
 
 func TestRecoverRollsBackInReverseAndSkipsAlreadyRestoredSteps(t *testing.T) {
-	first := installJournalStep("one", StepApplied)
+	first := installJournalStep("one", StepPublished)
 	second := installJournalStep("two", StepPrepared)
 	fixture := newFixture(Preview{})
 	fixture.store.journal = journalWith(TransactionInProgress, first, second)
@@ -44,15 +43,15 @@ func TestRecoverRollsBackInReverseAndSkipsAlreadyRestoredSteps(t *testing.T) {
 }
 
 func TestRecoverLeavesJournalWhenAfterImageDoesNotMatch(t *testing.T) {
-	step := installJournalStep("one", StepApplied)
+	step := installJournalStep("one", StepPublished)
 	fixture := newFixture(Preview{})
 	fixture.store.journal = journalWith(TransactionInProgress, step)
 	fixture.workspace.links[step.Location] = linkState("foreign/target")
 
 	_, err := fixture.executor().Recover()
 
-	if err == nil || !strings.Contains(err.Error(), "after-image mismatch") {
-		t.Fatalf("expected after-image mismatch, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "identity mismatch") {
+		t.Fatalf("expected identity mismatch, got %v", err)
 	}
 	if fixture.store.journal == nil || fixture.store.cleanupCalls != 0 {
 		t.Fatal("unsafe recovery removed journal")
@@ -63,7 +62,7 @@ func TestRecoverLeavesJournalWhenAfterImageDoesNotMatch(t *testing.T) {
 }
 
 func TestRecoverPreservesSameTargetReplacementWithDifferentIdentity(t *testing.T) {
-	step := installJournalStep("one", StepApplied)
+	step := installJournalStep("one", StepPublished)
 	fixture := newFixture(Preview{})
 	fixture.store.journal = journalWith(TransactionInProgress, step)
 	replacement := stateOf(step.After, step.Parent)
@@ -72,8 +71,8 @@ func TestRecoverPreservesSameTargetReplacementWithDifferentIdentity(t *testing.T
 
 	_, err := fixture.executor().Recover()
 
-	if err == nil || !strings.Contains(err.Error(), "after-image mismatch") {
-		t.Fatalf("expected after-image mismatch, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "identity mismatch") {
+		t.Fatalf("expected identity mismatch, got %v", err)
 	}
 	if fixture.workspace.writeCount() != 0 || fixture.store.cleanupCalls != 0 {
 		t.Fatal("same-target replacement was mutated")
@@ -89,8 +88,8 @@ func TestRecoverFailsClosedForPreparedInstallWithoutPublishedIdentity(t *testing
 
 	_, err := fixture.executor().Recover()
 
-	if err == nil || !strings.Contains(err.Error(), "after-image mismatch") {
-		t.Fatalf("expected after-image mismatch, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "identity mismatch") {
+		t.Fatalf("expected identity mismatch, got %v", err)
 	}
 	if fixture.workspace.writeCount() != 0 || fixture.store.cleanupCalls != 0 {
 		t.Fatal("unconfirmed prepared install was mutated")
@@ -98,7 +97,7 @@ func TestRecoverFailsClosedForPreparedInstallWithoutPublishedIdentity(t *testing
 }
 
 func TestRecoverCommittedJournalOnlyCleansAndCanRetry(t *testing.T) {
-	step := installJournalStep("one", StepApplied)
+	step := installJournalStep("one", StepPublished)
 	fixture := newFixture(Preview{})
 	fixture.store.journal = journalWith(TransactionCommitted, step)
 	fixture.workspace.links[step.Location] = stateOf(step.After, step.Parent)
@@ -124,7 +123,29 @@ func TestRecoverCommittedJournalOnlyCleansAndCanRetry(t *testing.T) {
 }
 
 func TestRecoverRejectsInvalidAndOverlappingJournalLocations(t *testing.T) {
-	tests := []struct {
+	for _, test := range invalidJournalCases() {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newFixture(Preview{})
+			fixture.store.journal = journalWith(TransactionInProgress, installJournalStep("one", StepPublished))
+			test.mutate(fixture.store.journal)
+
+			_, err := fixture.executor().Recover()
+
+			if err == nil || !strings.Contains(err.Error(), "validate transaction journal") {
+				t.Fatalf("expected validation error, got %v", err)
+			}
+			if fixture.workspace.filesystemCalls() != 0 || fixture.store.cleanupCalls != 0 {
+				t.Fatal("invalid journal caused mutation or cleanup")
+			}
+		})
+	}
+}
+
+func invalidJournalCases() []struct {
+	name   string
+	mutate func(*Journal)
+} {
+	return []struct {
 		name   string
 		mutate func(*Journal)
 	}{
@@ -137,6 +158,24 @@ func TestRecoverRejectsInvalidAndOverlappingJournalLocations(t *testing.T) {
 		{name: "invalid path", mutate: func(journal *Journal) { journal.Steps[0].Location.Path = "../escape" }},
 		{name: "invalid raw target", mutate: func(journal *Journal) { journal.Steps[0].After.RawTarget = "bad\nlink" }},
 		{name: "invalid parent", mutate: func(journal *Journal) { journal.Steps[0].Parent.Inode = 0 }},
+		{name: "unsafe private name", mutate: func(journal *Journal) {
+			journal.Steps[0].Private.Name = "../escape"
+		}},
+		{name: "partial private identity", mutate: func(journal *Journal) {
+			journal.Steps[0].Private.Identity.Device = 0
+		}},
+		{name: "wrong staged name", mutate: func(journal *Journal) {
+			journal.Steps[0].StagedName = "other"
+		}},
+		{name: "wrong retained name", mutate: func(journal *Journal) {
+			journal.Steps[0].RetainedName = "retained"
+		}},
+		{name: "invalid phase", mutate: func(journal *Journal) {
+			journal.Steps[0].Phase = "unknown"
+		}},
+		{name: "staged identity mismatch", mutate: func(journal *Journal) {
+			journal.Steps[0].StagedIdentity.Inode++
+		}},
 		{name: "partial entry identity", mutate: func(journal *Journal) {
 			journal.Steps[0].After.Entry.Device = 0
 		}},
@@ -144,25 +183,9 @@ func TestRecoverRejectsInvalidAndOverlappingJournalLocations(t *testing.T) {
 			journal.Steps = append(journal.Steps, journal.Steps[0])
 		}},
 		{name: "overlapping location", mutate: func(journal *Journal) {
-			child := installJournalStep("one/child", StepApplied)
+			child := installJournalStep("one/child", StepPublished)
 			journal.Steps = append(journal.Steps, child)
 		}},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			fixture := newFixture(Preview{})
-			fixture.store.journal = journalWith(TransactionInProgress, installJournalStep("one", StepApplied))
-			test.mutate(fixture.store.journal)
-
-			_, err := fixture.executor().Recover()
-
-			if err == nil || !strings.Contains(err.Error(), "validate transaction journal") {
-				t.Fatalf("expected validation error, got %v", err)
-			}
-			if fixture.workspace.writeCount() != 0 || fixture.store.cleanupCalls != 0 {
-				t.Fatal("invalid journal caused mutation or cleanup")
-			}
-		})
 	}
 }
 
@@ -175,17 +198,26 @@ func journalWith(status TransactionStatus, steps ...JournalMutation) *Journal {
 	}
 }
 
-func installJournalStep(path domain.ArtifactPath, state StepState) JournalMutation {
-	return JournalMutation{
+func installJournalStep(path domain.ArtifactPath, phase StepPhase) JournalMutation {
+	step := JournalMutation{
 		Kind:       MutationInstall,
 		Location:   testLocation(path),
 		SourcePath: domain.ArtifactPath("source/" + string(path)),
 		Before:     LinkImage{},
-		After: LinkImage{
-			Exists: true, RawTarget: "source/" + string(path),
-			Entry: FileIdentity{Device: 1, Inode: 2},
+		After:      LinkImage{Exists: true, RawTarget: "source/" + string(path)},
+		Parent:     FileIdentity{Device: 1, Inode: 1},
+		Private: PrivateDirectory{
+			Name:     ".mainframe-00000000000000000000000000000001",
+			Identity: FileIdentity{Device: 1, Inode: 10},
 		},
-		Parent: FileIdentity{Device: 1, Inode: 1},
-		State:  state,
+		StagedName: "staged",
+		Phase:      phase,
 	}
+	if phase != StepPrepared {
+		step.StagedIdentity = FileIdentity{Device: 1, Inode: 2}
+	}
+	if phase == StepPublished {
+		step.After.Entry = step.StagedIdentity
+	}
+	return step
 }

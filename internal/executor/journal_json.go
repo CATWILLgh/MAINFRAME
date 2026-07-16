@@ -120,16 +120,20 @@ func requireJournalShape(payload []byte) error {
 	for index, rawStep := range steps {
 		step, err := requiredObject(
 			rawStep,
-			"kind", "location", "source_path", "before", "after", "parent", "state",
+			"kind", "location", "source_path", "before", "after", "parent",
+			"private", "staged_name", "staged_identity", "retained_name",
+			"phase", "finalized",
 		)
 		if err != nil {
 			return fmt.Errorf("step %d: %w", index, err)
 		}
 		for name, fields := range map[string][]string{
-			"location": {"root", "path"},
-			"before":   {"exists", "raw_target", "entry"},
-			"after":    {"exists", "raw_target", "entry"},
-			"parent":   {"device", "inode"},
+			"location":        {"root", "path"},
+			"before":          {"exists", "raw_target", "entry"},
+			"after":           {"exists", "raw_target", "entry"},
+			"parent":          {"device", "inode"},
+			"private":         {"name", "identity"},
+			"staged_identity": {"device", "inode"},
 		} {
 			if _, err := requiredObject(step[name], fields...); err != nil {
 				return fmt.Errorf("step %d %s: %w", index, name, err)
@@ -143,6 +147,13 @@ func requireJournalShape(payload []byte) error {
 			if _, err := requiredObject(image["entry"], "device", "inode"); err != nil {
 				return fmt.Errorf("step %d %s entry: %w", index, name, err)
 			}
+		}
+		var private map[string]json.RawMessage
+		if err := json.Unmarshal(step["private"], &private); err != nil {
+			return fmt.Errorf("step %d private: %w", index, err)
+		}
+		if _, err := requiredObject(private["identity"], "device", "inode"); err != nil {
+			return fmt.Errorf("step %d private identity: %w", index, err)
 		}
 	}
 	return nil

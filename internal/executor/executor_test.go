@@ -185,11 +185,17 @@ type fixture struct {
 }
 
 func newFixture(preview Preview) *fixture {
+	store := &fakeStore{}
+	workspace := &fakeWorkspace{
+		links:   make(map[domain.Location]LinkState),
+		private: make(map[string]*fakePrivateDirectory),
+		store:   store,
+	}
 	return &fixture{
 		locker:    &fakeLocker{},
-		store:     &fakeStore{},
+		store:     store,
 		refresher: &fakeRefresher{preview: preview},
-		workspace: &fakeWorkspace{links: make(map[domain.Location]LinkState)},
+		workspace: workspace,
 	}
 }
 
@@ -255,13 +261,14 @@ func (locker *fakeLocker) Lock() (Lock, error) {
 }
 
 type fakeStore struct {
-	journal      *Journal
-	saves        []Journal
-	loadErr      error
-	saveFailAt   int
-	saveCalls    int
-	cleanupErr   error
-	cleanupCalls int
+	journal              *Journal
+	saves                []Journal
+	loadErr              error
+	saveFailAt           int
+	saveFailAfterWriteAt int
+	saveCalls            int
+	cleanupErr           error
+	cleanupCalls         int
 }
 
 func (store *fakeStore) Load() (*Journal, error) {
@@ -278,6 +285,9 @@ func (store *fakeStore) Save(journal Journal) error {
 	}
 	store.journal = cloneJournalPointer(&journal)
 	store.saves = append(store.saves, *cloneJournalPointer(&journal))
+	if store.saveFailAfterWriteAt == store.saveCalls {
+		return errors.New("save outcome unknown")
+	}
 	return nil
 }
 
@@ -304,65 +314,4 @@ func (refresher *fakeRefresher) Refresh(desired []domain.ComponentID) (Preview, 
 		return Preview{}, refresher.err
 	}
 	return refresher.preview, nil
-}
-
-type fakeWorkspace struct {
-	links          map[domain.Location]LinkState
-	writes         []string
-	inspectErr     error
-	resolveErr     error
-	replaceFailAt  int
-	replaceCalls   int
-	failAfterWrite bool
-	nextInode      uint64
-}
-
-func (workspace *fakeWorkspace) Inspect(location domain.Location) (LinkState, error) {
-	if workspace.inspectErr != nil {
-		return LinkState{}, workspace.inspectErr
-	}
-	state, exists := workspace.links[location]
-	if !exists {
-		state.Parent = FileIdentity{Device: 1, Inode: 1}
-	}
-	return state, nil
-}
-
-func (workspace *fakeWorkspace) ResolveSource(source domain.ArtifactPath) (string, error) {
-	if workspace.resolveErr != nil {
-		return "", workspace.resolveErr
-	}
-	return string(source), nil
-}
-
-func (workspace *fakeWorkspace) CompareAndSwapLink(
-	location domain.Location,
-	before, after LinkState,
-) (LinkState, error) {
-	workspace.replaceCalls++
-	fail := workspace.replaceFailAt == workspace.replaceCalls
-	if fail && !workspace.failAfterWrite {
-		return before, errors.New("replace failed")
-	}
-	current, _ := workspace.Inspect(location)
-	if current != before {
-		return current, errors.New("link compare-and-swap mismatch")
-	}
-	actual := after
-	if after.Exists {
-		workspace.nextInode++
-		actual.Entry = FileIdentity{Device: 1, Inode: 100 + workspace.nextInode}
-		workspace.links[location] = actual
-	} else {
-		delete(workspace.links, location)
-	}
-	workspace.writes = append(workspace.writes, string(location.Path)+":"+after.RawTarget)
-	if fail {
-		return actual, errors.New("replace outcome unknown")
-	}
-	return actual, nil
-}
-
-func (workspace *fakeWorkspace) writeCount() int {
-	return len(workspace.writes)
 }
