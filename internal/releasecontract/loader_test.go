@@ -2,12 +2,10 @@ package releasecontract_test
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
@@ -65,6 +63,10 @@ func TestLoadBuildsInstallModelAndSeparateResourceInventory(t *testing.T) {
 	if resource.Observation != releasecontract.SupportUnimplemented || resource.Apply != releasecontract.SupportUnimplemented {
 		t.Fatalf("resource support = %#v", resource)
 	}
+	server, exists := release.MCPCatalog.Server("context7")
+	if !exists || server.Name != "Context7" {
+		t.Fatalf("MCP catalog server = %#v, exists = %t", server, exists)
+	}
 }
 
 func TestLoadRejectsManifestAndPayloadTampering(t *testing.T) {
@@ -89,6 +91,45 @@ func TestLoadRejectsManifestAndPayloadTampering(t *testing.T) {
 	})
 }
 
+func TestLoadRejectsCatalogTamperingAndOversizedCatalog(t *testing.T) {
+	t.Run("digest", func(t *testing.T) {
+		root := writeFixture(t)
+		appendFile(t, filepath.Join(root, "metadata/mcp-catalog.json"), "\n")
+		if _, err := releasecontract.Load(root); err == nil {
+			t.Fatal("tampered catalog was accepted")
+		}
+	})
+
+	t.Run("size", func(t *testing.T) {
+		root := writeFixture(t)
+		catalogPath := filepath.Join(root, "metadata/mcp-catalog.json")
+		writeFile(t, catalogPath, strings.Repeat(" ", (1<<20)+1), 0o644)
+		indexPath := filepath.Join(root, "release.json")
+		index := readObject(t, indexPath)
+		index["mcp_catalog"].(map[string]any)["sha256"] = digest(t, catalogPath)
+		writeJSON(t, indexPath, index, 0o644)
+		_, err := releasecontract.Load(root)
+		if err == nil || !strings.Contains(err.Error(), "exceeds") {
+			t.Fatalf("oversized catalog error = %v", err)
+		}
+	})
+}
+
+func TestLoadRejectsCatalogOutsideReservedMetadataPath(t *testing.T) {
+	root := writeFixture(t)
+	indexPath := filepath.Join(root, "release.json")
+	index := readObject(t, indexPath)
+	payloadPath := filepath.Join(root, "bundles/codex/payload.txt")
+	index["mcp_catalog"] = map[string]any{
+		"path": "bundles/codex/payload.txt", "sha256": digest(t, payloadPath),
+	}
+	writeJSON(t, indexPath, index, 0o644)
+	_, err := releasecontract.Load(root)
+	if err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Fatalf("catalog ownership error = %v", err)
+	}
+}
+
 func TestLoadRejectsUnknownAndDuplicateJSONFields(t *testing.T) {
 	t.Run("unknown", func(t *testing.T) {
 		root := writeFixture(t)
@@ -103,7 +144,7 @@ func TestLoadRejectsUnknownAndDuplicateJSONFields(t *testing.T) {
 
 	t.Run("duplicate", func(t *testing.T) {
 		root := t.TempDir()
-		raw := `{"schema_version":1,"schema_version":1,"kind":"mainframe-release","release_id":"test-release","manifests":[]}`
+		raw := `{"schema_version":2,"schema_version":2,"kind":"mainframe-release","release_id":"test-release","manifests":[]}`
 		if err := os.WriteFile(filepath.Join(root, "release.json"), []byte(raw), 0o644); err != nil {
 			t.Fatalf("write index: %v", err)
 		}
@@ -264,138 +305,4 @@ func TestLoadRejectsInvalidSupportedObservationContracts(t *testing.T) {
 			}
 		})
 	}
-}
-
-func writeFixture(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	bundle := filepath.Join(root, "bundles/codex")
-	if err := os.MkdirAll(bundle, 0o755); err != nil {
-		t.Fatalf("mkdir bundle: %v", err)
-	}
-	writeFile(t, filepath.Join(bundle, "payload.txt"), "payload\n", 0o644)
-	writeFile(t, filepath.Join(bundle, "config.json"), "{}\n", 0o644)
-	manifest := map[string]any{
-		"schema_version": 1,
-		"kind":           "mainframe-bundle",
-		"component":      "codex",
-		"dependencies":   []string{},
-		"install_units": []any{map[string]any{
-			"id":                     "codex.payload",
-			"kind":                   "file",
-			"source":                 "payload.txt",
-			"target":                 map[string]any{"root": "codex-config", "path": "payload.txt"},
-			"legacy_source_suffixes": []string{"dist/codex/payload.txt"},
-		}},
-		"legacy_artifacts": []any{map[string]any{
-			"target":          map[string]any{"root": "codex-config", "path": "obsolete.txt"},
-			"target_suffixes": []string{"export/obsolete.txt"},
-		}},
-		"resources": []any{map[string]any{
-			"id":                     "codex.configuration",
-			"strategy":               "json-key-merge",
-			"source":                 "config.json",
-			"target":                 map[string]any{"root": "codex-config", "path": "config.json"},
-			"legacy_source_suffixes": []string{"dist/codex/config.json"},
-			"observation":            "unimplemented",
-			"apply":                  "unimplemented",
-		}},
-		"payload_files": []any{
-			payloadRow(t, filepath.Join(bundle, "config.json"), "config.json"),
-			payloadRow(t, filepath.Join(bundle, "payload.txt"), "payload.txt"),
-		},
-		"runtime_profile": map[string]string{"config_root": "${CODEX_HOME}"},
-	}
-	manifestPath := filepath.Join(bundle, "bundle.json")
-	writeJSON(t, manifestPath, manifest, 0o644)
-	index := map[string]any{
-		"schema_version": 1,
-		"kind":           "mainframe-release",
-		"release_id":     "test-release",
-		"manifests": []any{map[string]any{
-			"component": "codex",
-			"path":      "bundles/codex/bundle.json",
-			"sha256":    digest(t, manifestPath),
-		}},
-	}
-	writeJSON(t, filepath.Join(root, "release.json"), index, 0o644)
-	return root
-}
-
-func payloadRow(t *testing.T, file, path string) map[string]any {
-	t.Helper()
-	info, err := os.Stat(file)
-	if err != nil {
-		t.Fatalf("stat payload: %v", err)
-	}
-	return map[string]any{
-		"path":   path,
-		"mode":   "0644",
-		"size":   info.Size(),
-		"sha256": digest(t, file),
-	}
-}
-
-func rewriteIndexDigest(t *testing.T, root, manifestPath string) {
-	t.Helper()
-	indexPath := filepath.Join(root, "release.json")
-	index := readObject(t, indexPath)
-	entries := index["manifests"].([]any)
-	entries[0].(map[string]any)["sha256"] = digest(t, manifestPath)
-	writeJSON(t, indexPath, index, 0o644)
-}
-
-func readObject(t *testing.T, path string) map[string]any {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
-		t.Fatalf("decode %s: %v", path, err)
-	}
-	return value
-}
-
-func writeJSON(t *testing.T, path string, value any, mode os.FileMode) {
-	t.Helper()
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		t.Fatalf("encode %s: %v", path, err)
-	}
-	writeFile(t, path, string(data)+"\n", mode)
-}
-
-func writeFile(t *testing.T, path, value string, mode os.FileMode) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(value), mode); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-func appendFile(t *testing.T, path, value string) {
-	t.Helper()
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatalf("open %s: %v", path, err)
-	}
-	defer file.Close()
-	if _, err := file.WriteString(value); err != nil {
-		t.Fatalf("append %s: %v", path, err)
-	}
-}
-
-func digest(t *testing.T, path string) string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read digest source: %v", err)
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
-
-func location(path domain.ArtifactPath) domain.Location {
-	return domain.Location{Root: domain.RootCodexConfig, Path: path}
 }

@@ -60,7 +60,7 @@ func TestPreviewRendersConfigurationChangesAndIssues(t *testing.T) {
 		},
 		preview: configurationPlanFixture,
 	}
-	model := NewModel(previewer)
+	model := newTestModel(t, previewer)
 	updated, _ := model.openPreview()
 	view := updated.View().Content
 
@@ -108,7 +108,7 @@ func TestPreviewShowsDeselectedOpenCodeRemoval(t *testing.T) {
 			},
 		},
 	}
-	model := NewModel(previewer)
+	model := newTestModel(t, previewer)
 	model.selected = nil
 	updated, _ := model.openPreview()
 
@@ -118,7 +118,7 @@ func TestPreviewShowsDeselectedOpenCodeRemoval(t *testing.T) {
 }
 
 func TestEmptyPreviewExplainsThatConfigurationNeedsNoChanges(t *testing.T) {
-	model := NewModel(&fakePreviewer{targets: defaultTargets()})
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	updated, _ := model.openPreview()
 	if !strings.Contains(updated.View().Content, "No configuration changes") {
 		t.Fatalf("empty configuration preview is unexplained:\n%s", updated.View().Content)

@@ -290,10 +290,25 @@ func writeReleaseFixture(
 	}
 	manifestPath := filepath.Join(bundle, "bundle.json")
 	writeFixtureJSON(t, manifestPath, fixtureManifest(t, payloadPath, mode))
+	catalogPayload, err := os.ReadFile(filepath.Join("..", "mcpcatalog", "catalog.json"))
+	if err != nil {
+		t.Fatalf("read fixture MCP catalog: %v", err)
+	}
+	metadata := filepath.Join(root, "metadata")
+	if err := os.MkdirAll(metadata, 0o755); err != nil {
+		t.Fatalf("mkdir fixture metadata: %v", err)
+	}
+	catalogPath := filepath.Join(metadata, "mcp-catalog.json")
+	if err := os.WriteFile(catalogPath, catalogPayload, 0o644); err != nil {
+		t.Fatalf("write fixture MCP catalog: %v", err)
+	}
 	writeFixtureJSON(t, filepath.Join(root, "release.json"), map[string]any{
-		"schema_version": 1,
+		"schema_version": 2,
 		"kind":           "mainframe-release",
 		"release_id":     releaseID,
+		"mcp_catalog": map[string]any{
+			"path": "metadata/mcp-catalog.json", "sha256": fileDigest(t, catalogPath),
+		},
 		"manifests": []any{map[string]any{
 			"component": "codex",
 			"path":      "bundles/codex/bundle.json",

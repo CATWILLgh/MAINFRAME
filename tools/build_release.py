@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from bundle_sync import copy_regular_file, write_text_file
+from mcp_catalog_contract import CATALOG_RELEASE_PATH
 from release_contract import (
     validate_release,
     write_bundle_manifest,
@@ -169,9 +170,12 @@ def _build_staged(root: Path, staging: Path, release_id: str) -> None:
     cli = staging / "bin"
     _build_cli(root, cli)
     manifests.append(cli / "bundle.json")
+    mcp_catalog = staging / CATALOG_RELEASE_PATH
+    copy_regular_file(root / "internal/mcpcatalog/catalog.json", mcp_catalog)
     write_release_index(
         staging,
         release_id=release_id,
+        mcp_catalog=mcp_catalog,
         manifests=manifests,
     )
     validate_release(staging)

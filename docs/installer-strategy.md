@@ -148,6 +148,22 @@ requires a key. Shared local process hosting is a separate runtime concern;
 direct stdio remains the default until a gateway proves real multi-client
 multiplexing and safe lifecycle ownership.
 
+The first implemented catalog milestone is intentionally read-only. The
+release index verifies a separate bounded MCP catalog by path and SHA-256, and
+the TUI records a choice between environment selection and the final preview.
+It does not yet collect a key or publish adapter configuration. Context7's
+keyless remote profile is verified for Claude Code, Codex, OpenCode, and
+Antigravity 2.x. Its keyed remote profile is verified for Claude Code, Codex,
+and OpenCode; Antigravity 2.x is explicitly unsupported until a plaintext-free
+secret reference is proven. Optional GitHub stars are fetched asynchronously,
+kept only in memory, and discarded when stale or unavailable.
+
+The adapter capability boundary was verified on 2026-07-17 against the
+[Claude Code MCP contract](https://code.claude.com/docs/en/mcp),
+[Codex MCP contract](https://developers.openai.com/codex/mcp/),
+[OpenCode MCP contract](https://opencode.ai/docs/mcp-servers/), and
+[Antigravity MCP contract](https://antigravity.google/docs/mcp).
+
 Before execution, the immutable inspection can materialize a private prepared
 plan without writing. It preserves complete user JSON, composes non-overlapping
 resources sharing one physical file, and groups each configuration with its

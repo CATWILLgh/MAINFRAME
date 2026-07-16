@@ -20,6 +20,7 @@ from release_global import validate_global_contract, validate_local_target_isola
 from release_json import validate_owned_json_source, validate_shell_source
 from release_component_roots import validate_component_targets
 from release_external_state_contract import validate_external_state_units
+from mcp_catalog_contract import catalog_entry, validate_catalog_entry
 from release_contract_helpers import (
     location as _location,
     locations_overlap as _locations_overlap,
@@ -29,7 +30,8 @@ from release_contract_helpers import (
     sorted_unique_strings as _sorted_unique_strings,
     unique_identifier as _unique_identifier,
 )
-SCHEMA_VERSION = 1
+BUNDLE_SCHEMA_VERSION = 1
+RELEASE_SCHEMA_VERSION = 2
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
 BUNDLE_FIELDS = {
@@ -43,7 +45,7 @@ BUNDLE_FIELDS = {
     "payload_files",
     "runtime_profile",
 }
-INDEX_FIELDS = {"schema_version", "kind", "release_id", "manifests"}
+INDEX_FIELDS = {"schema_version", "kind", "release_id", "mcp_catalog", "manifests"}
 UNIT_REQUIRED_FIELDS = {"id", "kind", "source", "target"}
 UNIT_OPTIONAL_FIELDS = {"legacy_source_suffixes"}
 LEGACY_FIELDS = {"target", "target_suffixes"}
@@ -79,7 +81,7 @@ def write_bundle_manifest(
     """Validate bundle mappings and write their deterministic integrity manifest."""
     root = _real_directory(bundle_root, "bundle root")
     manifest = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": BUNDLE_SCHEMA_VERSION,
         "kind": BUNDLE_KIND,
         "component": component,
         "dependencies": sorted(dependencies),
@@ -117,6 +119,7 @@ def write_release_index(
     release_root: Path,
     *,
     release_id: str,
+    mcp_catalog: Path,
     manifests: list[Path],
 ) -> dict[str, Any]:
     """Write an index that references authoritative bundle manifests by digest."""
@@ -138,10 +141,12 @@ def write_release_index(
             }
         )
     entries.sort(key=lambda item: item["component"])
+    catalog = catalog_entry(root, mcp_catalog)
     index = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": RELEASE_SCHEMA_VERSION,
         "kind": RELEASE_KIND,
         "release_id": release_id,
+        "mcp_catalog": catalog,
         "manifests": entries,
     }
     _validate_release_document(root, index)
@@ -168,7 +173,10 @@ def validate_release(release_root: Path) -> dict[str, Any]:
 def _validate_bundle_document(root: Path, manifest: Any) -> None:
     _require_object(manifest, "bundle manifest")
     _require_fields(manifest, BUNDLE_FIELDS, BUNDLE_FIELDS, "bundle manifest")
-    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != SCHEMA_VERSION:
+    if (
+        type(manifest["schema_version"]) is not int
+        or manifest["schema_version"] != BUNDLE_SCHEMA_VERSION
+    ):
         raise ValueError("unsupported bundle schema version")
     if manifest["kind"] != BUNDLE_KIND:
         raise ValueError("invalid bundle kind")
@@ -346,10 +354,15 @@ def _validate_payload_rows(rows: Any) -> None:
 def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
     _require_object(index, "release index")
     _require_fields(index, INDEX_FIELDS, INDEX_FIELDS, "release index")
-    if type(index["schema_version"]) is not int or index["schema_version"] != SCHEMA_VERSION or index["kind"] != RELEASE_KIND:
+    if (
+        type(index["schema_version"]) is not int
+        or index["schema_version"] != RELEASE_SCHEMA_VERSION
+        or index["kind"] != RELEASE_KIND
+    ):
         raise ValueError("unsupported release contract")
     if not isinstance(index["release_id"], str) or not IDENTIFIER.fullmatch(index["release_id"]):
         raise ValueError("invalid release id")
+    catalog = validate_catalog_entry(root, index["mcp_catalog"])
     entries = index["manifests"]
     if not isinstance(entries, list) or not entries:
         raise ValueError("release manifests must be a non-empty list")
@@ -379,4 +392,6 @@ def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
         manifests.append(manifest)
     if components != sorted(set(components)):
         raise ValueError("release manifests must be sorted with unique components")
+    if catalog["path"] in {entry["path"] for entry in entries}:
+        raise ValueError("MCP catalog path overlaps a bundle manifest")
     return manifests

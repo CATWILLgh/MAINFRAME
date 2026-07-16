@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"context"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,10 +12,11 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
 func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
-	model := NewModel(&fakePreviewer{targets: []lifecycle.Target{
+	model := newTestModel(t, &fakePreviewer{targets: []lifecycle.Target{
 		{
 			ID: domain.ComponentClaudeCode, Status: lifecycle.StatusManaged, Selected: true,
 			Configuration: []lifecycle.ConfigurationResource{
@@ -80,7 +83,7 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 			}},
 		},
 	}
-	model := NewModel(previewer)
+	model := newTestModel(t, previewer)
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
 
 	updated, command := model.openPreview()
@@ -170,7 +173,7 @@ func TestConfigurationLabelsExplainEveryObservationReason(t *testing.T) {
 }
 
 func TestHuhSelectionUpdatesModelOwnedDesiredState(t *testing.T) {
-	model := NewModel(&fakePreviewer{targets: defaultTargets()})
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	model.Init()
 	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace, Text: " "}))
 	model = updated.(*Model)
@@ -182,7 +185,7 @@ func TestHuhSelectionUpdatesModelOwnedDesiredState(t *testing.T) {
 }
 
 func TestPreviewBackPreservesSelection(t *testing.T) {
-	model := NewModel(&fakePreviewer{targets: []lifecycle.Target{
+	model := newTestModel(t, &fakePreviewer{targets: []lifecycle.Target{
 		{ID: domain.ComponentClaudeCode, Status: lifecycle.StatusAbsent},
 		{ID: domain.ComponentCodex, Status: lifecycle.StatusAbsent},
 		{ID: domain.ComponentOpenCode, Status: lifecycle.StatusAbsent},
@@ -192,7 +195,7 @@ func TestPreviewBackPreservesSelection(t *testing.T) {
 
 	updatedModel, command := model.Update(keyPress("b"))
 	updated := updatedModel.(*Model)
-	if updated.screen != screenSelection {
+	if updated.screen != screenMCP {
 		t.Fatalf("screen = %v", updated.screen)
 	}
 	if !reflect.DeepEqual(updated.selected, model.selected) {
@@ -204,7 +207,7 @@ func TestPreviewBackPreservesSelection(t *testing.T) {
 }
 
 func TestEmptyPreviewExplainsThatFilesystemNeedsNoChanges(t *testing.T) {
-	model := NewModel(&fakePreviewer{targets: defaultTargets()})
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	updated, _ := model.openPreview()
 	if !strings.Contains(updated.View().Content, "No filesystem changes") {
 		t.Fatalf("empty preview is unexplained:\n%s", updated.View().Content)
@@ -212,7 +215,7 @@ func TestEmptyPreviewExplainsThatFilesystemNeedsNoChanges(t *testing.T) {
 }
 
 func TestPreviewErrorIsRenderedWithoutLeavingSelection(t *testing.T) {
-	model := NewModel(&fakePreviewer{
+	model := newTestModel(t, &fakePreviewer{
 		targets: []lifecycle.Target{
 			{ID: domain.ComponentClaudeCode, Status: lifecycle.StatusAbsent},
 			{ID: domain.ComponentCodex, Status: lifecycle.StatusAbsent},
@@ -235,7 +238,7 @@ func TestPreviewErrorIsRenderedWithoutLeavingSelection(t *testing.T) {
 
 func TestQuitKeysReturnAQuitCommand(t *testing.T) {
 	for _, key := range []string{"q", "ctrl+c"} {
-		model := NewModel(&fakePreviewer{targets: defaultTargets()})
+		model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 		_, command := model.Update(keyPress(key))
 		if command == nil {
 			t.Fatalf("key %q did not return a quit command", key)
@@ -244,18 +247,18 @@ func TestQuitKeysReturnAQuitCommand(t *testing.T) {
 }
 
 func TestEscapeAbortsSelectionButReturnsFromPreview(t *testing.T) {
-	selection := NewModel(&fakePreviewer{targets: defaultTargets()})
+	selection := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	selection.Init()
 	_, command := selection.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
 	if command == nil {
 		t.Fatal("escape did not abort selection")
 	}
 
-	preview := NewModel(&fakePreviewer{targets: defaultTargets()})
+	preview := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	preview.screen = screenPreview
 	updated, command := preview.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-	if updated.(*Model).screen != screenSelection || command == nil {
-		t.Fatal("escape did not return from preview to selection")
+	if updated.(*Model).screen != screenMCP || command == nil {
+		t.Fatal("escape did not return from preview to MCP onboarding")
 	}
 }
 
@@ -264,6 +267,7 @@ type fakePreviewer struct {
 	preview  lifecycle.Preview
 	err      error
 	selected []domain.ComponentID
+	calls    int
 }
 
 func (fake *fakePreviewer) Targets() []lifecycle.Target {
@@ -271,8 +275,38 @@ func (fake *fakePreviewer) Targets() []lifecycle.Target {
 }
 
 func (fake *fakePreviewer) Preview(selected []domain.ComponentID) (lifecycle.Preview, error) {
+	fake.calls++
 	fake.selected = append([]domain.ComponentID(nil), selected...)
 	return fake.preview, fake.err
+}
+
+type fakeStatsSource struct {
+	stats mcpcatalog.RepositoryStats
+	err   error
+}
+
+func (fake fakeStatsSource) Stats(
+	context.Context,
+	mcpcatalog.Repository,
+) (mcpcatalog.RepositoryStats, error) {
+	return fake.stats, fake.err
+}
+
+func newTestModel(t *testing.T, previewer Previewer) *Model {
+	return NewModel(previewer, testCatalog(t), nil)
+}
+
+func testCatalog(t *testing.T) mcpcatalog.Catalog {
+	t.Helper()
+	payload, err := os.ReadFile("../mcpcatalog/catalog.json")
+	if err != nil {
+		t.Fatalf("read MCP catalog: %v", err)
+	}
+	catalog, err := mcpcatalog.Parse(payload)
+	if err != nil {
+		t.Fatalf("parse MCP catalog: %v", err)
+	}
+	return catalog
 }
 
 func defaultTargets() []lifecycle.Target {

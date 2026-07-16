@@ -5,11 +5,19 @@ import (
 	"io"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
-func Run(input io.Reader, output io.Writer, previewer Previewer) error {
+func Run(
+	input io.Reader,
+	output io.Writer,
+	previewer Previewer,
+	catalog mcpcatalog.Catalog,
+	stats mcpcatalog.StatsSource,
+) error {
 	program := tea.NewProgram(
-		NewModel(previewer),
+		NewModel(previewer, catalog, stats),
 		tea.WithInput(input),
 		tea.WithOutput(output),
 	)

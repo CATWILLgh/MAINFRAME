@@ -10,6 +10,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
 type Previewer interface {
@@ -21,17 +22,24 @@ type screen uint8
 
 const (
 	screenSelection screen = iota
+	screenMCP
 	screenPreview
 )
 
 type Model struct {
-	previewer Previewer
-	targets   []lifecycle.Target
-	selected  []domain.ComponentID
-	form      *huh.Form
-	screen    screen
-	preview   lifecycle.Preview
-	err       error
+	previewer       Previewer
+	catalog         mcpcatalog.Catalog
+	stats           mcpcatalog.StatsSource
+	targets         []lifecycle.Target
+	selected        []domain.ComponentID
+	form            *huh.Form
+	screen          screen
+	preview         lifecycle.Preview
+	mcpPreview      mcpcatalog.OnboardingPreview
+	mcpChoices      map[mcpcatalog.ServerID]*mcpChoice
+	repositoryStats map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
+	statsGeneration uint64
+	err             error
 }
 
 var (
@@ -48,7 +56,11 @@ var (
 	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B8A"))
 )
 
-func NewModel(previewer Previewer) *Model {
+func NewModel(
+	previewer Previewer,
+	catalog mcpcatalog.Catalog,
+	stats mcpcatalog.StatsSource,
+) *Model {
 	targets := previewer.Targets()
 	selected := make([]domain.ComponentID, 0, len(targets))
 	for _, target := range targets {
@@ -57,9 +69,13 @@ func NewModel(previewer Previewer) *Model {
 		}
 	}
 	model := &Model{
-		previewer: previewer,
-		targets:   targets,
-		selected:  selected,
+		previewer:       previewer,
+		catalog:         catalog,
+		stats:           stats,
+		targets:         targets,
+		selected:        selected,
+		mcpChoices:      make(map[mcpcatalog.ServerID]*mcpChoice),
+		repositoryStats: make(map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats),
 	}
 	model.form = selectionForm(targets, &model.selected)
 	return model
@@ -70,18 +86,28 @@ func (model *Model) Init() tea.Cmd {
 }
 
 func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	if stats, ok := message.(repositoryStatsMsg); ok {
+		return model.applyRepositoryStats(stats)
+	}
 	if key, ok := message.(tea.KeyPressMsg); ok {
 		switch key.String() {
 		case "q", "ctrl+c":
 			return model, tea.Quit
 		case "esc":
-			if model.screen == screenSelection {
+			switch model.screen {
+			case screenSelection:
 				return model, tea.Quit
-			}
-			return model.backToSelection()
-		case "b":
-			if model.screen == screenPreview {
+			case screenMCP:
 				return model.backToSelection()
+			default:
+				return model.openMCP()
+			}
+		case "b":
+			if model.screen == screenMCP {
+				return model.backToSelection()
+			}
+			if model.screen == screenPreview {
+				return model.openMCP()
 			}
 		}
 	}
@@ -94,6 +120,9 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, tea.Quit
 	}
 	if model.form.State == huh.StateCompleted {
+		if model.screen == screenSelection {
+			return model.openMCP()
+		}
 		return model.openPreview()
 	}
 	return model, command
@@ -101,7 +130,9 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (model *Model) View() tea.View {
 	content := model.selectionView()
-	if model.screen == screenPreview {
+	if model.screen == screenMCP {
+		content = model.mcpView()
+	} else if model.screen == screenPreview {
 		content = model.previewView()
 	}
 	view := tea.NewView(content)
@@ -111,14 +142,19 @@ func (model *Model) View() tea.View {
 }
 
 func (model *Model) openPreview() (*Model, tea.Cmd) {
+	mcpPreview, err := model.catalog.Preview(model.selected, model.mcpSelections())
+	if err != nil {
+		model.err = err
+		return model.reinitializeCurrentForm()
+	}
 	result, err := model.previewer.Preview(model.selected)
 	if err != nil {
 		model.err = err
-		model.form = selectionForm(model.targets, &model.selected)
-		return model, model.form.Init()
+		return model.reinitializeCurrentForm()
 	}
 	model.err = nil
 	model.preview = result
+	model.mcpPreview = mcpPreview
 	model.screen = screenPreview
 	return model, nil
 }
@@ -126,6 +162,7 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 func (model *Model) backToSelection() (*Model, tea.Cmd) {
 	model.screen = screenSelection
 	model.preview = lifecycle.Preview{}
+	model.mcpPreview = mcpcatalog.OnboardingPreview{}
 	model.err = nil
 	model.form = selectionForm(model.targets, &model.selected)
 	return model, model.form.Init()
@@ -140,7 +177,7 @@ func (model *Model) selectionView() string {
 	if model.err != nil {
 		sections = append(sections, errorStyle.Render(model.err.Error()))
 	}
-	sections = append(sections, mutedStyle.Render("space toggle  •  enter preview  •  q quit"))
+	sections = append(sections, mutedStyle.Render("space toggle  •  enter next  •  q quit"))
 	return strings.Join(sections, "\n\n")
 }
 
@@ -167,6 +204,7 @@ func (model *Model) previewView() string {
 		sections = append(sections, mutedStyle.Render("No filesystem changes."))
 	}
 	sections = append(sections, renderConfigurationPlan(model.preview.Configuration))
+	sections = append(sections, renderMCPPreview(model.mcpPreview))
 	sections = append(sections, mutedStyle.Render("b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
 }

@@ -24,6 +24,8 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
     build_release.build(REPO, output, release_id="test-release")
 
     index = release_contract.validate_release(output)
+    assert index["schema_version"] == 2
+    assert index["mcp_catalog"]["path"] == "metadata/mcp-catalog.json"
     assert [entry["component"] for entry in index["manifests"]] == [
         "antigravity-2",
         "claude-code",
@@ -40,6 +42,7 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
     assert (output / "bundles/claude-code/bundle.json").is_file()
     assert (output / "bundles/codex/bundle.json").is_file()
     assert (output / "bundles/opencode/bundle.json").is_file()
+    assert (output / "metadata/mcp-catalog.json").is_file()
 
     manifests = [
         release_contract.validate_bundle((output / entry["path"]).parent)

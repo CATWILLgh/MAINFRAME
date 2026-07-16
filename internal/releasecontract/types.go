@@ -3,9 +3,14 @@ package releasecontract
 import (
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
-const schemaVersion = 1
+const (
+	bundleSchemaVersion  = 1
+	releaseSchemaVersion = 2
+	mcpCatalogPath       = "metadata/mcp-catalog.json"
+)
 
 const (
 	bundleKind  = "mainframe-bundle"
@@ -88,13 +93,20 @@ type Release struct {
 	IndexSHA256 string
 	Model       installmodel.Model
 	Resources   []Resource
+	MCPCatalog  mcpcatalog.Catalog
 }
 
 type releaseIndex struct {
 	SchemaVersion int             `json:"schema_version"`
 	Kind          string          `json:"kind"`
 	ReleaseID     string          `json:"release_id"`
+	MCPCatalog    catalogEntry    `json:"mcp_catalog"`
 	Manifests     []manifestEntry `json:"manifests"`
+}
+
+type catalogEntry struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
 }
 
 type manifestEntry struct {

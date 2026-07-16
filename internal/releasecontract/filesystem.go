@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -37,6 +38,10 @@ func canonicalRoot(root string) (string, error) {
 }
 
 func readRegular(root, relative string) ([]byte, error) {
+	return readRegularBounded(root, relative, 0)
+}
+
+func readRegularBounded(root, relative string, maximum int64) ([]byte, error) {
 	path, err := safePath(root, relative)
 	if err != nil {
 		return nil, err
@@ -48,7 +53,25 @@ func readRegular(root, relative string) ([]byte, error) {
 	if info.Mode()&fs.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s must be a regular file", relative)
 	}
-	return os.ReadFile(path)
+	if maximum > 0 && info.Size() > maximum {
+		return nil, fmt.Errorf("%s exceeds %d bytes", relative, maximum)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	if maximum == 0 {
+		return io.ReadAll(file)
+	}
+	payload, err := io.ReadAll(io.LimitReader(file, maximum+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(payload)) > maximum {
+		return nil, fmt.Errorf("%s exceeds %d bytes", relative, maximum)
+	}
+	return payload, nil
 }
 
 func safePath(root, relative string) (string, error) {
@@ -158,6 +181,7 @@ func expectedReleaseTree(
 	manifests []bundleManifest,
 ) map[string]bool {
 	expected := map[string]bool{"release.json": false}
+	addExpectedFile(expected, index.MCPCatalog.Path)
 	for position, entry := range index.Manifests {
 		addExpectedFile(expected, entry.Path)
 		base := path.Dir(entry.Path)

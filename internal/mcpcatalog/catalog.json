@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "kind": "mainframe-mcp-catalog",
+  "servers": [
+    {
+      "id": "context7",
+      "name": "Context7",
+      "summary": "Current, version-specific library documentation for coding agents.",
+      "publisher": "Upstash",
+      "homepage_url": "https://context7.com",
+      "documentation_url": "https://context7.com/docs/resources/all-clients",
+      "repository": {
+        "owner": "upstash",
+        "name": "context7",
+        "url": "https://github.com/upstash/context7"
+      },
+      "license": "MIT",
+      "profiles": [
+        {
+          "id": "remote-api-key",
+          "name": "Remote with API key",
+          "transport": "streamable-http",
+          "endpoint": "https://mcp.context7.com/mcp",
+          "authentication": {
+            "kind": "api-key",
+            "placement": "header",
+            "environment_variable": "CONTEXT7_API_KEY"
+          },
+          "compatibility": [
+            {
+              "adapter": "antigravity-2",
+              "status": "unsupported",
+              "reason": "A plaintext-free secret reference is not verified for Antigravity 2.x."
+            },
+            {
+              "adapter": "claude-code",
+              "status": "supported",
+              "reason": ""
+            },
+            {
+              "adapter": "codex",
+              "status": "supported",
+              "reason": ""
+            },
+            {
+              "adapter": "opencode",
+              "status": "supported",
+              "reason": ""
+            }
+          ],
+          "evidence": {
+            "url": "https://github.com/upstash/context7#installation",
+            "verified_on": "2026-07-17"
+          }
+        },
+        {
+          "id": "remote-keyless",
+          "name": "Remote without API key",
+          "transport": "streamable-http",
+          "endpoint": "https://mcp.context7.com/mcp",
+          "authentication": {
+            "kind": "none",
+            "placement": "none",
+            "environment_variable": ""
+          },
+          "compatibility": [
+            {
+              "adapter": "antigravity-2",
+              "status": "supported",
+              "reason": ""
+            },
+            {
+              "adapter": "claude-code",
+              "status": "supported",
+              "reason": ""
+            },
+            {
+              "adapter": "codex",
+              "status": "supported",
+              "reason": ""
+            },
+            {
+              "adapter": "opencode",
+              "status": "supported",
+              "reason": ""
+            }
+          ],
+          "evidence": {
+            "url": "https://github.com/upstash/context7#installation",
+            "verified_on": "2026-07-17"
+          }
+        }
+      ]
+    }
+  ]
+}

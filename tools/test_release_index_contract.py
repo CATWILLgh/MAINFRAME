@@ -11,10 +11,18 @@ from pathlib import Path
 
 
 TOOLS = Path(__file__).resolve().parent
+REPO = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 
 import release_contract
 from release_graph import reject_dependency_cycles
+
+
+def _mcp_catalog(root: Path) -> Path:
+    target = root / "metadata/mcp-catalog.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes((REPO / "internal/mcpcatalog/catalog.json").read_bytes())
+    return target
 
 
 
@@ -66,12 +74,15 @@ def test_release_index_references_authoritative_manifests_by_digest():
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[alpha / "bundle.json", beta / "bundle.json"],
     )
 
     release = release_contract.validate_release(root)
 
     assert release["release_id"] == "test-release"
+    assert release["schema_version"] == 2
+    assert set(release["mcp_catalog"]) == {"path", "sha256"}
     assert [entry["component"] for entry in release["manifests"]] == [
         "claude-code",
         "codex",
@@ -110,6 +121,7 @@ def test_release_validation_decodes_the_exact_indexed_manifest():
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[manifest_path],
     )
     index_path = root / "release.json"
@@ -126,6 +138,36 @@ def test_release_validation_decodes_the_exact_indexed_manifest():
         raise AssertionError("non-manifest indexed file was accepted")
 
 
+def test_release_validation_rejects_tampered_and_oversized_mcp_catalog():
+    root = Path(tempfile.mkdtemp())
+    bundle = _bundle(root, "claude-code", "claude-config")
+    catalog = _mcp_catalog(root)
+    release_contract.write_release_index(
+        root,
+        release_id="test-release",
+        mcp_catalog=catalog,
+        manifests=[bundle / "bundle.json"],
+    )
+    catalog.write_text(catalog.read_text() + "\n")
+    try:
+        release_contract.validate_release(root)
+    except ValueError as exc:
+        assert "catalog digest" in str(exc)
+    else:
+        raise AssertionError("tampered MCP catalog was accepted")
+
+    catalog.write_text(" " * ((1 << 20) + 1))
+    index = json.loads((root / "release.json").read_text())
+    index["mcp_catalog"]["sha256"] = release_contract._digest(catalog)
+    (root / "release.json").write_text(json.dumps(index, indent=2) + "\n")
+    try:
+        release_contract.validate_release(root)
+    except ValueError as exc:
+        assert "exceeds" in str(exc)
+    else:
+        raise AssertionError("oversized MCP catalog was accepted")
+
+
 def test_release_validation_requires_dependency_closure_and_global_target_isolation():
     root = Path(tempfile.mkdtemp())
     alpha = _bundle(root, "credential-tools", "user-bin")
@@ -136,6 +178,7 @@ def test_release_validation_requires_dependency_closure_and_global_target_isolat
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[alpha / "bundle.json", beta / "bundle.json"],
     )
     try:
@@ -150,6 +193,7 @@ def test_release_validation_requires_dependency_closure_and_global_target_isolat
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[alpha / "bundle.json", beta / "bundle.json"],
     )
     try:
@@ -178,6 +222,7 @@ def test_release_validation_rejects_cross_bundle_legacy_target_collision():
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[alpha / "bundle.json", beta / "bundle.json"],
     )
 
@@ -200,6 +245,7 @@ def test_release_validation_rejects_cross_runtime_dependency():
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[alpha / "bundle.json", beta / "bundle.json"],
     )
 
@@ -233,6 +279,7 @@ def test_release_index_rejects_manifest_beneath_symlinked_ancestor():
         release_contract.write_release_index(
             root,
             release_id="test-release",
+            mcp_catalog=_mcp_catalog(root),
             manifests=[redirected],
         )
     except ValueError as exc:

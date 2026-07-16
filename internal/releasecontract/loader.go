@@ -8,7 +8,10 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
+
+const maxMCPCatalogBytes int64 = 1 << 20
 
 func Load(root string) (Release, error) {
 	canonical, err := canonicalRoot(root)
@@ -25,6 +28,17 @@ func Load(root string) (Release, error) {
 	}
 	if err := validateIndex(index); err != nil {
 		return Release{}, err
+	}
+	catalogPayload, err := readRegularBounded(canonical, index.MCPCatalog.Path, maxMCPCatalogBytes)
+	if err != nil {
+		return Release{}, fmt.Errorf("read MCP catalog: %w", err)
+	}
+	if digestBytes(catalogPayload) != index.MCPCatalog.SHA256 {
+		return Release{}, fmt.Errorf("MCP catalog digest mismatch")
+	}
+	catalog, err := mcpcatalog.Parse(catalogPayload)
+	if err != nil {
+		return Release{}, fmt.Errorf("decode MCP catalog: %w", err)
 	}
 	components := make([]installmodel.ComponentSpec, 0, len(index.Manifests))
 	resources := make([]Resource, 0)
@@ -54,6 +68,7 @@ func Load(root string) (Release, error) {
 		IndexSHA256: digestBytes(indexPayload),
 		Model:       model,
 		Resources:   resources,
+		MCPCatalog:  catalog,
 	}, nil
 }
 

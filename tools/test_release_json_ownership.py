@@ -10,9 +10,17 @@ from pathlib import Path
 
 
 TOOLS = Path(__file__).resolve().parent
+REPO = TOOLS.parent
 sys.path.insert(0, str(TOOLS))
 
 import release_contract
+
+
+def _mcp_catalog(root: Path) -> Path:
+    target = root / "metadata/mcp-catalog.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes((REPO / "internal/mcpcatalog/catalog.json").read_bytes())
+    return target
 
 
 def _json_resource(
@@ -111,6 +119,7 @@ def test_release_validation_rejects_overlapping_owned_json_pointers():
         release_contract.write_release_index(
             root,
             release_id="test-release",
+            mcp_catalog=_mcp_catalog(root),
             manifests=[alpha / "bundle.json", beta / "bundle.json"],
         )
         try:
@@ -126,6 +135,7 @@ def test_release_validation_rejects_overlapping_owned_json_pointers():
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[alpha / "bundle.json", beta / "bundle.json"],
     )
     release_contract.validate_release(root)
@@ -139,6 +149,7 @@ def test_release_validation_bounds_aggregate_owned_pointers_per_target():
         release_contract.write_release_index(
             root,
             release_id="test-release",
+            mcp_catalog=_mcp_catalog(root),
             manifests=[alpha / "bundle.json", beta / "bundle.json"],
         )
         try:
@@ -186,6 +197,7 @@ def test_release_validation_isolates_json_resource_and_install_targets():
         release_contract.write_release_index(
             root,
             release_id="test-release",
+            mcp_catalog=_mcp_catalog(root),
             manifests=[bundle / "bundle.json"],
         )
         try:
@@ -231,6 +243,7 @@ def test_release_validation_rejects_structurally_incompatible_json_resources():
         release_contract.write_release_index(
             root,
             release_id="test-release",
+            mcp_catalog=_mcp_catalog(root),
             manifests=[bundle / "bundle.json"],
         )
         try:
@@ -267,6 +280,7 @@ def test_release_validation_allows_directory_resource_above_json_target():
     release_contract.write_release_index(
         root,
         release_id="test-release",
+        mcp_catalog=_mcp_catalog(root),
         manifests=[bundle / "bundle.json"],
     )
     release_contract.validate_release(root)
@@ -295,6 +309,7 @@ def test_release_validation_reserves_ownership_registry_and_map_pointer():
         release_contract.write_release_index(
             root,
             release_id="test-release",
+            mcp_catalog=_mcp_catalog(root),
             manifests=[bundle / "bundle.json"],
         )
         release_contract.validate_release(root)
@@ -318,6 +333,7 @@ def test_release_validation_reserves_ownership_registry_and_map_pointer():
         release_contract.write_release_index(
             root,
             release_id="test-release",
+            mcp_catalog=_mcp_catalog(root),
             manifests=[bundle / "bundle.json"],
         )
         release_contract.validate_release(root)

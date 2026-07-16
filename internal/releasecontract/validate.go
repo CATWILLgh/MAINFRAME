@@ -39,11 +39,18 @@ var componentDependencies = map[domain.ComponentID]map[domain.ComponentID]struct
 }
 
 func validateIndex(index releaseIndex) error {
-	if index.SchemaVersion != schemaVersion || index.Kind != releaseKind {
+	if index.SchemaVersion != releaseSchemaVersion || index.Kind != releaseKind {
 		return fmt.Errorf("unsupported release contract")
 	}
 	if !componentPattern.MatchString(index.ReleaseID) || len(index.Manifests) == 0 {
 		return fmt.Errorf("invalid release identity")
+	}
+	if index.MCPCatalog.Path != mcpCatalogPath {
+		return fmt.Errorf("MCP catalog must use reserved release path %q", mcpCatalogPath)
+	}
+	if !domain.ArtifactPath(index.MCPCatalog.Path).Portable() ||
+		!digestPattern.MatchString(index.MCPCatalog.SHA256) {
+		return fmt.Errorf("invalid MCP catalog entry")
 	}
 	components := make([]string, len(index.Manifests))
 	for position, entry := range index.Manifests {
@@ -65,7 +72,7 @@ func validateBundle(
 	manifest bundleManifest,
 ) (installmodel.ComponentSpec, []Resource, error) {
 	component := domain.ComponentID(manifest.Component)
-	if manifest.SchemaVersion != schemaVersion || manifest.Kind != bundleKind ||
+	if manifest.SchemaVersion != bundleSchemaVersion || manifest.Kind != bundleKind ||
 		!componentPattern.MatchString(manifest.Component) || !manifestCollectionsPresent(manifest) {
 		return installmodel.ComponentSpec{}, nil, fmt.Errorf("invalid bundle identity")
 	}

@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
@@ -13,40 +15,56 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 	"github.com/CATWILLgh/MAINFRAME/internal/releaselayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/tui"
 )
 
 const releaseRootEnvironment = "MAINFRAME_RELEASE_ROOT"
+const repositoryStatsHTTPTimeout = 4 * time.Second
 
 func runInteractivePreview(input io.Reader, output io.Writer) error {
-	service, err := buildPreviewService()
+	service, catalog, err := buildPreviewRuntime()
 	if err != nil {
 		return err
 	}
-	return tui.Run(input, output, &service)
+	stats, err := mcpcatalog.NewGitHubStatsClient(
+		&http.Client{Timeout: repositoryStatsHTTPTimeout},
+		mcpcatalog.GitHubAPIBaseURL,
+		time.Now,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare repository metadata: %w", err)
+	}
+	return tui.Run(input, output, &service, catalog, stats)
 }
 
 func buildPreviewService() (lifecycle.Service, error) {
+	service, _, err := buildPreviewRuntime()
+	return service, err
+}
+
+func buildPreviewRuntime() (lifecycle.Service, mcpcatalog.Catalog, error) {
 	releaseRoot, err := resolveReleaseRoot()
 	if err != nil {
-		return lifecycle.Service{}, err
+		return lifecycle.Service{}, mcpcatalog.Catalog{}, err
 	}
 	release, err := releasecontract.Load(releaseRoot)
 	if err != nil {
-		return lifecycle.Service{}, fmt.Errorf("load release: %w", err)
+		return lifecycle.Service{}, mcpcatalog.Catalog{}, fmt.Errorf("load release: %w", err)
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return lifecycle.Service{}, fmt.Errorf("resolve working directory: %w", err)
+		return lifecycle.Service{}, mcpcatalog.Catalog{}, fmt.Errorf("resolve working directory: %w", err)
 	}
-	return buildPreviewServiceFromContext(
+	service, err := buildPreviewServiceFromContext(
 		releaseRoot,
 		release,
 		cwd,
 		codexstate.NewAppServerClient(),
 	)
+	return service, release.MCPCatalog, err
 }
 
 func buildPreviewServiceFrom(
