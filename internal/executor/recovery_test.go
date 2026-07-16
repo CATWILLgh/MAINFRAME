@@ -131,7 +131,7 @@ func TestRecoverRejectsInvalidAndOverlappingJournalLocations(t *testing.T) {
 
 			_, err := fixture.executor().Recover()
 
-			if err == nil || !strings.Contains(err.Error(), "validate transaction journal") {
+			if err == nil || !strings.Contains(err.Error(), "validate") {
 				t.Fatalf("expected validation error, got %v", err)
 			}
 			if fixture.workspace.filesystemCalls() != 0 || fixture.store.cleanupCalls != 0 {
@@ -154,6 +154,12 @@ func invalidJournalCases() []struct {
 		{name: "invalid digest", mutate: func(journal *Journal) { journal.Release.IndexSHA256 = "ABC" }},
 		{name: "duplicate desired", mutate: func(journal *Journal) {
 			journal.Desired = []domain.ComponentID{"codex", "codex"}
+		}},
+		{name: "changed root anchor", mutate: func(journal *Journal) {
+			journal.Roots[0].AnchorPath = "/tmp"
+		}},
+		{name: "changed root path", mutate: func(journal *Journal) {
+			journal.Roots[0].RootPath = ".other"
 		}},
 		{name: "invalid path", mutate: func(journal *Journal) { journal.Steps[0].Location.Path = "../escape" }},
 		{name: "invalid raw target", mutate: func(journal *Journal) { journal.Steps[0].After.RawTarget = "bad\nlink" }},
@@ -190,10 +196,30 @@ func invalidJournalCases() []struct {
 }
 
 func journalWith(status TransactionStatus, steps ...JournalMutation) *Journal {
+	operations := make([]domain.Operation, 0, len(steps))
+	roots := make([]RootSnapshot, 0, 1)
+	if len(steps) > 0 {
+		roots = append(roots, RootSnapshot{
+			Root:           domain.RootCodexConfig,
+			AnchorPath:     "/home/user",
+			AnchorIdentity: FileIdentity{Device: 1, Inode: 1},
+			RootPath:       ".codex-config",
+		})
+	}
+	for _, step := range steps {
+		operations = append(operations, domain.Operation{
+			ComponentID: "codex",
+			Kind:        domain.OperationInstall,
+			Artifact:    domain.Artifact{Location: step.Location},
+			SourcePath:  step.SourcePath,
+		})
+	}
 	return &Journal{
 		Release: ReleaseIdentity{ID: "release", IndexSHA256: testDigest("digest")},
 		Desired: []domain.ComponentID{"codex"},
 		Status:  status,
+		Plan:    domain.Plan{Operations: operations},
+		Roots:   roots,
 		Steps:   append([]JournalMutation(nil), steps...),
 	}
 }
@@ -207,7 +233,7 @@ func installJournalStep(path domain.ArtifactPath, phase StepPhase) JournalMutati
 		After:      LinkImage{Exists: true, RawTarget: "source/" + string(path)},
 		Parent:     FileIdentity{Device: 1, Inode: 1},
 		Private: PrivateDirectory{
-			Name:     ".mainframe-00000000000000000000000000000001",
+			Name:     ".mainframe-" + testDigest(string(path))[:32],
 			Identity: FileIdentity{Device: 1, Inode: 10},
 		},
 		StagedName: "staged",

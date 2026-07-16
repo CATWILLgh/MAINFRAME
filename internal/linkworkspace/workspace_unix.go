@@ -19,7 +19,7 @@ const privateNamePrefix = ".mainframe-"
 
 type Workspace struct {
 	source  pinnedRoot
-	targets map[domain.RootID]pinnedRoot
+	targets map[domain.RootID]managedRoot
 }
 
 func New(source string, targets map[domain.RootID]string) (Workspace, error) {
@@ -27,12 +27,12 @@ func New(source string, targets map[domain.RootID]string) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, fmt.Errorf("pin source root: %w", err)
 	}
-	pinnedTargets := make(map[domain.RootID]pinnedRoot, len(targets))
+	pinnedTargets := make(map[domain.RootID]managedRoot, len(targets))
 	for id, target := range targets {
 		if !id.Valid() {
 			return Workspace{}, fmt.Errorf("invalid target root %q", id)
 		}
-		root, pinErr := pinRoot(target)
+		root, pinErr := pinManagedRoot(target)
 		if pinErr != nil {
 			return Workspace{}, fmt.Errorf("pin target root %q: %w", id, pinErr)
 		}

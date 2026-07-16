@@ -68,20 +68,51 @@ func validateJournal(journal Journal) error {
 	if err := validateDesired(journal.Desired); err != nil {
 		return err
 	}
+	if err := validateOperations(journal.Plan.Operations); err != nil {
+		return fmt.Errorf("invalid journal plan: %w", err)
+	}
 	if journal.Status != TransactionInProgress && journal.Status != TransactionCommitted {
 		return fmt.Errorf("invalid transaction status %q", journal.Status)
 	}
+	if err := validateJournalDirectories(journal); err != nil {
+		return err
+	}
+	if len(journal.Steps) > len(journal.Plan.Operations) ||
+		(journal.Status == TransactionCommitted &&
+			len(journal.Steps) != len(journal.Plan.Operations)) {
+		return fmt.Errorf("journal steps do not match the saved plan")
+	}
 	locations := make([]domain.Location, 0, len(journal.Steps))
+	privateNames := make(map[string]bool)
+	for _, directory := range journal.Directories {
+		privateNames[directory.PrivateName] = true
+	}
 	for index, step := range journal.Steps {
 		if err := validateJournalStep(step); err != nil {
 			return fmt.Errorf("invalid step %d: %w", index, err)
 		}
+		if !stepMatchesOperation(step, journal.Plan.Operations[index]) {
+			return fmt.Errorf("step %d does not match the saved plan", index)
+		}
+		if privateNames[step.Private.Name] {
+			return fmt.Errorf("duplicate private name %q", step.Private.Name)
+		}
+		privateNames[step.Private.Name] = true
 		if journal.Status == TransactionCommitted && step.Phase != StepPublished {
 			return fmt.Errorf("committed transaction has non-applied step %d", index)
 		}
 		locations = append(locations, step.Location)
 	}
 	return validateDistinctLocations(locations)
+}
+
+func stepMatchesOperation(step JournalMutation, operation domain.Operation) bool {
+	if step.Location != operation.Artifact.Location ||
+		step.SourcePath != operation.SourcePath {
+		return false
+	}
+	return operation.Kind == domain.OperationInstall && step.Kind == MutationInstall ||
+		operation.Kind == domain.OperationRemove && step.Kind == MutationRemove
 }
 
 func validRelease(release ReleaseIdentity) bool {

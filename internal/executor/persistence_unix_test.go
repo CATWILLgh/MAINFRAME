@@ -130,7 +130,8 @@ func TestUnixJournalStoreRejectsUntrustedJSON(t *testing.T) {
 	state := openTestState(t, root)
 	defer state.Close()
 	valid := `{"release":{"id":"release","index_sha256":"` + testDigest("digest") +
-		`"},"desired":["codex"],"status":"in_progress","steps":[]}`
+		`"},"desired":["codex"],"status":"in_progress","plan":{"operations":[]},` +
+		`"roots":[],"directories":[],"steps":[]}`
 	tests := []struct {
 		name    string
 		payload string

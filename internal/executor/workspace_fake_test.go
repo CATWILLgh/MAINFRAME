@@ -10,6 +10,10 @@ import (
 type fakeWorkspace struct {
 	links                map[domain.Location]LinkState
 	private              map[string]*fakePrivateDirectory
+	directoryPlan        *DirectoryPlan
+	directories          map[DirectoryTarget]DirectoryState
+	privateDirectories   map[string]FileIdentity
+	directoryCalls       []string
 	store                *fakeStore
 	writes               []string
 	inspectErr           error
@@ -29,6 +33,11 @@ type fakeWorkspace struct {
 	nextInode            uint64
 	nextName             uint64
 	publishSaveCount     int
+	directoryInspectSave int
+	directoryStageSave   int
+	directoryPublishSave int
+	linkInspectDirCalls  int
+	linkRollbackDirCalls int
 }
 
 type fakePrivateDirectory struct {
@@ -39,6 +48,7 @@ type fakePrivateDirectory struct {
 
 func (workspace *fakeWorkspace) Inspect(location domain.Location) (LinkState, error) {
 	workspace.inspectCalls++
+	workspace.linkInspectDirCalls = len(workspace.directoryCalls)
 	if workspace.inspectErr != nil {
 		return LinkState{}, workspace.inspectErr
 	}
@@ -169,6 +179,7 @@ func (workspace *fakeWorkspace) PublishRemove(mutation WorkspaceMutation) (LinkS
 }
 
 func (workspace *fakeWorkspace) Rollback(mutation WorkspaceMutation) error {
+	workspace.linkRollbackDirCalls = len(workspace.directoryCalls)
 	entry, err := workspace.privateEntry(mutation)
 	if err != nil {
 		return err
@@ -300,5 +311,6 @@ func (workspace *fakeWorkspace) writeCount() int {
 
 func (workspace *fakeWorkspace) filesystemCalls() int {
 	return workspace.inspectCalls + workspace.prepareCalls + workspace.stageCalls +
-		workspace.publishCalls + workspace.finalizeCalls + workspace.finalizePrivateCalls
+		workspace.publishCalls + workspace.finalizeCalls + workspace.finalizePrivateCalls +
+		len(workspace.directoryCalls)
 }

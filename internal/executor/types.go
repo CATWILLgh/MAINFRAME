@@ -40,7 +40,13 @@ type Refresher interface {
 type LinkWorkspace interface {
 	Inspect(domain.Location) (LinkState, error)
 	ResolveSource(domain.ArtifactPath) (string, error)
+	PlanDirectories(domain.Plan) (DirectoryPlan, error)
 	AllocatePrivateName() (string, error)
+	InspectDirectory(DirectoryMutation) (DirectoryState, error)
+	StageDirectory(DirectoryMutation) (FileIdentity, error)
+	PublishDirectory(DirectoryMutation) (DirectoryState, error)
+	RollbackDirectory(DirectoryMutation) error
+	FinalizeDirectory(DirectoryMutation) error
 	PreparePrivate(WorkspaceMutation) (FileIdentity, error)
 	StageInstall(WorkspaceMutation) (FileIdentity, error)
 	PublishInstall(WorkspaceMutation) (LinkState, error)
@@ -54,6 +60,8 @@ type FileIdentity struct {
 	Device uint64 `json:"device"`
 	Inode  uint64 `json:"inode"`
 }
+
+const ManagedDirectoryMode uint32 = 0o700
 
 type LinkImage struct {
 	Exists    bool         `json:"exists"`
@@ -71,6 +79,35 @@ type LinkState struct {
 type PrivateDirectory struct {
 	Name     string       `json:"name"`
 	Identity FileIdentity `json:"identity"`
+}
+
+type RootSnapshot struct {
+	Root           domain.RootID `json:"root"`
+	AnchorPath     string        `json:"anchor_path"`
+	AnchorIdentity FileIdentity  `json:"anchor_identity"`
+	RootPath       string        `json:"root_path"`
+}
+
+type DirectoryTarget struct {
+	Root domain.RootID `json:"root"`
+	Path string        `json:"path"`
+}
+
+type DirectoryRequirement struct {
+	Target DirectoryTarget `json:"target"`
+	Mode   uint32          `json:"mode"`
+}
+
+type DirectoryPlan struct {
+	Roots   []RootSnapshot
+	Missing []DirectoryRequirement
+}
+
+type DirectoryState struct {
+	Exists bool
+	Parent FileIdentity
+	Entry  FileIdentity
+	Mode   uint32
 }
 
 type MutationKind string
@@ -111,6 +148,26 @@ type JournalMutation struct {
 	Finalized      bool                `json:"finalized"`
 }
 
+type JournalDirectory struct {
+	Target      DirectoryTarget `json:"target"`
+	Mode        uint32          `json:"mode"`
+	Parent      FileIdentity    `json:"parent"`
+	PrivateName string          `json:"private_name"`
+	Entry       FileIdentity    `json:"entry"`
+	Phase       StepPhase       `json:"phase"`
+	Finalized   bool            `json:"finalized"`
+}
+
+type DirectoryMutation struct {
+	Root        RootSnapshot
+	Target      DirectoryTarget
+	Mode        uint32
+	Parent      FileIdentity
+	PrivateName string
+	Entry       FileIdentity
+	Phase       StepPhase
+}
+
 type WorkspaceMutation struct {
 	Kind           MutationKind
 	Location       domain.Location
@@ -126,10 +183,13 @@ type WorkspaceMutation struct {
 }
 
 type Journal struct {
-	Release ReleaseIdentity      `json:"release"`
-	Desired []domain.ComponentID `json:"desired"`
-	Status  TransactionStatus    `json:"status"`
-	Steps   []JournalMutation    `json:"steps"`
+	Release     ReleaseIdentity      `json:"release"`
+	Desired     []domain.ComponentID `json:"desired"`
+	Status      TransactionStatus    `json:"status"`
+	Plan        domain.Plan          `json:"plan"`
+	Roots       []RootSnapshot       `json:"roots"`
+	Directories []JournalDirectory   `json:"directories"`
+	Steps       []JournalMutation    `json:"steps"`
 }
 
 func cloneJournalPointer(journal *Journal) *Journal {
@@ -138,6 +198,9 @@ func cloneJournalPointer(journal *Journal) *Journal {
 	}
 	clone := *journal
 	clone.Desired = append([]domain.ComponentID(nil), journal.Desired...)
+	clone.Plan.Operations = append([]domain.Operation(nil), journal.Plan.Operations...)
+	clone.Roots = append([]RootSnapshot(nil), journal.Roots...)
+	clone.Directories = append([]JournalDirectory(nil), journal.Directories...)
 	clone.Steps = append([]JournalMutation(nil), journal.Steps...)
 	return &clone
 }

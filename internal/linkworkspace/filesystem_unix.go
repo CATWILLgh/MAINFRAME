@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"golang.org/x/sys/unix"
 )
@@ -22,6 +23,11 @@ const (
 type pinnedRoot struct {
 	path     string
 	identity executor.FileIdentity
+}
+
+type managedRoot struct {
+	anchor   pinnedRoot
+	rootPath string
 }
 
 func pinRoot(path string) (pinnedRoot, error) {
@@ -60,6 +66,73 @@ func (root pinnedRoot) open() (int, error) {
 		return -1, errors.New("pinned root identity changed")
 	}
 	return fd, nil
+}
+
+func pinManagedRoot(target string) (managedRoot, error) {
+	absolute, err := filepath.Abs(target)
+	if err != nil {
+		return managedRoot{}, fmt.Errorf("make managed root absolute: %w", err)
+	}
+	absolute = filepath.Clean(absolute)
+	existing := absolute
+	for {
+		_, err = os.Lstat(existing)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return managedRoot{}, fmt.Errorf("inspect managed root ancestor: %w", err)
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return managedRoot{}, errors.New("managed root has no existing ancestor")
+		}
+		existing = parent
+	}
+	anchor, err := pinRoot(existing)
+	if err != nil {
+		return managedRoot{}, err
+	}
+	remainder, err := filepath.Rel(existing, absolute)
+	if err != nil {
+		return managedRoot{}, fmt.Errorf("derive managed root path: %w", err)
+	}
+	if remainder == "." {
+		remainder = ""
+	}
+	return managedRoot{
+		anchor:   anchor,
+		rootPath: filepath.ToSlash(remainder),
+	}, nil
+}
+
+func (root managedRoot) open() (int, error) {
+	fd, err := root.anchor.open()
+	if err != nil {
+		return -1, err
+	}
+	if root.rootPath == "" {
+		return fd, nil
+	}
+	opened, err := openRelativeDirectory(fd, strings.Split(root.rootPath, "/"))
+	unix.Close(fd)
+	return opened, err
+}
+
+func (root managedRoot) snapshot(id domain.RootID) executor.RootSnapshot {
+	return executor.RootSnapshot{
+		Root:           id,
+		AnchorPath:     root.anchor.path,
+		AnchorIdentity: root.anchor.identity,
+		RootPath:       root.rootPath,
+	}
+}
+
+func (root managedRoot) absolute() string {
+	if root.rootPath == "" {
+		return root.anchor.path
+	}
+	return filepath.Join(root.anchor.path, filepath.FromSlash(root.rootPath))
 }
 
 func openAbsoluteDirectory(path string) (int, error) {

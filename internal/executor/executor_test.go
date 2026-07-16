@@ -187,9 +187,11 @@ type fixture struct {
 func newFixture(preview Preview) *fixture {
 	store := &fakeStore{}
 	workspace := &fakeWorkspace{
-		links:   make(map[domain.Location]LinkState),
-		private: make(map[string]*fakePrivateDirectory),
-		store:   store,
+		links:              make(map[domain.Location]LinkState),
+		private:            make(map[string]*fakePrivateDirectory),
+		directories:        make(map[DirectoryTarget]DirectoryState),
+		privateDirectories: make(map[string]FileIdentity),
+		store:              store,
 	}
 	return &fixture{
 		locker:    &fakeLocker{},

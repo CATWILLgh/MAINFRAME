@@ -16,7 +16,7 @@ const testDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 func TestExecutorRecoversJournalProducedWithUnixWorkspace(t *testing.T) {
 	source := t.TempDir()
-	target := t.TempDir()
+	target := filepath.Join(t.TempDir(), ".local", "bin")
 	if err := os.Mkdir(filepath.Join(source, "bin"), 0o755); err != nil {
 		t.Fatalf("mkdir source bin: %v", err)
 	}
@@ -48,6 +48,10 @@ func TestExecutorRecoversJournalProducedWithUnixWorkspace(t *testing.T) {
 	if _, err := runner.Apply(preview); err != nil {
 		t.Fatalf("Apply() error = %v", err)
 	}
+	if link, err := os.Lstat(filepath.Join(target, "mainframe")); err != nil ||
+		link.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("managed-root install did not publish link: info=%v error=%v", link, err)
+	}
 	if _, err := runner.Recover(); err != nil {
 		t.Fatalf("Recover() rejected its own journal: %v", err)
 	}
@@ -64,6 +68,15 @@ func (store *memoryStore) Load() (*executor.Journal, error) {
 func (store *memoryStore) Save(journal executor.Journal) error {
 	clone := journal
 	clone.Desired = append([]domain.ComponentID(nil), journal.Desired...)
+	clone.Plan.Operations = append(
+		[]domain.Operation(nil),
+		journal.Plan.Operations...,
+	)
+	clone.Roots = append([]executor.RootSnapshot(nil), journal.Roots...)
+	clone.Directories = append(
+		[]executor.JournalDirectory(nil),
+		journal.Directories...,
+	)
 	clone.Steps = append([]executor.JournalMutation(nil), journal.Steps...)
 	store.journal = &clone
 	return nil

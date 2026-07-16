@@ -14,6 +14,15 @@ func encodeJournal(journal Journal) ([]byte, error) {
 	if journal.Desired == nil {
 		journal.Desired = []domain.ComponentID{}
 	}
+	if journal.Plan.Operations == nil {
+		journal.Plan.Operations = []domain.Operation{}
+	}
+	if journal.Roots == nil {
+		journal.Roots = []RootSnapshot{}
+	}
+	if journal.Directories == nil {
+		journal.Directories = []JournalDirectory{}
+	}
 	if journal.Steps == nil {
 		journal.Steps = []JournalMutation{}
 	}
@@ -103,18 +112,40 @@ func expectJSONEnd(decoder *json.Decoder) error {
 }
 
 func requireJournalShape(payload []byte) error {
-	root, err := requiredObject(payload, "release", "desired", "status", "steps")
+	root, err := requiredObject(
+		payload,
+		"release", "desired", "status", "plan", "roots", "directories", "steps",
+	)
 	if err != nil {
 		return err
 	}
 	if _, err := requiredObject(root["release"], "id", "index_sha256"); err != nil {
 		return fmt.Errorf("release: %w", err)
 	}
-	var steps []json.RawMessage
-	if isNull(root["desired"]) || isNull(root["steps"]) {
-		return fmt.Errorf("desired and steps must be arrays")
+	plan, err := requiredObject(root["plan"], "operations")
+	if err != nil {
+		return fmt.Errorf("plan: %w", err)
 	}
-	if err := json.Unmarshal(root["steps"], &steps); err != nil {
+	if isNull(root["desired"]) || isNull(plan["operations"]) ||
+		isNull(root["roots"]) || isNull(root["directories"]) ||
+		isNull(root["steps"]) {
+		return fmt.Errorf("journal collections must be arrays")
+	}
+	if err := requireOperationsShape(plan["operations"]); err != nil {
+		return err
+	}
+	if err := requireRootsShape(root["roots"]); err != nil {
+		return err
+	}
+	if err := requireDirectoriesShape(root["directories"]); err != nil {
+		return err
+	}
+	return requireStepsShape(root["steps"])
+}
+
+func requireStepsShape(payload []byte) error {
+	var steps []json.RawMessage
+	if err := json.Unmarshal(payload, &steps); err != nil {
 		return fmt.Errorf("steps: %w", err)
 	}
 	for index, rawStep := range steps {
@@ -154,6 +185,76 @@ func requireJournalShape(payload []byte) error {
 		}
 		if _, err := requiredObject(private["identity"], "device", "inode"); err != nil {
 			return fmt.Errorf("step %d private identity: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func requireOperationsShape(payload []byte) error {
+	var operations []json.RawMessage
+	if err := json.Unmarshal(payload, &operations); err != nil {
+		return fmt.Errorf("plan operations: %w", err)
+	}
+	for index, rawOperation := range operations {
+		operation, err := requiredObject(
+			rawOperation,
+			"component_id", "kind", "artifact", "source_path",
+		)
+		if err != nil {
+			return fmt.Errorf("plan operation %d: %w", index, err)
+		}
+		artifact, err := requiredObject(operation["artifact"], "location")
+		if err != nil {
+			return fmt.Errorf("plan operation %d artifact: %w", index, err)
+		}
+		if _, err := requiredObject(artifact["location"], "root", "path"); err != nil {
+			return fmt.Errorf("plan operation %d location: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func requireRootsShape(payload []byte) error {
+	var roots []json.RawMessage
+	if err := json.Unmarshal(payload, &roots); err != nil {
+		return fmt.Errorf("roots: %w", err)
+	}
+	for index, rawRoot := range roots {
+		root, err := requiredObject(
+			rawRoot,
+			"root", "anchor_path", "anchor_identity", "root_path",
+		)
+		if err != nil {
+			return fmt.Errorf("root %d: %w", index, err)
+		}
+		if _, err := requiredObject(root["anchor_identity"], "device", "inode"); err != nil {
+			return fmt.Errorf("root %d anchor identity: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func requireDirectoriesShape(payload []byte) error {
+	var directories []json.RawMessage
+	if err := json.Unmarshal(payload, &directories); err != nil {
+		return fmt.Errorf("directories: %w", err)
+	}
+	for index, rawDirectory := range directories {
+		directory, err := requiredObject(
+			rawDirectory,
+			"target", "mode", "parent", "private_name", "entry", "phase", "finalized",
+		)
+		if err != nil {
+			return fmt.Errorf("directory %d: %w", index, err)
+		}
+		for name, fields := range map[string][]string{
+			"target": {"root", "path"},
+			"parent": {"device", "inode"},
+			"entry":  {"device", "inode"},
+		} {
+			if _, err := requiredObject(directory[name], fields...); err != nil {
+				return fmt.Errorf("directory %d %s: %w", index, name, err)
+			}
 		}
 	}
 	return nil

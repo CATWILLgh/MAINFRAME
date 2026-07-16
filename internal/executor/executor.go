@@ -63,10 +63,9 @@ func (executor Executor) withLock(operation func() (Result, error)) (result Resu
 }
 
 func (executor Executor) execute(preview Preview) (Result, error) {
-	journal := Journal{
-		Release: preview.Release,
-		Desired: append([]domain.ComponentID(nil), preview.Desired...),
-		Status:  TransactionInProgress,
+	journal, err := executor.initializeJournal(preview)
+	if err != nil {
+		return Result{}, err
 	}
 	for _, operation := range preview.Plan.Operations {
 		mutation, err := executor.prepare(operation)
@@ -85,7 +84,7 @@ func (executor Executor) execute(preview Preview) (Result, error) {
 			return Result{}, executor.abort(&journal, err)
 		}
 	}
-	if len(journal.Steps) == 0 {
+	if !hasMutations(journal) {
 		return Result{}, nil
 	}
 	journal.Status = TransactionCommitted
@@ -102,6 +101,46 @@ func (executor Executor) execute(preview Preview) (Result, error) {
 		return Result{Warnings: []string{fmt.Sprintf("cleanup committed journal: %v", err)}}, nil
 	}
 	return Result{}, nil
+}
+
+func (executor Executor) initializeJournal(preview Preview) (Journal, error) {
+	directoryPlan, err := executor.workspace.PlanDirectories(preview.Plan)
+	if err != nil {
+		return Journal{}, fmt.Errorf("plan managed directories: %w", err)
+	}
+	if err := validateDirectoryPlan(preview.Plan, directoryPlan); err != nil {
+		return Journal{}, fmt.Errorf("validate managed directories: %w", err)
+	}
+	journal := Journal{
+		Release: preview.Release,
+		Desired: append([]domain.ComponentID(nil), preview.Desired...),
+		Status:  TransactionInProgress,
+		Plan: domain.Plan{
+			Operations: append([]domain.Operation(nil), preview.Plan.Operations...),
+		},
+		Roots: append([]RootSnapshot(nil), directoryPlan.Roots...),
+	}
+	if err := executor.allocateDirectoryIntents(&journal, directoryPlan.Missing); err != nil {
+		return Journal{}, fmt.Errorf("allocate managed directory: %w", err)
+	}
+	if len(journal.Directories) > 0 {
+		if err := executor.store.Save(journal); err != nil {
+			return Journal{}, executor.abortAfterSaveFailure(
+				&journal,
+				fmt.Errorf("save managed directory intents: %w", err),
+			)
+		}
+		for index := range journal.Directories {
+			if err := executor.executeDirectory(&journal, index); err != nil {
+				return Journal{}, executor.abort(&journal, err)
+			}
+		}
+	}
+	return journal, nil
+}
+
+func hasMutations(journal Journal) bool {
+	return len(journal.Directories) > 0 || len(journal.Steps) > 0
 }
 
 func (executor Executor) prepare(operation domain.Operation) (JournalMutation, error) {
