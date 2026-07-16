@@ -56,6 +56,8 @@ DEV=0
 OPENCODE=0
 CODEX=0
 ANTIGRAVITY_2=0
+TRANSACTION_LOCK_HELD=0
+TRANSACTION_LOCK_FILE=""
 
 usage() {
     cat <<EOF
@@ -194,6 +196,105 @@ CREDENTIALS_INDEX_SOURCE="dist/claude-code/templates/credentials-index.md"
 SAFE_BACKUP_DIR=""
 
 # ---- Helpers ----
+
+_clean_absolute_path() {
+    local path="$1"
+    [[ "$path" == /* ]] &&
+        [[ "$path" != *"//"* ]] &&
+        [[ "$path" != *"/./"* && "$path" != */. ]] &&
+        [[ "$path" != *"/../"* && "$path" != */.. ]]
+}
+
+_state_path_has_symlink() {
+    local path="$1" current="" component
+    local -a components
+    IFS='/' read -r -a components <<< "${path#/}"
+    for component in "${components[@]}"; do
+        current="${current}/${component}"
+        [[ -L "$current" ]] && return 0
+    done
+    return 1
+}
+
+_prepare_transaction_state() {
+    local state_root="$1" previous_umask
+    if _state_path_has_symlink "$state_root"; then
+        log_error "symbolic link in MAINFRAME state path: ${state_root}"
+        return 1
+    fi
+    previous_umask="$(umask)"
+    umask 077
+    if ! mkdir -p "$state_root"; then
+        umask "$previous_umask"
+        log_error "could not create MAINFRAME state directory: ${state_root}"
+        return 1
+    fi
+    umask "$previous_umask"
+    if [[ ! -d "$state_root" || ! -O "$state_root" ]] ||
+            ! chmod 700 "$state_root"; then
+        log_error "unsafe MAINFRAME state directory: ${state_root}"
+        return 1
+    fi
+}
+
+_open_transaction_lock() {
+    local lock_file="$1"
+    if [[ -e "$lock_file" || -L "$lock_file" ]]; then
+        if [[ -L "$lock_file" || ! -f "$lock_file" || ! -O "$lock_file" ]]; then
+            log_error "unsafe MAINFRAME transaction lock: ${lock_file}"
+            return 1
+        fi
+    elif ! (umask 077 && : > "$lock_file"); then
+        log_error "could not create MAINFRAME transaction lock: ${lock_file}"
+        return 1
+    fi
+    if ! chmod 600 "$lock_file"; then
+        log_error "could not secure MAINFRAME transaction lock: ${lock_file}"
+        return 1
+    fi
+    if ! exec 9>>"$lock_file"; then
+        log_error "could not open MAINFRAME transaction lock: ${lock_file}"
+        return 1
+    fi
+}
+
+_acquire_platform_lock() {
+    local platform
+    local -a flock_command
+    platform="${OSTYPE:-unknown}"
+    if [[ "$platform" == darwin* && -x /usr/bin/lockf ]]; then
+        flock_command=(/usr/bin/lockf -s -t 0 9)
+    elif [[ "$platform" == linux* && -x /usr/bin/flock ]]; then
+        flock_command=(/usr/bin/flock -n 9)
+    elif [[ "$platform" == linux* && -x /bin/flock ]]; then
+        flock_command=(/bin/flock -n 9)
+    else
+        log_error "no supported transaction-lock utility for ${platform}"
+        exec 9>&-
+        return 1
+    fi
+    if ! "${flock_command[@]}"; then
+        log_error "another MAINFRAME installation is active"
+        exec 9>&-
+        return 1
+    fi
+}
+
+acquire_transaction_lock() {
+    local state_base state_root
+    [[ $TRANSACTION_LOCK_HELD -eq 0 ]] || return 0
+    state_base="${XDG_STATE_HOME:-${HOME%/}/.local/state}"
+    if ! _clean_absolute_path "$state_base"; then
+        log_error "unsafe MAINFRAME state base: ${state_base}"
+        return 1
+    fi
+    state_root="${state_base%/}/mainframe"
+    TRANSACTION_LOCK_FILE="${state_root}/transaction.lock"
+    _prepare_transaction_state "$state_root" || return 1
+    _open_transaction_lock "$TRANSACTION_LOCK_FILE" || return 1
+    _acquire_platform_lock || return 1
+    TRANSACTION_LOCK_HELD=1
+}
 
 # Verify the script is run from the right repo (dist/ must exist).
 check_prerequisites() {
@@ -1305,6 +1406,9 @@ main() {
     fi
 
     if [[ $UNINSTALL -eq 1 ]]; then
+        if [[ $DRY_RUN -eq 0 ]] && ! acquire_transaction_lock; then
+            return 1
+        fi
         check_prerequisites
         check_python
         log_info "Uninstalling MAINFRAME hub symlinks from ${CLAUDE_DIR}..."
@@ -1332,6 +1436,9 @@ main() {
 
     if ! check_required_install_sources; then
         log_error "Install aborted before changes because required sources are unavailable."
+        return 1
+    fi
+    if [[ $DRY_RUN -eq 0 ]] && ! acquire_transaction_lock; then
         return 1
     fi
 
