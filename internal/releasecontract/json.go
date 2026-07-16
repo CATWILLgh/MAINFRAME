@@ -41,3 +41,11 @@ func (ownership *optionalJSONMapOwnership) UnmarshalJSON(payload []byte) error {
 	}
 	return decodeStrict(payload, &ownership.Value)
 }
+
+func (externalState *optionalExternalState) UnmarshalJSON(payload []byte) error {
+	externalState.Present = true
+	if bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return fmt.Errorf("external state must not be null")
+	}
+	return decodeStrict(payload, &externalState.Value)
+}

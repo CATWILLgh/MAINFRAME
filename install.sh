@@ -99,8 +99,8 @@ Usage:
                       hooks.json, the gate launcher, and agent definitions into
                       ${CODEX_HOME:-~/.codex}. Existing AGENTS.md and hooks.json are
                       backed up first; default.rules, non-hub skills, and non-hub
-                      agents are left untouched. Gate hooks need a one-time
-                      per-project /hooks trust and use Codex-owned detectors.
+                      agents are left untouched. New or changed hook definitions
+                      need review through /hooks and use Codex-owned detectors.
   $0 --antigravity-2  Install PLUS the standalone Antigravity 2.x desktop
                       projection as the global 'mainframe' plugin under
                       ~/.gemini/config/plugins/. This is not the Antigravity
@@ -1171,9 +1171,9 @@ install_codex() {
         "$CODEX_CREDENTIALS_INDEX_SRC" \
         "${cfg_dir}/credentials-index.md"
     log_ok "Codex layer installed. Restart Codex sessions to pick it up."
-    log_warn "Codex gate hooks need per-project trust (content-pinned):"
-    log_warn "  run /hooks in each Codex project once to trust them — until then gates SILENTLY do not fire."
-    log_warn "  re-run /hooks after any hub gates update (the trust hash changes)."
+    log_warn "Codex gate hooks need trust for each hook definition:"
+    log_warn "  run /hooks in Codex to review new or changed hooks — untrusted hooks do not run."
+    log_warn "  review again only when Codex reports a changed hook definition."
 }
 
 uninstall_codex() {

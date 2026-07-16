@@ -27,8 +27,24 @@ func validateResource(resource releasecontract.Resource) error {
 		return fmt.Errorf("apply support must remain unimplemented")
 	}
 	if resource.Observation == releasecontract.SupportUnimplemented {
+		if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil ||
+			resource.ExternalState != nil {
+			return fmt.Errorf("unimplemented observation has lifecycle metadata")
+		}
+		return nil
+	}
+	if resource.Strategy == releasecontract.StrategyManualAction {
+		if resource.Observation != releasecontract.SupportSupported ||
+			resource.ExternalState == nil ||
+			resource.ExternalState.Kind != releasecontract.ExternalStateCodexHookTrust ||
+			resource.ComponentID != domain.ComponentCodex ||
+			resource.Target.Root != domain.RootCodexConfig ||
+			resource.Target.Path != "hooks.json" ||
+			resource.SourcePath == "" {
+			return fmt.Errorf("invalid external manual action")
+		}
 		if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil {
-			return fmt.Errorf("unimplemented observation has JSON ownership")
+			return fmt.Errorf("external manual action has JSON ownership")
 		}
 		return nil
 	}
@@ -248,14 +264,18 @@ func validObservation(resource releasecontract.Resource, observation Observation
 	}
 	valid := map[Status]map[Reason]bool{
 		Ready: {
-			ResourceExists: true, DirectoryExists: true, LinePresent: true, JSONFieldsMatch: true,
+			ResourceExists: true, DirectoryExists: true, LinePresent: true,
+			JSONFieldsMatch: true, ExternalStateSatisfied: true,
 		},
 		NeedsChange: {
-			ResourceMissing: true, DirectoryMissing: true, LineMissing: true, JSONFieldsDrifted: true,
+			ResourceMissing: true, DirectoryMissing: true, LineMissing: true,
+			JSONFieldsDrifted: true, ManualActionRequired: true,
 		},
 		NotApplicable: {OptionalTargetMissing: true},
+		NotAssessed:   {ExternalStateUnavailable: true},
 		Attention: {
-			SymbolicLink: true, WrongKind: true, InspectionFailed: true, JSONDocumentInvalid: true,
+			SymbolicLink: true, WrongKind: true, InspectionFailed: true,
+			JSONDocumentInvalid: true, ExternalInspectionFailed: true,
 		},
 	}
 	if !valid[observation.Status][observation.Reason] {
@@ -282,6 +302,9 @@ func reasonMatchesStrategy(strategy releasecontract.ResourceStrategy, reason Rea
 	case releasecontract.StrategyShellLineIfPresent:
 		return reason == LinePresent || reason == LineMissing || reason == OptionalTargetMissing ||
 			reason == SymbolicLink || reason == WrongKind || reason == InspectionFailed
+	case releasecontract.StrategyManualAction:
+		return reason == ExternalStateSatisfied || reason == ManualActionRequired ||
+			reason == ExternalStateUnavailable || reason == ExternalInspectionFailed
 	default:
 		return false
 	}

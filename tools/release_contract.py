@@ -19,6 +19,16 @@ from release_contract_io import (
 from release_global import validate_global_contract, validate_local_target_isolation
 from release_json import validate_owned_json_source, validate_shell_source
 from release_component_roots import validate_component_targets
+from release_external_state_contract import validate_external_state_units
+from release_contract_helpers import (
+    location as _location,
+    locations_overlap as _locations_overlap,
+    require_fields as _require_fields,
+    require_object as _require_object,
+    sorted_portable_paths as _sorted_portable_paths,
+    sorted_unique_strings as _sorted_unique_strings,
+    unique_identifier as _unique_identifier,
+)
 SCHEMA_VERSION = 1
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
@@ -38,7 +48,9 @@ UNIT_REQUIRED_FIELDS = {"id", "kind", "source", "target"}
 UNIT_OPTIONAL_FIELDS = {"legacy_source_suffixes"}
 LEGACY_FIELDS = {"target", "target_suffixes"}
 RESOURCE_REQUIRED_FIELDS = {"id", "strategy", "target", "observation", "apply"}
-RESOURCE_OPTIONAL_FIELDS = {"source", "legacy_source_suffixes", "owned_json_pointers", "ownership"}
+RESOURCE_OPTIONAL_FIELDS = {
+    "source", "legacy_source_suffixes", "owned_json_pointers", "ownership", "external_state"
+}
 PAYLOAD_FIELDS = {"path", "mode", "size", "sha256"}
 ENTRY_FIELDS = {"component", "path", "sha256"}
 SOURCE_STRATEGIES = {"json-key-merge", "seed-if-absent", "shell-line", "shell-line-if-present"}
@@ -51,8 +63,6 @@ OBSERVABLE_STRATEGIES = {
 }
 SHELL_STRATEGIES = {"shell-line", "shell-line-if-present"}
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
-ITEM_IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[._/-][a-z0-9_]+)*$")
-ROOT_IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -180,7 +190,8 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
         locations_overlap=_locations_overlap,
     )
     _validate_payload_rows(manifest["payload_files"])
-    _validate_resources(root, manifest["resources"], manifest["payload_files"])
+    _validate_resources(component, root, manifest["resources"], manifest["payload_files"])
+    validate_external_state_units(manifest)
     validate_component_targets(component, manifest)
 
 
@@ -237,7 +248,12 @@ def _validate_legacy_artifacts(artifacts: Any) -> None:
         raise ValueError("legacy_artifacts must be sorted by target")
 
 
-def _validate_resources(root: Path, resources: Any, payload_rows: list[dict[str, Any]]) -> None:
+def _validate_resources(
+    component: str,
+    root: Path,
+    resources: Any,
+    payload_rows: list[dict[str, Any]],
+) -> None:
     if not isinstance(resources, list):
         raise ValueError("resources must be a list")
     seen_ids: set[str] = set()
@@ -250,8 +266,10 @@ def _validate_resources(root: Path, resources: Any, payload_rows: list[dict[str,
         strategy = resource["strategy"]
         if strategy not in SOURCE_STRATEGIES | SOURCELESS_STRATEGIES:
             raise ValueError(f"resource {identifier!r} has invalid strategy")
+        has_external_state = "external_state" in resource
+        external_state = resource.get("external_state")
         has_source = "source" in resource
-        if (strategy in SOURCE_STRATEGIES) != has_source:
+        if ((strategy in SOURCE_STRATEGIES) or has_external_state) != has_source:
             raise ValueError(f"resource {identifier!r} has inconsistent source")
         if has_source:
             source = _portable_path(resource["source"], f"resource {identifier!r} source")
@@ -267,8 +285,26 @@ def _validate_resources(root: Path, resources: Any, payload_rows: list[dict[str,
             "unimplemented",
         }:
             raise ValueError(f"resource {identifier!r} overstates lifecycle support")
+        if has_external_state:
+            _require_object(external_state, f"resource {identifier!r} external state")
+            _require_fields(
+                external_state,
+                {"kind"},
+                {"kind"},
+                f"resource {identifier!r} external state",
+            )
+            if (
+                component != "codex"
+                or strategy != "manual-action"
+                or observation != "supported"
+                or external_state["kind"] != "codex-hook-trust-v1"
+                or resource["target"] != {"root": "codex-config", "path": "hooks.json"}
+            ):
+                raise ValueError(f"resource {identifier!r} has invalid external state boundary")
+        elif strategy == "manual-action" and observation == "supported":
+            raise ValueError(f"resource {identifier!r} overstates lifecycle support")
         if observation == "supported" and strategy not in OBSERVABLE_STRATEGIES:
-            if strategy != "json-key-merge":
+            if strategy != "json-key-merge" and not has_external_state:
                 raise ValueError(f"resource {identifier!r} overstates lifecycle support")
         if observation == "supported" and strategy in SHELL_STRATEGIES:
             validate_shell_source(source_path, identifier)
@@ -344,55 +380,3 @@ def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
     if components != sorted(set(components)):
         raise ValueError("release manifests must be sorted with unique components")
     return manifests
-
-
-def _location(value: Any, label: str) -> tuple[str, str]:
-    _require_object(value, label)
-    _require_fields(value, {"root", "path"}, {"root", "path"}, label)
-    root = value["root"]
-    if not isinstance(root, str) or not ROOT_IDENTIFIER.fullmatch(root):
-        raise ValueError(f"{label} has invalid root")
-    return root, _portable_path(value["path"], label)
-
-
-def _locations_overlap(left: tuple[str, str], right: tuple[str, str]) -> bool:
-    if left[0] != right[0]:
-        return False
-    return left[1] == right[1] or left[1].startswith(right[1] + "/") or right[1].startswith(left[1] + "/")
-
-
-def _unique_identifier(value: Any, seen: set[str], label: str) -> str:
-    if not isinstance(value, str) or not ITEM_IDENTIFIER.fullmatch(value):
-        raise ValueError(f"invalid {label} id {value!r}")
-    if value in seen:
-        raise ValueError(f"duplicate {label} id {value!r}")
-    seen.add(value)
-    return value
-
-
-def _require_fields(value: dict, required: set[str], allowed: set[str], label: str) -> None:
-    missing = required - value.keys()
-    unknown = value.keys() - allowed
-    if missing:
-        raise ValueError(f"{label} missing fields {sorted(missing)}")
-    if unknown:
-        raise ValueError(f"{label} has unknown fields {sorted(unknown)}")
-
-
-def _require_object(value: Any, label: str) -> None:
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must be an object")
-
-
-def _sorted_unique_strings(values: Any, pattern: re.Pattern) -> bool:
-    return isinstance(values, list) and all(isinstance(item, str) and pattern.fullmatch(item) for item in values) and values == sorted(set(values))
-
-
-def _sorted_portable_paths(values: Any) -> bool:
-    if not isinstance(values, list):
-        return False
-    try:
-        paths = [_portable_path(value, "legacy path") for value in values]
-    except ValueError:
-        return False
-    return paths == sorted(set(paths))

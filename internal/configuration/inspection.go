@@ -34,6 +34,14 @@ type fileSnapshot struct {
 }
 
 func Inspect(resources []releasecontract.Resource, host Host) (Inspection, error) {
+	return InspectWithExternal(resources, host, nil)
+}
+
+func InspectWithExternal(
+	resources []releasecontract.Resource,
+	host Host,
+	external ExternalObserver,
+) (Inspection, error) {
 	if host == nil {
 		return Inspection{}, fmt.Errorf("host must not be nil")
 	}
@@ -48,7 +56,7 @@ func Inspect(resources []releasecontract.Resource, host Host) (Inspection, error
 	}
 	snapshots := make(map[domain.Location]jsonSnapshot)
 	for _, resource := range cloned {
-		observation, err := observeResource(resource, host, snapshots)
+		observation, err := observeResource(resource, host, snapshots, external)
 		if err != nil {
 			return Inspection{}, fmt.Errorf(
 				"observe configuration resource %q: %w",
@@ -130,6 +138,10 @@ func cloneResources(resources []releasecontract.Resource) []releasecontract.Reso
 		if resource.JSONMapOwnership != nil {
 			ownership := *resource.JSONMapOwnership
 			result[index].JSONMapOwnership = &ownership
+		}
+		if resource.ExternalState != nil {
+			externalState := *resource.ExternalState
+			result[index].ExternalState = &externalState
 		}
 	}
 	return result

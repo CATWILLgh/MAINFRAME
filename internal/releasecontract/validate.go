@@ -101,6 +101,9 @@ func validateBundle(
 	if err != nil {
 		return installmodel.ComponentSpec{}, nil, err
 	}
+	if err := validateExternalStateArtifacts(resources, artifacts); err != nil {
+		return installmodel.ComponentSpec{}, nil, err
+	}
 	dependencies := make([]domain.ComponentID, len(manifest.Dependencies))
 	for index, dependency := range manifest.Dependencies {
 		dependencies[index] = domain.ComponentID(dependency)
@@ -109,6 +112,32 @@ func validateBundle(
 		ID: component, Dependencies: dependencies,
 		Artifacts: artifacts, LegacyArtifacts: legacy,
 	}, resources, nil
+}
+
+func validateExternalStateArtifacts(
+	resources []Resource,
+	artifacts []installmodel.ArtifactSpec,
+) error {
+	for _, resource := range resources {
+		if resource.ExternalState == nil {
+			continue
+		}
+		matched := false
+		for _, artifact := range artifacts {
+			if artifact.Target == resource.Target &&
+				artifact.SourcePath == resource.SourcePath {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf(
+				"external state resource %q does not match an install unit",
+				resource.ID,
+			)
+		}
+	}
+	return nil
 }
 
 func manifestCollectionsPresent(manifest bundleManifest) bool {
@@ -188,118 +217,6 @@ func validateLegacy(
 		return nil, fmt.Errorf("component %q legacy targets must be sorted", component)
 	}
 	return artifacts, nil
-}
-
-func validateResources(
-	releaseRoot, bundleRoot, sourceBase string,
-	component domain.ComponentID,
-	records []resourceRecord,
-	payloadRows []payloadFile,
-) ([]Resource, error) {
-	identifiers := make([]string, len(records))
-	resources := make([]Resource, len(records))
-	for index, record := range records {
-		identifiers[index] = record.ID
-		resource, err := validateResourceRecord(
-			releaseRoot, bundleRoot, sourceBase, component, record, payloadRows,
-		)
-		if err != nil {
-			return nil, err
-		}
-		resources[index] = resource
-	}
-	if !sortedUnique(identifiers) {
-		return nil, fmt.Errorf("component %q resources must be sorted and unique", component)
-	}
-	return resources, nil
-}
-
-func validateResourceRecord(
-	releaseRoot, bundleRoot, sourceBase string,
-	component domain.ComponentID,
-	record resourceRecord,
-	payloadRows []payloadFile,
-) (Resource, error) {
-	strategy := ResourceStrategy(record.Strategy)
-	if !itemPattern.MatchString(record.ID) || !strategy.valid() {
-		return Resource{}, fmt.Errorf("component %q has invalid resource %q", component, record.ID)
-	}
-	requiresSource := strategy == StrategyJSONKeyMerge || strategy == StrategySeedIfAbsent ||
-		strategy == StrategyShellLine || strategy == StrategyShellLineIfPresent
-	if requiresSource != (record.Source != "") {
-		return Resource{}, fmt.Errorf("resource %q has inconsistent source", record.ID)
-	}
-	var source domain.ArtifactPath
-	if record.Source != "" {
-		if err := validateSource(bundleRoot, record.Source, "file"); err != nil {
-			return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
-		}
-		source = domain.ArtifactPath(path.Join(sourceBase, record.Source))
-	}
-	target, err := location(record.Target)
-	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
-	}
-	if err := validateComponentTarget(component, target, "resource"); err != nil {
-		return Resource{}, err
-	}
-	legacySources, err := portablePaths(record.LegacySourceSuffixes, true)
-	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
-	}
-	observation := SupportStatus(record.Observation)
-	if !validObservationSupport(strategy, observation) || record.Apply != string(SupportUnimplemented) {
-		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
-	}
-	desiredLine, err := loadDesiredLine(bundleRoot, record.Source, strategy, observation)
-	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
-	}
-	mapOwnership, err := loadJSONMapOwnership(
-		releaseRoot, sourceBase, record.Source, component, target, strategy,
-		record.OwnedJSONPointers, record.Ownership, payloadRows,
-	)
-	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
-	}
-	if mapOwnership != nil && observation != SupportSupported {
-		return Resource{}, fmt.Errorf(
-			"resource %q: JSON map ownership requires supported observation",
-			record.ID,
-		)
-	}
-	ownedFields, err := loadOwnedJSONFields(
-		releaseRoot, sourceBase, record.Source, strategy, observation,
-		record.OwnedJSONPointers, mapOwnership != nil, payloadRows,
-	)
-	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
-	}
-	return Resource{
-		ID: record.ID, ComponentID: component, Strategy: strategy,
-		SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
-		Observation: observation, Apply: SupportUnimplemented, DesiredLine: desiredLine,
-		OwnedJSONFields: ownedFields, JSONMapOwnership: mapOwnership,
-	}, nil
-}
-
-func validObservationSupport(strategy ResourceStrategy, support SupportStatus) bool {
-	if support == SupportUnimplemented {
-		return true
-	}
-	if support != SupportSupported {
-		return false
-	}
-	switch strategy {
-	case StrategyJSONKeyMerge,
-		StrategySeedIfAbsent,
-		StrategyEnsureDir,
-		StrategyShellLine,
-		StrategyShellLineIfPresent:
-		return true
-	default:
-		return false
-	}
 }
 
 func validateSource(bundleRoot, source, kind string) error {

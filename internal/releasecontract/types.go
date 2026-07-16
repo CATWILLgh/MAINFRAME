@@ -44,6 +44,12 @@ const (
 	SupportSupported     SupportStatus = "supported"
 )
 
+type ExternalStateKind string
+
+const (
+	ExternalStateCodexHookTrust ExternalStateKind = "codex-hook-trust-v1"
+)
+
 type Resource struct {
 	ID                   string
 	ComponentID          domain.ComponentID
@@ -56,6 +62,7 @@ type Resource struct {
 	DesiredLine          string
 	OwnedJSONFields      []JSONField
 	JSONMapOwnership     *JSONMapOwnership
+	ExternalState        *ExternalStateDescriptor
 }
 
 type JSONField struct {
@@ -70,6 +77,10 @@ type JSONMapOwnership struct {
 	RegistryTarget        domain.Location
 	RegistrySchemaVersion int
 	EntriesPointer        string
+}
+
+type ExternalStateDescriptor struct {
+	Kind ExternalStateKind
 }
 
 type Release struct {
@@ -127,6 +138,7 @@ type resourceRecord struct {
 	Apply                string                   `json:"apply"`
 	OwnedJSONPointers    optionalStringList       `json:"owned_json_pointers,omitempty"`
 	Ownership            optionalJSONMapOwnership `json:"ownership,omitempty"`
+	ExternalState        optionalExternalState    `json:"external_state,omitempty"`
 }
 
 type optionalStringList struct {
@@ -150,6 +162,15 @@ type ownershipRegistryRecord struct {
 	Target         locationRecord `json:"target"`
 	SchemaVersion  int            `json:"schema_version"`
 	EntriesPointer string         `json:"entries_pointer"`
+}
+
+type externalStateRecord struct {
+	Kind string `json:"kind"`
+}
+
+type optionalExternalState struct {
+	Present bool
+	Value   externalStateRecord
 }
 
 type locationRecord struct {

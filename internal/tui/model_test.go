@@ -118,28 +118,37 @@ func TestConfigurationStatusSummarizesOnlyActionableAndUnknownStates(t *testing.
 		{ID: "attention", Status: lifecycle.ConfigurationAttention},
 		{ID: "unknown", Status: lifecycle.ConfigurationNotAssessed},
 		{ID: "optional", Status: lifecycle.ConfigurationNotApplicable},
+		{
+			ID: "manual", Status: lifecycle.ConfigurationNeedsChange,
+			Reason: lifecycle.ConfigurationManualActionRequired,
+		},
 	}
-	if got := configurationStatus(resources); got != " · configuration 2 changes, 1 warning, 1 not assessed" {
+	if got := configurationStatus(resources); got !=
+		" · configuration 2 changes, 1 warning, 1 not assessed, 1 manual action" {
 		t.Fatalf("status = %q", got)
 	}
 }
 
 func TestConfigurationLabelsExplainEveryObservationReason(t *testing.T) {
 	reasons := map[lifecycle.ConfigurationReason]string{
-		lifecycle.ConfigurationResourceExists:         "file exists",
-		lifecycle.ConfigurationDirectoryExists:        "directory exists",
-		lifecycle.ConfigurationLinePresent:            "line is present",
-		lifecycle.ConfigurationResourceMissing:        "file is missing",
-		lifecycle.ConfigurationDirectoryMissing:       "directory is missing",
-		lifecycle.ConfigurationLineMissing:            "line is missing",
-		lifecycle.ConfigurationOptionalTargetMissing:  "optional file is absent",
-		lifecycle.ConfigurationSymbolicLink:           "symbolic link is not followed",
-		lifecycle.ConfigurationWrongKind:              "unexpected file type",
-		lifecycle.ConfigurationInspectionFailed:       "inspection failed",
-		lifecycle.ConfigurationObservationUnsupported: "observation is not implemented",
-		lifecycle.ConfigurationJSONFieldsMatch:        "owned fields match",
-		lifecycle.ConfigurationJSONFieldsDrifted:      "owned fields differ",
-		lifecycle.ConfigurationJSONDocumentInvalid:    "JSON document is invalid",
+		lifecycle.ConfigurationResourceExists:           "file exists",
+		lifecycle.ConfigurationDirectoryExists:          "directory exists",
+		lifecycle.ConfigurationLinePresent:              "line is present",
+		lifecycle.ConfigurationResourceMissing:          "file is missing",
+		lifecycle.ConfigurationDirectoryMissing:         "directory is missing",
+		lifecycle.ConfigurationLineMissing:              "line is missing",
+		lifecycle.ConfigurationOptionalTargetMissing:    "optional file is absent",
+		lifecycle.ConfigurationSymbolicLink:             "symbolic link is not followed",
+		lifecycle.ConfigurationWrongKind:                "unexpected file type",
+		lifecycle.ConfigurationInspectionFailed:         "inspection failed",
+		lifecycle.ConfigurationObservationUnsupported:   "observation is not implemented",
+		lifecycle.ConfigurationJSONFieldsMatch:          "owned fields match",
+		lifecycle.ConfigurationJSONFieldsDrifted:        "owned fields differ",
+		lifecycle.ConfigurationJSONDocumentInvalid:      "JSON document is invalid",
+		lifecycle.ConfigurationExternalStateSatisfied:   "external state is ready",
+		lifecycle.ConfigurationManualActionRequired:     "manual action is required",
+		lifecycle.ConfigurationExternalStateUnavailable: "external state is unavailable",
+		lifecycle.ConfigurationExternalInspectionFailed: "external inspection failed",
 	}
 	for reason, want := range reasons {
 		if got := configurationReasonName(reason); got != want {

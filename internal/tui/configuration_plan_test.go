@@ -37,6 +37,19 @@ var configurationPlanFixture = lifecycle.Preview{
 				Reason: configuration.ObservationUnsupported,
 			},
 		},
+		ManualActions: []configuration.ManualAction{
+			{
+				ResourceID: "codex.hook-trust", ComponentID: domain.ComponentCodex,
+				Kind:   configuration.ManualActionCodexHookTrust,
+				Reason: configuration.ManualActionRequired,
+			},
+		},
+		Notices: []configuration.Notice{
+			{
+				ResourceID: "codex.hook-trust", ComponentID: domain.ComponentCodex,
+				Reason: configuration.ExternalStateUnavailable,
+			},
+		},
 	},
 }
 
@@ -60,6 +73,10 @@ func TestPreviewRendersConfigurationChangesAndIssues(t *testing.T) {
 		"stop managing · OpenCode · opencode.permissions · read · configuration + ownership registry",
 		"Issues · 1",
 		"planning unavailable · OpenCode · opencode.permissions · observation is not implemented",
+		"Manual actions · 1",
+		"Review MAINFRAME hooks in Codex with /hooks",
+		"Notices · 1",
+		"Codex is unavailable; hook trust was not inspected",
 	} {
 		if !strings.Contains(view, text) {
 			t.Fatalf("preview does not contain %q:\n%s", text, view)

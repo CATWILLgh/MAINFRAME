@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/discovery"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
@@ -36,12 +37,30 @@ func buildPreviewService() (lifecycle.Service, error) {
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("load release: %w", err)
 	}
-	return buildPreviewServiceFrom(releaseRoot, release)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return lifecycle.Service{}, fmt.Errorf("resolve working directory: %w", err)
+	}
+	return buildPreviewServiceFromContext(
+		releaseRoot,
+		release,
+		cwd,
+		codexstate.NewAppServerClient(),
+	)
 }
 
 func buildPreviewServiceFrom(
 	releaseRoot string,
 	release releasecontract.Release,
+) (lifecycle.Service, error) {
+	return buildPreviewServiceFromContext(releaseRoot, release, "", nil)
+}
+
+func buildPreviewServiceFromContext(
+	releaseRoot string,
+	release releasecontract.Release,
+	cwd string,
+	client codexstate.Client,
 ) (lifecycle.Service, error) {
 	layout, err := hostlayout.Resolve(hostEnvironment(), releaseRoot)
 	if err != nil {
@@ -55,7 +74,28 @@ func buildPreviewServiceFrom(
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("discover current installation: %w", err)
 	}
-	configurationInspection, err := configuration.Inspect(release.Resources, namespace)
+	var external configuration.ExternalObserver
+	if client != nil {
+		observer, err := codexstate.NewObserver(
+			releaseRoot,
+			cwd,
+			layout.Targets(),
+			release.Resources,
+			client,
+		)
+		if err != nil {
+			return lifecycle.Service{}, fmt.Errorf(
+				"prepare Codex state observer: %w",
+				err,
+			)
+		}
+		external = observer
+	}
+	configurationInspection, err := configuration.InspectWithExternal(
+		release.Resources,
+		namespace,
+		external,
+	)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("inspect configuration: %w", err)
 	}

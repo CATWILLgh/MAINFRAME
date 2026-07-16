@@ -20,6 +20,11 @@ func NewWithInspection(
 	if err := configuration.Validate(resources, observations); err != nil {
 		return Service{}, fmt.Errorf("validate configuration inspection: %w", err)
 	}
+	observations = externalObservationsForInventory(
+		resources,
+		observations,
+		observed,
+	)
 	indexed := make(map[string]configuration.Observation, len(observations))
 	for _, observation := range observations {
 		indexed[observation.ResourceID] = observation
@@ -30,6 +35,33 @@ func NewWithInspection(
 	}
 	service.configurationInspection = &inspection
 	return service, nil
+}
+
+func externalObservationsForInventory(
+	resources []releasecontract.Resource,
+	observations []configuration.Observation,
+	observed domain.ObservedState,
+) []configuration.Observation {
+	result := append([]configuration.Observation(nil), observations...)
+	resourceByID := make(map[string]releasecontract.Resource, len(resources))
+	for _, resource := range resources {
+		resourceByID[resource.ID] = resource
+	}
+	for index, observation := range result {
+		resource := resourceByID[observation.ResourceID]
+		if resource.ExternalState == nil ||
+			observation.Status != configuration.Ready ||
+			observedTargetManagedExact(
+				observed,
+				resource.ComponentID,
+				resource.Target,
+			) {
+			continue
+		}
+		result[index].Status = configuration.NeedsChange
+		result[index].Reason = configuration.ManualActionRequired
+	}
+	return result
 }
 
 func (service Service) Preview(components []domain.ComponentID) (Preview, error) {
@@ -48,10 +80,74 @@ func (service Service) Preview(components []domain.ComponentID) (Preview, error)
 	if err != nil {
 		return Preview{}, fmt.Errorf("plan configuration: %w", err)
 	}
+	service.requireReviewAfterExternalTargetChange(
+		&configurationPlan,
+		included,
+	)
 	return Preview{
 		Filesystem:    filesystem,
 		Configuration: configurationPlan,
 	}, nil
+}
+
+func (service Service) requireReviewAfterExternalTargetChange(
+	plan *configuration.Plan,
+	included []domain.ComponentID,
+) {
+	selected := make(map[domain.ComponentID]bool, len(included))
+	for _, component := range included {
+		selected[component] = true
+	}
+	observations := make(map[string]configuration.Observation)
+	for _, observation := range service.configurationInspection.Observations() {
+		observations[observation.ResourceID] = observation
+	}
+	for _, resource := range service.configurationInspection.Resources() {
+		if resource.ExternalState == nil ||
+			!selected[resource.ComponentID] ||
+			observations[resource.ID].Status != configuration.Ready ||
+			service.targetManagedExact(resource.ComponentID, resource.Target) {
+			continue
+		}
+		plan.ManualActions = append(
+			plan.ManualActions,
+			configuration.ManualAction{
+				ResourceID:  resource.ID,
+				ComponentID: resource.ComponentID,
+				Kind:        configuration.ManualActionCodexHookTrust,
+				Reason:      configuration.ManualActionRequired,
+			},
+		)
+	}
+	sort.Slice(plan.ManualActions, func(left, right int) bool {
+		return plan.ManualActions[left].ResourceID <
+			plan.ManualActions[right].ResourceID
+	})
+}
+
+func (service Service) targetManagedExact(
+	componentID domain.ComponentID,
+	target domain.Location,
+) bool {
+	return observedTargetManagedExact(service.observed, componentID, target)
+}
+
+func observedTargetManagedExact(
+	observed domain.ObservedState,
+	componentID domain.ComponentID,
+	target domain.Location,
+) bool {
+	for _, component := range observed.Components {
+		if component.ID != componentID {
+			continue
+		}
+		for _, artifact := range component.Artifacts {
+			if artifact.Location == target {
+				return artifact.Ownership == domain.OwnershipManagedExact
+			}
+		}
+	}
+	return false
 }
 
 func (service Service) configurationComponents(
@@ -96,5 +192,10 @@ func cloneConfigurationPlan(source configuration.Plan) configuration.Plan {
 	return configuration.Plan{
 		Changes: append([]configuration.Change(nil), source.Changes...),
 		Issues:  append([]configuration.Issue(nil), source.Issues...),
+		ManualActions: append(
+			[]configuration.ManualAction(nil),
+			source.ManualActions...,
+		),
+		Notices: append([]configuration.Notice(nil), source.Notices...),
 	}
 }

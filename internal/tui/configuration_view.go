@@ -14,7 +14,12 @@ func configurationStatus(resources []lifecycle.ConfigurationResource) string {
 		return ""
 	}
 	counts := make(map[lifecycle.ConfigurationStatus]int)
+	manualActions := 0
 	for _, resource := range resources {
+		if resource.Reason == lifecycle.ConfigurationManualActionRequired {
+			manualActions++
+			continue
+		}
 		counts[resource.Status]++
 	}
 	parts := make([]string, 0, 3)
@@ -27,6 +32,12 @@ func configurationStatus(resources []lifecycle.ConfigurationResource) string {
 	if count := counts[lifecycle.ConfigurationNotAssessed]; count > 0 {
 		parts = append(parts, fmt.Sprintf("%d not assessed", count))
 	}
+	if manualActions > 0 {
+		parts = append(
+			parts,
+			countLabel(manualActions, "manual action", "manual actions"),
+		)
+	}
 	if len(parts) == 0 {
 		return " · configuration ready"
 	}
@@ -35,7 +46,8 @@ func configurationStatus(resources []lifecycle.ConfigurationResource) string {
 
 func renderConfigurationPlan(plan configuration.Plan) string {
 	lines := []string{headingStyle.Render("Configuration plan")}
-	if len(plan.Changes) == 0 && len(plan.Issues) == 0 {
+	if len(plan.Changes) == 0 && len(plan.Issues) == 0 &&
+		len(plan.ManualActions) == 0 && len(plan.Notices) == 0 {
 		return strings.Join(
 			append(lines, mutedStyle.Render("No configuration changes.")),
 			"\n",
@@ -57,7 +69,47 @@ func renderConfigurationPlan(plan configuration.Plan) string {
 	for _, issue := range issues {
 		lines = append(lines, renderConfigurationIssue(issue))
 	}
+	if len(plan.ManualActions) > 0 {
+		lines = append(
+			lines,
+			headingStyle.Render(
+				fmt.Sprintf("Manual actions · %d", len(plan.ManualActions)),
+			),
+		)
+	}
+	for _, action := range plan.ManualActions {
+		lines = append(lines, renderManualAction(action))
+	}
+	if len(plan.Notices) > 0 {
+		lines = append(
+			lines,
+			headingStyle.Render(fmt.Sprintf("Notices · %d", len(plan.Notices))),
+		)
+	}
+	for _, notice := range plan.Notices {
+		lines = append(lines, renderConfigurationNotice(notice))
+	}
 	return strings.Join(lines, "\n")
+}
+
+func renderManualAction(action configuration.ManualAction) string {
+	switch action.Kind {
+	case configuration.ManualActionCodexHookTrust:
+		return "  •  Review MAINFRAME hooks in Codex with /hooks"
+	default:
+		return "  •  Complete the external configuration step"
+	}
+}
+
+func renderConfigurationNotice(notice configuration.Notice) string {
+	switch notice.Reason {
+	case configuration.ExternalStateUnavailable:
+		return "  !  Codex is unavailable; hook trust was not inspected"
+	case configuration.ExternalInspectionFailed:
+		return "  !  Codex hook trust inspection failed"
+	default:
+		return "  !  External configuration state was not inspected"
+	}
 }
 
 func renderConfigurationChange(change configuration.Change) string {
@@ -200,6 +252,14 @@ func configurationReasonName(reason lifecycle.ConfigurationReason) string {
 		return "owned fields differ"
 	case lifecycle.ConfigurationJSONDocumentInvalid:
 		return "JSON document is invalid"
+	case lifecycle.ConfigurationExternalStateSatisfied:
+		return "external state is ready"
+	case lifecycle.ConfigurationManualActionRequired:
+		return "manual action is required"
+	case lifecycle.ConfigurationExternalStateUnavailable:
+		return "external state is unavailable"
+	case lifecycle.ConfigurationExternalInspectionFailed:
+		return "external inspection failed"
 	default:
 		return "unknown reason"
 	}

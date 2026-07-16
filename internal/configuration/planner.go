@@ -42,9 +42,30 @@ type Issue struct {
 	Reason      Reason
 }
 
+type ManualActionKind string
+
+const (
+	ManualActionCodexHookTrust ManualActionKind = "codex_hook_trust"
+)
+
+type ManualAction struct {
+	ResourceID  string
+	ComponentID domain.ComponentID
+	Kind        ManualActionKind
+	Reason      Reason
+}
+
+type Notice struct {
+	ResourceID  string
+	ComponentID domain.ComponentID
+	Reason      Reason
+}
+
 type Plan struct {
-	Changes []Change
-	Issues  []Issue
+	Changes       []Change
+	Issues        []Issue
+	ManualActions []ManualAction
+	Notices       []Notice
 }
 
 func (inspection Inspection) Plan(included []domain.ComponentID) (Plan, error) {
@@ -62,7 +83,14 @@ func (inspection Inspection) Plan(included []domain.ComponentID) (Plan, error) {
 	var plan Plan
 	for _, resource := range inspection.resources {
 		observation := observations[resource.ID]
-		if resource.JSONMapOwnership != nil {
+		if resource.ExternalState != nil {
+			planExternalState(
+				&plan,
+				resource,
+				observation,
+				selected[resource.ComponentID],
+			)
+		} else if resource.JSONMapOwnership != nil {
 			planOwnedMap(&plan, resource, observation, inspection.ownedMaps, selected)
 		} else {
 			planGeneric(&plan, resource, observation, selected[resource.ComponentID])
@@ -70,6 +98,32 @@ func (inspection Inspection) Plan(included []domain.ComponentID) (Plan, error) {
 	}
 	sortPlan(&plan)
 	return plan, nil
+}
+
+func planExternalState(
+	plan *Plan,
+	resource releasecontract.Resource,
+	observation Observation,
+	selected bool,
+) {
+	if !selected {
+		return
+	}
+	switch observation.Status {
+	case NeedsChange:
+		plan.ManualActions = append(plan.ManualActions, ManualAction{
+			ResourceID:  resource.ID,
+			ComponentID: resource.ComponentID,
+			Kind:        ManualActionCodexHookTrust,
+			Reason:      observation.Reason,
+		})
+	case NotAssessed, Attention:
+		plan.Notices = append(plan.Notices, Notice{
+			ResourceID:  resource.ID,
+			ComponentID: resource.ComponentID,
+			Reason:      observation.Reason,
+		})
+	}
 }
 
 func planGeneric(
@@ -286,5 +340,15 @@ func sortPlan(plan *Plan) {
 			return a.UnitID < b.UnitID
 		}
 		return a.Kind < b.Kind
+	})
+	sort.Slice(plan.ManualActions, func(left, right int) bool {
+		a, b := plan.ManualActions[left], plan.ManualActions[right]
+		if a.ResourceID != b.ResourceID {
+			return a.ResourceID < b.ResourceID
+		}
+		return a.Kind < b.Kind
+	})
+	sort.Slice(plan.Notices, func(left, right int) bool {
+		return plan.Notices[left].ResourceID < plan.Notices[right].ResourceID
 	})
 }

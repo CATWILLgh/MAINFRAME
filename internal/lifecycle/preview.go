@@ -43,20 +43,24 @@ const (
 	ConfigurationAttention     = configuration.Attention
 	ConfigurationNotAssessed   = configuration.NotAssessed
 
-	ConfigurationResourceExists         = configuration.ResourceExists
-	ConfigurationDirectoryExists        = configuration.DirectoryExists
-	ConfigurationLinePresent            = configuration.LinePresent
-	ConfigurationResourceMissing        = configuration.ResourceMissing
-	ConfigurationDirectoryMissing       = configuration.DirectoryMissing
-	ConfigurationLineMissing            = configuration.LineMissing
-	ConfigurationOptionalTargetMissing  = configuration.OptionalTargetMissing
-	ConfigurationSymbolicLink           = configuration.SymbolicLink
-	ConfigurationWrongKind              = configuration.WrongKind
-	ConfigurationInspectionFailed       = configuration.InspectionFailed
-	ConfigurationObservationUnsupported = configuration.ObservationUnsupported
-	ConfigurationJSONFieldsMatch        = configuration.JSONFieldsMatch
-	ConfigurationJSONFieldsDrifted      = configuration.JSONFieldsDrifted
-	ConfigurationJSONDocumentInvalid    = configuration.JSONDocumentInvalid
+	ConfigurationResourceExists           = configuration.ResourceExists
+	ConfigurationDirectoryExists          = configuration.DirectoryExists
+	ConfigurationLinePresent              = configuration.LinePresent
+	ConfigurationResourceMissing          = configuration.ResourceMissing
+	ConfigurationDirectoryMissing         = configuration.DirectoryMissing
+	ConfigurationLineMissing              = configuration.LineMissing
+	ConfigurationOptionalTargetMissing    = configuration.OptionalTargetMissing
+	ConfigurationSymbolicLink             = configuration.SymbolicLink
+	ConfigurationWrongKind                = configuration.WrongKind
+	ConfigurationInspectionFailed         = configuration.InspectionFailed
+	ConfigurationObservationUnsupported   = configuration.ObservationUnsupported
+	ConfigurationJSONFieldsMatch          = configuration.JSONFieldsMatch
+	ConfigurationJSONFieldsDrifted        = configuration.JSONFieldsDrifted
+	ConfigurationJSONDocumentInvalid      = configuration.JSONDocumentInvalid
+	ConfigurationExternalStateSatisfied   = configuration.ExternalStateSatisfied
+	ConfigurationManualActionRequired     = configuration.ManualActionRequired
+	ConfigurationExternalStateUnavailable = configuration.ExternalStateUnavailable
+	ConfigurationExternalInspectionFailed = configuration.ExternalInspectionFailed
 )
 
 type ConfigurationResource struct {

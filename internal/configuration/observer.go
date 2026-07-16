@@ -25,20 +25,24 @@ const (
 type Reason string
 
 const (
-	ResourceExists         Reason = "resource_exists"
-	DirectoryExists        Reason = "directory_exists"
-	LinePresent            Reason = "line_present"
-	ResourceMissing        Reason = "resource_missing"
-	DirectoryMissing       Reason = "directory_missing"
-	LineMissing            Reason = "line_missing"
-	OptionalTargetMissing  Reason = "optional_target_missing"
-	SymbolicLink           Reason = "symbolic_link"
-	WrongKind              Reason = "wrong_kind"
-	InspectionFailed       Reason = "inspection_failed"
-	ObservationUnsupported Reason = "observation_unsupported"
-	JSONFieldsMatch        Reason = "json_fields_match"
-	JSONFieldsDrifted      Reason = "json_fields_drifted"
-	JSONDocumentInvalid    Reason = "json_document_invalid"
+	ResourceExists           Reason = "resource_exists"
+	DirectoryExists          Reason = "directory_exists"
+	LinePresent              Reason = "line_present"
+	ResourceMissing          Reason = "resource_missing"
+	DirectoryMissing         Reason = "directory_missing"
+	LineMissing              Reason = "line_missing"
+	OptionalTargetMissing    Reason = "optional_target_missing"
+	SymbolicLink             Reason = "symbolic_link"
+	WrongKind                Reason = "wrong_kind"
+	InspectionFailed         Reason = "inspection_failed"
+	ObservationUnsupported   Reason = "observation_unsupported"
+	JSONFieldsMatch          Reason = "json_fields_match"
+	JSONFieldsDrifted        Reason = "json_fields_drifted"
+	JSONDocumentInvalid      Reason = "json_document_invalid"
+	ExternalStateSatisfied   Reason = "external_state_satisfied"
+	ManualActionRequired     Reason = "manual_action_required"
+	ExternalStateUnavailable Reason = "external_state_unavailable"
+	ExternalInspectionFailed Reason = "external_inspection_failed"
 )
 
 type Observation struct {
@@ -50,6 +54,23 @@ type Observation struct {
 
 type Host interface {
 	Inspect(location domain.Location, includeContent bool) (hostfs.Entry, error)
+}
+
+type ExternalStatus string
+
+const (
+	ExternalSatisfied      ExternalStatus = "satisfied"
+	ExternalActionRequired ExternalStatus = "action_required"
+	ExternalUnavailable    ExternalStatus = "unavailable"
+	ExternalFailed         ExternalStatus = "failed"
+)
+
+type ExternalObservation struct {
+	Status ExternalStatus
+}
+
+type ExternalObserver interface {
+	Observe(releasecontract.Resource) ExternalObservation
 }
 
 func Observe(resources []releasecontract.Resource, host Host) ([]Observation, error) {
@@ -95,6 +116,7 @@ func observeResource(
 	resource releasecontract.Resource,
 	host Host,
 	jsonSnapshots map[domain.Location]jsonSnapshot,
+	external ExternalObserver,
 ) (Observation, error) {
 	result := Observation{ResourceID: resource.ID, ComponentID: resource.ComponentID}
 	if resource.Observation == releasecontract.SupportUnimplemented {
@@ -102,7 +124,11 @@ func observeResource(
 		return result, nil
 	}
 	if resource.Observation != releasecontract.SupportSupported || !supportedStrategy(resource.Strategy) {
-		return Observation{}, fmt.Errorf("invalid observation support for strategy %q", resource.Strategy)
+		if resource.Strategy != releasecontract.StrategyManualAction ||
+			resource.ExternalState == nil {
+			return Observation{}, fmt.Errorf("invalid observation support for strategy %q", resource.Strategy)
+		}
+		return observeExternalResource(resource, external)
 	}
 	if resource.Strategy == releasecontract.StrategyJSONKeyMerge {
 		return observeJSONResource(resource, host, jsonSnapshots), nil
@@ -126,6 +152,33 @@ func observeResource(
 		return result, nil
 	}
 	return classifyExisting(resource, entry, result), nil
+}
+
+func observeExternalResource(
+	resource releasecontract.Resource,
+	external ExternalObserver,
+) (Observation, error) {
+	result := Observation{
+		ResourceID:  resource.ID,
+		ComponentID: resource.ComponentID,
+	}
+	if external == nil {
+		result.Status, result.Reason = NotAssessed, ExternalStateUnavailable
+		return result, nil
+	}
+	switch external.Observe(resource).Status {
+	case ExternalSatisfied:
+		result.Status, result.Reason = Ready, ExternalStateSatisfied
+	case ExternalActionRequired:
+		result.Status, result.Reason = NeedsChange, ManualActionRequired
+	case ExternalUnavailable:
+		result.Status, result.Reason = NotAssessed, ExternalStateUnavailable
+	case ExternalFailed:
+		result.Status, result.Reason = Attention, ExternalInspectionFailed
+	default:
+		return Observation{}, fmt.Errorf("external observer returned invalid status")
+	}
+	return result, nil
 }
 
 type jsonSnapshot struct {

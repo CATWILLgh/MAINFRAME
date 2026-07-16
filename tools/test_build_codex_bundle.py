@@ -147,9 +147,11 @@ def test_build_materializes_complete_self_contained_codex_bundle():
         "codex.hook-trust": {
             "id": "codex.hook-trust",
             "strategy": "manual-action",
+            "source": "hooks.json",
             "target": {"root": "codex-config", "path": "hooks.json"},
-            "observation": "unimplemented",
+            "observation": "supported",
             "apply": "unimplemented",
+            "external_state": {"kind": "codex-hook-trust-v1"},
         },
     }
 
