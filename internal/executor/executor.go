@@ -9,14 +9,34 @@ import (
 )
 
 type Executor struct {
-	locker    Locker
-	store     JournalStore
-	refresher Refresher
-	workspace LinkWorkspace
+	locker         Locker
+	store          JournalStore
+	refresher      Refresher
+	workspace      LinkWorkspace
+	configurations ConfigurationWorkspace
 }
 
-func New(locker Locker, store JournalStore, refresher Refresher, workspace LinkWorkspace) Executor {
-	return Executor{locker: locker, store: store, refresher: refresher, workspace: workspace}
+func New(
+	locker Locker,
+	store JournalStore,
+	refresher Refresher,
+	workspace LinkWorkspace,
+) Executor {
+	return Executor{
+		locker: locker, store: store, refresher: refresher, workspace: workspace,
+	}
+}
+
+func NewWithConfiguration(
+	locker Locker,
+	store JournalStore,
+	refresher Refresher,
+	workspace LinkWorkspace,
+	configurations ConfigurationWorkspace,
+) Executor {
+	executor := New(locker, store, refresher, workspace)
+	executor.configurations = configurations
+	return executor
 }
 
 func (executor Executor) Apply(preview Preview) (Result, error) {
@@ -63,9 +83,16 @@ func (executor Executor) withLock(operation func() (Result, error)) (result Resu
 }
 
 func (executor Executor) execute(preview Preview) (Result, error) {
-	journal, err := executor.initializeJournal(preview)
+	prepared, err := executor.materializeConfigurations(preview.Configuration)
 	if err != nil {
 		return Result{}, err
+	}
+	journal, err := executor.initializeJournal(preview, prepared)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := executor.prepareConfigurations(&journal, prepared.payloads); err != nil {
+		return Result{}, executor.abort(&journal, err)
 	}
 	for _, operation := range preview.Plan.Operations {
 		mutation, err := executor.prepare(operation)
@@ -83,6 +110,9 @@ func (executor Executor) execute(preview Preview) (Result, error) {
 		if err := executor.executeStep(&journal, index); err != nil {
 			return Result{}, executor.abort(&journal, err)
 		}
+	}
+	if err := executor.publishConfigurations(&journal); err != nil {
+		return Result{}, executor.abort(&journal, err)
 	}
 	if !hasMutations(journal) {
 		return Result{}, nil
@@ -103,30 +133,43 @@ func (executor Executor) execute(preview Preview) (Result, error) {
 	return Result{}, nil
 }
 
-func (executor Executor) initializeJournal(preview Preview) (Journal, error) {
-	directoryPlan, err := executor.workspace.PlanDirectories(preview.Plan)
+func (executor Executor) initializeJournal(
+	preview Preview,
+	prepared preparedConfigurations,
+) (Journal, error) {
+	directoryInput := directoryPlanningPlan(preview.Plan, prepared.targets)
+	directoryPlan, err := executor.workspace.PlanDirectories(directoryInput)
 	if err != nil {
 		return Journal{}, fmt.Errorf("plan managed directories: %w", err)
 	}
-	if err := validateDirectoryPlan(preview.Plan, directoryPlan); err != nil {
+	if err := validateDirectoryPlan(
+		preview.Plan,
+		prepared.targets,
+		directoryPlan,
+	); err != nil {
 		return Journal{}, fmt.Errorf("validate managed directories: %w", err)
 	}
-	if err := executor.checkDirectoryModes(directoryPlan.Missing); err != nil {
+	if err := executor.checkDirectoryModes(
+		directoryPlan.Missing,
+		len(prepared.targets) > 0,
+	); err != nil {
 		return Journal{}, fmt.Errorf("check managed directory mode: %w", err)
 	}
 	journal := Journal{
-		Release: preview.Release,
-		Desired: append([]domain.ComponentID(nil), preview.Desired...),
-		Status:  TransactionInProgress,
+		SchemaVersion: CurrentJournalSchemaVersion,
+		Release:       preview.Release,
+		Desired:       append([]domain.ComponentID(nil), preview.Desired...),
+		Status:        TransactionInProgress,
 		Plan: domain.Plan{
 			Operations: append([]domain.Operation(nil), preview.Plan.Operations...),
 		},
-		Roots: append([]RootSnapshot(nil), directoryPlan.Roots...),
+		Roots:          append([]RootSnapshot(nil), directoryPlan.Roots...),
+		Configurations: cloneJournalConfigurations(prepared.transitions),
 	}
 	if err := executor.allocateDirectoryIntents(&journal, directoryPlan.Missing); err != nil {
 		return Journal{}, fmt.Errorf("allocate managed directory: %w", err)
 	}
-	if len(journal.Directories) > 0 {
+	if len(journal.Configurations) > 0 || len(journal.Directories) > 0 {
 		if err := executor.store.Save(journal); err != nil {
 			return Journal{}, executor.abortAfterSaveFailure(
 				&journal,
@@ -144,8 +187,15 @@ func (executor Executor) initializeJournal(preview Preview) (Journal, error) {
 
 func (executor Executor) checkDirectoryModes(
 	requirements []DirectoryRequirement,
+	configurationPrivate bool,
 ) error {
 	checked := make(map[uint32]bool)
+	if configurationPrivate {
+		if err := executor.workspace.CheckDirectoryMode(ManagedDirectoryMode); err != nil {
+			return err
+		}
+		checked[ManagedDirectoryMode] = true
+	}
 	for _, requirement := range requirements {
 		if checked[requirement.Mode] {
 			continue
@@ -159,7 +209,9 @@ func (executor Executor) checkDirectoryModes(
 }
 
 func hasMutations(journal Journal) bool {
-	return len(journal.Directories) > 0 || len(journal.Steps) > 0
+	return len(journal.Configurations) > 0 ||
+		len(journal.Directories) > 0 ||
+		len(journal.Steps) > 0
 }
 
 func (executor Executor) prepare(operation domain.Operation) (JournalMutation, error) {

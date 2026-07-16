@@ -11,6 +11,7 @@ import (
 )
 
 func encodeJournal(journal Journal) ([]byte, error) {
+	journal.SchemaVersion = CurrentJournalSchemaVersion
 	if journal.Desired == nil {
 		journal.Desired = []domain.ComponentID{}
 	}
@@ -19,6 +20,9 @@ func encodeJournal(journal Journal) ([]byte, error) {
 	}
 	if journal.Roots == nil {
 		journal.Roots = []RootSnapshot{}
+	}
+	if journal.Configurations == nil {
+		journal.Configurations = []JournalConfigurationTransition{}
 	}
 	if journal.Directories == nil {
 		journal.Directories = []JournalDirectory{}
@@ -33,6 +37,11 @@ func decodeJournal(payload []byte) (Journal, error) {
 	if err := rejectDuplicateJSON(payload); err != nil {
 		return Journal{}, err
 	}
+	var err error
+	payload, err = upgradeLegacyJournal(payload)
+	if err != nil {
+		return Journal{}, err
+	}
 	if err := requireJournalShape(payload); err != nil {
 		return Journal{}, err
 	}
@@ -43,6 +52,9 @@ func decodeJournal(payload []byte) (Journal, error) {
 		return Journal{}, err
 	}
 	if err := expectJSONEnd(decoder); err != nil {
+		return Journal{}, err
+	}
+	if err := validateJournalSchema(journal); err != nil {
 		return Journal{}, err
 	}
 	return journal, nil
@@ -114,7 +126,8 @@ func expectJSONEnd(decoder *json.Decoder) error {
 func requireJournalShape(payload []byte) error {
 	root, err := requiredObject(
 		payload,
-		"release", "desired", "status", "plan", "roots", "directories", "steps",
+		"schema_version", "release", "desired", "status", "plan", "roots",
+		"configurations", "directories", "steps",
 	)
 	if err != nil {
 		return err
@@ -127,14 +140,17 @@ func requireJournalShape(payload []byte) error {
 		return fmt.Errorf("plan: %w", err)
 	}
 	if isNull(root["desired"]) || isNull(plan["operations"]) ||
-		isNull(root["roots"]) || isNull(root["directories"]) ||
-		isNull(root["steps"]) {
+		isNull(root["roots"]) || isNull(root["configurations"]) ||
+		isNull(root["directories"]) || isNull(root["steps"]) {
 		return fmt.Errorf("journal collections must be arrays")
 	}
 	if err := requireOperationsShape(plan["operations"]); err != nil {
 		return err
 	}
 	if err := requireRootsShape(root["roots"]); err != nil {
+		return err
+	}
+	if err := requireConfigurationsShape(root["configurations"]); err != nil {
 		return err
 	}
 	if err := requireDirectoriesShape(root["directories"]); err != nil {

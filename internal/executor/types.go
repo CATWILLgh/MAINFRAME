@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
@@ -10,9 +11,10 @@ type ReleaseIdentity struct {
 }
 
 type Preview struct {
-	Release ReleaseIdentity
-	Desired []domain.ComponentID
-	Plan    domain.Plan
+	Release       ReleaseIdentity
+	Desired       []domain.ComponentID
+	Plan          domain.Plan
+	Configuration configuration.PreparedPlan
 }
 
 type Result struct {
@@ -121,10 +123,12 @@ const (
 type StepPhase string
 
 const (
-	StepPrepared   StepPhase = "prepared"
-	StepStaged     StepPhase = "staged"
-	StepPublished  StepPhase = "published"
-	StepRolledBack StepPhase = "rolled_back"
+	StepPrepared       StepPhase = "prepared"
+	StepParentBound    StepPhase = "parent_bound"
+	StepPrivateCreated StepPhase = "private_created"
+	StepStaged         StepPhase = "staged"
+	StepPublished      StepPhase = "published"
+	StepRolledBack     StepPhase = "rolled_back"
 )
 
 type TransactionStatus string
@@ -184,13 +188,15 @@ type WorkspaceMutation struct {
 }
 
 type Journal struct {
-	Release     ReleaseIdentity      `json:"release"`
-	Desired     []domain.ComponentID `json:"desired"`
-	Status      TransactionStatus    `json:"status"`
-	Plan        domain.Plan          `json:"plan"`
-	Roots       []RootSnapshot       `json:"roots"`
-	Directories []JournalDirectory   `json:"directories"`
-	Steps       []JournalMutation    `json:"steps"`
+	SchemaVersion  int                              `json:"schema_version"`
+	Release        ReleaseIdentity                  `json:"release"`
+	Desired        []domain.ComponentID             `json:"desired"`
+	Status         TransactionStatus                `json:"status"`
+	Plan           domain.Plan                      `json:"plan"`
+	Roots          []RootSnapshot                   `json:"roots"`
+	Configurations []JournalConfigurationTransition `json:"configurations"`
+	Directories    []JournalDirectory               `json:"directories"`
+	Steps          []JournalMutation                `json:"steps"`
 }
 
 func cloneJournalPointer(journal *Journal) *Journal {
@@ -201,6 +207,7 @@ func cloneJournalPointer(journal *Journal) *Journal {
 	clone.Desired = append([]domain.ComponentID(nil), journal.Desired...)
 	clone.Plan.Operations = append([]domain.Operation(nil), journal.Plan.Operations...)
 	clone.Roots = append([]RootSnapshot(nil), journal.Roots...)
+	clone.Configurations = cloneJournalConfigurations(journal.Configurations)
 	clone.Directories = append([]JournalDirectory(nil), journal.Directories...)
 	clone.Steps = append([]JournalMutation(nil), journal.Steps...)
 	return &clone

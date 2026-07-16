@@ -215,12 +215,13 @@ func journalWith(status TransactionStatus, steps ...JournalMutation) *Journal {
 		})
 	}
 	return &Journal{
-		Release: ReleaseIdentity{ID: "release", IndexSHA256: testDigest("digest")},
-		Desired: []domain.ComponentID{"codex"},
-		Status:  status,
-		Plan:    domain.Plan{Operations: operations},
-		Roots:   roots,
-		Steps:   append([]JournalMutation(nil), steps...),
+		SchemaVersion: CurrentJournalSchemaVersion,
+		Release:       ReleaseIdentity{ID: "release", IndexSHA256: testDigest("digest")},
+		Desired:       []domain.ComponentID{"codex"},
+		Status:        status,
+		Plan:          domain.Plan{Operations: operations},
+		Roots:         roots,
+		Steps:         append([]JournalMutation(nil), steps...),
 	}
 }
 

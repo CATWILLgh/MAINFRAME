@@ -52,11 +52,12 @@ func TestRecoverChecksDirectoryModeBeforePreparedDirectoryMutation(t *testing.T)
 	fixture.workspace.directoryPlan = directoryPlan
 	fixture.workspace.directoryModeErr = errors.New("unsupported process umask")
 	fixture.store.journal = &Journal{
-		Release: preview.Release,
-		Desired: append([]domain.ComponentID(nil), preview.Desired...),
-		Status:  TransactionInProgress,
-		Plan:    preview.Plan,
-		Roots:   append([]RootSnapshot(nil), directoryPlan.Roots...),
+		SchemaVersion: CurrentJournalSchemaVersion,
+		Release:       preview.Release,
+		Desired:       append([]domain.ComponentID(nil), preview.Desired...),
+		Status:        TransactionInProgress,
+		Plan:          preview.Plan,
+		Roots:         append([]RootSnapshot(nil), directoryPlan.Roots...),
 		Directories: []JournalDirectory{{
 			Target:      directoryPlan.Missing[0].Target,
 			Mode:        directoryPlan.Missing[0].Mode,

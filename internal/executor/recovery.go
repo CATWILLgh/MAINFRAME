@@ -14,6 +14,9 @@ func (executor Executor) recoverLocked() (Result, error) {
 	if journal == nil {
 		return Result{}, nil
 	}
+	if len(journal.Configurations) > 0 && executor.configurations == nil {
+		return Result{}, errors.New("configuration workspace is required for recovery")
+	}
 	if err := validateJournal(*journal); err != nil {
 		return Result{}, fmt.Errorf("validate transaction journal: %w", err)
 	}
@@ -31,6 +34,7 @@ func (executor Executor) recoverLocked() (Result, error) {
 	}
 	if err := executor.checkDirectoryModes(
 		preparedDirectoryRequirements(journal.Directories),
+		configurationPrivateRequired(journal.Configurations),
 	); err != nil {
 		return Result{}, fmt.Errorf("check recovery directory mode: %w", err)
 	}
@@ -60,7 +64,10 @@ func preparedDirectoryRequirements(
 }
 
 func (executor Executor) validateRecoveryRoots(journal Journal) error {
-	current, err := executor.workspace.PlanDirectories(journal.Plan)
+	targets := journalConfigurationTargets(journal.Configurations)
+	current, err := executor.workspace.PlanDirectories(
+		directoryPlanningPlan(journal.Plan, targets),
+	)
 	if err != nil {
 		return err
 	}
@@ -117,6 +124,9 @@ func (executor Executor) persistBeforeAbort(journal *Journal, cause error) error
 }
 
 func (executor Executor) rollback(journal *Journal) error {
+	if err := executor.rollbackConfigurations(journal); err != nil {
+		return err
+	}
 	for index := len(journal.Steps) - 1; index >= 0; index-- {
 		if err := executor.ensureRollbackReady(journal, index); err != nil {
 			return fmt.Errorf("prepare rollback %v: %w", journal.Steps[index].Location, err)
@@ -220,6 +230,9 @@ func (executor Executor) ensureRollbackReady(journal *Journal, index int) error 
 }
 
 func (executor Executor) finalizeCommitted(journal *Journal) error {
+	if err := executor.finalizeCommittedConfigurations(journal); err != nil {
+		return err
+	}
 	for index := range journal.Steps {
 		if err := executor.finalizeStep(journal, index); err != nil {
 			return err

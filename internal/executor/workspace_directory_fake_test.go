@@ -8,6 +8,10 @@ import (
 )
 
 func (workspace *fakeWorkspace) PlanDirectories(plan domain.Plan) (DirectoryPlan, error) {
+	workspace.plannedOperations = append(
+		[]domain.Operation(nil),
+		plan.Operations...,
+	)
 	if workspace.directoryPlan != nil {
 		return DirectoryPlan{
 			Roots:   append([]RootSnapshot(nil), workspace.directoryPlan.Roots...),

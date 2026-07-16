@@ -40,6 +40,7 @@ type fakeWorkspace struct {
 	directoryPublishSave int
 	linkInspectDirCalls  int
 	linkRollbackDirCalls int
+	plannedOperations    []domain.Operation
 }
 
 type fakePrivateDirectory struct {

@@ -22,7 +22,13 @@ func validatePreview(preview Preview) error {
 	if err := validateDesired(preview.Desired); err != nil {
 		return err
 	}
-	return validateOperations(preview.Plan.Operations)
+	if err := validateOperations(preview.Plan.Operations); err != nil {
+		return err
+	}
+	return validatePreparedTargets(
+		preview.Configuration.Transitions(),
+		preview.Plan.Operations,
+	)
 }
 
 func validateDesired(desired []domain.ComponentID) error {
@@ -62,6 +68,9 @@ func validateOperations(operations []domain.Operation) error {
 }
 
 func validateJournal(journal Journal) error {
+	if err := validateJournalSchema(journal); err != nil {
+		return err
+	}
 	if !validRelease(journal.Release) {
 		return fmt.Errorf("invalid release identity")
 	}
@@ -87,6 +96,15 @@ func validateJournal(journal Journal) error {
 	for _, directory := range journal.Directories {
 		privateNames[directory.PrivateName] = true
 	}
+	configurationLocations, err := validateJournalConfigurations(
+		journal.Configurations,
+		journal.Status,
+		privateNames,
+	)
+	if err != nil {
+		return err
+	}
+	locations = append(locations, configurationLocations...)
 	for index, step := range journal.Steps {
 		if err := validateJournalStep(step); err != nil {
 			return fmt.Errorf("invalid step %d: %w", index, err)
@@ -127,7 +145,7 @@ func validateJournalStep(step JournalMutation) error {
 	if step.Parent.Device == 0 || step.Parent.Inode == 0 {
 		return fmt.Errorf("invalid parent identity")
 	}
-	if !validStepPhase(step.Phase) {
+	if !validLinkStepPhase(step.Phase) {
 		return fmt.Errorf("invalid step phase %q", step.Phase)
 	}
 	if !validImage(step.Before) || !validImage(step.After) {
@@ -159,6 +177,12 @@ func validateJournalStep(step JournalMutation) error {
 }
 
 func validStepPhase(phase StepPhase) bool {
+	return phase == StepPrepared || phase == StepStaged ||
+		phase == StepPublished || phase == StepRolledBack ||
+		phase == StepParentBound || phase == StepPrivateCreated
+}
+
+func validLinkStepPhase(phase StepPhase) bool {
 	return phase == StepPrepared || phase == StepStaged ||
 		phase == StepPublished || phase == StepRolledBack
 }

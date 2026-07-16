@@ -14,7 +14,11 @@ type allowedDirectory struct {
 	Path   string
 }
 
-func validateDirectoryPlan(plan domain.Plan, directoryPlan DirectoryPlan) error {
+func validateDirectoryPlan(
+	plan domain.Plan,
+	configurations []domain.Location,
+	directoryPlan DirectoryPlan,
+) error {
 	directories := make([]JournalDirectory, 0, len(directoryPlan.Missing))
 	for index, requirement := range directoryPlan.Missing {
 		directories = append(directories, JournalDirectory{
@@ -25,19 +29,25 @@ func validateDirectoryPlan(plan domain.Plan, directoryPlan DirectoryPlan) error 
 		})
 	}
 	return validateJournalDirectories(Journal{
-		Status:      TransactionInProgress,
-		Plan:        plan,
-		Roots:       directoryPlan.Roots,
-		Directories: directories,
+		Status:         TransactionInProgress,
+		Plan:           plan,
+		Roots:          directoryPlan.Roots,
+		Configurations: configurationTargetsAsJournal(configurations),
+		Directories:    directories,
 	})
 }
 
 func validateJournalDirectories(journal Journal) error {
-	roots, err := validateRootSnapshots(journal.Plan, journal.Roots)
+	configurations := journalConfigurationTargets(journal.Configurations)
+	roots, err := validateRootSnapshots(
+		journal.Plan,
+		configurations,
+		journal.Roots,
+	)
 	if err != nil {
 		return err
 	}
-	allowed := deriveAllowedDirectories(journal.Plan, roots)
+	allowed := deriveAllowedDirectories(journal.Plan, configurations, roots)
 	indexes := make(map[string]int)
 	privateNames := make(map[string]bool)
 	for index, directory := range journal.Directories {
@@ -67,6 +77,7 @@ func validateJournalDirectories(journal Journal) error {
 
 func validateRootSnapshots(
 	plan domain.Plan,
+	configurations []domain.Location,
 	snapshots []RootSnapshot,
 ) (map[domain.RootID]RootSnapshot, error) {
 	required := make(map[domain.RootID]bool)
@@ -74,6 +85,9 @@ func validateRootSnapshots(
 		if operation.Kind == domain.OperationInstall {
 			required[operation.Artifact.Location.Root] = true
 		}
+	}
+	for _, target := range configurations {
+		required[target.Root] = true
 	}
 	roots := make(map[domain.RootID]RootSnapshot)
 	for index, snapshot := range snapshots {
@@ -99,6 +113,7 @@ func validAnchorPath(value string) bool {
 
 func deriveAllowedDirectories(
 	plan domain.Plan,
+	configurations []domain.Location,
 	roots map[domain.RootID]RootSnapshot,
 ) map[string]allowedDirectory {
 	allowed := make(map[string]allowedDirectory)
@@ -106,23 +121,34 @@ func deriveAllowedDirectories(
 		if operation.Kind != domain.OperationInstall {
 			continue
 		}
-		root := roots[operation.Artifact.Location.Root]
-		required := root.RootPath
-		parent := path.Dir(string(operation.Artifact.Location.Path))
-		if parent != "." {
-			required = path.Join(required, parent)
-		}
-		for _, prefix := range pathPrefixes(required) {
-			target := DirectoryTarget{Root: root.Root, Path: prefix}
-			physical := physicalDirectory(root, prefix)
-			candidate := allowedDirectory{Target: target, Path: physical}
-			current, exists := allowed[physical]
-			if !exists || directoryTargetLess(candidate.Target, current.Target) {
-				allowed[physical] = candidate
-			}
-		}
+		addAllowedTarget(allowed, operation.Artifact.Location, roots)
+	}
+	for _, target := range configurations {
+		addAllowedTarget(allowed, target, roots)
 	}
 	return allowed
+}
+
+func addAllowedTarget(
+	allowed map[string]allowedDirectory,
+	location domain.Location,
+	roots map[domain.RootID]RootSnapshot,
+) {
+	root := roots[location.Root]
+	required := root.RootPath
+	parent := path.Dir(string(location.Path))
+	if parent != "." {
+		required = path.Join(required, parent)
+	}
+	for _, prefix := range pathPrefixes(required) {
+		target := DirectoryTarget{Root: root.Root, Path: prefix}
+		physical := physicalDirectory(root, prefix)
+		candidate := allowedDirectory{Target: target, Path: physical}
+		current, exists := allowed[physical]
+		if !exists || directoryTargetLess(candidate.Target, current.Target) {
+			allowed[physical] = candidate
+		}
+	}
 }
 
 func pathPrefixes(value string) []string {
@@ -175,7 +201,7 @@ func physicalDirectory(root RootSnapshot, relative string) string {
 }
 
 func validateDirectoryPhase(directory JournalDirectory) error {
-	if !validStepPhase(directory.Phase) {
+	if !validLinkStepPhase(directory.Phase) {
 		return fmt.Errorf("invalid phase %q", directory.Phase)
 	}
 	if directory.Finalized &&

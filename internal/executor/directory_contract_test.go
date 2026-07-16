@@ -60,10 +60,11 @@ func TestCommittedJournalRequiresPublishedDirectories(t *testing.T) {
 func directoryJournalFixture() Journal {
 	operation := install("skills/mainframe", "bundles/codex/skills/mainframe")
 	return Journal{
-		Release: ReleaseIdentity{ID: "release", IndexSHA256: testDigest("directory")},
-		Desired: []domain.ComponentID{"codex"},
-		Status:  TransactionInProgress,
-		Plan:    domain.Plan{Operations: []domain.Operation{operation}},
+		SchemaVersion: CurrentJournalSchemaVersion,
+		Release:       ReleaseIdentity{ID: "release", IndexSHA256: testDigest("directory")},
+		Desired:       []domain.ComponentID{"codex"},
+		Status:        TransactionInProgress,
+		Plan:          domain.Plan{Operations: []domain.Operation{operation}},
 		Roots: []RootSnapshot{{
 			Root: domain.RootCodexConfig, AnchorPath: "/home/user",
 			AnchorIdentity: FileIdentity{Device: 1, Inode: 1},
