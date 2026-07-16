@@ -34,13 +34,25 @@ func TestPlannerRemovesOnlyExactArtifactsOfKnownUndesiredComponents(t *testing.T
 		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "conflict.md", domain.OwnershipConflict)),
 		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "foreign.md", domain.OwnershipForeign)),
 		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "legacy.md", domain.OwnershipLegacyAdoptable)),
-		operation("codex", domain.OperationRemove, observed(domain.RootCodexConfig, "AGENTS.md", domain.OwnershipManagedExact)),
+		{
+			ComponentID: "codex",
+			Kind:        domain.OperationRemove,
+			Artifact:    observed(domain.RootCodexConfig, "AGENTS.md", domain.OwnershipManagedExact),
+			SourcePath:  "dist/codex/AGENTS.md",
+		},
 		operation("retired", domain.OperationConflict, observed(domain.RootHome, "legacy/exact", domain.OwnershipManagedExact)),
 	}
 	assertOperations(t, got.Operations, want)
 }
 
 func TestPlannerSortsByComponentKindAndLocation(t *testing.T) {
+	registry, err := catalog.New([]catalog.Component{{ID: "codex", Artifacts: []catalog.Artifact{
+		expected(domain.RootHome, "z", "dist/z"),
+		expected(domain.RootCodexConfig, "b", "dist/b"),
+	}}})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
 	request := domain.PlanRequest{Observed: domain.ObservedState{Components: []domain.ObservedComponent{{
 		ID: "codex", Artifacts: []domain.Artifact{
 			observed(domain.RootHome, "z", domain.OwnershipManagedExact),
@@ -48,16 +60,34 @@ func TestPlannerSortsByComponentKindAndLocation(t *testing.T) {
 			observed(domain.RootCodexConfig, "a", domain.OwnershipForeign),
 		},
 	}}}}
-	got, err := newPlanner(t).Plan(request)
+	got, err := plan.New(registry).Plan(request)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
 	want := []domain.Operation{
 		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "a", domain.OwnershipForeign)),
-		operation("codex", domain.OperationRemove, observed(domain.RootCodexConfig, "b", domain.OwnershipManagedExact)),
-		operation("codex", domain.OperationRemove, observed(domain.RootHome, "z", domain.OwnershipManagedExact)),
+		{ComponentID: "codex", Kind: domain.OperationRemove, Artifact: observed(domain.RootCodexConfig, "b", domain.OwnershipManagedExact), SourcePath: "dist/b"},
+		{ComponentID: "codex", Kind: domain.OperationRemove, Artifact: observed(domain.RootHome, "z", domain.OwnershipManagedExact), SourcePath: "dist/z"},
 	}
 	assertOperations(t, got.Operations, want)
+}
+
+func TestPlannerRejectsForgedManagedExactArtifactForKnownComponent(t *testing.T) {
+	request := domain.PlanRequest{Observed: domain.ObservedState{Components: []domain.ObservedComponent{{
+		ID: "codex", Artifacts: []domain.Artifact{
+			observed(domain.RootCodexConfig, "not-in-release", domain.OwnershipManagedExact),
+		},
+	}}}}
+	got, err := newPlanner(t).Plan(request)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	want := operation(
+		"codex",
+		domain.OperationConflict,
+		observed(domain.RootCodexConfig, "not-in-release", domain.OwnershipManagedExact),
+	)
+	assertOperations(t, got.Operations, []domain.Operation{want})
 }
 
 func TestPlannerInstallsDesiredDependencyArtifactsWithSources(t *testing.T) {
@@ -189,11 +219,18 @@ func TestPlannerRejectsDuplicateObservedState(t *testing.T) {
 }
 
 func TestPlannerAllowsSameObservedPathUnderDifferentRoots(t *testing.T) {
+	registry, err := catalog.New([]catalog.Component{{ID: "codex", Artifacts: []catalog.Artifact{
+		expected(domain.RootCodexConfig, "same", "dist/codex/same"),
+		expected(domain.RootHome, "same", "dist/home/same"),
+	}}})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
 	request := domain.PlanRequest{Observed: domain.ObservedState{Components: []domain.ObservedComponent{{ID: "codex", Artifacts: []domain.Artifact{
 		observed(domain.RootCodexConfig, "same", domain.OwnershipManagedExact),
 		observed(domain.RootHome, "same", domain.OwnershipManagedExact),
 	}}}}}
-	got, err := newPlanner(t).Plan(request)
+	got, err := plan.New(registry).Plan(request)
 	if err != nil || len(got.Operations) != 2 {
 		t.Fatalf("operations = %#v, error = %v", got.Operations, err)
 	}
@@ -241,7 +278,10 @@ func newPlanner(t *testing.T) plan.Planner {
 	t.Helper()
 	registry, err := catalog.New([]catalog.Component{
 		{ID: "claude-code", Artifacts: []catalog.Artifact{expected(domain.RootClaudeConfig, "CLAUDE.md", "dist/CLAUDE.md")}},
-		{ID: "codex"},
+		{ID: "codex", Artifacts: []catalog.Artifact{
+			expected(domain.RootCodexConfig, "AGENTS.md", "dist/codex/AGENTS.md"),
+			expected(domain.RootCodexConfig, "config.toml", "dist/codex/config.toml"),
+		}},
 		{ID: "codex-gates", Dependencies: []domain.ComponentID{"shared-gate-detectors"}},
 		{ID: "shared-gate-detectors", Artifacts: []catalog.Artifact{expected(domain.RootCommonData, "detector", "dist/detector")}},
 	})

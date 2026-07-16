@@ -74,17 +74,34 @@ func (planner Planner) operationsForObserved(
 				continue
 			}
 			kind := domain.OperationConflict
-			if planner.catalog.Knows(component.ID) && artifact.Ownership.Removable() {
+			declaredSource, declared := planner.declaredSource(component.ID, artifact.Location)
+			var sourcePath domain.ArtifactPath
+			if declared && artifact.Ownership.Removable() {
 				kind = domain.OperationRemove
+				sourcePath = declaredSource
 			}
 			operations = append(operations, domain.Operation{
 				ComponentID: component.ID,
 				Kind:        kind,
 				Artifact:    artifact,
+				SourcePath:  sourcePath,
 			})
 		}
 	}
 	return operations
+}
+
+func (planner Planner) declaredSource(id domain.ComponentID, location domain.Location) (domain.ArtifactPath, bool) {
+	component, exists := planner.catalog.Component(id)
+	if !exists {
+		return "", false
+	}
+	for _, artifact := range component.Artifacts {
+		if artifact.Target == location {
+			return artifact.SourcePath, true
+		}
+	}
+	return "", false
 }
 
 func (planner Planner) expectedOwners(desired []domain.ComponentID) map[domain.Location]domain.ComponentID {

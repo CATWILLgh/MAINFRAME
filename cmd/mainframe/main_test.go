@@ -72,11 +72,11 @@ func TestRunPlanJSONContract(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("decode stdout: %v; output = %q", err, stdout.String())
 	}
-	if len(got.Operations) != 1 || got.Operations[0].Kind != domain.OperationRemove {
+	if len(got.Operations) != 1 || got.Operations[0].Kind != domain.OperationConflict {
 		t.Fatalf("unexpected plan: %#v", got)
 	}
 	if got.Operations[0].SourcePath != "" {
-		t.Fatalf("remove source path = %q, want empty", got.Operations[0].SourcePath)
+		t.Fatalf("conflict source path = %q, want empty", got.Operations[0].SourcePath)
 	}
 }
 
