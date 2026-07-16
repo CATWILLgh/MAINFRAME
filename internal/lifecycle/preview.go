@@ -66,12 +66,19 @@ type ConfigurationResource struct {
 	Reason   ConfigurationReason
 }
 
+type Preview struct {
+	Filesystem    domain.Plan
+	Configuration configuration.Plan
+}
+
 type Service struct {
-	planner       plan.Planner
-	observed      domain.ObservedState
-	desiredCounts map[domain.ComponentID]int
-	dependencies  map[domain.ComponentID][]domain.ComponentID
-	configuration map[domain.ComponentID][]ConfigurationResource
+	planner                 plan.Planner
+	observed                domain.ObservedState
+	desiredCounts           map[domain.ComponentID]int
+	dependencies            map[domain.ComponentID][]domain.ComponentID
+	configuration           map[domain.ComponentID][]ConfigurationResource
+	configurationInspection *configuration.Inspection
+	configurationFallback   configuration.Plan
 }
 
 func New(model installmodel.Model, observed domain.ObservedState) (Service, error) {
@@ -109,7 +116,12 @@ func NewWithConfiguration(
 	for _, observation := range observations {
 		indexed[observation.ResourceID] = observation
 	}
-	return newService(model, observed, resources, indexed)
+	service, err := newService(model, observed, resources, indexed)
+	if err != nil {
+		return Service{}, err
+	}
+	service.configurationFallback = unavailableConfigurationPlan(resources, indexed)
+	return service, nil
 }
 
 func newService(

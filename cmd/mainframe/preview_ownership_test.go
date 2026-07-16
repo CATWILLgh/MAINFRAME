@@ -3,8 +3,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
@@ -47,6 +49,19 @@ func TestBuildPreviewServiceObservesOpenCodePermissionOwnership(t *testing.T) {
 			if len(target.Configuration) != 1 ||
 				target.Configuration[0].Status != lifecycle.ConfigurationReady {
 				t.Fatalf("OpenCode configuration = %#v", target.Configuration)
+			}
+			preview, err := service.Preview(nil)
+			if err != nil {
+				t.Fatalf("preview deselection: %v", err)
+			}
+			want := configuration.Change{
+				ResourceID:  "opencode.permissions",
+				ComponentID: domain.ComponentOpenCode,
+				UnitID:      "bash",
+				Kind:        configuration.ChangeRemove,
+			}
+			if !reflect.DeepEqual(preview.Configuration.Changes, []configuration.Change{want}) {
+				t.Fatalf("configuration changes = %#v, want %#v", preview.Configuration.Changes, want)
 			}
 			return
 		}

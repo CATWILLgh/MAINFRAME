@@ -14,7 +14,7 @@ import (
 
 type Previewer interface {
 	Targets() []lifecycle.Target
-	Plan([]domain.ComponentID) (domain.Plan, error)
+	Preview([]domain.ComponentID) (lifecycle.Preview, error)
 }
 
 type screen uint8
@@ -30,7 +30,7 @@ type Model struct {
 	selected  []domain.ComponentID
 	form      *huh.Form
 	screen    screen
-	plan      domain.Plan
+	preview   lifecycle.Preview
 	err       error
 }
 
@@ -111,21 +111,21 @@ func (model *Model) View() tea.View {
 }
 
 func (model *Model) openPreview() (*Model, tea.Cmd) {
-	result, err := model.previewer.Plan(model.selected)
+	result, err := model.previewer.Preview(model.selected)
 	if err != nil {
 		model.err = err
 		model.form = selectionForm(model.targets, &model.selected)
 		return model, model.form.Init()
 	}
 	model.err = nil
-	model.plan = result
+	model.preview = result
 	model.screen = screenPreview
 	return model, nil
 }
 
 func (model *Model) backToSelection() (*Model, tea.Cmd) {
 	model.screen = screenSelection
-	model.plan = domain.Plan{}
+	model.preview = lifecycle.Preview{}
 	model.err = nil
 	model.form = selectionForm(model.targets, &model.selected)
 	return model, model.form.Init()
@@ -156,7 +156,7 @@ func (model *Model) previewView() string {
 	}
 	groupCount := 0
 	for _, group := range groups {
-		operations := operationsByKind(model.plan.Operations, group.kind)
+		operations := operationsByKind(model.preview.Filesystem.Operations, group.kind)
 		if len(operations) == 0 {
 			continue
 		}
@@ -166,10 +166,7 @@ func (model *Model) previewView() string {
 	if groupCount == 0 {
 		sections = append(sections, mutedStyle.Render("No filesystem changes."))
 	}
-	configuration := selectedConfiguration(model.targets, model.selected)
-	if len(configuration) > 0 {
-		sections = append(sections, renderConfiguration(configuration))
-	}
+	sections = append(sections, renderConfigurationPlan(model.preview.Configuration))
 	sections = append(sections, mutedStyle.Render("b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
 }

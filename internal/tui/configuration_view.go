@@ -2,9 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
-	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
 
@@ -32,40 +33,124 @@ func configurationStatus(resources []lifecycle.ConfigurationResource) string {
 	return " · configuration " + strings.Join(parts, ", ")
 }
 
-func selectedConfiguration(
-	targets []lifecycle.Target,
-	selected []domain.ComponentID,
-) []lifecycle.ConfigurationResource {
-	resources := make([]lifecycle.ConfigurationResource, 0)
-	seen := make(map[string]bool)
-	for _, target := range targets {
-		if contains(selected, target.ID) {
-			for _, resource := range target.Configuration {
-				if !seen[resource.ID] {
-					resources = append(resources, resource)
-					seen[resource.ID] = true
-				}
-			}
-		}
+func renderConfigurationPlan(plan configuration.Plan) string {
+	lines := []string{headingStyle.Render("Configuration plan")}
+	if len(plan.Changes) == 0 && len(plan.Issues) == 0 {
+		return strings.Join(
+			append(lines, mutedStyle.Render("No configuration changes.")),
+			"\n",
+		)
 	}
-	return resources
-}
-
-func renderConfiguration(resources []lifecycle.ConfigurationResource) string {
-	lines := []string{
-		headingStyle.Render(fmt.Sprintf("Configuration status · %d", len(resources))),
+	changes := append([]configuration.Change(nil), plan.Changes...)
+	issues := append([]configuration.Issue(nil), plan.Issues...)
+	sortConfigurationChanges(changes)
+	sortConfigurationIssues(issues)
+	if len(changes) > 0 {
+		lines = append(lines, headingStyle.Render(fmt.Sprintf("Changes · %d", len(changes))))
 	}
-	for _, resource := range resources {
-		lines = append(lines, fmt.Sprintf(
-			"  %s  %s · %s · %s · %s",
-			configurationGlyph(resource.Status),
-			resource.ID,
-			resource.Strategy,
-			configurationStatusName(resource.Status),
-			configurationReasonName(resource.Reason),
-		))
+	for _, change := range changes {
+		lines = append(lines, renderConfigurationChange(change))
+	}
+	if len(issues) > 0 {
+		lines = append(lines, headingStyle.Render(fmt.Sprintf("Issues · %d", len(issues))))
+	}
+	for _, issue := range issues {
+		lines = append(lines, renderConfigurationIssue(issue))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func renderConfigurationChange(change configuration.Change) string {
+	parts := []string{
+		configurationChangeName(change.Kind),
+		componentName(change.ComponentID),
+		change.ResourceID,
+	}
+	scope := "configuration"
+	if change.UnitID != "" {
+		parts = append(parts, change.UnitID)
+		scope = "configuration + ownership registry"
+	}
+	parts = append(parts, scope)
+	return fmt.Sprintf(
+		"  %s  %s",
+		configurationChangeGlyph(change.Kind),
+		strings.Join(parts, " · "),
+	)
+}
+
+func configurationChangeName(kind configuration.ChangeKind) string {
+	if kind == configuration.ChangeRelinquish {
+		return "stop managing"
+	}
+	return string(kind)
+}
+
+func renderConfigurationIssue(issue configuration.Issue) string {
+	parts := []string{
+		configurationIssueName(issue.Kind),
+		componentName(issue.ComponentID),
+		issue.ResourceID,
+	}
+	if issue.UnitID != "" {
+		parts = append(parts, issue.UnitID)
+	}
+	parts = append(parts, configurationReasonName(issue.Reason))
+	return "  !  " + strings.Join(parts, " · ")
+}
+
+func sortConfigurationChanges(changes []configuration.Change) {
+	sort.Slice(changes, func(left, right int) bool {
+		a, b := changes[left], changes[right]
+		if a.ResourceID != b.ResourceID {
+			return a.ResourceID < b.ResourceID
+		}
+		if a.UnitID != b.UnitID {
+			return a.UnitID < b.UnitID
+		}
+		return a.Kind < b.Kind
+	})
+}
+
+func sortConfigurationIssues(issues []configuration.Issue) {
+	sort.Slice(issues, func(left, right int) bool {
+		a, b := issues[left], issues[right]
+		if a.ResourceID != b.ResourceID {
+			return a.ResourceID < b.ResourceID
+		}
+		if a.UnitID != b.UnitID {
+			return a.UnitID < b.UnitID
+		}
+		return a.Kind < b.Kind
+	})
+}
+
+func configurationChangeGlyph(kind configuration.ChangeKind) string {
+	switch kind {
+	case configuration.ChangeAdd:
+		return "+"
+	case configuration.ChangeRemove:
+		return "−"
+	case configuration.ChangeRelinquish:
+		return "↪"
+	default:
+		return "~"
+	}
+}
+
+func configurationIssueName(kind configuration.IssueKind) string {
+	switch kind {
+	case configuration.IssueAttention:
+		return "needs attention"
+	case configuration.IssueNotAssessed:
+		return "not assessed"
+	case configuration.IssueRemovalUnsupported:
+		return "removal unsupported"
+	case configuration.IssuePlanningUnavailable:
+		return "planning unavailable"
+	default:
+		return "unknown issue"
+	}
 }
 
 func configurationStatusName(status lifecycle.ConfigurationStatus) string {
@@ -117,21 +202,6 @@ func configurationReasonName(reason lifecycle.ConfigurationReason) string {
 		return "JSON document is invalid"
 	default:
 		return "unknown reason"
-	}
-}
-
-func configurationGlyph(status lifecycle.ConfigurationStatus) string {
-	switch status {
-	case lifecycle.ConfigurationReady:
-		return "✓"
-	case lifecycle.ConfigurationNeedsChange:
-		return "+"
-	case lifecycle.ConfigurationNotApplicable:
-		return "·"
-	case lifecycle.ConfigurationAttention:
-		return "!"
-	default:
-		return "?"
 	}
 }
 

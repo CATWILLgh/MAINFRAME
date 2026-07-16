@@ -78,6 +78,13 @@ func TestRunPlanJSONContract(t *testing.T) {
 	if got.Operations[0].SourcePath != "" {
 		t.Fatalf("conflict source path = %q, want empty", got.Operations[0].SourcePath)
 	}
+	var contract map[string]json.RawMessage
+	if err := json.Unmarshal(stdout.Bytes(), &contract); err != nil {
+		t.Fatalf("decode JSON contract: %v", err)
+	}
+	if _, exists := contract["configuration"]; exists {
+		t.Fatalf("plan JSON unexpectedly exposes configuration: %s", stdout.String())
+	}
 }
 
 func TestRunRejectsUnknownJSONFields(t *testing.T) {

@@ -72,11 +72,13 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 			{ID: domain.ComponentCodex, Status: lifecycle.StatusManaged, Selected: true},
 			{ID: domain.ComponentOpenCode, Status: lifecycle.StatusAbsent},
 		},
-		plan: domain.Plan{Operations: []domain.Operation{
-			operation(domain.ComponentClaudeCode, domain.OperationInstall, domain.RootClaudeConfig, "CLAUDE.md"),
-			operation(domain.ComponentCodex, domain.OperationRemove, domain.RootCodexConfig, "AGENTS.md"),
-			operation(domain.ComponentOpenCode, domain.OperationConflict, domain.RootOpenCodeConfig, "AGENTS.md"),
-		}},
+		preview: lifecycle.Preview{
+			Filesystem: domain.Plan{Operations: []domain.Operation{
+				operation(domain.ComponentClaudeCode, domain.OperationInstall, domain.RootClaudeConfig, "CLAUDE.md"),
+				operation(domain.ComponentCodex, domain.OperationRemove, domain.RootCodexConfig, "AGENTS.md"),
+				operation(domain.ComponentOpenCode, domain.OperationConflict, domain.RootOpenCodeConfig, "AGENTS.md"),
+			}},
+		},
 	}
 	model := NewModel(previewer)
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
@@ -94,8 +96,8 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 		"Claude Code",
 		"Codex",
 		"OpenCode",
-		"Configuration status · 1",
-		"claude-code.permissions · json-key-merge · not assessed · observation is not implemented",
+		"Configuration plan",
+		"No configuration changes",
 		"b back",
 		"q quit",
 	} {
@@ -105,24 +107,6 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 	}
 	if !reflect.DeepEqual(previewer.selected, model.selected) {
 		t.Fatalf("preview selection = %v, want %v", previewer.selected, model.selected)
-	}
-}
-
-func TestSelectedConfigurationDeduplicatesSharedDependencyResources(t *testing.T) {
-	shared := lifecycle.ConfigurationResource{
-		ID: "credential-tools.secrets-store", Strategy: "seed-if-absent",
-		Status: lifecycle.ConfigurationNotAssessed, Reason: lifecycle.ConfigurationObservationUnsupported,
-	}
-	targets := []lifecycle.Target{
-		{ID: domain.ComponentClaudeCode, Configuration: []lifecycle.ConfigurationResource{shared}},
-		{ID: domain.ComponentCodex, Configuration: []lifecycle.ConfigurationResource{shared}},
-	}
-	got := selectedConfiguration(targets, []domain.ComponentID{
-		domain.ComponentClaudeCode,
-		domain.ComponentCodex,
-	})
-	if !reflect.DeepEqual(got, []lifecycle.ConfigurationResource{shared}) {
-		t.Fatalf("configuration = %#v, want one shared resource", got)
 	}
 }
 
@@ -268,7 +252,7 @@ func TestEscapeAbortsSelectionButReturnsFromPreview(t *testing.T) {
 
 type fakePreviewer struct {
 	targets  []lifecycle.Target
-	plan     domain.Plan
+	preview  lifecycle.Preview
 	err      error
 	selected []domain.ComponentID
 }
@@ -277,9 +261,9 @@ func (fake *fakePreviewer) Targets() []lifecycle.Target {
 	return append([]lifecycle.Target(nil), fake.targets...)
 }
 
-func (fake *fakePreviewer) Plan(selected []domain.ComponentID) (domain.Plan, error) {
+func (fake *fakePreviewer) Preview(selected []domain.ComponentID) (lifecycle.Preview, error) {
 	fake.selected = append([]domain.ComponentID(nil), selected...)
-	return fake.plan, fake.err
+	return fake.preview, fake.err
 }
 
 func defaultTargets() []lifecycle.Target {

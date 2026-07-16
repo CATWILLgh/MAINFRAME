@@ -55,15 +55,14 @@ func buildPreviewServiceFrom(
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("discover current installation: %w", err)
 	}
-	configurationObservations, err := configuration.Observe(release.Resources, namespace)
+	configurationInspection, err := configuration.Inspect(release.Resources, namespace)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("inspect configuration: %w", err)
 	}
-	service, err := lifecycle.NewWithConfiguration(
+	service, err := lifecycle.NewWithInspection(
 		release.Model,
 		observed,
-		release.Resources,
-		configurationObservations,
+		configurationInspection,
 	)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("create lifecycle preview: %w", err)

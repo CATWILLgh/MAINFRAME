@@ -67,10 +67,18 @@ def require_restrictive_projection(permission):
 def _is_rule(value):
     if isinstance(value, str):
         return value in DECISIONS
-    return (isinstance(value, dict)
+    return (isinstance(value, dict) and bool(value)
             and all(isinstance(pattern, str) and pattern
                     and isinstance(decision, str) and decision in DECISIONS
                     for pattern, decision in value.items()))
+
+
+def _rules_equal(actual, previous):
+    if actual != previous:
+        return False
+    if isinstance(actual, dict):
+        return list(actual.items()) == list(previous.items())
+    return True
 
 
 def validate_permission(value, *, label="permission"):
@@ -139,7 +147,8 @@ def merge_permissions(existing, generated, owned):
     for action, previous in owned.items():
         if previous is None:
             next_owned[action] = None
-        elif action not in existing or existing[action] != previous:
+        elif (action not in existing
+              or not _rules_equal(existing[action], previous)):
             next_owned[action] = None
         elif action in generated:
             merged[action] = copy.deepcopy(generated[action])

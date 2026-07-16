@@ -1,7 +1,6 @@
 package configuration
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -43,25 +42,22 @@ func observeOwnedJSONMap(
 		result.Status, result.Reason = Attention, JSONDocumentInvalid
 		return result
 	}
-	generated, err := decodeDecisionMap(ownership.DesiredMap, false)
+	reconciliation, err := reconcileOwnedJSONMaps(
+		existingRaw,
+		ownership.DesiredMap,
+		ownedRaw,
+	)
 	if err != nil {
 		result.Status, result.Reason = Attention, JSONDocumentInvalid
 		return result
 	}
-	merged, nextOwned, err := reconcileOwnedMap(existing, generated, owned)
-	if err != nil {
-		result.Status, result.Reason = Attention, JSONDocumentInvalid
-		return result
-	}
+	existingOrder, _ := orderedRuleMap(existingRaw)
+	ownedOrder, _ := orderedRuleMap(ownedRaw)
 	if configPresent && registryPresent &&
-		reflect.DeepEqual(existing, merged) &&
-		reflect.DeepEqual(owned, nextOwned) &&
-		ownedRulesHaveDesiredOrder(
-			existingRaw,
-			ownedRaw,
-			ownership.DesiredMap,
-			nextOwned,
-		) {
+		reflect.DeepEqual(existing, reconciliation.merged) &&
+		reflect.DeepEqual(owned, reconciliation.nextOwned) &&
+		reflect.DeepEqual(existingOrder, reconciliation.mergedOrder) &&
+		reflect.DeepEqual(ownedOrder, reconciliation.nextOwnedOrder) {
 		result.Status, result.Reason = Ready, JSONFieldsMatch
 		return result
 	}
@@ -136,51 +132,4 @@ func ownedRegistryMap(
 	}
 	owned, err := decodeDecisionMap(raw, true)
 	return owned, raw, true, err
-}
-
-func ownedRulesHaveDesiredOrder(
-	existingRaw, ownedRaw, desiredRaw string,
-	nextOwned map[string]any,
-) bool {
-	existing, err := orderedRuleMap(existingRaw)
-	if err != nil {
-		return false
-	}
-	owned, err := orderedRuleMap(ownedRaw)
-	if err != nil {
-		return false
-	}
-	desired, err := orderedRuleMap(desiredRaw)
-	if err != nil {
-		return false
-	}
-	for action, value := range nextOwned {
-		if value == nil {
-			continue
-		}
-		want, generated := desired[action]
-		if !generated || existing[action] != want || owned[action] != want {
-			return false
-		}
-	}
-	return true
-}
-
-func orderedRuleMap(raw string) (map[string]string, error) {
-	if len(raw) == 0 || raw[0] != '{' {
-		return map[string]string{}, nil
-	}
-	var entries map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
-		return nil, err
-	}
-	result := make(map[string]string, len(entries))
-	for action, rule := range entries {
-		var compact bytes.Buffer
-		if err := json.Compact(&compact, rule); err != nil {
-			return nil, err
-		}
-		result[action] = compact.String()
-	}
-	return result, nil
 }

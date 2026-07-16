@@ -18,6 +18,13 @@ var decisions = map[string]bool{
 	"deny":  true,
 }
 
+type ownedMapReconciliation struct {
+	merged         any
+	nextOwned      map[string]any
+	mergedOrder    map[string]string
+	nextOwnedOrder map[string]string
+}
+
 func decodeDecisionValue(raw string) (any, error) {
 	document, err := jsondocument.Parse([]byte(raw))
 	if err != nil {
@@ -50,32 +57,104 @@ func reconcileOwnedMap(
 	generated map[string]any,
 	owned map[string]any,
 ) (any, map[string]any, error) {
+	result, err := reconcileOwnedMapWithOrder(
+		existing,
+		generated,
+		owned,
+		map[string]string{},
+		map[string]string{},
+		map[string]string{},
+	)
+	return result.merged, result.nextOwned, err
+}
+
+func reconcileOwnedJSONMaps(
+	existingRaw, generatedRaw, ownedRaw string,
+) (ownedMapReconciliation, error) {
+	existing, err := decodeDecisionValue(existingRaw)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	generated, err := decodeDecisionMap(generatedRaw, false)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	owned, err := decodeDecisionMap(ownedRaw, true)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	existingOrder, err := orderedRuleMap(existingRaw)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	generatedOrder, err := orderedRuleMap(generatedRaw)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	ownedOrder, err := orderedRuleMap(ownedRaw)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	return reconcileOwnedMapWithOrder(
+		existing,
+		generated,
+		owned,
+		existingOrder,
+		generatedOrder,
+		ownedOrder,
+	)
+}
+
+func reconcileOwnedMapWithOrder(
+	existing any,
+	generated, owned map[string]any,
+	existingOrder, generatedOrder, ownedOrder map[string]string,
+) (ownedMapReconciliation, error) {
 	if err := validateDecisionMap(existing, false); err != nil {
-		return nil, nil, fmt.Errorf("existing map: %w", err)
+		return ownedMapReconciliation{}, fmt.Errorf("existing map: %w", err)
 	}
 	if err := validateDecisionMap(generated, false); err != nil {
-		return nil, nil, fmt.Errorf("generated map: %w", err)
+		return ownedMapReconciliation{}, fmt.Errorf("generated map: %w", err)
 	}
 	if err := validateDecisionMap(owned, true); err != nil {
-		return nil, nil, fmt.Errorf("ownership map: %w", err)
+		return ownedMapReconciliation{}, fmt.Errorf("ownership map: %w", err)
 	}
 	existingMap, isMap := existing.(map[string]any)
 	if !isMap {
-		return existing, tombstoneAll(owned, generated), nil
+		return ownedMapReconciliation{
+			merged:         existing,
+			nextOwned:      tombstoneAll(owned, generated),
+			mergedOrder:    map[string]string{},
+			nextOwnedOrder: map[string]string{},
+		}, nil
 	}
-	merged := cloneDecisionMap(existingMap)
-	nextOwned := reconcilePreviouslyOwned(existingMap, generated, owned, merged)
+	result := ownedMapReconciliation{
+		merged:         cloneDecisionMap(existingMap),
+		mergedOrder:    cloneRuleOrder(existingOrder),
+		nextOwnedOrder: map[string]string{},
+	}
+	merged := result.merged.(map[string]any)
+	result.nextOwned = reconcilePreviouslyOwned(
+		existingMap, generated, owned, merged,
+		existingOrder, generatedOrder, ownedOrder,
+		result.mergedOrder, result.nextOwnedOrder,
+	)
 	for action := range existingMap {
 		if _, tracked := owned[action]; !tracked {
-			nextOwned[action] = nil
+			result.nextOwned[action] = nil
 		}
 	}
-	addGeneratedActions(generated, merged, nextOwned)
-	return merged, nextOwned, nil
+	addGeneratedActions(
+		generated, merged, result.nextOwned,
+		generatedOrder, result.mergedOrder, result.nextOwnedOrder,
+	)
+	return result, nil
 }
 
 func reconcilePreviouslyOwned(
 	existing, generated, owned, merged map[string]any,
+	existingOrder, generatedOrder, ownedOrder map[string]string,
+	mergedOrder, nextOwnedOrder map[string]string,
 ) map[string]any {
 	next := make(map[string]any, len(owned)+len(generated))
 	for action, previous := range owned {
@@ -83,19 +162,27 @@ func reconcilePreviouslyOwned(
 		switch {
 		case previous == nil:
 			next[action] = nil
-		case !exists || !reflect.DeepEqual(actual, previous):
+		case !exists || !decisionRulesEqual(
+			actual, previous, existingOrder[action], ownedOrder[action],
+		):
 			next[action] = nil
 		case generated[action] != nil:
 			merged[action] = cloneDecisionRule(generated[action])
 			next[action] = cloneDecisionRule(generated[action])
+			copyRuleOrder(action, generatedOrder, mergedOrder)
+			copyRuleOrder(action, generatedOrder, nextOwnedOrder)
 		default:
 			delete(merged, action)
+			delete(mergedOrder, action)
 		}
 	}
 	return next
 }
 
-func addGeneratedActions(generated, merged, nextOwned map[string]any) {
+func addGeneratedActions(
+	generated, merged, nextOwned map[string]any,
+	generatedOrder, mergedOrder, nextOwnedOrder map[string]string,
+) {
 	actions := sortedKeys(generated)
 	for _, action := range actions {
 		if _, tracked := nextOwned[action]; tracked {
@@ -110,7 +197,33 @@ func addGeneratedActions(generated, merged, nextOwned map[string]any) {
 		}
 		merged[action] = cloneDecisionRule(generated[action])
 		nextOwned[action] = cloneDecisionRule(generated[action])
+		copyRuleOrder(action, generatedOrder, mergedOrder)
+		copyRuleOrder(action, generatedOrder, nextOwnedOrder)
 	}
+}
+
+func decisionRulesEqual(actual, previous any, actualOrder, previousOrder string) bool {
+	if !reflect.DeepEqual(actual, previous) {
+		return false
+	}
+	_, nested := actual.(map[string]any)
+	return !nested || actualOrder == previousOrder
+}
+
+func copyRuleOrder(action string, source, target map[string]string) {
+	if order, present := source[action]; present {
+		target[action] = order
+	} else {
+		delete(target, action)
+	}
+}
+
+func cloneRuleOrder(source map[string]string) map[string]string {
+	result := make(map[string]string, len(source))
+	for action, order := range source {
+		result[action] = order
+	}
+	return result
 }
 
 func validateDecisionMap(value any, allowNull bool) error {

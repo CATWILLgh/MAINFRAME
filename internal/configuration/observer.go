@@ -53,25 +53,11 @@ type Host interface {
 }
 
 func Observe(resources []releasecontract.Resource, host Host) ([]Observation, error) {
-	if host == nil {
-		return nil, fmt.Errorf("host must not be nil")
-	}
-	if err := validateResourceSet(resources); err != nil {
+	inspection, err := Inspect(resources, host)
+	if err != nil {
 		return nil, err
 	}
-	observations := make([]Observation, 0, len(resources))
-	jsonSnapshots := make(map[domain.Location]jsonSnapshot)
-	for _, resource := range resources {
-		observation, err := observeResource(resource, host, jsonSnapshots)
-		if err != nil {
-			return nil, fmt.Errorf("observe configuration resource %q: %w", resource.ID, err)
-		}
-		observations = append(observations, observation)
-	}
-	if err := Validate(resources, observations); err != nil {
-		return nil, err
-	}
-	return observations, nil
+	return inspection.Observations(), nil
 }
 
 func Validate(resources []releasecontract.Resource, observations []Observation) error {
