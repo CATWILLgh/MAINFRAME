@@ -119,20 +119,75 @@ def _validate_global_json_ownership(
                 locations_overlap,
             )
             previous_paths = ownership.setdefault(target, [])
-            for pointer in resource.get("owned_json_pointers", []):
-                if len(previous_paths) >= MAX_OWNED_JSON_POINTERS:
-                    raise ValueError(
-                        f"release JSON ownership for target {target!r} exceeds limit"
-                    )
-                tokens = json_pointer_tokens(pointer, resource["id"])
-                if any(
-                    token_paths_overlap(tokens, previous)
-                    for previous in previous_paths
-                ):
-                    raise ValueError(
-                        f"release JSON ownership for target {target!r} overlaps"
-                    )
-                previous_paths.append(tokens)
+            _claim_json_pointers(resource, target, previous_paths)
+    _validate_ownership_registry_targets(
+        manifests,
+        install_targets,
+        resource_targets,
+        parse_location=parse_location,
+        locations_overlap=locations_overlap,
+    )
+
+
+def _claim_json_pointers(
+    resource: dict[str, Any],
+    target: Location,
+    previous_paths: list[tuple[str, ...]],
+) -> None:
+    pointers = list(resource.get("owned_json_pointers", []))
+    if "ownership" in resource:
+        pointers.append(resource["ownership"]["map_pointer"])
+    for pointer in pointers:
+        if len(previous_paths) >= MAX_OWNED_JSON_POINTERS:
+            raise ValueError(
+                f"release JSON ownership for target {target!r} exceeds limit"
+            )
+        tokens = json_pointer_tokens(pointer, resource["id"])
+        if any(
+            token_paths_overlap(tokens, previous)
+            for previous in previous_paths
+        ):
+            raise ValueError(
+                f"release JSON ownership for target {target!r} overlaps"
+            )
+        previous_paths.append(tokens)
+
+
+def _validate_ownership_registry_targets(
+    manifests: list[dict[str, Any]],
+    install_targets: list[Location],
+    resource_targets: list[tuple[str, str, Location]],
+    *,
+    parse_location: Callable[[Any, str], Location],
+    locations_overlap: Callable[[Location, Location], bool],
+) -> None:
+    registries = []
+    for manifest in manifests:
+        for resource in manifest["resources"]:
+            if "ownership" not in resource:
+                continue
+            target = parse_location(
+                resource["ownership"]["registry"]["target"],
+                "ownership registry target",
+            )
+            primary = parse_location(resource["target"], "ownership resource target")
+            registries.append((resource["id"], primary, target))
+    for index, (identifier, primary, target) in enumerate(registries):
+        if locations_overlap(primary, target):
+            raise ValueError("ownership registry overlaps its resource target")
+        if any(locations_overlap(target, install) for install in install_targets):
+            raise ValueError("ownership registry overlaps install target")
+        _reject_resource_overlap(
+            identifier,
+            target,
+            resource_targets,
+            locations_overlap,
+        )
+        if any(
+            locations_overlap(target, other[2])
+            for other in registries[index + 1 :]
+        ):
+            raise ValueError("ownership registry targets overlap")
 
 
 def _reject_resource_overlap(

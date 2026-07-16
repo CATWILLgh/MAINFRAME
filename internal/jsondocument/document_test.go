@@ -27,6 +27,25 @@ func TestParseAndLookupCanonicalOwnedValues(t *testing.T) {
 	}
 }
 
+func TestLookupOrderedPreservesObjectMemberOrder(t *testing.T) {
+	document, err := jsondocument.Parse(
+		[]byte(`{"permission":{"bash":{"rm -rf /":"deny", "*": "allow"}}}`),
+	)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	pointer, err := jsondocument.ParsePointer("/permission")
+	if err != nil {
+		t.Fatalf("ParsePointer() error = %v", err)
+	}
+
+	got, status := document.LookupOrdered(pointer)
+	want := `{"bash":{"rm -rf /":"deny","*":"allow"}}`
+	if status != jsondocument.Found || got != want {
+		t.Fatalf("LookupOrdered() = %q, %q; want %q, found", got, status, want)
+	}
+}
+
 func TestLookupDistinguishesMissingAndIncompatibleTraversal(t *testing.T) {
 	document, err := jsondocument.Parse([]byte(`{"object":{},"array":[{"value":true}]}`))
 	if err != nil {

@@ -33,3 +33,11 @@ func (list *optionalStringList) UnmarshalJSON(payload []byte) error {
 	}
 	return json.Unmarshal(payload, &list.Values)
 }
+
+func (ownership *optionalJSONMapOwnership) UnmarshalJSON(payload []byte) error {
+	ownership.Present = true
+	if bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return fmt.Errorf("JSON map ownership must not be null")
+	}
+	return decodeStrict(payload, &ownership.Value)
+}

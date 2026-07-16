@@ -26,6 +26,7 @@ type Pointer struct {
 
 type Document struct {
 	value any
+	raw   []byte
 }
 
 func (document Document) Canonical() string {
@@ -34,6 +35,14 @@ func (document Document) Canonical() string {
 		return ""
 	}
 	return string(canonical)
+}
+
+func (document Document) Compact() string {
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, document.raw); err != nil {
+		return ""
+	}
+	return compact.String()
 }
 
 func Parse(payload []byte) (Document, error) {
@@ -56,7 +65,7 @@ func Parse(payload []byte) (Document, error) {
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return Document{}, fmt.Errorf("expected one JSON value")
 	}
-	return Document{value: value}, nil
+	return Document{value: value, raw: append([]byte(nil), payload...)}, nil
 }
 
 func ParsePointer(raw string) (Pointer, error) {
@@ -93,6 +102,26 @@ func (document Document) Lookup(pointer Pointer) (string, LookupStatus) {
 		return "", Incompatible
 	}
 	return string(canonical), Found
+}
+
+func (document Document) LookupOrdered(pointer Pointer) (string, LookupStatus) {
+	current := json.RawMessage(document.raw)
+	for _, token := range pointer.tokens {
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(current, &object); err != nil || object == nil {
+			return "", Incompatible
+		}
+		var exists bool
+		current, exists = object[token]
+		if !exists {
+			return "", Missing
+		}
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, current); err != nil {
+		return "", Incompatible
+	}
+	return compact.String(), Found
 }
 
 func Overlaps(left, right Pointer) bool {

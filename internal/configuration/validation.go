@@ -27,8 +27,8 @@ func validateResource(resource releasecontract.Resource) error {
 		return fmt.Errorf("apply support must remain unimplemented")
 	}
 	if resource.Observation == releasecontract.SupportUnimplemented {
-		if len(resource.OwnedJSONFields) != 0 {
-			return fmt.Errorf("unimplemented observation has owned JSON fields")
+		if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil {
+			return fmt.Errorf("unimplemented observation has JSON ownership")
 		}
 		return nil
 	}
@@ -40,10 +40,41 @@ func validateResource(resource releasecontract.Resource) error {
 		return fmt.Errorf("supported shell observation has no desired line")
 	}
 	if resource.Strategy == releasecontract.StrategyJSONKeyMerge {
+		return validateJSONResource(resource)
+	}
+	if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil {
+		return fmt.Errorf("JSON ownership requires JSON merge strategy")
+	}
+	return nil
+}
+
+func validateJSONResource(resource releasecontract.Resource) error {
+	ownership := resource.JSONMapOwnership
+	if ownership == nil {
 		return validateJSONFields(resource.OwnedJSONFields)
 	}
 	if len(resource.OwnedJSONFields) != 0 {
-		return fmt.Errorf("owned JSON fields require JSON merge strategy")
+		return fmt.Errorf("JSON map ownership conflicts with owned JSON fields")
+	}
+	if ownership.EntrySchema != "decision-rule-v1" ||
+		ownership.RegistrySchemaVersion != 1 ||
+		ownership.EntriesPointer != "/actions" {
+		return fmt.Errorf("unsupported JSON map ownership")
+	}
+	if _, err := jsondocument.ParsePointer(ownership.MapPointer); err != nil {
+		return fmt.Errorf("invalid ownership map pointer: %w", err)
+	}
+	if !ownership.RegistryTarget.Valid() ||
+		ownership.RegistryTarget.Root != resource.Target.Root ||
+		locationsOverlap(resource.Target, ownership.RegistryTarget) {
+		return fmt.Errorf("invalid ownership registry target")
+	}
+	document, err := jsondocument.Parse([]byte(ownership.DesiredMap))
+	if err != nil || document.Compact() != ownership.DesiredMap {
+		return fmt.Errorf("ownership desired map is not compact")
+	}
+	if _, err := decodeDecisionMap(ownership.DesiredMap, false); err != nil {
+		return fmt.Errorf("invalid ownership desired map: %w", err)
 	}
 	return nil
 }
@@ -64,8 +95,20 @@ func validateResourceSet(resources []releasecontract.Resource) error {
 			if err := validateTargetCompatibility(resource, previous); err != nil {
 				return fmt.Errorf("invalid configuration resource %q: %w", resource.ID, err)
 			}
+			if err := validateOwnershipCompatibility(resource, previous); err != nil {
+				return fmt.Errorf("invalid configuration resource %q: %w", resource.ID, err)
+			}
 		}
-		for _, field := range resource.OwnedJSONFields {
+		resourceClaims := append(
+			[]releasecontract.JSONField(nil),
+			resource.OwnedJSONFields...,
+		)
+		if resource.JSONMapOwnership != nil {
+			resourceClaims = append(resourceClaims, releasecontract.JSONField{
+				Pointer: resource.JSONMapOwnership.MapPointer,
+			})
+		}
+		for _, field := range resourceClaims {
 			pointer, _ := jsondocument.ParsePointer(field.Pointer)
 			if len(claims[resource.Target]) >= releasecontract.MaxOwnedJSONPointers {
 				return fmt.Errorf("too many owned JSON fields for configuration target")
@@ -80,6 +123,51 @@ func validateResourceSet(resources []releasecontract.Resource) error {
 		validated = append(validated, resource)
 	}
 	return nil
+}
+
+func validateOwnershipCompatibility(
+	left releasecontract.Resource,
+	right releasecontract.Resource,
+) error {
+	if left.JSONMapOwnership != nil {
+		if err := validateRegistryAgainstResource(
+			left.JSONMapOwnership.RegistryTarget,
+			right,
+		); err != nil {
+			return err
+		}
+	}
+	if right.JSONMapOwnership != nil {
+		if err := validateRegistryAgainstResource(
+			right.JSONMapOwnership.RegistryTarget,
+			left,
+		); err != nil {
+			return err
+		}
+	}
+	if left.JSONMapOwnership != nil && right.JSONMapOwnership != nil &&
+		locationsOverlap(
+			left.JSONMapOwnership.RegistryTarget,
+			right.JSONMapOwnership.RegistryTarget,
+		) {
+		return fmt.Errorf("ownership registry targets overlap")
+	}
+	return nil
+}
+
+func validateRegistryAgainstResource(
+	registry domain.Location,
+	resource releasecontract.Resource,
+) error {
+	if resource.Strategy == releasecontract.StrategyManualAction ||
+		!locationsOverlap(registry, resource.Target) {
+		return nil
+	}
+	if resource.Strategy == releasecontract.StrategyEnsureDir &&
+		locationAncestor(resource.Target, registry) {
+		return nil
+	}
+	return fmt.Errorf("ownership registry overlaps configuration resource")
 }
 
 func validateTargetCompatibility(left, right releasecontract.Resource) error {

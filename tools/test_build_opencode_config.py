@@ -183,6 +183,26 @@ def _merge_permissions(existing, generated, owned):
     return bo.merge_permissions(existing, generated, owned)
 
 
+def test_merge_permissions_matches_shared_ownership_fixtures():
+    fixture = os.path.join(
+        os.path.dirname(_TOOLS),
+        "internal",
+        "configuration",
+        "testdata",
+        "opencode_permission_ownership.json",
+    )
+    with open(fixture) as stream:
+        cases = json.load(stream)
+    for case in cases:
+        merged, next_owned = _merge_permissions(
+            case["existing"],
+            case["generated"],
+            case["owned"],
+        )
+        assert merged == case["merged"], case["name"]
+        assert next_owned == case["next_owned"], case["name"]
+
+
 def test_merge_permissions_preserves_scalar_permission():
     merged, next_owned = _merge_permissions(
         "ask", {"bash": {"*": "allow"}}, {})

@@ -92,7 +92,6 @@ def _install_units(output: Path) -> list[dict]:
 
 def _resources() -> list[dict]:
     supported = {"observation": "supported", "apply": "unimplemented"}
-    unimplemented = {"observation": "unimplemented", "apply": "unimplemented"}
     return [
         {
             "id": "opencode.credentials-index",
@@ -109,7 +108,20 @@ def _resources() -> list[dict]:
             "strategy": "json-key-merge",
             "source": "config-fragment.json",
             "target": {"root": "opencode-config", "path": "opencode.json"},
-            **unimplemented,
+            "ownership": {
+                "kind": "json-map-entry-registry-v1",
+                "map_pointer": "/permission",
+                "entry_schema": "decision-rule-v1",
+                "registry": {
+                    "target": {
+                        "root": "opencode-config",
+                        "path": "opencode.json.mainframe-permissions.json",
+                    },
+                    "schema_version": 1,
+                    "entries_pointer": "/actions",
+                },
+            },
+            **supported,
         },
     ]
 

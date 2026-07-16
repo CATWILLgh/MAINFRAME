@@ -1,0 +1,83 @@
+[
+  {
+    "name": "scalar override",
+    "existing": "ask",
+    "generated": {"bash": {"*": "allow"}},
+    "owned": {},
+    "merged": "ask",
+    "next_owned": {"bash": null}
+  },
+  {
+    "name": "unknown entries remain user owned",
+    "existing": {"edit": "ask", "fetch*": "deny"},
+    "generated": {"bash": {"*": "allow"}},
+    "owned": {},
+    "merged": {"edit": "ask", "fetch*": "deny", "bash": {"*": "allow"}},
+    "next_owned": {"edit": null, "fetch*": null, "bash": {"*": "allow"}}
+  },
+  {
+    "name": "owned entry updates",
+    "existing": {
+      "edit": "ask",
+      "bash": {"*": "allow", "old *": "deny"}
+    },
+    "generated": {"bash": {"*": "allow", "new *": "deny"}},
+    "owned": {"bash": {"*": "allow", "old *": "deny"}},
+    "merged": {
+      "edit": "ask",
+      "bash": {"*": "allow", "new *": "deny"}
+    },
+    "next_owned": {
+      "edit": null,
+      "bash": {"*": "allow", "new *": "deny"}
+    }
+  },
+  {
+    "name": "removed generated entry is deleted",
+    "existing": {"edit": "ask", "bash": {"*": "allow"}},
+    "generated": {},
+    "owned": {"edit": null, "bash": {"*": "allow"}},
+    "merged": {"edit": "ask"},
+    "next_owned": {"edit": null}
+  },
+  {
+    "name": "user change relinquishes ownership",
+    "existing": {"bash": {"custom *": "deny"}},
+    "generated": {"bash": {"*": "allow"}},
+    "owned": {"bash": {"*": "allow"}},
+    "merged": {"bash": {"custom *": "deny"}},
+    "next_owned": {"bash": null}
+  },
+  {
+    "name": "user deletion is not readded",
+    "existing": {},
+    "generated": {"bash": {"*": "allow"}},
+    "owned": {"bash": {"*": "allow"}},
+    "merged": {},
+    "next_owned": {"bash": null}
+  },
+  {
+    "name": "matching existing entry is not adopted without state",
+    "existing": {"bash": {"*": "allow"}},
+    "generated": {"bash": {"*": "allow"}},
+    "owned": {},
+    "merged": {"bash": {"*": "allow"}},
+    "next_owned": {"bash": null}
+  },
+  {
+    "name": "wildcard blocks generated action",
+    "existing": {"bash *": "deny"},
+    "generated": {"bash": {"*": "allow"}},
+    "owned": {},
+    "merged": {"bash *": "deny"},
+    "next_owned": {"bash *": null, "bash": null}
+  },
+  {
+    "name": "character class syntax is literal",
+    "existing": {"[b]ash": "deny"},
+    "generated": {"bash": {"*": "allow"}},
+    "owned": {},
+    "merged": {"[b]ash": "deny", "bash": {"*": "allow"}},
+    "next_owned": {"[b]ash": null, "bash": {"*": "allow"}}
+  }
+]

@@ -55,11 +55,21 @@ type Resource struct {
 	Apply                SupportStatus
 	DesiredLine          string
 	OwnedJSONFields      []JSONField
+	JSONMapOwnership     *JSONMapOwnership
 }
 
 type JSONField struct {
 	Pointer string
 	Desired string
+}
+
+type JSONMapOwnership struct {
+	MapPointer            string
+	EntrySchema           string
+	DesiredMap            string
+	RegistryTarget        domain.Location
+	RegistrySchemaVersion int
+	EntriesPointer        string
 }
 
 type Release struct {
@@ -108,19 +118,38 @@ type legacyArtifact struct {
 }
 
 type resourceRecord struct {
-	ID                   string             `json:"id"`
-	Strategy             string             `json:"strategy"`
-	Source               string             `json:"source,omitempty"`
-	Target               locationRecord     `json:"target"`
-	LegacySourceSuffixes []string           `json:"legacy_source_suffixes,omitempty"`
-	Observation          string             `json:"observation"`
-	Apply                string             `json:"apply"`
-	OwnedJSONPointers    optionalStringList `json:"owned_json_pointers,omitempty"`
+	ID                   string                   `json:"id"`
+	Strategy             string                   `json:"strategy"`
+	Source               string                   `json:"source,omitempty"`
+	Target               locationRecord           `json:"target"`
+	LegacySourceSuffixes []string                 `json:"legacy_source_suffixes,omitempty"`
+	Observation          string                   `json:"observation"`
+	Apply                string                   `json:"apply"`
+	OwnedJSONPointers    optionalStringList       `json:"owned_json_pointers,omitempty"`
+	Ownership            optionalJSONMapOwnership `json:"ownership,omitempty"`
 }
 
 type optionalStringList struct {
 	Present bool
 	Values  []string
+}
+
+type optionalJSONMapOwnership struct {
+	Present bool
+	Value   jsonMapOwnershipRecord
+}
+
+type jsonMapOwnershipRecord struct {
+	Kind        string                  `json:"kind"`
+	MapPointer  string                  `json:"map_pointer"`
+	EntrySchema string                  `json:"entry_schema"`
+	Registry    ownershipRegistryRecord `json:"registry"`
+}
+
+type ownershipRegistryRecord struct {
+	Target         locationRecord `json:"target"`
+	SchemaVersion  int            `json:"schema_version"`
+	EntriesPointer string         `json:"entries_pointer"`
 }
 
 type locationRecord struct {

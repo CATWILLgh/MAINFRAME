@@ -173,8 +173,21 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
         "strategy": "json-key-merge",
         "source": "config-fragment.json",
         "target": {"root": "opencode-config", "path": "opencode.json"},
-        "observation": "unimplemented",
+        "observation": "supported",
         "apply": "unimplemented",
+        "ownership": {
+            "kind": "json-map-entry-registry-v1",
+            "map_pointer": "/permission",
+            "entry_schema": "decision-rule-v1",
+            "registry": {
+                "target": {
+                    "root": "opencode-config",
+                    "path": "opencode.json.mainframe-permissions.json",
+                },
+                "schema_version": 1,
+                "entries_pointer": "/actions",
+            },
+        },
     }
     release_contract.validate_bundle(output)
 

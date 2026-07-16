@@ -18,6 +18,7 @@ func loadOwnedJSONFields(
 	strategy ResourceStrategy,
 	support SupportStatus,
 	pointerValues optionalStringList,
+	hasMapOwnership bool,
 	payloadRows []payloadFile,
 ) ([]JSONField, error) {
 	if strategy != StrategyJSONKeyMerge {
@@ -33,6 +34,9 @@ func loadOwnedJSONFields(
 		return nil, nil
 	}
 	if !pointerValues.Present {
+		if hasMapOwnership {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("supported JSON observation requires owned JSON pointers")
 	}
 	pointers, err := validateOwnedPointers(pointerValues.Values)
@@ -147,9 +151,23 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 				}
 				claims[target] = append(claims[target], jsonClaim{raw: raw, pointer: pointer})
 			}
+			if resource.Ownership.Present {
+				raw := resource.Ownership.Value.MapPointer
+				pointer, err := jsondocument.ParsePointer(raw)
+				if err != nil {
+					return err
+				}
+				if len(claims[target]) >= MaxOwnedJSONPointers {
+					return fmt.Errorf("resource %q: too many owned JSON pointers for target", resource.ID)
+				}
+				if err := rejectClaimOverlap(raw, pointer, claims[target]); err != nil {
+					return fmt.Errorf("resource %q: %w", resource.ID, err)
+				}
+				claims[target] = append(claims[target], jsonClaim{raw: raw, pointer: pointer})
+			}
 		}
 	}
-	return nil
+	return validateGlobalOwnershipRegistries(manifests, installTargets, resourceTargets)
 }
 
 type resourceTarget struct {

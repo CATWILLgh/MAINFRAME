@@ -154,16 +154,11 @@ func observeJSONResource(
 	host Host,
 	snapshots map[domain.Location]jsonSnapshot,
 ) Observation {
-	result := Observation{ResourceID: resource.ID, ComponentID: resource.ComponentID}
-	snapshot, exists := snapshots[resource.Target]
-	if !exists {
-		entry, err := host.Inspect(resource.Target, true)
-		snapshot = jsonSnapshot{entry: entry, err: err}
-		if err == nil && entry.Kind == hostfs.EntryRegular {
-			snapshot.document, snapshot.parseErr = jsondocument.Parse(entry.Content)
-		}
-		snapshots[resource.Target] = snapshot
+	if resource.JSONMapOwnership != nil {
+		return observeOwnedJSONMap(resource, host, snapshots)
 	}
+	result := Observation{ResourceID: resource.ID, ComponentID: resource.ComponentID}
+	snapshot := jsonSnapshotFor(resource.Target, host, snapshots)
 	if errors.Is(snapshot.err, fs.ErrNotExist) {
 		result.Status, result.Reason = NeedsChange, ResourceMissing
 		return result
@@ -185,6 +180,23 @@ func observeJSONResource(
 		return result
 	}
 	return compareJSONFields(resource, snapshot.document, result)
+}
+
+func jsonSnapshotFor(
+	location domain.Location,
+	host Host,
+	snapshots map[domain.Location]jsonSnapshot,
+) jsonSnapshot {
+	snapshot, exists := snapshots[location]
+	if !exists {
+		entry, err := host.Inspect(location, true)
+		snapshot = jsonSnapshot{entry: entry, err: err}
+		if err == nil && entry.Kind == hostfs.EntryRegular {
+			snapshot.document, snapshot.parseErr = jsondocument.Parse(entry.Content)
+		}
+		snapshots[location] = snapshot
+	}
+	return snapshot
 }
 
 func compareJSONFields(

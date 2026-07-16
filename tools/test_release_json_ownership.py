@@ -35,6 +35,30 @@ def _json_resource(
     return resource
 
 
+def _owned_map_resource(identifier: str) -> dict:
+    return {
+        "id": identifier,
+        "strategy": "json-key-merge",
+        "source": "config.json",
+        "target": {"root": "codex-config", "path": "config.json"},
+        "observation": "supported",
+        "apply": "unimplemented",
+        "ownership": {
+            "kind": "json-map-entry-registry-v1",
+            "map_pointer": "/owned",
+            "entry_schema": "decision-rule-v1",
+            "registry": {
+                "target": {
+                    "root": "codex-config",
+                    "path": "config.json.mainframe-owned.json",
+                },
+                "schema_version": 1,
+                "entries_pointer": "/actions",
+            },
+        },
+    }
+
+
 def _write_json_bundle(
     root: Path,
     component: str,
@@ -246,6 +270,61 @@ def test_release_validation_allows_directory_resource_above_json_target():
         manifests=[bundle / "bundle.json"],
     )
     release_contract.validate_release(root)
+
+
+def test_release_validation_reserves_ownership_registry_and_map_pointer():
+    root = Path(tempfile.mkdtemp())
+    bundle = root / "bundles" / "codex"
+    bundle.mkdir(parents=True)
+    (bundle / "config.json").write_text('{"owned":{"action":"deny"}}\n')
+    (bundle / "unit").write_text("unit\n")
+    owned = _owned_map_resource("alpha.owned")
+    static = _json_resource(
+        "alpha.static",
+        "codex-config",
+        pointers=("/owned/action",),
+    )
+    release_contract.write_bundle_manifest(
+        bundle,
+        component="codex",
+        dependencies=[],
+        install_units=[],
+        resources=[owned, static],
+    )
+    try:
+        release_contract.write_release_index(
+            root,
+            release_id="test-release",
+            manifests=[bundle / "bundle.json"],
+        )
+        release_contract.validate_release(root)
+    except ValueError as exc:
+        assert "overlap" in str(exc)
+    else:
+        raise AssertionError("ownership map pointer was not reserved")
+
+    static["target"]["path"] = "other.json"
+    static["strategy"] = "seed-if-absent"
+    static.pop("owned_json_pointers")
+    static["target"]["path"] = "config.json.mainframe-owned.json"
+    release_contract.write_bundle_manifest(
+        bundle,
+        component="codex",
+        dependencies=[],
+        install_units=[],
+        resources=[owned, static],
+    )
+    try:
+        release_contract.write_release_index(
+            root,
+            release_id="test-release",
+            manifests=[bundle / "bundle.json"],
+        )
+        release_contract.validate_release(root)
+    except ValueError as exc:
+        assert "overlap" in str(exc)
+    else:
+        raise AssertionError("ownership registry target was not reserved")
 
 
 def _run_all():

@@ -8,9 +8,6 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
-	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
@@ -258,9 +255,22 @@ func validateResourceRecord(
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
 	}
+	mapOwnership, err := loadJSONMapOwnership(
+		releaseRoot, sourceBase, record.Source, component, target, strategy,
+		record.OwnedJSONPointers, record.Ownership, payloadRows,
+	)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
+	if mapOwnership != nil && observation != SupportSupported {
+		return Resource{}, fmt.Errorf(
+			"resource %q: JSON map ownership requires supported observation",
+			record.ID,
+		)
+	}
 	ownedFields, err := loadOwnedJSONFields(
 		releaseRoot, sourceBase, record.Source, strategy, observation,
-		record.OwnedJSONPointers, payloadRows,
+		record.OwnedJSONPointers, mapOwnership != nil, payloadRows,
 	)
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
@@ -269,7 +279,7 @@ func validateResourceRecord(
 		ID: record.ID, ComponentID: component, Strategy: strategy,
 		SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
 		Observation: observation, Apply: SupportUnimplemented, DesiredLine: desiredLine,
-		OwnedJSONFields: ownedFields,
+		OwnedJSONFields: ownedFields, JSONMapOwnership: mapOwnership,
 	}, nil
 }
 
@@ -292,37 +302,6 @@ func validObservationSupport(strategy ResourceStrategy, support SupportStatus) b
 	}
 }
 
-func loadDesiredLine(
-	bundleRoot, source string,
-	strategy ResourceStrategy,
-	support SupportStatus,
-) (string, error) {
-	if support != SupportSupported || (strategy != StrategyShellLine && strategy != StrategyShellLineIfPresent) {
-		return "", nil
-	}
-	payload, err := readRegular(bundleRoot, source)
-	if err != nil {
-		return "", err
-	}
-	if !utf8.Valid(payload) {
-		return "", fmt.Errorf("shell source must be valid UTF-8")
-	}
-	line := strings.TrimSuffix(string(payload), "\n")
-	if strings.Trim(line, " \t") == "" || strings.ContainsAny(line, "\r\n") || hasUnsupportedShellControl(line) {
-		return "", fmt.Errorf("shell source must contain exactly one non-empty line")
-	}
-	return line, nil
-}
-
-func hasUnsupportedShellControl(line string) bool {
-	for _, character := range line {
-		if character != '\t' && unicode.IsControl(character) {
-			return true
-		}
-	}
-	return false
-}
-
 func validateSource(bundleRoot, source, kind string) error {
 	if !domain.ArtifactPath(source).Portable() {
 		return fmt.Errorf("invalid source path %q", source)
@@ -335,7 +314,9 @@ func validateSource(bundleRoot, source, kind string) error {
 	if err != nil {
 		return err
 	}
-	if (kind == "file" && !info.Mode().IsRegular()) || (kind == "tree" && !info.IsDir()) || info.Mode()&fs.ModeSymlink != 0 {
+	if (kind == "file" && !info.Mode().IsRegular()) ||
+		(kind == "tree" && !info.IsDir()) ||
+		info.Mode()&fs.ModeSymlink != 0 {
 		return fmt.Errorf("source %q does not match kind %q", source, kind)
 	}
 	return nil

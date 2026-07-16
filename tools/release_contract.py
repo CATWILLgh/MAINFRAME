@@ -38,7 +38,7 @@ UNIT_REQUIRED_FIELDS = {"id", "kind", "source", "target"}
 UNIT_OPTIONAL_FIELDS = {"legacy_source_suffixes"}
 LEGACY_FIELDS = {"target", "target_suffixes"}
 RESOURCE_REQUIRED_FIELDS = {"id", "strategy", "target", "observation", "apply"}
-RESOURCE_OPTIONAL_FIELDS = {"source", "legacy_source_suffixes", "owned_json_pointers"}
+RESOURCE_OPTIONAL_FIELDS = {"source", "legacy_source_suffixes", "owned_json_pointers", "ownership"}
 PAYLOAD_FIELDS = {"path", "mode", "size", "sha256"}
 ENTRY_FIELDS = {"component", "path", "sha256"}
 SOURCE_STRATEGIES = {"json-key-merge", "seed-if-absent", "shell-line", "shell-line-if-present"}
@@ -276,7 +276,11 @@ def _validate_resources(root: Path, resources: Any, payload_rows: list[dict[str,
             expected = payload_by_path.get(source)
             if expected is None:
                 raise ValueError(f"resource {identifier!r} source is absent from payload inventory")
-            validate_owned_json_source(root, source, expected, resource, identifier)
+            validate_owned_json_source(
+                root, source, expected, resource, identifier, parse_location=_location
+            )
+        elif "ownership" in resource:
+            raise ValueError(f"resource {identifier!r} ownership requires supported JSON observation")
         elif "owned_json_pointers" in resource:
             raise ValueError(
                 f"resource {identifier!r} owned_json_pointers require supported JSON observation"
