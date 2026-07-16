@@ -119,8 +119,17 @@ systems do not atomically bind a no-replace rename's source name to a previously
 observed inode. Another same-user writer that does not share MAINFRAME's
 transaction lock can therefore replace the source in that narrow interval; the
 replacement inode is retained rather than unlinked, but its public name may be
-moved. All MAINFRAME mutation paths, including `install.sh` while it remains
-supported, must share the transaction lock before Apply is exposed.
+moved.
+
+The Go executor and every mutating `install.sh` path share the persistent
+`${XDG_STATE_HOME:-$HOME/.local/state}/mainframe/transaction.lock`. The
+compatibility installer takes the same non-blocking BSD lock through macOS
+`lockf` or Linux `flock`, never removes the lock file, and holds its descriptor
+through all synchronous child commands. A read-only dry run and a failed
+install-source preflight create no lock state; uninstall locks before its first
+mutation. If the shell exits while a child still holds the inherited
+descriptor, exclusion lasts until that final child exits, favoring delayed
+availability over concurrent mutation.
 
 Missing target parents are not created implicitly by a link operation. The
 executor derives required directories from the saved plan and configured

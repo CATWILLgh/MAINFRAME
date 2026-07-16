@@ -33,9 +33,6 @@ The final product must install, update, remove, and replace selected adapters. A
 - Complete configuration ownership and application semantics.
 - Model creation and rollback of missing managed target directories before
   first-install plans may apply link operations.
-- Make every MAINFRAME writer, including the compatibility `install.sh` path,
-  acquire the same transaction lock. A no-replace rename protects its
-  destination but cannot bind its source name to an inode checked earlier.
 - Add a separate confirmation screen that displays the exact final plan and blocks on unresolved conflicts.
 - Exercise interruption after each operation on macOS and Linux fixtures before enabling Apply.
 
@@ -77,8 +74,13 @@ The final product must install, update, remove, and replace selected adapters. A
 - Made the commit boundary monotonic: once persisting `committed` is attempted,
   an uncertain save result is left for recovery and the current process never
   starts rollback.
-- Recorded the remaining same-user source-rename race and the requirement that
-  all supported MAINFRAME mutation paths share one transaction lock.
+- Made every mutating compatibility-installer path share the Go executor's
+  persistent transaction lock. The installer uses macOS `lockf` or Linux
+  `flock`, fails closed on contention, preserves source-preflight and dry-run
+  read-only behavior, and never removes the lock file.
+- Added cross-process compatibility coverage proving the platform utility
+  cannot enter while Go holds the lock, plus install/uninstall ordering,
+  contention, release, path, ownership, and mode coverage.
 - Tightened the planner so removal requires both `managed_exact` ownership and
   a matching artifact declared by the same release component.
 - Added an explicit recoverable managed-directory lifecycle. Missing roots and
@@ -99,4 +101,6 @@ The final product must install, update, remove, and replace selected adapters. A
 - `internal/tui/model.go:52`
 - `internal/plan/planner.go:19`
 - `internal/executor/executor.go`
+- `internal/executor/locker_compatibility_unix_test.go`
 - `internal/linkworkspace/workspace_unix.go`
+- `tools/test_install_lock.py`
