@@ -16,11 +16,13 @@ func TestResolveUsesOverridesAndReturnsIndependentTargetCopies(t *testing.T) {
 	codex := filepath.Join(t.TempDir(), "codex")
 	config := filepath.Join(t.TempDir(), "config")
 	state := filepath.Join(t.TempDir(), "state")
+	data := filepath.Join(t.TempDir(), "data")
 	env := environment(map[string]string{
 		"HOME":            home,
 		"CODEX_HOME":      codex,
 		"XDG_CONFIG_HOME": config,
 		"XDG_STATE_HOME":  state,
+		"XDG_DATA_HOME":   data,
 	}, "/fallback", "linux")
 
 	layout, err := hostlayout.Resolve(env, source)
@@ -44,6 +46,9 @@ func TestResolveUsesOverridesAndReturnsIndependentTargetCopies(t *testing.T) {
 	if layout.State() != filepath.Join(state, "mainframe") {
 		t.Fatalf("State() = %q", layout.State())
 	}
+	if layout.Data() != filepath.Join(data, "mainframe") {
+		t.Fatalf("Data() = %q", layout.Data())
+	}
 
 	first := layout.Targets()
 	first[domain.RootHome] = "/mutated"
@@ -62,6 +67,7 @@ func TestResolveFallsBackForMissingOrEmptyEnvironmentValues(t *testing.T) {
 		"CODEX_HOME":      "",
 		"XDG_CONFIG_HOME": "",
 		"XDG_STATE_HOME":  "",
+		"XDG_DATA_HOME":   "",
 	}, home, "darwin")
 
 	layout, err := hostlayout.Resolve(env, source)
@@ -87,6 +93,9 @@ func TestResolveFallsBackForMissingOrEmptyEnvironmentValues(t *testing.T) {
 	if layout.State() != filepath.Join(home, ".local", "state", "mainframe") {
 		t.Fatalf("state = %q", layout.State())
 	}
+	if layout.Data() != filepath.Join(home, ".local", "share", "mainframe") {
+		t.Fatalf("data = %q", layout.Data())
+	}
 }
 
 func TestResolveRejectsUnsupportedOrInvalidInputs(t *testing.T) {
@@ -107,6 +116,7 @@ func TestResolveRejectsUnsupportedOrInvalidInputs(t *testing.T) {
 		{name: "relative CODEX_HOME", env: environment(map[string]string{"HOME": validHome, "CODEX_HOME": "codex"}, validHome, "linux"), source: validSource, wantError: "CODEX_HOME"},
 		{name: "unclean XDG_CONFIG_HOME", env: environment(map[string]string{"HOME": validHome, "XDG_CONFIG_HOME": base + string(filepath.Separator) + "config" + string(filepath.Separator) + ".." + string(filepath.Separator) + "config"}, validHome, "linux"), source: validSource, wantError: "XDG_CONFIG_HOME"},
 		{name: "relative XDG_STATE_HOME", env: environment(map[string]string{"HOME": validHome, "XDG_STATE_HOME": "state"}, validHome, "linux"), source: validSource, wantError: "XDG_STATE_HOME"},
+		{name: "relative XDG_DATA_HOME", env: environment(map[string]string{"HOME": validHome, "XDG_DATA_HOME": "data"}, validHome, "linux"), source: validSource, wantError: "XDG_DATA_HOME"},
 		{name: "NUL home fallback", env: environment(nil, validHome+"\x00x", "linux"), source: validSource, wantError: "home"},
 		{name: "nil lookup", env: hostlayout.Environment{UserHomeDir: func() (string, error) { return validHome, nil }, GOOS: "linux"}, source: validSource, wantError: "LookupEnv"},
 		{name: "nil home lookup", env: hostlayout.Environment{LookupEnv: func(string) (string, bool) { return "", false }, GOOS: "linux"}, source: validSource, wantError: "UserHomeDir"},
