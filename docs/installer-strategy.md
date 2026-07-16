@@ -97,6 +97,57 @@ prepared transition or executor journal. Deselection suppresses them without
 revoking external state. An unavailable or incompatible Codex executable
 produces a non-blocking notice rather than a misleading `/hooks` instruction.
 
+## MCP onboarding is catalog-driven and adapter-owned
+
+MAINFRAME may ship a verified catalog of MCP server descriptions and adapter
+recipes, but an MCP connection is always an explicit user choice. The user
+selects one connection profile and then independently selects the adapters
+that should receive it. Each adapter owns and observes only its own projected
+configuration; no adapter discovers an MCP server by reading another
+adapter's configuration.
+
+A connection profile is one valid combination, not a Cartesian product of
+independent transport and authentication lists. It records the client-facing
+transport, endpoint or command, transport authentication, optional external
+service credential, credential placement, compatible adapters, and the
+source date that verified the recipe. This distinguishes an HTTP server that
+authenticates the MCP client from a local stdio process that needs no MCP
+transport authentication but may accept an API key for the external service
+it calls.
+
+The first onboarding scope supports profiles with no credential and profiles
+with an API key. OAuth implementation is deferred until a selected server
+requires it. OAuth-only profiles remain visible so the catalog does not imply
+false compatibility, but they are marked unsupported and cannot enter an
+installation plan; the TUI explains which capability is missing.
+
+The catalog card explains the server's purpose and shows its publisher,
+authoritative source, repository link, license, supported connection profiles,
+credential requirement, and last verification date. Repository stars may be
+shown as optional time-stamped popularity metadata. They are never a security
+or trust signal, never gate installation, and their absence or refresh failure
+must not block an otherwise verified offline catalog entry.
+
+Credentials never enter the release, project files, previews, logs, or
+executor journal. The TUI may collect an API key through masked input and
+store it in the neutral credential store only after the selected adapter
+recipe proves that it can consume a reference without leaking the value. If
+an adapter cannot do so safely, that profile is unsupported for that adapter
+instead of embedding the key in clear text.
+
+Context7 is the first reference catalog entry. Its
+[maintained repository](https://github.com/upstash/context7#installation)
+describes an API key as recommended for higher rate limits rather than a
+universal prerequisite, while its
+[client-specific recipes](https://context7.com/docs/resources/all-clients)
+commonly include one.
+
+The catalog therefore models keyed and unkeyed profiles explicitly and tests
+the selected profile instead of claiming that every Context7 installation
+requires a key. Shared local process hosting is a separate runtime concern;
+direct stdio remains the default until a gateway proves real multi-client
+multiplexing and safe lifecycle ownership.
+
 Before execution, the immutable inspection can materialize a private prepared
 plan without writing. It preserves complete user JSON, composes non-overlapping
 resources sharing one physical file, and groups each configuration with its
