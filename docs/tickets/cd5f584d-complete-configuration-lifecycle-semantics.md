@@ -22,7 +22,11 @@ and has no ownership registry.
 
 ## Why it is a problem
 
-The TUI cannot yet explain configuration drift or build a safe configuration plan for all behavior currently handled by `install.sh` and adapter-specific generators. Comparing entire JSON files would overwrite or misclassify user-owned keys, while file presence cannot prove Codex project trust.
+The TUI can now explain generic selected-resource changes and detailed
+OpenCode permission intent, but it still cannot build a safe removal plan for
+every behavior handled by `install.sh` and adapter-specific generators.
+Comparing entire JSON files would overwrite or misclassify user-owned keys,
+while file presence cannot prove Codex project trust.
 
 ## Why it is not a duplicate
 
@@ -32,7 +36,7 @@ The TUI cannot yet explain configuration drift or build a safe configuration pla
 
 - Represent OpenCode MCP additions and their ownership independently from permission rules.
 - Model Codex hook trust as adapter-local external state instead of inferring it from `hooks.json`.
-- Define plan, apply, and removal contracts for each configuration strategy
+- Complete removal and application contracts for every configuration strategy
   before exposing an Apply action.
 - Prove that each adapter reads and writes only its own configuration and state projections.
 
@@ -45,8 +49,13 @@ The TUI cannot yet explain configuration drift or build a safe configuration pla
   with an adapter-local registry. The observer preserves scalar overrides,
   tombstones, user changes, deletions, wildcard conflicts, and nested rule
   ordering according to the same semantics as the compatibility generator.
-- Apply and removal remain unavailable. OpenCode still needs journaled two-file
-  publication and independent MCP ownership; Codex still needs an
+- One immutable inspection now drives both status and a deterministic semantic
+  plan. The TUI distinguishes add, update, registry-proven removal, and
+  stopping management of user-changed or deleted OpenCode actions without
+  exposing raw bytes or executable configuration operations.
+- Removal execution and Apply remain unavailable. OpenCode still needs
+  journaled two-file publication and independent MCP ownership; other
+  strategies still need safe deselection semantics, and Codex still needs an
   adapter-local external trust contract.
 
 ## Acceptance criteria
@@ -63,7 +72,10 @@ The TUI cannot yet explain configuration drift or build a safe configuration pla
 - `internal/releasecontract/json_map_ownership.go`
 - `internal/jsondocument/document.go`
 - `internal/configuration/observer.go`
+- `internal/configuration/inspection.go`
+- `internal/configuration/planner.go`
 - `internal/configuration/owned_map.go`
+- `internal/lifecycle/configuration_preview.go`
 - `adapters/claude-code/build_bundle.py`
 - `adapters/opencode/build_bundle.py`
 - `adapters/opencode/build_opencode.py`

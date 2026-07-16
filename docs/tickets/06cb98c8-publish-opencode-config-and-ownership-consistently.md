@@ -43,6 +43,8 @@ The configuration and its ownership registry form one logical state transition b
   as one versioned ownership relationship.
 - Read-only observation detects a missing, stale, malformed, or inconsistent
   registry without adopting user entries.
+- Read-only planning groups the configuration and registry as one semantic
+  transition and removes only entries whose active ownership is still proven.
 - Publication remains intentionally unavailable: observation does not make two
   independent writes recoverable.
 
@@ -52,5 +54,6 @@ The configuration and its ownership registry form one logical state transition b
 - `adapters/opencode/permission_config.py:87`
 - `adapters/opencode/config_writer.py:173`
 - `internal/configuration/owned_map_observer.go`
+- `internal/configuration/planner.go`
 - `internal/releasecontract/json_map_ownership.go`
 - `tools/test_opencode_config_writer_failures.py`

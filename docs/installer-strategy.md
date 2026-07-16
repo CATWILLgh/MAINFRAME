@@ -69,10 +69,16 @@ computes the same safe fixed point as the compatibility generator: absent
 state never adopts matching user entries, changed or deleted managed entries
 become permanent tombstones, and unrelated entries remain user-owned. The
 observer also preserves nested permission-rule order because OpenCode applies
-the last matching pattern. The
-configuration file and registry are one logical state transition; Apply stays
-unimplemented until the executor can journal, publish, and recover both files
-together.
+the last matching pattern.
+
+Configuration planning uses the same immutable inspection as observation and
+does not read the host again. The TUI presents semantic configuration intent
+separately from the executable filesystem plan: add, update, remove a
+registry-proven managed entry, or stop managing a user-changed or deleted
+entry. A resource is the atomic planning group, so the OpenCode configuration
+file and ownership registry never appear as independent operations. Apply
+stays unimplemented until the executor can journal, publish, and recover both
+files together.
 
 ## Permission capabilities must be stated honestly
 
