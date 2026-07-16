@@ -83,6 +83,19 @@ Release builders produce immutable, self-contained component bundles from
 it does not infer ownership from repository paths or reach into a sibling
 bundle at runtime.
 
+Complete local releases are imported into
+`$XDG_DATA_HOME/mainframe/releases/<release-id>/<index-sha256>/`, with
+`~/.local/share` as the XDG fallback. Import copies through descriptor-relative
+no-follow traversal, validates the closed staged tree, and publishes by
+platform-native no-replace rename. MAINFRAME never overwrites or removes a
+published version. There is intentionally no mutable `current` pointer.
+
+This is product-level immutability, not an operating-system security boundary:
+another process running as the same user can still alter stored files. Every
+future plan and application must therefore reopen and fully validate the
+selected version immediately before use, then bind the result to both the
+release ID and exact release-index digest.
+
 Every component must pass an isolated-install scenario in which the other
 runtime directories do not exist. Lifecycle operations must preserve
 user-owned files, affect only the selected component and explicit neutral

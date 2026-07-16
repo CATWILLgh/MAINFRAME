@@ -38,8 +38,18 @@ The intended delivery model downloads only the components selected by the user. 
 - Missing or tampered selected payloads fail closed before planning or application.
 - Unit and integration tests prove that an unselected adapter payload is neither requested nor required.
 
+## Progress (2026-07-16)
+
+- Added a versioned local store for complete, explicitly supplied releases at
+  `$XDG_DATA_HOME/mainframe/releases/<release-id>/<index-sha256>/`.
+- Import now copies without following in-tree symbolic links, validates an exact
+  closed tree, and publishes without replacing an existing version.
+- Selective or network delivery remains out of scope here: it still requires
+  the signed catalog and publisher-authentication gate described above.
+
 ## Sources
 
 - `tools/build_release.py`
 - `internal/releasecontract/loader.go`
+- `internal/releasecache/store.go`
 - Phase 9 independent architecture review, 2026-07-15

@@ -56,6 +56,11 @@ The final product must install, update, remove, and replace selected adapters. A
   reverse rollback, interruption recovery, and cleanup retry.
 - Added inode-aware before/after images so rollback refuses a same-target link
   that was replaced after publication.
+- Added a complete-release store keyed by release ID and exact index digest,
+  with closed-tree validation, descriptor-relative copying, locking, durable
+  staging, and Darwin/Linux no-replace publication.
+- Documented that stored releases remain mutable by another same-user process;
+  future planning and application must revalidate them immediately before use.
 - Withheld the Darwin/Linux production mutator after independent review found
   that a portable `fstatat`/`readlinkat` check followed by `unlinkat` is not an
   atomic compare-and-delete operation.

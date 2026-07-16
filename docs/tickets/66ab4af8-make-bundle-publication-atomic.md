@@ -13,11 +13,22 @@ tags: ["bundle-v2", "publication", "symlink", "recovery"]
 
 ## What was observed
 
-The OpenCode bundle validates permission rules before touching the output, but nested source-tree validation still happens inside later `sync_tree()` calls. A nested symbolic link or unreadable source can therefore fail after `prepare_output_root()` has already removed stale output and earlier bundle sections have been rewritten.
+`tools/build_release.py` already contains component-builder failures by
+assembling and validating the complete release in a private sibling staging
+directory before publication. Direct component-builder outputs do not all have
+that guarantee. The OpenCode builder validates permission rules before touching
+the output, but nested source-tree validation still happens inside later
+`sync_tree()` calls. A direct bundle build can therefore fail after
+`prepare_output_root()` has removed stale output and earlier sections have been
+rewritten.
 
 ## Why it is a problem
 
-A failed build can leave a mixed release bundle containing old and new sections. A separate preflight traversal would narrow the window but would not close the race between validation and copying.
+A failed direct bundle build can leave a mixed output containing old and new
+sections. The outer complete-release builder prevents that partial output from
+becoming a published release, but direct consumers still lack the same
+guarantee. A separate preflight traversal would narrow the window without
+closing the race between validation and copying.
 
 ## Why it is not a duplicate
 
@@ -43,4 +54,5 @@ A failed build can leave a mixed release bundle containing old and new sections.
 - `adapters/opencode/build_bundle.py:169`
 - `tools/bundle_sync.py:8`
 - `tools/bundle_sync.py:52`
+- `tools/build_release.py:143`
 - `tools/test_build_opencode_bundle.py`
