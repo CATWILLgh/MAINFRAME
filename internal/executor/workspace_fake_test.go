@@ -11,6 +11,8 @@ type fakeWorkspace struct {
 	links                map[domain.Location]LinkState
 	private              map[string]*fakePrivateDirectory
 	directoryPlan        *DirectoryPlan
+	directoryModeErr     error
+	directoryModeChecks  int
 	directories          map[DirectoryTarget]DirectoryState
 	privateDirectories   map[string]FileIdentity
 	directoryCalls       []string

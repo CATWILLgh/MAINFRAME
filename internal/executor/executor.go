@@ -111,6 +111,9 @@ func (executor Executor) initializeJournal(preview Preview) (Journal, error) {
 	if err := validateDirectoryPlan(preview.Plan, directoryPlan); err != nil {
 		return Journal{}, fmt.Errorf("validate managed directories: %w", err)
 	}
+	if err := executor.checkDirectoryModes(directoryPlan.Missing); err != nil {
+		return Journal{}, fmt.Errorf("check managed directory mode: %w", err)
+	}
 	journal := Journal{
 		Release: preview.Release,
 		Desired: append([]domain.ComponentID(nil), preview.Desired...),
@@ -137,6 +140,22 @@ func (executor Executor) initializeJournal(preview Preview) (Journal, error) {
 		}
 	}
 	return journal, nil
+}
+
+func (executor Executor) checkDirectoryModes(
+	requirements []DirectoryRequirement,
+) error {
+	checked := make(map[uint32]bool)
+	for _, requirement := range requirements {
+		if checked[requirement.Mode] {
+			continue
+		}
+		if err := executor.workspace.CheckDirectoryMode(requirement.Mode); err != nil {
+			return err
+		}
+		checked[requirement.Mode] = true
+	}
+	return nil
 }
 
 func hasMutations(journal Journal) bool {

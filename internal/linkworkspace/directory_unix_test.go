@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
+	"golang.org/x/sys/unix"
 )
 
 func TestManagedDirectoryPlanIsReadOnlyAndParentFirst(t *testing.T) {
@@ -80,6 +82,25 @@ func TestManagedDirectoryPlanPreservesExistingParentMode(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o755 {
 		t.Fatalf("existing parent mode = %#o", info.Mode().Perm())
+	}
+}
+
+func TestManagedDirectoryModeCheckRejectsOwnerMask(t *testing.T) {
+	previousMask := unix.Umask(0o700)
+	defer unix.Umask(previousMask)
+	workspace := Workspace{}
+
+	err := workspace.CheckDirectoryMode(executor.ManagedDirectoryMode)
+
+	if err == nil || !strings.Contains(err.Error(), "umask 0700") {
+		t.Fatalf("CheckDirectoryMode() error = %v", err)
+	}
+	if observedMask := unix.Umask(0o700); observedMask != 0o700 {
+		t.Fatalf("process umask changed to %#o", observedMask)
+	}
+	unix.Umask(0o077)
+	if err := workspace.CheckDirectoryMode(executor.ManagedDirectoryMode); err != nil {
+		t.Fatalf("CheckDirectoryMode() with 0077: %v", err)
 	}
 }
 

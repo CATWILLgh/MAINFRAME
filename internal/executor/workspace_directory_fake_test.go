@@ -32,6 +32,14 @@ func (workspace *fakeWorkspace) PlanDirectories(plan domain.Plan) (DirectoryPlan
 	return result, nil
 }
 
+func (workspace *fakeWorkspace) CheckDirectoryMode(mode uint32) error {
+	workspace.directoryModeChecks++
+	if mode != ManagedDirectoryMode {
+		return errors.New("unexpected managed directory mode")
+	}
+	return workspace.directoryModeErr
+}
+
 func fakeRootPath(root domain.RootID) string {
 	if root == domain.RootHome {
 		return ""

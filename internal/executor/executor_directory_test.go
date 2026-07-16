@@ -1,12 +1,84 @@
 package executor
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
+
+func TestApplyChecksDirectoryModeBeforeManagedDirectoryIntent(t *testing.T) {
+	preview := testPreview(
+		"release",
+		"digest",
+		[]domain.ComponentID{"codex"},
+		install("mainframe", "source/mainframe"),
+	)
+	fixture := newFixture(preview)
+	fixture.workspace.directoryPlan = managedDirectoryPlan(".codex")
+	fixture.workspace.directoryModeErr = errors.New("unsupported process umask")
+
+	_, err := fixture.executor().Apply(preview)
+
+	if err == nil || !strings.Contains(err.Error(), "unsupported process umask") {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	if fixture.workspace.directoryModeChecks != 1 {
+		t.Fatalf(
+			"directory mode checks = %d, want 1",
+			fixture.workspace.directoryModeChecks,
+		)
+	}
+	if fixture.store.saveCalls != 0 || fixture.workspace.filesystemCalls() != 0 {
+		t.Fatalf(
+			"preflight wrote state: saves=%d filesystem=%d",
+			fixture.store.saveCalls,
+			fixture.workspace.filesystemCalls(),
+		)
+	}
+}
+
+func TestRecoverChecksDirectoryModeBeforePreparedDirectoryMutation(t *testing.T) {
+	preview := testPreview(
+		"release",
+		"digest",
+		[]domain.ComponentID{"codex"},
+		install("mainframe", "source/mainframe"),
+	)
+	fixture := newFixture(preview)
+	directoryPlan := managedDirectoryPlan(".codex")
+	fixture.workspace.directoryPlan = directoryPlan
+	fixture.workspace.directoryModeErr = errors.New("unsupported process umask")
+	fixture.store.journal = &Journal{
+		Release: preview.Release,
+		Desired: append([]domain.ComponentID(nil), preview.Desired...),
+		Status:  TransactionInProgress,
+		Plan:    preview.Plan,
+		Roots:   append([]RootSnapshot(nil), directoryPlan.Roots...),
+		Directories: []JournalDirectory{{
+			Target:      directoryPlan.Missing[0].Target,
+			Mode:        directoryPlan.Missing[0].Mode,
+			Parent:      FileIdentity{Device: 1, Inode: 1},
+			PrivateName: ".mainframe-00000000000000000000000000000001",
+			Phase:       StepPrepared,
+		}},
+	}
+
+	_, err := fixture.executor().Recover()
+
+	if err == nil || !strings.Contains(err.Error(), "unsupported process umask") {
+		t.Fatalf("Recover() error = %v", err)
+	}
+	if fixture.store.saveCalls != 0 || fixture.workspace.filesystemCalls() != 0 {
+		t.Fatalf(
+			"recovery preflight wrote state: saves=%d filesystem=%d",
+			fixture.store.saveCalls,
+			fixture.workspace.filesystemCalls(),
+		)
+	}
+}
 
 func TestApplyPersistsAllDirectoryIntentsBeforeFilesystemMutation(t *testing.T) {
 	preview := testPreview(

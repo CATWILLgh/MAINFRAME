@@ -29,6 +29,11 @@ func (executor Executor) recoverLocked() (Result, error) {
 		}
 		return Result{}, nil
 	}
+	if err := executor.checkDirectoryModes(
+		preparedDirectoryRequirements(journal.Directories),
+	); err != nil {
+		return Result{}, fmt.Errorf("check recovery directory mode: %w", err)
+	}
 	if err := executor.rollback(journal); err != nil {
 		return Result{}, err
 	}
@@ -36,6 +41,22 @@ func (executor Executor) recoverLocked() (Result, error) {
 		return Result{}, fmt.Errorf("cleanup rolled back journal: %w", err)
 	}
 	return Result{}, nil
+}
+
+func preparedDirectoryRequirements(
+	directories []JournalDirectory,
+) []DirectoryRequirement {
+	var requirements []DirectoryRequirement
+	for _, directory := range directories {
+		if directory.Phase == StepPrepared &&
+			validFileIdentity(directory.Parent) {
+			requirements = append(requirements, DirectoryRequirement{
+				Target: directory.Target,
+				Mode:   directory.Mode,
+			})
+		}
+	}
+	return requirements
 }
 
 func (executor Executor) validateRecoveryRoots(journal Journal) error {

@@ -41,6 +41,7 @@ type LinkWorkspace interface {
 	Inspect(domain.Location) (LinkState, error)
 	ResolveSource(domain.ArtifactPath) (string, error)
 	PlanDirectories(domain.Plan) (DirectoryPlan, error)
+	CheckDirectoryMode(uint32) error
 	AllocatePrivateName() (string, error)
 	InspectDirectory(DirectoryMutation) (DirectoryState, error)
 	StageDirectory(DirectoryMutation) (FileIdentity, error)
