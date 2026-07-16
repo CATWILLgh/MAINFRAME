@@ -18,6 +18,7 @@ from release_contract_io import (
 )
 from release_global import validate_global_contract, validate_local_target_isolation
 from release_json import validate_owned_json_source, validate_shell_source
+from release_component_roots import validate_component_targets
 SCHEMA_VERSION = 1
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
@@ -180,6 +181,7 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
     )
     _validate_payload_rows(manifest["payload_files"])
     _validate_resources(root, manifest["resources"], manifest["payload_files"])
+    validate_component_targets(component, manifest)
 
 
 def _validate_units(root: Path, units: Any) -> None:

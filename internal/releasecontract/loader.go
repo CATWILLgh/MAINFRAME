@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 )
 
@@ -105,6 +106,12 @@ func validateGlobal(manifests []bundleManifest) error {
 		for _, dependency := range manifest.Dependencies {
 			if !components[dependency] {
 				return fmt.Errorf("component %q has unknown dependency %q", manifest.Component, dependency)
+			}
+			if err := validateComponentDependency(
+				domain.ComponentID(manifest.Component),
+				domain.ComponentID(dependency),
+			); err != nil {
+				return err
 			}
 		}
 	}

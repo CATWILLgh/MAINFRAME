@@ -65,7 +65,7 @@ def _write_pointer_bundle(root: Path, component: str, start: int, count: int) ->
         component=component,
         dependencies=[],
         install_units=[],
-        resources=[_json_resource(component + ".configuration", "shared-config", pointers=pointers)],
+        resources=[_json_resource(component + ".configuration", "user-bin", pointers=pointers)],
     )
     return bundle
 
@@ -78,8 +78,12 @@ def test_release_validation_rejects_overlapping_owned_json_pointers():
     )
     for alpha_pointers, beta_pointers in overlap_cases:
         root = Path(tempfile.mkdtemp())
-        alpha = _write_json_bundle(root, "alpha", "shared-config", alpha_pointers)
-        beta = _write_json_bundle(root, "beta", "shared-config", beta_pointers)
+        alpha = _write_json_bundle(
+            root, "credential-tools", "user-bin", alpha_pointers
+        )
+        beta = _write_json_bundle(
+            root, "mainframe-cli", "user-bin", beta_pointers
+        )
         release_contract.write_release_index(
             root,
             release_id="test-release",
@@ -93,8 +97,8 @@ def test_release_validation_rejects_overlapping_owned_json_pointers():
             raise AssertionError("overlapping JSON ownership was accepted")
 
     root = Path(tempfile.mkdtemp())
-    alpha = _write_json_bundle(root, "alpha", "shared-config", ["/owned"])
-    beta = _write_json_bundle(root, "beta", "shared-config", ["/peer"])
+    alpha = _write_json_bundle(root, "credential-tools", "user-bin", ["/owned"])
+    beta = _write_json_bundle(root, "mainframe-cli", "user-bin", ["/peer"])
     release_contract.write_release_index(
         root,
         release_id="test-release",
@@ -106,8 +110,8 @@ def test_release_validation_rejects_overlapping_owned_json_pointers():
 def test_release_validation_bounds_aggregate_owned_pointers_per_target():
     for second_count, accepted in ((512, True), (513, False)):
         root = Path(tempfile.mkdtemp())
-        alpha = _write_pointer_bundle(root, "alpha", 0, 512)
-        beta = _write_pointer_bundle(root, "beta", 512, second_count)
+        alpha = _write_pointer_bundle(root, "credential-tools", 0, 512)
+        beta = _write_pointer_bundle(root, "mainframe-cli", 512, second_count)
         release_contract.write_release_index(
             root,
             release_id="test-release",
@@ -132,26 +136,26 @@ def test_release_validation_isolates_json_resource_and_install_targets():
     )
     for resource_target, install_target, observation in target_cases:
         root = Path(tempfile.mkdtemp())
-        bundle = root / "bundles" / "alpha"
+        bundle = root / "bundles" / "codex"
         bundle.mkdir(parents=True)
         (bundle / "config.json").write_text('{"owned":true}\n')
         (bundle / "unit").write_text("unit\n")
         resource = _json_resource(
             "alpha.configuration",
-            "shared-config",
+            "codex-config",
             observation=observation,
             pointers=None if observation == "unimplemented" else ("/owned",),
         )
         resource["target"]["path"] = resource_target
         release_contract.write_bundle_manifest(
             bundle,
-            component="alpha",
+            component="codex",
             dependencies=[],
             install_units=[{
                 "id": "alpha.unit",
                 "kind": "file",
                 "source": "unit",
-                "target": {"root": "shared-config", "path": install_target},
+                "target": {"root": "codex-config", "path": install_target},
             }],
             resources=[resource],
         )
@@ -174,7 +178,7 @@ def test_release_validation_rejects_structurally_incompatible_json_resources():
             "id": "alpha.peer",
             "strategy": "json-key-merge",
             "source": "config.json",
-            "target": {"root": "shared-config", "path": "config.json/child"},
+            "target": {"root": "codex-config", "path": "config.json/child"},
             "observation": "supported",
             "apply": "unimplemented",
             "owned_json_pointers": ["/peer"],
@@ -183,22 +187,22 @@ def test_release_validation_rejects_structurally_incompatible_json_resources():
             "id": "alpha.seed",
             "strategy": "seed-if-absent",
             "source": "config.json",
-            "target": {"root": "shared-config", "path": "config.json"},
+            "target": {"root": "codex-config", "path": "config.json"},
             "observation": "supported",
             "apply": "unimplemented",
         },
     )
     for second in cases:
         root = Path(tempfile.mkdtemp())
-        bundle = root / "bundles" / "alpha"
+        bundle = root / "bundles" / "codex"
         bundle.mkdir(parents=True)
         (bundle / "config.json").write_text('{"owned":true,"peer":true}\n')
         release_contract.write_bundle_manifest(
             bundle,
-            component="alpha",
+            component="codex",
             dependencies=[],
             install_units=[],
-            resources=[_json_resource("alpha.json", "shared-config"), second],
+            resources=[_json_resource("alpha.json", "codex-config"), second],
         )
         release_contract.write_release_index(
             root,
@@ -215,21 +219,21 @@ def test_release_validation_rejects_structurally_incompatible_json_resources():
 
 def test_release_validation_allows_directory_resource_above_json_target():
     root = Path(tempfile.mkdtemp())
-    bundle = root / "bundles" / "alpha"
+    bundle = root / "bundles" / "codex"
     bundle.mkdir(parents=True)
     (bundle / "config.json").write_text('{"owned":true}\n')
-    json_resource = _json_resource("alpha.json", "shared-config")
+    json_resource = _json_resource("alpha.json", "codex-config")
     json_resource["target"]["path"] = "managed/config.json"
     release_contract.write_bundle_manifest(
         bundle,
-        component="alpha",
+        component="codex",
         dependencies=[],
         install_units=[],
         resources=[
             {
                 "id": "alpha.directory",
                 "strategy": "ensure-directory",
-                "target": {"root": "shared-config", "path": "managed"},
+                "target": {"root": "codex-config", "path": "managed"},
                 "observation": "supported",
                 "apply": "unimplemented",
             },

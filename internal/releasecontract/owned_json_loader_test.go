@@ -19,7 +19,7 @@ func TestLoadAcceptsSupportedShellObservationAndCapturesDesiredLine(t *testing.T
 		"id":          "codex.shell-source",
 		"strategy":    "shell-line",
 		"source":      "source-line",
-		"target":      map[string]any{"root": "home", "path": ".zshenv"},
+		"target":      map[string]any{"root": "codex-config", "path": "shell-source"},
 		"observation": "supported",
 		"apply":       "unimplemented",
 	}}

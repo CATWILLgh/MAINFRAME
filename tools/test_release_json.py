@@ -65,13 +65,13 @@ def test_supported_json_observation_requires_valid_owned_pointers():
     )
     resource = _json_resource(
         "alpha.configuration",
-        "alpha-config",
+        "codex-config",
         pointers=["/", "/a~1b/~0key", "/permissions/allow", "/permissions/deny"],
     )
 
     manifest = release_contract.write_bundle_manifest(
         bundle,
-        component="alpha",
+        component="codex",
         dependencies=[],
         install_units=[],
         resources=[resource],
@@ -84,15 +84,15 @@ def test_supported_json_observation_requires_valid_owned_pointers():
 
 def test_owned_json_pointers_are_forbidden_outside_supported_json_observation():
     cases = [
-        _json_resource("alpha.missing", "alpha-config", pointers=None),
+        _json_resource("alpha.missing", "codex-config", pointers=None),
         _json_resource(
             "alpha.unimplemented",
-            "alpha-config",
+            "codex-config",
             observation="unimplemented",
         ),
         _json_resource(
             "alpha.unimplemented-empty",
-            "alpha-config",
+            "codex-config",
             observation="unimplemented",
             pointers=[],
         ),
@@ -100,7 +100,7 @@ def test_owned_json_pointers_are_forbidden_outside_supported_json_observation():
             "id": "alpha.seed",
             "strategy": "seed-if-absent",
             "source": "config.json",
-            "target": {"root": "alpha-config", "path": "seed.json"},
+            "target": {"root": "codex-config", "path": "seed.json"},
             "observation": "supported",
             "apply": "unimplemented",
             "owned_json_pointers": ["/owned"],
@@ -109,7 +109,7 @@ def test_owned_json_pointers_are_forbidden_outside_supported_json_observation():
             "id": "alpha.seed-empty",
             "strategy": "seed-if-absent",
             "source": "config.json",
-            "target": {"root": "alpha-config", "path": "seed-empty.json"},
+            "target": {"root": "codex-config", "path": "seed-empty.json"},
             "observation": "supported",
             "apply": "unimplemented",
             "owned_json_pointers": [],
@@ -121,7 +121,7 @@ def test_owned_json_pointers_are_forbidden_outside_supported_json_observation():
         try:
             release_contract.write_bundle_manifest(
                 bundle,
-                component="alpha",
+                component="codex",
                 dependencies=[],
                 install_units=[],
                 resources=[resource],
@@ -153,10 +153,10 @@ def test_owned_json_pointers_reject_invalid_shape_escape_order_and_overlap():
         try:
             release_contract.write_bundle_manifest(
                 bundle,
-                component="alpha",
+                component="codex",
                 dependencies=[],
                 install_units=[],
-                resources=[_json_resource("alpha.configuration", "alpha-config", pointers=pointers)],
+                resources=[_json_resource("alpha.configuration", "codex-config", pointers=pointers)],
             )
         except ValueError as exc:
             assert "owned_json_pointers" in str(exc)
@@ -176,10 +176,10 @@ def test_owned_json_pointers_resolve_only_through_existing_object_members():
         try:
             release_contract.write_bundle_manifest(
                 bundle,
-                component="alpha",
+                component="codex",
                 dependencies=[],
                 install_units=[],
-                resources=[_json_resource("alpha.configuration", "alpha-config", pointers=pointers)],
+                resources=[_json_resource("alpha.configuration", "codex-config", pointers=pointers)],
             )
         except ValueError as exc:
             assert "owned_json_pointers" in str(exc)
@@ -201,10 +201,10 @@ def test_supported_json_source_requires_strict_bounded_json():
         try:
             release_contract.write_bundle_manifest(
                 bundle,
-                component="alpha",
+                component="codex",
                 dependencies=[],
                 install_units=[],
-                resources=[_json_resource("alpha.configuration", "alpha-config")],
+                resources=[_json_resource("alpha.configuration", "codex-config")],
             )
         except ValueError as exc:
             assert "JSON" in str(exc) or "json" in str(exc)
@@ -221,10 +221,10 @@ def test_supported_json_source_accepts_exactly_one_mibibyte():
 
     release_contract.write_bundle_manifest(
         bundle,
-        component="alpha",
+        component="codex",
         dependencies=[],
         install_units=[],
-        resources=[_json_resource("alpha.configuration", "alpha-config")],
+        resources=[_json_resource("alpha.configuration", "codex-config")],
     )
 
 

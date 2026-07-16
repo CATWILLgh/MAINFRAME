@@ -14,6 +14,7 @@ TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
 import release_contract
+from release_graph import reject_dependency_cycles
 
 
 
@@ -60,8 +61,8 @@ def _bundle(root: Path, component: str, target_root: str) -> Path:
 
 def test_release_index_references_authoritative_manifests_by_digest():
     root = Path(tempfile.mkdtemp())
-    alpha = _bundle(root, "alpha", "alpha-config")
-    beta = _bundle(root, "beta", "beta-config")
+    alpha = _bundle(root, "claude-code", "claude-config")
+    beta = _bundle(root, "codex", "codex-config")
     release_contract.write_release_index(
         root,
         release_id="test-release",
@@ -72,8 +73,8 @@ def test_release_index_references_authoritative_manifests_by_digest():
 
     assert release["release_id"] == "test-release"
     assert [entry["component"] for entry in release["manifests"]] == [
-        "alpha",
-        "beta",
+        "claude-code",
+        "codex",
     ]
     assert all(set(entry) == {"component", "path", "sha256"} for entry in release["manifests"])
 
@@ -91,7 +92,7 @@ def test_release_index_references_authoritative_manifests_by_digest():
 
 def test_release_validation_decodes_the_exact_indexed_manifest():
     root = Path(tempfile.mkdtemp())
-    bundle = _bundle(root, "alpha", "alpha-config")
+    bundle = _bundle(root, "claude-code", "claude-config")
     decoy = bundle / "decoy.json"
     decoy.write_text('{"component":"wrong"}\n')
     manifest_path = bundle / "bundle.json"
@@ -113,7 +114,7 @@ def test_release_validation_decodes_the_exact_indexed_manifest():
     )
     index_path = root / "release.json"
     index = json.loads(index_path.read_text())
-    index["manifests"][0]["path"] = "bundles/alpha/decoy.json"
+    index["manifests"][0]["path"] = "bundles/claude-code/decoy.json"
     index["manifests"][0]["sha256"] = release_contract._digest(decoy)
     index_path.write_text(json.dumps(index, indent=2) + "\n")
 
@@ -127,8 +128,8 @@ def test_release_validation_decodes_the_exact_indexed_manifest():
 
 def test_release_validation_requires_dependency_closure_and_global_target_isolation():
     root = Path(tempfile.mkdtemp())
-    alpha = _bundle(root, "alpha", "shared-config")
-    beta = _bundle(root, "beta", "shared-config")
+    alpha = _bundle(root, "credential-tools", "user-bin")
+    beta = _bundle(root, "mainframe-cli", "user-bin")
     beta_manifest = json.loads((beta / "bundle.json").read_text())
     beta_manifest["dependencies"] = ["missing"]
     (beta / "bundle.json").write_text(json.dumps(beta_manifest, indent=2) + "\n")
@@ -161,12 +162,15 @@ def test_release_validation_requires_dependency_closure_and_global_target_isolat
 
 def test_release_validation_rejects_cross_bundle_legacy_target_collision():
     root = Path(tempfile.mkdtemp())
-    alpha = _bundle(root, "alpha", "alpha-config")
-    beta = _bundle(root, "beta", "beta-config")
+    alpha = _bundle(root, "credential-tools", "user-bin")
+    beta = _bundle(root, "mainframe-cli", "user-bin")
+    alpha_manifest = json.loads((alpha / "bundle.json").read_text())
+    alpha_manifest["install_units"][0]["target"]["path"] = "alpha-only"
+    (alpha / "bundle.json").write_text(json.dumps(alpha_manifest, indent=2) + "\n")
     beta_manifest = json.loads((beta / "bundle.json").read_text())
     beta_manifest["legacy_artifacts"] = [
         {
-            "target": {"root": "alpha-config", "path": "launcher.sh"},
+            "target": {"root": "user-bin", "path": "alpha-only"},
             "target_suffixes": ["export/launcher.sh"],
         }
     ]
@@ -185,15 +189,14 @@ def test_release_validation_rejects_cross_bundle_legacy_target_collision():
         raise AssertionError("cross-bundle legacy target collision was accepted")
 
 
-def test_release_validation_rejects_dependency_cycle():
+def test_release_validation_rejects_cross_runtime_dependency():
     root = Path(tempfile.mkdtemp())
-    alpha = _bundle(root, "alpha", "alpha-config")
-    beta = _bundle(root, "beta", "beta-config")
-    for bundle, dependency in ((alpha, "beta"), (beta, "alpha")):
-        manifest_path = bundle / "bundle.json"
-        manifest = json.loads(manifest_path.read_text())
-        manifest["dependencies"] = [dependency]
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    alpha = _bundle(root, "claude-code", "claude-config")
+    beta = _bundle(root, "opencode", "opencode-config")
+    manifest_path = beta / "bundle.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["dependencies"] = ["claude-code"]
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     release_contract.write_release_index(
         root,
         release_id="test-release",
@@ -203,6 +206,19 @@ def test_release_validation_rejects_dependency_cycle():
     try:
         release_contract.validate_release(root)
     except ValueError as exc:
+        assert "cannot depend" in str(exc)
+    else:
+        raise AssertionError("cross-runtime dependency was accepted")
+
+
+def test_dependency_graph_rejects_cycle_defense_in_depth():
+    manifests = [
+        {"component": "first", "dependencies": ["second"]},
+        {"component": "second", "dependencies": ["first"]},
+    ]
+    try:
+        reject_dependency_cycles(manifests)
+    except ValueError as exc:
         assert "cycle" in str(exc)
     else:
         raise AssertionError("dependency cycle was accepted")
@@ -210,9 +226,9 @@ def test_release_validation_rejects_dependency_cycle():
 
 def test_release_index_rejects_manifest_beneath_symlinked_ancestor():
     root = Path(tempfile.mkdtemp())
-    bundle = _bundle(root, "alpha", "alpha-config")
+    bundle = _bundle(root, "claude-code", "claude-config")
     (root / "linked-bundles").symlink_to(root / "bundles")
-    redirected = root / "linked-bundles" / "alpha" / "bundle.json"
+    redirected = root / "linked-bundles" / "claude-code" / "bundle.json"
     try:
         release_contract.write_release_index(
             root,

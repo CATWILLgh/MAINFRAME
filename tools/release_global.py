@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from release_graph import reject_dependency_cycles
+from release_component_roots import validate_component_dependency
 from release_json import (
     MAX_OWNED_JSON_POINTERS,
     json_pointer_tokens,
@@ -55,6 +56,7 @@ def validate_global_contract(
                 raise ValueError(
                     f"component {manifest['component']!r} has unknown dependency {dependency!r}"
                 )
+            validate_component_dependency(manifest["component"], dependency)
         for collection in (manifest["install_units"], manifest["resources"]):
             for item in collection:
                 unique_identifier(item["id"], identifiers, "release item")

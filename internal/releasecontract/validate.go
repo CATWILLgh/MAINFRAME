@@ -19,6 +19,27 @@ import (
 var componentPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 var itemPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._/-][a-z0-9_]+)*$`)
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var componentRoots = map[domain.ComponentID]map[domain.RootID]struct{}{
+	"antigravity-2": {"antigravity-config": {}, "antigravity-data": {}},
+	"claude-code":   {domain.RootClaudeConfig: {}},
+	"codex":         {domain.RootCodexConfig: {}},
+	"credential-tools": {
+		domain.RootCredentialsConfig: {}, domain.RootHome: {}, domain.RootUserBin: {},
+	},
+	"mainframe-cli": {domain.RootUserBin: {}},
+	"opencode":      {domain.RootOpenCodeConfig: {}},
+}
+var credentialToolsHomePaths = map[domain.ArtifactPath]struct{}{
+	".bashrc": {}, ".profile": {}, ".zshenv": {},
+}
+var componentDependencies = map[domain.ComponentID]map[domain.ComponentID]struct{}{
+	"antigravity-2":    {"credential-tools": {}, "mainframe-cli": {}},
+	"claude-code":      {"credential-tools": {}, "mainframe-cli": {}},
+	"codex":            {"credential-tools": {}, "mainframe-cli": {}},
+	"credential-tools": {},
+	"mainframe-cli":    {},
+	"opencode":         {"credential-tools": {}, "mainframe-cli": {}},
+}
 
 func validateIndex(index releaseIndex) error {
 	if index.SchemaVersion != schemaVersion || index.Kind != releaseKind {
@@ -50,6 +71,9 @@ func validateBundle(
 	if manifest.SchemaVersion != schemaVersion || manifest.Kind != bundleKind ||
 		!componentPattern.MatchString(manifest.Component) || !manifestCollectionsPresent(manifest) {
 		return installmodel.ComponentSpec{}, nil, fmt.Errorf("invalid bundle identity")
+	}
+	if _, exists := componentRoots[component]; !exists {
+		return installmodel.ComponentSpec{}, nil, fmt.Errorf("unknown release component %q", component)
 	}
 	if !sortedUnique(manifest.Dependencies) {
 		return installmodel.ComponentSpec{}, nil, fmt.Errorf("invalid dependencies for %q", component)
@@ -118,6 +142,9 @@ func validateUnits(
 		if err != nil {
 			return nil, fmt.Errorf("install unit %q: %w", unit.ID, err)
 		}
+		if err := validateComponentTarget(component, target, "install unit"); err != nil {
+			return nil, err
+		}
 		suffixes, err := portablePaths(unit.LegacySourceSuffixes, true)
 		if err != nil {
 			return nil, fmt.Errorf("install unit %q: %w", unit.ID, err)
@@ -144,6 +171,9 @@ func validateLegacy(
 		target, err := location(record.Target)
 		if err != nil {
 			return nil, fmt.Errorf("component %q legacy target: %w", component, err)
+		}
+		if err := validateComponentTarget(component, target, "legacy artifact"); err != nil {
+			return nil, err
 		}
 		suffixes, err := portablePaths(record.TargetSuffixes, false)
 		if err != nil {
@@ -212,6 +242,9 @@ func validateResourceRecord(
 	target, err := location(record.Target)
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
+	if err := validateComponentTarget(component, target, "resource"); err != nil {
+		return Resource{}, err
 	}
 	legacySources, err := portablePaths(record.LegacySourceSuffixes, true)
 	if err != nil {
@@ -314,6 +347,44 @@ func location(record locationRecord) (domain.Location, error) {
 		return domain.Location{}, fmt.Errorf("invalid location %#v", record)
 	}
 	return value, nil
+}
+
+func validateComponentTarget(
+	component domain.ComponentID,
+	target domain.Location,
+	kind string,
+) error {
+	if _, exists := componentRoots[component][target.Root]; !exists {
+		return fmt.Errorf(
+			"component %q cannot target root %q from %s",
+			component,
+			target.Root,
+			kind,
+		)
+	}
+	if component == "credential-tools" && target.Root == domain.RootHome {
+		if _, exists := credentialToolsHomePaths[target.Path]; !exists {
+			return fmt.Errorf(
+				"component %q cannot target path %q under root %q from %s",
+				component,
+				target.Path,
+				target.Root,
+				kind,
+			)
+		}
+	}
+	return nil
+}
+
+func validateComponentDependency(component, dependency domain.ComponentID) error {
+	allowed, exists := componentDependencies[component]
+	if !exists {
+		return fmt.Errorf("unknown release component %q", component)
+	}
+	if _, exists := allowed[dependency]; !exists {
+		return fmt.Errorf("component %q cannot depend on %q", component, dependency)
+	}
+	return nil
 }
 
 func portablePaths(values []string, allowEmpty bool) ([]domain.ArtifactPath, error) {

@@ -59,16 +59,16 @@ def _bundle(root: Path, component: str, target_root: str) -> Path:
 
 def test_bundle_manifest_records_units_resources_and_payload_integrity():
     root = Path(tempfile.mkdtemp())
-    bundle = _bundle(root, "alpha", "alpha-config")
+    bundle = _bundle(root, "credential-tools", "credentials-config")
 
     manifest = release_contract.validate_bundle(bundle)
 
     assert manifest["schema_version"] == 1
     assert manifest["kind"] == "mainframe-bundle"
-    assert manifest["component"] == "alpha"
+    assert manifest["component"] == "credential-tools"
     assert [item["id"] for item in manifest["install_units"]] == [
-        "alpha.launcher",
-        "alpha.tree",
+        "credential-tools.launcher",
+        "credential-tools.tree",
     ]
     assert manifest["resources"][0]["strategy"] == "json-key-merge"
     payload = {item["path"]: item for item in manifest["payload_files"]}
@@ -85,14 +85,14 @@ def test_resource_observation_support_matches_strategy_contract():
 
     manifest = release_contract.write_bundle_manifest(
         bundle,
-        component="alpha",
+        component="credential-tools",
         dependencies=[],
         install_units=[],
         resources=[
             {
                 "id": "alpha.directory",
                 "strategy": "ensure-directory",
-                "target": {"root": "alpha-config", "path": "cache"},
+                "target": {"root": "credentials-config", "path": "cache"},
                 "observation": "supported",
                 "apply": "unimplemented",
             },
@@ -100,7 +100,7 @@ def test_resource_observation_support_matches_strategy_contract():
                 "id": "alpha.seed",
                 "strategy": "seed-if-absent",
                 "source": "seed.txt",
-                "target": {"root": "alpha-config", "path": "seed.txt"},
+                "target": {"root": "credentials-config", "path": "seed.txt"},
                 "observation": "supported",
                 "apply": "unimplemented",
             },
@@ -122,7 +122,7 @@ def test_resource_observation_support_matches_strategy_contract():
     (bundle / "shell-line").write_text("source ~/.config/example.env")
     release_contract.write_bundle_manifest(
         bundle,
-        component="alpha",
+        component="credential-tools",
         dependencies=[],
         install_units=[],
         resources=[
@@ -149,7 +149,7 @@ def test_resource_observation_rejects_unsupported_strategies_and_apply():
         resource = {
             "id": "alpha.configuration",
             "strategy": strategy,
-            "target": {"root": "alpha-config", "path": "config"},
+            "target": {"root": "credentials-config", "path": "config"},
             "observation": observation,
             "apply": apply,
         }
@@ -159,7 +159,7 @@ def test_resource_observation_rejects_unsupported_strategies_and_apply():
         try:
             release_contract.write_bundle_manifest(
                 bundle,
-                component="alpha",
+                component="credential-tools",
                 dependencies=[],
                 install_units=[],
                 resources=[resource],
@@ -187,7 +187,7 @@ def test_supported_shell_resource_requires_one_non_empty_logical_line():
         try:
             release_contract.write_bundle_manifest(
                 bundle,
-                component="alpha",
+                component="credential-tools",
                 dependencies=[],
                 install_units=[],
                 resources=[
@@ -209,7 +209,7 @@ def test_supported_shell_resource_requires_one_non_empty_logical_line():
 
 def test_bundle_validation_rejects_tampering_and_unknown_fields():
     root = Path(tempfile.mkdtemp())
-    bundle = _bundle(root, "alpha", "alpha-config")
+    bundle = _bundle(root, "credential-tools", "credentials-config")
     (bundle / "tree/item.txt").write_text("tampered\n")
     try:
         release_contract.validate_bundle(bundle)
@@ -218,7 +218,9 @@ def test_bundle_validation_rejects_tampering_and_unknown_fields():
     else:
         raise AssertionError("tampered payload was accepted")
 
-    bundle = _bundle(Path(tempfile.mkdtemp()), "alpha", "alpha-config")
+    bundle = _bundle(
+        Path(tempfile.mkdtemp()), "credential-tools", "credentials-config"
+    )
     path = bundle / "bundle.json"
     manifest = json.loads(path.read_text())
     manifest["unexpected"] = True
@@ -233,7 +235,7 @@ def test_bundle_validation_rejects_tampering_and_unknown_fields():
 
 def test_contract_rejects_boolean_schema_and_payload_size_values():
     root = Path(tempfile.mkdtemp())
-    bundle = _bundle(root, "alpha", "alpha-config")
+    bundle = _bundle(root, "credential-tools", "credentials-config")
     manifest_path = bundle / "bundle.json"
     manifest = json.loads(manifest_path.read_text())
     manifest["schema_version"] = True
@@ -258,7 +260,7 @@ def test_bundle_writer_rejects_symlink_payload_and_overlapping_targets():
     try:
         release_contract.write_bundle_manifest(
             bundle,
-            component="alpha",
+            component="credential-tools",
             dependencies=[],
             install_units=[],
             resources=[],
@@ -274,20 +276,23 @@ def test_bundle_writer_rejects_symlink_payload_and_overlapping_targets():
     try:
         release_contract.write_bundle_manifest(
             bundle,
-            component="alpha",
+            component="credential-tools",
             dependencies=[],
             install_units=[
                 {
                     "id": "alpha.parent",
                     "kind": "tree",
                     "source": "tree",
-                    "target": {"root": "alpha-config", "path": "tree"},
+                    "target": {"root": "credentials-config", "path": "tree"},
                 },
                 {
                     "id": "alpha.child",
                     "kind": "tree",
                     "source": "tree/child",
-                    "target": {"root": "alpha-config", "path": "tree/child"},
+                    "target": {
+                        "root": "credentials-config",
+                        "path": "tree/child",
+                    },
                 },
             ],
             resources=[],
@@ -303,20 +308,20 @@ def test_bundle_manifest_preserves_explicit_legacy_adoption_rules():
     (bundle / "current").write_text("current")
     manifest = release_contract.write_bundle_manifest(
         bundle,
-        component="alpha",
+        component="credential-tools",
         dependencies=[],
         install_units=[
             {
                 "id": "alpha.current",
                 "kind": "file",
                 "source": "current",
-                "target": {"root": "alpha-config", "path": "current"},
+                "target": {"root": "credentials-config", "path": "current"},
                 "legacy_source_suffixes": ["dist/alpha/current"],
             }
         ],
         legacy_artifacts=[
             {
-                "target": {"root": "alpha-config", "path": "obsolete"},
+                "target": {"root": "credentials-config", "path": "obsolete"},
                 "target_suffixes": ["export/obsolete"],
             }
         ],
@@ -325,7 +330,7 @@ def test_bundle_manifest_preserves_explicit_legacy_adoption_rules():
                 "id": "alpha.settings",
                 "strategy": "json-key-merge",
                 "source": "current",
-                "target": {"root": "alpha-config", "path": "settings.json"},
+                "target": {"root": "credentials-config", "path": "settings.json"},
                 "legacy_source_suffixes": ["dist/alpha/settings.json"],
                 "observation": "unimplemented",
                 "apply": "unimplemented",
@@ -338,7 +343,7 @@ def test_bundle_manifest_preserves_explicit_legacy_adoption_rules():
     ]
     assert manifest["legacy_artifacts"] == [
         {
-            "target": {"root": "alpha-config", "path": "obsolete"},
+            "target": {"root": "credentials-config", "path": "obsolete"},
             "target_suffixes": ["export/obsolete"],
         }
     ]
@@ -346,6 +351,28 @@ def test_bundle_manifest_preserves_explicit_legacy_adoption_rules():
         "dist/alpha/settings.json"
     ]
     assert release_contract.validate_bundle(bundle) == manifest
+
+
+def test_bundle_rejects_component_targeting_foreign_root():
+    bundle = Path(tempfile.mkdtemp())
+    (bundle / "payload").write_text("payload\n")
+    try:
+        release_contract.write_bundle_manifest(
+            bundle,
+            component="codex",
+            dependencies=[],
+            install_units=[{
+                "id": "codex.payload",
+                "kind": "file",
+                "source": "payload",
+                "target": {"root": "claude-config", "path": "payload"},
+            }],
+            resources=[],
+        )
+    except ValueError as exc:
+        assert "codex" in str(exc) and "claude-config" in str(exc)
+    else:
+        raise AssertionError("Codex bundle targeting Claude Code root was accepted")
 
 
 def _run_all():
