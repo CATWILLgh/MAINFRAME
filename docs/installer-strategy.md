@@ -81,6 +81,22 @@ stays unavailable until every supported configuration strategy has complete
 ownership and deselection semantics and the remaining executor activation
 gates pass.
 
+Codex hook trust is an adapter-local external prerequisite. The release
+contract names the desired hook source, while the observer asks Codex's
+read-only `hooks/list` interface for the effective state. Ready requires all
+of the following: the desired hook artifact is already managed exactly for
+the selected release, the response names the resolved Codex hook target,
+warnings and errors are absent, the non-empty semantic handler set matches
+the verified release source exactly, and every handler is enabled and trusted
+or managed. File presence alone is never evidence of trust. MAINFRAME never
+reads or writes Codex's persisted `hooks.state`.
+
+External manual actions and inspection notices are separate from executable
+configuration changes and unresolved ownership issues. They never enter a
+prepared transition or executor journal. Deselection suppresses them without
+revoking external state. An unavailable or incompatible Codex executable
+produces a non-blocking notice rather than a misleading `/hooks` instruction.
+
 Before execution, the immutable inspection can materialize a private prepared
 plan without writing. It preserves complete user JSON, composes non-overlapping
 resources sharing one physical file, and groups each configuration with its

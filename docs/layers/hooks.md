@@ -16,7 +16,7 @@
 - OpenCode wiring source: `adapters/opencode/plugins/mainframe-gates.js`, linked directly into `~/.config/opencode/plugins/`. It ports blocking pre-tool gates plus advisory post-tool checks; the runtime cannot reproduce every Claude Code stop-gate guarantee.
 - Codex projection: `adapters/codex/build_codex.py` maps 16 selected detectors over `PreToolUse`, `PostToolUse`, and `Stop`, renders `dist/codex/hooks.json`, and copies `adapters/codex/gates/mainframe-hook.sh` to `dist/codex/mainframe-hook.sh`.
 - Antigravity projection: `adapters/antigravity-2/` translates the desktop `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop` schemas to the neutral detector contract. It caches pre-tool arguments because the native post-tool payload omits them, and rejects CLI transcript paths.
-- After source changes, render Claude Code and run the relevant target builder. Codex hooks require per-project `/hooks` trust; Antigravity hooks are self-contained in its plugin.
+- After source changes, render Claude Code and run the relevant target builder. Codex pins trust to each global user-hook definition and exposes its effective state through `hooks/list`; review new or changed definitions through `/hooks`. Antigravity hooks are self-contained in its plugin.
 
 ---
 

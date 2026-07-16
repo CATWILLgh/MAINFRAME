@@ -15,18 +15,19 @@ tags: ["tui", "configuration", "ownership", "opencode", "codex"]
 
 The read-only observer can safely classify seed-if-absent files, required or
 optional shell lines, directories, the three Claude Code permission arrays,
-and OpenCode permission actions through their separate ownership registry.
-Codex hook trust remains explicitly not assessed because it is external
-project state. OpenCode MCP projection is not represented as a release resource
-and has no ownership registry.
+OpenCode permission actions through their separate ownership registry, and
+Codex global user-hook trust through Codex's own `hooks/list` interface.
+OpenCode MCP projection is not represented as a release resource and has no
+ownership registry.
 
 ## Why it is a problem
 
 The TUI can now explain generic selected-resource changes and detailed
 OpenCode permission intent, but it still cannot build a safe removal plan for
 every behavior handled by `install.sh` and adapter-specific generators.
-Comparing entire JSON files would overwrite or misclassify user-owned keys,
-while file presence cannot prove Codex project trust.
+Comparing entire JSON files would overwrite or misclassify user-owned keys.
+Codex hook file presence also cannot prove that its definitions are enabled
+and trusted.
 
 ## Why it is not a duplicate
 
@@ -35,7 +36,6 @@ while file presence cannot prove Codex project trust.
 ## What probably needs to be done
 
 - Represent OpenCode MCP additions and their ownership independently from permission rules.
-- Model Codex hook trust as adapter-local external state instead of inferring it from `hooks.json`.
 - Complete removal and application contracts for every configuration strategy
   before exposing an Apply action.
 - Prove that each adapter reads and writes only its own configuration and state projections.
@@ -60,9 +60,17 @@ while file presence cannot prove Codex project trust.
 - The executor can now apply a supported prepared transition, including
   registry-proven removal, as one recoverable journaled transaction across the
   configuration and ownership files.
+- Codex hook trust now has a typed adapter-local external-state descriptor.
+  Observation uses the bounded read-only `hooks/list` protocol, requires an
+  exact non-empty desired handler set and managed-exact hook artifact, and
+  fails closed for disabled, untrusted, modified, partial, unexpected,
+  malformed, or unavailable state. MAINFRAME does not read or write
+  `hooks.state`.
+- The semantic plan separates manual actions and external notices from
+  executable changes and blocking ownership issues. They never enter prepared
+  transitions or journals, and deselection neither reports nor revokes them.
 - Apply remains unavailable. OpenCode still needs independent MCP ownership;
-  other strategies still need safe deselection semantics, and Codex still
-  needs an adapter-local external trust contract.
+  other strategies still need safe deselection semantics.
 
 ## Acceptance criteria
 
@@ -82,6 +90,8 @@ while file presence cannot prove Codex project trust.
 - `internal/configuration/planner.go`
 - `internal/configuration/prepared.go`
 - `internal/configuration/owned_map.go`
+- `internal/codexstate/observer.go`
+- `internal/codexstate/app_server.go`
 - `internal/executor/configuration_execute.go`
 - `internal/executor/configuration_recovery.go`
 - `internal/lifecycle/configuration_preview.go`
@@ -89,5 +99,6 @@ while file presence cannot prove Codex project trust.
 - `adapters/opencode/build_bundle.py`
 - `adapters/opencode/build_opencode.py`
 - `adapters/codex/build_bundle.py`
+- <https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#hooks>
 - `docs/tickets/7a1c1d1d-add-safe-plan-application.md`
 - `docs/tickets/06cb98c8-publish-opencode-config-and-ownership-consistently.md`
