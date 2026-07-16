@@ -61,6 +61,19 @@ index while the secret store and `secret` command remain neutral. Migration
 code may inspect legacy locations belonging to the same runtime, but must not
 discover state through another runtime.
 
+Configuration ownership is explicit release data. Static JSON ownership uses
+non-overlapping RFC 6901 pointers. OpenCode permission ownership instead uses a
+versioned map-entry descriptor that binds the desired permission map to the
+adapter-local `opencode.json.mainframe-permissions.json` registry. Observation
+computes the same safe fixed point as the compatibility generator: absent
+state never adopts matching user entries, changed or deleted managed entries
+become permanent tombstones, and unrelated entries remain user-owned. The
+observer also preserves nested permission-rule order because OpenCode applies
+the last matching pattern. The
+configuration file and registry are one logical state transition; Apply stays
+unimplemented until the executor can journal, publish, and recover both files
+together.
+
 ## Permission capabilities must be stated honestly
 
 The TUI presents the protection each runtime can actually provide. A control

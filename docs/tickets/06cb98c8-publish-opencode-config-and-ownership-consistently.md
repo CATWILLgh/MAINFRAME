@@ -37,9 +37,20 @@ The configuration and its ownership registry form one logical state transition b
 - User-owned actions are never adopted or overwritten during recovery.
 - Failure-injection tests cover both publication orders and every recovery branch.
 
+## Progress
+
+- The release contract now models `opencode.json` and its permission registry
+  as one versioned ownership relationship.
+- Read-only observation detects a missing, stale, malformed, or inconsistent
+  registry without adopting user entries.
+- Publication remains intentionally unavailable: observation does not make two
+  independent writes recoverable.
+
 ## Sources
 
 - `adapters/opencode/build_opencode.py:344`
 - `adapters/opencode/permission_config.py:87`
 - `adapters/opencode/config_writer.py:173`
+- `internal/configuration/owned_map_observer.go`
+- `internal/releasecontract/json_map_ownership.go`
 - `tools/test_opencode_config_writer_failures.py`
