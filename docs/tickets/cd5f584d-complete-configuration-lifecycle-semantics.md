@@ -57,10 +57,12 @@ while file presence cannot prove Codex project trust.
   and registry after-images without writing. Preparation preserves ordered
   user JSON, coalesces shared physical targets, binds existing files by digest,
   mode, device, and inode, and fails closed for every unsupported change.
-- Removal execution and Apply remain unavailable. OpenCode still needs
-  journaled two-file publication and independent MCP ownership; other
-  strategies still need safe deselection semantics, and Codex still needs an
-  adapter-local external trust contract.
+- The executor can now apply a supported prepared transition, including
+  registry-proven removal, as one recoverable journaled transaction across the
+  configuration and ownership files.
+- Apply remains unavailable. OpenCode still needs independent MCP ownership;
+  other strategies still need safe deselection semantics, and Codex still
+  needs an adapter-local external trust contract.
 
 ## Acceptance criteria
 
@@ -80,6 +82,8 @@ while file presence cannot prove Codex project trust.
 - `internal/configuration/planner.go`
 - `internal/configuration/prepared.go`
 - `internal/configuration/owned_map.go`
+- `internal/executor/configuration_execute.go`
+- `internal/executor/configuration_recovery.go`
 - `internal/lifecycle/configuration_preview.go`
 - `adapters/claude-code/build_bundle.py`
 - `adapters/opencode/build_bundle.py`

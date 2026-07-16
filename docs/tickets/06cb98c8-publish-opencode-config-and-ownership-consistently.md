@@ -48,8 +48,13 @@ The configuration and its ownership registry form one logical state transition b
 - Pure preparation now materializes exact ordered after-images for both files
   in one transition and binds their before-images by digest, mode, device, and
   inode without writing.
-- Publication remains intentionally unavailable: prepared bytes are not yet
-  securely staged, journaled by reference, or recoverable after interruption.
+- The Go executor now stages prepared bytes in identity-bound private
+  workspaces, journals both files by digest and inode without storing their
+  contents, publishes each boundary atomically, and rolls the logical
+  transition back in reverse order after interruption.
+- The compatibility Python writer remains sequential and does not use this
+  protocol. This ticket therefore remains open until that path is migrated or
+  retired and its failure-injection acceptance criteria pass.
 
 ## Sources
 
@@ -59,5 +64,8 @@ The configuration and its ownership registry form one logical state transition b
 - `internal/configuration/owned_map_observer.go`
 - `internal/configuration/planner.go`
 - `internal/configuration/prepared.go`
+- `internal/executor/configuration_execute.go`
+- `internal/executor/configuration_recovery.go`
+- `internal/linkworkspace/configuration_publish_unix.go`
 - `internal/releasecontract/json_map_ownership.go`
 - `tools/test_opencode_config_writer_failures.py`

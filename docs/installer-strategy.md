@@ -77,8 +77,9 @@ separately from the executable filesystem plan: add, update, remove a
 registry-proven managed entry, or stop managing a user-changed or deleted
 entry. A resource is the atomic planning group, so the OpenCode configuration
 file and ownership registry never appear as independent operations. Apply
-stays unimplemented until the executor can journal, publish, and recover both
-files together.
+stays unavailable until every supported configuration strategy has complete
+ownership and deselection semantics and the remaining executor activation
+gates pass.
 
 Before execution, the immutable inspection can materialize a private prepared
 plan without writing. It preserves complete user JSON, composes non-overlapping
@@ -148,6 +149,32 @@ observed inode. Another same-user writer that does not share MAINFRAME's
 transaction lock can therefore replace the source in that narrow interval; the
 replacement inode is retained rather than unlinked, but its public name may be
 moved.
+
+Configuration changes participate in the same lock and transaction as link and
+directory changes. Journal schema version 2 records only targets, content
+digests, modes, file identities, and private names; configuration bytes remain
+in the immutable prepared plan held by the process. The decoder accepts only
+the exact prior unversioned journal shape and upgrades it as a link-only
+transaction, so an interrupted legacy operation remains recoverable.
+
+Before staging, each configuration target is rebound to the exact current
+parent and before-image captured during preview. Staged bytes are written with
+exclusive creation under a reserved writing name inside an identity-bound
+`0700` sibling directory, synchronized, and atomically promoted to the staged
+name at owner-only mode. Interrupted partial writes are discarded only from
+that reserved private entry after type, ownership, link-count, mode, and
+identity checks. Every target parent must be on the supported local-filesystem
+list and pass real no-replace and exchange renames inside that private
+directory before any public link or configuration name is changed.
+
+Creating a configuration file uses a no-replace rename. Replacing one uses an
+atomic exchange, retaining the previous inode inside the private directory.
+Each publication boundary is saved independently, configuration rollback runs
+in reverse order before link and directory rollback, and committed recovery
+removes only entries whose identities still match the journal. Probe remnants
+from an interruption are removed only when their type, ownership, mode,
+identity, and protocol-defined content or interrupted-write prefix are
+recognized; any foreign entry fails closed.
 
 The Go executor and every mutating `install.sh` path share the persistent
 `${XDG_STATE_HOME:-$HOME/.local/state}/mainframe/transaction.lock`. The

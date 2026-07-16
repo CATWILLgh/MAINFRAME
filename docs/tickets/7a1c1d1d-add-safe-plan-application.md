@@ -91,6 +91,14 @@ The final product must install, update, remove, and replace selected adapters. A
   changes per physical target, groups OpenCode configuration with its ownership
   registry, and binds every existing before-image by content digest, mode,
   device, and inode without writing or placing secret bytes in the journal.
+- Extended the same transaction journal to configuration files. Prepared
+  transitions now preflight every target, stage owner-only bytes in
+  identity-bound private directories, use no-replace creation or atomic
+  exchange replacement, roll back members in reverse order, and recover every
+  saved or interrupted boundary without journaled payload bytes.
+- Added real per-target-filesystem capability probes for no-replace and
+  exchange renames, local-filesystem rejection, strict legacy-journal upgrade,
+  and fail-closed cleanup of recognized probe remnants.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),
@@ -105,7 +113,10 @@ The final product must install, update, remove, and replace selected adapters. A
 - `internal/tui/model.go:52`
 - `internal/plan/planner.go:19`
 - `internal/executor/executor.go`
+- `internal/executor/configuration_execute.go`
+- `internal/executor/configuration_recovery.go`
 - `internal/configuration/prepared.go`
 - `internal/executor/locker_compatibility_unix_test.go`
+- `internal/linkworkspace/configuration_workspace_unix.go`
 - `internal/linkworkspace/workspace_unix.go`
 - `tools/test_install_lock.py`
