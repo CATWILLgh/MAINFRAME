@@ -31,6 +31,7 @@ func TestPreviewTargetsReportManagedAttentionAndAbsent(t *testing.T) {
 		{ID: domain.ComponentClaudeCode, Status: StatusManaged, Selected: true},
 		{ID: domain.ComponentCodex, Status: StatusAttention, Selected: true},
 		{ID: domain.ComponentOpenCode, Status: StatusAbsent},
+		{ID: domain.ComponentAntigravity2, Status: StatusAbsent},
 	}
 	if got := service.Targets(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("targets = %#v, want %#v", got, want)
@@ -50,14 +51,16 @@ func TestPreviewBuildsPlanForVisibleTargets(t *testing.T) {
 	result, err := service.Plan([]domain.ComponentID{
 		domain.ComponentClaudeCode,
 		domain.ComponentOpenCode,
+		domain.ComponentAntigravity2,
 	})
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
 	wantKinds := map[domain.ComponentID]domain.OperationKind{
-		domain.ComponentClaudeCode: domain.OperationInstall,
-		domain.ComponentCodex:      domain.OperationRemove,
-		domain.ComponentOpenCode:   domain.OperationInstall,
+		domain.ComponentClaudeCode:   domain.OperationInstall,
+		domain.ComponentCodex:        domain.OperationRemove,
+		domain.ComponentOpenCode:     domain.OperationInstall,
+		domain.ComponentAntigravity2: domain.OperationInstall,
 	}
 	if len(result.Operations) != len(wantKinds) {
 		t.Fatalf("operations = %#v", result.Operations)
@@ -209,6 +212,7 @@ func TestPreviewProjectsDependencyHealthAndConfigurationOntoVisibleTarget(t *tes
 		},
 		{ID: domain.ComponentCodex},
 		{ID: domain.ComponentOpenCode},
+		{ID: domain.ComponentAntigravity2},
 	})
 	if err != nil {
 		t.Fatalf("model: %v", err)
@@ -326,6 +330,16 @@ func testModel(t *testing.T) installmodel.Model {
 			ID: domain.ComponentOpenCode,
 			Artifacts: []installmodel.ArtifactSpec{
 				desired(domain.RootOpenCodeConfig, "AGENTS.md", "opencode/AGENTS.md"),
+			},
+		},
+		{
+			ID: domain.ComponentAntigravity2,
+			Artifacts: []installmodel.ArtifactSpec{
+				desired(
+					domain.RootAntigravityConfig,
+					"plugins/mainframe",
+					"antigravity-2/plugin",
+				),
 			},
 		},
 		{ID: domain.ComponentCodexGates},

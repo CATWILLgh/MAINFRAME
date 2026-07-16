@@ -1,7 +1,7 @@
 ---
 id: e50d67ad
 title: Package Antigravity as an installer TUI component
-status: open
+status: closed
 priority: medium
 component: installer
 discovered: 2026-07-16
@@ -39,6 +39,26 @@ After the Antigravity branch is integrated, two delivery paths expose different 
 - Planning Antigravity does not implicitly select Claude Code except through explicit shared dependencies.
 - Apply and removal are exposed only after ownership-safe lifecycle contracts and regression tests exist.
 - Existing Claude Code, Codex, OpenCode, legacy installer, and packaged-release tests remain green.
+
+## Resolution
+
+Resolved on 2026-07-16.
+
+- The immutable release now contains an indexed `antigravity-2` bundle whose
+  plugin tree targets only `antigravity-config/plugins/mainframe`.
+- Antigravity independently depends on `credential-tools` and `mainframe-cli`;
+  it has no Claude Code, Codex, or OpenCode dependency.
+- The credentials index is a seed-only resource under
+  `antigravity-data/credentials-index.md`. Persistent memory remains runtime
+  data and is not modeled as a removable release artifact.
+- The TUI exposes Antigravity as an independent read-only lifecycle target.
+  Exact ownership is reported as installed, missing ownership as absent, and
+  drift or conflicts as needing attention.
+- Live desktop activation is modeled as an unimplemented manual observation,
+  so the preview reports it as not assessed and does not claim apply support.
+  Real application validation remains tracked by `bce23629`.
+- Removal is only a filesystem plan for exactly managed artifacts; the current
+  TUI still applies nothing.
 
 ## Sources
 

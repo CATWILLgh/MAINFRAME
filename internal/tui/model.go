@@ -249,6 +249,8 @@ func componentName(id domain.ComponentID) string {
 		return "Codex"
 	case domain.ComponentOpenCode:
 		return "OpenCode"
+	case domain.ComponentAntigravity2:
+		return "Antigravity 2.x"
 	default:
 		return string(id)
 	}

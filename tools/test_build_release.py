@@ -25,6 +25,7 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
 
     index = release_contract.validate_release(output)
     assert [entry["component"] for entry in index["manifests"]] == [
+        "antigravity-2",
         "claude-code",
         "codex",
         "credential-tools",
@@ -35,6 +36,7 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
     assert binary.is_file() and os.access(binary, os.X_OK)
     assert (output / "bin/bundle.json").is_file()
     assert (output / "common/credential-tools/bundle.json").is_file()
+    assert (output / "bundles/antigravity-2/bundle.json").is_file()
     assert (output / "bundles/claude-code/bundle.json").is_file()
     assert (output / "bundles/codex/bundle.json").is_file()
     assert (output / "bundles/opencode/bundle.json").is_file()
@@ -44,7 +46,7 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
         for entry in index["manifests"]
     ]
     by_component = {manifest["component"]: manifest for manifest in manifests}
-    for adapter in ("claude-code", "codex", "opencode"):
+    for adapter in ("antigravity-2", "claude-code", "codex", "opencode"):
         assert by_component[adapter]["dependencies"] == [
             "credential-tools",
             "mainframe-cli",

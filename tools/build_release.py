@@ -142,6 +142,10 @@ def _build_cli(root: Path, output: Path) -> None:
 
 def _build_staged(root: Path, staging: Path, release_id: str) -> None:
     builders = {
+        "antigravity-2": _load_builder(
+            "mainframe_antigravity_bundle",
+            root / "adapters/antigravity-2/build_bundle.py",
+        ),
         "claude-code": _load_builder(
             "mainframe_claude_bundle",
             root / "adapters/claude-code/build_bundle.py",

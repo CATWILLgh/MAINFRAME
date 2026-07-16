@@ -27,6 +27,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 		},
 		{ID: domain.ComponentCodex, Status: lifecycle.StatusAttention, Selected: true},
 		{ID: domain.ComponentOpenCode, Status: lifecycle.StatusAbsent},
+		{ID: domain.ComponentAntigravity2, Status: lifecycle.StatusAbsent},
 	}})
 	model.Init()
 
@@ -37,6 +38,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 		"Claude Code — installed · configuration 1 not assessed",
 		"Codex — needs attention",
 		"OpenCode — not detected",
+		"Antigravity 2.x — not detected",
 	} {
 		if !strings.Contains(view.Content, text) {
 			t.Fatalf("view does not contain %q:\n%s", text, view.Content)
@@ -285,6 +287,7 @@ func defaultTargets() []lifecycle.Target {
 		{ID: domain.ComponentClaudeCode, Status: lifecycle.StatusAbsent},
 		{ID: domain.ComponentCodex, Status: lifecycle.StatusAbsent},
 		{ID: domain.ComponentOpenCode, Status: lifecycle.StatusAbsent},
+		{ID: domain.ComponentAntigravity2, Status: lifecycle.StatusAbsent},
 	}
 }
 

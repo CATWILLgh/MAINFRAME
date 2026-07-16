@@ -45,6 +45,8 @@ func Resolve(environment Environment, source string) (Layout, error) {
 			domain.RootClaudeConfig:      filepath.Join(home, ".claude"),
 			domain.RootCodexConfig:       codex,
 			domain.RootOpenCodeConfig:    filepath.Join(config, "opencode"),
+			domain.RootAntigravityConfig: filepath.Join(home, ".gemini", "config"),
+			domain.RootAntigravityData:   filepath.Join(home, ".gemini", "antigravity"),
 			domain.RootCredentialsConfig: filepath.Join(config, "credentials"),
 			domain.RootUserBin:           filepath.Join(home, ".local", "bin"),
 		},

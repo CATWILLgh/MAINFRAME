@@ -39,6 +39,7 @@ func TestBuildPreviewServiceDiscoversManagedArtifact(t *testing.T) {
 			},
 		},
 		{ID: domain.ComponentOpenCode},
+		{ID: domain.ComponentAntigravity2},
 	})
 	if err != nil {
 		t.Fatalf("model: %v", err)

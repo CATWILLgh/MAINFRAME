@@ -16,6 +16,8 @@ const (
 	RootClaudeConfig      RootID = "claude-config"
 	RootCodexConfig       RootID = "codex-config"
 	RootOpenCodeConfig    RootID = "opencode-config"
+	RootAntigravityConfig RootID = "antigravity-config"
+	RootAntigravityData   RootID = "antigravity-data"
 	RootUserBin           RootID = "user-bin"
 	RootCredentialsConfig RootID = "credentials-config"
 	RootCommonData        RootID = "common-data"
@@ -38,6 +40,7 @@ const (
 	ComponentClaudeCode          ComponentID = "claude-code"
 	ComponentCodex               ComponentID = "codex"
 	ComponentOpenCode            ComponentID = "opencode"
+	ComponentAntigravity2        ComponentID = "antigravity-2"
 	ComponentCodexGates          ComponentID = "codex-gates"
 	ComponentSharedGateDetectors ComponentID = "shared-gate-detectors"
 )

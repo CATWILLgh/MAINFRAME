@@ -23,6 +23,7 @@ var visibleTargets = []domain.ComponentID{
 	domain.ComponentClaudeCode,
 	domain.ComponentCodex,
 	domain.ComponentOpenCode,
+	domain.ComponentAntigravity2,
 }
 
 type Target struct {
