@@ -89,8 +89,9 @@ The final product must install, update, remove, and replace selected adapters. A
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),
   [#cd5f584d](cd5f584d-complete-configuration-lifecycle-semantics.md), and
-  [#33930a3b](33930a3b-enable-selective-release-downloads.md). Root-specific
-  directory modes and native Linux lifecycle verification remain tracked in
+  [#33930a3b](33930a3b-enable-selective-release-downloads.md). The managed
+  directory mode policy is resolved; native Linux lifecycle verification
+  remains tracked in
   [#20e75df1](20e75df1-model-managed-target-directories.md).
 
 ## Sources
