@@ -53,6 +53,10 @@ while file presence cannot prove Codex project trust.
   plan. The TUI distinguishes add, update, registry-proven removal, and
   stopping management of user-changed or deleted OpenCode actions without
   exposing raw bytes or executable configuration operations.
+- The same inspection can now prepare exact, immutable OpenCode configuration
+  and registry after-images without writing. Preparation preserves ordered
+  user JSON, coalesces shared physical targets, binds existing files by digest,
+  mode, device, and inode, and fails closed for every unsupported change.
 - Removal execution and Apply remain unavailable. OpenCode still needs
   journaled two-file publication and independent MCP ownership; other
   strategies still need safe deselection semantics, and Codex still needs an
@@ -74,6 +78,7 @@ while file presence cannot prove Codex project trust.
 - `internal/configuration/observer.go`
 - `internal/configuration/inspection.go`
 - `internal/configuration/planner.go`
+- `internal/configuration/prepared.go`
 - `internal/configuration/owned_map.go`
 - `internal/lifecycle/configuration_preview.go`
 - `adapters/claude-code/build_bundle.py`

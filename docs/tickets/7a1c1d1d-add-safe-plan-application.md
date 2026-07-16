@@ -87,6 +87,10 @@ The final product must install, update, remove, and replace selected adapters. A
   nested parents are journaled before writes, created before links, bound to
   configured physical roots and exact identities, and rolled back child-first
   without deleting populated or foreign directories.
+- Added pure configuration transaction preparation. It composes ordered JSON
+  changes per physical target, groups OpenCode configuration with its ownership
+  registry, and binds every existing before-image by content digest, mode,
+  device, and inode without writing or placing secret bytes in the journal.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),
@@ -101,6 +105,7 @@ The final product must install, update, remove, and replace selected adapters. A
 - `internal/tui/model.go:52`
 - `internal/plan/planner.go:19`
 - `internal/executor/executor.go`
+- `internal/configuration/prepared.go`
 - `internal/executor/locker_compatibility_unix_test.go`
 - `internal/linkworkspace/workspace_unix.go`
 - `tools/test_install_lock.py`

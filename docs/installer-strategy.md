@@ -68,8 +68,8 @@ adapter-local `opencode.json.mainframe-permissions.json` registry. Observation
 computes the same safe fixed point as the compatibility generator: absent
 state never adopts matching user entries, changed or deleted managed entries
 become permanent tombstones, and unrelated entries remain user-owned. The
-observer also preserves nested permission-rule order because OpenCode applies
-the last matching pattern.
+observer also preserves permission-action and nested pattern order because
+OpenCode applies the last matching rule.
 
 Configuration planning uses the same immutable inspection as observation and
 does not read the host again. The TUI presents semantic configuration intent
@@ -79,6 +79,15 @@ entry. A resource is the atomic planning group, so the OpenCode configuration
 file and ownership registry never appear as independent operations. Apply
 stays unimplemented until the executor can journal, publish, and recover both
 files together.
+
+Before execution, the immutable inspection can materialize a private prepared
+plan without writing. It preserves complete user JSON, composes non-overlapping
+resources sharing one physical file, and groups each configuration with its
+ownership registry. Every file mutation is bound to exact captured bytes,
+mode, device, and inode; missing files use an explicit absence precondition.
+Prepared bytes remain outside the executor journal. Any unresolved issue,
+unsupported changed strategy, incomplete snapshot, or target collision fails
+the whole preparation with no partial result.
 
 ## Permission capabilities must be stated honestly
 

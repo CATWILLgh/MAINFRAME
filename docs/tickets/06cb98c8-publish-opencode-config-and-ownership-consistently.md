@@ -45,8 +45,11 @@ The configuration and its ownership registry form one logical state transition b
   registry without adopting user entries.
 - Read-only planning groups the configuration and registry as one semantic
   transition and removes only entries whose active ownership is still proven.
-- Publication remains intentionally unavailable: observation does not make two
-  independent writes recoverable.
+- Pure preparation now materializes exact ordered after-images for both files
+  in one transition and binds their before-images by digest, mode, device, and
+  inode without writing.
+- Publication remains intentionally unavailable: prepared bytes are not yet
+  securely staged, journaled by reference, or recoverable after interruption.
 
 ## Sources
 
@@ -55,5 +58,6 @@ The configuration and its ownership registry form one logical state transition b
 - `adapters/opencode/config_writer.py:173`
 - `internal/configuration/owned_map_observer.go`
 - `internal/configuration/planner.go`
+- `internal/configuration/prepared.go`
 - `internal/releasecontract/json_map_ownership.go`
 - `tools/test_opencode_config_writer_failures.py`
