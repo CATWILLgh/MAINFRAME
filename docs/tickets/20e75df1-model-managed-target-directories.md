@@ -37,13 +37,10 @@ records link before/after images, not directory creation and emptiness.
 
 ## What probably needs to be done
 
-- Define root-specific modes before exposing Apply. The internal protocol
-  persists mode independently but currently uses `0700` for every created
-  directory.
 - Run the lifecycle fixtures natively on Linux. Linux compilation is covered,
   but compilation does not exercise filesystem rename and durability behavior.
-- Keep Apply unavailable until those two checks and the remaining executor
-  gates in [#7a1c1d1d](7a1c1d1d-add-safe-plan-application.md) pass.
+- Keep Apply unavailable until that check and the remaining executor gates in
+  [#7a1c1d1d](7a1c1d1d-add-safe-plan-application.md) pass.
 
 ## Acceptance criteria
 
@@ -74,11 +71,20 @@ records link before/after images, not directory creation and emptiness.
 - Added native Darwin tests for nested and partially existing paths, symbolic
   link substitution, physical aliases, no-replace publication, interruption,
   concurrent population, restoration retry, and end-to-end first installation.
+- Defined `0700` as the same-user policy for every newly created managed
+  directory while preserving every existing directory's mode. No current
+  runtime requires cross-user traversal, so root-specific numeric modes would
+  not represent a real access boundary.
+- Added coverage for a process mask that removes owner permission bits and
+  rejects it before managed-directory intent persistence or target-directory
+  mutation. The check reads the inherited mask in an isolated child process and
+  never changes the installer's mask.
 - Added race-detector coverage and Linux cross-compilation. Native Linux
-  lifecycle execution and root-specific mode policy remain open.
+  lifecycle execution remains open.
 
 ## Sources
 
+- [XDG Base Directory Specification 0.8](https://specifications.freedesktop.org/basedir/latest/)
 - `internal/executor/types.go`
 - `internal/hostlayout/layout.go`
 - `internal/releasecontract/types.go`

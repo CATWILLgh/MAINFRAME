@@ -137,10 +137,20 @@ the populated inode remains retained under its journaled private name and a
 later retry returns it to the public name when that name becomes free. Existing
 directories are never changed or claimed.
 
-The internal foundation currently creates managed directories with mode
-`0700`. Root-specific modes and a native Linux lifecycle run remain required
-before the public Apply action can be enabled; these remaining checks stay in
+The installer creates every missing managed directory with mode `0700` and
+never changes an existing directory's mode. This is a deliberate same-user
+policy, consistent with the XDG requirement to create missing destination
+directories as `0700`: every shipped runtime and command consumes its target
+through the installing user's account, and no supported target requires
+cross-user traversal. A root-specific mode may be introduced only alongside a
+concrete consumer that needs a different access boundary. Native Linux
+lifecycle execution remains required before the public Apply action can be
+enabled; that check stays in
 [#20e75df1](tickets/20e75df1-model-managed-target-directories.md).
+Before persisting managed-directory intents, the executor reads the inherited
+process mask in an isolated child process. A mask that removes any required
+`0700` owner bit is rejected without changing the parent process or staging a
+managed target directory.
 
 Every component must pass an isolated-install scenario in which the other
 runtime directories do not exist. Lifecycle operations must preserve
