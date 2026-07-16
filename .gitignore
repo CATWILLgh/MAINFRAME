@@ -43,6 +43,7 @@ tools/agnostic-blacklist.txt
 
 # Private documents (only docs/layers/ is published)
 docs/*
+!docs/installer-strategy.md
 !docs/layers/
 !docs/tickets/
 !docs/tickets/**

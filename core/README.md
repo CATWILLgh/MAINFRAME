@@ -5,6 +5,10 @@ Per-tool refinements and projection code live in `adapters/<tool>/`. Delivered
 artifacts live under `dist/<tool>/`; generated files there are outputs, not
 authoring locations.
 
+Neutral authoring does not permit runtime coupling. Every adapter must package
+a closed runtime bundle under the ownership contract in
+[`docs/installer-strategy.md`](../docs/installer-strategy.md).
+
 ## Editing rule
 
 1. Edit files under `core/` or the owning `adapters/<tool>/`.
@@ -53,9 +57,8 @@ projections and committed goldens.
 - `skills/` — SKILL.md-standard skills; foreign parsers tolerate the hub's
   extra frontmatter keys (verified on OpenCode), so skills render as pure
   byte-copies for Claude Code — no frontmatter split, bodies verbatim.
-  OpenCode links that same rendered copy; Codex generates a native projection.
-  Antigravity generates a compatible plugin projection. `validate-skill.py`
-  treats this directory as the source of truth.
+  Each alternate-runtime builder packages its own compatible projection from
+  this source. `validate-skill.py` treats this directory as the source of truth.
 
 - `memory/` — portable project identity, bounded `MEMORY.md` loading, validation,
   and atomic writes. Claude Code keeps its native backend; OpenCode and
