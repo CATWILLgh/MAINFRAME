@@ -25,6 +25,10 @@ func TestLoadBuildsInstallModelAndSeparateResourceInventory(t *testing.T) {
 	if release.ID != "test-release" {
 		t.Fatalf("release ID = %q", release.ID)
 	}
+	wantIndexSHA256 := digest(t, filepath.Join(root, "release.json"))
+	if release.IndexSHA256 != wantIndexSHA256 {
+		t.Fatalf("index digest = %q, want %q", release.IndexSHA256, wantIndexSHA256)
+	}
 	artifacts := release.Model.Artifacts()
 	if len(artifacts) != 2 {
 		t.Fatalf("artifact count = %d, want 2", len(artifacts))

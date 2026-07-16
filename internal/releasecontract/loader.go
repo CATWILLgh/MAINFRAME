@@ -46,7 +46,12 @@ func Load(root string) (Release, error) {
 		return Release{}, fmt.Errorf("build release install model: %w", err)
 	}
 	sort.Slice(resources, func(i, j int) bool { return resources[i].ID < resources[j].ID })
-	return Release{ID: index.ReleaseID, Model: model, Resources: resources}, nil
+	return Release{
+		ID:          index.ReleaseID,
+		IndexSHA256: digestBytes(indexPayload),
+		Model:       model,
+		Resources:   resources,
+	}, nil
 }
 
 func loadBundle(

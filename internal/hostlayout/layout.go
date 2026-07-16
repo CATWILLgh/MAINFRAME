@@ -16,6 +16,7 @@ type Environment struct {
 
 type Layout struct {
 	source  string
+	state   string
 	targets map[domain.RootID]string
 }
 
@@ -38,8 +39,13 @@ func Resolve(environment Environment, source string) (Layout, error) {
 	if err != nil {
 		return Layout{}, err
 	}
+	state, err := overrideOrDefault(environment, "XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	if err != nil {
+		return Layout{}, err
+	}
 	return Layout{
 		source: source,
+		state:  filepath.Join(state, "mainframe"),
 		targets: map[domain.RootID]string{
 			domain.RootHome:              home,
 			domain.RootClaudeConfig:      filepath.Join(home, ".claude"),
@@ -55,6 +61,10 @@ func Resolve(environment Environment, source string) (Layout, error) {
 
 func (layout Layout) Source() string {
 	return layout.source
+}
+
+func (layout Layout) State() string {
+	return layout.state
 }
 
 func (layout Layout) Targets() map[domain.RootID]string {

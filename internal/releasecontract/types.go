@@ -63,9 +63,10 @@ type JSONField struct {
 }
 
 type Release struct {
-	ID        string
-	Model     installmodel.Model
-	Resources []Resource
+	ID          string
+	IndexSHA256 string
+	Model       installmodel.Model
+	Resources   []Resource
 }
 
 type releaseIndex struct {
