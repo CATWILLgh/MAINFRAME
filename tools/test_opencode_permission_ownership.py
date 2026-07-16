@@ -44,6 +44,16 @@ def test_empty_nested_rule_is_invalid_but_empty_generated_map_is_valid():
     assert owned == {}
 
 
+def test_top_level_action_order_matches_reconciliation_contract():
+    merged, owned = merge_permissions(
+        {"custom_*": "deny", "bash": "ask"},
+        {"edit": "deny", "bash": "allow"},
+        {"bash": "ask"},
+    )
+    assert list(merged) == ["custom_*", "bash", "edit"]
+    assert list(owned) == ["bash", "custom_*", "edit"]
+
+
 def _run_all():
     tests = [value for name, value in sorted(globals().items())
              if name.startswith("test_") and callable(value)]

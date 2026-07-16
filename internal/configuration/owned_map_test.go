@@ -112,6 +112,25 @@ func TestReconcileOwnedJSONMapsPreservesNestedRuleOwnershipOrder(t *testing.T) {
 	}
 }
 
+func TestReconcileOwnedJSONMapsPreservesTopLevelActionOrder(t *testing.T) {
+	result, err := reconcileOwnedJSONMaps(
+		`{"custom_*":"deny","bash":"ask"}`,
+		`{"edit":"deny","bash":"allow"}`,
+		`{"bash":"ask"}`,
+	)
+	if err != nil {
+		t.Fatalf("reconcileOwnedJSONMaps() error = %v", err)
+	}
+	if result.mergedRaw !=
+		`{"custom_*":"deny","bash":"allow","edit":"deny"}` {
+		t.Fatalf("merged raw = %s", result.mergedRaw)
+	}
+	if result.nextOwnedRaw !=
+		`{"bash":"allow","custom_*":null,"edit":"deny"}` {
+		t.Fatalf("ownership raw = %s", result.nextOwnedRaw)
+	}
+}
+
 func assertOrderedOwnership(t *testing.T, test orderedOwnershipCase) {
 	t.Helper()
 	result, err := reconcileOwnedJSONMaps(

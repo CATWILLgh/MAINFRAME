@@ -37,7 +37,12 @@ func inspectNoFollow(root, relative string, includeContent bool) (Entry, error) 
 		return Entry{}, err
 	}
 	kind := entryKind(uint32(metadata.Mode))
-	entry := Entry{Kind: kind}
+	entry := Entry{
+		Kind:   kind,
+		Mode:   uint32(metadata.Mode) & 0o777,
+		Device: uint64(metadata.Dev),
+		Inode:  uint64(metadata.Ino),
+	}
 	if kind == EntryDirectory {
 		if err := verifyDirectoryNoFollow(parent, name, metadata); err != nil {
 			return Entry{}, err
@@ -132,7 +137,8 @@ func inspectRegularNoFollow(
 	if err := unix.Fstat(descriptor, &opened); err != nil {
 		return nil, err
 	}
-	if !sameEntry(expected, opened) || entryKind(uint32(opened.Mode)) != EntryRegular {
+	if !sameFileSnapshot(expected, opened) ||
+		entryKind(uint32(opened.Mode)) != EntryRegular {
 		return nil, fmt.Errorf("%q changed while being inspected", name)
 	}
 	if !includeContent {
@@ -145,11 +151,25 @@ func inspectRegularNoFollow(
 	if len(content) > maxInspectedFileSize {
 		return nil, fmt.Errorf("%q exceeds the inspection size limit", name)
 	}
+	var after unix.Stat_t
+	if err := unix.Fstat(descriptor, &after); err != nil {
+		return nil, err
+	}
+	if !sameFileSnapshot(expected, after) {
+		return nil, fmt.Errorf("%q changed while being inspected", name)
+	}
 	return content, nil
 }
 
 func sameEntry(expected, opened unix.Stat_t) bool {
 	return expected.Dev == opened.Dev && expected.Ino == opened.Ino
+}
+
+func sameFileSnapshot(expected, opened unix.Stat_t) bool {
+	return sameEntry(expected, opened) &&
+		expected.Mode == opened.Mode &&
+		expected.Size == opened.Size &&
+		sameFileTimes(expected, opened)
 }
 
 func entryKind(mode uint32) EntryKind {

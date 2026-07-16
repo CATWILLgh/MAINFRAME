@@ -23,6 +23,8 @@ type ownedMapReconciliation struct {
 	nextOwned      map[string]any
 	mergedOrder    map[string]string
 	nextOwnedOrder map[string]string
+	mergedRaw      string
+	nextOwnedRaw   string
 }
 
 func decodeDecisionValue(raw string) (any, error) {
@@ -95,7 +97,7 @@ func reconcileOwnedJSONMaps(
 	if err != nil {
 		return ownedMapReconciliation{}, err
 	}
-	return reconcileOwnedMapWithOrder(
+	result, err := reconcileOwnedMapWithOrder(
 		existing,
 		generated,
 		owned,
@@ -103,6 +105,29 @@ func reconcileOwnedJSONMaps(
 		generatedOrder,
 		ownedOrder,
 	)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	result.mergedRaw, err = encodeMergedDecision(
+		result.merged,
+		result.mergedOrder,
+		existingRaw,
+		generatedRaw,
+	)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	result.nextOwnedRaw, err = encodeOrderedDecisionMap(
+		result.nextOwned,
+		result.nextOwnedOrder,
+		ownedRaw,
+		existingRaw,
+		generatedRaw,
+	)
+	if err != nil {
+		return ownedMapReconciliation{}, err
+	}
+	return result, nil
 }
 
 func reconcileOwnedMapWithOrder(

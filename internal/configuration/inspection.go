@@ -1,9 +1,12 @@
 package configuration
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
@@ -11,12 +14,23 @@ type Inspection struct {
 	resources    []releasecontract.Resource
 	observations []Observation
 	ownedMaps    map[string]ownedMapSnapshot
+	files        map[domain.Location]fileSnapshot
 }
 
 type ownedMapSnapshot struct {
-	existingRaw   string
-	ownedRaw      string
-	existingOrder map[string]string
+	existingRaw     string
+	ownedRaw        string
+	existingOrder   map[string]string
+	configPresent   bool
+	registryPresent bool
+}
+
+type fileSnapshot struct {
+	present bool
+	raw     []byte
+	mode    uint32
+	device  uint64
+	inode   uint64
 }
 
 func Inspect(resources []releasecontract.Resource, host Host) (Inspection, error) {
@@ -58,6 +72,7 @@ func Inspect(resources []releasecontract.Resource, host Host) (Inspection, error
 	if err := Validate(cloned, inspection.observations); err != nil {
 		return Inspection{}, err
 	}
+	inspection.files = captureFileSnapshots(snapshots)
 	return inspection, nil
 }
 
@@ -75,14 +90,17 @@ func captureOwnedMapSnapshot(
 ) (ownedMapSnapshot, error) {
 	config := snapshots[resource.Target]
 	registry := snapshots[resource.JSONMapOwnership.RegistryTarget]
-	_, existingRaw, _, err := ownedConfigMap(
+	_, existingRaw, configPresent, err := ownedConfigMap(
 		config,
 		resource.JSONMapOwnership.MapPointer,
 	)
 	if err != nil {
 		return ownedMapSnapshot{}, err
 	}
-	_, ownedRaw, _, err := ownedRegistryMap(registry, resource.JSONMapOwnership)
+	_, ownedRaw, registryPresent, err := ownedRegistryMap(
+		registry,
+		resource.JSONMapOwnership,
+	)
 	if err != nil {
 		return ownedMapSnapshot{}, err
 	}
@@ -93,6 +111,7 @@ func captureOwnedMapSnapshot(
 	return ownedMapSnapshot{
 		existingRaw: existingRaw, ownedRaw: ownedRaw,
 		existingOrder: existingOrder,
+		configPresent: configPresent, registryPresent: registryPresent,
 	}, nil
 }
 
@@ -111,6 +130,30 @@ func cloneResources(resources []releasecontract.Resource) []releasecontract.Reso
 		if resource.JSONMapOwnership != nil {
 			ownership := *resource.JSONMapOwnership
 			result[index].JSONMapOwnership = &ownership
+		}
+	}
+	return result
+}
+
+func captureFileSnapshots(
+	snapshots map[domain.Location]jsonSnapshot,
+) map[domain.Location]fileSnapshot {
+	result := make(map[domain.Location]fileSnapshot, len(snapshots))
+	for location, snapshot := range snapshots {
+		if errors.Is(snapshot.err, fs.ErrNotExist) {
+			result[location] = fileSnapshot{}
+			continue
+		}
+		if snapshot.err != nil || snapshot.entry.Kind != hostfs.EntryRegular ||
+			snapshot.parseErr != nil {
+			continue
+		}
+		result[location] = fileSnapshot{
+			present: true,
+			raw:     append([]byte(nil), snapshot.entry.Content...),
+			mode:    snapshot.entry.Mode,
+			device:  snapshot.entry.Device,
+			inode:   snapshot.entry.Inode,
 		}
 	}
 	return result

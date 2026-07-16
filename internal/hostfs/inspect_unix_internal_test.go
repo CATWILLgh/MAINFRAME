@@ -50,3 +50,26 @@ func TestInspectRegularRejectsConcurrentReplacementWithoutBlocking(t *testing.T)
 		})
 	}
 }
+
+func TestSameFileSnapshotDetectsContentMetadataChanges(t *testing.T) {
+	base := unix.Stat_t{
+		Dev: 1, Ino: 2, Mode: unix.S_IFREG | 0o600, Size: 10,
+	}
+	tests := map[string]func(*unix.Stat_t){
+		"identity": func(value *unix.Stat_t) { value.Ino++ },
+		"mode":     func(value *unix.Stat_t) { value.Mode = unix.S_IFREG | 0o400 },
+		"size":     func(value *unix.Stat_t) { value.Size++ },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			changed := base
+			mutate(&changed)
+			if sameFileSnapshot(base, changed) {
+				t.Fatal("changed file metadata was accepted")
+			}
+		})
+	}
+	if !sameFileSnapshot(base, base) {
+		t.Fatal("identical file metadata was rejected")
+	}
+}

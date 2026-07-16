@@ -18,6 +18,9 @@ const (
 type Entry struct {
 	Kind    EntryKind
 	Content []byte
+	Mode    uint32
+	Device  uint64
+	Inode   uint64
 }
 
 func (namespace Namespace) Inspect(location domain.Location, includeContent bool) (Entry, error) {

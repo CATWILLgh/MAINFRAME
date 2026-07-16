@@ -176,6 +176,7 @@ func jsonSnapshotFor(
 	snapshot, exists := snapshots[location]
 	if !exists {
 		entry, err := host.Inspect(location, true)
+		entry.Content = append([]byte(nil), entry.Content...)
 		snapshot = jsonSnapshot{entry: entry, err: err}
 		if err == nil && entry.Kind == hostfs.EntryRegular {
 			snapshot.document, snapshot.parseErr = jsondocument.Parse(entry.Content)

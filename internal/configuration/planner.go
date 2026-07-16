@@ -153,7 +153,15 @@ func planOwnedMap(
 		})
 		return
 	}
+	start := len(plan.Changes)
 	classifyOwnedChanges(plan, resource, state, reconciliation, isSelected)
+	if isSelected && len(plan.Changes) == start &&
+		(!state.configPresent || !state.registryPresent) {
+		plan.Changes = append(
+			plan.Changes,
+			changeForResource(resource, ChangeAdd, ""),
+		)
+	}
 }
 
 func issueForObservation(

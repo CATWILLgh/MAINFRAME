@@ -99,7 +99,7 @@ func ownedConfigMap(
 	raw, status := snapshot.document.LookupOrdered(pointer)
 	switch status {
 	case jsondocument.Missing:
-		return map[string]any{}, `{}`, true, nil
+		return map[string]any{}, `{}`, false, nil
 	case jsondocument.Found:
 		value, err := decodeDecisionValue(raw)
 		return value, raw, true, err
