@@ -109,8 +109,8 @@ func TestLoadRejectsMixedDocumentFormatsAtOneSemanticTarget(t *testing.T) {
 	writeFile(t, configPath, `{"unrelated":true}`+"\n", 0o644)
 	manifest["resources"] = []any{map[string]any{
 		"id": "codex.config-json", "strategy": "json-key-merge",
-		"source": "config.json",
-		"target": map[string]any{"root": "codex-config", "path": "config.toml"},
+		"source":      "config.json",
+		"target":      map[string]any{"root": "codex-config", "path": "config.toml"},
 		"observation": "supported", "apply": "unimplemented",
 		"owned_json_pointers": []any{"/unrelated"},
 	}}
@@ -244,5 +244,49 @@ func TestLoadAllowsMCPProjectionsToShareOneRegistry(t *testing.T) {
 	}
 	if len(release.MCPProjections) != 2 {
 		t.Fatalf("MCP projections = %#v", release.MCPProjections)
+	}
+}
+
+func TestLoadProtectsGenericAndMCPJSONOwnershipBoundaries(t *testing.T) {
+	tests := map[string]struct {
+		pointer string
+		wantErr bool
+	}{
+		"disjoint":   {pointer: "/permission"},
+		"ancestor":   {pointer: "/mcp", wantErr: true},
+		"equal":      {pointer: "/mcp/context7", wantErr: true},
+		"descendant": {pointer: "/mcp/context7/url", wantErr: true},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			root, manifestPath := writeOpenCodeProjectionFixture(t)
+			manifest := readObject(t, manifestPath)
+			sourcePath := filepath.Join(filepath.Dir(manifestPath), "opencode.json")
+			writeFile(
+				t,
+				sourcePath,
+				`{"permission":{},"mcp":{"context7":{"url":"https://mcp.context7.com/mcp"}}}`+"\n",
+				0o644,
+			)
+			manifest["resources"] = []any{map[string]any{
+				"id": "opencode.permissions", "strategy": "json-key-merge",
+				"source": "opencode.json",
+				"target": map[string]any{
+					"root": "opencode-config", "path": "opencode.json",
+				},
+				"observation": "supported", "apply": "unimplemented",
+				"owned_json_pointers": []any{test.pointer},
+			}}
+			manifest["payload_files"] = []any{
+				payloadRow(t, sourcePath, "opencode.json"),
+			}
+			writeJSON(t, manifestPath, manifest, 0o644)
+			rewriteIndexDigest(t, root, manifestPath)
+
+			_, err := releasecontract.Load(root)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("Load() error = %v, wantErr %t", err, test.wantErr)
+			}
+		})
 	}
 }

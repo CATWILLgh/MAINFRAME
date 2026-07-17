@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"io/fs"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
@@ -59,6 +60,57 @@ func TestPrepareConfigurationComposesCodexMCPAfterImages(t *testing.T) {
 	}
 }
 
+func TestPrepareConfigurationComposesOpenCodePermissionsAndMCP(t *testing.T) {
+	host := lifecyclePreparationHost{}
+	configurationInspection, err := configuration.Inspect(
+		[]releasecontract.Resource{lifecycleOpenCodePermissionResource()},
+		host,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpInspection, err := mcpconfiguration.Inspect(
+		[]releasecontract.MCPProjection{lifecycleOpenCodeProjection()},
+		lifecycleMCPCatalog(t),
+		host,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewWithInspections(
+		testModel(t),
+		domain.ObservedState{},
+		configurationInspection,
+		mcpInspection,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := service.PrepareConfiguration(PreviewRequest{
+		Components: []domain.ComponentID{domain.ComponentOpenCode},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentOpenCode},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareConfiguration() error = %v", err)
+	}
+	transitions := prepared.Transitions()
+	if len(transitions) != 1 || lifecycleMutationCount(transitions) != 3 ||
+		len(transitions[0].ResourceIDs) != 2 ||
+		transitions[0].ResourceIDs[0] != "opencode.mcp.context7" ||
+		transitions[0].ResourceIDs[1] != "opencode.permissions" {
+		t.Fatalf("prepared transitions = %#v", transitions)
+	}
+	after := string(transitions[0].Mutations[0].After)
+	if !strings.Contains(after, `"permission"`) ||
+		!strings.Contains(after, `"context7"`) {
+		t.Fatalf("composed configuration =\n%s", after)
+	}
+}
+
 func lifecycleGenericResource() releasecontract.Resource {
 	return releasecontract.Resource{
 		ID: "codex.generic", ComponentID: domain.ComponentCodex,
@@ -72,6 +124,27 @@ func lifecycleGenericResource() releasecontract.Resource {
 			MapPointer: "/permission", DesiredMap: `{"bash":"deny"}`,
 			RegistryTarget: domain.Location{
 				Root: domain.RootCodexConfig, Path: "mainframe/generic-ownership.json",
+			},
+			RegistrySchemaVersion: 1, EntriesPointer: "/actions",
+			EntrySchema: "decision-rule-v1",
+		},
+	}
+}
+
+func lifecycleOpenCodePermissionResource() releasecontract.Resource {
+	return releasecontract.Resource{
+		ID: "opencode.permissions", ComponentID: domain.ComponentOpenCode,
+		Strategy: releasecontract.StrategyJSONKeyMerge,
+		Target: domain.Location{
+			Root: domain.RootOpenCodeConfig, Path: "opencode.json",
+		},
+		Observation: releasecontract.SupportSupported,
+		Apply:       releasecontract.SupportUnimplemented,
+		JSONMapOwnership: &releasecontract.JSONMapOwnership{
+			MapPointer: "/permission", DesiredMap: `{"bash":"deny"}`,
+			RegistryTarget: domain.Location{
+				Root: domain.RootOpenCodeConfig,
+				Path: "opencode.json.mainframe-permissions.json",
 			},
 			RegistrySchemaVersion: 1, EntriesPointer: "/actions",
 			EntrySchema: "decision-rule-v1",
@@ -128,5 +201,23 @@ func lifecycleCodexProjection() releasecontract.MCPProjection {
 		RegistrySchemaVersion:  1,
 		RegistryEntriesPointer: "/servers",
 		DesiredEntry:           `{"url":"https://mcp.context7.com/mcp"}`,
+	}
+}
+
+func lifecycleOpenCodeProjection() releasecontract.MCPProjection {
+	return releasecontract.MCPProjection{
+		ID: "opencode.mcp.context7", ComponentID: domain.ComponentOpenCode,
+		Codec:    releasecontract.MCPProjectionOpenCodeRemote,
+		ServerID: "context7", ProfileID: "remote-keyless",
+		Target: domain.Location{
+			Root: domain.RootOpenCodeConfig, Path: "opencode.json",
+		},
+		MapPointer: "/mcp", EntryKey: "context7",
+		RegistryTarget: domain.Location{
+			Root: domain.RootOpenCodeConfig,
+			Path: "opencode.json.mainframe-mcp.json",
+		},
+		RegistrySchemaVersion: 1, RegistryEntriesPointer: "/servers",
+		DesiredEntry: `{"type":"remote","url":"https://mcp.context7.com/mcp"}`,
 	}
 }

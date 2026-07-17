@@ -32,9 +32,9 @@ func (service Service) PrepareConfiguration(
 			)
 		}
 	}
-	mcp := configuration.PreparedPlan{}
 	if service.mcpInspection != nil {
-		mcp, err = service.mcpInspection.Prepare(
+		generic, err = service.mcpInspection.PrepareOnto(
+			generic,
 			request.Components,
 			request.MCPSelections,
 		)
@@ -45,12 +45,5 @@ func (service Service) PrepareConfiguration(
 			)
 		}
 	}
-	combined, err := configuration.CombinePreparedPlans(generic, mcp)
-	if err != nil {
-		return configuration.PreparedPlan{}, fmt.Errorf(
-			"combine prepared configuration: %w",
-			err,
-		)
-	}
-	return combined, nil
+	return generic, nil
 }

@@ -16,6 +16,9 @@ import (
 
 type mcpPreparation struct {
 	inspection Inspection
+	base       []configuration.Transition
+	baseIndex  map[domain.Location]baseMutationReference
+	baseAfter  map[domain.Location][]byte
 	after      map[domain.Location][]byte
 	touched    map[domain.Location]bool
 	groups     map[domain.Location]map[string]bool
@@ -26,6 +29,16 @@ func (inspection Inspection) Prepare(
 	components []domain.ComponentID,
 	selections []mcpcatalog.Selection,
 ) (configuration.PreparedPlan, error) {
+	return inspection.PrepareOnto(
+		configuration.PreparedPlan{}, components, selections,
+	)
+}
+
+func (inspection Inspection) PrepareOnto(
+	base configuration.PreparedPlan,
+	components []domain.ComponentID,
+	selections []mcpcatalog.Selection,
+) (configuration.PreparedPlan, error) {
 	plan, err := inspection.Plan(components, selections)
 	if err != nil {
 		return configuration.PreparedPlan{}, err
@@ -33,13 +46,7 @@ func (inspection Inspection) Prepare(
 	if plan.Blocking {
 		return configuration.PreparedPlan{}, fmt.Errorf("MCP configuration plan is blocked")
 	}
-	builder := &mcpPreparation{
-		inspection: inspection,
-		after:      make(map[domain.Location][]byte),
-		touched:    make(map[domain.Location]bool),
-		groups:     make(map[domain.Location]map[string]bool),
-		registryOf: make(map[domain.Location]domain.Location),
-	}
+	builder := newMCPPreparation(inspection, base)
 	for _, intent := range plan.Intents {
 		if intent.Kind == IntentReady {
 			continue
@@ -76,14 +83,10 @@ func (builder *mcpPreparation) apply(
 	projection releasecontract.MCPProjection,
 	intent Intent,
 ) error {
-	if projection.TargetDocumentFormat() != releasecontract.MCPProjectionDocumentTOML ||
-		projection.ComponentID != domain.ComponentCodex {
-		return fmt.Errorf("exact adapter materialization is not implemented")
-	}
 	if intent.Kind == IntentRelinquish {
 		return builder.updateRegistry(projection, "null", false)
 	}
-	nextConfig, err := builder.materializeCodexConfig(projection, intent)
+	nextConfig, err := builder.materializeConfig(projection, intent)
 	if err != nil {
 		return err
 	}
@@ -93,7 +96,7 @@ func (builder *mcpPreparation) apply(
 			return err
 		}
 	} else {
-		owned, encodeErr := encodeCodexRegistryEntry(projection.DesiredEntry)
+		owned, encodeErr := mcpRegistryEntry(projection)
 		if encodeErr != nil {
 			return encodeErr
 		}
@@ -103,6 +106,36 @@ func (builder *mcpPreparation) apply(
 	}
 	builder.addGroup(projection)
 	return nil
+}
+
+func (builder *mcpPreparation) materializeConfig(
+	projection releasecontract.MCPProjection,
+	intent Intent,
+) ([]byte, error) {
+	switch {
+	case projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentTOML &&
+		projection.ComponentID == domain.ComponentCodex:
+		return builder.materializeCodexConfig(projection, intent)
+	case projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON &&
+		projection.ComponentID == domain.ComponentOpenCode:
+		return builder.materializeOpenCodeConfig(projection, intent)
+	default:
+		return nil, fmt.Errorf("exact adapter materialization is not implemented")
+	}
+}
+
+func mcpRegistryEntry(
+	projection releasecontract.MCPProjection,
+) (string, error) {
+	if projection.ComponentID == domain.ComponentOpenCode &&
+		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON {
+		return projection.DesiredEntry, nil
+	}
+	if projection.ComponentID == domain.ComponentCodex &&
+		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentTOML {
+		return encodeCodexRegistryEntry(projection.DesiredEntry)
+	}
+	return "", fmt.Errorf("exact MCP registry materialization is not implemented")
 }
 
 func (builder *mcpPreparation) materializeCodexConfig(
@@ -150,6 +183,9 @@ func (builder *mcpPreparation) updateRegistry(
 	remove bool,
 ) error {
 	location := projection.RegistryTarget
+	if err := builder.rejectBaseMutation(location); err != nil {
+		return err
+	}
 	document, err := builder.registryDocument(location)
 	if err != nil {
 		return err
@@ -191,6 +227,9 @@ func (builder *mcpPreparation) current(location domain.Location) []byte {
 	if raw, exists := builder.after[location]; exists {
 		return append([]byte(nil), raw...)
 	}
+	if raw, exists := builder.baseAfter[location]; exists {
+		return append([]byte(nil), raw...)
+	}
 	return append([]byte(nil), builder.inspection.files[location].raw...)
 }
 
@@ -216,10 +255,15 @@ func (builder *mcpPreparation) transitions() ([]configuration.Transition, error)
 		if err != nil {
 			return nil, err
 		}
-		if len(transition.Mutations) > 0 {
-			result = append(result, transition)
+		if len(transition.Mutations) == 0 {
+			continue
 		}
+		if builder.mergeBaseTransition(configTarget, transition) {
+			continue
+		}
+		result = append(result, transition)
 	}
+	result = append(result, builder.base...)
 	return result, nil
 }
 
