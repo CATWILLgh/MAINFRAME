@@ -16,18 +16,20 @@ tags: ["antigravity", "mcp", "migration", "tui", "configuration"]
 Current Antigravity documentation places the global MCP configuration at
 `~/.gemini/config/mcp_config.json`. Other current official Google documentation
 still names `~/.gemini/antigravity/mcp_config.json`. A live check against
-Antigravity 2.2.1 confirmed that the canonical path is loaded and that a regular
-file present only at the legacy path is not loaded. The installer observes both
-locations but writes neither during migration detection.
+Antigravity 2.2.1 confirmed that a synthetic MCP command from the canonical path
+is executed and that the equivalent command from a regular file present only at
+the legacy path is not executed. The installer observes both locations but
+writes neither during migration detection.
 
 ## Why it is a problem
 
 Detection and privacy-safe preview are implemented, but official sources do not
-define version boundaries or precedence. Same-key canonical precedence when
-both paths are valid regular files is now verified for 2.2.1, but automatic
-migration or deletion would still risk choosing the wrong source of truth on
-other supported versions. That behavior must remain unavailable until the
-supported-version policy is explicit.
+define version boundaries or precedence. Live checks now show that only
+canonical-path synthetic MCP commands execute on 2.2.1 when both paths are valid
+regular files, whether server keys collide or differ. Automatic migration or
+deletion would still risk choosing the wrong source of truth on other supported
+versions, so that behavior must remain unavailable until the supported-version
+policy is explicit.
 
 ## Why it is not a duplicate
 
@@ -49,13 +51,11 @@ Completed in the installer branch:
 Remaining work:
 
 1. Verify the remaining supported Antigravity versions or narrow the supported
-   runtime policy to versions with proven canonical precedence.
-2. Verify whether 2.2.1 merges distinct server keys from both paths; same-key
-   precedence does not answer that separate loading question.
-3. Define an explicit user choice and safe mutation contract for migration,
+   runtime policy to versions with proven canonical command precedence.
+2. Define an explicit user choice and safe mutation contract for migration,
    including deletion support in the configuration executor.
-4. Preserve unrelated servers and unknown fields during the chosen migration.
-5. Keep Antigravity MCP Apply gated until the mutation contract and live checks
+3. Preserve unrelated servers and unknown fields during the chosen migration.
+4. Keep Antigravity MCP Apply gated until the mutation contract and live checks
    are complete.
 
 ## Acceptance criteria
@@ -69,6 +69,9 @@ Remaining work:
   execution and no legacy-only command execution during the probe.
 - [x] Antigravity 2.2.1 live verification confirms canonical precedence when
   both paths define the same MCP server key.
+- [x] Antigravity 2.2.1 live verification confirms that a synthetic command for
+  a distinct legacy-only server key does not execute alongside the canonical
+  command.
 - [ ] Migration preserves unrelated servers and unknown fields.
 - [ ] Live verification records behavior and precedence on every supported
   Antigravity major line.
@@ -107,15 +110,22 @@ verified after restoration.
   commands: only the canonical-path command was launched.
 - A second absent-path launch after the simultaneous case launched neither
   command, excluding cached execution as the source of the result.
+- Simultaneous regular files with different server keys and different synthetic
+  commands: only the canonical-path command was launched; the command for the
+  legacy-only key did not execute alongside it.
+- A post-case absent-path launch after the distinct-key check launched neither
+  command, again excluding cached execution.
 - Antigravity created a canonical-path file even during absent-path controls, so
   canonical file creation alone is not evidence of legacy migration.
 - Original state was restored exactly; Antigravity was stopped and all probe
   artifacts were removed.
 
-This establishes canonical path loading and same-key canonical precedence for
-2.2.1 when both paths are valid regular files. It does not establish whether
-distinct legacy keys are merged or behavior on other supported versions.
-Automatic migration remains gated.
+This establishes canonical-only synthetic MCP command execution for the tested
+Antigravity 2.2.1 cases when both paths are valid regular files: same-key command
+execution resolves to canonical, and a distinct legacy-key command does not
+execute alongside the canonical command. It does not establish whether the
+legacy file is read or parsed, behavior for non-synthetic entries or other file
+shapes, or behavior on other versions. Automatic migration remains gated.
 
 ## Sources
 
