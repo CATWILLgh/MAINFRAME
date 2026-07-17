@@ -31,6 +31,29 @@ def _load_builder():
     return module
 
 
+def _mcp_projection():
+    return {
+        "id": "antigravity-2.mcp.context7",
+        "codec": "antigravity-global-http-v1",
+        "server": "context7",
+        "profile": "remote-keyless",
+        "target": {
+            "root": "antigravity-config",
+            "path": "mcp_config.json",
+        },
+        "map_pointer": "/mcpServers",
+        "entry_key": "context7",
+        "registry": {
+            "target": {
+                "root": "antigravity-data",
+                "path": "mainframe/mcp-ownership.json",
+            },
+            "schema_version": 1,
+            "entries_pointer": "/servers",
+        },
+    }
+
+
 def test_bundle_is_self_contained_and_models_external_validation():
     output = Path(tempfile.mkdtemp()) / "bundle"
     _load_builder().build(REPO, output)
@@ -50,6 +73,7 @@ def test_bundle_is_self_contained_and_models_external_validation():
             "legacy_source_suffixes": ["dist/antigravity-2/plugin"],
         }
     ]
+    assert manifest["mcp_projections"] == [_mcp_projection()]
     resources = {resource["id"]: resource for resource in manifest["resources"]}
     assert resources == {
         "antigravity-2.credentials-index": {

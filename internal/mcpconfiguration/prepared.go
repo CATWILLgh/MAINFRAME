@@ -113,6 +113,9 @@ func (builder *mcpPreparation) materializeConfig(
 	intent Intent,
 ) ([]byte, error) {
 	switch {
+	case projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON &&
+		projection.ComponentID == domain.ComponentAntigravity2:
+		return builder.materializeJSONConfig(projection, intent)
 	case projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentTOML &&
 		projection.ComponentID == domain.ComponentCodex:
 		return builder.materializeCodexConfig(projection, intent)
@@ -130,6 +133,10 @@ func (builder *mcpPreparation) materializeConfig(
 func mcpRegistryEntry(
 	projection releasecontract.MCPProjection,
 ) (string, error) {
+	if projection.ComponentID == domain.ComponentAntigravity2 &&
+		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON {
+		return projection.DesiredEntry, nil
+	}
 	if projection.ComponentID == domain.ComponentClaudeCode &&
 		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON {
 		return projection.DesiredEntry, nil

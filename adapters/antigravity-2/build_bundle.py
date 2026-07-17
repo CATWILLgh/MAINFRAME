@@ -74,6 +74,29 @@ def _resources() -> list[dict]:
     ]
 
 
+def _mcp_projections() -> list[dict]:
+    return [{
+        "id": "antigravity-2.mcp.context7",
+        "codec": "antigravity-global-http-v1",
+        "server": "context7",
+        "profile": "remote-keyless",
+        "target": {
+            "root": "antigravity-config",
+            "path": "mcp_config.json",
+        },
+        "map_pointer": "/mcpServers",
+        "entry_key": "context7",
+        "registry": {
+            "target": {
+                "root": "antigravity-data",
+                "path": "mainframe/mcp-ownership.json",
+            },
+            "schema_version": 1,
+            "entries_pointer": "/servers",
+        },
+    }]
+
+
 def build(root: Path, output: Path) -> None:
     """Materialize release inputs without reading or mutating user state."""
     root = root.resolve()
@@ -100,6 +123,7 @@ def build(root: Path, output: Path) -> None:
             }
         ],
         resources=_resources(),
+        mcp_projections=_mcp_projections(),
     )
 
 

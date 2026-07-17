@@ -165,6 +165,45 @@ func TestPrepareConfigurationIncludesClaudeMCP(t *testing.T) {
 	}
 }
 
+func TestPrepareConfigurationIncludesAntigravityMCP(t *testing.T) {
+	host := lifecyclePreparationHost{}
+	configurationInspection, err := configuration.Inspect(nil, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpInspection, err := mcpconfiguration.Inspect(
+		[]releasecontract.MCPProjection{lifecycleAntigravityProjection()},
+		lifecycleMCPCatalog(t),
+		host,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewWithInspections(
+		testModel(t), domain.ObservedState{}, configurationInspection, mcpInspection,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := service.PrepareConfiguration(PreviewRequest{
+		Components: []domain.ComponentID{domain.ComponentAntigravity2},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentAntigravity2},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareConfiguration() error = %v", err)
+	}
+	transitions := prepared.Transitions()
+	if len(transitions) != 1 || lifecycleMutationCount(transitions) != 2 ||
+		len(transitions[0].ResourceIDs) != 1 ||
+		transitions[0].ResourceIDs[0] != "antigravity-2.mcp.context7" {
+		t.Fatalf("prepared transitions = %#v", transitions)
+	}
+}
+
 func lifecycleGenericResource() releasecontract.Resource {
 	return releasecontract.Resource{
 		ID: "codex.generic", ComponentID: domain.ComponentCodex,
@@ -290,5 +329,22 @@ func lifecycleClaudeProjection() releasecontract.MCPProjection {
 		},
 		RegistrySchemaVersion: 1, RegistryEntriesPointer: "/servers",
 		DesiredEntry: `{"type":"http","url":"https://mcp.context7.com/mcp"}`,
+	}
+}
+
+func lifecycleAntigravityProjection() releasecontract.MCPProjection {
+	return releasecontract.MCPProjection{
+		ID: "antigravity-2.mcp.context7", ComponentID: domain.ComponentAntigravity2,
+		Codec:    releasecontract.MCPProjectionAntigravityGlobalHTTP,
+		ServerID: "context7", ProfileID: "remote-keyless",
+		Target: domain.Location{
+			Root: domain.RootAntigravityConfig, Path: "mcp_config.json",
+		},
+		MapPointer: "/mcpServers", EntryKey: "context7",
+		RegistryTarget: domain.Location{
+			Root: domain.RootAntigravityData, Path: "mainframe/mcp-ownership.json",
+		},
+		RegistrySchemaVersion: 1, RegistryEntriesPointer: "/servers",
+		DesiredEntry: `{"serverUrl":"https://mcp.context7.com/mcp"}`,
 	}
 }

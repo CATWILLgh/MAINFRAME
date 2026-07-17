@@ -100,9 +100,10 @@ type Release struct {
 type MCPProjectionCodec string
 
 const (
-	MCPProjectionClaudeUserHTTP MCPProjectionCodec = "claude-user-http-v1"
-	MCPProjectionCodexUserHTTP  MCPProjectionCodec = "codex-user-http-v1"
-	MCPProjectionOpenCodeRemote MCPProjectionCodec = "opencode-remote-v1"
+	MCPProjectionAntigravityGlobalHTTP MCPProjectionCodec = "antigravity-global-http-v1"
+	MCPProjectionClaudeUserHTTP        MCPProjectionCodec = "claude-user-http-v1"
+	MCPProjectionCodexUserHTTP         MCPProjectionCodec = "codex-user-http-v1"
+	MCPProjectionOpenCodeRemote        MCPProjectionCodec = "opencode-remote-v1"
 )
 
 type MCPProjectionDocumentFormat string

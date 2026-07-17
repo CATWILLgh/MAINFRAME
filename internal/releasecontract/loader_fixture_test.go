@@ -163,6 +163,25 @@ func validCodexMCPProjectionRecord() map[string]any {
 	}
 }
 
+func validAntigravityMCPProjectionRecord() map[string]any {
+	return map[string]any{
+		"id":          "antigravity-2.mcp.context7",
+		"codec":       "antigravity-global-http-v1",
+		"server":      "context7",
+		"profile":     "remote-keyless",
+		"target":      map[string]any{"root": "antigravity-config", "path": "mcp_config.json"},
+		"map_pointer": "/mcpServers",
+		"entry_key":   "context7",
+		"registry": map[string]any{
+			"target": map[string]any{
+				"root": "antigravity-data", "path": "mainframe/mcp-ownership.json",
+			},
+			"schema_version":  1,
+			"entries_pointer": "/servers",
+		},
+	}
+}
+
 func writeOpenCodeProjectionFixture(t *testing.T) (string, string) {
 	t.Helper()
 	root := writeFixture(t)
@@ -236,6 +255,25 @@ func writeCodexProjectionFixture(t *testing.T) (string, string) {
 	manifest["mcp_projections"] = []any{validCodexMCPProjectionRecord()}
 	writeJSON(t, manifestPath, manifest, 0o644)
 	rewriteIndexDigest(t, root, manifestPath)
+	return root, manifestPath
+}
+
+func writeAntigravityProjectionFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root, manifestPath := writeCodexProjectionFixture(t)
+	manifest := readObject(t, manifestPath)
+	manifest["component"] = "antigravity-2"
+	manifest["runtime_profile"] = map[string]string{
+		"config_root": "~/.gemini/config",
+	}
+	manifest["mcp_projections"] = []any{validAntigravityMCPProjectionRecord()}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	indexPath := filepath.Join(root, "release.json")
+	index := readObject(t, indexPath)
+	entry := index["manifests"].([]any)[0].(map[string]any)
+	entry["component"] = "antigravity-2"
+	entry["sha256"] = digest(t, manifestPath)
+	writeJSON(t, indexPath, index, 0o644)
 	return root, manifestPath
 }
 

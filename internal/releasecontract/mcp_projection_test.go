@@ -66,6 +66,67 @@ func TestLoadDerivesCodexMCPProjectionFromCatalog(t *testing.T) {
 	}
 }
 
+func TestLoadDerivesAntigravityMCPProjectionFromCatalog(t *testing.T) {
+	root, _ := writeAntigravityProjectionFixture(t)
+
+	release, err := releasecontract.Load(root)
+	if err != nil {
+		t.Fatalf("load release: %v", err)
+	}
+	if len(release.MCPProjections) != 1 {
+		t.Fatalf("MCP projections = %#v", release.MCPProjections)
+	}
+	projection := release.MCPProjections[0]
+	if projection.ID != "antigravity-2.mcp.context7" ||
+		projection.ComponentID != domain.ComponentAntigravity2 ||
+		projection.Target != (domain.Location{
+			Root: domain.RootAntigravityConfig, Path: "mcp_config.json",
+		}) ||
+		projection.RegistryTarget != (domain.Location{
+			Root: domain.RootAntigravityData, Path: "mainframe/mcp-ownership.json",
+		}) ||
+		projection.DesiredEntry != `{"serverUrl":"https://mcp.context7.com/mcp"}` {
+		t.Fatalf("MCP projection = %#v", projection)
+	}
+}
+
+func TestLoadRejectsInvalidAntigravityMCPProjectionContract(t *testing.T) {
+	tests := map[string]func(map[string]any){
+		"foreign codec": func(record map[string]any) {
+			record["codec"] = "claude-user-http-v1"
+		},
+		"foreign target root": func(record map[string]any) {
+			record["target"].(map[string]any)["root"] = "antigravity-data"
+		},
+		"legacy target path": func(record map[string]any) {
+			record["target"].(map[string]any)["path"] = "mcp_config_legacy.json"
+		},
+		"wrong pointer": func(record map[string]any) {
+			record["map_pointer"] = "/mcp"
+		},
+		"registry under config": func(record map[string]any) {
+			record["registry"].(map[string]any)["target"].(map[string]any)["root"] =
+				"antigravity-config"
+		},
+		"keyed profile": func(record map[string]any) {
+			record["profile"] = "remote-api-key"
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			root, manifestPath := writeAntigravityProjectionFixture(t)
+			manifest := readObject(t, manifestPath)
+			record := manifest["mcp_projections"].([]any)[0].(map[string]any)
+			mutate(record)
+			writeJSON(t, manifestPath, manifest, 0o644)
+			rewriteIndexDigest(t, root, manifestPath)
+			if _, err := releasecontract.Load(root); err == nil {
+				t.Fatal("invalid Antigravity MCP projection was accepted")
+			}
+		})
+	}
+}
+
 func TestLoadRejectsInvalidCodexMCPProjectionContract(t *testing.T) {
 	tests := map[string]func(map[string]any){
 		"OpenCode codec": func(record map[string]any) {

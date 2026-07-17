@@ -19,6 +19,18 @@ PROJECTION_FIELDS = {
 }
 REGISTRY_FIELDS = {"target", "schema_version", "entries_pointer"}
 CODEC_CONTRACTS = {
+    ("antigravity-2", "antigravity-global-http-v1"): {
+        "target": ("antigravity-config", "mcp_config.json"),
+        "map_pointer": "/mcpServers",
+        "registry_target": (
+            "antigravity-data",
+            "mainframe/mcp-ownership.json",
+        ),
+        "registry_pointer": "/servers",
+        "target_format": "json",
+        "entry_type": "",
+        "endpoint_key": "serverUrl",
+    },
     ("claude-code", "claude-user-http-v1"): {
         "target": ("home", ".claude.json"),
         "map_pointer": "/mcpServers",
@@ -29,6 +41,7 @@ CODEC_CONTRACTS = {
         "registry_pointer": "/servers",
         "target_format": "json",
         "entry_type": "http",
+        "endpoint_key": "url",
     },
     ("codex", "codex-user-http-v1"): {
         "target": ("codex-config", "config.toml"),
@@ -40,6 +53,7 @@ CODEC_CONTRACTS = {
         "registry_pointer": "/servers",
         "target_format": "toml",
         "entry_type": "",
+        "endpoint_key": "url",
     },
     ("opencode", "opencode-remote-v1"): {
         "target": ("opencode-config", "opencode.json"),
@@ -51,6 +65,7 @@ CODEC_CONTRACTS = {
         "registry_pointer": "/servers",
         "target_format": "json",
         "entry_type": "remote",
+        "endpoint_key": "url",
     },
 }
 
@@ -226,7 +241,7 @@ def desired_entry(
         or not profile.get("endpoint")
     ):
         raise ValueError("MCP profile is incompatible with projection codec")
-    entry = {"url": profile["endpoint"]}
+    entry = {contract["endpoint_key"]: profile["endpoint"]}
     if contract["entry_type"]:
         entry["type"] = contract["entry_type"]
     return entry

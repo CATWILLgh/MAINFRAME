@@ -12,60 +12,81 @@ type mcpProjectionCodecContract struct {
 	registryTarget  domain.Location
 	registryPointer string
 	documentFormat  MCPProjectionDocumentFormat
+	endpointKey     string
 	entryType       string
+}
+
+type mcpProjectionCodecKey struct {
+	component domain.ComponentID
+	codec     MCPProjectionCodec
+}
+
+var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContract{
+	{domain.ComponentAntigravity2, MCPProjectionAntigravityGlobalHTTP}: {
+		target: domain.Location{
+			Root: domain.RootAntigravityConfig, Path: "mcp_config.json",
+		},
+		mapPointer: "/mcpServers",
+		registryTarget: domain.Location{
+			Root: domain.RootAntigravityData, Path: "mainframe/mcp-ownership.json",
+		},
+		registryPointer: "/servers",
+		documentFormat:  MCPProjectionDocumentJSON,
+		endpointKey:     "serverUrl",
+	},
+	{domain.ComponentClaudeCode, MCPProjectionClaudeUserHTTP}: {
+		target: domain.Location{
+			Root: domain.RootHome, Path: ".claude.json",
+		},
+		mapPointer: "/mcpServers",
+		registryTarget: domain.Location{
+			Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json",
+		},
+		registryPointer: "/servers",
+		documentFormat:  MCPProjectionDocumentJSON,
+		endpointKey:     "url",
+		entryType:       "http",
+	},
+	{domain.ComponentCodex, MCPProjectionCodexUserHTTP}: {
+		target: domain.Location{
+			Root: domain.RootCodexConfig, Path: "config.toml",
+		},
+		mapPointer: "/mcp_servers",
+		registryTarget: domain.Location{
+			Root: domain.RootCodexConfig, Path: "mainframe/mcp-ownership.json",
+		},
+		registryPointer: "/servers",
+		documentFormat:  MCPProjectionDocumentTOML,
+		endpointKey:     "url",
+	},
+	{domain.ComponentOpenCode, MCPProjectionOpenCodeRemote}: {
+		target: domain.Location{
+			Root: domain.RootOpenCodeConfig, Path: "opencode.json",
+		},
+		mapPointer: "/mcp",
+		registryTarget: domain.Location{
+			Root: domain.RootOpenCodeConfig,
+			Path: "opencode.json.mainframe-mcp.json",
+		},
+		registryPointer: "/servers",
+		documentFormat:  MCPProjectionDocumentJSON,
+		endpointKey:     "url",
+		entryType:       "remote",
+	},
 }
 
 func mcpProjectionContract(
 	component domain.ComponentID,
 	codec MCPProjectionCodec,
 ) (mcpProjectionCodecContract, bool) {
-	switch {
-	case component == domain.ComponentClaudeCode && codec == MCPProjectionClaudeUserHTTP:
-		return mcpProjectionCodecContract{
-			target: domain.Location{
-				Root: domain.RootHome, Path: ".claude.json",
-			},
-			mapPointer: "/mcpServers",
-			registryTarget: domain.Location{
-				Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json",
-			},
-			registryPointer: "/servers",
-			documentFormat:  MCPProjectionDocumentJSON,
-			entryType:       "http",
-		}, true
-	case component == domain.ComponentCodex && codec == MCPProjectionCodexUserHTTP:
-		return mcpProjectionCodecContract{
-			target: domain.Location{
-				Root: domain.RootCodexConfig, Path: "config.toml",
-			},
-			mapPointer: "/mcp_servers",
-			registryTarget: domain.Location{
-				Root: domain.RootCodexConfig, Path: "mainframe/mcp-ownership.json",
-			},
-			registryPointer: "/servers",
-			documentFormat:  MCPProjectionDocumentTOML,
-		}, true
-	case component == domain.ComponentOpenCode && codec == MCPProjectionOpenCodeRemote:
-		return mcpProjectionCodecContract{
-			target: domain.Location{
-				Root: domain.RootOpenCodeConfig, Path: "opencode.json",
-			},
-			mapPointer: "/mcp",
-			registryTarget: domain.Location{
-				Root: domain.RootOpenCodeConfig,
-				Path: "opencode.json.mainframe-mcp.json",
-			},
-			registryPointer: "/servers",
-			documentFormat:  MCPProjectionDocumentJSON,
-			entryType:       "remote",
-		}, true
-	default:
-		return mcpProjectionCodecContract{}, false
-	}
+	contract, exists := mcpProjectionContracts[mcpProjectionCodecKey{
+		component: component, codec: codec,
+	}]
+	return contract, exists
 }
 
 func encodeMCPProjectionEntry(contract mcpProjectionCodecContract, endpoint string) (string, error) {
-	entry := map[string]string{"url": endpoint}
+	entry := map[string]string{contract.endpointKey: endpoint}
 	if contract.entryType != "" {
 		entry["type"] = contract.entryType
 	}
