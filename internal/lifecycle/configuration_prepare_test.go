@@ -111,6 +111,60 @@ func TestPrepareConfigurationComposesOpenCodePermissionsAndMCP(t *testing.T) {
 	}
 }
 
+func TestPrepareConfigurationIncludesClaudeMCP(t *testing.T) {
+	host := lifecyclePreparationHost{}
+	configurationInspection, err := configuration.Inspect(nil, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpInspection, err := mcpconfiguration.Inspect(
+		[]releasecontract.MCPProjection{lifecycleClaudeProjection()},
+		lifecycleMCPCatalog(t),
+		host,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewWithInspections(
+		testModel(t),
+		domain.ObservedState{},
+		configurationInspection,
+		mcpInspection,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := service.PrepareConfiguration(PreviewRequest{
+		Components: []domain.ComponentID{domain.ComponentClaudeCode},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentClaudeCode},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareConfiguration() error = %v", err)
+	}
+	transitions := prepared.Transitions()
+	if len(transitions) != 1 || lifecycleMutationCount(transitions) != 2 ||
+		len(transitions[0].ResourceIDs) != 1 ||
+		transitions[0].ResourceIDs[0] != "claude-code.mcp.context7" {
+		t.Fatalf("prepared transitions = %#v", transitions)
+	}
+	var foundConfig, foundRegistry bool
+	for _, mutation := range transitions[0].Mutations {
+		foundConfig = foundConfig || mutation.Target == (domain.Location{
+			Root: domain.RootHome, Path: ".claude.json",
+		})
+		foundRegistry = foundRegistry || mutation.Target == (domain.Location{
+			Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json",
+		})
+	}
+	if !foundConfig || !foundRegistry {
+		t.Fatalf("Claude targets are incomplete: %#v", transitions)
+	}
+}
+
 func lifecycleGenericResource() releasecontract.Resource {
 	return releasecontract.Resource{
 		ID: "codex.generic", ComponentID: domain.ComponentCodex,
@@ -219,5 +273,22 @@ func lifecycleOpenCodeProjection() releasecontract.MCPProjection {
 		},
 		RegistrySchemaVersion: 1, RegistryEntriesPointer: "/servers",
 		DesiredEntry: `{"type":"remote","url":"https://mcp.context7.com/mcp"}`,
+	}
+}
+
+func lifecycleClaudeProjection() releasecontract.MCPProjection {
+	return releasecontract.MCPProjection{
+		ID: "claude-code.mcp.context7", ComponentID: domain.ComponentClaudeCode,
+		Codec:    releasecontract.MCPProjectionClaudeUserHTTP,
+		ServerID: "context7", ProfileID: "remote-keyless",
+		Target: domain.Location{
+			Root: domain.RootHome, Path: ".claude.json",
+		},
+		MapPointer: "/mcpServers", EntryKey: "context7",
+		RegistryTarget: domain.Location{
+			Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json",
+		},
+		RegistrySchemaVersion: 1, RegistryEntriesPointer: "/servers",
+		DesiredEntry: `{"type":"http","url":"https://mcp.context7.com/mcp"}`,
 	}
 }

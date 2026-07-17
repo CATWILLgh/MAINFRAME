@@ -117,8 +117,11 @@ func (builder *mcpPreparation) materializeConfig(
 		projection.ComponentID == domain.ComponentCodex:
 		return builder.materializeCodexConfig(projection, intent)
 	case projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON &&
+		projection.ComponentID == domain.ComponentClaudeCode:
+		return builder.materializeJSONConfig(projection, intent)
+	case projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON &&
 		projection.ComponentID == domain.ComponentOpenCode:
-		return builder.materializeOpenCodeConfig(projection, intent)
+		return builder.materializeJSONConfig(projection, intent)
 	default:
 		return nil, fmt.Errorf("exact adapter materialization is not implemented")
 	}
@@ -127,6 +130,10 @@ func (builder *mcpPreparation) materializeConfig(
 func mcpRegistryEntry(
 	projection releasecontract.MCPProjection,
 ) (string, error) {
+	if projection.ComponentID == domain.ComponentClaudeCode &&
+		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON {
+		return projection.DesiredEntry, nil
+	}
 	if projection.ComponentID == domain.ComponentOpenCode &&
 		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON {
 		return projection.DesiredEntry, nil

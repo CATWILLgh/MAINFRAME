@@ -7,7 +7,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
-func (builder *mcpPreparation) materializeOpenCodeConfig(
+func (builder *mcpPreparation) materializeJSONConfig(
 	projection releasecontract.MCPProjection,
 	intent Intent,
 ) ([]byte, error) {
@@ -22,7 +22,7 @@ func (builder *mcpPreparation) materializeOpenCodeConfig(
 	}
 	document, err := jsondocument.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("parse OpenCode MCP configuration: %w", err)
+		return nil, fmt.Errorf("parse JSON MCP configuration: %w", err)
 	}
 	pointer, err := jsondocument.ParsePointer(
 		projection.MapPointer + "/" + projection.EntryKey,
@@ -41,7 +41,7 @@ func (builder *mcpPreparation) materializeOpenCodeConfig(
 		return nil, fmt.Errorf("unsupported MCP intent %q", intent.Kind)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("materialize OpenCode MCP configuration: %w", err)
+		return nil, fmt.Errorf("materialize JSON MCP configuration: %w", err)
 	}
 	return document.Indented(), nil
 }
