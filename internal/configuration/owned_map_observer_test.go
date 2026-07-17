@@ -339,3 +339,13 @@ func ownedMapResource(
 		},
 	}
 }
+
+func supportedOwnedMapResource(
+	target domain.Location,
+	registry domain.Location,
+) releasecontract.Resource {
+	resource := ownedMapResource(target, registry)
+	resource.ComponentID = domain.ComponentOpenCode
+	resource.Apply = releasecontract.SupportSupported
+	return resource
+}

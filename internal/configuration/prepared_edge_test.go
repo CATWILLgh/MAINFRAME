@@ -14,14 +14,14 @@ func TestInspectionPrepareCreatesPrivateMissingFiles(t *testing.T) {
 	target := location("opencode.json")
 	registry := location("opencode.json.mainframe-permissions.json")
 	inspection, err := configuration.Inspect(
-		[]releasecontract.Resource{ownedMapResource(target, registry)},
+		[]releasecontract.Resource{supportedOwnedMapResource(target, registry)},
 		preparedHost(nil),
 	)
 	if err != nil {
 		t.Fatalf("Inspect() error = %v", err)
 	}
 
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -40,7 +40,7 @@ func TestInspectionPrepareCreatesPrivateMissingFiles(t *testing.T) {
 func TestInspectionPrepareCreatesSelectedEmptyOwnedMap(t *testing.T) {
 	target := location("opencode.json")
 	registry := location("opencode.json.mainframe-permissions.json")
-	resource := ownedMapResource(target, registry)
+	resource := supportedOwnedMapResource(target, registry)
 	resource.JSONMapOwnership.DesiredMap = `{}`
 	inspection, err := configuration.Inspect(
 		[]releasecontract.Resource{resource},
@@ -50,7 +50,7 @@ func TestInspectionPrepareCreatesSelectedEmptyOwnedMap(t *testing.T) {
 		t.Fatalf("Inspect() error = %v", err)
 	}
 
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -73,7 +73,7 @@ func TestInspectionPrepareRejectsPhysicalTargetAliases(t *testing.T) {
 		shared := []byte(`{"version":1,"actions":{}}`)
 		assertAliasedPreparationFails(
 			t,
-			[]releasecontract.Resource{ownedMapResource(target, registry)},
+			[]releasecontract.Resource{supportedOwnedMapResource(target, registry)},
 			map[domain.Location]hostfs.Entry{
 				target:   preparedEntry(shared, 0o600, 71),
 				registry: preparedEntry(shared, 0o600, 71),
@@ -83,11 +83,11 @@ func TestInspectionPrepareRejectsPhysicalTargetAliases(t *testing.T) {
 	t.Run("two configuration targets", func(t *testing.T) {
 		firstTarget := location("opencode.json")
 		secondTarget := location("other-opencode.json")
-		first := ownedMapResource(
+		first := supportedOwnedMapResource(
 			firstTarget,
 			location("opencode.json.mainframe-permissions.json"),
 		)
-		second := ownedMapResource(
+		second := supportedOwnedMapResource(
 			secondTarget,
 			location("other-opencode.json.mainframe-permissions.json"),
 		)
@@ -121,14 +121,14 @@ func TestInspectionPrepareRejectsUnsafeExistingMode(t *testing.T) {
 	registry := location("opencode.json.mainframe-permissions.json")
 	inspection := inspectPreparedOwnedMap(
 		t,
-		[]releasecontract.Resource{ownedMapResource(target, registry)},
+		[]releasecontract.Resource{supportedOwnedMapResource(target, registry)},
 		map[domain.Location]hostfs.Entry{
 			target:   preparedEntry([]byte(`{"permission":{}}`), 0o200, 51),
 			registry: preparedEntry([]byte(`{"version":1,"actions":{}}`), 0o600, 52),
 		},
 	)
 
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err == nil || len(prepared.Transitions()) != 0 {
 		t.Fatalf("Prepare() = %#v, %v; want fail-closed mode error", prepared, err)
 	}
@@ -139,7 +139,7 @@ func TestInspectionPrepareFixedPointIsEmpty(t *testing.T) {
 	registry := location("opencode.json.mainframe-permissions.json")
 	inspection := inspectPreparedOwnedMap(
 		t,
-		[]releasecontract.Resource{ownedMapResource(target, registry)},
+		[]releasecontract.Resource{supportedOwnedMapResource(target, registry)},
 		map[domain.Location]hostfs.Entry{
 			target: preparedEntry(
 				[]byte(`{"permission":{"bash":{"*":"allow"}}}`),
@@ -153,7 +153,7 @@ func TestInspectionPrepareFixedPointIsEmpty(t *testing.T) {
 			),
 		},
 	)
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}

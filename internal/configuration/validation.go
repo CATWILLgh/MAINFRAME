@@ -23,8 +23,9 @@ func supportedStrategy(strategy releasecontract.ResourceStrategy) bool {
 }
 
 func validateResource(resource releasecontract.Resource) error {
-	if resource.Apply != releasecontract.SupportUnimplemented {
-		return fmt.Errorf("apply support must remain unimplemented")
+	if resource.Apply != releasecontract.SupportUnimplemented &&
+		!resource.SupportsApply() {
+		return fmt.Errorf("invalid apply support")
 	}
 	if resource.Observation == releasecontract.SupportUnimplemented {
 		if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil ||

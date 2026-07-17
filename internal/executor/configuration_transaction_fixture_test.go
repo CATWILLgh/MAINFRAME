@@ -30,11 +30,11 @@ func prepareOwnedConfiguration(
 	)
 	resource := releasecontract.Resource{
 		ID:          "opencode.permissions",
-		ComponentID: "credential-tools",
+		ComponentID: domain.ComponentOpenCode,
 		Strategy:    releasecontract.StrategyJSONKeyMerge,
 		Target:      target,
 		Observation: releasecontract.SupportSupported,
-		Apply:       releasecontract.SupportUnimplemented,
+		Apply:       releasecontract.SupportSupported,
 		JSONMapOwnership: &releasecontract.JSONMapOwnership{
 			MapPointer:            "/permission",
 			DesiredMap:            desired,
@@ -52,7 +52,7 @@ func prepareOwnedConfiguration(
 		t.Fatalf("Inspect() error = %v", err)
 	}
 	prepared, err := inspection.Prepare(
-		[]domain.ComponentID{"credential-tools"},
+		[]domain.ComponentID{domain.ComponentOpenCode},
 	)
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -247,7 +247,7 @@ func configurationState(
 }
 
 func testConfigurationLocation(path domain.ArtifactPath) domain.Location {
-	return domain.Location{Root: domain.RootHome, Path: path}
+	return domain.Location{Root: domain.RootOpenCodeConfig, Path: path}
 }
 
 func payloadDigest(payload []byte) string {

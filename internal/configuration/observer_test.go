@@ -340,7 +340,7 @@ func withJSON(
 }
 
 func location(path domain.ArtifactPath) domain.Location {
-	return domain.Location{Root: domain.RootHome, Path: path}
+	return domain.Location{Root: domain.RootOpenCodeConfig, Path: path}
 }
 
 func observation(id string, status configuration.Status, reason configuration.Reason) configuration.Observation {

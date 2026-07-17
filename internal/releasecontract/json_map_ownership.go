@@ -13,6 +13,7 @@ const (
 	jsonMapOwnershipKind  = "json-map-entry-registry-v1"
 	decisionRuleSchema    = "decision-rule-v1"
 	registrySchemaVersion = 1
+	decisionRuleEntries   = "/actions"
 )
 
 func loadJSONMapOwnership(
@@ -72,7 +73,7 @@ func validateJSONMapOwnership(
 	if err := validateOwnershipPointer(record.Registry.EntriesPointer, "entries"); err != nil {
 		return nil, err
 	}
-	if record.Registry.EntriesPointer != "/actions" {
+	if record.Registry.EntriesPointer != decisionRuleEntries {
 		return nil, fmt.Errorf("unsupported ownership registry entries pointer")
 	}
 	target, err := location(record.Registry.Target)

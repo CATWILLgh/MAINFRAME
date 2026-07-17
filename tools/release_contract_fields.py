@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Field sets and strategy groups for the release contract."""
 
+import re
+
+IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
 BUNDLE_FIELDS_V2 = {
     "schema_version", "kind", "component", "dependencies", "install_units",
     "legacy_artifacts", "resources", "payload_files", "runtime_profile",

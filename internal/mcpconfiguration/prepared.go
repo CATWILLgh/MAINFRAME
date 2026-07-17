@@ -60,6 +60,12 @@ func (inspection Inspection) PrepareOnto(
 		if !exists {
 			return configuration.PreparedPlan{}, fmt.Errorf("unknown MCP projection %q", intent.ProjectionID)
 		}
+		if !projection.SupportsMaterialization() {
+			return configuration.PreparedPlan{}, fmt.Errorf(
+				"MCP projection %q does not support materialization",
+				projection.ID,
+			)
+		}
 		if err := builder.apply(projection, intent); err != nil {
 			return configuration.PreparedPlan{}, fmt.Errorf(
 				"prepare MCP projection %q: %w",

@@ -14,7 +14,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
-func TestPrepareConfigurationComposesCodexMCPAfterImages(t *testing.T) {
+func TestPrepareConfigurationRejectsUnsupportedGenericChangeBeforeMCP(t *testing.T) {
 	host := lifecyclePreparationHost{}
 	configurationInspection, err := configuration.Inspect(
 		[]releasecontract.Resource{lifecycleGenericResource()},
@@ -49,13 +49,45 @@ func TestPrepareConfigurationComposesCodexMCPAfterImages(t *testing.T) {
 			Adapters: []domain.ComponentID{domain.ComponentCodex},
 		}},
 	})
+	if err == nil || len(prepared.Transitions()) != 0 {
+		t.Fatalf("PrepareConfiguration() = %#v, %v; want rejection", prepared, err)
+	}
+}
+
+func TestPrepareConfigurationIncludesCodexMCP(t *testing.T) {
+	host := lifecyclePreparationHost{}
+	configurationInspection, err := configuration.Inspect(nil, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpInspection, err := mcpconfiguration.Inspect(
+		[]releasecontract.MCPProjection{lifecycleCodexProjection()},
+		lifecycleMCPCatalog(t),
+		host,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewWithInspections(
+		testModel(t), domain.ObservedState{}, configurationInspection, mcpInspection,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := service.PrepareConfiguration(PreviewRequest{
+		Components: []domain.ComponentID{domain.ComponentCodex},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentCodex},
+		}},
+	})
 	if err != nil {
 		t.Fatalf("PrepareConfiguration() error = %v", err)
 	}
 	transitions := prepared.Transitions()
-	if len(transitions) != 2 || lifecycleMutationCount(transitions) != 4 ||
-		transitions[0].ResourceIDs[0] != "codex.mcp.context7" ||
-		transitions[1].ResourceIDs[0] != "codex.generic" {
+	if len(transitions) != 1 || lifecycleMutationCount(transitions) != 2 ||
+		transitions[0].ResourceIDs[0] != "codex.mcp.context7" {
 		t.Fatalf("prepared transitions = %#v", transitions)
 	}
 }
@@ -232,7 +264,7 @@ func lifecycleOpenCodePermissionResource() releasecontract.Resource {
 			Root: domain.RootOpenCodeConfig, Path: "opencode.json",
 		},
 		Observation: releasecontract.SupportSupported,
-		Apply:       releasecontract.SupportUnimplemented,
+		Apply:       releasecontract.SupportSupported,
 		JSONMapOwnership: &releasecontract.JSONMapOwnership{
 			MapPointer: "/permission", DesiredMap: `{"bash":"deny"}`,
 			RegistryTarget: domain.Location{

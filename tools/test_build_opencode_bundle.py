@@ -193,7 +193,7 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
         "source": "config-fragment.json",
         "target": {"root": "opencode-config", "path": "opencode.json"},
         "observation": "supported",
-        "apply": "unimplemented",
+        "apply": "supported",
         "ownership": {
             "kind": "json-map-entry-registry-v1",
             "map_pointer": "/permission",

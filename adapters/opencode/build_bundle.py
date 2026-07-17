@@ -91,7 +91,8 @@ def _install_units(output: Path) -> list[dict]:
 
 
 def _resources() -> list[dict]:
-    supported = {"observation": "supported", "apply": "unimplemented"}
+    observed = {"observation": "supported", "apply": "unimplemented"}
+    apply_supported = {"observation": "supported", "apply": "supported"}
     return [
         {
             "id": "opencode.credentials-index",
@@ -101,7 +102,7 @@ def _resources() -> list[dict]:
                 "root": "opencode-config",
                 "path": "credentials-index.md",
             },
-            **supported,
+            **observed,
         },
         {
             "id": "opencode.permissions",
@@ -121,7 +122,7 @@ def _resources() -> list[dict]:
                     "entries_pointer": "/actions",
                 },
             },
-            **supported,
+            **apply_supported,
         },
     ]
 

@@ -7,13 +7,14 @@ import (
 )
 
 type mcpProjectionCodecContract struct {
-	target          domain.Location
-	mapPointer      string
-	registryTarget  domain.Location
-	registryPointer string
-	documentFormat  MCPProjectionDocumentFormat
-	endpointKey     string
-	entryType       string
+	target                   domain.Location
+	mapPointer               string
+	registryTarget           domain.Location
+	registryPointer          string
+	documentFormat           MCPProjectionDocumentFormat
+	endpointKey              string
+	entryType                string
+	materializationSupported bool
 }
 
 type mcpProjectionCodecKey struct {
@@ -30,9 +31,10 @@ var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContrac
 		registryTarget: domain.Location{
 			Root: domain.RootAntigravityData, Path: "mainframe/mcp-ownership.json",
 		},
-		registryPointer: "/servers",
-		documentFormat:  MCPProjectionDocumentJSON,
-		endpointKey:     "serverUrl",
+		registryPointer:          "/servers",
+		documentFormat:           MCPProjectionDocumentJSON,
+		endpointKey:              "serverUrl",
+		materializationSupported: true,
 	},
 	{domain.ComponentClaudeCode, MCPProjectionClaudeUserHTTP}: {
 		target: domain.Location{
@@ -42,10 +44,11 @@ var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContrac
 		registryTarget: domain.Location{
 			Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json",
 		},
-		registryPointer: "/servers",
-		documentFormat:  MCPProjectionDocumentJSON,
-		endpointKey:     "url",
-		entryType:       "http",
+		registryPointer:          "/servers",
+		documentFormat:           MCPProjectionDocumentJSON,
+		endpointKey:              "url",
+		entryType:                "http",
+		materializationSupported: true,
 	},
 	{domain.ComponentCodex, MCPProjectionCodexUserHTTP}: {
 		target: domain.Location{
@@ -55,9 +58,10 @@ var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContrac
 		registryTarget: domain.Location{
 			Root: domain.RootCodexConfig, Path: "mainframe/mcp-ownership.json",
 		},
-		registryPointer: "/servers",
-		documentFormat:  MCPProjectionDocumentTOML,
-		endpointKey:     "url",
+		registryPointer:          "/servers",
+		documentFormat:           MCPProjectionDocumentTOML,
+		endpointKey:              "url",
+		materializationSupported: true,
 	},
 	{domain.ComponentOpenCode, MCPProjectionOpenCodeRemote}: {
 		target: domain.Location{
@@ -68,11 +72,18 @@ var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContrac
 			Root: domain.RootOpenCodeConfig,
 			Path: "opencode.json.mainframe-mcp.json",
 		},
-		registryPointer: "/servers",
-		documentFormat:  MCPProjectionDocumentJSON,
-		endpointKey:     "url",
-		entryType:       "remote",
+		registryPointer:          "/servers",
+		documentFormat:           MCPProjectionDocumentJSON,
+		endpointKey:              "url",
+		entryType:                "remote",
+		materializationSupported: true,
 	},
+}
+
+// SupportsMaterialization covers emitted intents; adapter deselection remains planner policy.
+func (projection MCPProjection) SupportsMaterialization() bool {
+	contract, exists := mcpProjectionContract(projection.ComponentID, projection.Codec)
+	return exists && contract.materializationSupported
 }
 
 func mcpProjectionContract(

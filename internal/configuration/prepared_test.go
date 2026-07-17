@@ -47,7 +47,7 @@ var preparedRegistryAfter = strings.Join([]string{
 func TestInspectionPreparesOneOrderedOwnedMapTransition(t *testing.T) {
 	target := location("opencode.json")
 	registry := location("opencode.json.mainframe-permissions.json")
-	resource := ownedMapResource(target, registry)
+	resource := supportedOwnedMapResource(target, registry)
 	resource.JSONMapOwnership.DesiredMap =
 		`{"edit":"deny","bash":{"*":"allow"}}`
 	configRaw := []byte(
@@ -69,7 +69,7 @@ func TestInspectionPreparesOneOrderedOwnedMapTransition(t *testing.T) {
 		t.Fatalf("Inspect() error = %v", err)
 	}
 
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -113,14 +113,14 @@ func TestInspectionPrepareRelinquishOnlyMutatesRegistry(t *testing.T) {
 	)
 	inspection := inspectPreparedOwnedMap(
 		t,
-		[]releasecontract.Resource{ownedMapResource(target, registry)},
+		[]releasecontract.Resource{supportedOwnedMapResource(target, registry)},
 		map[domain.Location]hostfs.Entry{
 			target:   preparedEntry(configRaw, 0o600, 21),
 			registry: preparedEntry(registryRaw, 0o600, 22),
 		},
 	)
 
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -137,8 +137,8 @@ func TestInspectionPrepareComposesSharedPhysicalTarget(t *testing.T) {
 	target := location("opencode.json")
 	firstRegistry := location("opencode.json.mainframe-permissions.json")
 	secondRegistry := location("opencode.json.mainframe-agent-permissions.json")
-	first := ownedMapResource(target, firstRegistry)
-	second := ownedMapResource(target, secondRegistry)
+	first := supportedOwnedMapResource(target, firstRegistry)
+	second := supportedOwnedMapResource(target, secondRegistry)
 	second.ID = "agent-permissions"
 	second.JSONMapOwnership.MapPointer = "/agent_permission"
 	second.JSONMapOwnership.DesiredMap = `{"task":"deny"}`
@@ -153,7 +153,7 @@ func TestInspectionPrepareComposesSharedPhysicalTarget(t *testing.T) {
 		},
 	)
 
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -181,7 +181,7 @@ func TestInspectionPrepareIsImmutableAndPerformsNoHostReads(t *testing.T) {
 		registry: preparedEntry([]byte(`{"version":1,"actions":{}}`), 0o600, 42),
 	})
 	inspection, err := configuration.Inspect(
-		[]releasecontract.Resource{ownedMapResource(target, registry)},
+		[]releasecontract.Resource{supportedOwnedMapResource(target, registry)},
 		host,
 	)
 	if err != nil {
@@ -189,7 +189,7 @@ func TestInspectionPrepareIsImmutableAndPerformsNoHostReads(t *testing.T) {
 	}
 	host.entries[target].Content[0] = '['
 	calls := host.calls[target] + host.calls[registry]
-	first, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	first, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
@@ -197,7 +197,7 @@ func TestInspectionPrepareIsImmutableAndPerformsNoHostReads(t *testing.T) {
 	exposed[0].ResourceIDs[0] = "forged"
 	exposed[0].Mutations[0].After[0] = '['
 
-	second, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	second, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
 		t.Fatalf("second Prepare() error = %v", err)
 	}
@@ -215,7 +215,7 @@ func TestInspectionPrepareFailsClosed(t *testing.T) {
 		releasecontract.StrategySeedIfAbsent,
 		releasecontract.SupportSupported,
 	)
-	unsafe := ownedMapResource(
+	unsafe := supportedOwnedMapResource(
 		location("opencode.json"),
 		location("opencode.json.mainframe-permissions.json"),
 	)
@@ -242,9 +242,9 @@ func TestInspectionPrepareFailsClosed(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Inspect() error = %v", err)
 			}
-			prepared, err := inspection.Prepare(
-				[]domain.ComponentID{"credential-tools"},
-			)
+			prepared, err := inspection.Prepare([]domain.ComponentID{
+				"credential-tools", domain.ComponentOpenCode,
+			})
 			if err == nil || len(prepared.Transitions()) != 0 {
 				t.Fatalf("Prepare() = %#v, %v; want error and zero plan", prepared, err)
 			}
@@ -282,7 +282,7 @@ func assertAliasedPreparationFails(
 ) {
 	t.Helper()
 	inspection := inspectPreparedOwnedMap(t, resources, entries)
-	prepared, err := inspection.Prepare([]domain.ComponentID{"credential-tools"})
+	prepared, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err == nil || len(prepared.Transitions()) != 0 {
 		t.Fatalf("Prepare() = %#v, %v; want alias rejection", prepared, err)
 	}

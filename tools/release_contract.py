@@ -36,13 +36,12 @@ from release_contract_helpers import (
     unique_identifier as _unique_identifier,
 )
 import release_host_requirements as host_contract
+from release_resource_capability import valid_apply_declaration
 BUNDLE_SCHEMA_VERSION = 2
 RELEASE_SCHEMA_VERSION = 2
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
 SOURCE_STRATEGIES = fields.SOURCE_STRATEGIES
-IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
-SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def write_bundle_manifest(
@@ -113,7 +112,7 @@ def write_release_index(
 ) -> dict[str, Any]:
     """Write an index that references authoritative bundle manifests by digest."""
     root = _real_directory(release_root, "release root")
-    if not IDENTIFIER.fullmatch(release_id):
+    if not fields.IDENTIFIER.fullmatch(release_id):
         raise ValueError(f"invalid release id {release_id!r}")
     entries = []
     for manifest_path in manifests:
@@ -176,10 +175,10 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
     if manifest["kind"] != BUNDLE_KIND:
         raise ValueError("invalid bundle kind")
     component = manifest["component"]
-    if not isinstance(component, str) or not IDENTIFIER.fullmatch(component):
+    if not isinstance(component, str) or not fields.IDENTIFIER.fullmatch(component):
         raise ValueError(f"invalid component id {component!r}")
     dependencies = manifest["dependencies"]
-    if not _sorted_unique_strings(dependencies, IDENTIFIER):
+    if not _sorted_unique_strings(dependencies, fields.IDENTIFIER):
         raise ValueError("dependencies must be sorted unique component ids")
     profile = manifest["runtime_profile"]
     _require_object(profile, "runtime profile")
@@ -290,7 +289,7 @@ def _validate_resources(
             raise ValueError(f"resource {identifier!r} has invalid legacy sources")
         _location(resource["target"], f"resource {identifier!r} target")
         observation = resource["observation"]
-        if resource["apply"] != "unimplemented" or observation not in {
+        if observation not in {
             "supported",
             "unimplemented",
         }:
@@ -331,10 +330,10 @@ def _validate_resources(
             raise ValueError(
                 f"resource {identifier!r} owned_json_pointers require supported JSON observation"
             )
+        if not valid_apply_declaration(component, resource):
+            raise ValueError(f"resource {identifier!r} overstates lifecycle support")
     if [resource["id"] for resource in resources] != sorted(seen_ids):
         raise ValueError("resources must be sorted by id")
-
-
 def _validate_payload_rows(rows: Any) -> None:
     if not isinstance(rows, list):
         raise ValueError("payload_files must be a list")
@@ -347,7 +346,7 @@ def _validate_payload_rows(rows: Any) -> None:
             raise ValueError("invalid payload mode")
         if type(row["size"]) is not int or row["size"] < 0:
             raise ValueError("invalid payload size")
-        if not isinstance(row["sha256"], str) or not SHA256.fullmatch(row["sha256"]):
+        if not isinstance(row["sha256"], str) or not fields.SHA256.fullmatch(row["sha256"]):
             raise ValueError("invalid payload digest")
     if paths != sorted(set(paths)):
         raise ValueError("payload_files must have sorted unique paths")
@@ -362,7 +361,7 @@ def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
         or index["kind"] != RELEASE_KIND
     ):
         raise ValueError("unsupported release contract")
-    if not isinstance(index["release_id"], str) or not IDENTIFIER.fullmatch(index["release_id"]):
+    if not isinstance(index["release_id"], str) or not fields.IDENTIFIER.fullmatch(index["release_id"]):
         raise ValueError("invalid release id")
     catalog = validate_catalog_entry(root, index["mcp_catalog"])
     entries = index["manifests"]
@@ -374,10 +373,10 @@ def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
         _require_object(entry, "release manifest entry")
         _require_fields(entry, fields.ENTRY_FIELDS, fields.ENTRY_FIELDS, "release manifest entry")
         component = entry["component"]
-        if not isinstance(component, str) or not IDENTIFIER.fullmatch(component):
+        if not isinstance(component, str) or not fields.IDENTIFIER.fullmatch(component):
             raise ValueError("invalid release component")
         relative = _portable_path(entry["path"], "release manifest path")
-        if not isinstance(entry["sha256"], str) or not SHA256.fullmatch(entry["sha256"]):
+        if not isinstance(entry["sha256"], str) or not fields.SHA256.fullmatch(entry["sha256"]):
             raise ValueError("invalid release manifest digest")
         _reject_symlink_segments(root, relative)
         path = root / Path(relative)

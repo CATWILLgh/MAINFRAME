@@ -21,6 +21,9 @@ func TestLoadDerivesOpenCodeMCPProjectionFromCatalog(t *testing.T) {
 		t.Fatalf("MCP projections = %#v", release.MCPProjections)
 	}
 	projection := release.MCPProjections[0]
+	if !projection.SupportsMaterialization() {
+		t.Fatal("validated OpenCode projection lacks materialization support")
+	}
 	if projection.ID != "opencode.mcp.context7" ||
 		projection.ComponentID != domain.ComponentOpenCode ||
 		projection.DesiredEntry != `{"type":"remote","url":"https://mcp.context7.com/mcp"}` {

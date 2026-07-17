@@ -116,6 +116,12 @@ func changedOwnedResources(
 		if !changed[resource.ID] {
 			continue
 		}
+		if !resource.SupportsApply() {
+			return nil, fmt.Errorf(
+				"configuration resource %q does not support apply",
+				resource.ID,
+			)
+		}
 		if resource.JSONMapOwnership == nil {
 			return nil, fmt.Errorf(
 				"configuration resource %q cannot be materialized",

@@ -292,7 +292,7 @@ func openCodePermissionResource(
 		ID: "opencode.permissions", ComponentID: domain.ComponentOpenCode,
 		Strategy: releasecontract.StrategyJSONKeyMerge, Target: target,
 		Observation: releasecontract.SupportSupported,
-		Apply:       releasecontract.SupportUnimplemented,
+		Apply:       releasecontract.SupportSupported,
 		JSONMapOwnership: &releasecontract.JSONMapOwnership{
 			MapPointer: "/permission", DesiredMap: `{"bash":"deny"}`,
 			RegistryTarget: registry, RegistrySchemaVersion: 1,

@@ -59,6 +59,13 @@ and trusted.
   and registry after-images without writing. Preparation preserves ordered
   user JSON, coalesces shared physical targets, binds existing files by digest,
   mode, device, and inode, and fails closed for every unsupported change.
+- The release contract now advertises Apply support only for OpenCode's
+  decision-rule map ownership shape. Python bundle validation and the Go loader
+  enforce the same boundary, preserve the capability in the loaded release,
+  and reject preparation when a changed resource did not advertise support.
+  MCP materialization support is derived from each exact adapter codec instead
+  of duplicated in bundle metadata; it covers emitted intents, while complete
+  adapter deselection remains outside reconciliation.
 - The executor can now apply a supported prepared transition, including
   registry-proven removal, as one recoverable journaled transaction across the
   configuration and ownership files.

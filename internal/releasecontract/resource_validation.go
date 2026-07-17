@@ -54,8 +54,7 @@ func validateResourceRecord(
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
 	}
-	if !validObservationSupport(strategy, observation, externalState != nil) ||
-		record.Apply != string(SupportUnimplemented) {
+	if !validObservationSupport(strategy, observation, externalState != nil) {
 		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
 	}
 	desiredLine, err := loadDesiredLine(bundleRoot, record.Source, strategy, observation)
@@ -68,13 +67,17 @@ func validateResourceRecord(
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
 	}
-	return Resource{
+	resource := Resource{
 		ID: record.ID, ComponentID: component, Strategy: strategy,
 		SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
-		Observation: observation, Apply: SupportUnimplemented, DesiredLine: desiredLine,
+		Observation: observation, Apply: SupportStatus(record.Apply), DesiredLine: desiredLine,
 		OwnedJSONFields: ownedFields, JSONMapOwnership: mapOwnership,
 		ExternalState: externalState,
-	}, nil
+	}
+	if !validApplyDeclaration(resource) {
+		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
+	}
+	return resource, nil
 }
 
 func validateResourceOwnership(
