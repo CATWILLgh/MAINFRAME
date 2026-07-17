@@ -144,6 +144,25 @@ func validClaudeMCPProjectionRecord() map[string]any {
 	}
 }
 
+func validCodexMCPProjectionRecord() map[string]any {
+	return map[string]any{
+		"id":          "codex.mcp.context7",
+		"codec":       "codex-user-http-v1",
+		"server":      "context7",
+		"profile":     "remote-keyless",
+		"target":      map[string]any{"root": "codex-config", "path": "config.toml"},
+		"map_pointer": "/mcp_servers",
+		"entry_key":   "context7",
+		"registry": map[string]any{
+			"target": map[string]any{
+				"root": "codex-config", "path": "mainframe/mcp-ownership.json",
+			},
+			"schema_version":  1,
+			"entries_pointer": "/servers",
+		},
+	}
+}
+
 func writeOpenCodeProjectionFixture(t *testing.T) (string, string) {
 	t.Helper()
 	root := writeFixture(t)
@@ -197,6 +216,26 @@ func writeClaudeProjectionFixture(t *testing.T) (string, string) {
 	entry["component"] = "claude-code"
 	entry["sha256"] = digest(t, manifestPath)
 	writeJSON(t, indexPath, index, 0o644)
+	return root, manifestPath
+}
+
+func writeCodexProjectionFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := writeFixture(t)
+	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+	for _, name := range []string{"config.json", "payload.txt"} {
+		if err := os.Remove(filepath.Join(filepath.Dir(manifestPath), name)); err != nil {
+			t.Fatalf("remove fixture payload: %v", err)
+		}
+	}
+	manifest := readObject(t, manifestPath)
+	manifest["install_units"] = []any{}
+	manifest["legacy_artifacts"] = []any{}
+	manifest["resources"] = []any{}
+	manifest["payload_files"] = []any{}
+	manifest["mcp_projections"] = []any{validCodexMCPProjectionRecord()}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	rewriteIndexDigest(t, root, manifestPath)
 	return root, manifestPath
 }
 

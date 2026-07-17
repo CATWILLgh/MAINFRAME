@@ -138,6 +138,26 @@ def _resources() -> list[dict]:
     ]
 
 
+def _mcp_projections() -> list[dict]:
+    return [{
+        "id": "codex.mcp.context7",
+        "codec": "codex-user-http-v1",
+        "server": "context7",
+        "profile": "remote-keyless",
+        "target": {"root": "codex-config", "path": "config.toml"},
+        "map_pointer": "/mcp_servers",
+        "entry_key": "context7",
+        "registry": {
+            "target": {
+                "root": "codex-config",
+                "path": "mainframe/mcp-ownership.json",
+            },
+            "schema_version": 1,
+            "entries_pointer": "/servers",
+        },
+    }]
+
+
 def _validate_sources(root: Path) -> None:
     for relative in (
         "core/skills",
@@ -229,6 +249,7 @@ def _stage_bundle(
         install_units=_install_units(root, skills, agents),
         resources=_resources(),
         runtime_profile=asdict(profile),
+        mcp_projections=_mcp_projections(),
     )
     release_contract.validate_bundle(staged)
 

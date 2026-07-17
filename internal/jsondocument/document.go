@@ -29,6 +29,10 @@ type Document struct {
 	raw   []byte
 }
 
+func (pointer Pointer) Tokens() []string {
+	return append([]string(nil), pointer.tokens...)
+}
+
 func (document Document) Canonical() string {
 	canonical, err := json.Marshal(document.value)
 	if err != nil {

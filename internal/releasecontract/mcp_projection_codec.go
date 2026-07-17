@@ -11,6 +11,7 @@ type mcpProjectionCodecContract struct {
 	mapPointer      string
 	registryTarget  domain.Location
 	registryPointer string
+	documentFormat  MCPProjectionDocumentFormat
 	entryType       string
 }
 
@@ -29,7 +30,20 @@ func mcpProjectionContract(
 				Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json",
 			},
 			registryPointer: "/servers",
+			documentFormat:  MCPProjectionDocumentJSON,
 			entryType:       "http",
+		}, true
+	case component == domain.ComponentCodex && codec == MCPProjectionCodexUserHTTP:
+		return mcpProjectionCodecContract{
+			target: domain.Location{
+				Root: domain.RootCodexConfig, Path: "config.toml",
+			},
+			mapPointer: "/mcp_servers",
+			registryTarget: domain.Location{
+				Root: domain.RootCodexConfig, Path: "mainframe/mcp-ownership.json",
+			},
+			registryPointer: "/servers",
+			documentFormat:  MCPProjectionDocumentTOML,
 		}, true
 	case component == domain.ComponentOpenCode && codec == MCPProjectionOpenCodeRemote:
 		return mcpProjectionCodecContract{
@@ -42,6 +56,7 @@ func mcpProjectionContract(
 				Path: "opencode.json.mainframe-mcp.json",
 			},
 			registryPointer: "/servers",
+			documentFormat:  MCPProjectionDocumentJSON,
 			entryType:       "remote",
 		}, true
 	default:
@@ -50,9 +65,10 @@ func mcpProjectionContract(
 }
 
 func encodeMCPProjectionEntry(contract mcpProjectionCodecContract, endpoint string) (string, error) {
-	desired, err := json.Marshal(map[string]string{
-		"type": contract.entryType,
-		"url":  endpoint,
-	})
+	entry := map[string]string{"url": endpoint}
+	if contract.entryType != "" {
+		entry["type"] = contract.entryType
+	}
+	desired, err := json.Marshal(entry)
 	return string(desired), err
 }

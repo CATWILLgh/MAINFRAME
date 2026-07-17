@@ -47,6 +47,83 @@ func TestLoadDerivesClaudeMCPProjectionFromCatalog(t *testing.T) {
 	}
 }
 
+func TestLoadDerivesCodexMCPProjectionFromCatalog(t *testing.T) {
+	root, _ := writeCodexProjectionFixture(t)
+
+	release, err := releasecontract.Load(root)
+	if err != nil {
+		t.Fatalf("load release: %v", err)
+	}
+	if len(release.MCPProjections) != 1 {
+		t.Fatalf("MCP projections = %#v", release.MCPProjections)
+	}
+	projection := release.MCPProjections[0]
+	if projection.ID != "codex.mcp.context7" ||
+		projection.ComponentID != domain.ComponentCodex ||
+		projection.Target != (domain.Location{Root: domain.RootCodexConfig, Path: "config.toml"}) ||
+		projection.DesiredEntry != `{"url":"https://mcp.context7.com/mcp"}` {
+		t.Fatalf("MCP projection = %#v", projection)
+	}
+}
+
+func TestLoadRejectsInvalidCodexMCPProjectionContract(t *testing.T) {
+	tests := map[string]func(map[string]any){
+		"OpenCode codec": func(record map[string]any) {
+			record["codec"] = "opencode-remote-v1"
+		},
+		"foreign target root": func(record map[string]any) {
+			record["target"].(map[string]any)["root"] = "home"
+		},
+		"wrong target path": func(record map[string]any) {
+			record["target"].(map[string]any)["path"] = "settings.toml"
+		},
+		"wrong pointer": func(record map[string]any) {
+			record["map_pointer"] = "/mcp"
+		},
+		"foreign registry": func(record map[string]any) {
+			record["registry"].(map[string]any)["target"].(map[string]any)["root"] = "home"
+		},
+		"keyed profile": func(record map[string]any) {
+			record["profile"] = "remote-api-key"
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			root, manifestPath := writeCodexProjectionFixture(t)
+			manifest := readObject(t, manifestPath)
+			record := manifest["mcp_projections"].([]any)[0].(map[string]any)
+			mutate(record)
+			writeJSON(t, manifestPath, manifest, 0o644)
+			rewriteIndexDigest(t, root, manifestPath)
+			if _, err := releasecontract.Load(root); err == nil {
+				t.Fatal("invalid Codex MCP projection was accepted")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsMixedDocumentFormatsAtOneSemanticTarget(t *testing.T) {
+	root, manifestPath := writeCodexProjectionFixture(t)
+	manifest := readObject(t, manifestPath)
+	configPath := filepath.Join(root, "bundles/codex/config.json")
+	writeFile(t, configPath, `{"unrelated":true}`+"\n", 0o644)
+	manifest["resources"] = []any{map[string]any{
+		"id": "codex.config-json", "strategy": "json-key-merge",
+		"source": "config.json",
+		"target": map[string]any{"root": "codex-config", "path": "config.toml"},
+		"observation": "supported", "apply": "unimplemented",
+		"owned_json_pointers": []any{"/unrelated"},
+	}}
+	manifest["payload_files"] = []any{payloadRow(t, configPath, "config.json")}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	rewriteIndexDigest(t, root, manifestPath)
+
+	if _, err := releasecontract.Load(root); err == nil ||
+		!strings.Contains(err.Error(), "format") {
+		t.Fatalf("mixed document format error = %v", err)
+	}
+}
+
 func TestLoadRejectsInvalidClaudeMCPProjectionContract(t *testing.T) {
 	tests := map[string]func(map[string]any){
 		"OpenCode codec": func(record map[string]any) {

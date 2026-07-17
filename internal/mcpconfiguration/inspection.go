@@ -24,13 +24,14 @@ type Inspection struct {
 }
 
 type projectionSnapshot struct {
-	existingPresent bool
-	existingRaw     string
-	ownedPresent    bool
-	ownedTombstone  bool
-	ownedRaw        string
-	configProblem   string
-	registryProblem string
+	existingPresent    bool
+	existingComparable bool
+	existingRaw        string
+	ownedPresent       bool
+	ownedTombstone     bool
+	ownedRaw           string
+	configProblem      string
+	registryProblem    string
 }
 
 func Inspect(
@@ -60,30 +61,17 @@ func inspectProjection(
 	projection releasecontract.MCPProjection,
 	host Host,
 ) projectionSnapshot {
-	config, configMissing, configProblem := inspectDocument(projection.Target, host)
+	existing := inspectTargetEntry(projection, host)
 	registry, registryMissing, registryProblem := inspectDocument(
 		projection.RegistryTarget,
 		host,
 	)
 	snapshot := projectionSnapshot{
-		configProblem:   configProblem,
-		registryProblem: registryProblem,
-	}
-	if !configMissing && configProblem == "" {
-		pointer, err := jsondocument.ParsePointer(
-			projection.MapPointer + "/" + projection.EntryKey,
-		)
-		if err != nil {
-			snapshot.configProblem = "MCP projection pointer is invalid"
-			return snapshot
-		}
-		raw, status := config.Lookup(pointer)
-		switch status {
-		case jsondocument.Found:
-			snapshot.existingPresent, snapshot.existingRaw = true, raw
-		case jsondocument.Incompatible:
-			snapshot.configProblem = "configuration MCP map is not an object"
-		}
+		existingPresent:    existing.present,
+		existingComparable: existing.comparable,
+		existingRaw:        existing.raw,
+		configProblem:      existing.problem,
+		registryProblem:    registryProblem,
 	}
 	if registryMissing || registryProblem != "" {
 		return snapshot
@@ -97,6 +85,39 @@ func inspectProjection(
 	snapshot.ownedTombstone = tombstone
 	snapshot.ownedPresent = present
 	return snapshot
+}
+
+type targetEntryObservation struct {
+	present    bool
+	comparable bool
+	raw        string
+	problem    string
+}
+
+func inspectTargetEntry(
+	projection releasecontract.MCPProjection,
+	host Host,
+) targetEntryObservation {
+	entry, err := host.Inspect(projection.Target, true)
+	if errors.Is(err, fs.ErrNotExist) {
+		return targetEntryObservation{comparable: true}
+	}
+	if err != nil {
+		return targetEntryObservation{problem: "configuration inspection failed"}
+	}
+	if entry.Kind == hostfs.EntrySymlink {
+		return targetEntryObservation{problem: "configuration target is a symbolic link"}
+	}
+	if entry.Kind != hostfs.EntryRegular {
+		return targetEntryObservation{problem: "configuration target is not a regular file"}
+	}
+	pointer, err := jsondocument.ParsePointer(
+		projection.MapPointer + "/" + projection.EntryKey,
+	)
+	if err != nil {
+		return targetEntryObservation{problem: "MCP projection pointer is invalid"}
+	}
+	return lookupTargetEntry(projection.TargetDocumentFormat(), entry.Content, pointer)
 }
 
 func inspectDocument(

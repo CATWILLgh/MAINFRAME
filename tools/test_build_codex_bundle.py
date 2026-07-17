@@ -154,6 +154,23 @@ def test_build_materializes_complete_self_contained_codex_bundle():
             "external_state": {"kind": "codex-hook-trust-v1"},
         },
     }
+    assert manifest["mcp_projections"] == [{
+        "id": "codex.mcp.context7",
+        "codec": "codex-user-http-v1",
+        "server": "context7",
+        "profile": "remote-keyless",
+        "target": {"root": "codex-config", "path": "config.toml"},
+        "map_pointer": "/mcp_servers",
+        "entry_key": "context7",
+        "registry": {
+            "target": {
+                "root": "codex-config",
+                "path": "mainframe/mcp-ownership.json",
+            },
+            "schema_version": 1,
+            "entries_pointer": "/servers",
+        },
+    }]
 
 
 def test_bundle_gate_tree_has_no_claude_runtime_paths():

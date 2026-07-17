@@ -161,6 +161,53 @@ func TestBuildPreviewServicePlansSelectedClaudeMCP(t *testing.T) {
 	}
 }
 
+func TestBuildPreviewServicePlansSelectedCodexMCP(t *testing.T) {
+	home := t.TempDir()
+	codexRoot := filepath.Join(home, ".codex")
+	if err := os.MkdirAll(codexRoot, 0o700); err != nil {
+		t.Fatalf("mkdir Codex root: %v", err)
+	}
+	writePreviewFile(t, filepath.Join(codexRoot, "config.toml"), "[mcp_servers]\n")
+	t.Setenv("HOME", home)
+	catalogPayload, err := os.ReadFile("../../internal/mcpcatalog/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := mcpcatalog.Parse(catalogPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := buildPreviewServiceFrom(
+		t.TempDir(),
+		releasecontract.Release{
+			ID:             "test-release",
+			Model:          previewOwnershipModel(t),
+			MCPCatalog:     catalog,
+			MCPProjections: []releasecontract.MCPProjection{previewCodexMCPProjection()},
+		},
+	)
+	if err != nil {
+		t.Fatalf("build preview service: %v", err)
+	}
+	preview, err := service.Preview(lifecycle.PreviewRequest{
+		Components: []domain.ComponentID{domain.ComponentCodex},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentCodex},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("preview selected MCP: %v", err)
+	}
+	if preview.MCP.Blocking || len(preview.MCP.Intents) != 1 ||
+		preview.MCP.Intents[0].Kind != mcpconfiguration.IntentAdd ||
+		preview.MCP.Intents[0].Target != (domain.Location{
+			Root: domain.RootCodexConfig, Path: "config.toml",
+		}) {
+		t.Fatalf("Codex MCP preview = %#v", preview.MCP)
+	}
+}
+
 func writePreviewFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -251,5 +298,28 @@ func previewClaudeMCPProjection() releasecontract.MCPProjection {
 		RegistrySchemaVersion:  1,
 		RegistryEntriesPointer: "/servers",
 		DesiredEntry:           `{"type":"http","url":"https://mcp.context7.com/mcp"}`,
+	}
+}
+
+func previewCodexMCPProjection() releasecontract.MCPProjection {
+	return releasecontract.MCPProjection{
+		ID:          "codex.mcp.context7",
+		ComponentID: domain.ComponentCodex,
+		Codec:       releasecontract.MCPProjectionCodexUserHTTP,
+		ServerID:    "context7",
+		ProfileID:   "remote-keyless",
+		Target: domain.Location{
+			Root: domain.RootCodexConfig,
+			Path: "config.toml",
+		},
+		MapPointer: "/mcp_servers",
+		EntryKey:   "context7",
+		RegistryTarget: domain.Location{
+			Root: domain.RootCodexConfig,
+			Path: "mainframe/mcp-ownership.json",
+		},
+		RegistrySchemaVersion:  1,
+		RegistryEntriesPointer: "/servers",
+		DesiredEntry:           `{"url":"https://mcp.context7.com/mcp"}`,
 	}
 }

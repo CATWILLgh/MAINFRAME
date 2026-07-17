@@ -149,5 +149,5 @@ func validateGlobal(manifests []bundleManifest) error {
 			}
 		}
 	}
-	return validateGlobalJSONOwnership(manifests)
+	return validateGlobalStructuredOwnership(manifests)
 }

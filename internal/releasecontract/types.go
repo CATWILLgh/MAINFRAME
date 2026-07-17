@@ -101,7 +101,15 @@ type MCPProjectionCodec string
 
 const (
 	MCPProjectionClaudeUserHTTP MCPProjectionCodec = "claude-user-http-v1"
+	MCPProjectionCodexUserHTTP  MCPProjectionCodec = "codex-user-http-v1"
 	MCPProjectionOpenCodeRemote MCPProjectionCodec = "opencode-remote-v1"
+)
+
+type MCPProjectionDocumentFormat string
+
+const (
+	MCPProjectionDocumentJSON MCPProjectionDocumentFormat = "json"
+	MCPProjectionDocumentTOML MCPProjectionDocumentFormat = "toml"
 )
 
 type MCPProjection struct {
@@ -117,6 +125,14 @@ type MCPProjection struct {
 	RegistrySchemaVersion  int
 	RegistryEntriesPointer string
 	DesiredEntry           string
+}
+
+func (projection MCPProjection) TargetDocumentFormat() MCPProjectionDocumentFormat {
+	contract, exists := mcpProjectionContract(projection.ComponentID, projection.Codec)
+	if !exists {
+		return ""
+	}
+	return contract.documentFormat
 }
 
 type releaseIndex struct {

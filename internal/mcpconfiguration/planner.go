@@ -1,9 +1,7 @@
 package mcpconfiguration
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"sort"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
@@ -123,7 +121,8 @@ func reconcile(
 		return Intent{}, false
 	}
 	if snapshot.ownedPresent {
-		if !snapshot.existingPresent || !jsonEqual(snapshot.existingRaw, snapshot.ownedRaw) {
+		if !snapshot.existingPresent || !snapshot.existingComparable ||
+			!jsonEqual(snapshot.existingRaw, snapshot.ownedRaw) {
 			return newIntent(projection, IntentRelinquish, "managed entry was changed or removed by the user"), true
 		}
 		if !desired {
@@ -149,12 +148,7 @@ func jsonEqual(left, right string) bool {
 	if leftErr != nil || rightErr != nil {
 		return false
 	}
-	var leftValue, rightValue any
-	if json.Unmarshal([]byte(leftDocument.Canonical()), &leftValue) != nil ||
-		json.Unmarshal([]byte(rightDocument.Canonical()), &rightValue) != nil {
-		return false
-	}
-	return reflect.DeepEqual(leftValue, rightValue)
+	return leftDocument.Canonical() == rightDocument.Canonical()
 }
 
 func newIntent(

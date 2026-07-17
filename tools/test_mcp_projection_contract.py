@@ -60,6 +60,26 @@ def _claude_projection():
     }
 
 
+def _codex_projection():
+    return {
+        "id": "codex.mcp.context7",
+        "codec": "codex-user-http-v1",
+        "server": "context7",
+        "profile": "remote-keyless",
+        "target": {"root": "codex-config", "path": "config.toml"},
+        "map_pointer": "/mcp_servers",
+        "entry_key": "context7",
+        "registry": {
+            "target": {
+                "root": "codex-config",
+                "path": "mainframe/mcp-ownership.json",
+            },
+            "schema_version": 1,
+            "entries_pointer": "/servers",
+        },
+    }
+
+
 def test_projection_is_strict_and_component_local():
     release_mcp_projection.validate_manifest_projections(
         "opencode", [_projection()], parse_location=release_contract._location
@@ -156,6 +176,36 @@ def test_claude_projection_is_exact_and_uses_http_dialect():
             raise AssertionError(f"invalid Claude projection was accepted: {path}")
 
 
+def test_codex_projection_is_exact_and_uses_toml_http_dialect():
+    projection = _codex_projection()
+    release_mcp_projection.validate_manifest_projections(
+        "codex", [projection], parse_location=release_contract._location
+    )
+    assert release_mcp_projection.desired_entry(
+        projection, "codex", _catalog()
+    ) == {"url": "https://mcp.context7.com/mcp"}
+    for path, value in (
+        (("codec",), "opencode-remote-v1"),
+        (("target", "root"), "home"),
+        (("target", "path"), "settings.toml"),
+        (("map_pointer",), "/mcp"),
+        (("registry", "target", "path"), "mcp-ownership.json"),
+    ):
+        invalid = copy.deepcopy(projection)
+        target = invalid
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        try:
+            release_mcp_projection.validate_manifest_projections(
+                "codex", [invalid], parse_location=release_contract._location
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid Codex projection was accepted: {path}")
+
+
 def test_release_rejects_duplicate_claim_and_registry_overlap():
     projection = _projection()
     manifest = {
@@ -243,6 +293,34 @@ def test_release_allows_distinct_servers_to_share_registry():
         parse_location=release_contract._location,
         locations_overlap=release_contract._locations_overlap,
     )
+
+
+def test_release_rejects_json_and_toml_claims_on_one_target():
+    projection = _codex_projection()
+    manifest = {
+        "component": "codex",
+        "dependencies": [],
+        "install_units": [],
+        "legacy_artifacts": [],
+        "resources": [{
+            "id": "codex.config-json",
+            "strategy": "json-key-merge",
+            "target": projection["target"],
+            "owned_json_pointers": ["/unrelated"],
+        }],
+        "mcp_projections": [projection],
+    }
+    try:
+        release_mcp_projection.validate_release_projections(
+            [manifest],
+            _catalog(),
+            parse_location=release_contract._location,
+            locations_overlap=release_contract._locations_overlap,
+        )
+    except ValueError as error:
+        assert "format" in str(error)
+    else:
+        raise AssertionError("mixed JSON and TOML target was accepted")
 
 
 def _run_all():

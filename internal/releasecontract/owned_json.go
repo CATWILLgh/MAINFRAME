@@ -101,7 +101,7 @@ func payloadRecord(rows []payloadFile, source string) (payloadFile, bool) {
 	return payloadFile{}, false
 }
 
-func validateGlobalJSONOwnership(manifests []bundleManifest) error {
+func validateGlobalStructuredOwnership(manifests []bundleManifest) error {
 	installTargets := make([]domain.Location, 0)
 	resourceTargets := make([]resourceTarget, 0)
 	for _, manifest := range manifests {
@@ -119,6 +119,7 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 			}
 			resourceTargets = append(resourceTargets, resourceTarget{
 				id: resource.ID, strategy: ResourceStrategy(resource.Strategy), target: target,
+				format: resourceDocumentFormat(ResourceStrategy(resource.Strategy)),
 			})
 		}
 		for _, projection := range manifest.MCPProjections {
@@ -126,12 +127,16 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 			if err != nil {
 				return err
 			}
+			contract, _ := mcpProjectionContract(
+				domain.ComponentID(manifest.Component), MCPProjectionCodec(projection.Codec),
+			)
 			resourceTargets = append(resourceTargets, resourceTarget{
 				id: projection.ID, strategy: StrategyJSONKeyMerge, target: target,
+				format: contract.documentFormat,
 			})
 		}
 	}
-	claims := make(map[domain.Location][]jsonClaim)
+	claims := make(map[domain.Location][]documentClaim)
 	for _, manifest := range manifests {
 		for _, resource := range manifest.Resources {
 			if resource.Strategy != string(StrategyJSONKeyMerge) {
@@ -144,7 +149,9 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 			if err := rejectInstallOverlap(target, installTargets); err != nil {
 				return fmt.Errorf("resource %q: %w", resource.ID, err)
 			}
-			if err := rejectResourceOverlap(resource.ID, target, resourceTargets); err != nil {
+			if err := rejectResourceOverlap(
+				resource.ID, target, MCPProjectionDocumentJSON, resourceTargets,
+			); err != nil {
 				return fmt.Errorf("resource %q: %w", resource.ID, err)
 			}
 			for _, raw := range resource.OwnedJSONPointers.Values {
@@ -158,7 +165,7 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 				if err := rejectClaimOverlap(raw, pointer, claims[target]); err != nil {
 					return fmt.Errorf("resource %q: %w", resource.ID, err)
 				}
-				claims[target] = append(claims[target], jsonClaim{raw: raw, pointer: pointer})
+				claims[target] = append(claims[target], documentClaim{raw: raw, pointer: pointer})
 			}
 			if resource.Ownership.Present {
 				raw := resource.Ownership.Value.MapPointer
@@ -172,7 +179,7 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 				if err := rejectClaimOverlap(raw, pointer, claims[target]); err != nil {
 					return fmt.Errorf("resource %q: %w", resource.ID, err)
 				}
-				claims[target] = append(claims[target], jsonClaim{raw: raw, pointer: pointer})
+				claims[target] = append(claims[target], documentClaim{raw: raw, pointer: pointer})
 			}
 		}
 		for _, projection := range manifest.MCPProjections {
@@ -183,7 +190,12 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 			if err := rejectInstallOverlap(target, installTargets); err != nil {
 				return fmt.Errorf("MCP projection %q: %w", projection.ID, err)
 			}
-			if err := rejectResourceOverlap(projection.ID, target, resourceTargets); err != nil {
+			contract, _ := mcpProjectionContract(
+				domain.ComponentID(manifest.Component), MCPProjectionCodec(projection.Codec),
+			)
+			if err := rejectResourceOverlap(
+				projection.ID, target, contract.documentFormat, resourceTargets,
+			); err != nil {
 				return fmt.Errorf("MCP projection %q: %w", projection.ID, err)
 			}
 			raw := projection.MapPointer + "/" + projection.EntryKey
@@ -194,7 +206,7 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 			if err := rejectClaimOverlap(raw, pointer, claims[target]); err != nil {
 				return fmt.Errorf("MCP projection %q: %w", projection.ID, err)
 			}
-			claims[target] = append(claims[target], jsonClaim{raw: raw, pointer: pointer})
+			claims[target] = append(claims[target], documentClaim{raw: raw, pointer: pointer})
 		}
 	}
 	return validateGlobalOwnershipRegistries(manifests, installTargets, resourceTargets)
@@ -204,9 +216,10 @@ type resourceTarget struct {
 	id       string
 	strategy ResourceStrategy
 	target   domain.Location
+	format   MCPProjectionDocumentFormat
 }
 
-type jsonClaim struct {
+type documentClaim struct {
 	raw     string
 	pointer jsondocument.Pointer
 }
@@ -214,7 +227,7 @@ type jsonClaim struct {
 func rejectInstallOverlap(target domain.Location, installTargets []domain.Location) error {
 	for _, installTarget := range installTargets {
 		if locationsOverlap(target, installTarget) {
-			return fmt.Errorf("JSON target overlaps install target")
+			return fmt.Errorf("structured target overlaps install target")
 		}
 	}
 	return nil
@@ -223,7 +236,7 @@ func rejectInstallOverlap(target domain.Location, installTargets []domain.Locati
 func rejectClaimOverlap(
 	raw string,
 	pointer jsondocument.Pointer,
-	claims []jsonClaim,
+	claims []documentClaim,
 ) error {
 	for _, claim := range claims {
 		if jsondocument.Overlaps(claim.pointer, pointer) {
@@ -233,14 +246,22 @@ func rejectClaimOverlap(
 	return nil
 }
 
-func rejectResourceOverlap(id string, target domain.Location, resources []resourceTarget) error {
+func rejectResourceOverlap(
+	id string,
+	target domain.Location,
+	format MCPProjectionDocumentFormat,
+	resources []resourceTarget,
+) error {
 	for _, other := range resources {
 		if other.id == id || other.strategy == StrategyManualAction {
 			continue
 		}
 		if other.strategy == StrategyJSONKeyMerge {
+			if other.target == target && other.format != format {
+				return fmt.Errorf("structured target document formats disagree")
+			}
 			if other.target != target && locationsOverlap(target, other.target) {
-				return fmt.Errorf("JSON resource targets overlap")
+				return fmt.Errorf("structured resource targets overlap")
 			}
 			continue
 		}
@@ -250,9 +271,16 @@ func rejectResourceOverlap(id string, target domain.Location, resources []resour
 		if other.strategy == StrategyEnsureDir && locationAncestor(other.target, target) {
 			continue
 		}
-		return fmt.Errorf("JSON target overlaps non-JSON resource target")
+		return fmt.Errorf("structured target overlaps non-merge resource target")
 	}
 	return nil
+}
+
+func resourceDocumentFormat(strategy ResourceStrategy) MCPProjectionDocumentFormat {
+	if strategy == StrategyJSONKeyMerge {
+		return MCPProjectionDocumentJSON
+	}
+	return ""
 }
 
 func locationAncestor(parent, child domain.Location) bool {

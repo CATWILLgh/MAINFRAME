@@ -27,7 +27,19 @@ CODEC_CONTRACTS = {
             "mainframe/mcp-ownership.json",
         ),
         "registry_pointer": "/servers",
+        "target_format": "json",
         "entry_type": "http",
+    },
+    ("codex", "codex-user-http-v1"): {
+        "target": ("codex-config", "config.toml"),
+        "map_pointer": "/mcp_servers",
+        "registry_target": (
+            "codex-config",
+            "mainframe/mcp-ownership.json",
+        ),
+        "registry_pointer": "/servers",
+        "target_format": "toml",
+        "entry_type": "",
     },
     ("opencode", "opencode-remote-v1"): {
         "target": ("opencode-config", "opencode.json"),
@@ -37,6 +49,7 @@ CODEC_CONTRACTS = {
             "opencode.json.mainframe-mcp.json",
         ),
         "registry_pointer": "/servers",
+        "target_format": "json",
         "entry_type": "remote",
     },
 }
@@ -77,6 +90,12 @@ def validate_release_projections(
     )
     projection_ids: set[str] = set()
     projection_registries: list[tuple[str, str]] = []
+    target_formats = {
+        parse_location(resource["target"], "JSON resource target"): "json"
+        for manifest in manifests
+        for resource in manifest["resources"]
+        if resource["strategy"] == "json-key-merge"
+    }
     for manifest in manifests:
         for projection in manifest["mcp_projections"]:
             identifier = projection["id"]
@@ -85,6 +104,13 @@ def validate_release_projections(
             projection_ids.add(identifier)
             desired_entry(projection, manifest["component"], catalog)
             target = parse_location(projection["target"], "MCP projection target")
+            projection_format = _codec_contract(
+                manifest["component"], projection["codec"]
+            )["target_format"]
+            existing_format = target_formats.get(target)
+            if existing_format is not None and existing_format != projection_format:
+                raise ValueError("structured target document formats disagree")
+            target_formats[target] = projection_format
             if any(locations_overlap(target, item) for item in install_targets):
                 raise ValueError("MCP projection overlaps install target")
             if any(locations_overlap(target, item) for item in registries):
@@ -200,7 +226,10 @@ def desired_entry(
         or not profile.get("endpoint")
     ):
         raise ValueError("MCP profile is incompatible with projection codec")
-    return {"type": contract["entry_type"], "url": profile["endpoint"]}
+    entry = {"url": profile["endpoint"]}
+    if contract["entry_type"]:
+        entry["type"] = contract["entry_type"]
+    return entry
 
 
 def _validate_projection(
