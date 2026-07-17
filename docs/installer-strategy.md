@@ -161,8 +161,9 @@ secret reference is proven. Optional GitHub stars are fetched asynchronously,
 kept only in memory, and discarded when stale or unavailable.
 
 The second read-only milestone gives keyless Context7 exact OpenCode, Claude
-Code, and Codex projections. Bundle schema version 2 links each projection to the catalog
-server and profile instead of repeating the endpoint or authentication data.
+Code, Codex, and Antigravity 2.x projections. Bundle schema version 2 links each
+projection to the catalog server and profile instead of repeating the endpoint
+or authentication data.
 The TUI can therefore classify each adapter-local Context7 entry as an
 addition, update, managed removal, user-owned conflict, relinquished ownership,
 or already ready.
@@ -176,9 +177,11 @@ access to the home root. Its ownership registry lives separately under
 `mcp_servers.context7` in its own global `config.toml` through a strict TOML
 codec and keeps its ownership registry under its own `mainframe/` directory.
 The codec rejects invalid or redefined TOML and never treats temporal or
-non-finite TOML values as equivalent JSON ownership state. Antigravity remains
-descriptive until its own configuration codec and root satisfy the same
-contract.
+non-finite TOML values as equivalent JSON ownership state. Antigravity owns
+only `mcpServers.context7` in its canonical global
+`~/.gemini/config/mcp_config.json` and emits the adapter-native `serverUrl`
+field. Its ownership registry remains under Antigravity's separate data root,
+not in another adapter or the runtime-consumed MCP file.
 
 Every loaded projection is revalidated before host inspection. An unsafe state
 in one selected adapter makes the combined plan blocking without hiding valid
@@ -212,6 +215,14 @@ preferences, projects, and sibling MCP entries while using Claude's explicit
 their captured identity, and relinquishment changes only the registry. The
 home root remains available only through the exact release-validated
 `.claude.json` projection; it does not become a general Claude Code target.
+
+Antigravity Context7 preparation owns only the exact canonical
+`~/.gemini/config/mcp_config.json` `mcpServers.<server>` entry and the registry
+under `~/.gemini/antigravity/mainframe/`. The ordered-JSON materializer
+preserves unrelated servers and unknown top-level fields while emitting only
+the canonical `serverUrl` dialect. It never writes the legacy
+`~/.gemini/antigravity/mcp_config.json`; detection and migration of that older
+location is an explicit prerequisite before Antigravity MCP Apply.
 
 OpenCode Context7 preparation uses the same ordered-JSON boundary as its
 permission ownership without sharing ownership between them. When both change

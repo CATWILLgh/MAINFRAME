@@ -17,11 +17,10 @@ The read-only observer can safely classify seed-if-absent files, required or
 optional shell lines, directories, the three Claude Code permission arrays,
 OpenCode permission actions through their separate ownership registry, and
 Codex global user-hook trust through Codex's own `hooks/list` interface.
-OpenCode, Claude Code, and Codex MCP now have separate release-owned
+OpenCode, Claude Code, Codex, and Antigravity MCP now have separate release-owned
 projections, read-only ownership plans, and exact private preparation paths.
-All three can prepare adapter-local file mutations without writing, while none
+All four can prepare adapter-local file mutations without writing, while none
 of the MCP paths can be applied from the CLI or TUI.
-Antigravity does not yet have an adapter-local MCP projection codec.
 
 ## Why it is a problem
 
@@ -89,6 +88,15 @@ and trusted.
   after-images for add, update, removal, relinquishment, and several servers.
   Unrelated preferences and sibling adapters remain isolated, and Apply stays
   unavailable.
+- Antigravity keyless Context7 now has an exact schema-v2 projection for the
+  canonical global `~/.gemini/config/mcp_config.json`
+  `mcpServers.context7` entry. It derives the adapter-native `serverUrl` value
+  from the verified catalog, keeps ownership under Antigravity's own data root,
+  and privately prepares add, update, removal, relinquishment, and ready states
+  without touching sibling servers or unknown fields. Legacy-path detection and
+  migration remain a prerequisite tracked in
+  [#cd0cdc27](cd0cdc27-detect-legacy-antigravity-mcp-config.md); Apply stays
+  unavailable.
 - Codex keyless Context7 now has an exact adapter-local projection for
   `config.toml` `mcp_servers.context7`. A strict TOML parser observes only that
   selected table, its registry remains JSON under the Codex configuration
@@ -107,15 +115,15 @@ and trusted.
   [#38b9fb12](38b9fb12-compose-codex-mcp-managed-region.md).
 - Combined MCP plans retain every selected adapter's intent while remaining
   blocking if any adapter conflicts. Unselected sibling state is ignored.
-- Apply remains unavailable. Antigravity needs a verified
-  local MCP target contract, and other strategies still need safe deselection
-  semantics.
+- Apply remains unavailable. Antigravity legacy-path migration and other
+  strategies still need safe deselection semantics.
 
 ## Acceptance criteria
 
 - Every configuration behavior currently performed by the legacy installer or an adapter generator is represented once in the release contract or explicitly classified as an external prerequisite.
 - JSON observation reports drift only for MAINFRAME-owned keys and preserves unrelated user content.
-- Claude Code MCP, Codex MCP, OpenCode MCP, and OpenCode permission ownership can be planned independently.
+- Claude Code MCP, Codex MCP, OpenCode MCP, Antigravity MCP, and OpenCode
+  permission ownership can be planned independently.
 - Codex trust is never reported ready from file presence alone.
 - Tier 1 tests cover add, update, remove, user override, malformed input, and adapter isolation for each supported strategy.
 
@@ -137,6 +145,7 @@ and trusted.
 - `internal/mcpconfiguration/inspection.go`
 - `internal/mcpconfiguration/planner.go`
 - `internal/mcpconfiguration/json_config.go`
+- `adapters/antigravity-2/build_bundle.py`
 - `internal/releasecontract/mcp_projection.go`
 - `cmd/mainframe/inspection_cache.go`
 - `adapters/claude-code/build_bundle.py`
