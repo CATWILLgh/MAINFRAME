@@ -125,6 +125,25 @@ func validMCPProjectionRecord() map[string]any {
 	}
 }
 
+func validClaudeMCPProjectionRecord() map[string]any {
+	return map[string]any{
+		"id":          "claude-code.mcp.context7",
+		"codec":       "claude-user-http-v1",
+		"server":      "context7",
+		"profile":     "remote-keyless",
+		"target":      map[string]any{"root": "home", "path": ".claude.json"},
+		"map_pointer": "/mcpServers",
+		"entry_key":   "context7",
+		"registry": map[string]any{
+			"target": map[string]any{
+				"root": "claude-config", "path": "mainframe/mcp-ownership.json",
+			},
+			"schema_version":  1,
+			"entries_pointer": "/servers",
+		},
+	}
+}
+
 func writeOpenCodeProjectionFixture(t *testing.T) (string, string) {
 	t.Helper()
 	root := writeFixture(t)
@@ -149,6 +168,33 @@ func writeOpenCodeProjectionFixture(t *testing.T) (string, string) {
 	index := readObject(t, indexPath)
 	entry := index["manifests"].([]any)[0].(map[string]any)
 	entry["component"] = "opencode"
+	entry["sha256"] = digest(t, manifestPath)
+	writeJSON(t, indexPath, index, 0o644)
+	return root, manifestPath
+}
+
+func writeClaudeProjectionFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := writeFixture(t)
+	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+	for _, name := range []string{"config.json", "payload.txt"} {
+		if err := os.Remove(filepath.Join(filepath.Dir(manifestPath), name)); err != nil {
+			t.Fatalf("remove fixture payload: %v", err)
+		}
+	}
+	manifest := readObject(t, manifestPath)
+	manifest["component"] = "claude-code"
+	manifest["runtime_profile"] = map[string]string{"config_root": "~/.claude"}
+	manifest["install_units"] = []any{}
+	manifest["legacy_artifacts"] = []any{}
+	manifest["resources"] = []any{}
+	manifest["payload_files"] = []any{}
+	manifest["mcp_projections"] = []any{validClaudeMCPProjectionRecord()}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	indexPath := filepath.Join(root, "release.json")
+	index := readObject(t, indexPath)
+	entry := index["manifests"].([]any)[0].(map[string]any)
+	entry["component"] = "claude-code"
 	entry["sha256"] = digest(t, manifestPath)
 	writeJSON(t, indexPath, index, 0o644)
 	return root, manifestPath

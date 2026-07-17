@@ -134,6 +134,9 @@ func TestPlanKeepsUnsupportedAdapterDescriptiveAndRevalidatesSelection(t *testin
 
 func TestPlanIgnoresUnmanagedSiblingAdapterConfigurationProblem(t *testing.T) {
 	host := &fakeHost{entries: map[domain.Location]hostfs.Entry{
+		claudeLocation(".claude.json"): {
+			Kind: hostfs.EntryRegular, Content: []byte(`{}`),
+		},
 		location("opencode.json"): {
 			Kind: hostfs.EntryRegular, Content: []byte(`{"mcp":`),
 		},
@@ -142,7 +145,7 @@ func TestPlanIgnoresUnmanagedSiblingAdapterConfigurationProblem(t *testing.T) {
 		},
 	}}
 	inspection, err := mcpconfiguration.Inspect(
-		[]releasecontract.MCPProjection{projection()}, catalog(t), host,
+		[]releasecontract.MCPProjection{claudeProjection(), projection()}, catalog(t), host,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +161,8 @@ func TestPlanIgnoresUnmanagedSiblingAdapterConfigurationProblem(t *testing.T) {
 		t.Fatalf("Plan() error = %v", err)
 	}
 	if plan.Blocking || len(plan.Intents) != 1 ||
-		plan.Intents[0].Kind != mcpconfiguration.IntentUnsupported {
+		plan.Intents[0].Kind != mcpconfiguration.IntentAdd ||
+		plan.Intents[0].ComponentID != domain.ComponentClaudeCode {
 		t.Fatalf("isolated adapter plan = %#v", plan)
 	}
 }
@@ -204,7 +208,7 @@ func TestRelinquishedOwnershipIgnoresUnsafeConfiguration(t *testing.T) {
 	}
 }
 
-func TestPlanFailsClosedForMalformedStateWithoutPartialIntents(t *testing.T) {
+func TestPlanFailsClosedForMalformedStateAndKeepsDescriptiveIntents(t *testing.T) {
 	host := &fakeHost{entries: map[domain.Location]hostfs.Entry{
 		location("opencode.json"): {
 			Kind: hostfs.EntryRegular, Content: []byte(`{"mcp":`),
@@ -229,8 +233,9 @@ func TestPlanFailsClosedForMalformedStateWithoutPartialIntents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if !plan.Blocking || len(plan.Intents) != 1 ||
-		plan.Intents[0].Kind != mcpconfiguration.IntentConflict {
+	if !plan.Blocking || len(plan.Intents) != 2 ||
+		plan.Intents[0].Kind != mcpconfiguration.IntentUnsupported ||
+		plan.Intents[1].Kind != mcpconfiguration.IntentConflict {
 		t.Fatalf("malformed-state plan = %#v", plan)
 	}
 }

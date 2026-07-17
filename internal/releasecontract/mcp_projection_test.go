@@ -28,6 +28,64 @@ func TestLoadDerivesOpenCodeMCPProjectionFromCatalog(t *testing.T) {
 	}
 }
 
+func TestLoadDerivesClaudeMCPProjectionFromCatalog(t *testing.T) {
+	root, _ := writeClaudeProjectionFixture(t)
+
+	release, err := releasecontract.Load(root)
+	if err != nil {
+		t.Fatalf("load release: %v", err)
+	}
+	if len(release.MCPProjections) != 1 {
+		t.Fatalf("MCP projections = %#v", release.MCPProjections)
+	}
+	projection := release.MCPProjections[0]
+	if projection.ID != "claude-code.mcp.context7" ||
+		projection.ComponentID != domain.ComponentClaudeCode ||
+		projection.Target != (domain.Location{Root: domain.RootHome, Path: ".claude.json"}) ||
+		projection.DesiredEntry != `{"type":"http","url":"https://mcp.context7.com/mcp"}` {
+		t.Fatalf("MCP projection = %#v", projection)
+	}
+}
+
+func TestLoadRejectsInvalidClaudeMCPProjectionContract(t *testing.T) {
+	tests := map[string]func(map[string]any){
+		"OpenCode codec": func(record map[string]any) {
+			record["codec"] = "opencode-remote-v1"
+		},
+		"foreign target root": func(record map[string]any) {
+			record["target"].(map[string]any)["root"] = "claude-config"
+		},
+		"foreign home path": func(record map[string]any) {
+			record["target"].(map[string]any)["path"] = ".profile"
+		},
+		"wrong pointer": func(record map[string]any) {
+			record["map_pointer"] = "/mcp"
+		},
+		"registry under home": func(record map[string]any) {
+			record["registry"].(map[string]any)["target"].(map[string]any)["root"] = "home"
+		},
+		"wrong registry path": func(record map[string]any) {
+			record["registry"].(map[string]any)["target"].(map[string]any)["path"] = "mainframe-mcp.json"
+		},
+		"keyed profile": func(record map[string]any) {
+			record["profile"] = "remote-api-key"
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			root, manifestPath := writeClaudeProjectionFixture(t)
+			manifest := readObject(t, manifestPath)
+			record := manifest["mcp_projections"].([]any)[0].(map[string]any)
+			mutate(record)
+			writeJSON(t, manifestPath, manifest, 0o644)
+			rewriteIndexDigest(t, root, manifestPath)
+			if _, err := releasecontract.Load(root); err == nil {
+				t.Fatal("invalid Claude MCP projection was accepted")
+			}
+		})
+	}
+}
+
 func TestLoadRejectsInvalidMCPProjectionContract(t *testing.T) {
 	tests := map[string]func(map[string]any){
 		"unknown field":     func(record map[string]any) { record["unknown"] = true },

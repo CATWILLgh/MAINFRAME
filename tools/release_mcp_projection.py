@@ -18,14 +18,28 @@ PROJECTION_FIELDS = {
     "entry_key", "registry",
 }
 REGISTRY_FIELDS = {"target", "schema_version", "entries_pointer"}
-CODEC = "opencode-remote-v1"
-MAP_POINTER = "/mcp"
-REGISTRY_POINTER = "/servers"
-CONFIG_TARGET = ("opencode-config", "opencode.json")
-REGISTRY_TARGET = (
-    "opencode-config",
-    "opencode.json.mainframe-mcp.json",
-)
+CODEC_CONTRACTS = {
+    ("claude-code", "claude-user-http-v1"): {
+        "target": ("home", ".claude.json"),
+        "map_pointer": "/mcpServers",
+        "registry_target": (
+            "claude-config",
+            "mainframe/mcp-ownership.json",
+        ),
+        "registry_pointer": "/servers",
+        "entry_type": "http",
+    },
+    ("opencode", "opencode-remote-v1"): {
+        "target": ("opencode-config", "opencode.json"),
+        "map_pointer": "/mcp",
+        "registry_target": (
+            "opencode-config",
+            "opencode.json.mainframe-mcp.json",
+        ),
+        "registry_pointer": "/servers",
+        "entry_type": "remote",
+    },
+}
 
 
 def validate_manifest_projections(
@@ -155,6 +169,7 @@ def desired_entry(
     component: str,
     catalog: dict[str, Any],
 ) -> dict[str, str]:
+    contract = _codec_contract(component, projection["codec"])
     server = next(
         (item for item in catalog["servers"] if item["id"] == projection["server"]),
         None,
@@ -185,7 +200,7 @@ def desired_entry(
         or not profile.get("endpoint")
     ):
         raise ValueError("MCP profile is incompatible with projection codec")
-    return {"type": "remote", "url": profile["endpoint"]}
+    return {"type": contract["entry_type"], "url": profile["endpoint"]}
 
 
 def _validate_projection(
@@ -193,10 +208,9 @@ def _validate_projection(
     projection: dict[str, Any],
     parse_location: Callable[[Any, str], tuple[str, str]],
 ) -> None:
+    contract = _codec_contract(component, projection.get("codec"))
     if (
-        component != "opencode"
-        or projection["codec"] != CODEC
-        or not isinstance(projection["id"], str)
+        not isinstance(projection["id"], str)
         or not IDENTIFIER.fullmatch(projection["id"])
     ):
         raise ValueError("unsupported MCP projection identity or codec")
@@ -207,7 +221,7 @@ def _validate_projection(
             raise ValueError(f"invalid MCP projection {field}")
     if projection["entry_key"] != projection["server"]:
         raise ValueError("MCP projection entry key must match server")
-    if projection["map_pointer"] != MAP_POINTER:
+    if projection["map_pointer"] != contract["map_pointer"]:
         raise ValueError("unsupported MCP projection map pointer")
     require_object(projection["registry"], "MCP projection registry")
     require_fields(
@@ -220,13 +234,23 @@ def _validate_projection(
     if (
         type(registry["schema_version"]) is not int
         or registry["schema_version"] != 1
-        or registry["entries_pointer"] != REGISTRY_POINTER
+        or registry["entries_pointer"] != contract["registry_pointer"]
     ):
         raise ValueError("unsupported MCP projection registry contract")
     target = parse_location(projection["target"], "MCP projection target")
     registry_target = parse_location(registry["target"], "MCP projection registry")
-    if target != CONFIG_TARGET or registry_target != REGISTRY_TARGET:
+    if (
+        target != contract["target"]
+        or registry_target != contract["registry_target"]
+    ):
         raise ValueError("unsupported MCP projection target")
+
+
+def _codec_contract(component: str, codec: Any) -> dict[str, Any]:
+    contract = CODEC_CONTRACTS.get((component, codec))
+    if contract is None:
+        raise ValueError("unsupported MCP projection identity or codec")
+    return contract
 
 
 def _protected_targets(

@@ -99,7 +99,10 @@ type Release struct {
 
 type MCPProjectionCodec string
 
-const MCPProjectionOpenCodeRemote MCPProjectionCodec = "opencode-remote-v1"
+const (
+	MCPProjectionClaudeUserHTTP MCPProjectionCodec = "claude-user-http-v1"
+	MCPProjectionOpenCodeRemote MCPProjectionCodec = "opencode-remote-v1"
+)
 
 type MCPProjection struct {
 	ID                     string

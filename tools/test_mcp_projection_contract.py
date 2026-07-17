@@ -40,6 +40,26 @@ def _projection():
     }
 
 
+def _claude_projection():
+    return {
+        "id": "claude-code.mcp.context7",
+        "codec": "claude-user-http-v1",
+        "server": "context7",
+        "profile": "remote-keyless",
+        "target": {"root": "home", "path": ".claude.json"},
+        "map_pointer": "/mcpServers",
+        "entry_key": "context7",
+        "registry": {
+            "target": {
+                "root": "claude-config",
+                "path": "mainframe/mcp-ownership.json",
+            },
+            "schema_version": 1,
+            "entries_pointer": "/servers",
+        },
+    }
+
+
 def test_projection_is_strict_and_component_local():
     release_mcp_projection.validate_manifest_projections(
         "opencode", [_projection()], parse_location=release_contract._location
@@ -102,6 +122,38 @@ def test_desired_entry_is_derived_from_verified_catalog_profile():
         pass
     else:
         raise AssertionError("keyed profile entered the keyless projection")
+
+
+def test_claude_projection_is_exact_and_uses_http_dialect():
+    projection = _claude_projection()
+    release_mcp_projection.validate_manifest_projections(
+        "claude-code", [projection], parse_location=release_contract._location
+    )
+    assert release_mcp_projection.desired_entry(
+        projection, "claude-code", _catalog()
+    ) == {"type": "http", "url": "https://mcp.context7.com/mcp"}
+    mutations = (
+        (("codec",), "opencode-remote-v1"),
+        (("target", "path"), ".claude/settings.json"),
+        (("target", "root"), "claude-config"),
+        (("map_pointer",), "/mcp"),
+        (("registry", "target", "root"), "home"),
+        (("registry", "target", "path"), "mainframe-mcp.json"),
+    )
+    for path, value in mutations:
+        invalid = copy.deepcopy(projection)
+        target = invalid
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        try:
+            release_mcp_projection.validate_manifest_projections(
+                "claude-code", [invalid], parse_location=release_contract._location
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid Claude projection was accepted: {path}")
 
 
 def test_release_rejects_duplicate_claim_and_registry_overlap():

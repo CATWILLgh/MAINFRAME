@@ -155,6 +155,28 @@ def _resources() -> list[dict[str, Any]]:
     ]
 
 
+def _mcp_projections() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "claude-code.mcp.context7",
+            "codec": "claude-user-http-v1",
+            "server": "context7",
+            "profile": "remote-keyless",
+            "target": {"root": "home", "path": ".claude.json"},
+            "map_pointer": "/mcpServers",
+            "entry_key": "context7",
+            "registry": {
+                "target": {
+                    "root": "claude-config",
+                    "path": "mainframe/mcp-ownership.json",
+                },
+                "schema_version": 1,
+                "entries_pointer": "/servers",
+            },
+        }
+    ]
+
+
 def _install_units(
     style_children: list[Path], rule_children: list[Path]
 ) -> list[dict[str, Any]]:
@@ -241,6 +263,7 @@ def build(root: Path, output: Path) -> None:
         legacy_artifacts=_legacy_artifacts(),
         resources=_resources(),
         runtime_profile=asdict(profile),
+        mcp_projections=_mcp_projections(),
     )
 
 

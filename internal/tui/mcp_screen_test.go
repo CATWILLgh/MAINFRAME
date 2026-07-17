@@ -74,7 +74,7 @@ func TestMCPConfigurationIntentAppearsInPreview(t *testing.T) {
 		targets: defaultTargets(),
 		preview: lifecycle.Preview{MCP: mcpconfiguration.Plan{
 			Intents: []mcpconfiguration.Intent{{
-				ComponentID: domain.ComponentOpenCode,
+				ComponentID: domain.ComponentClaudeCode,
 				ServerID:    "context7",
 				Kind:        mcpconfiguration.IntentAdd,
 				Reason:      "selected entry is absent",
@@ -82,12 +82,12 @@ func TestMCPConfigurationIntentAppearsInPreview(t *testing.T) {
 		}},
 	}
 	model := newTestModel(t, previewer)
-	model.selected = []domain.ComponentID{domain.ComponentOpenCode}
+	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
 	model.openMCP()
 	choice := model.mcpChoices["context7"]
 	choice.Enabled = true
 	choice.ProfileID = "remote-keyless"
-	choice.Adapters = []domain.ComponentID{domain.ComponentOpenCode}
+	choice.Adapters = []domain.ComponentID{domain.ComponentClaudeCode}
 
 	updated, command := model.openPreview()
 	if command != nil || updated.screen != screenPreview {
@@ -95,7 +95,7 @@ func TestMCPConfigurationIntentAppearsInPreview(t *testing.T) {
 	}
 	for _, text := range []string{
 		"MCP configuration plan",
-		"OpenCode · context7 · add",
+		"Claude Code · context7 · add",
 		"selected entry is absent",
 	} {
 		if !strings.Contains(updated.View().Content, text) {

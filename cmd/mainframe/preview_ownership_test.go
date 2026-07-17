@@ -118,6 +118,49 @@ func TestBuildPreviewServicePlansSelectedOpenCodeMCP(t *testing.T) {
 	}
 }
 
+func TestBuildPreviewServicePlansSelectedClaudeMCP(t *testing.T) {
+	home := t.TempDir()
+	writePreviewFile(t, filepath.Join(home, ".claude.json"), `{"mcpServers":{}}`)
+	t.Setenv("HOME", home)
+	catalogPayload, err := os.ReadFile("../../internal/mcpcatalog/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := mcpcatalog.Parse(catalogPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := buildPreviewServiceFrom(
+		t.TempDir(),
+		releasecontract.Release{
+			ID:             "test-release",
+			Model:          previewOwnershipModel(t),
+			MCPCatalog:     catalog,
+			MCPProjections: []releasecontract.MCPProjection{previewClaudeMCPProjection()},
+		},
+	)
+	if err != nil {
+		t.Fatalf("build preview service: %v", err)
+	}
+	preview, err := service.Preview(lifecycle.PreviewRequest{
+		Components: []domain.ComponentID{domain.ComponentClaudeCode},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentClaudeCode},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("preview selected MCP: %v", err)
+	}
+	if preview.MCP.Blocking || len(preview.MCP.Intents) != 1 ||
+		preview.MCP.Intents[0].Kind != mcpconfiguration.IntentAdd ||
+		preview.MCP.Intents[0].Target != (domain.Location{
+			Root: domain.RootHome, Path: ".claude.json",
+		}) {
+		t.Fatalf("Claude MCP preview = %#v", preview.MCP)
+	}
+}
+
 func writePreviewFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -185,5 +228,28 @@ func previewMCPProjection() releasecontract.MCPProjection {
 		RegistrySchemaVersion:  1,
 		RegistryEntriesPointer: "/servers",
 		DesiredEntry:           `{"type":"remote","url":"https://mcp.context7.com/mcp"}`,
+	}
+}
+
+func previewClaudeMCPProjection() releasecontract.MCPProjection {
+	return releasecontract.MCPProjection{
+		ID:          "claude-code.mcp.context7",
+		ComponentID: domain.ComponentClaudeCode,
+		Codec:       releasecontract.MCPProjectionClaudeUserHTTP,
+		ServerID:    "context7",
+		ProfileID:   "remote-keyless",
+		Target: domain.Location{
+			Root: domain.RootHome,
+			Path: ".claude.json",
+		},
+		MapPointer: "/mcpServers",
+		EntryKey:   "context7",
+		RegistryTarget: domain.Location{
+			Root: domain.RootClaudeConfig,
+			Path: "mainframe/mcp-ownership.json",
+		},
+		RegistrySchemaVersion:  1,
+		RegistryEntriesPointer: "/servers",
+		DesiredEntry:           `{"type":"http","url":"https://mcp.context7.com/mcp"}`,
 	}
 }

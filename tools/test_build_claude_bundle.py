@@ -168,6 +168,28 @@ def _expected_resources() -> list[dict]:
     ]
 
 
+def _expected_mcp_projections() -> list[dict]:
+    return [
+        {
+            "id": "claude-code.mcp.context7",
+            "codec": "claude-user-http-v1",
+            "server": "context7",
+            "profile": "remote-keyless",
+            "target": {"root": "home", "path": ".claude.json"},
+            "map_pointer": "/mcpServers",
+            "entry_key": "context7",
+            "registry": {
+                "target": {
+                    "root": "claude-config",
+                    "path": "mainframe/mcp-ownership.json",
+                },
+                "schema_version": 1,
+                "entries_pointer": "/servers",
+            },
+        }
+    ]
+
+
 def test_manifest_records_exact_units_resources_and_integrity():
     sandbox = _sandbox()
     root = _fixture_root(sandbox)
@@ -190,6 +212,7 @@ def test_manifest_records_exact_units_resources_and_integrity():
         "agents/nestjs-backend-engineer.md"
     )
     assert manifest["resources"] == _expected_resources()
+    assert manifest["mcp_projections"] == _expected_mcp_projections()
     assert (output / "credentials-index.md").read_text() == (
         "Index: `~/.claude/credentials-index.md`\n"
     )

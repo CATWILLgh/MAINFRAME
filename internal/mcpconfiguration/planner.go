@@ -21,6 +21,7 @@ func (inspection Inspection) Plan(
 		return Plan{}, err
 	}
 	desired, intents := inspection.resolveSelections(preview)
+	blocking := false
 	active := make(map[domain.ComponentID]bool, len(components))
 	for _, component := range components {
 		active[component] = true
@@ -29,15 +30,13 @@ func (inspection Inspection) Plan(
 		if !active[projection.ComponentID] {
 			continue
 		}
-		intent, exists, blocking := inspection.projectionIntent(
+		intent, exists, intentBlocking := inspection.projectionIntent(
 			projection, desired[projection.ID],
 		)
 		if exists {
 			intents = append(intents, intent)
 		}
-		if blocking {
-			return Plan{Intents: []Intent{intent}, Blocking: true}, nil
-		}
+		blocking = blocking || intentBlocking
 	}
 	sort.Slice(intents, func(left, right int) bool {
 		if intents[left].ComponentID != intents[right].ComponentID {
@@ -45,7 +44,7 @@ func (inspection Inspection) Plan(
 		}
 		return intents[left].ServerID < intents[right].ServerID
 	})
-	return Plan{Intents: intents}, nil
+	return Plan{Intents: intents, Blocking: blocking}, nil
 }
 
 func (inspection Inspection) resolveSelections(

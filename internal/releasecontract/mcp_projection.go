@@ -1,20 +1,12 @@
 package releasecontract
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/jsondocument"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
-)
-
-const (
-	openCodeMCPMapPointer      = "/mcp"
-	openCodeMCPRegistryPointer = "/servers"
-	openCodeMCPConfigPath      = "opencode.json"
-	openCodeMCPRegistryPath    = "opencode.json.mainframe-mcp.json"
 )
 
 func loadMCPProjections(
@@ -74,24 +66,18 @@ func validateLoadedMCPProjection(
 	projection MCPProjection,
 	catalog mcpcatalog.Catalog,
 ) error {
-	if !itemPattern.MatchString(projection.ID) ||
-		projection.ComponentID != domain.ComponentOpenCode ||
-		projection.Codec != MCPProjectionOpenCodeRemote ||
-		projection.MapPointer != openCodeMCPMapPointer ||
-		projection.RegistryEntriesPointer != openCodeMCPRegistryPointer ||
+	contract, exists := mcpProjectionContract(
+		projection.ComponentID, projection.Codec,
+	)
+	if !exists || !itemPattern.MatchString(projection.ID) ||
+		projection.MapPointer != contract.mapPointer ||
+		projection.RegistryEntriesPointer != contract.registryPointer ||
 		projection.RegistrySchemaVersion != registrySchemaVersion ||
 		projection.EntryKey != string(projection.ServerID) {
 		return fmt.Errorf("invalid identity, codec, or pointer contract")
 	}
-	wantTarget := domain.Location{
-		Root: domain.RootOpenCodeConfig,
-		Path: openCodeMCPConfigPath,
-	}
-	wantRegistry := domain.Location{
-		Root: domain.RootOpenCodeConfig,
-		Path: openCodeMCPRegistryPath,
-	}
-	if projection.Target != wantTarget || projection.RegistryTarget != wantRegistry {
+	if projection.Target != contract.target ||
+		projection.RegistryTarget != contract.registryTarget {
 		return fmt.Errorf("invalid adapter-local target")
 	}
 	record := mcpProjectionRecord{
@@ -104,14 +90,11 @@ func validateLoadedMCPProjection(
 	if err != nil {
 		return err
 	}
-	desired, err := json.Marshal(map[string]string{
-		"type": "remote",
-		"url":  profile.Endpoint,
-	})
+	desired, err := encodeMCPProjectionEntry(contract, profile.Endpoint)
 	if err != nil {
 		return err
 	}
-	if projection.DesiredEntry != string(desired) {
+	if projection.DesiredEntry != desired {
 		return fmt.Errorf("desired entry does not match catalog profile")
 	}
 	return nil
@@ -133,22 +116,21 @@ func loadMCPProjection(
 	if err != nil {
 		return MCPProjection{}, err
 	}
-	desired, err := json.Marshal(map[string]string{
-		"type": "remote",
-		"url":  profile.Endpoint,
-	})
+	codec := MCPProjectionCodec(record.Codec)
+	contract, _ := mcpProjectionContract(component, codec)
+	desired, err := encodeMCPProjectionEntry(contract, profile.Endpoint)
 	if err != nil {
 		return MCPProjection{}, err
 	}
 	return MCPProjection{
 		ID: record.ID, ComponentID: component,
-		Codec:    MCPProjectionOpenCodeRemote,
+		Codec:    codec,
 		ServerID: server.ID, ProfileID: profile.ID,
 		Target: target, MapPointer: record.MapPointer, EntryKey: record.EntryKey,
 		RegistryTarget:         registry,
 		RegistrySchemaVersion:  record.Registry.SchemaVersion,
 		RegistryEntriesPointer: record.Registry.EntriesPointer,
-		DesiredEntry:           string(desired),
+		DesiredEntry:           desired,
 	}, nil
 }
 
@@ -162,12 +144,14 @@ func validateMCPProjectionRecord(
 		!componentPattern.MatchString(record.EntryKey) {
 		return fmt.Errorf("invalid identity")
 	}
-	if MCPProjectionCodec(record.Codec) != MCPProjectionOpenCodeRemote ||
-		component != domain.ComponentOpenCode {
+	contract, exists := mcpProjectionContract(
+		component, MCPProjectionCodec(record.Codec),
+	)
+	if !exists {
 		return fmt.Errorf("unsupported codec or component")
 	}
-	if record.MapPointer != openCodeMCPMapPointer ||
-		record.Registry.EntriesPointer != openCodeMCPRegistryPointer ||
+	if record.MapPointer != contract.mapPointer ||
+		record.Registry.EntriesPointer != contract.registryPointer ||
 		record.Registry.SchemaVersion != registrySchemaVersion {
 		return fmt.Errorf("unsupported pointer or registry schema")
 	}
@@ -187,6 +171,12 @@ func loadMCPProjectionLocations(
 	component domain.ComponentID,
 	record mcpProjectionRecord,
 ) (domain.Location, domain.Location, error) {
+	contract, exists := mcpProjectionContract(
+		component, MCPProjectionCodec(record.Codec),
+	)
+	if !exists {
+		return domain.Location{}, domain.Location{}, fmt.Errorf("unsupported codec or component")
+	}
 	target, err := location(record.Target)
 	if err != nil {
 		return domain.Location{}, domain.Location{}, err
@@ -195,13 +185,10 @@ func loadMCPProjectionLocations(
 	if err != nil {
 		return domain.Location{}, domain.Location{}, err
 	}
-	if err := validateComponentTarget(component, target, "MCP projection"); err != nil {
-		return domain.Location{}, domain.Location{}, err
-	}
 	if err := validateComponentTarget(component, registry, "MCP projection registry"); err != nil {
 		return domain.Location{}, domain.Location{}, err
 	}
-	if target.Path != openCodeMCPConfigPath || registry.Path != openCodeMCPRegistryPath ||
+	if target != contract.target || registry != contract.registryTarget ||
 		locationsOverlap(target, registry) {
 		return domain.Location{}, domain.Location{}, fmt.Errorf("unsupported target or registry")
 	}
