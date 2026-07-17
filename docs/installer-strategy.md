@@ -184,8 +184,9 @@ Every loaded projection is revalidated before host inspection. An unsafe state
 in one selected adapter makes the combined plan blocking without hiding valid
 intents for its siblings; an unselected adapter's state cannot block the active
 adapter. The neutral preview never treats one adapter's state as belonging to
-another. This MCP plan contains no configuration bytes, prepared transition,
-secret input, or Apply path.
+another. Preview contains no configuration bytes, secret input, or Apply
+path. A separate preparation boundary may derive immutable after-images from
+the same snapshots without exposing them in the TUI.
 
 The adapter capability boundary was verified on 2026-07-17 against the
 [Claude Code MCP contract](https://code.claude.com/docs/en/mcp),
@@ -202,6 +203,17 @@ mode, device, and inode; missing files use an explicit absence precondition.
 Prepared bytes remain outside the executor journal. Any unresolved issue,
 unsupported changed strategy, incomplete snapshot, or target collision fails
 the whole preparation with no partial result.
+
+Codex Context7 preparation never reserializes the user's complete TOML file.
+MAINFRAME appends one deterministic, versioned block and recognizes it later
+only when both the adapter-local ownership registry proves the block format
+and the exact block remains the file suffix. Update and removal validate the
+complete TOML semantics before and after the byte-scoped change; any edited
+marker, legacy semantic-only registry entry, marker-like multiline string, or
+unrelated semantic drift fails closed. The single-block format admits one
+Codex MCP projection; a release with more is rejected until
+[#38b9fb12](tickets/38b9fb12-compose-codex-mcp-managed-region.md) replaces it
+with one deterministic multi-entry region.
 
 ## Permission capabilities must be stated honestly
 

@@ -86,10 +86,19 @@ and trusted.
   root, and non-JSON TOML semantics trigger safe relinquishment instead of
   lossy comparison. Release validation rejects mixed JSON and TOML ownership
   on one physical target.
+- Codex keyless Context7 can now prepare exact `config.toml` and adapter-local
+  registry after-images from one immutable snapshot. It owns only a
+  versioned, registry-proven suffix block, validates full TOML semantics around
+  every change, preserves unrelated bytes, and fails closed on legacy or
+  edited block provenance. The prepared transition composes with generic
+  configuration for the existing recoverable executor, while Apply remains
+  absent from the CLI and TUI.
+- The single-entry Codex block format rejects a second Codex MCP projection.
+  A deterministic multi-entry managed region is tracked separately in
+  [#38b9fb12](38b9fb12-compose-codex-mcp-managed-region.md).
 - Combined MCP plans retain every selected adapter's intent while remaining
   blocking if any adapter conflicts. Unselected sibling state is ignored.
-- Apply remains unavailable. Codex still needs safe TOML preparation and
-  merging, Antigravity needs a verified
+- Apply remains unavailable. Antigravity needs a verified
   local MCP target contract, and other strategies still need safe deselection
   semantics.
 

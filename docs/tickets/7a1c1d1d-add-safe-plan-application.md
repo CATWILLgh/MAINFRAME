@@ -120,3 +120,13 @@ The final product must install, update, remove, and replace selected adapters. A
 - `internal/linkworkspace/configuration_workspace_unix.go`
 - `internal/linkworkspace/workspace_unix.go`
 - `tools/test_install_lock.py`
+
+## Re-occurrence noted (2026-07-17)
+
+**Noticed during:** Codex MCP TOML after-image preparation
+**Where:** `internal/executor/configuration_prepare.go` and `internal/linkworkspace/configuration_stage_unix.go`
+**Additional details:** Removing the only MAINFRAME-managed Codex MCP block can
+produce a valid zero-byte `config.toml`. Pure executor tests accept and hash
+that after-image, and the Unix staging path permits a zero-iteration write.
+Before Apply is exposed, add a real-workspace integration case that publishes
+and rolls back this exact zero-byte transition on macOS and Linux.
