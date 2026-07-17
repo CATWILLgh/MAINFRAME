@@ -69,6 +69,13 @@ type Plan struct {
 }
 
 func (inspection Inspection) Plan(included []domain.ComponentID) (Plan, error) {
+	return inspection.PlanWithPreservation(included, nil)
+}
+
+func (inspection Inspection) PlanWithPreservation(
+	included []domain.ComponentID,
+	preserved []domain.ComponentID,
+) (Plan, error) {
 	if err := Validate(inspection.resources, inspection.observations); err != nil {
 		return Plan{}, fmt.Errorf("invalid configuration inspection: %w", err)
 	}
@@ -76,12 +83,21 @@ func (inspection Inspection) Plan(included []domain.ComponentID) (Plan, error) {
 	for _, component := range included {
 		selected[component] = true
 	}
+	preserveOnly := make(map[domain.ComponentID]bool, len(preserved))
+	for _, component := range preserved {
+		if !selected[component] {
+			preserveOnly[component] = true
+		}
+	}
 	observations := make(map[string]Observation, len(inspection.observations))
 	for _, observation := range inspection.observations {
 		observations[observation.ResourceID] = observation
 	}
 	var plan Plan
 	for _, resource := range inspection.resources {
+		if preserveOnly[resource.ComponentID] {
+			continue
+		}
 		observation := observations[resource.ID]
 		if resource.ExternalState != nil {
 			planExternalState(

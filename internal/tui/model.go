@@ -64,7 +64,7 @@ func NewModel(
 	targets := previewer.Targets()
 	selected := make([]domain.ComponentID, 0, len(targets))
 	for _, target := range targets {
-		if target.Selected {
+		if target.Selected && targetSelectable(target) {
 			selected = append(selected, target.ID)
 		}
 	}
@@ -167,6 +167,7 @@ func (model *Model) backToSelection() (*Model, tea.Cmd) {
 	model.preview = lifecycle.Preview{}
 	model.mcpPreview = mcpcatalog.OnboardingPreview{}
 	model.err = nil
+	model.selected = selectableSelection(model.targets, model.selected)
 	model.form = selectionForm(model.targets, &model.selected)
 	return model, model.form.Init()
 }
@@ -176,6 +177,9 @@ func (model *Model) selectionView() string {
 		header(),
 		headingStyle.Render("Choose environments"),
 		model.form.View(),
+	}
+	if unavailable := unavailableTargetsView(model.targets); unavailable != "" {
+		sections = append(sections, unavailable)
 	}
 	if model.err != nil {
 		sections = append(sections, errorStyle.Render(model.err.Error()))
@@ -216,6 +220,9 @@ func (model *Model) previewView() string {
 func selectionForm(targets []lifecycle.Target, selected *[]domain.ComponentID) *huh.Form {
 	options := make([]huh.Option[domain.ComponentID], 0, len(targets))
 	for _, target := range targets {
+		if !targetSelectable(target) {
+			continue
+		}
 		options = append(options, huh.NewOption(
 			fmt.Sprintf(
 				"%s — %s%s",

@@ -52,7 +52,14 @@ func (plan PreparedPlan) Transitions() []Transition {
 func (inspection Inspection) Prepare(
 	included []domain.ComponentID,
 ) (PreparedPlan, error) {
-	semantic, err := inspection.Plan(included)
+	return inspection.PrepareWithPreservation(included, nil)
+}
+
+func (inspection Inspection) PrepareWithPreservation(
+	included []domain.ComponentID,
+	preserved []domain.ComponentID,
+) (PreparedPlan, error) {
+	semantic, err := inspection.PlanWithPreservation(included, preserved)
 	if err != nil {
 		return PreparedPlan{}, err
 	}

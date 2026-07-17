@@ -22,8 +22,9 @@ func (service Service) PrepareConfiguration(
 	}
 	generic := configuration.PreparedPlan{}
 	if service.configurationInspection != nil {
-		generic, err = service.configurationInspection.Prepare(
+		generic, err = service.configurationInspection.PrepareWithPreservation(
 			service.configurationComponents(request.Components),
+			service.configurationComponents(service.preservationRoots(request.Components)),
 		)
 		if err != nil {
 			return configuration.PreparedPlan{}, fmt.Errorf(

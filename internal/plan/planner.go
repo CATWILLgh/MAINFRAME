@@ -17,6 +17,13 @@ func New(componentCatalog catalog.Catalog) Planner {
 }
 
 func (planner Planner) Plan(request domain.PlanRequest) (domain.Plan, error) {
+	return planner.PlanWithPreservation(request, nil)
+}
+
+func (planner Planner) PlanWithPreservation(
+	request domain.PlanRequest,
+	preserveRoots []domain.ComponentID,
+) (domain.Plan, error) {
 	if err := validateObserved(request.Observed); err != nil {
 		return domain.Plan{}, err
 	}
@@ -24,10 +31,18 @@ func (planner Planner) Plan(request domain.PlanRequest) (domain.Plan, error) {
 	if err != nil {
 		return domain.Plan{}, err
 	}
+	preserved, err := planner.catalog.DependencyClosure(preserveRoots)
+	if err != nil {
+		return domain.Plan{}, err
+	}
+	preserveOnly := componentDifference(preserved, desired)
 	expectedOwners := planner.expectedOwners(desired)
 	observedByLocation := indexObservedArtifacts(request.Observed)
 	operations := planner.operationsForDesired(desired, observedByLocation)
-	operations = append(operations, planner.operationsForObserved(request.Observed, expectedOwners)...)
+	operations = append(
+		operations,
+		planner.operationsForObserved(request.Observed, expectedOwners, preserveOnly)...,
+	)
 	sortOperations(operations)
 	return domain.Plan{Operations: operations}, nil
 }
@@ -66,9 +81,13 @@ func (planner Planner) operationsForDesired(
 func (planner Planner) operationsForObserved(
 	observed domain.ObservedState,
 	expectedOwners map[domain.Location]domain.ComponentID,
+	preserveOnly map[domain.ComponentID]bool,
 ) []domain.Operation {
 	operations := make([]domain.Operation, 0)
 	for _, component := range observed.Components {
+		if preserveOnly[component.ID] {
+			continue
+		}
 		for _, artifact := range component.Artifacts {
 			if _, expected := expectedOwners[artifact.Location]; expected {
 				continue
@@ -89,6 +108,23 @@ func (planner Planner) operationsForObserved(
 		}
 	}
 	return operations
+}
+
+func componentDifference(
+	components []domain.ComponentID,
+	excluded []domain.ComponentID,
+) map[domain.ComponentID]bool {
+	excludedSet := make(map[domain.ComponentID]bool, len(excluded))
+	for _, component := range excluded {
+		excludedSet[component] = true
+	}
+	result := make(map[domain.ComponentID]bool, len(components))
+	for _, component := range components {
+		if !excludedSet[component] {
+			result[component] = true
+		}
+	}
+	return result
 }
 
 func (planner Planner) declaredSource(id domain.ComponentID, location domain.Location) (domain.ArtifactPath, bool) {

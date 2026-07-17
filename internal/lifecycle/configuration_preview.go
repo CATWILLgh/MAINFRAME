@@ -95,14 +95,16 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 		}
 	}
 	if service.configurationInspection == nil {
+		preserved := service.configurationComponents(service.preservationRoots(request.Components))
 		return Preview{
 			Filesystem:    filesystem,
-			Configuration: cloneConfigurationPlan(service.configurationFallback),
+			Configuration: filterConfigurationPlan(service.configurationFallback, preserved),
 			MCP:           mcpPlan,
 		}, nil
 	}
 	included := service.configurationComponents(request.Components)
-	configurationPlan, err := service.configurationInspection.Plan(included)
+	preserved := service.configurationComponents(service.preservationRoots(request.Components))
+	configurationPlan, err := service.configurationInspection.PlanWithPreservation(included, preserved)
 	if err != nil {
 		return Preview{}, fmt.Errorf("plan configuration: %w", err)
 	}
@@ -225,4 +227,39 @@ func cloneConfigurationPlan(source configuration.Plan) configuration.Plan {
 		),
 		Notices: append([]configuration.Notice(nil), source.Notices...),
 	}
+}
+
+func filterConfigurationPlan(
+	source configuration.Plan,
+	preserved []domain.ComponentID,
+) configuration.Plan {
+	if len(preserved) == 0 {
+		return cloneConfigurationPlan(source)
+	}
+	blocked := make(map[domain.ComponentID]bool, len(preserved))
+	for _, component := range preserved {
+		blocked[component] = true
+	}
+	result := configuration.Plan{}
+	for _, change := range source.Changes {
+		if !blocked[change.ComponentID] {
+			result.Changes = append(result.Changes, change)
+		}
+	}
+	for _, issue := range source.Issues {
+		if !blocked[issue.ComponentID] {
+			result.Issues = append(result.Issues, issue)
+		}
+	}
+	for _, action := range source.ManualActions {
+		if !blocked[action.ComponentID] {
+			result.ManualActions = append(result.ManualActions, action)
+		}
+	}
+	for _, notice := range source.Notices {
+		if !blocked[notice.ComponentID] {
+			result.Notices = append(result.Notices, notice)
+		}
+	}
+	return result
 }

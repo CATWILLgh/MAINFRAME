@@ -47,17 +47,17 @@ Completed in the installer branch:
   equivalent dual, conflicting dual, and invalid legacy configuration.
 - Material Antigravity MCP preparation is rejected while migration is required;
   unrelated Antigravity preparation remains available.
+- TUI host discovery enforces the exact managed Antigravity `2.2.1` requirement,
+  explains unavailable states, and preserves an already installed incompatible
+  adapter without repair or removal. The legacy installer retains its broader
+  2.x policy.
 
 Remaining work:
 
-1. Connect TUI host discovery to the managed release requirement, which is now
-   narrowed to the evidence-backed Antigravity `2.2.1`; keep the legacy
-   installer's broader 2.x acceptance separate until the TUI can explain an
-   incompatibility.
-2. Define an explicit user choice and safe mutation contract for migration,
+1. Define an explicit user choice and safe mutation contract for migration,
    including deletion support in the configuration executor.
-3. Preserve unrelated servers and unknown fields during the chosen migration.
-4. Keep Antigravity MCP Apply gated until the mutation contract and live checks
+2. Preserve unrelated servers and unknown fields during the chosen migration.
+3. Keep Antigravity MCP Apply gated until the mutation contract and live checks
    are complete.
 
 ## Acceptance criteria
@@ -67,6 +67,8 @@ Remaining work:
 - [x] Preview reports legacy presence without exposing configuration values.
 - [x] Preparation cannot silently create a second active definition while
   legacy state is unresolved.
+- [x] TUI host discovery enforces the exact managed version without blocking
+  unrelated adapters or removing an already installed incompatible adapter.
 - [x] Antigravity 2.2.1 live verification confirms canonical-only command
   execution and no legacy-only command execution during the probe.
 - [x] Antigravity 2.2.1 live verification confirms canonical precedence when

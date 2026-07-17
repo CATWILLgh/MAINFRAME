@@ -6,6 +6,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/hostcompatibility"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
@@ -29,10 +30,11 @@ var visibleTargets = []domain.ComponentID{
 }
 
 type Target struct {
-	ID            domain.ComponentID
-	Status        TargetStatus
-	Selected      bool
-	Configuration []ConfigurationResource
+	ID                domain.ComponentID
+	Status            TargetStatus
+	Selected          bool
+	Configuration     []ConfigurationResource
+	HostCompatibility *hostcompatibility.Assessment
 }
 
 type ConfigurationStatus = configuration.Status
@@ -92,6 +94,7 @@ type Service struct {
 	configurationInspection *configuration.Inspection
 	configurationFallback   configuration.Plan
 	mcpInspection           *mcpconfiguration.Inspection
+	hostCompatibility       map[domain.ComponentID]hostcompatibility.Assessment
 }
 
 func New(model installmodel.Model, observed domain.ObservedState) (Service, error) {
@@ -171,11 +174,13 @@ func (service Service) Targets() []Target {
 	}
 	targets := make([]Target, 0, len(visibleTargets))
 	for _, id := range visibleTargets {
+		compatibility := service.hostCompatibilityFor(id)
 		targets = append(targets, Target{
-			ID:            id,
-			Status:        service.status(id, observed),
-			Selected:      observed[id].ID != "",
-			Configuration: append([]ConfigurationResource(nil), service.configuration[id]...),
+			ID:                id,
+			Status:            service.status(id, observed),
+			Selected:          observed[id].ID != "" && hostSelectable(compatibility),
+			Configuration:     append([]ConfigurationResource(nil), service.configuration[id]...),
+			HostCompatibility: compatibility,
 		})
 	}
 	return targets
@@ -236,15 +241,80 @@ func (service Service) Plan(components []domain.ComponentID) (domain.Plan, error
 		if !selectable(id) {
 			return domain.Plan{}, fmt.Errorf("component %q is not selectable", id)
 		}
+		if !hostSelectable(service.hostCompatibilityFor(id)) {
+			return domain.Plan{}, fmt.Errorf("component %q does not satisfy its host requirement", id)
+		}
 		if seen[id] {
 			return domain.Plan{}, fmt.Errorf("duplicate selected component %q", id)
 		}
 		seen[id] = true
 	}
-	return service.planner.Plan(domain.PlanRequest{
+	return service.planner.PlanWithPreservation(domain.PlanRequest{
 		Desired:  domain.DesiredState{Components: append([]domain.ComponentID(nil), components...)},
 		Observed: cloneObserved(service.observed),
-	})
+	}, service.preservationRoots(components))
+}
+
+func (service Service) WithHostCompatibility(
+	assessments []hostcompatibility.Assessment,
+) (Service, error) {
+	indexed := make(map[domain.ComponentID]hostcompatibility.Assessment, len(assessments))
+	for _, assessment := range assessments {
+		if assessment.ComponentID == "" || !validHostStatus(assessment.Status) {
+			return Service{}, fmt.Errorf("invalid host compatibility assessment for %q", assessment.ComponentID)
+		}
+		if _, duplicate := indexed[assessment.ComponentID]; duplicate {
+			return Service{}, fmt.Errorf("duplicate host compatibility assessment for %q", assessment.ComponentID)
+		}
+		assessment.DetectedVersions = append([]string(nil), assessment.DetectedVersions...)
+		assessment.ExpectedVersions = append([]string(nil), assessment.ExpectedVersions...)
+		indexed[assessment.ComponentID] = assessment
+	}
+	service.hostCompatibility = indexed
+	return service, nil
+}
+
+func (service Service) preservationRoots(selected []domain.ComponentID) []domain.ComponentID {
+	selectedSet := make(map[domain.ComponentID]bool, len(selected))
+	for _, component := range selected {
+		selectedSet[component] = true
+	}
+	observedSet := make(map[domain.ComponentID]bool, len(service.observed.Components))
+	for _, component := range service.observed.Components {
+		observedSet[component.ID] = true
+	}
+	var result []domain.ComponentID
+	for _, target := range visibleTargets {
+		if !selectedSet[target] && observedSet[target] &&
+			!hostSelectable(service.hostCompatibilityFor(target)) {
+			result = append(result, target)
+		}
+	}
+	return result
+}
+
+func (service Service) hostCompatibilityFor(id domain.ComponentID) *hostcompatibility.Assessment {
+	assessment, exists := service.hostCompatibility[id]
+	if !exists {
+		return nil
+	}
+	assessment.DetectedVersions = append([]string(nil), assessment.DetectedVersions...)
+	assessment.ExpectedVersions = append([]string(nil), assessment.ExpectedVersions...)
+	return &assessment
+}
+
+func hostSelectable(assessment *hostcompatibility.Assessment) bool {
+	return assessment == nil || assessment.Status == hostcompatibility.StatusSatisfied
+}
+
+func validHostStatus(status hostcompatibility.Status) bool {
+	switch status {
+	case hostcompatibility.StatusSatisfied, hostcompatibility.StatusMissing,
+		hostcompatibility.StatusIncompatible, hostcompatibility.StatusUnavailable:
+		return true
+	default:
+		return false
+	}
 }
 
 func (service Service) status(

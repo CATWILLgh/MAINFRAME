@@ -170,10 +170,27 @@ cached version 2 bundles. Antigravity is the first version 3 bundle: it records
 `com.google.antigravity` version `2.2.1`, the exact native host covered by live
 evidence. Every version 3 bundle must declare at least one requirement. All
 requirement rows must hold, while any exact version listed within one row may
-satisfy that row. The requirement is metadata only in this milestone. The legacy
-`install.sh` path continues to accept Antigravity 2.x until TUI discovery and a
-clear incompatibility screen can enforce the narrower managed policy without
-silently removing existing support.
+satisfy that row. The launcher inspects bounded `Info.plist` files under the
+system and user application directories, supports both XML and binary property
+lists, and exposes only bundle identifiers and versions to the lifecycle. A
+complete scan distinguishes a missing application from an installed unsupported
+version; an incomplete or unavailable scan fails closed for that adapter. The
+scan has shared entry, byte, and retained-result limits across both application
+directories. Unsafe or oversized metadata is never rendered. Multiple detected
+copies are accepted only when every copy uses a supported exact version; a
+supported and unsupported pair is reported as incompatible rather than guessing
+which copy the operating system will launch.
+
+The TUI enforces the requirement only for Antigravity. A compatible application
+makes the adapter selectable. A missing, unsupported, or safely unverifiable
+application removes only Antigravity from the choices and explains the fixed
+reason without exposing paths or parser errors. If an incompatible Antigravity
+adapter is already installed, filesystem and configuration planners preserve
+its complete dependency closure without repair or removal. Explicit selection
+is rejected again by the lifecycle boundary. Claude Code, Codex, and OpenCode
+remain usable. The legacy `install.sh` path continues to accept Antigravity 2.x
+while the TUI uses the narrower evidence-backed managed policy.
+
 The TUI can therefore classify each adapter-local Context7 entry as an
 addition, update, managed removal, user-owned conflict, relinquished ownership,
 or already ready.

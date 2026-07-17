@@ -48,6 +48,7 @@ func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 	if model.screen == screenMCP {
 		model.form = mcpForm(model.catalog, model.mcpChoices, model.selected)
 	} else {
+		model.selected = selectableSelection(model.targets, model.selected)
 		model.form = selectionForm(model.targets, &model.selected)
 	}
 	return model, model.form.Init()

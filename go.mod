@@ -8,6 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.5
 	github.com/pelletier/go-toml/v2 v2.4.3
 	golang.org/x/sys v0.46.0
+	howett.net/plist v1.0.1
 )
 
 require (
