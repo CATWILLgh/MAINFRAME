@@ -10,6 +10,8 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
@@ -50,7 +52,7 @@ func TestBuildPreviewServiceObservesOpenCodePermissionOwnership(t *testing.T) {
 				target.Configuration[0].Status != lifecycle.ConfigurationReady {
 				t.Fatalf("OpenCode configuration = %#v", target.Configuration)
 			}
-			preview, err := service.Preview(nil)
+			preview, err := service.Preview(lifecycle.PreviewRequest{})
 			if err != nil {
 				t.Fatalf("preview deselection: %v", err)
 			}
@@ -67,6 +69,53 @@ func TestBuildPreviewServiceObservesOpenCodePermissionOwnership(t *testing.T) {
 		}
 	}
 	t.Fatal("OpenCode target not found")
+}
+
+func TestBuildPreviewServicePlansSelectedOpenCodeMCP(t *testing.T) {
+	home := t.TempDir()
+	configRoot := filepath.Join(home, ".config")
+	openCodeRoot := filepath.Join(configRoot, "opencode")
+	if err := os.MkdirAll(openCodeRoot, 0o700); err != nil {
+		t.Fatalf("mkdir OpenCode root: %v", err)
+	}
+	writePreviewFile(t, filepath.Join(openCodeRoot, "opencode.json"), `{}`)
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", configRoot)
+	catalogPayload, err := os.ReadFile("../../internal/mcpcatalog/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := mcpcatalog.Parse(catalogPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := buildPreviewServiceFrom(
+		t.TempDir(),
+		releasecontract.Release{
+			ID:             "test-release",
+			Model:          previewOwnershipModel(t),
+			Resources:      []releasecontract.Resource{previewOwnershipResource()},
+			MCPCatalog:     catalog,
+			MCPProjections: []releasecontract.MCPProjection{previewMCPProjection()},
+		},
+	)
+	if err != nil {
+		t.Fatalf("build preview service: %v", err)
+	}
+	preview, err := service.Preview(lifecycle.PreviewRequest{
+		Components: []domain.ComponentID{domain.ComponentOpenCode},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentOpenCode},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("preview selected MCP: %v", err)
+	}
+	if preview.MCP.Blocking || len(preview.MCP.Intents) != 1 ||
+		preview.MCP.Intents[0].Kind != mcpconfiguration.IntentAdd {
+		t.Fatalf("MCP preview = %#v", preview.MCP)
+	}
 }
 
 func writePreviewFile(t *testing.T, path, content string) {
@@ -113,5 +162,28 @@ func previewOwnershipResource() releasecontract.Resource {
 			RegistrySchemaVersion: 1,
 			EntriesPointer:        "/actions",
 		},
+	}
+}
+
+func previewMCPProjection() releasecontract.MCPProjection {
+	return releasecontract.MCPProjection{
+		ID:          "opencode.mcp.context7",
+		ComponentID: domain.ComponentOpenCode,
+		Codec:       releasecontract.MCPProjectionOpenCodeRemote,
+		ServerID:    "context7",
+		ProfileID:   "remote-keyless",
+		Target: domain.Location{
+			Root: domain.RootOpenCodeConfig,
+			Path: "opencode.json",
+		},
+		MapPointer: "/mcp",
+		EntryKey:   "context7",
+		RegistryTarget: domain.Location{
+			Root: domain.RootOpenCodeConfig,
+			Path: "opencode.json.mainframe-mcp.json",
+		},
+		RegistrySchemaVersion:  1,
+		RegistryEntriesPointer: "/servers",
+		DesiredEntry:           `{"type":"remote","url":"https://mcp.context7.com/mcp"}`,
 	}
 }

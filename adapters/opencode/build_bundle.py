@@ -319,6 +319,25 @@ def build(root: Path, output: Path) -> None:
         install_units=_install_units(output),
         resources=_resources(),
         runtime_profile=asdict(profile),
+        mcp_projections=[
+            {
+                "id": "opencode.mcp.context7",
+                "codec": "opencode-remote-v1",
+                "server": "context7",
+                "profile": "remote-keyless",
+                "target": {"root": "opencode-config", "path": "opencode.json"},
+                "map_pointer": "/mcp",
+                "entry_key": "context7",
+                "registry": {
+                    "target": {
+                        "root": "opencode-config",
+                        "path": "opencode.json.mainframe-mcp.json",
+                    },
+                    "schema_version": 1,
+                    "entries_pointer": "/servers",
+                },
+            }
+        ],
     )
 
 

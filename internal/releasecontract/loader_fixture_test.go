@@ -21,7 +21,7 @@ func writeFixture(t *testing.T) string {
 	writeFile(t, filepath.Join(bundle, "payload.txt"), "payload\n", 0o644)
 	writeFile(t, filepath.Join(bundle, "config.json"), "{}\n", 0o644)
 	manifest := map[string]any{
-		"schema_version": 1,
+		"schema_version": 2,
 		"kind":           "mainframe-bundle",
 		"component":      "codex",
 		"dependencies":   []string{},
@@ -50,6 +50,7 @@ func writeFixture(t *testing.T) string {
 			payloadRow(t, filepath.Join(bundle, "payload.txt"), "payload.txt"),
 		},
 		"runtime_profile": map[string]string{"config_root": "${CODEX_HOME}"},
+		"mcp_projections": []any{},
 	}
 	manifestPath := filepath.Join(bundle, "bundle.json")
 	writeJSON(t, manifestPath, manifest, 0o644)
@@ -105,6 +106,52 @@ func catalogFixtureJSON() string {
     }]
   }]
 }`
+}
+
+func validMCPProjectionRecord() map[string]any {
+	return map[string]any{
+		"id":          "opencode.mcp.context7",
+		"codec":       "opencode-remote-v1",
+		"server":      "context7",
+		"profile":     "remote-keyless",
+		"target":      map[string]any{"root": "opencode-config", "path": "opencode.json"},
+		"map_pointer": "/mcp",
+		"entry_key":   "context7",
+		"registry": map[string]any{
+			"target":          map[string]any{"root": "opencode-config", "path": "opencode.json.mainframe-mcp.json"},
+			"schema_version":  1,
+			"entries_pointer": "/servers",
+		},
+	}
+}
+
+func writeOpenCodeProjectionFixture(t *testing.T) (string, string) {
+	t.Helper()
+	root := writeFixture(t)
+	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+	for _, name := range []string{"config.json", "payload.txt"} {
+		if err := os.Remove(filepath.Join(filepath.Dir(manifestPath), name)); err != nil {
+			t.Fatalf("remove fixture payload: %v", err)
+		}
+	}
+	manifest := readObject(t, manifestPath)
+	manifest["component"] = "opencode"
+	manifest["runtime_profile"] = map[string]string{
+		"config_root": "${XDG_CONFIG_HOME}/opencode",
+	}
+	manifest["install_units"] = []any{}
+	manifest["legacy_artifacts"] = []any{}
+	manifest["resources"] = []any{}
+	manifest["payload_files"] = []any{}
+	manifest["mcp_projections"] = []any{validMCPProjectionRecord()}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	indexPath := filepath.Join(root, "release.json")
+	index := readObject(t, indexPath)
+	entry := index["manifests"].([]any)[0].(map[string]any)
+	entry["component"] = "opencode"
+	entry["sha256"] = digest(t, manifestPath)
+	writeJSON(t, indexPath, index, 0o644)
+	return root, manifestPath
 }
 
 func payloadRow(t *testing.T, file, path string) map[string]any {

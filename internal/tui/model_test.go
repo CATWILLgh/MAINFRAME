@@ -263,20 +263,22 @@ func TestEscapeAbortsSelectionButReturnsFromPreview(t *testing.T) {
 }
 
 type fakePreviewer struct {
-	targets  []lifecycle.Target
-	preview  lifecycle.Preview
-	err      error
-	selected []domain.ComponentID
-	calls    int
+	targets       []lifecycle.Target
+	preview       lifecycle.Preview
+	err           error
+	selected      []domain.ComponentID
+	mcpSelections []mcpcatalog.Selection
+	calls         int
 }
 
 func (fake *fakePreviewer) Targets() []lifecycle.Target {
 	return append([]lifecycle.Target(nil), fake.targets...)
 }
 
-func (fake *fakePreviewer) Preview(selected []domain.ComponentID) (lifecycle.Preview, error) {
+func (fake *fakePreviewer) Preview(request lifecycle.PreviewRequest) (lifecycle.Preview, error) {
 	fake.calls++
-	fake.selected = append([]domain.ComponentID(nil), selected...)
+	fake.selected = append([]domain.ComponentID(nil), request.Components...)
+	fake.mcpSelections = append([]mcpcatalog.Selection(nil), request.MCPSelections...)
 	return fake.preview, fake.err
 }
 

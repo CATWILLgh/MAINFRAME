@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 )
 
 func TestEnvironmentSelectionOpensMCPOnboardingBeforePreview(t *testing.T) {
@@ -35,7 +37,8 @@ func TestEnvironmentSelectionOpensMCPOnboardingBeforePreview(t *testing.T) {
 }
 
 func TestMCPChoiceAppearsInReadOnlyPreview(t *testing.T) {
-	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
+	previewer := &fakePreviewer{targets: defaultTargets()}
+	model := newTestModel(t, previewer)
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode, domain.ComponentCodex}
 	model.openMCP()
 	choice := model.mcpChoices["context7"]
@@ -47,6 +50,11 @@ func TestMCPChoiceAppearsInReadOnlyPreview(t *testing.T) {
 	if command != nil || updated.screen != screenPreview {
 		t.Fatalf("screen = %v, command = %v", updated.screen, command)
 	}
+	if len(previewer.mcpSelections) != 1 ||
+		previewer.mcpSelections[0].ServerID != "context7" ||
+		previewer.mcpSelections[0].ProfileID != "remote-api-key" {
+		t.Fatalf("lifecycle MCP selections = %#v", previewer.mcpSelections)
+	}
 	for _, text := range []string{
 		"MCP onboarding choices",
 		"Context7",
@@ -57,6 +65,41 @@ func TestMCPChoiceAppearsInReadOnlyPreview(t *testing.T) {
 	} {
 		if !strings.Contains(updated.View().Content, text) {
 			t.Fatalf("preview does not contain %q:\n%s", text, updated.View().Content)
+		}
+	}
+}
+
+func TestMCPConfigurationIntentAppearsInPreview(t *testing.T) {
+	previewer := &fakePreviewer{
+		targets: defaultTargets(),
+		preview: lifecycle.Preview{MCP: mcpconfiguration.Plan{
+			Intents: []mcpconfiguration.Intent{{
+				ComponentID: domain.ComponentOpenCode,
+				ServerID:    "context7",
+				Kind:        mcpconfiguration.IntentAdd,
+				Reason:      "selected entry is absent",
+			}},
+		}},
+	}
+	model := newTestModel(t, previewer)
+	model.selected = []domain.ComponentID{domain.ComponentOpenCode}
+	model.openMCP()
+	choice := model.mcpChoices["context7"]
+	choice.Enabled = true
+	choice.ProfileID = "remote-keyless"
+	choice.Adapters = []domain.ComponentID{domain.ComponentOpenCode}
+
+	updated, command := model.openPreview()
+	if command != nil || updated.screen != screenPreview {
+		t.Fatalf("screen = %v, command = %v", updated.screen, command)
+	}
+	for _, text := range []string{
+		"MCP configuration plan",
+		"OpenCode · context7 · add",
+		"selected entry is absent",
+	} {
+		if !strings.Contains(updated.View().Content, text) {
+			t.Fatalf("configuration preview does not contain %q:\n%s", text, updated.View().Content)
 		}
 	}
 }

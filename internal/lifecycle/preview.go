@@ -7,6 +7,8 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/plan"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
@@ -73,6 +75,12 @@ type ConfigurationResource struct {
 type Preview struct {
 	Filesystem    domain.Plan
 	Configuration configuration.Plan
+	MCP           mcpconfiguration.Plan
+}
+
+type PreviewRequest struct {
+	Components    []domain.ComponentID
+	MCPSelections []mcpcatalog.Selection
 }
 
 type Service struct {
@@ -83,6 +91,7 @@ type Service struct {
 	configuration           map[domain.ComponentID][]ConfigurationResource
 	configurationInspection *configuration.Inspection
 	configurationFallback   configuration.Plan
+	mcpInspection           *mcpconfiguration.Inspection
 }
 
 func New(model installmodel.Model, observed domain.ObservedState) (Service, error) {

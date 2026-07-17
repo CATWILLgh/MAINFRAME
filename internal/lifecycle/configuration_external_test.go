@@ -79,7 +79,7 @@ func assertExternalLifecyclePreview(
 			)
 		}
 	}
-	preview, err := service.Preview([]domain.ComponentID{domain.ComponentCodex})
+	preview, err := service.Preview(PreviewRequest{Components: []domain.ComponentID{domain.ComponentCodex}})
 	if err != nil {
 		t.Fatalf("Preview() error = %v", err)
 	}

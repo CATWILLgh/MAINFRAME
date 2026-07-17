@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 )
 
 func renderMCPPreview(preview mcpcatalog.OnboardingPreview) string {
@@ -19,6 +20,29 @@ func renderMCPPreview(preview mcpcatalog.OnboardingPreview) string {
 	lines = append(lines, mutedStyle.Render(
 		"Read-only choice. Configuration and credentials are not changed.",
 	))
+	return strings.Join(lines, "\n")
+}
+
+func renderMCPConfigurationPlan(plan mcpconfiguration.Plan) string {
+	lines := []string{headingStyle.Render("MCP configuration plan")}
+	if len(plan.Intents) == 0 {
+		return strings.Join(append(lines, mutedStyle.Render("No MCP configuration changes.")), "\n")
+	}
+	for _, intent := range plan.Intents {
+		line := fmt.Sprintf(
+			"  %s · %s · %s",
+			componentName(intent.ComponentID),
+			intent.ServerID,
+			intent.Kind,
+		)
+		if intent.Reason != "" {
+			line += "\n    " + intent.Reason
+		}
+		lines = append(lines, line)
+	}
+	if plan.Blocking {
+		lines = append(lines, errorStyle.Render("MCP configuration has blocking conflicts."))
+	}
 	return strings.Join(lines, "\n")
 }
 

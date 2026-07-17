@@ -171,6 +171,7 @@ func validDecision(value string) bool {
 type ownershipRegistryTarget struct {
 	resourceID string
 	target     domain.Location
+	shareable  bool
 }
 
 func validateGlobalOwnershipRegistries(
@@ -216,6 +217,17 @@ func ownershipRegistryTargets(
 				target:     target,
 			})
 		}
+		for _, projection := range manifest.MCPProjections {
+			target, err := location(projection.Registry.Target)
+			if err != nil {
+				return nil, err
+			}
+			targets = append(targets, ownershipRegistryTarget{
+				resourceID: projection.ID,
+				target:     target,
+				shareable:  true,
+			})
+		}
 	}
 	return targets, nil
 }
@@ -225,7 +237,14 @@ func rejectOwnershipRegistryOverlap(
 	registries []ownershipRegistryTarget,
 ) error {
 	for otherIndex, other := range registries {
-		if otherIndex != index && locationsOverlap(registries[index].target, other.target) {
+		current := registries[index]
+		if otherIndex == index {
+			continue
+		}
+		if current.shareable && other.shareable && current.target == other.target {
+			continue
+		}
+		if locationsOverlap(current.target, other.target) {
 			return fmt.Errorf("registry targets overlap")
 		}
 	}

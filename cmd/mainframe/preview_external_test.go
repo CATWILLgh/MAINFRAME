@@ -23,7 +23,7 @@ func TestBuildPreviewServiceReadsCodexHookTrustThroughExternalObserver(t *testin
 			candidate.Configuration[0].Status != lifecycle.ConfigurationReady {
 			t.Fatalf("Codex configuration = %#v", candidate.Configuration)
 		}
-		preview, err := service.Preview([]domain.ComponentID{domain.ComponentCodex})
+		preview, err := service.Preview(lifecycle.PreviewRequest{Components: []domain.ComponentID{domain.ComponentCodex}})
 		if err != nil {
 			t.Fatalf("Preview() error = %v", err)
 		}

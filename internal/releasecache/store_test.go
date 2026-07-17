@@ -325,7 +325,7 @@ func fixtureManifest(t *testing.T, payloadPath string, mode os.FileMode) map[str
 		t.Fatalf("stat fixture payload: %v", err)
 	}
 	return map[string]any{
-		"schema_version": 1,
+		"schema_version": 2,
 		"kind":           "mainframe-bundle",
 		"component":      "codex",
 		"dependencies":   []string{},
@@ -340,6 +340,7 @@ func fixtureManifest(t *testing.T, payloadPath string, mode os.FileMode) map[str
 			"size": info.Size(), "sha256": fileDigest(t, payloadPath),
 		}},
 		"runtime_profile": map[string]string{"config_root": "${CODEX_HOME}"},
+		"mcp_projections": []any{},
 	}
 }
 

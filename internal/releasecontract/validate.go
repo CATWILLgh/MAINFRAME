@@ -153,7 +153,8 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 		manifest.LegacyArtifacts != nil &&
 		manifest.Resources != nil &&
 		manifest.PayloadFiles != nil &&
-		manifest.RuntimeProfile != nil
+		manifest.RuntimeProfile != nil &&
+		manifest.MCPProjections != nil
 }
 
 func validateUnits(

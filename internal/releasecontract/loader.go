@@ -55,6 +55,10 @@ func Load(root string) (Release, error) {
 	if err := validateGlobal(manifests); err != nil {
 		return Release{}, err
 	}
+	projections, err := loadMCPProjections(manifests, catalog)
+	if err != nil {
+		return Release{}, err
+	}
 	if err := validateClosedReleaseTree(canonical, index, manifests); err != nil {
 		return Release{}, err
 	}
@@ -64,11 +68,12 @@ func Load(root string) (Release, error) {
 	}
 	sort.Slice(resources, func(i, j int) bool { return resources[i].ID < resources[j].ID })
 	return Release{
-		ID:          index.ReleaseID,
-		IndexSHA256: digestBytes(indexPayload),
-		Model:       model,
-		Resources:   resources,
-		MCPCatalog:  catalog,
+		ID:             index.ReleaseID,
+		IndexSHA256:    digestBytes(indexPayload),
+		Model:          model,
+		Resources:      resources,
+		MCPCatalog:     catalog,
+		MCPProjections: projections,
 	}, nil
 }
 
@@ -123,6 +128,12 @@ func validateGlobal(manifests []bundleManifest) error {
 				return fmt.Errorf("duplicate release item %q", resource.ID)
 			}
 			identifiers[resource.ID] = true
+		}
+		for _, projection := range manifest.MCPProjections {
+			if identifiers[projection.ID] {
+				return fmt.Errorf("duplicate release item %q", projection.ID)
+			}
+			identifiers[projection.ID] = true
 		}
 	}
 	for _, manifest := range manifests {

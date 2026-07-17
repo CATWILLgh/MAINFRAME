@@ -121,6 +121,15 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 				id: resource.ID, strategy: ResourceStrategy(resource.Strategy), target: target,
 			})
 		}
+		for _, projection := range manifest.MCPProjections {
+			target, err := location(projection.Target)
+			if err != nil {
+				return err
+			}
+			resourceTargets = append(resourceTargets, resourceTarget{
+				id: projection.ID, strategy: StrategyJSONKeyMerge, target: target,
+			})
+		}
 	}
 	claims := make(map[domain.Location][]jsonClaim)
 	for _, manifest := range manifests {
@@ -165,6 +174,27 @@ func validateGlobalJSONOwnership(manifests []bundleManifest) error {
 				}
 				claims[target] = append(claims[target], jsonClaim{raw: raw, pointer: pointer})
 			}
+		}
+		for _, projection := range manifest.MCPProjections {
+			target, err := location(projection.Target)
+			if err != nil {
+				return err
+			}
+			if err := rejectInstallOverlap(target, installTargets); err != nil {
+				return fmt.Errorf("MCP projection %q: %w", projection.ID, err)
+			}
+			if err := rejectResourceOverlap(projection.ID, target, resourceTargets); err != nil {
+				return fmt.Errorf("MCP projection %q: %w", projection.ID, err)
+			}
+			raw := projection.MapPointer + "/" + projection.EntryKey
+			pointer, err := jsondocument.ParsePointer(raw)
+			if err != nil {
+				return err
+			}
+			if err := rejectClaimOverlap(raw, pointer, claims[target]); err != nil {
+				return fmt.Errorf("MCP projection %q: %w", projection.ID, err)
+			}
+			claims[target] = append(claims[target], jsonClaim{raw: raw, pointer: pointer})
 		}
 	}
 	return validateGlobalOwnershipRegistries(manifests, installTargets, resourceTargets)

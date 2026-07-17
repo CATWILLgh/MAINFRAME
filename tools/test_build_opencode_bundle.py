@@ -139,6 +139,25 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert manifest["runtime_profile"]["config_root"] == (
         "${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
     )
+    assert manifest["mcp_projections"] == [
+        {
+            "id": "opencode.mcp.context7",
+            "codec": "opencode-remote-v1",
+            "server": "context7",
+            "profile": "remote-keyless",
+            "target": {"root": "opencode-config", "path": "opencode.json"},
+            "map_pointer": "/mcp",
+            "entry_key": "context7",
+            "registry": {
+                "target": {
+                    "root": "opencode-config",
+                    "path": "opencode.json.mainframe-mcp.json",
+                },
+                "schema_version": 1,
+                "entries_pointer": "/servers",
+            },
+        }
+    ]
     units = {unit["source"]: unit for unit in manifest["install_units"]}
     assert units["AGENTS.md"]["target"] == {
         "root": "opencode-config",

@@ -21,6 +21,11 @@ from release_json import validate_owned_json_source, validate_shell_source
 from release_component_roots import validate_component_targets
 from release_external_state_contract import validate_external_state_units
 from mcp_catalog_contract import catalog_entry, validate_catalog_entry
+import release_contract_fields as fields
+from release_mcp_projection import (
+    validate_manifest_projections,
+    validate_release_projections,
+)
 from release_contract_helpers import (
     location as _location,
     locations_overlap as _locations_overlap,
@@ -30,40 +35,11 @@ from release_contract_helpers import (
     sorted_unique_strings as _sorted_unique_strings,
     unique_identifier as _unique_identifier,
 )
-BUNDLE_SCHEMA_VERSION = 1
+BUNDLE_SCHEMA_VERSION = 2
 RELEASE_SCHEMA_VERSION = 2
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
-BUNDLE_FIELDS = {
-    "schema_version",
-    "kind",
-    "component",
-    "dependencies",
-    "install_units",
-    "legacy_artifacts",
-    "resources",
-    "payload_files",
-    "runtime_profile",
-}
-INDEX_FIELDS = {"schema_version", "kind", "release_id", "mcp_catalog", "manifests"}
-UNIT_REQUIRED_FIELDS = {"id", "kind", "source", "target"}
-UNIT_OPTIONAL_FIELDS = {"legacy_source_suffixes"}
-LEGACY_FIELDS = {"target", "target_suffixes"}
-RESOURCE_REQUIRED_FIELDS = {"id", "strategy", "target", "observation", "apply"}
-RESOURCE_OPTIONAL_FIELDS = {
-    "source", "legacy_source_suffixes", "owned_json_pointers", "ownership", "external_state"
-}
-PAYLOAD_FIELDS = {"path", "mode", "size", "sha256"}
-ENTRY_FIELDS = {"component", "path", "sha256"}
-SOURCE_STRATEGIES = {"json-key-merge", "seed-if-absent", "shell-line", "shell-line-if-present"}
-SOURCELESS_STRATEGIES = {"ensure-directory", "manual-action"}
-OBSERVABLE_STRATEGIES = {
-    "ensure-directory",
-    "seed-if-absent",
-    "shell-line",
-    "shell-line-if-present",
-}
-SHELL_STRATEGIES = {"shell-line", "shell-line-if-present"}
+SOURCE_STRATEGIES = fields.SOURCE_STRATEGIES
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -77,6 +53,7 @@ def write_bundle_manifest(
     resources: list[dict[str, Any]],
     legacy_artifacts: list[dict[str, Any]] | None = None,
     runtime_profile: dict[str, str] | None = None,
+    mcp_projections: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate bundle mappings and write their deterministic integrity manifest."""
     root = _real_directory(bundle_root, "bundle root")
@@ -96,6 +73,9 @@ def write_bundle_manifest(
         "resources": sorted(resources, key=lambda item: item.get("id", "")),
         "payload_files": _payload_inventory(root),
         "runtime_profile": dict(sorted((runtime_profile or {}).items())),
+        "mcp_projections": sorted(
+            mcp_projections or [], key=lambda item: item.get("id", "")
+        ),
     }
     _validate_bundle_document(root, manifest)
     _write_json(root / "bundle.json", manifest)
@@ -167,12 +147,19 @@ def validate_release(release_root: Path) -> dict[str, Any]:
         locations_overlap=_locations_overlap,
         unique_identifier=_unique_identifier,
     )
+    catalog_path = root / index["mcp_catalog"]["path"]
+    validate_release_projections(
+        manifests,
+        _read_json(catalog_path),
+        parse_location=_location,
+        locations_overlap=_locations_overlap,
+    )
     return index
 
 
 def _validate_bundle_document(root: Path, manifest: Any) -> None:
     _require_object(manifest, "bundle manifest")
-    _require_fields(manifest, BUNDLE_FIELDS, BUNDLE_FIELDS, "bundle manifest")
+    _require_fields(manifest, fields.BUNDLE_FIELDS, fields.BUNDLE_FIELDS, "bundle manifest")
     if (
         type(manifest["schema_version"]) is not int
         or manifest["schema_version"] != BUNDLE_SCHEMA_VERSION
@@ -201,6 +188,11 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
     _validate_resources(component, root, manifest["resources"], manifest["payload_files"])
     validate_external_state_units(manifest)
     validate_component_targets(component, manifest)
+    validate_manifest_projections(
+        component,
+        manifest["mcp_projections"],
+        parse_location=_location,
+    )
 
 
 def _validate_units(root: Path, units: Any) -> None:
@@ -212,8 +204,8 @@ def _validate_units(root: Path, units: Any) -> None:
         _require_object(unit, "install unit")
         _require_fields(
             unit,
-            UNIT_REQUIRED_FIELDS,
-            UNIT_REQUIRED_FIELDS | UNIT_OPTIONAL_FIELDS,
+            fields.UNIT_REQUIRED_FIELDS,
+            fields.UNIT_REQUIRED_FIELDS | fields.UNIT_OPTIONAL_FIELDS,
             "install unit",
         )
         identifier = _unique_identifier(unit["id"], seen_ids, "install unit")
@@ -247,7 +239,7 @@ def _validate_legacy_artifacts(artifacts: Any) -> None:
     locations = []
     for artifact in artifacts:
         _require_object(artifact, "legacy artifact")
-        _require_fields(artifact, LEGACY_FIELDS, LEGACY_FIELDS, "legacy artifact")
+        _require_fields(artifact, fields.LEGACY_FIELDS, fields.LEGACY_FIELDS, "legacy artifact")
         locations.append(_location(artifact["target"], "legacy artifact target"))
         suffixes = artifact["target_suffixes"]
         if not suffixes or not _sorted_portable_paths(suffixes):
@@ -268,16 +260,16 @@ def _validate_resources(
     payload_by_path = {row["path"]: row for row in payload_rows}
     for resource in resources:
         _require_object(resource, "resource")
-        allowed = RESOURCE_REQUIRED_FIELDS | RESOURCE_OPTIONAL_FIELDS
-        _require_fields(resource, RESOURCE_REQUIRED_FIELDS, allowed, "resource")
+        allowed = fields.RESOURCE_REQUIRED_FIELDS | fields.RESOURCE_OPTIONAL_FIELDS
+        _require_fields(resource, fields.RESOURCE_REQUIRED_FIELDS, allowed, "resource")
         identifier = _unique_identifier(resource["id"], seen_ids, "resource")
         strategy = resource["strategy"]
-        if strategy not in SOURCE_STRATEGIES | SOURCELESS_STRATEGIES:
+        if strategy not in fields.SOURCE_STRATEGIES | fields.SOURCELESS_STRATEGIES:
             raise ValueError(f"resource {identifier!r} has invalid strategy")
         has_external_state = "external_state" in resource
         external_state = resource.get("external_state")
         has_source = "source" in resource
-        if ((strategy in SOURCE_STRATEGIES) or has_external_state) != has_source:
+        if ((strategy in fields.SOURCE_STRATEGIES) or has_external_state) != has_source:
             raise ValueError(f"resource {identifier!r} has inconsistent source")
         if has_source:
             source = _portable_path(resource["source"], f"resource {identifier!r} source")
@@ -311,10 +303,10 @@ def _validate_resources(
                 raise ValueError(f"resource {identifier!r} has invalid external state boundary")
         elif strategy == "manual-action" and observation == "supported":
             raise ValueError(f"resource {identifier!r} overstates lifecycle support")
-        if observation == "supported" and strategy not in OBSERVABLE_STRATEGIES:
+        if observation == "supported" and strategy not in fields.OBSERVABLE_STRATEGIES:
             if strategy != "json-key-merge" and not has_external_state:
                 raise ValueError(f"resource {identifier!r} overstates lifecycle support")
-        if observation == "supported" and strategy in SHELL_STRATEGIES:
+        if observation == "supported" and strategy in fields.SHELL_STRATEGIES:
             validate_shell_source(source_path, identifier)
         if observation == "supported" and strategy == "json-key-merge":
             expected = payload_by_path.get(source)
@@ -339,7 +331,7 @@ def _validate_payload_rows(rows: Any) -> None:
     paths = []
     for row in rows:
         _require_object(row, "payload file")
-        _require_fields(row, PAYLOAD_FIELDS, PAYLOAD_FIELDS, "payload file")
+        _require_fields(row, fields.PAYLOAD_FIELDS, fields.PAYLOAD_FIELDS, "payload file")
         paths.append(_portable_path(row["path"], "payload path"))
         if not isinstance(row["mode"], str) or not re.fullmatch(r"0[0-7]{3}", row["mode"]):
             raise ValueError("invalid payload mode")
@@ -353,7 +345,7 @@ def _validate_payload_rows(rows: Any) -> None:
 
 def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
     _require_object(index, "release index")
-    _require_fields(index, INDEX_FIELDS, INDEX_FIELDS, "release index")
+    _require_fields(index, fields.INDEX_FIELDS, fields.INDEX_FIELDS, "release index")
     if (
         type(index["schema_version"]) is not int
         or index["schema_version"] != RELEASE_SCHEMA_VERSION
@@ -370,7 +362,7 @@ def _validate_release_document(root: Path, index: Any) -> list[dict[str, Any]]:
     manifests = []
     for entry in entries:
         _require_object(entry, "release manifest entry")
-        _require_fields(entry, ENTRY_FIELDS, ENTRY_FIELDS, "release manifest entry")
+        _require_fields(entry, fields.ENTRY_FIELDS, fields.ENTRY_FIELDS, "release manifest entry")
         component = entry["component"]
         if not isinstance(component, str) or not IDENTIFIER.fullmatch(component):
             raise ValueError("invalid release component")

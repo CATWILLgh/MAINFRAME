@@ -43,10 +43,10 @@ func TestPreviewPlansConfigurationForDeduplicatedDependencyClosure(t *testing.T)
 		t.Fatalf("service: %v", err)
 	}
 
-	got, err := service.Preview([]domain.ComponentID{
+	got, err := service.Preview(PreviewRequest{Components: []domain.ComponentID{
 		domain.ComponentClaudeCode,
 		domain.ComponentCodex,
-	})
+	}})
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestLegacyPreviewReportsConfigurationPlanningUnavailable(t *testing.T) {
 		t.Fatalf("service: %v", err)
 	}
 
-	got, err := service.Preview([]domain.ComponentID{domain.ComponentOpenCode})
+	got, err := service.Preview(PreviewRequest{Components: []domain.ComponentID{domain.ComponentOpenCode}})
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestLegacyObservedConfigurationStillReportsPlanningUnavailable(t *testing.T
 		t.Fatalf("service: %v", err)
 	}
 
-	got, err := service.Preview([]domain.ComponentID{domain.ComponentCodex})
+	got, err := service.Preview(PreviewRequest{Components: []domain.ComponentID{domain.ComponentCodex}})
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -141,10 +141,10 @@ func TestLegacyObservedConfigurationStillReportsPlanningUnavailable(t *testing.T
 func TestPreviewRejectsInvalidSelectionBeforeConfigurationPlanning(t *testing.T) {
 	service := newTestService(t, domain.ObservedState{})
 
-	_, err := service.Preview([]domain.ComponentID{
+	_, err := service.Preview(PreviewRequest{Components: []domain.ComponentID{
 		domain.ComponentCodex,
 		domain.ComponentCodex,
-	})
+	}})
 	if err == nil || !strings.Contains(err.Error(), "duplicate") {
 		t.Fatalf("Preview() error = %v, want duplicate selection error", err)
 	}

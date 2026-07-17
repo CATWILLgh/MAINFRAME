@@ -63,7 +63,8 @@ def test_bundle_manifest_records_units_resources_and_payload_integrity():
 
     manifest = release_contract.validate_bundle(bundle)
 
-    assert manifest["schema_version"] == 1
+    assert manifest["schema_version"] == 2
+    assert manifest["mcp_projections"] == []
     assert manifest["kind"] == "mainframe-bundle"
     assert manifest["component"] == "credential-tools"
     assert [item["id"] for item in manifest["install_units"]] == [

@@ -7,6 +7,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
@@ -37,6 +38,20 @@ func NewWithInspection(
 	return service, nil
 }
 
+func NewWithInspections(
+	model installmodel.Model,
+	observed domain.ObservedState,
+	configurationInspection configuration.Inspection,
+	mcpInspection mcpconfiguration.Inspection,
+) (Service, error) {
+	service, err := NewWithInspection(model, observed, configurationInspection)
+	if err != nil {
+		return Service{}, err
+	}
+	service.mcpInspection = &mcpInspection
+	return service, nil
+}
+
 func externalObservationsForInventory(
 	resources []releasecontract.Resource,
 	observations []configuration.Observation,
@@ -64,18 +79,29 @@ func externalObservationsForInventory(
 	return result
 }
 
-func (service Service) Preview(components []domain.ComponentID) (Preview, error) {
-	filesystem, err := service.Plan(components)
+func (service Service) Preview(request PreviewRequest) (Preview, error) {
+	filesystem, err := service.Plan(request.Components)
 	if err != nil {
 		return Preview{}, err
+	}
+	mcpPlan := mcpconfiguration.Plan{}
+	if service.mcpInspection != nil {
+		mcpPlan, err = service.mcpInspection.Plan(
+			request.Components,
+			request.MCPSelections,
+		)
+		if err != nil {
+			return Preview{}, fmt.Errorf("plan MCP configuration: %w", err)
+		}
 	}
 	if service.configurationInspection == nil {
 		return Preview{
 			Filesystem:    filesystem,
 			Configuration: cloneConfigurationPlan(service.configurationFallback),
+			MCP:           mcpPlan,
 		}, nil
 	}
-	included := service.configurationComponents(components)
+	included := service.configurationComponents(request.Components)
 	configurationPlan, err := service.configurationInspection.Plan(included)
 	if err != nil {
 		return Preview{}, fmt.Errorf("plan configuration: %w", err)
@@ -87,6 +113,7 @@ func (service Service) Preview(components []domain.ComponentID) (Preview, error)
 	return Preview{
 		Filesystem:    filesystem,
 		Configuration: configurationPlan,
+		MCP:           mcpPlan,
 	}, nil
 }
 

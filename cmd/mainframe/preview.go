@@ -16,6 +16,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 	"github.com/CATWILLgh/MAINFRAME/internal/releaselayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/tui"
@@ -88,6 +89,7 @@ func buildPreviewServiceFromContext(
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("open host namespace: %w", err)
 	}
+	inspectionHost := newInspectionCache(namespace)
 	observed, err := discovery.Discover(release.Model, namespace.Filesystem(), namespace.Roots())
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("discover current installation: %w", err)
@@ -111,16 +113,25 @@ func buildPreviewServiceFromContext(
 	}
 	configurationInspection, err := configuration.InspectWithExternal(
 		release.Resources,
-		namespace,
+		inspectionHost,
 		external,
 	)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("inspect configuration: %w", err)
 	}
-	service, err := lifecycle.NewWithInspection(
+	mcpInspection, err := mcpconfiguration.Inspect(
+		release.MCPProjections,
+		release.MCPCatalog,
+		inspectionHost,
+	)
+	if err != nil {
+		return lifecycle.Service{}, fmt.Errorf("inspect MCP configuration: %w", err)
+	}
+	service, err := lifecycle.NewWithInspections(
 		release.Model,
 		observed,
 		configurationInspection,
+		mcpInspection,
 	)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("create lifecycle preview: %w", err)

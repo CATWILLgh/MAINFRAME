@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	bundleSchemaVersion  = 1
+	bundleSchemaVersion  = 2
 	releaseSchemaVersion = 2
 	mcpCatalogPath       = "metadata/mcp-catalog.json"
 )
@@ -89,11 +89,31 @@ type ExternalStateDescriptor struct {
 }
 
 type Release struct {
-	ID          string
-	IndexSHA256 string
-	Model       installmodel.Model
-	Resources   []Resource
-	MCPCatalog  mcpcatalog.Catalog
+	ID             string
+	IndexSHA256    string
+	Model          installmodel.Model
+	Resources      []Resource
+	MCPCatalog     mcpcatalog.Catalog
+	MCPProjections []MCPProjection
+}
+
+type MCPProjectionCodec string
+
+const MCPProjectionOpenCodeRemote MCPProjectionCodec = "opencode-remote-v1"
+
+type MCPProjection struct {
+	ID                     string
+	ComponentID            domain.ComponentID
+	Codec                  MCPProjectionCodec
+	ServerID               mcpcatalog.ServerID
+	ProfileID              mcpcatalog.ProfileID
+	Target                 domain.Location
+	MapPointer             string
+	EntryKey               string
+	RegistryTarget         domain.Location
+	RegistrySchemaVersion  int
+	RegistryEntriesPointer string
+	DesiredEntry           string
 }
 
 type releaseIndex struct {
@@ -116,15 +136,27 @@ type manifestEntry struct {
 }
 
 type bundleManifest struct {
-	SchemaVersion   int               `json:"schema_version"`
-	Kind            string            `json:"kind"`
-	Component       string            `json:"component"`
-	Dependencies    []string          `json:"dependencies"`
-	InstallUnits    []installUnit     `json:"install_units"`
-	LegacyArtifacts []legacyArtifact  `json:"legacy_artifacts"`
-	Resources       []resourceRecord  `json:"resources"`
-	PayloadFiles    []payloadFile     `json:"payload_files"`
-	RuntimeProfile  map[string]string `json:"runtime_profile"`
+	SchemaVersion   int                   `json:"schema_version"`
+	Kind            string                `json:"kind"`
+	Component       string                `json:"component"`
+	Dependencies    []string              `json:"dependencies"`
+	InstallUnits    []installUnit         `json:"install_units"`
+	LegacyArtifacts []legacyArtifact      `json:"legacy_artifacts"`
+	Resources       []resourceRecord      `json:"resources"`
+	PayloadFiles    []payloadFile         `json:"payload_files"`
+	RuntimeProfile  map[string]string     `json:"runtime_profile"`
+	MCPProjections  []mcpProjectionRecord `json:"mcp_projections"`
+}
+
+type mcpProjectionRecord struct {
+	ID         string                  `json:"id"`
+	Codec      string                  `json:"codec"`
+	Server     string                  `json:"server"`
+	Profile    string                  `json:"profile"`
+	Target     locationRecord          `json:"target"`
+	MapPointer string                  `json:"map_pointer"`
+	EntryKey   string                  `json:"entry_key"`
+	Registry   ownershipRegistryRecord `json:"registry"`
 }
 
 type installUnit struct {

@@ -15,7 +15,7 @@ import (
 
 type Previewer interface {
 	Targets() []lifecycle.Target
-	Preview([]domain.ComponentID) (lifecycle.Preview, error)
+	Preview(lifecycle.PreviewRequest) (lifecycle.Preview, error)
 }
 
 type screen uint8
@@ -147,7 +147,10 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 		model.err = err
 		return model.reinitializeCurrentForm()
 	}
-	result, err := model.previewer.Preview(model.selected)
+	result, err := model.previewer.Preview(lifecycle.PreviewRequest{
+		Components:    model.selected,
+		MCPSelections: model.mcpSelections(),
+	})
 	if err != nil {
 		model.err = err
 		return model.reinitializeCurrentForm()
@@ -204,6 +207,7 @@ func (model *Model) previewView() string {
 		sections = append(sections, mutedStyle.Render("No filesystem changes."))
 	}
 	sections = append(sections, renderConfigurationPlan(model.preview.Configuration))
+	sections = append(sections, renderMCPConfigurationPlan(model.preview.MCP))
 	sections = append(sections, renderMCPPreview(model.mcpPreview))
 	sections = append(sections, mutedStyle.Render("b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
