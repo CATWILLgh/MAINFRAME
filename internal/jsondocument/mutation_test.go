@@ -74,3 +74,55 @@ func TestSetRejectsIncompatibleParentWithoutMutatingDocument(t *testing.T) {
 		t.Fatalf("failed Set() mutated document: %q", got)
 	}
 }
+
+func TestDeletePreservesSiblingOrderAndMissingPathsAreIdempotent(t *testing.T) {
+	document, err := jsondocument.Parse([]byte(
+		`{"version":1,"servers":{"alpha":{"url":"a"},"context7":{"url":"c"},"zeta":{"url":"z"}}}`,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pointer, err := jsondocument.ParsePointer("/servers/context7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err = document.Delete(pointer)
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	document, err = document.Delete(pointer)
+	if err != nil {
+		t.Fatalf("second Delete() error = %v", err)
+	}
+	want := strings.Join([]string{
+		"{",
+		`  "version": 1,`,
+		`  "servers": {`,
+		`    "alpha": {`,
+		`      "url": "a"`,
+		"    },",
+		`    "zeta": {`,
+		`      "url": "z"`,
+		"    }",
+		"  }",
+		"}",
+		"",
+	}, "\n")
+	if got := string(document.Indented()); got != want {
+		t.Fatalf("Indented() =\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestDeleteRejectsAnIncompatibleParent(t *testing.T) {
+	document, err := jsondocument.Parse([]byte(`{"servers":"user-owned"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pointer, err := jsondocument.ParsePointer("/servers/context7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := document.Delete(pointer); err == nil {
+		t.Fatal("Delete() accepted an incompatible parent")
+	}
+}

@@ -62,6 +62,21 @@ func (document Document) Set(pointer Pointer, raw []byte) (Document, error) {
 	return Parse(encoded.Bytes())
 }
 
+func (document Document) Delete(pointer Pointer) (Document, error) {
+	root, err := parseOrdered(document.raw)
+	if err != nil {
+		return Document{}, err
+	}
+	if err := root.delete(pointer.tokens); err != nil {
+		return Document{}, err
+	}
+	var encoded bytes.Buffer
+	if err := root.writeJSON(&encoded); err != nil {
+		return Document{}, err
+	}
+	return Parse(encoded.Bytes())
+}
+
 func parseOrdered(raw []byte) (orderedValue, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
@@ -143,6 +158,26 @@ func (value *orderedValue) set(tokens []string, replacement orderedValue) error 
 		return err
 	}
 	value.object = append(value.object, orderedMember{key: tokens[0], value: child})
+	return nil
+}
+
+func (value *orderedValue) delete(tokens []string) error {
+	if len(tokens) == 0 {
+		return fmt.Errorf("cannot delete the document root")
+	}
+	if value.kind != orderedObject {
+		return fmt.Errorf("JSON pointer parent is not an object")
+	}
+	for index := range value.object {
+		if value.object[index].key != tokens[0] {
+			continue
+		}
+		if len(tokens) == 1 {
+			value.object = append(value.object[:index], value.object[index+1:]...)
+			return nil
+		}
+		return value.object[index].value.delete(tokens[1:])
+	}
 	return nil
 }
 

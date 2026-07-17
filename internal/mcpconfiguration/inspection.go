@@ -21,17 +21,28 @@ type Inspection struct {
 	projections []releasecontract.MCPProjection
 	catalog     mcpcatalog.Catalog
 	snapshots   map[string]projectionSnapshot
+	files       map[domain.Location]mcpFileSnapshot
 }
 
 type projectionSnapshot struct {
-	existingPresent    bool
-	existingComparable bool
-	existingRaw        string
-	ownedPresent       bool
-	ownedTombstone     bool
-	ownedRaw           string
-	configProblem      string
-	registryProblem    string
+	existingPresent     bool
+	existingComparable  bool
+	existingRaw         string
+	ownedPresent        bool
+	ownedTombstone      bool
+	ownedMaterializable bool
+	ownedRaw            string
+	configProblem       string
+	registryProblem     string
+}
+
+type mcpFileSnapshot struct {
+	present bool
+	raw     []byte
+	mode    uint32
+	device  uint64
+	inode   uint64
+	problem string
 }
 
 func Inspect(
@@ -50,21 +61,50 @@ func Inspect(
 		projections: cloned,
 		catalog:     catalog,
 		snapshots:   make(map[string]projectionSnapshot, len(cloned)),
+		files:       make(map[domain.Location]mcpFileSnapshot),
 	}
 	for _, projection := range cloned {
-		inspection.snapshots[projection.ID] = inspectProjection(projection, host)
+		inspection.captureFile(projection.Target, host)
+		inspection.captureFile(projection.RegistryTarget, host)
+		inspection.snapshots[projection.ID] = inspection.inspectProjection(projection)
 	}
 	return inspection, nil
 }
 
-func inspectProjection(
+func (inspection *Inspection) captureFile(location domain.Location, host Host) {
+	if _, exists := inspection.files[location]; exists {
+		return
+	}
+	entry, err := host.Inspect(location, true)
+	if errors.Is(err, fs.ErrNotExist) {
+		inspection.files[location] = mcpFileSnapshot{}
+		return
+	}
+	if err != nil {
+		inspection.files[location] = mcpFileSnapshot{problem: "configuration inspection failed"}
+		return
+	}
+	snapshot := mcpFileSnapshot{
+		mode: entry.Mode, device: entry.Device, inode: entry.Inode,
+	}
+	switch entry.Kind {
+	case hostfs.EntrySymlink:
+		snapshot.problem = "configuration target is a symbolic link"
+	case hostfs.EntryRegular:
+		snapshot.present = true
+		snapshot.raw = append([]byte(nil), entry.Content...)
+	default:
+		snapshot.problem = "configuration target is not a regular file"
+	}
+	inspection.files[location] = snapshot
+}
+
+func (inspection Inspection) inspectProjection(
 	projection releasecontract.MCPProjection,
-	host Host,
 ) projectionSnapshot {
-	existing := inspectTargetEntry(projection, host)
+	existing := inspectTargetEntry(projection, inspection.files[projection.Target])
 	registry, registryMissing, registryProblem := inspectDocument(
-		projection.RegistryTarget,
-		host,
+		inspection.files[projection.RegistryTarget],
 	)
 	snapshot := projectionSnapshot{
 		existingPresent:    existing.present,
@@ -76,7 +116,7 @@ func inspectProjection(
 	if registryMissing || registryProblem != "" {
 		return snapshot
 	}
-	owned, tombstone, present, err := registryEntry(registry, projection)
+	owned, tombstone, present, materializable, err := registryEntry(registry, projection)
 	if err != nil {
 		snapshot.registryProblem = err.Error()
 		return snapshot
@@ -84,6 +124,7 @@ func inspectProjection(
 	snapshot.ownedRaw = owned
 	snapshot.ownedTombstone = tombstone
 	snapshot.ownedPresent = present
+	snapshot.ownedMaterializable = materializable
 	return snapshot
 }
 
@@ -96,20 +137,13 @@ type targetEntryObservation struct {
 
 func inspectTargetEntry(
 	projection releasecontract.MCPProjection,
-	host Host,
+	file mcpFileSnapshot,
 ) targetEntryObservation {
-	entry, err := host.Inspect(projection.Target, true)
-	if errors.Is(err, fs.ErrNotExist) {
+	if file.problem != "" {
+		return targetEntryObservation{problem: file.problem}
+	}
+	if !file.present {
 		return targetEntryObservation{comparable: true}
-	}
-	if err != nil {
-		return targetEntryObservation{problem: "configuration inspection failed"}
-	}
-	if entry.Kind == hostfs.EntrySymlink {
-		return targetEntryObservation{problem: "configuration target is a symbolic link"}
-	}
-	if entry.Kind != hostfs.EntryRegular {
-		return targetEntryObservation{problem: "configuration target is not a regular file"}
 	}
 	pointer, err := jsondocument.ParsePointer(
 		projection.MapPointer + "/" + projection.EntryKey,
@@ -117,62 +151,63 @@ func inspectTargetEntry(
 	if err != nil {
 		return targetEntryObservation{problem: "MCP projection pointer is invalid"}
 	}
-	return lookupTargetEntry(projection.TargetDocumentFormat(), entry.Content, pointer)
+	return lookupTargetEntry(projection.TargetDocumentFormat(), file.raw, pointer)
 }
 
 func inspectDocument(
-	location domain.Location,
-	host Host,
+	file mcpFileSnapshot,
 ) (jsondocument.Document, bool, string) {
-	entry, err := host.Inspect(location, true)
-	if errors.Is(err, fs.ErrNotExist) {
+	if file.problem != "" {
+		return jsondocument.Document{}, false, file.problem
+	}
+	if !file.present {
 		return jsondocument.Document{}, true, ""
 	}
+	document, err := jsondocument.Parse(file.raw)
 	if err != nil {
-		return jsondocument.Document{}, false, "configuration inspection failed"
+		return jsondocument.Document{}, false, "configuration JSON is invalid"
 	}
-	switch entry.Kind {
-	case hostfs.EntrySymlink:
-		return jsondocument.Document{}, false, "configuration target is a symbolic link"
-	case hostfs.EntryRegular:
-		document, err := jsondocument.Parse(entry.Content)
-		if err != nil {
-			return jsondocument.Document{}, false, "configuration JSON is invalid"
-		}
-		return document, false, ""
-	default:
-		return jsondocument.Document{}, false, "configuration target is not a regular file"
-	}
+	return document, false, ""
 }
 
 func registryEntry(
 	document jsondocument.Document,
 	projection releasecontract.MCPProjection,
-) (string, bool, bool, error) {
+) (string, bool, bool, bool, error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(document.Canonical()), &root); err != nil ||
 		len(root) != 2 || string(root["version"]) != "1" || root["servers"] == nil {
-		return "", false, false, fmt.Errorf("MCP ownership registry is invalid")
+		return "", false, false, false, fmt.Errorf("MCP ownership registry is invalid")
 	}
 	pointer, err := jsondocument.ParsePointer(
 		projection.RegistryEntriesPointer + "/" + projection.EntryKey,
 	)
 	if err != nil {
-		return "", false, false, fmt.Errorf("MCP registry pointer is invalid")
+		return "", false, false, false, fmt.Errorf("MCP registry pointer is invalid")
 	}
 	raw, status := document.Lookup(pointer)
 	if status == jsondocument.Missing {
-		return "", false, false, nil
+		return "", false, false, false, nil
 	}
 	if status != jsondocument.Found {
-		return "", false, false, fmt.Errorf("MCP ownership registry entries are invalid")
+		return "", false, false, false, fmt.Errorf("MCP ownership registry entries are invalid")
 	}
 	if raw == "null" {
-		return "", true, true, nil
+		return "", true, true, true, nil
 	}
 	var object map[string]any
 	if err := json.Unmarshal([]byte(raw), &object); err != nil || object == nil {
-		return "", false, false, fmt.Errorf("MCP ownership registry entry is invalid")
+		return "", false, false, false, fmt.Errorf("MCP ownership registry entry is invalid")
 	}
-	return raw, false, true, nil
+	if projection.TargetDocumentFormat() != releasecontract.MCPProjectionDocumentTOML {
+		return raw, false, true, true, nil
+	}
+	entry, materializable, err := decodeCodexRegistryEntry([]byte(raw))
+	if err != nil {
+		return "", false, false, false, err
+	}
+	if materializable {
+		return entry, false, true, true, nil
+	}
+	return raw, false, true, false, nil
 }

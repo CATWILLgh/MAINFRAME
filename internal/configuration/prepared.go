@@ -89,10 +89,7 @@ func (inspection Inspection) Prepare(
 	if err != nil {
 		return PreparedPlan{}, err
 	}
-	if err := rejectPhysicalAliases(transitions); err != nil {
-		return PreparedPlan{}, err
-	}
-	return PreparedPlan{transitions: transitions}, nil
+	return NewPreparedPlan(transitions)
 }
 
 func changedResourceIDs(changes []Change) map[string]bool {

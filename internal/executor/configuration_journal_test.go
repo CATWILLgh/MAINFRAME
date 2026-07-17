@@ -18,6 +18,26 @@ func TestPreviewCarriesPreparedConfiguration(t *testing.T) {
 	}
 }
 
+func TestValidatePreparedTargetsAcceptsAnEmptyConfigurationFile(t *testing.T) {
+	plan, err := configuration.NewPreparedPlan([]configuration.Transition{{
+		ResourceIDs: []string{"codex.mcp.context7"},
+		Mutations: []configuration.FileMutation{{
+			Target: testLocation("config.toml"),
+			Before: configuration.BeforeImage{
+				Exists: true, SHA256: testDigest("managed block"), Mode: 0o600,
+				Device: 1, Inode: 2,
+			},
+			After: []byte{}, Mode: 0o600,
+		}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validatePreparedTargets(plan.Transitions(), nil); err != nil {
+		t.Fatalf("validatePreparedTargets() rejected an empty file: %v", err)
+	}
+}
+
 func TestValidateJournalAcceptsConfigurationLifecyclePhases(t *testing.T) {
 	tests := []Journal{
 		configurationJournalFixture(StepPrepared, TransactionInProgress),

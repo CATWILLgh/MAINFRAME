@@ -122,7 +122,7 @@ func validatePreparedTargets(
 			return fmt.Errorf("prepared configuration transition is empty")
 		}
 		for _, mutation := range transition.Mutations {
-			if !validLocation(mutation.Target) || len(mutation.After) == 0 {
+			if !validLocation(mutation.Target) {
 				return fmt.Errorf("prepared configuration mutation is invalid")
 			}
 			locations = append(locations, mutation.Target)

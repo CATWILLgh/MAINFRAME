@@ -32,6 +32,9 @@ func loadMCPProjections(
 		}
 	}
 	sort.Slice(result, func(left, right int) bool { return result[left].ID < result[right].ID })
+	if err := validateCodexMCPProjectionCardinality(result); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -39,6 +42,9 @@ func ValidateMCPProjections(
 	projections []MCPProjection,
 	catalog mcpcatalog.Catalog,
 ) error {
+	if err := validateCodexMCPProjectionCardinality(projections); err != nil {
+		return err
+	}
 	identifiers := make([]string, len(projections))
 	claims := make(map[domain.Location]map[string]bool)
 	for index, projection := range projections {
@@ -58,6 +64,19 @@ func ValidateMCPProjections(
 	}
 	if !sortedUnique(identifiers) {
 		return fmt.Errorf("MCP projections must be sorted with unique ids")
+	}
+	return nil
+}
+
+func validateCodexMCPProjectionCardinality(projections []MCPProjection) error {
+	count := 0
+	for _, projection := range projections {
+		if projection.ComponentID == domain.ComponentCodex {
+			count++
+		}
+	}
+	if count > 1 {
+		return fmt.Errorf("the managed TOML format supports one Codex MCP projection")
 	}
 	return nil
 }
