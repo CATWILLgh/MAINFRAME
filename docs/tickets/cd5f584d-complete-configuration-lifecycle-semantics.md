@@ -17,8 +17,9 @@ The read-only observer can safely classify seed-if-absent files, required or
 optional shell lines, directories, the three Claude Code permission arrays,
 OpenCode permission actions through their separate ownership registry, and
 Codex global user-hook trust through Codex's own `hooks/list` interface.
-OpenCode MCP projection is not represented as a release resource and has no
-ownership registry.
+OpenCode MCP now has a release-owned projection and a separate read-only
+ownership plan, but it cannot yet prepare or apply file mutations. Claude Code,
+Codex, and Antigravity do not yet have adapter-local MCP projection codecs.
 
 ## Why it is a problem
 
@@ -69,8 +70,15 @@ and trusted.
 - The semantic plan separates manual actions and external notices from
   executable changes and blocking ownership issues. They never enter prepared
   transitions or journals, and deselection neither reports nor revokes them.
-- Apply remains unavailable. OpenCode still needs independent MCP ownership;
-  other strategies still need safe deselection semantics.
+- OpenCode keyless Context7 now has an independent schema-v2 projection,
+  adapter-local shared MCP registry, exact-key reconciliation, catalog-derived
+  desired value, and a semantic-only TUI plan. Generic and MCP observation use
+  one immutable per-location snapshot. It cannot enter prepared file
+  transitions or Apply.
+- Apply remains unavailable. Claude Code needs a safe `~/.claude.json` root,
+  Codex needs strict TOML observation and merging, Antigravity needs a verified
+  local MCP target contract, and other strategies still need safe deselection
+  semantics.
 
 ## Acceptance criteria
 
@@ -95,6 +103,10 @@ and trusted.
 - `internal/executor/configuration_execute.go`
 - `internal/executor/configuration_recovery.go`
 - `internal/lifecycle/configuration_preview.go`
+- `internal/mcpconfiguration/inspection.go`
+- `internal/mcpconfiguration/planner.go`
+- `internal/releasecontract/mcp_projection.go`
+- `cmd/mainframe/inspection_cache.go`
 - `adapters/claude-code/build_bundle.py`
 - `adapters/opencode/build_bundle.py`
 - `adapters/opencode/build_opencode.py`
@@ -102,3 +114,12 @@ and trusted.
 - <https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md#hooks>
 - `docs/tickets/7a1c1d1d-add-safe-plan-application.md`
 - `docs/tickets/06cb98c8-publish-opencode-config-and-ownership-consistently.md`
+
+## Re-occurrence noted (2026-07-17)
+
+**Noticed during:** keyless Context7 semantic configuration planning
+**Where:** `internal/mcpconfiguration`, bundle schema v2, and adapter builders
+**Additional details:** OpenCode can now produce exact read-only
+`add`/`update`/`remove`/`relinquish`/`conflict` intent without file bytes or an
+execution path. Completing the same capability for the other adapters requires
+their own roots and codecs rather than reading or reusing OpenCode state.

@@ -72,7 +72,9 @@ observer also preserves permission-action and nested pattern order because
 OpenCode applies the last matching rule.
 
 Configuration planning uses the same immutable inspection as observation and
-does not read the host again. The TUI presents semantic configuration intent
+does not read the host again. Configuration and MCP observers share one
+location-keyed read snapshot, so a file used by both cannot represent two
+different moments in one preview. The TUI presents semantic configuration intent
 separately from the executable filesystem plan: add, update, remove a
 registry-proven managed entry, or stop managing a user-changed or deleted
 entry. A resource is the atomic planning group, so the OpenCode configuration
@@ -157,6 +159,21 @@ Antigravity 2.x. Its keyed remote profile is verified for Claude Code, Codex,
 and OpenCode; Antigravity 2.x is explicitly unsupported until a plaintext-free
 secret reference is proven. Optional GitHub stars are fetched asynchronously,
 kept only in memory, and discarded when stale or unavailable.
+
+The second read-only milestone gives keyless Context7 an exact OpenCode
+projection. Bundle schema version 2 links that projection to the catalog
+server and profile instead of repeating the endpoint or authentication data.
+The TUI can therefore classify the adapter-local `mcp.context7` entry as an
+addition, update, managed removal, user-owned conflict, relinquished ownership,
+or already ready. MCP servers share one adapter-local `/servers` ownership
+registry, which remains separate from the OpenCode permission registry; their
+exact entry claims and both configuration claims remain non-overlapping.
+Claude Code, Codex, and Antigravity remain descriptive until their own
+configuration codecs and roots satisfy the same contract. Their plans neither
+consume nor become blocked by OpenCode state. The neutral release preview may
+inspect each declared projection, but it never treats that state as belonging
+to a different adapter. This MCP plan contains no configuration
+bytes, prepared transition, secret input, or Apply path.
 
 The adapter capability boundary was verified on 2026-07-17 against the
 [Claude Code MCP contract](https://code.claude.com/docs/en/mcp),
