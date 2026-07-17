@@ -160,20 +160,28 @@ and OpenCode; Antigravity 2.x is explicitly unsupported until a plaintext-free
 secret reference is proven. Optional GitHub stars are fetched asynchronously,
 kept only in memory, and discarded when stale or unavailable.
 
-The second read-only milestone gives keyless Context7 an exact OpenCode
-projection. Bundle schema version 2 links that projection to the catalog
+The second read-only milestone gives keyless Context7 exact OpenCode and Claude
+Code projections. Bundle schema version 2 links each projection to the catalog
 server and profile instead of repeating the endpoint or authentication data.
-The TUI can therefore classify the adapter-local `mcp.context7` entry as an
+The TUI can therefore classify each adapter-local Context7 entry as an
 addition, update, managed removal, user-owned conflict, relinquished ownership,
-or already ready. MCP servers share one adapter-local `/servers` ownership
-registry, which remains separate from the OpenCode permission registry; their
-exact entry claims and both configuration claims remain non-overlapping.
-Claude Code, Codex, and Antigravity remain descriptive until their own
-configuration codecs and roots satisfy the same contract. Their plans neither
-consume nor become blocked by OpenCode state. The neutral release preview may
-inspect each declared projection, but it never treats that state as belonging
-to a different adapter. This MCP plan contains no configuration
-bytes, prepared transition, secret input, or Apply path.
+or already ready.
+
+OpenCode owns only `mcp.context7` in its own configuration and keeps MCP
+ownership separate from its permission registry. Claude Code uses the verified
+user-scope `~/.claude.json` contract, but the codec admits only the exact
+`mcpServers.context7` entry; the release component does not receive general
+access to the home root. Its ownership registry lives separately under
+`~/.claude/mainframe/` and is never shared with OpenCode. Codex and Antigravity
+remain descriptive until their own configuration codecs and roots satisfy the
+same contract.
+
+Every loaded projection is revalidated before host inspection. An unsafe state
+in one selected adapter makes the combined plan blocking without hiding valid
+intents for its siblings; an unselected adapter's state cannot block the active
+adapter. The neutral preview never treats one adapter's state as belonging to
+another. This MCP plan contains no configuration bytes, prepared transition,
+secret input, or Apply path.
 
 The adapter capability boundary was verified on 2026-07-17 against the
 [Claude Code MCP contract](https://code.claude.com/docs/en/mcp),
