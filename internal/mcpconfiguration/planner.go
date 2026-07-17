@@ -36,13 +36,18 @@ func (inspection Inspection) Plan(
 		}
 		blocking = blocking || intentBlocking
 	}
+	migrations := inspection.migrationAssessments(active)
+	for _, migration := range migrations {
+		blocking = blocking || migration.Conflict &&
+			hasMaterialIntent(intents, migration.ComponentID)
+	}
 	sort.Slice(intents, func(left, right int) bool {
 		if intents[left].ComponentID != intents[right].ComponentID {
 			return intents[left].ComponentID < intents[right].ComponentID
 		}
 		return intents[left].ServerID < intents[right].ServerID
 	})
-	return Plan{Intents: intents, Blocking: blocking}, nil
+	return Plan{Intents: intents, Migrations: migrations, Blocking: blocking}, nil
 }
 
 func (inspection Inspection) resolveSelections(
@@ -164,5 +169,8 @@ func newIntent(
 }
 
 func (plan Plan) String() string {
-	return fmt.Sprintf("MCP plan with %d intents", len(plan.Intents))
+	return fmt.Sprintf(
+		"MCP plan with %d intents and %d migration assessments",
+		len(plan.Intents), len(plan.Migrations),
+	)
 }

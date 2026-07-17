@@ -43,6 +43,11 @@ func (inspection Inspection) PrepareOnto(
 	if err != nil {
 		return configuration.PreparedPlan{}, err
 	}
+	if requiresMigrationForMaterialIntent(plan) {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"MCP configuration migration is required before changing Antigravity MCP",
+		)
+	}
 	if plan.Blocking {
 		return configuration.PreparedPlan{}, fmt.Errorf("MCP configuration plan is blocked")
 	}

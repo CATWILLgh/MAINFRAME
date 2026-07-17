@@ -22,6 +22,7 @@ type Inspection struct {
 	catalog     mcpcatalog.Catalog
 	snapshots   map[string]projectionSnapshot
 	files       map[domain.Location]mcpFileSnapshot
+	migrations  map[domain.ComponentID]migrationSnapshot
 }
 
 type projectionSnapshot struct {
@@ -62,12 +63,14 @@ func Inspect(
 		catalog:     catalog,
 		snapshots:   make(map[string]projectionSnapshot, len(cloned)),
 		files:       make(map[domain.Location]mcpFileSnapshot),
+		migrations:  make(map[domain.ComponentID]migrationSnapshot),
 	}
 	for _, projection := range cloned {
 		inspection.captureFile(projection.Target, host)
 		inspection.captureFile(projection.RegistryTarget, host)
 		inspection.snapshots[projection.ID] = inspection.inspectProjection(projection)
 	}
+	inspection.captureAntigravityMigration(cloned, host)
 	return inspection, nil
 }
 

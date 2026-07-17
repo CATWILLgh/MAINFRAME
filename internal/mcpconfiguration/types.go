@@ -27,7 +27,26 @@ type Intent struct {
 	Target       domain.Location
 }
 
+type MigrationState string
+
+const (
+	MigrationLegacyOnly      MigrationState = "legacy-only"
+	MigrationCanonicalOnly   MigrationState = "canonical-only"
+	MigrationEquivalentDual  MigrationState = "equivalent-dual"
+	MigrationConflictingDual MigrationState = "conflicting-dual"
+	MigrationInvalidLegacy   MigrationState = "invalid-legacy"
+)
+
+type MigrationAssessment struct {
+	ComponentID       domain.ComponentID
+	State             MigrationState
+	Reason            string
+	RequiresMigration bool
+	Conflict          bool
+}
+
 type Plan struct {
-	Intents  []Intent
-	Blocking bool
+	Intents    []Intent
+	Migrations []MigrationAssessment
+	Blocking   bool
 }

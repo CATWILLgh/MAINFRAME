@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 )
@@ -25,7 +26,9 @@ func renderMCPPreview(preview mcpcatalog.OnboardingPreview) string {
 
 func renderMCPConfigurationPlan(plan mcpconfiguration.Plan) string {
 	lines := []string{headingStyle.Render("MCP configuration plan")}
-	if len(plan.Intents) == 0 {
+	migrationNotices := renderMCPMigrationNotices(plan.Migrations)
+	lines = append(lines, migrationNotices...)
+	if len(plan.Intents) == 0 && len(migrationNotices) == 0 {
 		return strings.Join(append(lines, mutedStyle.Render("No MCP configuration changes.")), "\n")
 	}
 	for _, intent := range plan.Intents {
@@ -44,6 +47,39 @@ func renderMCPConfigurationPlan(plan mcpconfiguration.Plan) string {
 		lines = append(lines, errorStyle.Render("MCP configuration has blocking conflicts."))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func renderMCPMigrationNotices(
+	migrations []mcpconfiguration.MigrationAssessment,
+) []string {
+	notices := make([]string, 0, len(migrations))
+	for _, migration := range migrations {
+		if migration.ComponentID != domain.ComponentAntigravity2 {
+			continue
+		}
+		var notice string
+		style := bannerStyle
+		switch migration.State {
+		case mcpconfiguration.MigrationLegacyOnly:
+			notice = "Legacy Antigravity MCP configuration detected. " +
+				"A migration is required before Antigravity MCP changes."
+		case mcpconfiguration.MigrationEquivalentDual:
+			notice = "Both Antigravity MCP locations contain equivalent configuration. " +
+				"Cleanup or migration is required before Antigravity MCP changes."
+		case mcpconfiguration.MigrationConflictingDual:
+			notice = "Antigravity MCP locations differ. " +
+				"Resolve them explicitly before Antigravity MCP changes."
+			style = errorStyle
+		case mcpconfiguration.MigrationInvalidLegacy:
+			notice = "Legacy Antigravity MCP configuration cannot be safely inspected. " +
+				"Resolve it explicitly before Antigravity MCP changes."
+			style = errorStyle
+		}
+		if notice != "" {
+			notices = append(notices, style.Render(notice))
+		}
+	}
+	return notices
 }
 
 func renderMCPConnection(connection mcpcatalog.Connection) string {
