@@ -1,6 +1,6 @@
 module github.com/CATWILLgh/MAINFRAME
 
-go 1.25.8
+go 1.25.12
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
