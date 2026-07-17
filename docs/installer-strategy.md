@@ -160,8 +160,8 @@ and OpenCode; Antigravity 2.x is explicitly unsupported until a plaintext-free
 secret reference is proven. Optional GitHub stars are fetched asynchronously,
 kept only in memory, and discarded when stale or unavailable.
 
-The second read-only milestone gives keyless Context7 exact OpenCode and Claude
-Code projections. Bundle schema version 2 links each projection to the catalog
+The second read-only milestone gives keyless Context7 exact OpenCode, Claude
+Code, and Codex projections. Bundle schema version 2 links each projection to the catalog
 server and profile instead of repeating the endpoint or authentication data.
 The TUI can therefore classify each adapter-local Context7 entry as an
 addition, update, managed removal, user-owned conflict, relinquished ownership,
@@ -172,9 +172,13 @@ ownership separate from its permission registry. Claude Code uses the verified
 user-scope `~/.claude.json` contract, but the codec admits only the exact
 `mcpServers.context7` entry; the release component does not receive general
 access to the home root. Its ownership registry lives separately under
-`~/.claude/mainframe/` and is never shared with OpenCode. Codex and Antigravity
-remain descriptive until their own configuration codecs and roots satisfy the
-same contract.
+`~/.claude/mainframe/` and is never shared with OpenCode. Codex observes only
+`mcp_servers.context7` in its own global `config.toml` through a strict TOML
+codec and keeps its ownership registry under its own `mainframe/` directory.
+The codec rejects invalid or redefined TOML and never treats temporal or
+non-finite TOML values as equivalent JSON ownership state. Antigravity remains
+descriptive until its own configuration codec and root satisfy the same
+contract.
 
 Every loaded projection is revalidated before host inspection. An unsafe state
 in one selected adapter makes the combined plan blocking without hiding valid
@@ -186,6 +190,7 @@ secret input, or Apply path.
 The adapter capability boundary was verified on 2026-07-17 against the
 [Claude Code MCP contract](https://code.claude.com/docs/en/mcp),
 [Codex MCP contract](https://developers.openai.com/codex/mcp/),
+[Codex configuration contract](https://developers.openai.com/codex/config-reference/),
 [OpenCode MCP contract](https://opencode.ai/docs/mcp-servers/), and
 [Antigravity MCP contract](https://antigravity.google/docs/mcp).
 

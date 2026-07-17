@@ -17,9 +17,10 @@ The read-only observer can safely classify seed-if-absent files, required or
 optional shell lines, directories, the three Claude Code permission arrays,
 OpenCode permission actions through their separate ownership registry, and
 Codex global user-hook trust through Codex's own `hooks/list` interface.
-OpenCode and Claude Code MCP now have separate release-owned projections and
-read-only ownership plans, but they cannot yet prepare or apply file mutations.
-Codex and Antigravity do not yet have adapter-local MCP projection codecs.
+OpenCode, Claude Code, and Codex MCP now have separate release-owned
+projections and read-only ownership plans, but they cannot yet prepare or apply
+file mutations. Antigravity does not yet have an adapter-local MCP projection
+codec.
 
 ## Why it is a problem
 
@@ -79,10 +80,16 @@ and trusted.
   user-scope `~/.claude.json` `mcpServers.context7` entry. Its ownership registry
   is under `~/.claude/mainframe/`, it does not grant the Claude component broad
   home-root access, and loaded values are revalidated before host reads.
+- Codex keyless Context7 now has an exact adapter-local projection for
+  `config.toml` `mcp_servers.context7`. A strict TOML parser observes only that
+  selected table, its registry remains JSON under the Codex configuration
+  root, and non-JSON TOML semantics trigger safe relinquishment instead of
+  lossy comparison. Release validation rejects mixed JSON and TOML ownership
+  on one physical target.
 - Combined MCP plans retain every selected adapter's intent while remaining
   blocking if any adapter conflicts. Unselected sibling state is ignored.
-- Apply remains unavailable. Codex needs strict TOML observation and merging,
-  Antigravity needs a verified
+- Apply remains unavailable. Codex still needs safe TOML preparation and
+  merging, Antigravity needs a verified
   local MCP target contract, and other strategies still need safe deselection
   semantics.
 
@@ -90,7 +97,7 @@ and trusted.
 
 - Every configuration behavior currently performed by the legacy installer or an adapter generator is represented once in the release contract or explicitly classified as an external prerequisite.
 - JSON observation reports drift only for MAINFRAME-owned keys and preserves unrelated user content.
-- Claude Code MCP, OpenCode MCP, and OpenCode permission ownership can be planned independently.
+- Claude Code MCP, Codex MCP, OpenCode MCP, and OpenCode permission ownership can be planned independently.
 - Codex trust is never reported ready from file presence alone.
 - Tier 1 tests cover add, update, remove, user override, malformed input, and adapter isolation for each supported strategy.
 
