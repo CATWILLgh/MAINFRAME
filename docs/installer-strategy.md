@@ -204,6 +204,15 @@ Prepared bytes remain outside the executor journal. Any unresolved issue,
 unsupported changed strategy, incomplete snapshot, or target collision fails
 the whole preparation with no partial result.
 
+Claude Code Context7 preparation owns only the exact user-scope
+`~/.claude.json` `mcpServers.<server>` entry and its separate registry under
+`~/.claude/mainframe/`. The ordered-JSON materializer preserves unrelated
+preferences, projects, and sibling MCP entries while using Claude's explicit
+`type: http` dialect. Missing files are private, existing files are rebound to
+their captured identity, and relinquishment changes only the registry. The
+home root remains available only through the exact release-validated
+`.claude.json` projection; it does not become a general Claude Code target.
+
 OpenCode Context7 preparation uses the same ordered-JSON boundary as its
 permission ownership without sharing ownership between them. When both change
 `opencode.json`, MCP preparation starts from the permission plan's after-image

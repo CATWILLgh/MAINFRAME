@@ -18,9 +18,9 @@ optional shell lines, directories, the three Claude Code permission arrays,
 OpenCode permission actions through their separate ownership registry, and
 Codex global user-hook trust through Codex's own `hooks/list` interface.
 OpenCode, Claude Code, and Codex MCP now have separate release-owned
-projections and read-only ownership plans. OpenCode and Codex can prepare exact
-adapter-local file mutations without writing, while Claude Code still lacks
-preparation and none of the MCP paths can be applied from the CLI or TUI.
+projections, read-only ownership plans, and exact private preparation paths.
+All three can prepare adapter-local file mutations without writing, while none
+of the MCP paths can be applied from the CLI or TUI.
 Antigravity does not yet have an adapter-local MCP projection codec.
 
 ## Why it is a problem
@@ -84,7 +84,11 @@ and trusted.
 - Claude Code keyless Context7 now has its own schema-v2 codec for the exact
   user-scope `~/.claude.json` `mcpServers.context7` entry. Its ownership registry
   is under `~/.claude/mainframe/`, it does not grant the Claude component broad
-  home-root access, and loaded values are revalidated before host reads.
+  home-root access, and loaded values are revalidated before host reads. The
+  same immutable inspection can now prepare ordered `.claude.json` and registry
+  after-images for add, update, removal, relinquishment, and several servers.
+  Unrelated preferences and sibling adapters remain isolated, and Apply stays
+  unavailable.
 - Codex keyless Context7 now has an exact adapter-local projection for
   `config.toml` `mcp_servers.context7`. A strict TOML parser observes only that
   selected table, its registry remains JSON under the Codex configuration
@@ -132,6 +136,7 @@ and trusted.
 - `internal/lifecycle/configuration_preview.go`
 - `internal/mcpconfiguration/inspection.go`
 - `internal/mcpconfiguration/planner.go`
+- `internal/mcpconfiguration/json_config.go`
 - `internal/releasecontract/mcp_projection.go`
 - `cmd/mainframe/inspection_cache.go`
 - `adapters/claude-code/build_bundle.py`
@@ -148,7 +153,7 @@ and trusted.
 **Where:** `internal/mcpconfiguration`, bundle schema v2, and adapter builders
 **Additional details:** OpenCode and Claude Code can produce exact read-only
 `add`/`update`/`remove`/`relinquish`/`conflict` intent without exposing file
-bytes in the TUI. OpenCode and Codex also have private preparation paths, but
-no MCP execution path. Their codecs and registries are independent. Completing
-the same capability for the other adapters requires their own roots and codecs
-rather than reading or reusing another adapter's state.
+bytes in the TUI. OpenCode, Claude Code, and Codex also have private preparation
+paths, but no MCP execution path. Their codecs and registries are independent.
+Completing the same capability for the other adapters requires their own roots
+and codecs rather than reading or reusing another adapter's state.
