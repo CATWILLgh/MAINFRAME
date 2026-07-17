@@ -204,6 +204,17 @@ Prepared bytes remain outside the executor journal. Any unresolved issue,
 unsupported changed strategy, incomplete snapshot, or target collision fails
 the whole preparation with no partial result.
 
+OpenCode Context7 preparation uses the same ordered-JSON boundary as its
+permission ownership without sharing ownership between them. When both change
+`opencode.json`, MCP preparation starts from the permission plan's after-image
+only after their complete before-images match, then updates only
+`mcp.<server>`. Release validation independently proves that their JSON
+pointers do not overlap. The result is one recoverable transition containing
+the shared configuration and both adapter-local registries. Multiple OpenCode
+MCP entries sharing that target and registry are applied deterministically;
+registry-only relinquishment remains a separate transition. No CLI or TUI
+Apply path is introduced by this preparation boundary.
+
 Codex Context7 preparation never reserializes the user's complete TOML file.
 MAINFRAME appends one deterministic, versioned block and recognizes it later
 only when both the adapter-local ownership registry proves the block format

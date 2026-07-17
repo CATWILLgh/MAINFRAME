@@ -18,9 +18,10 @@ optional shell lines, directories, the three Claude Code permission arrays,
 OpenCode permission actions through their separate ownership registry, and
 Codex global user-hook trust through Codex's own `hooks/list` interface.
 OpenCode, Claude Code, and Codex MCP now have separate release-owned
-projections and read-only ownership plans, but they cannot yet prepare or apply
-file mutations. Antigravity does not yet have an adapter-local MCP projection
-codec.
+projections and read-only ownership plans. OpenCode and Codex can prepare exact
+adapter-local file mutations without writing, while Claude Code still lacks
+preparation and none of the MCP paths can be applied from the CLI or TUI.
+Antigravity does not yet have an adapter-local MCP projection codec.
 
 ## Why it is a problem
 
@@ -74,8 +75,12 @@ and trusted.
 - OpenCode keyless Context7 now has an independent schema-v2 projection,
   adapter-local shared MCP registry, exact-key reconciliation, catalog-derived
   desired value, and a semantic-only TUI plan. Generic and MCP observation use
-  one immutable per-location snapshot. It cannot enter prepared file
-  transitions or Apply.
+  one immutable per-location snapshot. OpenCode MCP can now prepare ordered
+  JSON and registry after-images, including add, update, removal, relinquish,
+  and several entries sharing one target and registry. When permissions and
+  MCP both change `opencode.json`, exact before-image equality and disjoint
+  release-owned pointers produce one transition without overwriting either
+  result. Apply remains unavailable.
 - Claude Code keyless Context7 now has its own schema-v2 codec for the exact
   user-scope `~/.claude.json` `mcpServers.context7` entry. Its ownership registry
   is under `~/.claude/mainframe/`, it does not grant the Claude component broad
@@ -141,8 +146,9 @@ and trusted.
 
 **Noticed during:** keyless Context7 semantic configuration planning
 **Where:** `internal/mcpconfiguration`, bundle schema v2, and adapter builders
-**Additional details:** OpenCode and Claude Code can now produce exact read-only
-`add`/`update`/`remove`/`relinquish`/`conflict` intent without file bytes or an
-execution path. Their codecs and registries are independent. Completing the
-same capability for the other adapters requires their own roots and codecs
+**Additional details:** OpenCode and Claude Code can produce exact read-only
+`add`/`update`/`remove`/`relinquish`/`conflict` intent without exposing file
+bytes in the TUI. OpenCode and Codex also have private preparation paths, but
+no MCP execution path. Their codecs and registries are independent. Completing
+the same capability for the other adapters requires their own roots and codecs
 rather than reading or reusing another adapter's state.
