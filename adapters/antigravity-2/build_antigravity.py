@@ -18,6 +18,7 @@ TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from detector_projection import project_hooklib_fallbacks
+from compatibility import BUNDLE_IDENTIFIER, LEGACY_SUPPORTED_MAJOR
 from gates.mainframe_runtime import HANDLER_TIMEOUT_SECONDS
 from skill_projection import (
     adapt_runtime_markdown,
@@ -29,7 +30,6 @@ from source_boundary import SourceBoundary, SourcePath
 
 
 ADAPTER_VERSION = "0.1.0"
-BUNDLE_IDENTIFIER = "com.google.antigravity"
 RULE_MAX_CHARS = 12_000
 PLUGIN_COMMAND = "python3 ~/.gemini/config/plugins/mainframe/scripts/mainframe_hook.py"
 HOOK_EVENTS = (
@@ -352,9 +352,10 @@ def validate_native_app(app: Path) -> str:
             f"Antigravity bundle identifier {BUNDLE_IDENTIFIER} is required; "
             f"found {identifier!r} at {app}"
         )
-    if version.split(".", 1)[0] != "2":
+    if version.split(".", 1)[0] != LEGACY_SUPPORTED_MAJOR:
         raise ValueError(
-            f"Antigravity major version 2 is required; found {version} at {app}"
+            f"Antigravity major version {LEGACY_SUPPORTED_MAJOR} is required; "
+            f"found {version} at {app}"
         )
     return version
 

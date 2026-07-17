@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	bundleSchemaVersion  = 2
-	releaseSchemaVersion = 2
-	mcpCatalogPath       = "metadata/mcp-catalog.json"
+	bundleSchemaVersionV2 = 2
+	bundleSchemaVersionV3 = 3
+	releaseSchemaVersion  = 2
+	mcpCatalogPath        = "metadata/mcp-catalog.json"
 )
 
 const (
@@ -89,12 +90,24 @@ type ExternalStateDescriptor struct {
 }
 
 type Release struct {
-	ID             string
-	IndexSHA256    string
-	Model          installmodel.Model
-	Resources      []Resource
-	MCPCatalog     mcpcatalog.Catalog
-	MCPProjections []MCPProjection
+	ID               string
+	IndexSHA256      string
+	Model            installmodel.Model
+	Resources        []Resource
+	MCPCatalog       mcpcatalog.Catalog
+	MCPProjections   []MCPProjection
+	HostRequirements []HostRequirement
+}
+
+type HostRequirementKind string
+
+const HostRequirementDarwinApplicationBundleV1 HostRequirementKind = "darwin-application-bundle-v1"
+
+type HostRequirement struct {
+	ComponentID      domain.ComponentID
+	Kind             HostRequirementKind
+	BundleIdentifier string
+	ExactVersions    []string
 }
 
 type MCPProjectionCodec string
@@ -156,16 +169,28 @@ type manifestEntry struct {
 }
 
 type bundleManifest struct {
-	SchemaVersion   int                   `json:"schema_version"`
-	Kind            string                `json:"kind"`
-	Component       string                `json:"component"`
-	Dependencies    []string              `json:"dependencies"`
-	InstallUnits    []installUnit         `json:"install_units"`
-	LegacyArtifacts []legacyArtifact      `json:"legacy_artifacts"`
-	Resources       []resourceRecord      `json:"resources"`
-	PayloadFiles    []payloadFile         `json:"payload_files"`
-	RuntimeProfile  map[string]string     `json:"runtime_profile"`
-	MCPProjections  []mcpProjectionRecord `json:"mcp_projections"`
+	SchemaVersion    int                      `json:"schema_version"`
+	Kind             string                   `json:"kind"`
+	Component        string                   `json:"component"`
+	Dependencies     []string                 `json:"dependencies"`
+	InstallUnits     []installUnit            `json:"install_units"`
+	LegacyArtifacts  []legacyArtifact         `json:"legacy_artifacts"`
+	Resources        []resourceRecord         `json:"resources"`
+	PayloadFiles     []payloadFile            `json:"payload_files"`
+	RuntimeProfile   map[string]string        `json:"runtime_profile"`
+	MCPProjections   []mcpProjectionRecord    `json:"mcp_projections"`
+	HostRequirements optionalHostRequirements `json:"host_requirements,omitempty"`
+}
+
+type optionalHostRequirements struct {
+	Present bool
+	Values  []hostRequirementRecord
+}
+
+type hostRequirementRecord struct {
+	Kind             string   `json:"kind"`
+	BundleIdentifier string   `json:"bundle_identifier"`
+	ExactVersions    []string `json:"exact_versions"`
 }
 
 type mcpProjectionRecord struct {

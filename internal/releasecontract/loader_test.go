@@ -23,6 +23,9 @@ func TestLoadBuildsInstallModelAndSeparateResourceInventory(t *testing.T) {
 	if release.ID != "test-release" {
 		t.Fatalf("release ID = %q", release.ID)
 	}
+	if len(release.HostRequirements) != 0 {
+		t.Fatalf("v2 host requirements = %#v", release.HostRequirements)
+	}
 	wantIndexSHA256 := digest(t, filepath.Join(root, "release.json"))
 	if release.IndexSHA256 != wantIndexSHA256 {
 		t.Fatalf("index digest = %q, want %q", release.IndexSHA256, wantIndexSHA256)
@@ -66,6 +69,86 @@ func TestLoadBuildsInstallModelAndSeparateResourceInventory(t *testing.T) {
 	server, exists := release.MCPCatalog.Server("context7")
 	if !exists || server.Name != "Context7" {
 		t.Fatalf("MCP catalog server = %#v, exists = %t", server, exists)
+	}
+}
+
+func TestLoadBuildsTypedVersionThreeHostRequirements(t *testing.T) {
+	root := writeFixture(t)
+	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+	manifest := readObject(t, manifestPath)
+	manifest["schema_version"] = 3
+	manifest["host_requirements"] = []any{
+		map[string]any{
+			"kind":              "darwin-application-bundle-v1",
+			"bundle_identifier": "com.example.helper",
+			"exact_versions":    []string{"1.0", "1.1"},
+		},
+		map[string]any{
+			"kind":              "darwin-application-bundle-v1",
+			"bundle_identifier": "com.google.antigravity",
+			"exact_versions":    []string{"2.2.1"},
+		},
+	}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	rewriteIndexDigest(t, root, manifestPath)
+
+	release, err := releasecontract.Load(root)
+	if err != nil {
+		t.Fatalf("load v3 release: %v", err)
+	}
+	want := []releasecontract.HostRequirement{
+		{
+			ComponentID:      domain.ComponentCodex,
+			Kind:             releasecontract.HostRequirementDarwinApplicationBundleV1,
+			BundleIdentifier: "com.example.helper",
+			ExactVersions:    []string{"1.0", "1.1"},
+		},
+		{
+			ComponentID:      domain.ComponentCodex,
+			Kind:             releasecontract.HostRequirementDarwinApplicationBundleV1,
+			BundleIdentifier: "com.google.antigravity",
+			ExactVersions:    []string{"2.2.1"},
+		},
+	}
+	if !reflect.DeepEqual(release.HostRequirements, want) {
+		t.Fatalf("host requirements = %#v, want %#v", release.HostRequirements, want)
+	}
+}
+
+func TestLoadRejectsInvalidVersionThreeHostRequirements(t *testing.T) {
+	valid := []any{map[string]any{
+		"kind":              "darwin-application-bundle-v1",
+		"bundle_identifier": "com.google.antigravity",
+		"exact_versions":    []string{"2.2.1"},
+	}}
+	tests := map[string]struct {
+		set          bool
+		requirements any
+	}{
+		"missing": {},
+		"null":    {set: true},
+		"empty":   {set: true, requirements: []any{}},
+		"unknown kind": {set: true, requirements: []any{map[string]any{
+			"kind": "unknown-host", "bundle_identifier": "com.google.antigravity",
+			"exact_versions": []string{"2.2.1"},
+		}}},
+		"duplicates": {set: true, requirements: []any{valid[0], valid[0]}},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			root := writeFixture(t)
+			manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+			manifest := readObject(t, manifestPath)
+			manifest["schema_version"] = 3
+			if test.set {
+				manifest["host_requirements"] = test.requirements
+			}
+			writeJSON(t, manifestPath, manifest, 0o644)
+			rewriteIndexDigest(t, root, manifestPath)
+			if _, err := releasecontract.Load(root); err == nil {
+				t.Fatal("invalid v3 host requirements were accepted")
+			}
+		})
 	}
 }
 

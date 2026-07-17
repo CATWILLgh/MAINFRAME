@@ -59,7 +59,15 @@ def test_bundle_is_self_contained_and_models_external_validation():
     _load_builder().build(REPO, output)
 
     manifest = release_contract.validate_bundle(output)
+    assert manifest["schema_version"] == 3
     assert manifest["component"] == "antigravity-2"
+    assert manifest["host_requirements"] == [
+        {
+            "kind": "darwin-application-bundle-v1",
+            "bundle_identifier": "com.google.antigravity",
+            "exact_versions": ["2.2.1"],
+        }
+    ]
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["install_units"] == [
         {

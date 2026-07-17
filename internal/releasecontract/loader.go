@@ -29,16 +29,9 @@ func Load(root string) (Release, error) {
 	if err := validateIndex(index); err != nil {
 		return Release{}, err
 	}
-	catalogPayload, err := readRegularBounded(canonical, index.MCPCatalog.Path, maxMCPCatalogBytes)
+	catalog, err := loadCatalog(canonical, index)
 	if err != nil {
-		return Release{}, fmt.Errorf("read MCP catalog: %w", err)
-	}
-	if digestBytes(catalogPayload) != index.MCPCatalog.SHA256 {
-		return Release{}, fmt.Errorf("MCP catalog digest mismatch")
-	}
-	catalog, err := mcpcatalog.Parse(catalogPayload)
-	if err != nil {
-		return Release{}, fmt.Errorf("decode MCP catalog: %w", err)
+		return Release{}, err
 	}
 	components := make([]installmodel.ComponentSpec, 0, len(index.Manifests))
 	resources := make([]Resource, 0)
@@ -55,6 +48,7 @@ func Load(root string) (Release, error) {
 	if err := validateGlobal(manifests); err != nil {
 		return Release{}, err
 	}
+	hostRequirements := hostRequirementsFromManifests(manifests)
 	projections, err := loadMCPProjections(manifests, catalog)
 	if err != nil {
 		return Release{}, err
@@ -68,13 +62,44 @@ func Load(root string) (Release, error) {
 	}
 	sort.Slice(resources, func(i, j int) bool { return resources[i].ID < resources[j].ID })
 	return Release{
-		ID:             index.ReleaseID,
-		IndexSHA256:    digestBytes(indexPayload),
-		Model:          model,
-		Resources:      resources,
-		MCPCatalog:     catalog,
-		MCPProjections: projections,
+		ID:               index.ReleaseID,
+		IndexSHA256:      digestBytes(indexPayload),
+		Model:            model,
+		Resources:        resources,
+		MCPCatalog:       catalog,
+		MCPProjections:   projections,
+		HostRequirements: hostRequirements,
 	}, nil
+}
+
+func loadCatalog(root string, index releaseIndex) (mcpcatalog.Catalog, error) {
+	payload, err := readRegularBounded(root, index.MCPCatalog.Path, maxMCPCatalogBytes)
+	if err != nil {
+		return mcpcatalog.Catalog{}, fmt.Errorf("read MCP catalog: %w", err)
+	}
+	if digestBytes(payload) != index.MCPCatalog.SHA256 {
+		return mcpcatalog.Catalog{}, fmt.Errorf("MCP catalog digest mismatch")
+	}
+	catalog, err := mcpcatalog.Parse(payload)
+	if err != nil {
+		return mcpcatalog.Catalog{}, fmt.Errorf("decode MCP catalog: %w", err)
+	}
+	return catalog, nil
+}
+
+func hostRequirementsFromManifests(manifests []bundleManifest) []HostRequirement {
+	result := make([]HostRequirement, 0)
+	for _, manifest := range manifests {
+		for _, record := range manifest.HostRequirements.Values {
+			result = append(result, HostRequirement{
+				ComponentID:      domain.ComponentID(manifest.Component),
+				Kind:             HostRequirementKind(record.Kind),
+				BundleIdentifier: record.BundleIdentifier,
+				ExactVersions:    append([]string(nil), record.ExactVersions...),
+			})
+		}
+	}
+	return result
 }
 
 func loadBundle(

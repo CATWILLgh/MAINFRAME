@@ -49,3 +49,11 @@ func (externalState *optionalExternalState) UnmarshalJSON(payload []byte) error 
 	}
 	return decodeStrict(payload, &externalState.Value)
 }
+
+func (requirements *optionalHostRequirements) UnmarshalJSON(payload []byte) error {
+	requirements.Present = true
+	if bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return fmt.Errorf("host requirements must not be null")
+	}
+	return decodeStrict(payload, &requirements.Values)
+}

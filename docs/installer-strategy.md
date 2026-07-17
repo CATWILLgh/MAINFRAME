@@ -163,7 +163,17 @@ kept only in memory, and discarded when stale or unavailable.
 The second read-only milestone gives keyless Context7 exact OpenCode, Claude
 Code, Codex, and Antigravity 2.x projections. Bundle schema version 2 links each
 projection to the catalog server and profile instead of repeating the endpoint
-or authentication data.
+or authentication data. Bundle schema version 3 adds a strict
+`host_requirements` collection without changing the release-index schema. A
+release may contain both bundle versions, and the loader continues to accept
+cached version 2 bundles. Antigravity is the first version 3 bundle: it records
+`com.google.antigravity` version `2.2.1`, the exact native host covered by live
+evidence. Every version 3 bundle must declare at least one requirement. All
+requirement rows must hold, while any exact version listed within one row may
+satisfy that row. The requirement is metadata only in this milestone. The legacy
+`install.sh` path continues to accept Antigravity 2.x until TUI discovery and a
+clear incompatibility screen can enforce the narrower managed policy without
+silently removing existing support.
 The TUI can therefore classify each adapter-local Context7 entry as an
 addition, update, managed removal, user-owned conflict, relinquished ownership,
 or already ready.

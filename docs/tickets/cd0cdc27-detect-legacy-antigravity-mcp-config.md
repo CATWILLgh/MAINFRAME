@@ -50,8 +50,10 @@ Completed in the installer branch:
 
 Remaining work:
 
-1. Verify the remaining supported Antigravity versions or narrow the supported
-   runtime policy to versions with proven canonical command precedence.
+1. Connect TUI host discovery to the managed release requirement, which is now
+   narrowed to the evidence-backed Antigravity `2.2.1`; keep the legacy
+   installer's broader 2.x acceptance separate until the TUI can explain an
+   incompatibility.
 2. Define an explicit user choice and safe mutation contract for migration,
    including deletion support in the configuration executor.
 3. Preserve unrelated servers and unknown fields during the chosen migration.

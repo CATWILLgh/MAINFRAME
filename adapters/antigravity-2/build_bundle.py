@@ -13,8 +13,10 @@ sys.path.insert(0, str(TOOLS))
 
 from bundle_sync import prepare_output_root, remove_path, write_text_file
 from release_contract import write_bundle_manifest
+from release_contract_fields import HOST_REQUIREMENTS_SCHEMA_VERSION
 
 import build_antigravity
+import compatibility
 
 
 CONFIG_ROOT_TOKEN = "{{mainframe.config_root}}"
@@ -24,6 +26,7 @@ EXECUTABLE_PLUGIN_PATHS = {
     Path("scripts/mainframe_hook.py"),
     Path("scripts/mainframe_state.py"),
 }
+DEFAULT_BUNDLE_PATH = Path("dist/antigravity-2/bundle")
 
 
 def _write_plugin(root: Path, output: Path) -> None:
@@ -124,6 +127,8 @@ def build(root: Path, output: Path) -> None:
         ],
         resources=_resources(),
         mcp_projections=_mcp_projections(),
+        schema_version=HOST_REQUIREMENTS_SCHEMA_VERSION,
+        host_requirements=compatibility.managed_host_requirements(),
     )
 
 
@@ -133,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     root = args.root.resolve()
-    output = args.output or root / "dist/antigravity-2/bundle-v2"
+    output = args.output or root / DEFAULT_BUNDLE_PATH
     build(root, output)
     print(f"wrote Antigravity 2.x bundle to {output}")
     return 0

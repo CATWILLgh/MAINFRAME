@@ -3,6 +3,7 @@ package releasecontract_test
 import (
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
@@ -30,6 +31,16 @@ func TestPythonReleaseBuilderAndGoLoaderAgreeOnAntigravityMCP(t *testing.T) {
 	release, err := releasecontract.Load(output)
 	if err != nil {
 		t.Fatalf("load Python release in Go: %v", err)
+	}
+	wantRequirement := releasecontract.HostRequirement{
+		ComponentID:      domain.ComponentAntigravity2,
+		Kind:             releasecontract.HostRequirementDarwinApplicationBundleV1,
+		BundleIdentifier: "com.google.antigravity",
+		ExactVersions:    []string{"2.2.1"},
+	}
+	if len(release.HostRequirements) != 1 ||
+		!reflect.DeepEqual(release.HostRequirements[0], wantRequirement) {
+		t.Fatalf("cross-runtime host requirements = %#v", release.HostRequirements)
 	}
 	for _, projection := range release.MCPProjections {
 		if projection.ID != "antigravity-2.mcp.context7" {

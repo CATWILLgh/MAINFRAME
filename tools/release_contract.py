@@ -35,6 +35,7 @@ from release_contract_helpers import (
     sorted_unique_strings as _sorted_unique_strings,
     unique_identifier as _unique_identifier,
 )
+import release_host_requirements as host_contract
 BUNDLE_SCHEMA_VERSION = 2
 RELEASE_SCHEMA_VERSION = 2
 BUNDLE_KIND = "mainframe-bundle"
@@ -54,11 +55,13 @@ def write_bundle_manifest(
     legacy_artifacts: list[dict[str, Any]] | None = None,
     runtime_profile: dict[str, str] | None = None,
     mcp_projections: list[dict[str, Any]] | None = None,
+    schema_version: int = BUNDLE_SCHEMA_VERSION,
+    host_requirements: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Validate bundle mappings and write their deterministic integrity manifest."""
     root = _real_directory(bundle_root, "bundle root")
     manifest = {
-        "schema_version": BUNDLE_SCHEMA_VERSION,
+        "schema_version": schema_version,
         "kind": BUNDLE_KIND,
         "component": component,
         "dependencies": sorted(dependencies),
@@ -77,6 +80,12 @@ def write_bundle_manifest(
             mcp_projections or [], key=lambda item: item.get("id", "")
         ),
     }
+    if schema_version == fields.HOST_REQUIREMENTS_SCHEMA_VERSION:
+        manifest["host_requirements"] = host_contract.canonical_host_requirements(
+            host_requirements
+        )
+    elif host_requirements is not None:
+        raise ValueError("host requirements require bundle schema version 3")
     _validate_bundle_document(root, manifest)
     _write_json(root / "bundle.json", manifest)
     return manifest
@@ -159,12 +168,11 @@ def validate_release(release_root: Path) -> dict[str, Any]:
 
 def _validate_bundle_document(root: Path, manifest: Any) -> None:
     _require_object(manifest, "bundle manifest")
-    _require_fields(manifest, fields.BUNDLE_FIELDS, fields.BUNDLE_FIELDS, "bundle manifest")
-    if (
-        type(manifest["schema_version"]) is not int
-        or manifest["schema_version"] != BUNDLE_SCHEMA_VERSION
-    ):
+    schema_version = manifest.get("schema_version")
+    if type(schema_version) is not int or schema_version not in fields.BUNDLE_FIELDS:
         raise ValueError("unsupported bundle schema version")
+    contract_fields = fields.BUNDLE_FIELDS[schema_version]
+    _require_fields(manifest, contract_fields, contract_fields, "bundle manifest")
     if manifest["kind"] != BUNDLE_KIND:
         raise ValueError("invalid bundle kind")
     component = manifest["component"]
@@ -177,6 +185,8 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
     _require_object(profile, "runtime profile")
     if not all(isinstance(key, str) and isinstance(value, str) for key, value in profile.items()):
         raise ValueError("runtime profile values must be strings")
+    if schema_version == fields.HOST_REQUIREMENTS_SCHEMA_VERSION:
+        host_contract.validate_host_requirements(manifest["host_requirements"])
     _validate_units(root, manifest["install_units"])
     _validate_legacy_artifacts(manifest["legacy_artifacts"])
     validate_local_target_isolation(

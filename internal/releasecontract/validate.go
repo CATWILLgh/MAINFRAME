@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
@@ -72,7 +73,7 @@ func validateBundle(
 	manifest bundleManifest,
 ) (installmodel.ComponentSpec, []Resource, error) {
 	component := domain.ComponentID(manifest.Component)
-	if manifest.SchemaVersion != bundleSchemaVersion || manifest.Kind != bundleKind ||
+	if !supportedBundleSchemaVersion(manifest.SchemaVersion) || manifest.Kind != bundleKind ||
 		!componentPattern.MatchString(manifest.Component) || !manifestCollectionsPresent(manifest) {
 		return installmodel.ComponentSpec{}, nil, fmt.Errorf("invalid bundle identity")
 	}
@@ -81,6 +82,9 @@ func validateBundle(
 	}
 	if !sortedUnique(manifest.Dependencies) {
 		return installmodel.ComponentSpec{}, nil, fmt.Errorf("invalid dependencies for %q", component)
+	}
+	if err := validateHostRequirements(component, manifest); err != nil {
+		return installmodel.ComponentSpec{}, nil, err
 	}
 	actual, err := payloadInventory(bundleRoot)
 	if err != nil {
@@ -148,13 +152,60 @@ func validateExternalStateArtifacts(
 }
 
 func manifestCollectionsPresent(manifest bundleManifest) bool {
-	return manifest.Dependencies != nil &&
+	common := manifest.Dependencies != nil &&
 		manifest.InstallUnits != nil &&
 		manifest.LegacyArtifacts != nil &&
 		manifest.Resources != nil &&
 		manifest.PayloadFiles != nil &&
-		manifest.RuntimeProfile != nil &&
-		manifest.MCPProjections != nil
+		manifest.RuntimeProfile != nil && manifest.MCPProjections != nil
+	if !common {
+		return false
+	}
+	switch manifest.SchemaVersion {
+	case bundleSchemaVersionV2:
+		return !manifest.HostRequirements.Present
+	case bundleSchemaVersionV3:
+		return manifest.HostRequirements.Present
+	default:
+		return false
+	}
+}
+
+func supportedBundleSchemaVersion(version int) bool {
+	return version == bundleSchemaVersionV2 || version == bundleSchemaVersionV3
+}
+
+func validateHostRequirements(component domain.ComponentID, manifest bundleManifest) error {
+	if manifest.SchemaVersion == bundleSchemaVersionV2 {
+		return nil
+	}
+	rows := manifest.HostRequirements.Values
+	if len(rows) == 0 {
+		return fmt.Errorf("component %q host requirements must not be empty", component)
+	}
+	keys := make([]string, len(rows))
+	for index, row := range rows {
+		kind := HostRequirementKind(row.Kind)
+		if kind != HostRequirementDarwinApplicationBundleV1 {
+			return fmt.Errorf("component %q has unsupported host requirement kind %q", component, kind)
+		}
+		if strings.TrimSpace(row.BundleIdentifier) == "" || len(row.ExactVersions) == 0 {
+			return fmt.Errorf("component %q has invalid host requirement", component)
+		}
+		for _, version := range row.ExactVersions {
+			if strings.TrimSpace(version) == "" {
+				return fmt.Errorf("component %q has an empty exact host version", component)
+			}
+		}
+		if !sortedUnique(row.ExactVersions) {
+			return fmt.Errorf("component %q host versions must be sorted and unique", component)
+		}
+		keys[index] = row.Kind + "\x00" + row.BundleIdentifier
+	}
+	if !sortedUnique(keys) {
+		return fmt.Errorf("component %q host requirements must be sorted and unique", component)
+	}
+	return nil
 }
 
 func validateUnits(

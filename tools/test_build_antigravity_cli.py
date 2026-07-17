@@ -21,6 +21,9 @@ def test_native_validation_requires_antigravity_major_two() -> None:
         plistlib.dump({"CFBundleIdentifier": build.BUNDLE_IDENTIFIER, "CFBundleShortVersionString": "2.2.1"}, handle)
     assert build.validate_native_app(app) == "2.2.1"
     with plist.open("wb") as handle:
+        plistlib.dump({"CFBundleIdentifier": build.BUNDLE_IDENTIFIER, "CFBundleShortVersionString": "2.9.9"}, handle)
+    assert build.validate_native_app(app) == "2.9.9"
+    with plist.open("wb") as handle:
         plistlib.dump({"CFBundleIdentifier": build.BUNDLE_IDENTIFIER, "CFBundleShortVersionString": "3.0.0"}, handle)
     try:
         build.validate_native_app(app)
