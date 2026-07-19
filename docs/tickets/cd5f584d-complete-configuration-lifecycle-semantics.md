@@ -64,8 +64,9 @@ and trusted.
   enforce the same boundary, preserve the capability in the loaded release,
   and reject preparation when a changed resource did not advertise support.
   MCP materialization support is derived from each exact adapter codec instead
-  of duplicated in bundle metadata; it covers emitted intents, while complete
-  adapter deselection remains outside reconciliation.
+  of duplicated in bundle metadata. Complete adapter deselection now removes
+  only exact registry-owned entries, relinquishes user-changed entries, ignores
+  unowned inactive state, and preserves installed host-incompatible adapters.
 - The executor can now apply a supported prepared transition, including
   registry-proven removal, as one recoverable journaled transaction across the
   configuration and ownership files.
