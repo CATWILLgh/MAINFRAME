@@ -16,13 +16,28 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 		name      string
 		snapshots SnapshotBuilder
 		executors ApplyExecutorFactory
+		recovery  RecoveryExecutorFactory
 	}{
-		{name: "snapshot builder", executors: &fakeApplyExecutorFactory{}},
-		{name: "executor factory", snapshots: &fakeSnapshotBuilder{}},
+		{
+			name: "snapshot builder", executors: &fakeApplyExecutorFactory{},
+			recovery: readyRecoveryFactory(),
+		},
+		{
+			name: "executor factory", snapshots: &fakeSnapshotBuilder{},
+			recovery: readyRecoveryFactory(),
+		},
+		{
+			name: "recovery factory", snapshots: &fakeSnapshotBuilder{},
+			executors: &fakeApplyExecutorFactory{},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := New(test.snapshots, test.executors); err == nil {
+			if _, err := New(
+				test.snapshots,
+				test.executors,
+				test.recovery,
+			); err == nil {
 				t.Fatal("New() accepted a missing dependency")
 			}
 		})
@@ -32,7 +47,7 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 func TestReviewBuildsOneImmutablePlan(t *testing.T) {
 	builder := &fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}}
 	factory := &fakeApplyExecutorFactory{}
-	service, err := New(builder, factory)
+	service, err := New(builder, factory, readyRecoveryFactory())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -80,7 +95,7 @@ func TestReviewFailureDoesNotOpenApplyResources(t *testing.T) {
 	snapshotErr := errors.New("snapshot failed")
 	builder := &fakeSnapshotBuilder{errors: []error{snapshotErr}}
 	factory := &fakeApplyExecutorFactory{}
-	service, err := New(builder, factory)
+	service, err := New(builder, factory, readyRecoveryFactory())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -100,7 +115,7 @@ func TestApplyRefreshesTheCompleteReviewedRequestAndClosesSession(t *testing.T) 
 	}}
 	session := &fakeApplySession{refresh: true}
 	factory := &fakeApplyExecutorFactory{session: session}
-	service, err := New(builder, factory)
+	service, err := New(builder, factory, readyRecoveryFactory())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -142,7 +157,7 @@ func TestApplyReportsExecutorFactoryFailures(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			builder := &fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}}
-			service, err := New(builder, test.factory)
+			service, err := New(builder, test.factory, readyRecoveryFactory())
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -169,7 +184,7 @@ func TestApplyClosesSessionWhenRefreshFails(t *testing.T) {
 	}
 	session := &fakeApplySession{refresh: true}
 	factory := &fakeApplyExecutorFactory{session: session}
-	service, err := New(builder, factory)
+	service, err := New(builder, factory, readyRecoveryFactory())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -193,7 +208,7 @@ func TestApplyRejectsRefresherComponentMismatchAndStillCloses(t *testing.T) {
 		refreshDesired: []domain.ComponentID{domain.ComponentCodex},
 	}
 	factory := &fakeApplyExecutorFactory{session: session}
-	service, err := New(builder, factory)
+	service, err := New(builder, factory, readyRecoveryFactory())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -223,7 +238,7 @@ func TestApplyRejectsAChangedFreshSnapshotAndStillCloses(t *testing.T) {
 	}}
 	session := &fakeApplySession{refresh: true}
 	factory := &fakeApplyExecutorFactory{session: session}
-	service, err := New(builder, factory)
+	service, err := New(builder, factory, readyRecoveryFactory())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -257,7 +272,7 @@ func TestApplyReportsSessionCloseFailure(t *testing.T) {
 			builder := &fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}}
 			session := &fakeApplySession{applyErr: test.applyErr, closeErr: closeErr}
 			factory := &fakeApplyExecutorFactory{session: session}
-			service, err := New(builder, factory)
+			service, err := New(builder, factory, readyRecoveryFactory())
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -287,7 +302,7 @@ func TestApplyReportsSessionCloseFailure(t *testing.T) {
 func TestApplyRejectsAnUnreviewedPlanBeforeOpeningResources(t *testing.T) {
 	builder := &fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}}
 	factory := &fakeApplyExecutorFactory{}
-	service, err := New(builder, factory)
+	service, err := New(builder, factory, readyRecoveryFactory())
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

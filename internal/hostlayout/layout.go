@@ -21,6 +21,11 @@ type Layout struct {
 	targets map[domain.RootID]string
 }
 
+type RecoveryLayout struct {
+	state   string
+	targets map[domain.RootID]string
+}
+
 func Resolve(environment Environment, source string) (Layout, error) {
 	if err := validateEnvironment(environment); err != nil {
 		return Layout{}, err
@@ -28,19 +33,24 @@ func Resolve(environment Environment, source string) (Layout, error) {
 	if err := validateAbsolutePath("source", source); err != nil {
 		return Layout{}, err
 	}
-	home, err := resolveHome(environment)
+	recovery, err := resolveRecoveryLayout(environment)
 	if err != nil {
 		return Layout{}, err
 	}
-	codex, err := overrideOrDefault(environment, "CODEX_HOME", filepath.Join(home, ".codex"))
+	home := recovery.targets[domain.RootHome]
+	codex, err := overrideOrDefault(
+		environment,
+		"CODEX_HOME",
+		filepath.Join(home, ".codex"),
+	)
 	if err != nil {
 		return Layout{}, err
 	}
-	config, err := overrideOrDefault(environment, "XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	if err != nil {
-		return Layout{}, err
-	}
-	state, err := overrideOrDefault(environment, "XDG_STATE_HOME", filepath.Join(home, ".local", "state"))
+	config, err := overrideOrDefault(
+		environment,
+		"XDG_CONFIG_HOME",
+		filepath.Join(home, ".config"),
+	)
 	if err != nil {
 		return Layout{}, err
 	}
@@ -48,18 +58,58 @@ func Resolve(environment Environment, source string) (Layout, error) {
 	if err != nil {
 		return Layout{}, err
 	}
+	targets := recovery.Targets()
+	targets[domain.RootCodexConfig] = codex
+	targets[domain.RootOpenCodeConfig] = filepath.Join(config, "opencode")
+	targets[domain.RootCredentialsConfig] = filepath.Join(config, "credentials")
 	return Layout{
-		source: source,
-		state:  filepath.Join(state, "mainframe"),
-		data:   filepath.Join(data, "mainframe"),
+		source:  source,
+		state:   recovery.state,
+		data:    filepath.Join(data, "mainframe"),
+		targets: targets,
+	}, nil
+}
+
+func ResolveRecovery(environment Environment) (RecoveryLayout, error) {
+	if err := validateEnvironment(environment); err != nil {
+		return RecoveryLayout{}, err
+	}
+	return resolveRecoveryLayout(environment)
+}
+
+func resolveRecoveryLayout(environment Environment) (RecoveryLayout, error) {
+	home, err := resolveHome(environment)
+	if err != nil {
+		return RecoveryLayout{}, err
+	}
+	codex := overrideOrRawDefault(
+		environment,
+		"CODEX_HOME",
+		filepath.Join(home, ".codex"),
+	)
+	config := overrideOrRawDefault(
+		environment,
+		"XDG_CONFIG_HOME",
+		filepath.Join(home, ".config"),
+	)
+	state, err := overrideOrDefault(
+		environment,
+		"XDG_STATE_HOME",
+		filepath.Join(home, ".local", "state"),
+	)
+	if err != nil {
+		return RecoveryLayout{}, err
+	}
+	return RecoveryLayout{
+		state: filepath.Join(state, "mainframe"),
 		targets: map[domain.RootID]string{
 			domain.RootHome:              home,
 			domain.RootClaudeConfig:      filepath.Join(home, ".claude"),
 			domain.RootCodexConfig:       codex,
-			domain.RootOpenCodeConfig:    filepath.Join(config, "opencode"),
+			domain.RootOpenCodeConfig:    joinUnvalidated(config, "opencode"),
 			domain.RootAntigravityConfig: filepath.Join(home, ".gemini", "config"),
 			domain.RootAntigravityData:   filepath.Join(home, ".gemini", "antigravity"),
-			domain.RootCredentialsConfig: filepath.Join(config, "credentials"),
+			domain.RootCredentialsConfig: joinUnvalidated(config, "credentials"),
 			domain.RootUserBin:           filepath.Join(home, ".local", "bin"),
 		},
 	}, nil
@@ -78,11 +128,23 @@ func (layout Layout) Data() string {
 }
 
 func (layout Layout) Targets() map[domain.RootID]string {
-	targets := make(map[domain.RootID]string, len(layout.targets))
-	for root, target := range layout.targets {
-		targets[root] = target
+	return cloneTargets(layout.targets)
+}
+
+func (layout RecoveryLayout) State() string {
+	return layout.state
+}
+
+func (layout RecoveryLayout) Targets() map[domain.RootID]string {
+	return cloneTargets(layout.targets)
+}
+
+func cloneTargets(source map[domain.RootID]string) map[domain.RootID]string {
+	result := make(map[domain.RootID]string, len(source))
+	for root, target := range source {
+		result[root] = target
 	}
-	return targets
+	return result
 }
 
 func validateEnvironment(environment Environment) error {
@@ -124,6 +186,22 @@ func overrideOrDefault(environment Environment, name, fallback string) (string, 
 		return "", err
 	}
 	return value, nil
+}
+
+func overrideOrRawDefault(environment Environment, name, fallback string) string {
+	value, exists := environment.LookupEnv(name)
+	if !exists || value == "" {
+		return fallback
+	}
+	return value
+}
+
+func joinUnvalidated(parent, child string) string {
+	separator := string(filepath.Separator)
+	if parent == separator {
+		return separator + child
+	}
+	return parent + separator + child
 }
 
 func validateAbsolutePath(name, value string) error {

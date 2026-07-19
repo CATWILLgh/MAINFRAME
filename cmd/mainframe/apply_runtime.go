@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
@@ -17,6 +18,31 @@ import (
 
 type releaseLoader func(string) (releasecontract.Release, error)
 
+type releaseRootResolver func() (string, error)
+
+type releaseRootSource struct {
+	mu      sync.Mutex
+	resolve releaseRootResolver
+	value   string
+}
+
+func (source *releaseRootSource) Resolve() (string, error) {
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	if source.value != "" {
+		return source.value, nil
+	}
+	if source.resolve == nil {
+		return "", errors.New("release root resolver must not be nil")
+	}
+	value, err := source.resolve()
+	if err != nil {
+		return "", err
+	}
+	source.value = value
+	return value, nil
+}
+
 type previewServiceBuilder func(
 	string,
 	releasecontract.Release,
@@ -26,7 +52,7 @@ type previewServiceBuilder func(
 ) (lifecycle.Service, error)
 
 type releaseSnapshotBuilder struct {
-	releaseRoot string
+	resolveRoot releaseRootResolver
 	cwd         string
 	load        releaseLoader
 	client      func() codexstate.Client
@@ -35,8 +61,18 @@ type releaseSnapshotBuilder struct {
 }
 
 func newReleaseSnapshotBuilder(releaseRoot, cwd string) releaseSnapshotBuilder {
+	return newReleaseSnapshotBuilderWithResolver(
+		func() (string, error) { return releaseRoot, nil },
+		cwd,
+	)
+}
+
+func newReleaseSnapshotBuilderWithResolver(
+	resolveRoot releaseRootResolver,
+	cwd string,
+) releaseSnapshotBuilder {
 	return releaseSnapshotBuilder{
-		releaseRoot: releaseRoot,
+		resolveRoot: resolveRoot,
 		cwd:         cwd,
 		load:        releasecontract.Load,
 		client:      func() codexstate.Client { return codexstate.NewAppServerClient() },
@@ -49,12 +85,19 @@ func (builder releaseSnapshotBuilder) Build() (application.Snapshot, error) {
 	if err := builder.validate(); err != nil {
 		return application.Snapshot{}, err
 	}
-	release, err := builder.load(builder.releaseRoot)
+	releaseRoot, err := builder.resolveRoot()
+	if err != nil {
+		return application.Snapshot{}, err
+	}
+	if releaseRoot == "" {
+		return application.Snapshot{}, errors.New("release root must not be empty")
+	}
+	release, err := builder.load(releaseRoot)
 	if err != nil {
 		return application.Snapshot{}, fmt.Errorf("load release: %w", err)
 	}
 	service, err := builder.build(
-		builder.releaseRoot,
+		releaseRoot,
 		release,
 		builder.cwd,
 		builder.client(),
@@ -73,10 +116,10 @@ func (builder releaseSnapshotBuilder) Build() (application.Snapshot, error) {
 }
 
 func (builder releaseSnapshotBuilder) validate() error {
-	if builder.releaseRoot == "" || builder.cwd == "" {
-		return errors.New("release snapshot paths must not be empty")
+	if builder.cwd == "" {
+		return errors.New("release snapshot working directory must not be empty")
 	}
-	if builder.load == nil || builder.client == nil ||
+	if builder.resolveRoot == nil || builder.load == nil || builder.client == nil ||
 		builder.build == nil || builder.discover == nil {
 		return errors.New("release snapshot dependencies must not be nil")
 	}
@@ -84,14 +127,21 @@ func (builder releaseSnapshotBuilder) validate() error {
 }
 
 type productionApplyExecutorFactory struct {
-	releaseRoot string
+	resolveRoot releaseRootResolver
 	environment hostlayout.Environment
 }
 
 func (factory productionApplyExecutorFactory) Open(
 	refresher executor.Refresher,
 ) (application.ApplySession, error) {
-	layout, err := hostlayout.Resolve(factory.environment, factory.releaseRoot)
+	if factory.resolveRoot == nil {
+		return nil, errors.New("release root resolver must not be nil")
+	}
+	releaseRoot, err := factory.resolveRoot()
+	if err != nil {
+		return nil, err
+	}
+	layout, err := hostlayout.Resolve(factory.environment, releaseRoot)
 	if err != nil {
 		return nil, fmt.Errorf("resolve host layout: %w", err)
 	}
@@ -110,26 +160,30 @@ func (factory productionApplyExecutorFactory) Open(
 		workspace,
 		workspace,
 	)
-	return &productionApplySession{executor: runner, state: state}, nil
+	return &productionExecutorSession{executor: runner, state: state}, nil
 }
 
-type productionApplySession struct {
+type productionExecutorSession struct {
 	executor executor.Executor
 	state    *executor.UnixState
 }
 
-func (session *productionApplySession) Apply(
+func (session *productionExecutorSession) Apply(
 	preview executor.Preview,
 ) (executor.Result, error) {
 	return session.executor.Apply(preview)
 }
 
-func (session *productionApplySession) Close() error {
+func (session *productionExecutorSession) Recover() (executor.Result, error) {
+	return session.executor.Recover()
+}
+
+func (session *productionExecutorSession) Close() error {
 	return session.state.Close()
 }
 
 func buildApplyService() (application.Service, error) {
-	releaseRoot, err := resolveReleaseRoot()
+	recoveryFactory, err := newProductionRecoveryExecutorFactory()
 	if err != nil {
 		return application.Service{}, err
 	}
@@ -137,12 +191,13 @@ func buildApplyService() (application.Service, error) {
 	if err != nil {
 		return application.Service{}, fmt.Errorf("resolve working directory: %w", err)
 	}
-	builder := newReleaseSnapshotBuilder(releaseRoot, cwd)
+	releaseRoots := &releaseRootSource{resolve: resolveReleaseRoot}
+	builder := newReleaseSnapshotBuilderWithResolver(releaseRoots.Resolve, cwd)
 	factory := productionApplyExecutorFactory{
-		releaseRoot: releaseRoot,
+		resolveRoot: releaseRoots.Resolve,
 		environment: hostEnvironment(),
 	}
-	service, err := application.New(builder, factory)
+	service, err := application.New(builder, factory, recoveryFactory)
 	if err != nil {
 		return application.Service{}, fmt.Errorf("build apply service: %w", err)
 	}

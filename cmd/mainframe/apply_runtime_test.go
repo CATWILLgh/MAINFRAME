@@ -4,8 +4,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
@@ -21,7 +23,7 @@ func TestReleaseSnapshotBuilderReloadsAndReinspectsEveryBuild(t *testing.T) {
 	builds := 0
 	clients := 0
 	builder := releaseSnapshotBuilder{
-		releaseRoot: releaseRoot,
+		resolveRoot: func() (string, error) { return releaseRoot, nil },
 		cwd:         t.TempDir(),
 		load: func(root string) (releasecontract.Release, error) {
 			loads++
@@ -83,7 +85,7 @@ func TestProductionApplyExecutorFactoryCreatesStateOnlyWhenOpened(t *testing.T) 
 		GOOS:        "darwin",
 	}
 	factory := productionApplyExecutorFactory{
-		releaseRoot: releaseRoot,
+		resolveRoot: func() (string, error) { return releaseRoot, nil },
 		environment: environment,
 	}
 	stateRoot := filepath.Join(stateBase, "mainframe")
@@ -115,6 +117,138 @@ func TestBuildApplyServiceDoesNotCreateState(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stateBase, "mainframe")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("building apply service created state: %v", err)
+	}
+}
+
+func TestBuildApplyServiceDefersReleaseResolution(t *testing.T) {
+	home := t.TempDir()
+	stateBase := filepath.Join(t.TempDir(), "state")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_STATE_HOME", stateBase)
+	t.Setenv(releaseRootEnvironment, filepath.Join(t.TempDir(), "missing"))
+
+	if _, err := buildApplyService(); err != nil {
+		t.Fatalf("buildApplyService() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stateBase, "mainframe")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("building apply service created state: %v", err)
+	}
+}
+
+func TestProductionApplyRecoversJournalBeforeOpeningDeletedRelease(t *testing.T) {
+	home := canonicalTempDir(t)
+	stateBase := filepath.Join(canonicalTempDir(t), "state")
+	releaseRoot := canonicalTempDir(t)
+	environment := hostlayout.Environment{
+		LookupEnv: func(name string) (string, bool) {
+			if name == "XDG_STATE_HOME" {
+				return stateBase, true
+			}
+			return "", false
+		},
+		UserHomeDir: func() (string, error) { return home, nil },
+		GOOS:        "darwin",
+	}
+	releaseRoots := &releaseRootSource{
+		resolve: func() (string, error) { return releaseRoot, nil },
+	}
+	layout, err := hostlayout.ResolveRecovery(environment)
+	if err != nil {
+		t.Fatalf("ResolveRecovery() error = %v", err)
+	}
+	service, err := application.New(
+		productionTestSnapshotBuilder(t, releaseRoots.Resolve),
+		productionApplyExecutorFactory{
+			resolveRoot: releaseRoots.Resolve,
+			environment: environment,
+		},
+		productionRecoveryExecutorFactory{layout: layout},
+	)
+	if err != nil {
+		t.Fatalf("application.New() error = %v", err)
+	}
+	reviewed, err := service.Review(application.Request{
+		Components: []domain.ComponentID{domain.ComponentCodex},
+	})
+	if err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	stateRoot := filepath.Join(stateBase, "mainframe")
+	saveEmptyProductionJournal(t, stateRoot)
+	if err := os.RemoveAll(releaseRoot); err != nil {
+		t.Fatalf("remove release: %v", err)
+	}
+
+	if _, err := service.Apply(reviewed); err == nil ||
+		!strings.Contains(err.Error(), "pin source root") {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	assertProductionJournalMissing(t, stateRoot)
+}
+
+func productionTestSnapshotBuilder(
+	t *testing.T,
+	resolve releaseRootResolver,
+) releaseSnapshotBuilder {
+	t.Helper()
+	return releaseSnapshotBuilder{
+		resolveRoot: resolve,
+		cwd:         t.TempDir(),
+		load: func(string) (releasecontract.Release, error) {
+			return releasecontract.Release{
+				ID:          "release",
+				IndexSHA256: applyRuntimeDigest(1),
+				Model:       previewOwnershipModel(t),
+			}, nil
+		},
+		client: func() codexstate.Client { return nil },
+		build: func(
+			_ string,
+			release releasecontract.Release,
+			_ string,
+			_ codexstate.Client,
+			_ hostApplicationDiscoverer,
+		) (lifecycle.Service, error) {
+			return lifecycle.New(release.Model, domain.ObservedState{})
+		},
+		discover: hostcompatibility.DiscoverApplications,
+	}
+}
+
+func saveEmptyProductionJournal(t *testing.T, stateRoot string) {
+	t.Helper()
+	state, err := executor.OpenUnixState(stateRoot)
+	if err != nil {
+		t.Fatalf("OpenUnixState() error = %v", err)
+	}
+	journal := executor.Journal{
+		SchemaVersion: executor.CurrentJournalSchemaVersion,
+		Release: executor.ReleaseIdentity{
+			ID:          "release",
+			IndexSHA256: applyRuntimeDigest(1),
+		},
+		Desired: []domain.ComponentID{domain.ComponentCodex},
+		Status:  executor.TransactionInProgress,
+	}
+	if err := state.Save(journal); err != nil {
+		state.Close()
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := state.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+}
+
+func assertProductionJournalMissing(t *testing.T, stateRoot string) {
+	t.Helper()
+	state, err := executor.OpenUnixState(stateRoot)
+	if err != nil {
+		t.Fatalf("OpenUnixState() error = %v", err)
+	}
+	defer state.Close()
+	journal, err := state.Load()
+	if err != nil || journal != nil {
+		t.Fatalf("Load() after recovery = %#v, %v", journal, err)
 	}
 }
 

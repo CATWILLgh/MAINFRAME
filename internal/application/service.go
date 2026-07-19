@@ -39,6 +39,7 @@ type ApplyExecutorFactory interface {
 type Service struct {
 	snapshots SnapshotBuilder
 	executors ApplyExecutorFactory
+	recovery  RecoveryService
 }
 
 type ReviewedPlan struct {
@@ -48,14 +49,26 @@ type ReviewedPlan struct {
 	reviewed   bool
 }
 
-func New(snapshots SnapshotBuilder, executors ApplyExecutorFactory) (Service, error) {
+func New(
+	snapshots SnapshotBuilder,
+	executors ApplyExecutorFactory,
+	recoveryExecutors RecoveryExecutorFactory,
+) (Service, error) {
 	if snapshots == nil {
 		return Service{}, errors.New("snapshot builder must not be nil")
 	}
 	if executors == nil {
 		return Service{}, errors.New("apply executor factory must not be nil")
 	}
-	return Service{snapshots: snapshots, executors: executors}, nil
+	recovery, err := NewRecovery(recoveryExecutors)
+	if err != nil {
+		return Service{}, err
+	}
+	return Service{
+		snapshots: snapshots,
+		executors: executors,
+		recovery:  recovery,
+	}, nil
 }
 
 func (service Service) Review(request Request) (ReviewedPlan, error) {
@@ -68,10 +81,22 @@ func (service Service) Review(request Request) (ReviewedPlan, error) {
 
 func (service Service) Apply(
 	plan ReviewedPlan,
-) (result executor.Result, err error) {
+) (executor.Result, error) {
 	if !plan.reviewed {
 		return executor.Result{}, errors.New("plan was not produced by Review")
 	}
+	recovered, err := service.recovery.Recover()
+	if err != nil {
+		return recovered, fmt.Errorf("recover before apply: %w", err)
+	}
+	applied, err := service.applyReviewed(plan)
+	applied.Warnings = append(recovered.Warnings, applied.Warnings...)
+	return applied, err
+}
+
+func (service Service) applyReviewed(
+	plan ReviewedPlan,
+) (result executor.Result, err error) {
 	request := cloneRequest(plan.request)
 	refresher := requestRefresher{snapshots: service.snapshots, request: request}
 	session, err := service.executors.Open(refresher)

@@ -31,13 +31,19 @@ func (workspace Workspace) PlanDirectories(
 		Roots: make([]executor.RootSnapshot, 0, len(rootIDs)),
 	}
 	for _, rootID := range rootIDs {
-		root, exists := workspace.targets[rootID]
+		root, exists, err := workspace.target(rootID)
+		if err != nil {
+			return executor.DirectoryPlan{}, err
+		}
 		if !exists {
 			return executor.DirectoryPlan{}, fmt.Errorf("unknown target root %q", rootID)
 		}
 		result.Roots = append(result.Roots, root.snapshot(rootID))
 	}
-	directories := workspace.derivePlannedDirectories(plan)
+	directories, err := workspace.derivePlannedDirectories(plan)
+	if err != nil {
+		return executor.DirectoryPlan{}, err
+	}
 	sort.Slice(directories, func(left, right int) bool {
 		leftDepth := strings.Count(directories[left].target.Path, "/")
 		rightDepth := strings.Count(directories[right].target.Path, "/")
@@ -46,24 +52,43 @@ func (workspace Workspace) PlanDirectories(
 		}
 		return directories[left].physical < directories[right].physical
 	})
+	missing, err := workspace.missingDirectoryRequirements(directories)
+	if err != nil {
+		return executor.DirectoryPlan{}, err
+	}
+	result.Missing = missing
+	return result, nil
+}
+
+func (workspace Workspace) missingDirectoryRequirements(
+	directories []plannedDirectory,
+) ([]executor.DirectoryRequirement, error) {
 	missing := make(map[string]bool)
+	result := make([]executor.DirectoryRequirement, 0, len(directories))
 	for _, directory := range directories {
 		if missing[filepath.Dir(directory.physical)] {
 			missing[directory.physical] = true
 		} else {
-			exists, err := inspectPlannedDirectory(
-				workspace.targets[directory.target.Root],
-				directory.target.Path,
-			)
+			root, found, err := workspace.target(directory.target.Root)
 			if err != nil {
-				return executor.DirectoryPlan{}, err
+				return nil, err
+			}
+			if !found {
+				return nil, fmt.Errorf(
+					"unknown target root %q",
+					directory.target.Root,
+				)
+			}
+			exists, err := inspectPlannedDirectory(root, directory.target.Path)
+			if err != nil {
+				return nil, err
 			}
 			if exists {
 				continue
 			}
 			missing[directory.physical] = true
 		}
-		result.Missing = append(result.Missing, executor.DirectoryRequirement{
+		result = append(result, executor.DirectoryRequirement{
 			Target: directory.target,
 			Mode:   executor.ManagedDirectoryMode,
 		})
@@ -89,13 +114,16 @@ func installRootIDs(plan domain.Plan) []domain.RootID {
 
 func (workspace Workspace) derivePlannedDirectories(
 	plan domain.Plan,
-) []plannedDirectory {
+) ([]plannedDirectory, error) {
 	byPhysical := make(map[string]plannedDirectory)
 	for _, operation := range plan.Operations {
 		if operation.Kind != domain.OperationInstall {
 			continue
 		}
-		root, exists := workspace.targets[operation.Artifact.Location.Root]
+		root, exists, err := workspace.target(operation.Artifact.Location.Root)
+		if err != nil {
+			return nil, err
+		}
 		if !exists {
 			continue
 		}
@@ -122,7 +150,7 @@ func (workspace Workspace) derivePlannedDirectories(
 	for _, directory := range byPhysical {
 		result = append(result, directory)
 	}
-	return result
+	return result, nil
 }
 
 func portablePrefixes(value string) []string {
@@ -178,7 +206,10 @@ func inspectPlannedDirectory(root managedRoot, relative string) (bool, error) {
 func (workspace Workspace) rejectPhysicalTargetConflicts(plan domain.Plan) error {
 	physical := make([]string, 0, len(plan.Operations))
 	for _, operation := range plan.Operations {
-		root, exists := workspace.targets[operation.Artifact.Location.Root]
+		root, exists, err := workspace.target(operation.Artifact.Location.Root)
+		if err != nil {
+			return err
+		}
 		if !exists {
 			return fmt.Errorf("unknown target root %q", operation.Artifact.Location.Root)
 		}

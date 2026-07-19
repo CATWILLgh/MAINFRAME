@@ -98,6 +98,56 @@ func TestResolveFallsBackForMissingOrEmptyEnvironmentValues(t *testing.T) {
 	}
 }
 
+func TestResolveRecoveryIgnoresReleaseAndDataPaths(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	state := filepath.Join(t.TempDir(), "state")
+	env := environment(map[string]string{
+		"HOME":           home,
+		"XDG_STATE_HOME": state,
+		"XDG_DATA_HOME":  "invalid-relative-data",
+	}, "/fallback", "darwin")
+
+	layout, err := hostlayout.ResolveRecovery(env)
+	if err != nil {
+		t.Fatalf("ResolveRecovery() error = %v", err)
+	}
+	if layout.State() != filepath.Join(state, "mainframe") {
+		t.Fatalf("State() = %q", layout.State())
+	}
+	if layout.Targets()[domain.RootHome] != home {
+		t.Fatalf("home target = %q", layout.Targets()[domain.RootHome])
+	}
+	first := layout.Targets()
+	first[domain.RootHome] = "/mutated"
+	if layout.Targets()[domain.RootHome] != home {
+		t.Fatal("Targets() exposed mutable recovery layout state")
+	}
+}
+
+func TestResolveRecoveryDefersInvalidTargetInputs(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	uncleanConfig := filepath.Join(t.TempDir(), "config") +
+		string(filepath.Separator) + ".." + string(filepath.Separator) + "config"
+	env := environment(map[string]string{
+		"HOME":            home,
+		"CODEX_HOME":      "relative-codex",
+		"XDG_CONFIG_HOME": uncleanConfig,
+	}, "/fallback", "linux")
+
+	layout, err := hostlayout.ResolveRecovery(env)
+	if err != nil {
+		t.Fatalf("ResolveRecovery() error = %v", err)
+	}
+	targets := layout.Targets()
+	if targets[domain.RootCodexConfig] != "relative-codex" {
+		t.Fatalf("Codex target = %q", targets[domain.RootCodexConfig])
+	}
+	wantOpenCode := uncleanConfig + string(filepath.Separator) + "opencode"
+	if targets[domain.RootOpenCodeConfig] != wantOpenCode {
+		t.Fatalf("OpenCode target = %q", targets[domain.RootOpenCodeConfig])
+	}
+}
+
 func TestResolveRejectsUnsupportedOrInvalidInputs(t *testing.T) {
 	base := t.TempDir()
 	validHome := filepath.Join(base, "home")

@@ -20,7 +20,10 @@ func (workspace Workspace) openDirectoryContext(
 	if err := validateDirectoryMutation(mutation); err != nil {
 		return directoryContext{}, err
 	}
-	configured, exists := workspace.targets[mutation.Root.Root]
+	configured, exists, err := workspace.target(mutation.Root.Root)
+	if err != nil {
+		return directoryContext{}, err
+	}
 	if !exists || configured.absolute() != filepath.Clean(filepath.Join(
 		mutation.Root.AnchorPath,
 		filepath.FromSlash(mutation.Root.RootPath),

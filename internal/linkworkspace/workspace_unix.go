@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
@@ -18,8 +20,15 @@ import (
 const privateNamePrefix = ".mainframe-"
 
 type Workspace struct {
-	source  pinnedRoot
-	targets map[domain.RootID]managedRoot
+	source   pinnedRoot
+	targets  map[domain.RootID]managedRoot
+	recovery *recoveryTargetSet
+}
+
+type recoveryTargetSet struct {
+	mu     sync.Mutex
+	paths  map[domain.RootID]string
+	pinned map[domain.RootID]managedRoot
 }
 
 func New(source string, targets map[domain.RootID]string) (Workspace, error) {
@@ -39,6 +48,67 @@ func New(source string, targets map[domain.RootID]string) (Workspace, error) {
 		pinnedTargets[id] = root
 	}
 	return Workspace{source: sourceRoot, targets: pinnedTargets}, nil
+}
+
+func NewRecovery(targets map[domain.RootID]string) (Workspace, error) {
+	paths := make(map[domain.RootID]string, len(targets))
+	for id, target := range targets {
+		if !id.Valid() {
+			return Workspace{}, fmt.Errorf("invalid target root %q", id)
+		}
+		paths[id] = target
+	}
+	return Workspace{
+		targets: map[domain.RootID]managedRoot{},
+		recovery: &recoveryTargetSet{
+			paths:  paths,
+			pinned: make(map[domain.RootID]managedRoot),
+		},
+	}, nil
+}
+
+func (workspace Workspace) target(
+	id domain.RootID,
+) (managedRoot, bool, error) {
+	if root, found := workspace.targets[id]; found {
+		return root, true, nil
+	}
+	if workspace.recovery == nil {
+		return managedRoot{}, false, nil
+	}
+	return workspace.recovery.pin(id)
+}
+
+func (targets *recoveryTargetSet) pin(
+	id domain.RootID,
+) (managedRoot, bool, error) {
+	targets.mu.Lock()
+	defer targets.mu.Unlock()
+	if root, found := targets.pinned[id]; found {
+		return root, true, nil
+	}
+	path, found := targets.paths[id]
+	if !found {
+		return managedRoot{}, false, nil
+	}
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path ||
+		strings.ContainsRune(path, 0) {
+		return managedRoot{}, true, fmt.Errorf(
+			"invalid target root path %q for %q",
+			path,
+			id,
+		)
+	}
+	root, err := pinManagedRoot(path)
+	if err != nil {
+		return managedRoot{}, true, fmt.Errorf(
+			"pin target root %q: %w",
+			id,
+			err,
+		)
+	}
+	targets.pinned[id] = root
+	return root, true, nil
 }
 
 func (workspace Workspace) Inspect(location domain.Location) (executor.LinkState, error) {
@@ -125,7 +195,10 @@ func (workspace Workspace) openLocationParent(
 	if !location.Path.Portable() || !location.Root.Valid() {
 		return -1, "", executor.FileIdentity{}, errors.New("location is not portable")
 	}
-	root, found := workspace.targets[location.Root]
+	root, found, err := workspace.target(location.Root)
+	if err != nil {
+		return -1, "", executor.FileIdentity{}, err
+	}
 	if !found {
 		return -1, "", executor.FileIdentity{}, fmt.Errorf("unknown target root %q", location.Root)
 	}

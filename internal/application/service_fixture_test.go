@@ -34,10 +34,12 @@ type fakeApplyExecutorFactory struct {
 	session ApplySession
 	opens   int
 	err     error
+	events  *[]string
 }
 
 func (factory *fakeApplyExecutorFactory) Open(refresher executor.Refresher) (ApplySession, error) {
 	factory.opens++
+	appendEvent(factory.events, "open apply")
 	if factory.err != nil {
 		return nil, factory.err
 	}
@@ -57,10 +59,13 @@ type fakeApplySession struct {
 	closes         int
 	applyErr       error
 	closeErr       error
+	result         executor.Result
+	events         *[]string
 }
 
 func (session *fakeApplySession) Apply(preview executor.Preview) (executor.Result, error) {
 	session.applies++
+	appendEvent(session.events, "apply")
 	if session.refresh {
 		desired := preview.Desired
 		if session.refreshDesired != nil {
@@ -75,12 +80,57 @@ func (session *fakeApplySession) Apply(preview executor.Preview) (executor.Resul
 			return executor.Result{}, errors.New("preview changed")
 		}
 	}
-	return executor.Result{}, session.applyErr
+	return session.result, session.applyErr
 }
 
 func (session *fakeApplySession) Close() error {
 	session.closes++
+	appendEvent(session.events, "close apply")
 	return session.closeErr
+}
+
+type fakeRecoveryExecutorFactory struct {
+	session RecoverySession
+	opens   int
+	err     error
+	events  *[]string
+}
+
+func (factory *fakeRecoveryExecutorFactory) Open() (RecoverySession, error) {
+	factory.opens++
+	appendEvent(factory.events, "open recovery")
+	return factory.session, factory.err
+}
+
+type fakeRecoverySession struct {
+	result     executor.Result
+	recovers   int
+	closes     int
+	recoverErr error
+	closeErr   error
+	events     *[]string
+}
+
+func (session *fakeRecoverySession) Recover() (executor.Result, error) {
+	session.recovers++
+	appendEvent(session.events, "recover")
+	return session.result, session.recoverErr
+}
+
+func (session *fakeRecoverySession) Close() error {
+	session.closes++
+	appendEvent(session.events, "close recovery")
+	return session.closeErr
+}
+
+func readyRecoveryFactory() RecoveryExecutorFactory {
+	return &fakeRecoveryExecutorFactory{session: &fakeRecoverySession{}}
+}
+
+func appendEvent(events *[]string, event string) {
+	if events != nil {
+		*events = append(*events, event)
+	}
 }
 
 func testRequest() Request {

@@ -110,6 +110,17 @@ The final product must install, update, remove, and replace selected adapters. A
   transaction descriptor, and link/configuration workspaces are opened only
   for Apply and the descriptor is always closed; building the service or
   running the TUI remains read-only.
+- Added a release-independent recovery runtime. Application now restores or
+  rolls back an interrupted transaction before it opens the source-pinned Apply
+  executor, so a missing or damaged release cannot strand journaled work.
+- Added a target-only recovery workspace that pins only roots named by the
+  journal. Path validation is also deferred until a root is referenced, so an
+  unrelated unavailable or malformed adapter root cannot block recovery while
+  a referenced invalid root still fails closed.
+- Added real Darwin interruption coverage for a prepared link installation
+  after its release source disappears and for a zero-byte configuration
+  exchange interrupted before the next journal save. Both cases also verify
+  repeated recovery.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),
@@ -139,15 +150,16 @@ The final product must install, update, remove, and replace selected adapters. A
 **Additional details:** Removing the only MAINFRAME-managed Codex MCP block can
 produce a valid zero-byte `config.toml`. Pure executor tests accept and hash
 that after-image, and the Unix staging path permits a zero-iteration write.
-Before Apply is exposed, add a real-workspace integration case that publishes
-and rolls back this exact zero-byte transition on macOS and Linux.
+A real-workspace Darwin integration case now publishes, interrupts, and restores
+this exact zero-byte transition. Native Linux execution remains part of the
+cross-platform activation gate.
 
 ## Re-occurrence noted (2026-07-19)
 
 **Noticed during:** Production application orchestration
 **Where:** `internal/application/service.go` and `cmd/mainframe/apply_runtime.go`
-**Additional details:** The executor still performs automatic recovery before
-every Apply under the transaction lock. A future explicit recovery command must
-use a separate minimal runtime that opens the journal-bound workspaces without
-loading or validating the current release. Otherwise a missing or damaged
-release could prevent recovery of a transaction that was started earlier.
+**Additional details:** A separate minimal runtime now opens journal-bound
+workspaces without loading or validating the current release. Application calls
+it before opening the source-pinned Apply executor; the executor keeps its own
+locked recovery as a defensive check. No explicit CLI or TUI recovery action is
+exposed while the remaining activation gates are open.
