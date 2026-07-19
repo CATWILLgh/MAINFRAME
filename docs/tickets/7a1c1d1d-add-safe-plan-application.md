@@ -48,7 +48,7 @@ The final product must install, update, remove, and replace selected adapters. A
   configuration lifecycle, and cross-platform executor checks pass independent
   review.
 
-## Progress (2026-07-16)
+## Progress (2026-07-19)
 
 - Added an internal executor with exact release-index digest and fresh-plan
   equality checks.
@@ -99,6 +99,17 @@ The final product must install, update, remove, and replace selected adapters. A
 - Added real per-target-filesystem capability probes for no-replace and
   exchange renames, local-filesystem rejection, strict legacy-journal upgrade,
   and fail-closed cleanup of recognized probe remnants.
+- Added an application-level reviewed-plan boundary with one canonical request
+  for adapter and MCP selections. The request is recursively cloned, and both
+  the semantic preview and executable plan come from the same fresh snapshot.
+- Added a request-bound production refresher. During Apply, the executor keeps
+  its automatic recovery under the transaction lock, then reloads the exact
+  release, rebuilds host discovery and all configuration inspections, and
+  requires exact equality with the reviewed executable plan before writing.
+- Added operation-scoped production executor construction. The state directory,
+  transaction descriptor, and link/configuration workspaces are opened only
+  for Apply and the descriptor is always closed; building the service or
+  running the TUI remains read-only.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),
@@ -130,3 +141,13 @@ produce a valid zero-byte `config.toml`. Pure executor tests accept and hash
 that after-image, and the Unix staging path permits a zero-iteration write.
 Before Apply is exposed, add a real-workspace integration case that publishes
 and rolls back this exact zero-byte transition on macOS and Linux.
+
+## Re-occurrence noted (2026-07-19)
+
+**Noticed during:** Production application orchestration
+**Where:** `internal/application/service.go` and `cmd/mainframe/apply_runtime.go`
+**Additional details:** The executor still performs automatic recovery before
+every Apply under the transaction lock. A future explicit recovery command must
+use a separate minimal runtime that opens the journal-bound workspaces without
+loading or validating the current release. Otherwise a missing or damaged
+release could prevent recovery of a transaction that was started earlier.
