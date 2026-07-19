@@ -18,6 +18,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python build and validator dependencies
+        run: python3 -m pip install tiktoken pyyaml
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -48,9 +51,7 @@ jobs:
         run: |
           fail=0
           for t in tools/test_*.py; do
-            # Projection, release, render, and validator suites below need
-            # pyyaml (the skill validator also needs tiktoken).
-            # They run after Validator dependencies.
+            # Projection, release, render, and validator suites run separately.
             [ "$t" = "tools/test_build_hub_page.py" ] && continue
             [ "$t" = "tools/test_build_claude_bundle.py" ] && continue
             [ "$t" = "tools/test_build_release.py" ] && continue
@@ -75,13 +76,9 @@ jobs:
           done
           exit $fail
 
-      - name: Validator dependencies
-        run: pip install tiktoken pyyaml
-
       # ADR 0085: core/ + adapters/ are the source of truth; dist/ is a
       # committed render output. The test suites exercise rendered files, so
-      # this check is the sole guard against un-rendered core edits. Needs
-      # pyyaml (agents section), hence it runs after Validator dependencies.
+      # this check is the sole guard against un-rendered core edits.
       - name: Neutral-core render check
         run: python3 tools/render_core.py --check
 
