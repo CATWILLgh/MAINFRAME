@@ -149,3 +149,26 @@ jobs:
       # Root CLAUDE.md is gitignored (not in the checkout); validate the shipped one.
       - name: Validate umbrella CLAUDE.md
         run: python3 tools/validate-claude-md.py dist/claude-code/CLAUDE.md
+
+  darwin-pre-sign:
+    name: Darwin pre-sign
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install packaged release dependency
+        run: python3 -m pip install pyyaml
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Darwin filesystem lifecycle tests
+        run: go test -count=1 ./internal/releasecache ./internal/linkworkspace ./internal/hostfs
+
+      - name: Packaged CLI lifecycle test
+        run: python3 tools/test_build_release.py
