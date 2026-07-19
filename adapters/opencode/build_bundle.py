@@ -22,8 +22,9 @@ from bundle_sync import (
     sync_tree,
     write_text_file,
 )
+from bundle_publication import publish_bundle
 from detector_projection import project_hooklib_fallbacks
-from release_contract import write_bundle_manifest
+from release_contract import validate_bundle, write_bundle_manifest
 import build_opencode
 from permission_config import load_permission_rules, require_restrictive_projection
 
@@ -172,25 +173,18 @@ def _project_plugin(source: Path) -> str:
 
 
 def _project_skills(root: Path, output: Path, profile) -> None:
-    with tempfile.TemporaryDirectory() as temporary:
-        staged = Path(temporary) / "skills"
-        sync_tree(root / "core/skills", staged)
-        for path in sorted(staged.rglob("*.md")):
-            write_text_file(
-                path, build_opencode.project_runtime_text(path.read_text(), profile)
-            )
-        sync_tree(staged, output)
+    sync_tree(root / "core/skills", output)
+    for path in sorted(output.rglob("*.md")):
+        write_text_file(
+            path, build_opencode.project_runtime_text(path.read_text(), profile)
+        )
 
 
 def _project_agents(root: Path, output: Path, profile) -> None:
-    with tempfile.TemporaryDirectory() as temporary:
-        staged = Path(temporary) / "agents"
-        staged.mkdir()
-        for name, rendered in build_opencode._collect_agents(
-            str(root), enrich=None, profile=profile
-        ):
-            write_text_file(staged / name, rendered)
-        sync_tree(staged, output)
+    agents = build_opencode._collect_agents(str(root), enrich=None, profile=profile)
+    prepare_output_root(output, {name for name, _ in agents})
+    for name, rendered in agents:
+        write_text_file(output / name, rendered)
 
 
 def _validate_agent_sources(root: Path) -> None:
@@ -219,35 +213,29 @@ def _project_detector(text: str, source: Path, profile) -> str:
 
 
 def _project_gates(root: Path, output: Path, profile) -> None:
-    with tempfile.TemporaryDirectory() as temporary:
-        staged = Path(temporary) / "gates"
-        sync_tree(root / "core/gates/detectors", staged / "detectors")
-        sync_tree(root / "core/gates/rules", staged / "rules")
-        for path in sorted((staged / "detectors").rglob("*.py")):
-            write_text_file(path, _project_detector(path.read_text(), path, profile))
-        projected = "\n".join(
-            path.read_text()
-            for path in sorted((staged / "detectors").rglob("*.py"))
-        )
-        if "~/.claude" in projected or "/.claude/" in projected:
-            raise ValueError("projected detectors retain a Claude runtime path")
-        sync_tree(staged, output)
+    sync_tree(root / "core/gates/detectors", output / "detectors")
+    sync_tree(root / "core/gates/rules", output / "rules")
+    detectors = sorted((output / "detectors").rglob("*.py"))
+    for path in detectors:
+        write_text_file(path, _project_detector(path.read_text(), path, profile))
+    projected = "\n".join(path.read_text() for path in detectors)
+    if "~/.claude" in projected or "/.claude/" in projected:
+        raise ValueError("projected detectors retain a Claude runtime path")
 
 
 def _project_plugin_tree(gates_source: Path, memory_source: Path, output: Path) -> None:
-    with tempfile.TemporaryDirectory() as temporary:
-        staged = Path(temporary) / "plugins"
-        write_text_file(
-            staged / "mainframe-gates.js", _project_plugin(gates_source)
+    prepare_output_root(
+        output,
+        {"mainframe-gates.js", "mainframe-memory.js", "package.json"},
+    )
+    write_text_file(output / "mainframe-gates.js", _project_plugin(gates_source))
+    memory = memory_source.read_text()
+    if "~/.claude" in memory or "/.claude/" in memory:
+        raise ValueError(
+            f"{memory_source}: memory plugin retains a Claude runtime path"
         )
-        memory = memory_source.read_text()
-        if "~/.claude" in memory or "/.claude/" in memory:
-            raise ValueError(
-                f"{memory_source}: memory plugin retains a Claude runtime path"
-            )
-        write_text_file(staged / "mainframe-memory.js", memory)
-        write_text_file(staged / "package.json", '{"type":"module"}\n')
-        sync_tree(staged, output)
+    write_text_file(output / "mainframe-memory.js", memory)
+    write_text_file(output / "package.json", '{"type":"module"}\n')
 
 
 def _project_memory(root: Path, output: Path) -> None:
@@ -261,7 +249,27 @@ def _project_memory(root: Path, output: Path) -> None:
         copy_regular_file(source, output / name, executable=True)
 
 
-def build(root: Path, output: Path) -> None:
+def _mcp_projections() -> list[dict]:
+    return [{
+        "id": "opencode.mcp.context7",
+        "codec": "opencode-remote-v1",
+        "server": "context7",
+        "profile": "remote-keyless",
+        "target": {"root": "opencode-config", "path": "opencode.json"},
+        "map_pointer": "/mcp",
+        "entry_key": "context7",
+        "registry": {
+            "target": {
+                "root": "opencode-config",
+                "path": "opencode.json.mainframe-mcp.json",
+            },
+            "schema_version": 1,
+            "entries_pointer": "/servers",
+        },
+    }]
+
+
+def materialize(root: Path, output: Path) -> None:
     """Materialize OpenCode release inputs without reading user state."""
     profile = load_profiles(root)["opencode"]
     agents_source = root / "dist/opencode/AGENTS.md"
@@ -300,10 +308,7 @@ def build(root: Path, output: Path) -> None:
         agents_source.read_text(), profile
     )
     write_text_file(output / "AGENTS.md", agents_text)
-    _project_plugin_tree(
-        gates_plugin_source, memory_plugin_source, output / "plugins"
-    )
-
+    _project_plugin_tree(gates_plugin_source, memory_plugin_source, output / "plugins")
     fragment = {"permission": permission}
     write_text_file(
         output / "config-fragment.json",
@@ -320,25 +325,17 @@ def build(root: Path, output: Path) -> None:
         install_units=_install_units(output),
         resources=_resources(),
         runtime_profile=asdict(profile),
-        mcp_projections=[
-            {
-                "id": "opencode.mcp.context7",
-                "codec": "opencode-remote-v1",
-                "server": "context7",
-                "profile": "remote-keyless",
-                "target": {"root": "opencode-config", "path": "opencode.json"},
-                "map_pointer": "/mcp",
-                "entry_key": "context7",
-                "registry": {
-                    "target": {
-                        "root": "opencode-config",
-                        "path": "opencode.json.mainframe-mcp.json",
-                    },
-                    "schema_version": 1,
-                    "entries_pointer": "/servers",
-                },
-            }
-        ],
+        mcp_projections=_mcp_projections(),
+    )
+
+
+def build(root: Path, output: Path) -> None:
+    """Atomically publish a validated OpenCode bundle."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    publish_bundle(
+        output,
+        lambda staged: materialize(root, staged),
+        validate_bundle,
     )
 
 

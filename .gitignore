@@ -63,3 +63,10 @@ dist/codex/*
 
 # Derived standalone Antigravity 2.x desktop plugin projection.
 dist/antigravity-2/
+
+# Direct bundle publication state; never part of a release payload.
+dist/**/.*.publication.lock
+dist/**/.*.publication.json
+dist/**/.*.publication.json.tmp-*
+dist/**/.*.staging-*
+dist/**/.*.retained-*

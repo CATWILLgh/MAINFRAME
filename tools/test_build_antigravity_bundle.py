@@ -13,6 +13,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
 import release_contract
+from test_build_release import assert_late_failure_preserves_bundle
 
 
 def _load_builder():
@@ -54,34 +55,7 @@ def _mcp_projection():
     }
 
 
-def test_bundle_is_self_contained_and_models_external_validation():
-    output = Path(tempfile.mkdtemp()) / "bundle"
-    _load_builder().build(REPO, output)
-
-    manifest = release_contract.validate_bundle(output)
-    assert manifest["schema_version"] == 3
-    assert manifest["component"] == "antigravity-2"
-    assert manifest["host_requirements"] == [
-        {
-            "kind": "darwin-application-bundle-v1",
-            "bundle_identifier": "com.google.antigravity",
-            "exact_versions": ["2.2.1"],
-        }
-    ]
-    assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
-    assert manifest["install_units"] == [
-        {
-            "id": "antigravity-2.plugin",
-            "kind": "tree",
-            "source": "plugin",
-            "target": {
-                "root": "antigravity-config",
-                "path": "plugins/mainframe",
-            },
-            "legacy_source_suffixes": ["dist/antigravity-2/plugin"],
-        }
-    ]
-    assert manifest["mcp_projections"] == [_mcp_projection()]
+def _assert_resources(manifest: dict) -> None:
     resources = {resource["id"]: resource for resource in manifest["resources"]}
     assert resources == {
         "antigravity-2.credentials-index": {
@@ -106,6 +80,30 @@ def test_bundle_is_self_contained_and_models_external_validation():
             "apply": "unimplemented",
         },
     }
+
+
+def test_bundle_is_self_contained_and_models_external_validation():
+    output = Path(tempfile.mkdtemp()) / "bundle"
+    _load_builder().build(REPO, output)
+
+    manifest = release_contract.validate_bundle(output)
+    assert manifest["schema_version"] == 3
+    assert manifest["component"] == "antigravity-2"
+    assert manifest["host_requirements"] == [{
+        "kind": "darwin-application-bundle-v1",
+        "bundle_identifier": "com.google.antigravity",
+        "exact_versions": ["2.2.1"],
+    }]
+    assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
+    assert manifest["install_units"] == [{
+        "id": "antigravity-2.plugin",
+        "kind": "tree",
+        "source": "plugin",
+        "target": {"root": "antigravity-config", "path": "plugins/mainframe"},
+        "legacy_source_suffixes": ["dist/antigravity-2/plugin"],
+    }]
+    assert manifest["mcp_projections"] == [_mcp_projection()]
+    _assert_resources(manifest)
     credentials = (output / "credentials-index.md").read_text()
     assert "~/.gemini/antigravity/credentials-index.md" in credentials
     assert "{{mainframe.config_root}}" not in credentials
@@ -114,6 +112,18 @@ def test_bundle_is_self_contained_and_models_external_validation():
     assert not any(
         unit["target"]["root"] == "antigravity-data"
         for unit in manifest["install_units"]
+    )
+
+
+def test_late_materialization_failure_preserves_complete_bundle():
+    assert_late_failure_preserves_bundle(
+        _load_builder(), REPO, Path(tempfile.mkdtemp()) / "bundle", "materialize"
+    )
+
+
+def test_late_validation_failure_preserves_complete_bundle():
+    assert_late_failure_preserves_bundle(
+        _load_builder(), REPO, Path(tempfile.mkdtemp()) / "bundle", "validate_bundle"
     )
 
 

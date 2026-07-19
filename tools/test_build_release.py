@@ -17,12 +17,67 @@ import build_release
 import release_contract
 
 
-def test_build_creates_complete_indexed_release_and_executable_layout():
+def snapshot_tree(path: Path) -> dict[str, tuple[int, bytes | str | None]]:
+    snapshot = {}
+    for item in [path, *sorted(path.rglob("*"))]:
+        relative = item.relative_to(path).as_posix() or "."
+        mode = item.lstat().st_mode
+        if item.is_symlink():
+            content = os.readlink(item)
+        elif item.is_file():
+            content = item.read_bytes()
+        else:
+            content = None
+        snapshot[relative] = (mode, content)
+    return snapshot
+
+
+def run_dry_run(builder: Path, root: Path) -> subprocess.CompletedProcess[str]:
     sandbox = Path(tempfile.mkdtemp())
-    output = sandbox / "mainframe-test"
+    temporary = sandbox / "temporary"
+    temporary.mkdir()
+    result = subprocess.run(
+        [sys.executable, str(builder), "--root", str(root), "--dry-run"],
+        check=True,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        env=dict(os.environ, TMPDIR=str(temporary)),
+    )
+    assert list(temporary.iterdir()) == [], "dry-run publication metadata survived"
+    return result
 
-    build_release.build(REPO, output, release_id="test-release")
 
+def assert_late_failure_preserves_bundle(
+    builder,
+    root: Path,
+    output: Path,
+    attribute: str,
+) -> None:
+    builder.build(root, output)
+    before = snapshot_tree(output)
+    original = getattr(builder, attribute)
+
+    def reject(*args, **kwargs):
+        if attribute == "materialize":
+            original(*args, **kwargs)
+        raise RuntimeError(f"late {attribute} failure")
+
+    setattr(builder, attribute, reject)
+    try:
+        try:
+            builder.build(root, output)
+        except RuntimeError as exc:
+            assert str(exc) == f"late {attribute} failure"
+        else:
+            raise AssertionError(f"late {attribute} failure was ignored")
+    finally:
+        setattr(builder, attribute, original)
+    assert snapshot_tree(output) == before
+    release_contract.validate_bundle(output)
+
+
+def _assert_release_layout(output: Path) -> dict:
     index = release_contract.validate_release(output)
     assert index["schema_version"] == 2
     assert index["mcp_catalog"]["path"] == "metadata/mcp-catalog.json"
@@ -43,7 +98,10 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
     assert (output / "bundles/codex/bundle.json").is_file()
     assert (output / "bundles/opencode/bundle.json").is_file()
     assert (output / "metadata/mcp-catalog.json").is_file()
+    return index
 
+
+def _assert_component_contracts(output: Path, index: dict) -> Path:
     manifests = [
         release_contract.validate_bundle((output / entry["path"]).parent)
         for entry in index["manifests"]
@@ -94,6 +152,10 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
         resource["apply"] == "unimplemented"
         for resource in credentials["resources"]
     )
+    return output / "bin/mainframe"
+
+
+def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
     secret_help = subprocess.run(
         [str(output / "common/credential-tools/secret"), "help"],
         text=True,
@@ -126,6 +188,25 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
     )
     assert preview.returncode == 0, (preview.stdout, preview.stderr)
     assert preview.stderr == ""
+
+    forbidden = (".lock", ".journal", ".publication.json", ".staging-")
+    metadata = [
+        path.relative_to(output).as_posix()
+        for path in output.rglob("*")
+        if any(marker in path.name for marker in forbidden)
+    ]
+    assert metadata == []
+
+
+def test_build_creates_complete_indexed_release_and_executable_layout():
+    sandbox = Path(tempfile.mkdtemp())
+    output = sandbox / "mainframe-test"
+
+    build_release.build(REPO, output, release_id="test-release")
+
+    index = _assert_release_layout(output)
+    binary = _assert_component_contracts(output, index)
+    _assert_release_cli(binary, output, sandbox)
 
 
 def test_build_rejects_existing_destination_without_mutation():

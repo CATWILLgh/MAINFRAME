@@ -22,6 +22,11 @@ import build_codex
 import release_contract
 from adapter_profiles import load_profiles
 from bundle_sync import source_files
+from test_build_release import (
+    assert_late_failure_preserves_bundle,
+    run_dry_run,
+    snapshot_tree,
+)
 
 
 def _target(unit: dict) -> tuple[str, str]:
@@ -82,39 +87,7 @@ def _expected_payload_paths() -> set[str]:
     return paths
 
 
-def test_build_materializes_complete_self_contained_codex_bundle():
-    output = Path(tempfile.mkdtemp()) / "bundle-v2"
-    build_bundle.build(REPO, output)
-
-    launcher = output / "mainframe-hook.sh"
-    detectors = output / "gates/detectors"
-    assert launcher.is_file() and os.access(launcher, os.X_OK)
-    assert (detectors / "path-validation.py").is_file()
-    assert (detectors / "_hooklib.py").is_file()
-    assert (output / "gates/rules").is_dir()
-    assert (output / "AGENTS.md").is_file()
-    assert (output / "rules/mainframe.rules").is_file()
-    assert (output / "hooks.json").is_file()
-    assert (output / "agents/decision-reviewer.toml").is_file()
-    assert (output / "credentials-index.md").is_file()
-    credentials_index = (output / "credentials-index.md").read_text()
-    assert "${CODEX_HOME:-$HOME/.codex}/credentials-index.md" in credentials_index
-    assert "~/.claude/credentials-index.md" not in credentials_index
-    plan_file = output / "skills/task-workflow/plan-file.md"
-    assert plan_file.is_file()
-    assert "${CODEX_HOME:-$HOME/.codex}/plans/audit" in plan_file.read_text()
-    assert "~/.claude/plans" not in plan_file.read_text()
-    workflow_markdown = "\n".join(
-        path.read_text()
-        for path in sorted((output / "skills/task-workflow").rglob("*.md"))
-    )
-    assert "~/.codex/plans" not in workflow_markdown
-    assert "{{mainframe.plans_root}}" not in workflow_markdown
-    assert ".claude" not in launcher.read_text()
-    assert not any(
-        "__pycache__" in path.parts or path.suffix == ".pyc"
-        for path in output.rglob("*")
-    )
+def _assert_manifest_contract(output: Path) -> None:
     manifest = release_contract.validate_bundle(output)
     assert manifest["component"] == "codex"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
@@ -173,6 +146,43 @@ def test_build_materializes_complete_self_contained_codex_bundle():
     }]
 
 
+def test_build_materializes_complete_self_contained_codex_bundle():
+    output = Path(tempfile.mkdtemp()) / "bundle-v2"
+    build_bundle.build(REPO, output)
+
+    launcher = output / "mainframe-hook.sh"
+    detectors = output / "gates/detectors"
+    for relative in (
+        "AGENTS.md",
+        "agents/decision-reviewer.toml",
+        "credentials-index.md",
+        "hooks.json",
+        "rules/mainframe.rules",
+    ):
+        assert (output / relative).is_file()
+    assert launcher.is_file() and os.access(launcher, os.X_OK)
+    assert (detectors / "path-validation.py").is_file()
+    assert (detectors / "_hooklib.py").is_file()
+    credentials = (output / "credentials-index.md").read_text()
+    assert "${CODEX_HOME:-$HOME/.codex}/credentials-index.md" in credentials
+    assert "~/.claude/credentials-index.md" not in credentials
+    plan = (output / "skills/task-workflow/plan-file.md").read_text()
+    assert "${CODEX_HOME:-$HOME/.codex}/plans/audit" in plan
+    assert "~/.claude/plans" not in plan
+    workflow = "\n".join(
+        path.read_text()
+        for path in sorted((output / "skills/task-workflow").rglob("*.md"))
+    )
+    assert "~/.codex/plans" not in workflow
+    assert "{{mainframe.plans_root}}" not in workflow
+    assert ".claude" not in launcher.read_text()
+    assert not any(
+        path.suffix == ".pyc" or "__pycache__" in path.parts
+        for path in output.rglob("*")
+    )
+    _assert_manifest_contract(output)
+
+
 def test_bundle_gate_tree_has_no_claude_runtime_paths():
     output = Path(tempfile.mkdtemp()) / "bundle-v2"
     build_bundle.build(REPO, output)
@@ -227,6 +237,32 @@ def test_native_validation_failure_precedes_bundle_publication():
 
     assert sentinel.read_text() == "unchanged"
     assert list(output.iterdir()) == [sentinel]
+
+
+def test_late_materialization_failure_preserves_complete_bundle():
+    assert_late_failure_preserves_bundle(
+        build_bundle,
+        REPO,
+        Path(tempfile.mkdtemp()) / "bundle-v2",
+        "materialize",
+    )
+
+
+def test_late_validation_failure_preserves_complete_bundle():
+    assert_late_failure_preserves_bundle(
+        build_bundle,
+        REPO,
+        Path(tempfile.mkdtemp()) / "bundle-v2",
+        "validate_bundle",
+    )
+
+
+def test_cli_dry_run_preserves_default_output():
+    output = REPO / "dist/codex/bundle-v2"
+    before = snapshot_tree(output) if output.exists() else None
+    result = run_dry_run(ADAPTER / "build_bundle.py", REPO)
+    assert result.stdout == "validated Codex bundle without publishing\n"
+    assert (snapshot_tree(output) if output.exists() else None) == before
 
 
 def test_real_blocking_detector_runs_without_other_adapter_trees():
@@ -313,66 +349,6 @@ def test_rebuild_removes_stale_files_from_the_managed_bundle():
 
     assert not any(path.exists() for path in stale_files)
     assert not stale_link.is_symlink()
-
-
-def test_rebuild_replaces_a_redirected_detector_directory_safely():
-    sandbox = Path(tempfile.mkdtemp())
-    output = sandbox / "bundle-v2"
-    foreign = sandbox / "foreign"
-    foreign.mkdir()
-    marker = foreign / "keep.txt"
-    marker.write_text("foreign")
-    foreign_skills = sandbox / "foreign-skills"
-    foreign_skills.mkdir()
-    skills_marker = foreign_skills / "keep.txt"
-    skills_marker.write_text("foreign skills")
-    detector_link = output / "gates/detectors"
-    detector_link.parent.mkdir(parents=True)
-    detector_link.symlink_to(foreign, target_is_directory=True)
-    skills_link = output / "skills"
-    skills_link.symlink_to(foreign_skills, target_is_directory=True)
-    foreign_agents = sandbox / "foreign-agents"
-    foreign_agents.mkdir()
-    agents_marker = foreign_agents / "keep.txt"
-    agents_marker.write_text("foreign agents")
-    agents_link = output / "agents"
-    agents_link.symlink_to(foreign_agents, target_is_directory=True)
-
-    build_bundle.build(REPO, output)
-
-    assert marker.read_text() == "foreign"
-    assert skills_marker.read_text() == "foreign skills"
-    assert agents_marker.read_text() == "foreign agents"
-    assert not detector_link.is_symlink()
-    assert not skills_link.is_symlink()
-    assert not agents_link.is_symlink()
-    assert (detector_link / "path-validation.py").is_file()
-    assert (skills_link / "task-workflow/SKILL.md").is_file()
-    assert (agents_link / "decision-reviewer.toml").is_file()
-
-
-def test_rebuild_does_not_follow_managed_file_symlinks():
-    sandbox = Path(tempfile.mkdtemp())
-    output = sandbox / "bundle-v2"
-    output.mkdir()
-    foreign_launcher = sandbox / "foreign-launcher"
-    foreign_manifest = sandbox / "foreign-manifest"
-    foreign_credentials = sandbox / "foreign-credentials"
-    foreign_launcher.write_text("keep launcher")
-    foreign_manifest.write_text("keep manifest")
-    foreign_credentials.write_text("keep credentials")
-    (output / "mainframe-hook.sh").symlink_to(foreign_launcher)
-    (output / "bundle.json").symlink_to(foreign_manifest)
-    (output / "credentials-index.md").symlink_to(foreign_credentials)
-
-    build_bundle.build(REPO, output)
-
-    assert foreign_launcher.read_text() == "keep launcher"
-    assert foreign_manifest.read_text() == "keep manifest"
-    assert foreign_credentials.read_text() == "keep credentials"
-    assert not (output / "mainframe-hook.sh").is_symlink()
-    assert not (output / "bundle.json").is_symlink()
-    assert not (output / "credentials-index.md").is_symlink()
 
 
 def test_build_rejects_a_redirected_bundle_root_without_touching_target():

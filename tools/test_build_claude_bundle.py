@@ -18,6 +18,7 @@ ADAPTER = REPO / "adapters/claude-code"
 sys.path.insert(0, str(ADAPTER))
 
 import build_bundle
+from test_build_release import assert_late_failure_preserves_bundle
 
 
 def _sandbox() -> Path:
@@ -311,6 +312,20 @@ def test_cli_build_does_not_read_or_modify_user_state():
     for path, expected in before.items():
         assert (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) == expected
     assert build_bundle.validate_bundle(output)["component"] == "claude-code"
+
+
+def test_late_materialization_failure_preserves_complete_bundle():
+    sandbox = _sandbox()
+    assert_late_failure_preserves_bundle(
+        build_bundle, _fixture_root(sandbox), sandbox / "bundle-v2", "materialize"
+    )
+
+
+def test_late_validation_failure_preserves_complete_bundle():
+    sandbox = _sandbox()
+    assert_late_failure_preserves_bundle(
+        build_bundle, _fixture_root(sandbox), sandbox / "bundle-v2", "validate_bundle"
+    )
 
 
 def _run_all() -> None:

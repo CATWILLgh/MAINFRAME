@@ -20,14 +20,26 @@ from bundle_sync import (
     sync_tree,
     write_text_file,
 )
+from bundle_publication import publish_bundle
 from detector_projection import project_hooklib_fallbacks
 import build_codex
-import release_contract
+from release_contract import validate_bundle, write_bundle_manifest
 
 
 CODEX_CONFIG_EXPRESSION = (
     'os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")'
 )
+CODEX_BUNDLE_ENTRIES = {
+    "AGENTS.md",
+    "agents",
+    "bundle.json",
+    "credentials-index.md",
+    "gates",
+    "hooks.json",
+    "mainframe-hook.sh",
+    "rules",
+    "skills",
+}
 
 
 def _unit(
@@ -242,7 +254,7 @@ def _stage_bundle(
             (root / "core/resources/credentials-index.md").read_text(), profile
         ),
     )
-    release_contract.write_bundle_manifest(
+    write_bundle_manifest(
         staged,
         component="codex",
         dependencies=["credential-tools", "mainframe-cli"],
@@ -251,24 +263,38 @@ def _stage_bundle(
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
     )
-    release_contract.validate_bundle(staged)
 
 
-def build(root: Path, output: Path, *, validate_native: bool = False) -> None:
+def materialize(
+    root: Path,
+    output: Path,
+    *,
+    validate_native: bool = False,
+) -> None:
     """Materialize all immutable Codex delivery without user-state I/O."""
     if output.is_symlink() or (output.exists() and not output.is_dir()):
         raise ValueError(f"bundle output must be a real directory: {output}")
     _validate_sources(root)
     profile = load_profiles(root)["codex"]
     inputs = _render_inputs(root, profile, validate_native)
-    with tempfile.TemporaryDirectory() as temporary:
-        staged = Path(temporary) / "bundle-v2"
-        staged.mkdir()
-        _stage_bundle(root, staged, profile, *inputs)
-        expected = {path.name for path in staged.iterdir()}
-        prepare_output_root(output, expected)
-        sync_tree(staged, output)
-    release_contract.validate_bundle(output)
+    prepare_output_root(output, CODEX_BUNDLE_ENTRIES)
+    _stage_bundle(root, output, profile, *inputs)
+
+
+def build(root: Path, output: Path, *, validate_native: bool = False) -> None:
+    """Atomically publish a validated Codex bundle."""
+    if output.is_symlink() or (output.exists() and not output.is_dir()):
+        raise ValueError(f"bundle output must be a real directory: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    publish_bundle(
+        output,
+        lambda staged: materialize(
+            root,
+            staged,
+            validate_native=validate_native,
+        ),
+        validate_bundle,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -11,8 +11,9 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
+from bundle_publication import publish_bundle
 from bundle_sync import prepare_output_root, remove_path, write_text_file
-from release_contract import write_bundle_manifest
+from release_contract import validate_bundle, write_bundle_manifest
 from release_contract_fields import HOST_REQUIREMENTS_SCHEMA_VERSION
 
 import build_antigravity
@@ -100,7 +101,7 @@ def _mcp_projections() -> list[dict]:
     }]
 
 
-def build(root: Path, output: Path) -> None:
+def materialize(root: Path, output: Path) -> None:
     """Materialize release inputs without reading or mutating user state."""
     root = root.resolve()
     prepare_output_root(
@@ -129,6 +130,16 @@ def build(root: Path, output: Path) -> None:
         mcp_projections=_mcp_projections(),
         schema_version=HOST_REQUIREMENTS_SCHEMA_VERSION,
         host_requirements=compatibility.managed_host_requirements(),
+    )
+
+
+def build(root: Path, output: Path) -> None:
+    """Atomically publish a validated Antigravity 2.x bundle."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    publish_bundle(
+        output,
+        lambda staged: materialize(root, staged),
+        validate_bundle,
     )
 
 

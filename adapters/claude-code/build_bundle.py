@@ -24,6 +24,7 @@ from bundle_sync import (
     sync_tree,
     write_text_file,
 )
+from bundle_publication import publish_bundle
 from release_contract import validate_bundle, write_bundle_manifest
 
 
@@ -217,7 +218,7 @@ def _legacy_artifacts() -> list[dict[str, Any]]:
     ]
 
 
-def build(root: Path, output: Path) -> None:
+def materialize(root: Path, output: Path) -> None:
     """Materialize release inputs without reading or mutating user state."""
     instructions = root / "dist/claude-code/CLAUDE.md"
     plugin = root / "dist/claude-code/plugin"
@@ -264,6 +265,16 @@ def build(root: Path, output: Path) -> None:
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
+    )
+
+
+def build(root: Path, output: Path) -> None:
+    """Atomically publish a validated Claude Code bundle."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    publish_bundle(
+        output,
+        lambda staged: materialize(root, staged),
+        validate_bundle,
     )
 
 

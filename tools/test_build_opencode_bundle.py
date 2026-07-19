@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -19,6 +20,22 @@ BUILDER = REPO / "adapters/opencode/build_bundle.py"
 sys.path.insert(0, str(REPO / "tools"))
 
 import release_contract
+import test_build_release as test_support
+
+
+def _load_builder():
+    spec = importlib.util.spec_from_file_location(
+        "mainframe_opencode_bundle_test", BUILDER
+    )
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load bundle builder: {BUILDER}")
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(BUILDER.parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
+    return module
 
 
 def _sandbox() -> Path:
@@ -97,32 +114,7 @@ def _assert_invalid_rules_preserve_output(rules: str) -> None:
     assert list(output.iterdir()) == [sentinel]
 
 
-def test_cli_build_is_pure_and_projects_an_isolated_bundle():
-    sandbox = _sandbox()
-    home = sandbox / "home"
-    xdg = sandbox / "xdg"
-    config = xdg / "opencode/opencode.json"
-    claude_config = home / ".claude.json"
-    output = sandbox / "bundle-v2"
-    config.parent.mkdir(parents=True)
-    home.mkdir()
-    config.write_text("do not parse or replace")
-    claude_config.write_text("do not parse")
-    config.chmod(0o640)
-    claude_config.chmod(0o600)
-    before = {
-        config: (config.read_bytes(), stat.S_IMODE(config.stat().st_mode)),
-        claude_config: (
-            claude_config.read_bytes(),
-            stat.S_IMODE(claude_config.stat().st_mode),
-        ),
-    }
-
-    _run_builder(output, home, xdg)
-
-    for path, (content, mode) in before.items():
-        assert path.read_bytes() == content
-        assert stat.S_IMODE(path.stat().st_mode) == mode
+def _assert_bundle_layout(output: Path) -> None:
     assert (output / "AGENTS.md").is_file()
     assert (output / "skills/task-workflow/SKILL.md").is_file()
     assert (output / "agents/decision-reviewer.md").is_file()
@@ -133,7 +125,9 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert (output / "memory/memory-reminder.py").is_file()
     fragment = json.loads((output / "config-fragment.json").read_text())
     assert fragment["permission"]["bash"]["rm -rf /"] == "deny"
-    manifest = json.loads((output / "bundle.json").read_text())
+
+
+def _assert_manifest_header(manifest: dict) -> None:
     assert manifest["component"] == "opencode"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"]["config_root"] == (
@@ -158,6 +152,9 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
             },
         }
     ]
+
+
+def _assert_manifest_units(manifest: dict) -> None:
     units = {unit["source"]: unit for unit in manifest["install_units"]}
     assert units["AGENTS.md"]["target"] == {
         "root": "opencode-config",
@@ -172,6 +169,9 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert units["memory/memory-reminder.py"]["kind"] == "file"
     assert "bundle.json" not in units
     assert "config-fragment.json" not in units
+
+
+def _assert_manifest_resources(manifest: dict, output: Path) -> None:
     resources = {resource["id"]: resource for resource in manifest["resources"]}
     assert resources["opencode.credentials-index"]["strategy"] == (
         "seed-if-absent"
@@ -208,8 +208,9 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
             },
         },
     }
-    release_contract.validate_bundle(output)
 
+
+def _assert_projection_isolated(output: Path, home: Path) -> None:
     projected_paths = [output / "AGENTS.md"]
     projected_paths.extend(
         path
@@ -229,6 +230,8 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
     assert str(home) not in projected
     assert "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plans" in projected
 
+
+def _assert_memory_runtime(output: Path, sandbox: Path, home: Path) -> None:
     memory_plugin = (output / "plugins/mainframe-memory.js").read_text()
     assert "import.meta.url" in memory_plugin
     assert "XDG_DATA_HOME" in memory_plugin
@@ -255,6 +258,36 @@ process.stdout.write(plugin.MainframeMemory.runtime.storeRoot)
     assert result.stdout == str(data_home / "opencode/mainframe-memory")
 
 
+def test_cli_build_is_pure_and_projects_an_isolated_bundle():
+    sandbox = _sandbox()
+    home, xdg = sandbox / "home", sandbox / "xdg"
+    config = xdg / "opencode/opencode.json"
+    claude_config = home / ".claude.json"
+    output = sandbox / "bundle-v2"
+    config.parent.mkdir(parents=True)
+    home.mkdir()
+    config.write_text("do not parse or replace")
+    claude_config.write_text("do not parse")
+    config.chmod(0o640)
+    claude_config.chmod(0o600)
+    before = {
+        path: (path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
+        for path in (config, claude_config)
+    }
+
+    _run_builder(output, home, xdg)
+
+    for path, expected in before.items():
+        assert (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) == expected
+    _assert_bundle_layout(output)
+    manifest = release_contract.validate_bundle(output)
+    _assert_manifest_header(manifest)
+    _assert_manifest_units(manifest)
+    _assert_manifest_resources(manifest, output)
+    _assert_projection_isolated(output, home)
+    _assert_memory_runtime(output, sandbox, home)
+
+
 def test_duplicate_permission_keys_fail_before_bundle_publication():
     _assert_invalid_rules_preserve_output(
         '{"allow": [], "allow": [], "ask": [], '
@@ -266,6 +299,26 @@ def test_non_restrictive_permissions_fail_before_bundle_publication():
     _assert_invalid_rules_preserve_output(
         '{"allow": ["Bash(git status *)"], "ask": [], "deny": []}\n'
     )
+
+
+def test_late_materialization_failure_preserves_complete_bundle():
+    test_support.assert_late_failure_preserves_bundle(
+        _load_builder(), REPO, _sandbox() / "bundle-v2", "materialize"
+    )
+
+
+def test_late_validation_failure_preserves_complete_bundle():
+    test_support.assert_late_failure_preserves_bundle(
+        _load_builder(), REPO, _sandbox() / "bundle-v2", "validate_bundle"
+    )
+
+
+def test_cli_dry_run_preserves_default_output():
+    output = REPO / "dist/opencode/bundle-v2"
+    before = test_support.snapshot_tree(output) if output.exists() else None
+    result = test_support.run_dry_run(BUILDER, REPO)
+    assert result.stdout == "validated OpenCode bundle without publishing\n"
+    assert (test_support.snapshot_tree(output) if output.exists() else None) == before
 
 
 def test_bundled_plugin_blocks_and_writes_only_opencode_telemetry():
@@ -321,26 +374,6 @@ process.stdout.write(block)
         sources = connection.execute("SELECT DISTINCT source FROM events").fetchall()
     assert sources == [("opencode",)], sources
     assert not (home / ".claude").exists(), list(home.rglob("*"))
-
-
-def test_rebuild_does_not_follow_a_managed_directory_symlink():
-    sandbox = _sandbox()
-    home = sandbox / "home"
-    xdg = sandbox / "xdg"
-    output = sandbox / "bundle-v2"
-    foreign = sandbox / "foreign"
-    home.mkdir()
-    foreign.mkdir()
-    marker = foreign / "marker.txt"
-    marker.write_text("foreign")
-    output.mkdir()
-    (output / "plugins").symlink_to(foreign)
-
-    _run_builder(output, home, xdg)
-
-    assert marker.read_text() == "foreign"
-    assert not (output / "plugins").is_symlink()
-    assert (output / "plugins/mainframe-gates.js").is_file()
 
 
 def _run_all():

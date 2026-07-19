@@ -15,6 +15,7 @@ from pathlib import Path
 from bundle_sync import copy_regular_file, write_text_file
 from mcp_catalog_contract import CATALOG_RELEASE_PATH
 from release_contract import (
+    validate_bundle,
     validate_release,
     write_bundle_manifest,
     write_release_index,
@@ -41,6 +42,40 @@ def _load_builder(name: str, path: Path):
     return module
 
 
+def _credential_resources() -> list[dict]:
+    lifecycle = {"observation": "supported", "apply": "unimplemented"}
+    return [
+        {
+            "id": "credential-tools.secrets-store",
+            "strategy": "seed-if-absent",
+            "source": "secrets.env",
+            "target": {"root": "credentials-config", "path": "secrets.env"},
+            **lifecycle,
+        },
+        {
+            "id": "credential-tools.bashrc-source",
+            "strategy": "shell-line-if-present",
+            "source": "shell-source-line",
+            "target": {"root": "home", "path": ".bashrc"},
+            **lifecycle,
+        },
+        {
+            "id": "credential-tools.profile-source",
+            "strategy": "shell-line-if-present",
+            "source": "shell-source-line",
+            "target": {"root": "home", "path": ".profile"},
+            **lifecycle,
+        },
+        {
+            "id": "credential-tools.zshenv-source",
+            "strategy": "shell-line",
+            "source": "shell-source-line",
+            "target": {"root": "home", "path": ".zshenv"},
+            **lifecycle,
+        },
+    ]
+
+
 def _build_credential_tools(root: Path, output: Path) -> None:
     output.mkdir(parents=True)
     copy_regular_file(
@@ -51,7 +86,6 @@ def _build_credential_tools(root: Path, output: Path) -> None:
     write_text_file(output / "secrets.env", "")
     (output / "secrets.env").chmod(0o600)
     write_text_file(output / "shell-source-line", SHELL_SOURCE_LINE)
-    lifecycle = {"observation": "supported", "apply": "unimplemented"}
     write_bundle_manifest(
         output,
         component="credential-tools",
@@ -68,39 +102,7 @@ def _build_credential_tools(root: Path, output: Path) -> None:
                 ],
             }
         ],
-        resources=[
-            {
-                "id": "credential-tools.secrets-store",
-                "strategy": "seed-if-absent",
-                "source": "secrets.env",
-                "target": {
-                    "root": "credentials-config",
-                    "path": "secrets.env",
-                },
-                **lifecycle,
-            },
-            {
-                "id": "credential-tools.bashrc-source",
-                "strategy": "shell-line-if-present",
-                "source": "shell-source-line",
-                "target": {"root": "home", "path": ".bashrc"},
-                **lifecycle,
-            },
-            {
-                "id": "credential-tools.profile-source",
-                "strategy": "shell-line-if-present",
-                "source": "shell-source-line",
-                "target": {"root": "home", "path": ".profile"},
-                **lifecycle,
-            },
-            {
-                "id": "credential-tools.zshenv-source",
-                "strategy": "shell-line",
-                "source": "shell-source-line",
-                "target": {"root": "home", "path": ".zshenv"},
-                **lifecycle,
-            },
-        ],
+        resources=_credential_resources(),
     )
 
 
@@ -162,7 +164,8 @@ def _build_staged(root: Path, staging: Path, release_id: str) -> None:
     manifests = []
     for component, builder in builders.items():
         bundle = staging / "bundles" / component
-        builder.build(root, bundle)
+        builder.materialize(root, bundle)
+        validate_bundle(bundle)
         manifests.append(bundle / "bundle.json")
     credentials = staging / "common/credential-tools"
     _build_credential_tools(root, credentials)
