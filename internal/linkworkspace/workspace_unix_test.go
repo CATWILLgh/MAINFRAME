@@ -201,11 +201,16 @@ func TestPublishRemoveRejectsSameTargetWithDifferentInode(t *testing.T) {
 	}
 	before := fixture.inspect(t, location)
 	private := fixture.preparePrivate(t, location)
-	if err := os.Remove(public); err != nil {
+	replacement := filepath.Join(fixture.target, "replacement-mainframe")
+	if err := os.Symlink(target, replacement); err != nil {
+		t.Fatalf("create replacement link: %v", err)
+	}
+	if err := os.Rename(replacement, public); err != nil {
 		t.Fatalf("replace public link: %v", err)
 	}
-	if err := os.Symlink(target, public); err != nil {
-		t.Fatalf("recreate public link: %v", err)
+	substituted := fixture.inspect(t, location)
+	if substituted.Entry == before.Entry {
+		t.Fatal("test setup reused the original public link identity")
 	}
 	mutation := executor.WorkspaceMutation{
 		Kind: executor.MutationRemove, Location: location,
