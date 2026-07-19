@@ -47,3 +47,11 @@ tool's working directory.
 - `tools/validate-claude-md.py`
 - `tools/smoke-hooklib.py`
 - Failure observed after `apply_patch` on 2026-07-16
+
+## Re-occurrence noted (2026-07-19)
+
+**Noticed during:** Release-independent installer recovery implementation
+**Where:** Every `apply_patch` call from the MAINFRAME repository
+**Additional details:** Both validator paths again resolved under `/tools` and
+reported a failed tool call after successfully applying each patch. Separate
+focused and full verification remained necessary.
