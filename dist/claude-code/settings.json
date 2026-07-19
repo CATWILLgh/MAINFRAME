@@ -254,7 +254,7 @@
   },
   "outputStyle": "Explanatory Concise",
   "language": "Russian",
-  "effortLevel": "xhigh",
+  "effortLevel": "high",
   "advisorModel": "opus",
   "autoMemoryEnabled": true,
   "skipWorkflowUsageWarning": true,

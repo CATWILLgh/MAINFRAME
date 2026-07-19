@@ -96,7 +96,7 @@ From docs (`code.claude.com/docs/en/settings`):
 | `autoCompactEnabled` | `true` | Automatic context compaction |
 | `teammateMode` | `"in-process"` | Mode for teammates |
 | `remoteControlAtStartup` | `false` | Remote control |
-| `effortLevel` | `"xhigh"` | Claude's effort level |
+| `effortLevel` | `"high"` | Claude's effort level |
 
 ### 2.2. Rendering and permissions
 
