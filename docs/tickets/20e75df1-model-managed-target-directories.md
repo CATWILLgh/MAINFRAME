@@ -1,7 +1,7 @@
 ---
 id: 20e75df1
 title: Model creation and rollback of managed target directories
-status: open
+status: closed
 priority: medium
 component: installer
 discovered: 2026-07-16
@@ -80,7 +80,20 @@ records link before/after images, not directory creation and emptiness.
   mutation. The check reads the inherited mask in an isolated child process and
   never changes the installer's mask.
 - Added race-detector coverage and Linux cross-compilation. Native Linux
-  lifecycle execution remains open.
+  lifecycle execution was completed by the resolution below.
+
+## Resolution
+
+Resolved on 2026-07-19.
+
+- GitHub Actions run `29688060631` executed the complete Go lifecycle suite on
+  `ubuntu-latest`, including managed-directory creation, interruption,
+  rollback, recovery, ownership, mode, and idempotency fixtures.
+- The run also exercised Linux-native no-replace and exchange rename behavior
+  through the production filesystem workspaces; every test and validator
+  completed successfully.
+- Linux compilation remains covered alongside the native execution gate, and
+  the corresponding macOS lifecycle fixtures remain green locally.
 
 ## Sources
 
