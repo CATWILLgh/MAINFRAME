@@ -295,6 +295,22 @@ Release builders produce immutable, self-contained component bundles from
 it does not infer ownership from repository paths or reach into a sibling
 bundle at runtime.
 
+Direct developer-mode bundle builders use the same isolation boundary without
+rewriting their active output file by file. Each builder materializes and
+validates a complete private sibling tree, then publishes it with one
+platform-native no-replace or exchange rename under a persistent lock. A small
+identity-bound journal makes interruption before or after that rename
+recoverable and never enters a complete release payload. The direct parent and
+managed output entry are opened without following symbolic links; the rest of
+the caller-supplied parent chain remains an explicit trust boundary. The
+previous generation is retained until the next successful publication instead
+of being deleted during the exchange. A lookup that begins at the public output
+name therefore resolves through a complete old or new tree, while a runtime
+that pins an older directory across multiple publications can outlive that one
+retained generation. Separate reads spanning the commit may also cross
+generations. This is cooperative process recovery, not a same-user security
+boundary or a full Darwin power-loss guarantee.
+
 Complete local releases are imported into
 `$XDG_DATA_HOME/mainframe/releases/<release-id>/<index-sha256>/`, with
 `~/.local/share` as the XDG fallback. Import copies through descriptor-relative

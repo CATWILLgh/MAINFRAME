@@ -1,7 +1,7 @@
 ---
 id: 66ab4af8
 title: Make generated bundle publication atomic after complete source validation
-status: open
+status: approved
 priority: medium
 component: bundles
 discovered: 2026-07-15
@@ -40,19 +40,67 @@ closing the race between validation and copying.
 - Validate the complete staged tree and manifest before publication.
 - Replace the active bundle through a recoverable directory-swap protocol.
 - Preserve the last valid bundle when staging, validation, publication, or cleanup fails.
-- Apply the same publication contract to Claude Code, Codex, and OpenCode bundles.
+- Apply the same publication contract to Claude Code, Codex, OpenCode, and
+  Antigravity 2.x bundles.
 
 ## Acceptance criteria
 
 - Any invalid nested source fails without changing the active bundle.
-- Readers never observe a mixed old/new bundle.
+- Each lookup that starts from the public output name resolves through a fully
+  materialized old or new bundle tree; no active tree is published file by file.
 - Interruption at every publication step leaves either the old or fully validated new bundle recoverable.
-- Symbolic-link source and destination attacks cannot redirect writes outside the owned bundle root.
+- The output entry and its direct parent cannot be symbolic links. The remaining
+  caller-supplied parent chain is an explicit trust boundary; managed cleanup
+  never follows symbolic links inside a generation.
+
+## Resolution
+
+Resolved on 2026-07-19.
+
+- Direct builders now materialize and validate a complete private sibling tree
+  before one native no-replace or exchange rename publishes it.
+- A persistent per-output lock serializes cooperating publishers. An atomically
+  published journal binds the parent, old output, and staging directory to exact
+  device and inode identities before the namespace transition.
+- Recovery classifies only the closed set of journaled pre-commit,
+  post-commit, retained-generation, and post-cleanup states. Unknown identities
+  fail closed without deleting either generation. Private staging trees left by
+  interruption before journal creation are reclaimed on the next locked build.
+- The exchanged previous generation is renamed into a private retained slot
+  instead of being deleted immediately. One prior generation survives until the
+  next successful publication, so readers already holding its directory open
+  are not invalidated by the commit that replaced it.
+- The complete release builder calls pure adapter materialization inside its
+  existing private release staging tree, so lock and journal metadata can never
+  enter an indexed payload.
+- Darwin uses `renameatx_np` with `RENAME_EXCL` or `RENAME_SWAP`; Linux uses
+  `renameat2` with `RENAME_NOREPLACE` or `RENAME_EXCHANGE`. Unsupported systems
+  and filesystems fail without a two-rename fallback.
+- The guarantee applies to lookups that begin at the public output name and to
+  cooperating publisher process recovery. A runtime that keeps a directory open
+  across multiple later publications can outlive the single retained generation;
+  separate reads spanning a commit can also observe two complete generations.
+  Full Darwin power-loss durability is not claimed by this developer-build
+  protocol.
 
 ## Sources
 
-- `adapters/opencode/build_bundle.py:169`
-- `tools/bundle_sync.py:8`
-- `tools/bundle_sync.py:52`
-- `tools/build_release.py:143`
+- `tools/bundle_publication.py`
+- `tools/bundle_cleanup.py`
+- `tools/bundle_rename.py`
+- `tools/build_release.py`
 - `tools/test_build_opencode_bundle.py`
+
+## Audit
+
+Approved on 2026-07-19 after an independent decision review.
+
+- The reviewer reproduced and then verified fixes for direct-parent symbolic-link
+  redirection, immediate invalidation of an open previous generation, and
+  pre-journal staging leakage.
+- The focused publication suites passed `14/14` and `8/8`; the complete Python
+  suite, repeated Go suite, Go race detector, `go vet`, and render check also
+  passed locally.
+- No remaining High- or Medium-severity defect was grounded. The documented
+  same-user, older pinned-reader, and Darwin power-loss limits remain deliberate
+  follow-up boundaries rather than hidden guarantees.
