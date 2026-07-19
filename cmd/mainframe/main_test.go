@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -45,6 +44,7 @@ func TestRunReportsPreviewStartupFailure(t *testing.T) {
 }
 
 func TestPlanCommandDoesNotLaunchPreview(t *testing.T) {
+	usePlanRelease(t)
 	input := `{"desired":{"components":[]},"observed":{"components":[]}}`
 	var stdout, stderr bytes.Buffer
 	launcher := func(io.Reader, io.Writer) error {
@@ -61,7 +61,8 @@ func TestPlanCommandDoesNotLaunchPreview(t *testing.T) {
 }
 
 func TestRunPlanJSONContract(t *testing.T) {
-	input := `{"desired":{"components":["claude-code"]},"observed":{"components":[{"id":"codex","artifacts":[{"location":{"root":"codex-config","path":"AGENTS.md"},"ownership":"managed_exact"}]}]}}`
+	usePlanRelease(t)
+	input := `{"desired":{"components":[]},"observed":{"components":[{"id":"codex","artifacts":[{"location":{"root":"codex-config","path":"AGENTS.md"},"ownership":"foreign"}]}]}}`
 	var stdout, stderr bytes.Buffer
 
 	exitCode := run([]string{"plan"}, strings.NewReader(input), &stdout, &stderr)
@@ -84,6 +85,11 @@ func TestRunPlanJSONContract(t *testing.T) {
 	}
 	if _, exists := contract["configuration"]; exists {
 		t.Fatalf("plan JSON unexpectedly exposes configuration: %s", stdout.String())
+	}
+	for _, internalField := range []string{"release_id", "index_sha256", "unit_id"} {
+		if strings.Contains(stdout.String(), `"`+internalField+`"`) {
+			t.Fatalf("plan JSON unexpectedly exposes %q: %s", internalField, stdout.String())
+		}
 	}
 }
 
@@ -154,6 +160,7 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 }
 
 func TestRunRejectsUnknownDesiredComponent(t *testing.T) {
+	usePlanRelease(t)
 	input := `{"desired":{"components":["unknown"]},"observed":{"components":[]}}`
 	var stdout, stderr bytes.Buffer
 
@@ -173,30 +180,12 @@ func TestRunRejectsNullRequest(t *testing.T) {
 }
 
 func TestRunRejectsUnknownOwnership(t *testing.T) {
+	usePlanRelease(t)
 	input := `{"desired":{"components":[]},"observed":{"components":[{"id":"codex","artifacts":[{"location":{"root":"codex-config","path":"x"},"ownership":"unknown"}]}]}}`
 	var stdout, stderr bytes.Buffer
 
 	exitCode := run([]string{"plan"}, strings.NewReader(input), &stdout, &stderr)
 	if exitCode == 0 || !strings.Contains(stderr.String(), "invalid ownership") {
 		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
-	}
-}
-
-func TestDefaultModelPreservesComponentGraph(t *testing.T) {
-	model, err := defaultModel()
-	if err != nil {
-		t.Fatalf("default model: %v", err)
-	}
-	closure, err := model.Catalog().DependencyClosure([]domain.ComponentID{domain.ComponentCodexGates})
-	if err != nil {
-		t.Fatalf("dependency closure: %v", err)
-	}
-	want := []domain.ComponentID{domain.ComponentCodexGates, domain.ComponentSharedGateDetectors}
-	if !reflect.DeepEqual(closure, want) {
-		t.Fatalf("closure = %v, want %v", closure, want)
-	}
-	codexOnly, err := model.Catalog().DependencyClosure([]domain.ComponentID{domain.ComponentCodex})
-	if err != nil || !reflect.DeepEqual(codexOnly, []domain.ComponentID{domain.ComponentCodex}) {
-		t.Fatalf("codex closure = %v, error = %v", codexOnly, err)
 	}
 }

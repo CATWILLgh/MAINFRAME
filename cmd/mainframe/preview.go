@@ -29,6 +29,11 @@ const repositoryStatsHTTPTimeout = 4 * time.Second
 
 type hostApplicationDiscoverer func(string, []string) hostcompatibility.ApplicationInventory
 
+type readOnlyReleaseSnapshot struct {
+	root    string
+	release releasecontract.Release
+}
+
 func runInteractivePreview(input io.Reader, output io.Writer) error {
 	service, catalog, err := buildPreviewRuntime()
 	if err != nil {
@@ -51,26 +56,34 @@ func buildPreviewService() (lifecycle.Service, error) {
 }
 
 func buildPreviewRuntime() (lifecycle.Service, mcpcatalog.Catalog, error) {
-	releaseRoot, err := resolveReleaseRoot()
+	snapshot, err := loadReadOnlyReleaseSnapshot()
 	if err != nil {
 		return lifecycle.Service{}, mcpcatalog.Catalog{}, err
-	}
-	release, err := releasecontract.Load(releaseRoot)
-	if err != nil {
-		return lifecycle.Service{}, mcpcatalog.Catalog{}, fmt.Errorf("load release: %w", err)
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return lifecycle.Service{}, mcpcatalog.Catalog{}, fmt.Errorf("resolve working directory: %w", err)
 	}
 	service, err := buildPreviewServiceFromContextWithHostDiscovery(
-		releaseRoot,
-		release,
+		snapshot.root,
+		snapshot.release,
 		cwd,
 		codexstate.NewAppServerClient(),
 		hostcompatibility.DiscoverApplications,
 	)
-	return service, release.MCPCatalog, err
+	return service, snapshot.release.MCPCatalog, err
+}
+
+func loadReadOnlyReleaseSnapshot() (readOnlyReleaseSnapshot, error) {
+	releaseRoot, err := resolveReleaseRoot()
+	if err != nil {
+		return readOnlyReleaseSnapshot{}, err
+	}
+	release, err := releasecontract.Load(releaseRoot)
+	if err != nil {
+		return readOnlyReleaseSnapshot{}, fmt.Errorf("load release: %w", err)
+	}
+	return readOnlyReleaseSnapshot{root: releaseRoot, release: release}, nil
 }
 
 func buildPreviewServiceFrom(

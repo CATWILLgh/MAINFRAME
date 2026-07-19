@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -188,6 +189,25 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
     )
     assert preview.returncode == 0, (preview.stdout, preview.stderr)
     assert preview.stderr == ""
+
+    plan = subprocess.run(
+        [str(binary), "plan"],
+        input=json.dumps(
+            {
+                "desired": {"components": ["codex"]},
+                "observed": {"components": []},
+            }
+        ),
+        text=True,
+        capture_output=True,
+        cwd=sandbox,
+        env=env,
+        timeout=30,
+    )
+    assert plan.returncode == 0, (plan.stdout, plan.stderr)
+    operations = json.loads(plan.stdout)["operations"]
+    assert any(operation["component_id"] == "codex" for operation in operations)
+    assert all("unit_id" not in operation for operation in operations)
 
     forbidden = (".lock", ".journal", ".publication.json", ".staging-")
     metadata = [

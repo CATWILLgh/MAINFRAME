@@ -9,13 +9,23 @@ import (
 	"os"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
-	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/plan"
 )
 
 const maxPlanRequestBytes = 1 << 20
 
 type previewLauncher func(io.Reader, io.Writer) error
+
+type planResponse struct {
+	Operations []planOperation `json:"operations"`
+}
+
+type planOperation struct {
+	ComponentID domain.ComponentID   `json:"component_id"`
+	Kind        domain.OperationKind `json:"kind"`
+	Artifact    domain.Artifact      `json:"artifact"`
+	SourcePath  domain.ArtifactPath  `json:"source_path,omitempty"`
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
@@ -54,18 +64,31 @@ func runPlan(input io.Reader, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	model, err := defaultModel()
-	if err != nil {
-		return fmt.Errorf("build install model: %w", err)
-	}
-	result, err := plan.New(model.Catalog()).Plan(request)
+	snapshot, err := loadReadOnlyReleaseSnapshot()
 	if err != nil {
 		return err
 	}
-	if err := json.NewEncoder(output).Encode(result); err != nil {
+	result, err := plan.New(snapshot.release.Model.Catalog()).Plan(request)
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(output).Encode(publicPlanResponse(result)); err != nil {
 		return fmt.Errorf("encode response: %w", err)
 	}
 	return nil
+}
+
+func publicPlanResponse(source domain.Plan) planResponse {
+	operations := make([]planOperation, len(source.Operations))
+	for index, operation := range source.Operations {
+		operations[index] = planOperation{
+			ComponentID: operation.ComponentID,
+			Kind:        operation.Kind,
+			Artifact:    operation.Artifact,
+			SourcePath:  operation.SourcePath,
+		}
+	}
+	return planResponse{Operations: operations}
 }
 
 func decodeRequest(input io.Reader) (domain.PlanRequest, error) {
@@ -145,14 +168,4 @@ func scanJSONValue(decoder *json.Decoder) error {
 	}
 	_, err = decoder.Token()
 	return err
-}
-
-func defaultModel() (installmodel.Model, error) {
-	return installmodel.New([]installmodel.ComponentSpec{
-		{ID: domain.ComponentClaudeCode},
-		{ID: domain.ComponentCodex},
-		{ID: domain.ComponentOpenCode},
-		{ID: domain.ComponentCodexGates, Dependencies: []domain.ComponentID{domain.ComponentSharedGateDetectors}},
-		{ID: domain.ComponentSharedGateDetectors},
-	})
 }
