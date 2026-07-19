@@ -56,19 +56,38 @@ func (planner Planner) operationsForDesired(
 		component, _ := planner.catalog.Component(id)
 		for _, expected := range component.Artifacts {
 			observed, exists := observedByLocation[expected.Target]
-			if exists && observed.componentID == id && observed.artifact.Ownership == domain.OwnershipManagedExact {
+			if exists && observed.componentID == id &&
+				observed.artifact.Ownership == domain.OwnershipManagedExact &&
+				(expected.UnitID == "" || observed.artifact.UnitID == expected.UnitID) {
 				continue
 			}
 			kind := domain.OperationInstall
 			artifact := domain.Artifact{Location: expected.Target}
 			sourcePath := expected.SourcePath
 			if exists {
-				kind = domain.OperationConflict
 				artifact = observed.artifact
-				sourcePath = ""
+				if observed.componentID == id && expected.UnitID != "" &&
+					observed.artifact.UnitID == expected.UnitID {
+					switch observed.artifact.Ownership {
+					case domain.OwnershipManagedPrevious:
+						kind = domain.OperationReplace
+					case domain.OwnershipManagedMissing:
+						kind = domain.OperationInstall
+					case domain.OwnershipExactAdoptable:
+						kind = domain.OperationAdopt
+						sourcePath = ""
+					default:
+						kind = domain.OperationConflict
+						sourcePath = ""
+					}
+				} else {
+					kind = domain.OperationConflict
+					sourcePath = ""
+				}
 			}
 			operations = append(operations, domain.Operation{
 				ComponentID: id,
+				UnitID:      expected.UnitID,
 				Kind:        kind,
 				Artifact:    artifact,
 				SourcePath:  sourcePath,
@@ -93,14 +112,25 @@ func (planner Planner) operationsForObserved(
 				continue
 			}
 			kind := domain.OperationConflict
-			declaredSource, declared := planner.declaredSource(component.ID, artifact.Location)
+			declaredArtifact, declared := planner.declaredArtifact(component.ID, artifact.Location)
 			var sourcePath domain.ArtifactPath
-			if declared && artifact.Ownership.Removable() {
+			var unitID string
+			if artifact.UnitID != "" && artifact.Ownership.Removable() {
 				kind = domain.OperationRemove
-				sourcePath = declaredSource
+				unitID = artifact.UnitID
+			} else if artifact.UnitID != "" &&
+				(artifact.Ownership == domain.OwnershipManagedDrifted ||
+					artifact.Ownership == domain.OwnershipManagedMissing) {
+				kind = domain.OperationRelinquish
+				unitID = artifact.UnitID
+			} else if declared && artifact.Ownership.Removable() {
+				kind = domain.OperationRemove
+				unitID = declaredArtifact.UnitID
+				sourcePath = declaredArtifact.SourcePath
 			}
 			operations = append(operations, domain.Operation{
 				ComponentID: component.ID,
+				UnitID:      unitID,
 				Kind:        kind,
 				Artifact:    artifact,
 				SourcePath:  sourcePath,
@@ -127,17 +157,17 @@ func componentDifference(
 	return result
 }
 
-func (planner Planner) declaredSource(id domain.ComponentID, location domain.Location) (domain.ArtifactPath, bool) {
+func (planner Planner) declaredArtifact(id domain.ComponentID, location domain.Location) (catalog.Artifact, bool) {
 	component, exists := planner.catalog.Component(id)
 	if !exists {
-		return "", false
+		return catalog.Artifact{}, false
 	}
 	for _, artifact := range component.Artifacts {
 		if artifact.Target == location {
-			return artifact.SourcePath, true
+			return artifact, true
 		}
 	}
-	return "", false
+	return catalog.Artifact{}, false
 }
 
 func (planner Planner) expectedOwners(desired []domain.ComponentID) map[domain.Location]domain.ComponentID {

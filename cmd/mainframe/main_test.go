@@ -93,6 +93,22 @@ func TestRunPlanJSONContract(t *testing.T) {
 	}
 }
 
+func TestRunPlanDoesNotExposeOwnershipImplementationDetails(t *testing.T) {
+	usePlanRelease(t)
+	input := `{"desired":{"components":["codex"]},"observed":{"components":[{"id":"codex","artifacts":[{"location":{"root":"codex-config","path":"AGENTS.md"},"unit_id":"codex.instructions","ownership":"managed_previous","raw_target":"/old/AGENTS.md","link_device":7,"link_inode":8}]}]}}`
+	var stdout, stderr bytes.Buffer
+
+	exitCode := run([]string{"plan"}, strings.NewReader(input), &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
+	}
+	for _, internalField := range []string{"unit_id", "raw_target", "link_device", "link_inode"} {
+		if strings.Contains(stdout.String(), `"`+internalField+`"`) {
+			t.Fatalf("plan JSON unexpectedly exposes %q: %s", internalField, stdout.String())
+		}
+	}
+}
+
 func TestRunRejectsUnknownJSONFields(t *testing.T) {
 	input := `{"desired":{"components":[]},"observed":{"components":[]},"surprise":true}`
 	var stdout, stderr bytes.Buffer

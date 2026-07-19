@@ -78,7 +78,10 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 		preview: lifecycle.Preview{
 			Filesystem: domain.Plan{Operations: []domain.Operation{
 				operation(domain.ComponentClaudeCode, domain.OperationInstall, domain.RootClaudeConfig, "CLAUDE.md"),
+				operation(domain.ComponentCodex, domain.OperationAdopt, domain.RootCodexConfig, "rules/mainframe.rules"),
+				operation(domain.ComponentCodex, domain.OperationReplace, domain.RootCodexConfig, "skills"),
 				operation(domain.ComponentCodex, domain.OperationRemove, domain.RootCodexConfig, "AGENTS.md"),
+				operation(domain.ComponentOpenCode, domain.OperationRelinquish, domain.RootOpenCodeConfig, "commands"),
 				operation(domain.ComponentOpenCode, domain.OperationConflict, domain.RootOpenCodeConfig, "AGENTS.md"),
 			}},
 		},
@@ -94,7 +97,10 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 	for _, text := range []string{
 		"Filesystem plan",
 		"Install · 1",
+		"Adopt existing · 1",
+		"Update · 1",
 		"Remove · 1",
+		"Stop managing · 1",
 		"Conflicts · 1",
 		"Claude Code",
 		"Codex",

@@ -10,6 +10,7 @@ import (
 )
 
 type ArtifactSpec struct {
+	UnitID               string
 	Target               domain.Location
 	SourcePath           domain.ArtifactPath
 	LegacyTargetSuffixes []domain.ArtifactPath
@@ -28,6 +29,7 @@ type ComponentSpec struct {
 }
 
 type Artifact struct {
+	UnitID               string
 	ComponentID          domain.ComponentID
 	Target               domain.Location
 	SourcePath           domain.ArtifactPath
@@ -136,7 +138,9 @@ func deriveCatalog(components []ComponentSpec) (catalog.Catalog, error) {
 	for _, component := range components {
 		artifacts := make([]catalog.Artifact, 0, len(component.Artifacts))
 		for _, spec := range component.Artifacts {
-			artifacts = append(artifacts, catalog.Artifact{Target: spec.Target, SourcePath: spec.SourcePath})
+			artifacts = append(artifacts, catalog.Artifact{
+				UnitID: spec.UnitID, Target: spec.Target, SourcePath: spec.SourcePath,
+			})
 		}
 		definitions = append(definitions, catalog.Component{ID: component.ID, Dependencies: component.Dependencies, Artifacts: artifacts})
 	}
@@ -144,7 +148,7 @@ func deriveCatalog(components []ComponentSpec) (catalog.Catalog, error) {
 }
 
 func desiredArtifact(id domain.ComponentID, spec ArtifactSpec) Artifact {
-	return Artifact{ComponentID: id, Target: spec.Target, SourcePath: spec.SourcePath, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...)}
+	return Artifact{UnitID: spec.UnitID, ComponentID: id, Target: spec.Target, SourcePath: spec.SourcePath, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...)}
 }
 
 func legacyArtifact(id domain.ComponentID, spec LegacyArtifactSpec) Artifact {

@@ -25,7 +25,7 @@ func (context mutationContext) close() {
 func (workspace Workspace) StageInstall(
 	mutation executor.WorkspaceMutation,
 ) (executor.FileIdentity, error) {
-	if mutation.Kind != executor.MutationInstall ||
+	if (mutation.Kind != executor.MutationInstall && mutation.Kind != executor.MutationReplace) ||
 		mutation.SourceTarget == "" || !validEntryName(mutation.StagedName) {
 		return executor.FileIdentity{}, errors.New("invalid staged link")
 	}
@@ -199,6 +199,11 @@ func (workspace Workspace) Finalize(mutation executor.WorkspaceMutation) error {
 	switch mutation.Kind {
 	case executor.MutationInstall:
 		return finalizeInstall(context, mutation)
+	case executor.MutationReplace:
+		return removeVerifiedPrivateLink(
+			context.privateFD, mutation.RetainedName,
+			mutation.Before.RawTarget, mutation.Before.Entry,
+		)
 	case executor.MutationRemove:
 		return removeVerifiedPrivateLink(
 			context.privateFD, mutation.RetainedName,

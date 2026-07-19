@@ -23,8 +23,13 @@ type planResponse struct {
 type planOperation struct {
 	ComponentID domain.ComponentID   `json:"component_id"`
 	Kind        domain.OperationKind `json:"kind"`
-	Artifact    domain.Artifact      `json:"artifact"`
+	Artifact    planArtifact         `json:"artifact"`
 	SourcePath  domain.ArtifactPath  `json:"source_path,omitempty"`
+}
+
+type planArtifact struct {
+	Location  domain.Location        `json:"location"`
+	Ownership domain.OwnershipStatus `json:"ownership,omitempty"`
 }
 
 func main() {
@@ -84,8 +89,10 @@ func publicPlanResponse(source domain.Plan) planResponse {
 		operations[index] = planOperation{
 			ComponentID: operation.ComponentID,
 			Kind:        operation.Kind,
-			Artifact:    operation.Artifact,
-			SourcePath:  operation.SourcePath,
+			Artifact: planArtifact{
+				Location: operation.Artifact.Location, Ownership: operation.Artifact.Ownership,
+			},
+			SourcePath: operation.SourcePath,
 		}
 	}
 	return planResponse{Operations: operations}

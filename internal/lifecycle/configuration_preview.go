@@ -66,7 +66,7 @@ func externalObservationsForInventory(
 		resource := resourceByID[observation.ResourceID]
 		if resource.ExternalState == nil ||
 			observation.Status != configuration.Ready ||
-			observedTargetManagedExact(
+			observedTargetTrustedExact(
 				observed,
 				resource.ComponentID,
 				resource.Target,
@@ -137,7 +137,7 @@ func (service Service) requireReviewAfterExternalTargetChange(
 		if resource.ExternalState == nil ||
 			!selected[resource.ComponentID] ||
 			observations[resource.ID].Status != configuration.Ready ||
-			service.targetManagedExact(resource.ComponentID, resource.Target) {
+			service.targetTrustedExact(resource.ComponentID, resource.Target) {
 			continue
 		}
 		plan.ManualActions = append(
@@ -156,14 +156,14 @@ func (service Service) requireReviewAfterExternalTargetChange(
 	})
 }
 
-func (service Service) targetManagedExact(
+func (service Service) targetTrustedExact(
 	componentID domain.ComponentID,
 	target domain.Location,
 ) bool {
-	return observedTargetManagedExact(service.observed, componentID, target)
+	return observedTargetTrustedExact(service.observed, componentID, target)
 }
 
-func observedTargetManagedExact(
+func observedTargetTrustedExact(
 	observed domain.ObservedState,
 	componentID domain.ComponentID,
 	target domain.Location,
@@ -174,7 +174,8 @@ func observedTargetManagedExact(
 		}
 		for _, artifact := range component.Artifacts {
 			if artifact.Location == target {
-				return artifact.Ownership == domain.OwnershipManagedExact
+				return artifact.Ownership == domain.OwnershipManagedExact ||
+					artifact.Ownership == domain.OwnershipExactAdoptable
 			}
 		}
 	}

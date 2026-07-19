@@ -100,6 +100,8 @@ func TestOnlyManagedExactIsRemovable(t *testing.T) {
 	statuses := []domain.OwnershipStatus{
 		domain.OwnershipManagedExact,
 		domain.OwnershipManagedDrifted,
+		domain.OwnershipManagedMissing,
+		domain.OwnershipExactAdoptable,
 		domain.OwnershipLegacyAdoptable,
 		domain.OwnershipForeign,
 		domain.OwnershipConflict,

@@ -3,6 +3,7 @@ package executor
 import (
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/linkownership"
 )
 
 type ReleaseIdentity struct {
@@ -35,6 +36,11 @@ type JournalStore interface {
 	Cleanup() error
 }
 
+type OwnershipStore interface {
+	LoadOwnership() (linkownership.Registry, error)
+	SaveOwnership(linkownership.Registry) error
+}
+
 type Refresher interface {
 	Refresh([]domain.ComponentID) (Preview, error)
 }
@@ -53,6 +59,7 @@ type LinkWorkspace interface {
 	PreparePrivate(WorkspaceMutation) (FileIdentity, error)
 	StageInstall(WorkspaceMutation) (FileIdentity, error)
 	PublishInstall(WorkspaceMutation) (LinkState, error)
+	PublishReplace(WorkspaceMutation) (LinkState, error)
 	PublishRemove(WorkspaceMutation) (LinkState, error)
 	Rollback(WorkspaceMutation) error
 	Finalize(WorkspaceMutation) error
@@ -116,8 +123,11 @@ type DirectoryState struct {
 type MutationKind string
 
 const (
-	MutationInstall MutationKind = "install"
-	MutationRemove  MutationKind = "remove"
+	MutationInstall    MutationKind = "install"
+	MutationAdopt      MutationKind = "adopt"
+	MutationReplace    MutationKind = "replace"
+	MutationRemove     MutationKind = "remove"
+	MutationRelinquish MutationKind = "relinquish"
 )
 
 type StepPhase string
@@ -139,19 +149,32 @@ const (
 )
 
 type JournalMutation struct {
-	Kind           MutationKind        `json:"kind"`
-	Location       domain.Location     `json:"location"`
-	SourcePath     domain.ArtifactPath `json:"source_path,omitempty"`
-	Before         LinkImage           `json:"before"`
-	After          LinkImage           `json:"after"`
-	Parent         FileIdentity        `json:"parent"`
-	Private        PrivateDirectory    `json:"private"`
-	StagedName     string              `json:"staged_name"`
-	StagedIdentity FileIdentity        `json:"staged_identity"`
-	RetainedName   string              `json:"retained_name"`
-	Phase          StepPhase           `json:"phase"`
-	Finalized      bool                `json:"finalized"`
+	ComponentID    domain.ComponentID   `json:"component_id,omitempty"`
+	UnitID         string               `json:"unit_id,omitempty"`
+	Kind           MutationKind         `json:"kind"`
+	Location       domain.Location      `json:"location"`
+	SourcePath     domain.ArtifactPath  `json:"source_path,omitempty"`
+	Before         LinkImage            `json:"before"`
+	After          LinkImage            `json:"after"`
+	Parent         FileIdentity         `json:"parent"`
+	Private        PrivateDirectory     `json:"private"`
+	StagedName     string               `json:"staged_name"`
+	StagedIdentity FileIdentity         `json:"staged_identity"`
+	RetainedName   string               `json:"retained_name"`
+	Phase          StepPhase            `json:"phase"`
+	Finalized      bool                 `json:"finalized"`
+	ClaimBefore    *linkownership.Claim `json:"claim_before,omitempty"`
+	ClaimAfter     *linkownership.Claim `json:"claim_after,omitempty"`
+	ClaimPhase     ClaimPhase           `json:"claim_phase,omitempty"`
 }
+
+type ClaimPhase string
+
+const (
+	ClaimPrepared   ClaimPhase = "prepared"
+	ClaimPublished  ClaimPhase = "published"
+	ClaimRolledBack ClaimPhase = "rolled_back"
+)
 
 type JournalDirectory struct {
 	Target      DirectoryTarget `json:"target"`
@@ -210,5 +233,17 @@ func cloneJournalPointer(journal *Journal) *Journal {
 	clone.Configurations = cloneJournalConfigurations(journal.Configurations)
 	clone.Directories = append([]JournalDirectory(nil), journal.Directories...)
 	clone.Steps = append([]JournalMutation(nil), journal.Steps...)
+	for index := range clone.Steps {
+		clone.Steps[index].ClaimBefore = cloneClaim(clone.Steps[index].ClaimBefore)
+		clone.Steps[index].ClaimAfter = cloneClaim(clone.Steps[index].ClaimAfter)
+	}
 	return &clone
+}
+
+func cloneClaim(claim *linkownership.Claim) *linkownership.Claim {
+	if claim == nil {
+		return nil
+	}
+	cloned := *claim
+	return &cloned
 }

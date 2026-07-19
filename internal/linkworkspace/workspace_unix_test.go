@@ -131,6 +131,47 @@ func TestRemoveRetainsAndRollbackRestoresExactLink(t *testing.T) {
 	}
 }
 
+func TestReplaceAtomicallyExchangesAndRecoversNativeLink(t *testing.T) {
+	fixture := newWorkspaceFixture(t)
+	if err := os.WriteFile(filepath.Join(fixture.source, "bin", "next"), []byte("next"), 0o755); err != nil {
+		t.Fatalf("write next source: %v", err)
+	}
+	location := fixture.location("mainframe")
+	oldTarget := fixture.resolveSource(t, "bin/mainframe")
+	newTarget := fixture.resolveSource(t, "bin/next")
+	if err := os.Symlink(oldTarget, filepath.Join(fixture.target, "mainframe")); err != nil {
+		t.Fatalf("create old link: %v", err)
+	}
+	before := fixture.inspect(t, location)
+	private := fixture.preparePrivate(t, location)
+	mutation := executor.WorkspaceMutation{
+		Kind: executor.MutationReplace, Location: location,
+		SourceTarget: newTarget, Before: image(before),
+		After:  executor.LinkImage{Exists: true, RawTarget: newTarget},
+		Parent: before.Parent, Private: private,
+		StagedName: "staged", RetainedName: "staged", Phase: executor.StepPrepared,
+	}
+	staged, err := fixture.workspace.StageInstall(mutation)
+	if err != nil {
+		t.Fatalf("StageInstall() error = %v", err)
+	}
+	mutation.StagedIdentity = staged
+	mutation.After.Entry = staged
+	mutation.Phase = executor.StepStaged
+	published, err := fixture.workspace.PublishReplace(mutation)
+	if err != nil || !published.Exists || published.RawTarget != newTarget {
+		t.Fatalf("PublishReplace() = %#v, %v", published, err)
+	}
+	mutation.Phase = executor.StepPublished
+	if err := fixture.workspace.Rollback(mutation); err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	restored := fixture.inspect(t, location)
+	if !restored.Exists || restored.RawTarget != oldTarget || restored.Entry != before.Entry {
+		t.Fatalf("restored link = %#v", restored)
+	}
+}
+
 func TestRemoveFinalizeDeletesOnlyPrivateRetainedLink(t *testing.T) {
 	fixture := newWorkspaceFixture(t)
 	location := fixture.location("mainframe")

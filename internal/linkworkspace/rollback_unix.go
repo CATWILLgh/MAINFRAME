@@ -18,11 +18,43 @@ func (workspace Workspace) Rollback(mutation executor.WorkspaceMutation) error {
 	switch mutation.Kind {
 	case executor.MutationInstall:
 		return workspace.rollbackInstall(context, mutation)
+	case executor.MutationReplace:
+		return workspace.rollbackReplace(context, mutation)
 	case executor.MutationRemove:
 		return workspace.rollbackRemove(context, mutation)
 	default:
 		return errors.New("invalid mutation kind")
 	}
+}
+
+func (workspace Workspace) rollbackReplace(
+	context mutationContext,
+	mutation executor.WorkspaceMutation,
+) error {
+	public, retained, err := inspectReplacePair(context, mutation)
+	if err != nil {
+		return err
+	}
+	if replacePrepared(public, retained, mutation) {
+		return workspace.verifyParentIdentity(mutation)
+	}
+	if !replacePublished(public, retained, mutation) {
+		return errors.New("replace rollback state changed")
+	}
+	if err := renameExchange(
+		context.parentFD, context.finalName,
+		context.privateFD, mutation.RetainedName,
+	); err != nil {
+		return fmt.Errorf("rollback replace: %w", err)
+	}
+	if err := syncRenamedDirectories(context.parentFD, context.privateFD); err != nil {
+		return err
+	}
+	public, retained, err = inspectReplacePair(context, mutation)
+	if err != nil || !replacePrepared(public, retained, mutation) {
+		return errors.Join(err, errors.New("replace rollback differs"))
+	}
+	return workspace.verifyParentIdentity(mutation)
 }
 
 func (workspace Workspace) rollbackInstall(

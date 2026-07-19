@@ -109,6 +109,29 @@ func TestPlannerInstallsDesiredDependencyArtifactsWithSources(t *testing.T) {
 	assertOperations(t, got.Operations, want)
 }
 
+func TestPlannerCarriesStableInstallUnitIdentity(t *testing.T) {
+	registry, err := catalog.New([]catalog.Component{{
+		ID: "codex",
+		Artifacts: []catalog.Artifact{{
+			UnitID:     "codex.instructions",
+			Target:     location(domain.RootCodexConfig, "AGENTS.md"),
+			SourcePath: "dist/codex/AGENTS.md",
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
+	got, err := plan.New(registry).Plan(domain.PlanRequest{
+		Desired: domain.DesiredState{Components: []domain.ComponentID{"codex"}},
+	})
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(got.Operations) != 1 || got.Operations[0].UnitID != "codex.instructions" {
+		t.Fatalf("operations = %#v", got.Operations)
+	}
+}
+
 func TestPlannerKeepsSamePathUnderDifferentRootsDistinct(t *testing.T) {
 	registry, err := catalog.New([]catalog.Component{{ID: "codex", Artifacts: []catalog.Artifact{
 		expected(domain.RootCodexConfig, "AGENTS.md", "dist/codex/AGENTS.md"),

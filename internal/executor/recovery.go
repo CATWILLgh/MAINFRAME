@@ -128,10 +128,21 @@ func (executor Executor) rollback(journal *Journal) error {
 		return err
 	}
 	for index := len(journal.Steps) - 1; index >= 0; index-- {
+		if err := executor.rollbackClaim(journal, index); err != nil {
+			return fmt.Errorf("rollback ownership %v: %w", journal.Steps[index].Location, err)
+		}
 		if err := executor.ensureRollbackReady(journal, index); err != nil {
 			return fmt.Errorf("prepare rollback %v: %w", journal.Steps[index].Location, err)
 		}
 		step := &journal.Steps[index]
+		if claimOnlyMutation(step.Kind) {
+			step.Phase = StepRolledBack
+			step.Finalized = true
+			if err := executor.store.Save(*journal); err != nil {
+				return fmt.Errorf("save rolled back relinquishment: %w", err)
+			}
+			continue
+		}
 		if step.Phase != StepRolledBack {
 			if err := executor.workspace.Rollback(workspaceMutation(*step)); err != nil {
 				return fmt.Errorf("rollback %v: %w", step.Location, err)
@@ -216,12 +227,16 @@ func (executor Executor) ensureDirectoryRollbackReady(
 
 func (executor Executor) ensureRollbackReady(journal *Journal, index int) error {
 	step := &journal.Steps[index]
+	if claimOnlyMutation(step.Kind) {
+		return nil
+	}
 	if !validFileIdentity(step.Private.Identity) {
 		if err := executor.preparePrivate(journal, index); err != nil {
 			return err
 		}
 	}
-	if step.Kind == MutationInstall && step.Phase == StepPrepared {
+	if (step.Kind == MutationInstall || step.Kind == MutationReplace) &&
+		step.Phase == StepPrepared {
 		if err := executor.stageInstall(journal, index); err != nil {
 			return err
 		}
@@ -265,6 +280,13 @@ func (executor Executor) finalizeDirectory(journal *Journal, index int) error {
 
 func (executor Executor) finalizeStep(journal *Journal, index int) error {
 	step := &journal.Steps[index]
+	if claimOnlyMutation(step.Kind) {
+		if !step.Finalized {
+			step.Finalized = true
+			return executor.store.Save(*journal)
+		}
+		return nil
+	}
 	if !step.Finalized {
 		if err := executor.workspace.Finalize(workspaceMutation(*step)); err != nil {
 			return err
@@ -278,4 +300,24 @@ func (executor Executor) finalizeStep(journal *Journal, index int) error {
 		return fmt.Errorf("finalize private directory: %w", err)
 	}
 	return nil
+}
+
+func (executor Executor) rollbackClaim(journal *Journal, index int) error {
+	step := &journal.Steps[index]
+	if step.ClaimPhase == "" || step.ClaimPhase == ClaimRolledBack {
+		return nil
+	}
+	registry, err := executor.ownership.LoadOwnership()
+	if err != nil {
+		return err
+	}
+	updated, err := transitionRegistry(registry, step.ClaimAfter, step.ClaimBefore)
+	if err != nil {
+		return err
+	}
+	if err := executor.ownership.SaveOwnership(updated); err != nil {
+		return err
+	}
+	step.ClaimPhase = ClaimRolledBack
+	return executor.store.Save(*journal)
 }

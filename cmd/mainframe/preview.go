@@ -13,6 +13,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/discovery"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostcompatibility"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
@@ -125,7 +126,16 @@ func buildPreviewServiceFromContextWithHostDiscovery(
 		return lifecycle.Service{}, fmt.Errorf("open host namespace: %w", err)
 	}
 	inspectionHost := newInspectionCache(namespace)
-	observed, err := discovery.Discover(release.Model, namespace.Filesystem(), namespace.Roots())
+	ownership, err := executor.ReadUnixOwnership(layout.State())
+	if err != nil {
+		return lifecycle.Service{}, fmt.Errorf("read installation ownership: %w", err)
+	}
+	observed, err := discovery.DiscoverWithOwnership(
+		release.Model,
+		namespace.Filesystem(),
+		namespace.Roots(),
+		ownership,
+	)
 	if err != nil {
 		return lifecycle.Service{}, fmt.Errorf("discover current installation: %w", err)
 	}

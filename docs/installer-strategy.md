@@ -340,6 +340,34 @@ MAINFRAME never unlinks a public target name. A committed transaction removes
 only verified private entries before it removes its journal; an interrupted
 transaction performs the inverse renames and can safely retry each step.
 
+Automatic link ownership comes only from the durable registry at
+`${XDG_STATE_HOME:-$HOME/.local/state}/mainframe/link-ownership.json`. Each
+claim binds one stable release unit ID and component to one logical target,
+the exact raw symbolic-link target, and the release ID plus index digest that
+created it. Device and inode numbers are deliberately not persisted there;
+discovery captures the live link identity for every preview, and Apply checks
+that fresh identity again before changing a public name. A claim whose link
+was removed can be repaired or relinquished without requiring the old release
+payload. A user-changed link or non-link entry is never removed: MAINFRAME
+drops only its claim and leaves the user entry untouched.
+
+An exact link created earlier by `install.sh` has no registry claim. When it
+points to a live artifact in the currently validated release, the plan exposes
+a separate adoption operation. Adoption changes only the registry, after
+rechecking the link target and inode immediately before and after claim
+publication; a mismatch rolls the claim back. It does not replace the public link.
+Matching an older path suffix is not enough for adoption. This one-time bridge
+keeps existing installations usable without treating arbitrary historical or
+user-created links as managed.
+
+Updating a claimed link uses one platform-native atomic exchange: macOS
+`RENAME_SWAP` or Linux `RENAME_EXCHANGE`. The new staged link becomes public
+while the exact previous inode moves into the private workspace in the same
+namespace operation. The ownership transition is recorded in the same
+recoverable transaction. A failure before either durable boundary restores
+both the previous link and its previous claim; committed cleanup removes only
+the verified retained inode.
+
 Every parent and private directory is opened descriptor-relatively without
 following symbolic links and checked against its recorded identity. Detected
 concurrent changes before a namespace transition fail closed. The operating

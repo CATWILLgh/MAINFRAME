@@ -30,42 +30,8 @@ func TestLoadBuildsInstallModelAndSeparateResourceInventory(t *testing.T) {
 	if release.IndexSHA256 != wantIndexSHA256 {
 		t.Fatalf("index digest = %q, want %q", release.IndexSHA256, wantIndexSHA256)
 	}
-	artifacts := release.Model.Artifacts()
-	if len(artifacts) != 2 {
-		t.Fatalf("artifact count = %d, want 2", len(artifacts))
-	}
-	desired, legacy := artifacts[0], artifacts[1]
-	if desired.LegacyOnly {
-		desired, legacy = legacy, desired
-	}
-	if desired.ComponentID != domain.ComponentCodex || desired.Target != location("payload.txt") {
-		t.Fatalf("desired artifact = %#v", desired)
-	}
-	if desired.SourcePath != "bundles/codex/payload.txt" {
-		t.Fatalf("desired source = %q", desired.SourcePath)
-	}
-	if !reflect.DeepEqual(desired.LegacyTargetSuffixes, []domain.ArtifactPath{"dist/codex/payload.txt"}) {
-		t.Fatalf("desired legacy suffixes = %v", desired.LegacyTargetSuffixes)
-	}
-	if !legacy.LegacyOnly || legacy.Target != location("obsolete.txt") {
-		t.Fatalf("legacy artifact = %#v", legacy)
-	}
-	if len(release.Resources) != 1 {
-		t.Fatalf("resource count = %d", len(release.Resources))
-	}
-	resource := release.Resources[0]
-	if resource.ID != "codex.configuration" || resource.ComponentID != domain.ComponentCodex {
-		t.Fatalf("resource = %#v", resource)
-	}
-	if resource.SourcePath != "bundles/codex/config.json" || resource.Strategy != releasecontract.StrategyJSONKeyMerge {
-		t.Fatalf("resource source/strategy = %#v", resource)
-	}
-	if !reflect.DeepEqual(resource.LegacySourceSuffixes, []domain.ArtifactPath{"dist/codex/config.json"}) {
-		t.Fatalf("resource legacy sources = %v", resource.LegacySourceSuffixes)
-	}
-	if resource.Observation != releasecontract.SupportUnimplemented || resource.Apply != releasecontract.SupportUnimplemented {
-		t.Fatalf("resource support = %#v", resource)
-	}
+	assertInstallModel(t, release)
+	assertResourceInventory(t, release)
 	server, exists := release.MCPCatalog.Server("context7")
 	if !exists || server.Name != "Context7" {
 		t.Fatalf("MCP catalog server = %#v, exists = %t", server, exists)

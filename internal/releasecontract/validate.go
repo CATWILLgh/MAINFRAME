@@ -235,6 +235,7 @@ func validateUnits(
 			return nil, fmt.Errorf("install unit %q: %w", unit.ID, err)
 		}
 		artifacts[index] = installmodel.ArtifactSpec{
+			UnitID:               unit.ID,
 			Target:               target,
 			SourcePath:           domain.ArtifactPath(path.Join(sourceBase, unit.Source)),
 			LegacyTargetSuffixes: suffixes,

@@ -195,7 +195,10 @@ func (model *Model) previewView() string {
 		kind  domain.OperationKind
 	}{
 		{title: "Install", kind: domain.OperationInstall},
+		{title: "Adopt existing", kind: domain.OperationAdopt},
+		{title: "Update", kind: domain.OperationReplace},
 		{title: "Remove", kind: domain.OperationRemove},
+		{title: "Stop managing", kind: domain.OperationRelinquish},
 		{title: "Conflicts", kind: domain.OperationConflict},
 	}
 	groupCount := 0
@@ -280,8 +283,14 @@ func operationGlyph(kind domain.OperationKind) string {
 	switch kind {
 	case domain.OperationInstall:
 		return "+"
+	case domain.OperationAdopt:
+		return "✓"
+	case domain.OperationReplace:
+		return "↻"
 	case domain.OperationRemove:
 		return "−"
+	case domain.OperationRelinquish:
+		return "◇"
 	default:
 		return "!"
 	}

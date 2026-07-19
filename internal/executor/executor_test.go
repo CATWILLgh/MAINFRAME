@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/linkownership"
 )
 
 func TestApplyRejectsChangedPreviewWithoutWorkspaceWrites(t *testing.T) {
@@ -271,6 +272,11 @@ type fakeStore struct {
 	saveCalls            int
 	cleanupErr           error
 	cleanupCalls         int
+	ownership            linkownership.Registry
+	ownershipSaveCalls   int
+	ownershipFailAt      int
+	ownershipFailAfterAt int
+	ownershipAfterSave   func()
 }
 
 func (store *fakeStore) Load() (*Journal, error) {
@@ -299,6 +305,29 @@ func (store *fakeStore) Cleanup() error {
 		return store.cleanupErr
 	}
 	store.journal = nil
+	return nil
+}
+
+func (store *fakeStore) LoadOwnership() (linkownership.Registry, error) {
+	return linkownership.New(store.ownership.Claims())
+}
+
+func (store *fakeStore) SaveOwnership(registry linkownership.Registry) error {
+	store.ownershipSaveCalls++
+	if store.ownershipFailAt == store.ownershipSaveCalls {
+		return errors.New("ownership save failed")
+	}
+	stored, err := linkownership.New(registry.Claims())
+	if err != nil {
+		return err
+	}
+	store.ownership = stored
+	if store.ownershipAfterSave != nil {
+		store.ownershipAfterSave()
+	}
+	if store.ownershipFailAfterAt == store.ownershipSaveCalls {
+		return errors.New("ownership save outcome unknown")
+	}
 	return nil
 }
 

@@ -41,6 +41,7 @@ type fakeWorkspace struct {
 	linkInspectDirCalls  int
 	linkRollbackDirCalls int
 	plannedOperations    []domain.Operation
+	absentPublicObserved bool
 }
 
 type fakePrivateDirectory struct {
@@ -153,6 +154,28 @@ func (workspace *fakeWorkspace) PublishInstall(mutation WorkspaceMutation) (Link
 	return actual, nil
 }
 
+func (workspace *fakeWorkspace) PublishReplace(mutation WorkspaceMutation) (LinkState, error) {
+	entry, err := workspace.privateEntry(mutation)
+	if err != nil {
+		return LinkState{}, err
+	}
+	workspace.publishCalls++
+	current, _ := workspace.Inspect(mutation.Location)
+	if current.Exists && current.Entry == mutation.StagedIdentity && entry.retained != nil {
+		return current, nil
+	}
+	if current != stateOf(mutation.Before, mutation.Parent) || entry.staged == nil ||
+		entry.staged.Entry != mutation.StagedIdentity || entry.retained != nil {
+		return current, errors.New("publish replace mismatch")
+	}
+	newState := *entry.staged
+	entry.staged = nil
+	entry.retained = &current
+	workspace.links[mutation.Location] = newState
+	workspace.recordWrite(mutation.Location, newState.RawTarget)
+	return newState, nil
+}
+
 func (workspace *fakeWorkspace) PublishRemove(mutation WorkspaceMutation) (LinkState, error) {
 	entry, err := workspace.privateEntry(mutation)
 	if err != nil {
@@ -190,7 +213,29 @@ func (workspace *fakeWorkspace) Rollback(mutation WorkspaceMutation) error {
 	if mutation.Kind == MutationInstall {
 		return workspace.rollbackInstall(mutation, entry)
 	}
+	if mutation.Kind == MutationReplace {
+		return workspace.rollbackReplace(mutation, entry)
+	}
 	return workspace.rollbackRemove(mutation, entry)
+}
+
+func (workspace *fakeWorkspace) rollbackReplace(
+	mutation WorkspaceMutation,
+	private *fakePrivateDirectory,
+) error {
+	current, _ := workspace.Inspect(mutation.Location)
+	if current == stateOf(mutation.Before, mutation.Parent) && private.staged != nil {
+		return nil
+	}
+	if private.retained == nil || current.Entry != mutation.StagedIdentity {
+		return errors.New("replace rollback identity mismatch")
+	}
+	old := *private.retained
+	private.retained = nil
+	private.staged = &current
+	workspace.links[mutation.Location] = old
+	workspace.recordWrite(mutation.Location, old.RawTarget)
+	return nil
 }
 
 func (workspace *fakeWorkspace) rollbackInstall(
@@ -245,6 +290,8 @@ func (workspace *fakeWorkspace) Finalize(mutation WorkspaceMutation) error {
 	}
 	if mutation.Kind == MutationInstall {
 		entry.staged = nil
+	} else if mutation.Kind == MutationReplace {
+		entry.retained = nil
 	} else {
 		entry.retained = nil
 	}
@@ -292,6 +339,18 @@ func recoverFakePrivate(mutation WorkspaceMutation) *fakePrivateDirectory {
 			mutation.Parent,
 		)
 		entry.staged = &state
+	}
+	if mutation.Kind == MutationReplace {
+		if mutation.Phase == StepStaged || mutation.Phase == StepRolledBack {
+			state := stateOf(LinkImage{
+				Exists: true, RawTarget: mutation.SourceTarget, Entry: mutation.StagedIdentity,
+			}, mutation.Parent)
+			entry.staged = &state
+		}
+		if mutation.Phase == StepPublished {
+			state := stateOf(mutation.Before, mutation.Parent)
+			entry.retained = &state
+		}
 	}
 	if mutation.Kind == MutationRemove && mutation.Phase == StepPublished {
 		state := stateOf(mutation.Before, mutation.Parent)

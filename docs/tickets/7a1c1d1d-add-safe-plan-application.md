@@ -39,7 +39,11 @@ The final product must install, update, remove, and replace selected adapters. A
 ## Acceptance criteria
 
 - The TUI owns no direct filesystem, process, network, or package-manager writes.
-- Only `managed_exact` artifacts can be removed automatically; drifted, foreign, legacy-adoptable, and conflicting artifacts stop for a decision.
+- Only registry-backed `managed_exact` and `managed_previous` links can be
+  removed automatically. Drifted or missing claims are relinquished without
+  deleting user state; exact current `install.sh` links require an explicit
+  adoption operation; foreign, legacy-adoptable, and conflicting artifacts
+  stop for a decision.
 - An interrupted operation can be continued or restored without losing user data.
 - Repeated application of the same desired state is idempotent.
 - macOS and Linux lifecycle fixtures cover install, add, remove, replace, conflict, interruption, and recovery.
@@ -121,6 +125,29 @@ The final product must install, update, remove, and replace selected adapters. A
   after its release source disappears and for a zero-byte configuration
   exchange interrupted before the next journal save. Both cases also verify
   repeated recovery.
+- Added a strict, owner-only durable link-ownership registry keyed by stable
+  release unit ID, component, logical target, raw link target, release ID, and
+  release-index digest. Discovery now trusts only exact registry claims and
+  captures live device/inode identities separately for the reviewed plan.
+- Added one-time adoption for exact live links created by `install.sh` from the
+  currently validated release. Adoption writes only the claim and never
+  replaces the existing public link. It rechecks the target and inode before
+  and after claim publication and rolls the claim back on a mismatch;
+  suffix-only legacy matches remain untrusted.
+- Added atomic claimed-link update through Darwin `RENAME_SWAP` and Linux
+  `RENAME_EXCHANGE`. The old inode is retained for rollback, and link plus claim
+  transitions share the recoverable transaction boundaries.
+- Added repair and relinquishment semantics for manually removed links,
+  changed symbolic links, and claimed targets replaced by non-link entries.
+  User-changed entries are never removed while stale claims cannot block a
+  later reinstall.
+- Connected read-only CLI/TUI discovery to the registry without creating the
+  state directory. Unsafe or malformed registry state fails closed.
+- Extended the packaged release test across Claude Code, Codex, OpenCode, and
+  Antigravity 2.x. It verifies initial dependency closure, isolated adapter
+  deselection, and previous-release replacement against the built manifests.
+- Kept ownership identities internal to planning. Public CLI JSON contains only
+  the operation, logical target, ownership classification, and source path.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),

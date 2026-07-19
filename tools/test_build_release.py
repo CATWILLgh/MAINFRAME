@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -16,6 +15,10 @@ sys.path.insert(0, str(REPO / "tools"))
 
 import build_release
 import release_contract
+from release_lifecycle_assertions import (
+    assert_adapter_lifecycle_plans,
+    assert_adapter_plans,
+)
 
 
 def snapshot_tree(path: Path) -> dict[str, tuple[int, bytes | str | None]]:
@@ -157,6 +160,23 @@ def _assert_component_contracts(output: Path, index: dict) -> Path:
 
 
 def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
+    _assert_secret_help(output)
+    home = sandbox / "home"
+    home.mkdir()
+    env = dict(
+        os.environ,
+        HOME=str(home),
+        CODEX_HOME=str(home / ".codex"),
+        XDG_CONFIG_HOME=str(home / ".config"),
+        XDG_STATE_HOME=str(home / ".local/state"),
+    )
+    _assert_tui_launch(binary, sandbox, env)
+    assert_adapter_plans(binary, output, sandbox, env)
+    assert_adapter_lifecycle_plans(binary, output, sandbox, env)
+    _assert_no_publication_residue(output)
+
+
+def _assert_secret_help(output: Path) -> None:
     secret_help = subprocess.run(
         [str(output / "common/credential-tools/secret"), "help"],
         text=True,
@@ -170,14 +190,12 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
     assert "~/.config/credentials" not in secret_help
     assert "install.sh" not in secret_help
 
-    home = sandbox / "home"
-    home.mkdir()
-    env = dict(
-        os.environ,
-        HOME=str(home),
-        CODEX_HOME=str(home / ".codex"),
-        XDG_CONFIG_HOME=str(home / ".config"),
-    )
+
+def _assert_tui_launch(
+    binary: Path,
+    sandbox: Path,
+    env: dict[str, str],
+) -> None:
     preview = subprocess.run(
         [str(binary)],
         input="q",
@@ -190,25 +208,8 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
     assert preview.returncode == 0, (preview.stdout, preview.stderr)
     assert preview.stderr == ""
 
-    plan = subprocess.run(
-        [str(binary), "plan"],
-        input=json.dumps(
-            {
-                "desired": {"components": ["codex"]},
-                "observed": {"components": []},
-            }
-        ),
-        text=True,
-        capture_output=True,
-        cwd=sandbox,
-        env=env,
-        timeout=30,
-    )
-    assert plan.returncode == 0, (plan.stdout, plan.stderr)
-    operations = json.loads(plan.stdout)["operations"]
-    assert any(operation["component_id"] == "codex" for operation in operations)
-    assert all("unit_id" not in operation for operation in operations)
 
+def _assert_no_publication_residue(output: Path) -> None:
     forbidden = (".lock", ".journal", ".publication.json", ".staging-")
     metadata = [
         path.relative_to(output).as_posix()

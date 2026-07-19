@@ -14,6 +14,7 @@ type Component struct {
 }
 
 type Artifact struct {
+	UnitID     string
 	Target     domain.Location
 	SourcePath domain.ArtifactPath
 }

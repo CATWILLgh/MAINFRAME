@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
-	"sort"
 	"strings"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+	"github.com/CATWILLgh/MAINFRAME/internal/linkownership"
 )
 
 type Roots struct {
@@ -23,6 +23,24 @@ type preparedRoots struct {
 }
 
 func Discover(model installmodel.Model, filesystem fs.ReadLinkFS, roots Roots) (domain.ObservedState, error) {
+	return discover(model, filesystem, roots, nil)
+}
+
+func DiscoverWithOwnership(
+	model installmodel.Model,
+	filesystem fs.ReadLinkFS,
+	roots Roots,
+	registry linkownership.Registry,
+) (domain.ObservedState, error) {
+	return discover(model, filesystem, roots, &registry)
+}
+
+func discover(
+	model installmodel.Model,
+	filesystem fs.ReadLinkFS,
+	roots Roots,
+	registry *linkownership.Registry,
+) (domain.ObservedState, error) {
 	if filesystem == nil {
 		return domain.ObservedState{}, fmt.Errorf("filesystem must not be nil")
 	}
@@ -35,13 +53,22 @@ func Discover(model installmodel.Model, filesystem fs.ReadLinkFS, roots Roots) (
 		return domain.ObservedState{}, err
 	}
 	grouped := make(map[domain.ComponentID][]domain.Artifact)
+	observedLocations := make(map[domain.Location]bool, len(artifacts))
 	for _, spec := range artifacts {
-		artifact, exists, err := inspectArtifact(filesystem, prepared, spec)
+		artifact, exists, err := inspectArtifact(filesystem, prepared, spec, registry)
 		if err != nil {
 			return domain.ObservedState{}, err
 		}
 		if exists {
 			grouped[spec.ComponentID] = append(grouped[spec.ComponentID], artifact)
+			observedLocations[spec.Target] = true
+		}
+	}
+	if registry != nil {
+		if err := inspectClaimOnlyArtifacts(
+			filesystem, prepared, observedLocations, *registry, grouped,
+		); err != nil {
+			return domain.ObservedState{}, err
 		}
 	}
 	return observedState(grouped), nil
@@ -91,6 +118,7 @@ func inspectArtifact(
 	filesystem fs.ReadLinkFS,
 	roots preparedRoots,
 	spec installmodel.Artifact,
+	registry *linkownership.Registry,
 ) (domain.Artifact, bool, error) {
 	location := resolvedLocation(roots, spec.Target)
 	info, err := filesystem.Lstat(location)
@@ -101,13 +129,24 @@ func inspectArtifact(
 		return domain.Artifact{}, false, fmt.Errorf("inspect artifact %#v: %w", spec.Target, err)
 	}
 	if info.Mode()&fs.ModeSymlink == 0 {
+		if registry != nil {
+			claim, claimed := registry.ClaimAt(spec.Target)
+			if claimed && claim.ComponentID == spec.ComponentID && claim.UnitID == spec.UnitID {
+				identity := linkIdentity(info)
+				return domain.Artifact{
+					Location: spec.Target, UnitID: claim.UnitID,
+					Ownership:  domain.OwnershipManagedDrifted,
+					LinkDevice: identity.Device, LinkInode: identity.Inode,
+				}, true, nil
+			}
+		}
 		ownership := domain.OwnershipConflict
 		if spec.LegacyOnly {
 			ownership = domain.OwnershipForeign
 		}
 		return observedArtifact(spec.Target, ownership), true, nil
 	}
-	return inspectLink(filesystem, roots, spec, location)
+	return inspectLink(filesystem, roots, spec, location, linkIdentity(info), registry)
 }
 
 func inspectLink(
@@ -115,6 +154,8 @@ func inspectLink(
 	roots preparedRoots,
 	spec installmodel.Artifact,
 	location string,
+	identity domain.LinkIdentity,
+	registry *linkownership.Registry,
 ) (domain.Artifact, bool, error) {
 	rawTarget, err := filesystem.ReadLink(location)
 	if err != nil {
@@ -125,13 +166,20 @@ func inspectLink(
 		return domain.Artifact{}, false, fmt.Errorf("resolve link %#v: %w", spec.Target, err)
 	}
 	if spec.LegacyOnly {
-		return observedArtifact(spec.Target, classifyLegacy(spec, target)), true, nil
+		ownership := classifyLegacy(spec, target)
+		if registry == nil {
+			return observedArtifact(spec.Target, ownership), true, nil
+		}
+		return observedLink(spec, ownership, rawTarget, identity), true, nil
 	}
-	ownership, err := classifyDesired(filesystem, roots, spec, target)
+	ownership, err := classifyDesired(filesystem, roots, spec, target, rawTarget, registry)
 	if err != nil {
 		return domain.Artifact{}, false, err
 	}
-	return observedArtifact(spec.Target, ownership), true, nil
+	if registry == nil {
+		return observedArtifact(spec.Target, ownership), true, nil
+	}
+	return observedLink(spec, ownership, rawTarget, identity), true, nil
 }
 
 func classifyDesired(
@@ -139,8 +187,33 @@ func classifyDesired(
 	roots preparedRoots,
 	spec installmodel.Artifact,
 	target string,
+	rawTarget string,
+	registry *linkownership.Registry,
 ) (domain.OwnershipStatus, error) {
 	expected := path.Join(string(roots.source), string(spec.SourcePath))
+	if registry != nil {
+		claim, exists := registry.ClaimAt(spec.Target)
+		if !exists {
+			return classifyUnclaimed(filesystem, spec, target, expected)
+		}
+		if claim.ComponentID != spec.ComponentID || claim.UnitID != spec.UnitID {
+			return domain.OwnershipConflict, nil
+		}
+		if claim.RawTarget != rawTarget {
+			return domain.OwnershipManagedDrifted, nil
+		}
+		if target != expected {
+			return domain.OwnershipManagedPrevious, nil
+		}
+		live, err := targetExists(filesystem, target)
+		if err != nil {
+			return "", fmt.Errorf("inspect link target %q: %w", target, err)
+		}
+		if live {
+			return domain.OwnershipManagedExact, nil
+		}
+		return domain.OwnershipManagedPrevious, nil
+	}
 	if target == expected {
 		live, err := targetExists(filesystem, target)
 		if err != nil {
@@ -150,6 +223,28 @@ func classifyDesired(
 			return domain.OwnershipManagedExact, nil
 		}
 		return domain.OwnershipManagedDrifted, nil
+	}
+	if matchesSuffix(target, spec.LegacyTargetSuffixes) {
+		return domain.OwnershipLegacyAdoptable, nil
+	}
+	return domain.OwnershipForeign, nil
+}
+
+func classifyUnclaimed(
+	filesystem fs.FS,
+	spec installmodel.Artifact,
+	target string,
+	expected string,
+) (domain.OwnershipStatus, error) {
+	if target == expected {
+		live, err := targetExists(filesystem, target)
+		if err != nil {
+			return "", fmt.Errorf("inspect unclaimed link target %q: %w", target, err)
+		}
+		if live {
+			return domain.OwnershipExactAdoptable, nil
+		}
+		return domain.OwnershipForeign, nil
 	}
 	if matchesSuffix(target, spec.LegacyTargetSuffixes) {
 		return domain.OwnershipLegacyAdoptable, nil
@@ -205,24 +300,81 @@ func observedArtifact(location domain.Location, ownership domain.OwnershipStatus
 	return domain.Artifact{Location: location, Ownership: ownership}
 }
 
-func observedState(grouped map[domain.ComponentID][]domain.Artifact) domain.ObservedState {
-	ids := make([]domain.ComponentID, 0, len(grouped))
-	for id := range grouped {
-		ids = append(ids, id)
+func observedLink(
+	spec installmodel.Artifact,
+	ownership domain.OwnershipStatus,
+	rawTarget string,
+	identity domain.LinkIdentity,
+) domain.Artifact {
+	return domain.Artifact{
+		Location: spec.Target, UnitID: spec.UnitID, Ownership: ownership,
+		RawTarget: rawTarget, LinkDevice: identity.Device, LinkInode: identity.Inode,
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	components := make([]domain.ObservedComponent, 0, len(ids))
-	for _, id := range ids {
-		artifacts := grouped[id]
-		sort.Slice(artifacts, func(i, j int) bool {
-			if artifacts[i].Location.Root != artifacts[j].Location.Root {
-				return artifacts[i].Location.Root < artifacts[j].Location.Root
-			}
-			return artifacts[i].Location.Path < artifacts[j].Location.Path
-		})
-		components = append(components, domain.ObservedComponent{ID: id, Artifacts: artifacts})
+}
+
+func inspectClaimOnlyArtifacts(
+	filesystem fs.ReadLinkFS,
+	roots preparedRoots,
+	observedLocations map[domain.Location]bool,
+	registry linkownership.Registry,
+	grouped map[domain.ComponentID][]domain.Artifact,
+) error {
+	for _, claim := range registry.Claims() {
+		if observedLocations[claim.Target] {
+			continue
+		}
+		artifact, exists, err := inspectClaim(filesystem, roots, claim)
+		if err != nil {
+			return err
+		}
+		if exists {
+			grouped[claim.ComponentID] = append(grouped[claim.ComponentID], artifact)
+		}
 	}
-	return domain.ObservedState{Components: components}
+	return nil
+}
+
+func inspectClaim(
+	filesystem fs.ReadLinkFS,
+	roots preparedRoots,
+	claim linkownership.Claim,
+) (domain.Artifact, bool, error) {
+	root, exists := roots.targets[claim.Target.Root]
+	if !exists {
+		return domain.Artifact{}, false, fmt.Errorf("missing target root %q", claim.Target.Root)
+	}
+	location := path.Join(string(root), string(claim.Target.Path))
+	info, err := filesystem.Lstat(location)
+	if errors.Is(err, fs.ErrNotExist) {
+		return domain.Artifact{
+			Location: claim.Target, UnitID: claim.UnitID,
+			Ownership: domain.OwnershipManagedMissing, RawTarget: claim.RawTarget,
+		}, true, nil
+	}
+	if err != nil {
+		return domain.Artifact{}, false, fmt.Errorf("inspect ownership claim %#v: %w", claim.Target, err)
+	}
+	if info.Mode()&fs.ModeSymlink == 0 {
+		identity := linkIdentity(info)
+		return domain.Artifact{
+			Location: claim.Target, UnitID: claim.UnitID,
+			Ownership:  domain.OwnershipManagedDrifted,
+			LinkDevice: identity.Device, LinkInode: identity.Inode,
+		}, true, nil
+	}
+	rawTarget, err := filesystem.ReadLink(location)
+	if err != nil {
+		return domain.Artifact{}, false, fmt.Errorf("read ownership claim %#v: %w", claim.Target, err)
+	}
+	status := domain.OwnershipManagedPrevious
+	if rawTarget != claim.RawTarget {
+		status = domain.OwnershipManagedDrifted
+	}
+	return domain.Artifact{
+		Location: claim.Target, UnitID: claim.UnitID, Ownership: status,
+		RawTarget:  rawTarget,
+		LinkDevice: linkIdentity(info).Device, LinkInode: linkIdentity(info).Inode,
+	}, true, nil
 }
 
 func validPath(artifactPath domain.ArtifactPath) bool {

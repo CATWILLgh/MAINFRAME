@@ -14,6 +14,7 @@ type Executor struct {
 	refresher      Refresher
 	workspace      LinkWorkspace
 	configurations ConfigurationWorkspace
+	ownership      OwnershipStore
 }
 
 func New(
@@ -22,9 +23,13 @@ func New(
 	refresher Refresher,
 	workspace LinkWorkspace,
 ) Executor {
-	return Executor{
+	executor := Executor{
 		locker: locker, store: store, refresher: refresher, workspace: workspace,
 	}
+	if ownership, ok := store.(OwnershipStore); ok {
+		executor.ownership = ownership
+	}
+	return executor
 }
 
 func NewWithConfiguration(
@@ -95,7 +100,7 @@ func (executor Executor) execute(preview Preview) (Result, error) {
 		return Result{}, executor.abort(&journal, err)
 	}
 	for _, operation := range preview.Plan.Operations {
-		mutation, err := executor.prepare(operation)
+		mutation, err := executor.prepare(operation, preview.Release)
 		if err != nil {
 			return Result{}, executor.abort(&journal, fmt.Errorf("prepare mutation: %w", err))
 		}
@@ -214,52 +219,15 @@ func hasMutations(journal Journal) bool {
 		len(journal.Steps) > 0
 }
 
-func (executor Executor) prepare(operation domain.Operation) (JournalMutation, error) {
-	before, err := executor.workspace.Inspect(operation.Artifact.Location)
-	if err != nil {
-		return JournalMutation{}, err
-	}
-	target, err := executor.workspace.ResolveSource(operation.SourcePath)
-	if err != nil {
-		return JournalMutation{}, err
-	}
-	mutation := JournalMutation{
-		Location:   operation.Artifact.Location,
-		SourcePath: operation.SourcePath,
-		Before:     imageOf(before),
-		Parent:     before.Parent,
-		Phase:      StepPrepared,
-	}
-	switch operation.Kind {
-	case domain.OperationInstall:
-		if before.Exists {
-			return JournalMutation{}, errors.New("install target appeared after preview")
-		}
-		mutation.Kind = MutationInstall
-		mutation.After = LinkImage{Exists: true, RawTarget: target}
-		mutation.StagedName = "staged"
-	case domain.OperationRemove:
-		if !before.Exists || before.RawTarget != target {
-			return JournalMutation{}, errors.New("remove target changed after preview")
-		}
-		mutation.Kind = MutationRemove
-		mutation.RetainedName = "retained"
-	default:
-		return JournalMutation{}, fmt.Errorf("unsupported operation %q", operation.Kind)
-	}
-	privateName, err := executor.workspace.AllocatePrivateName()
-	if err != nil {
-		return JournalMutation{}, err
-	}
-	mutation.Private.Name = privateName
-	return mutation, nil
-}
-
 func (executor Executor) executeStep(journal *Journal, index int) error {
+	if claimOnlyMutation(journal.Steps[index].Kind) {
+		return executor.publishClaim(journal, index)
+	}
 	if err := executor.preparePrivate(journal, index); err != nil {
 		return fmt.Errorf("prepare private workspace: %w", err)
 	}
-	if journal.Steps[index].Kind == MutationInstall {
+	if journal.Steps[index].Kind == MutationInstall ||
+		journal.Steps[index].Kind == MutationReplace {
 		if err := executor.stageInstall(journal, index); err != nil {
 			return fmt.Errorf("stage install: %w", err)
 		}
@@ -280,7 +248,11 @@ func (executor Executor) executeStep(journal *Journal, index int) error {
 	if publishErr != nil {
 		return fmt.Errorf("publish mutation: %w", publishErr)
 	}
-	return nil
+	return executor.publishClaim(journal, index)
+}
+
+func claimOnlyMutation(kind MutationKind) bool {
+	return kind == MutationAdopt || kind == MutationRelinquish
 }
 
 func (executor Executor) preparePrivate(journal *Journal, index int) error {
@@ -321,6 +293,9 @@ func (executor Executor) publish(step JournalMutation) (LinkState, error) {
 	if step.Kind == MutationInstall {
 		return executor.workspace.PublishInstall(mutation)
 	}
+	if step.Kind == MutationReplace {
+		return executor.workspace.PublishReplace(mutation)
+	}
 	return executor.workspace.PublishRemove(mutation)
 }
 
@@ -334,7 +309,8 @@ func confirmPublished(mutation JournalMutation, actual LinkState) error {
 	if actual.Exists && !validFileIdentity(actual.Entry) {
 		return errors.New("workspace returned an after-image without identity")
 	}
-	if mutation.Kind == MutationInstall && actual.Entry != mutation.StagedIdentity {
+	if (mutation.Kind == MutationInstall || mutation.Kind == MutationReplace) &&
+		actual.Entry != mutation.StagedIdentity {
 		return errors.New("published link identity differs from staged link")
 	}
 	if !actual.Exists && actual.Entry != (FileIdentity{}) {

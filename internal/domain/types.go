@@ -101,28 +101,43 @@ func (location Location) Valid() bool {
 }
 
 type Artifact struct {
-	Location  Location        `json:"location"`
-	Ownership OwnershipStatus `json:"ownership,omitempty"`
+	Location   Location        `json:"location"`
+	UnitID     string          `json:"unit_id,omitempty"`
+	Ownership  OwnershipStatus `json:"ownership,omitempty"`
+	RawTarget  string          `json:"raw_target,omitempty"`
+	LinkDevice uint64          `json:"link_device,omitempty"`
+	LinkInode  uint64          `json:"link_inode,omitempty"`
+}
+
+type LinkIdentity struct {
+	Device uint64 `json:"device"`
+	Inode  uint64 `json:"inode"`
 }
 
 type OwnershipStatus string
 
 const (
 	OwnershipManagedExact    OwnershipStatus = "managed_exact"
+	OwnershipManagedPrevious OwnershipStatus = "managed_previous"
 	OwnershipManagedDrifted  OwnershipStatus = "managed_drifted"
+	OwnershipManagedMissing  OwnershipStatus = "managed_missing"
+	OwnershipExactAdoptable  OwnershipStatus = "exact_adoptable"
 	OwnershipLegacyAdoptable OwnershipStatus = "legacy_adoptable"
 	OwnershipForeign         OwnershipStatus = "foreign"
 	OwnershipConflict        OwnershipStatus = "conflict"
 )
 
 func (status OwnershipStatus) Removable() bool {
-	return status == OwnershipManagedExact
+	return status == OwnershipManagedExact || status == OwnershipManagedPrevious
 }
 
 func (status OwnershipStatus) Valid() bool {
 	switch status {
 	case OwnershipManagedExact,
+		OwnershipManagedPrevious,
 		OwnershipManagedDrifted,
+		OwnershipManagedMissing,
+		OwnershipExactAdoptable,
 		OwnershipLegacyAdoptable,
 		OwnershipForeign,
 		OwnershipConflict:
@@ -135,13 +150,17 @@ func (status OwnershipStatus) Valid() bool {
 type OperationKind string
 
 const (
-	OperationInstall  OperationKind = "install"
-	OperationRemove   OperationKind = "remove"
-	OperationConflict OperationKind = "conflict"
+	OperationInstall    OperationKind = "install"
+	OperationAdopt      OperationKind = "adopt"
+	OperationReplace    OperationKind = "replace"
+	OperationRemove     OperationKind = "remove"
+	OperationRelinquish OperationKind = "relinquish"
+	OperationConflict   OperationKind = "conflict"
 )
 
 type Operation struct {
 	ComponentID ComponentID   `json:"component_id"`
+	UnitID      string        `json:"unit_id,omitempty"`
 	Kind        OperationKind `json:"kind"`
 	Artifact    Artifact      `json:"artifact"`
 	SourcePath  ArtifactPath  `json:"source_path,omitempty"`

@@ -79,6 +79,35 @@ func openStateDirectory(root string) (int, error) {
 	return -1, fmt.Errorf("state root has no path components")
 }
 
+func openExistingStateDirectory(root string) (int, error) {
+	current, err := unix.Open(
+		string(filepath.Separator),
+		unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC,
+		0,
+	)
+	if err != nil {
+		return -1, fmt.Errorf("open filesystem root: %w", err)
+	}
+	components := strings.Split(
+		strings.TrimPrefix(root, string(filepath.Separator)),
+		string(filepath.Separator),
+	)
+	for _, component := range components {
+		next, openErr := unix.Openat(
+			current,
+			component,
+			unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC,
+			0,
+		)
+		unix.Close(current)
+		if openErr != nil {
+			return -1, fmt.Errorf("open state root component %q: %w", component, openErr)
+		}
+		current = next
+	}
+	return current, nil
+}
+
 func openOrCreateDirectory(parent int, name string) (int, bool, error) {
 	flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_NOFOLLOW | unix.O_CLOEXEC
 	descriptor, err := unix.Openat(parent, name, flags, 0)
@@ -134,6 +163,18 @@ func secureDirectory(descriptor int) error {
 		return err
 	}
 	return unix.Fsync(descriptor)
+}
+
+func validateStateDirectory(descriptor int) error {
+	var metadata unix.Stat_t
+	if err := unix.Fstat(descriptor, &metadata); err != nil {
+		return err
+	}
+	if metadata.Mode&unix.S_IFMT != unix.S_IFDIR ||
+		int(metadata.Uid) != os.Geteuid() || metadata.Mode&0o777 != 0o700 {
+		return errors.New("state root metadata is unsafe")
+	}
+	return nil
 }
 
 func (state *UnixState) directoryDescriptor() (int, error) {
