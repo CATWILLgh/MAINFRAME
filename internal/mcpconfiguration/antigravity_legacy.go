@@ -147,11 +147,7 @@ func conflictingAntigravityMigration(reason string) MigrationAssessment {
 
 func hasMaterialIntent(intents []Intent, component domain.ComponentID) bool {
 	for _, intent := range intents {
-		if intent.ComponentID != component {
-			continue
-		}
-		switch intent.Kind {
-		case IntentAdd, IntentUpdate, IntentRemove:
+		if intent.ComponentID == component && isMaterialIntent(intent.Kind) {
 			return true
 		}
 	}

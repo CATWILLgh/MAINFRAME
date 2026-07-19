@@ -8,6 +8,8 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostcompatibility"
+	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
@@ -114,4 +116,78 @@ func TestCompatibilityPreservationFiltersFallbackConfiguration(t *testing.T) {
 	if !reflect.DeepEqual(preview.Configuration, configuration.Plan{}) {
 		t.Fatalf("configuration = %#v, want empty", preview.Configuration)
 	}
+}
+
+func TestCompatibilityPreservationFiltersMCPPreviewAndPreparation(t *testing.T) {
+	service := incompatibleAntigravityMCPService(t)
+	request := PreviewRequest{Components: []domain.ComponentID{domain.ComponentClaudeCode}}
+	preview, err := service.Preview(request)
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+	if len(preview.MCP.Intents) != 0 || len(preview.MCP.Migrations) != 0 || preview.MCP.Blocking {
+		t.Fatalf("preserved MCP preview = %#v", preview.MCP)
+	}
+	prepared, err := service.PrepareConfiguration(request)
+	if err != nil {
+		t.Fatalf("PrepareConfiguration() error = %v", err)
+	}
+	if len(prepared.Transitions()) != 0 {
+		t.Fatalf("preserved MCP transitions = %#v", prepared.Transitions())
+	}
+}
+
+func incompatibleAntigravityMCPService(t *testing.T) Service {
+	t.Helper()
+	projection := lifecycleAntigravityProjection()
+	host := lifecyclePreparationHost{
+		projection.Target: {
+			Kind: hostfs.EntryRegular,
+			Content: []byte(
+				`{"mcpServers":{"context7":` + projection.DesiredEntry + `}}`,
+			),
+		},
+		projection.RegistryTarget: {
+			Kind: hostfs.EntryRegular,
+			Content: []byte(
+				`{"version":1,"servers":{"context7":` + projection.DesiredEntry + `}}`,
+			),
+		},
+	}
+	genericInspection, err := configuration.Inspect(nil, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcpInspection, err := mcpconfiguration.Inspect(
+		[]releasecontract.MCPProjection{projection}, lifecycleMCPCatalog(t), host,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewWithInspections(
+		testModel(t),
+		domain.ObservedState{Components: []domain.ObservedComponent{{
+			ID: domain.ComponentAntigravity2,
+			Artifacts: []domain.Artifact{
+				artifact(
+					domain.RootAntigravityConfig,
+					"plugins/mainframe",
+					domain.OwnershipManagedExact,
+				),
+			},
+		}}},
+		genericInspection,
+		mcpInspection,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err = service.WithHostCompatibility([]hostcompatibility.Assessment{{
+		ComponentID: domain.ComponentAntigravity2,
+		Status:      hostcompatibility.StatusIncompatible,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
 }

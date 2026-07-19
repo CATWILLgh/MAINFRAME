@@ -9,6 +9,7 @@ import (
 func (service Service) PrepareConfiguration(
 	request PreviewRequest,
 ) (configuration.PreparedPlan, error) {
+	preservationRoots := service.preservationRoots(request.Components)
 	preview, err := service.Preview(request)
 	if err != nil {
 		return configuration.PreparedPlan{}, err
@@ -24,7 +25,7 @@ func (service Service) PrepareConfiguration(
 	if service.configurationInspection != nil {
 		generic, err = service.configurationInspection.PrepareWithPreservation(
 			service.configurationComponents(request.Components),
-			service.configurationComponents(service.preservationRoots(request.Components)),
+			service.configurationComponents(preservationRoots),
 		)
 		if err != nil {
 			return configuration.PreparedPlan{}, fmt.Errorf(
@@ -34,9 +35,10 @@ func (service Service) PrepareConfiguration(
 		}
 	}
 	if service.mcpInspection != nil {
-		generic, err = service.mcpInspection.PrepareOnto(
+		generic, err = service.mcpInspection.PrepareOntoWithPreservation(
 			generic,
 			request.Components,
+			preservationRoots,
 			request.MCPSelections,
 		)
 		if err != nil {

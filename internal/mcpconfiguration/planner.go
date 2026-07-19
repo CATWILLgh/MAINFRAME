@@ -14,6 +14,14 @@ func (inspection Inspection) Plan(
 	components []domain.ComponentID,
 	selections []mcpcatalog.Selection,
 ) (Plan, error) {
+	return inspection.PlanWithPreservation(components, nil, selections)
+}
+
+func (inspection Inspection) PlanWithPreservation(
+	components []domain.ComponentID,
+	preserved []domain.ComponentID,
+	selections []mcpcatalog.Selection,
+) (Plan, error) {
 	preview, err := inspection.catalog.Preview(components, selections)
 	if err != nil {
 		return Plan{}, err
@@ -24,8 +32,12 @@ func (inspection Inspection) Plan(
 	for _, component := range components {
 		active[component] = true
 	}
+	preserveOnly := make(map[domain.ComponentID]bool, len(preserved))
+	for _, component := range preserved {
+		preserveOnly[component] = !active[component]
+	}
 	for _, projection := range inspection.projections {
-		if !active[projection.ComponentID] {
+		if preserveOnly[projection.ComponentID] {
 			continue
 		}
 		intent, exists, intentBlocking := inspection.projectionIntent(
@@ -36,7 +48,8 @@ func (inspection Inspection) Plan(
 		}
 		blocking = blocking || intentBlocking
 	}
-	migrations := inspection.migrationAssessments(active)
+	migrationScope := materialMigrationScope(active, preserveOnly, intents)
+	migrations := inspection.migrationAssessments(migrationScope)
 	for _, migration := range migrations {
 		blocking = blocking || migration.Conflict &&
 			hasMaterialIntent(intents, migration.ComponentID)
@@ -48,6 +61,34 @@ func (inspection Inspection) Plan(
 		return intents[left].ServerID < intents[right].ServerID
 	})
 	return Plan{Intents: intents, Migrations: migrations, Blocking: blocking}, nil
+}
+
+func materialMigrationScope(
+	active map[domain.ComponentID]bool,
+	preserved map[domain.ComponentID]bool,
+	intents []Intent,
+) map[domain.ComponentID]bool {
+	result := make(map[domain.ComponentID]bool, len(active))
+	for component := range active {
+		if !preserved[component] {
+			result[component] = true
+		}
+	}
+	for _, intent := range intents {
+		if !preserved[intent.ComponentID] && isMaterialIntent(intent.Kind) {
+			result[intent.ComponentID] = true
+		}
+	}
+	return result
+}
+
+func isMaterialIntent(kind IntentKind) bool {
+	switch kind {
+	case IntentAdd, IntentUpdate, IntentRemove:
+		return true
+	default:
+		return false
+	}
 }
 
 func (inspection Inspection) resolveSelections(
@@ -79,16 +120,20 @@ func (inspection Inspection) projectionIntent(
 	selected bool,
 ) (Intent, bool, bool) {
 	snapshot := inspection.snapshots[projection.ID]
+	if !selected && (snapshot.registryProblem != "" || !snapshot.ownedPresent) {
+		return Intent{}, false, false
+	}
 	if snapshot.registryProblem != "" {
 		return newIntent(
 			projection, IntentConflict, snapshot.registryProblem,
 		), true, true
 	}
-	if !selected && !snapshot.ownedPresent {
-		return Intent{}, false, false
-	}
 	if snapshot.ownedTombstone {
 		intent, exists := reconcile(projection, snapshot, selected)
+		return intent, exists, false
+	}
+	if !selected {
+		intent, exists := reconcile(projection, snapshot, false)
 		return intent, exists, false
 	}
 	if snapshot.configProblem != "" {

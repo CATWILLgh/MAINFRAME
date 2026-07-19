@@ -10,7 +10,6 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/jsondocument"
-	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
@@ -23,62 +22,6 @@ type mcpPreparation struct {
 	touched    map[domain.Location]bool
 	groups     map[domain.Location]map[string]bool
 	registryOf map[domain.Location]domain.Location
-}
-
-func (inspection Inspection) Prepare(
-	components []domain.ComponentID,
-	selections []mcpcatalog.Selection,
-) (configuration.PreparedPlan, error) {
-	return inspection.PrepareOnto(
-		configuration.PreparedPlan{}, components, selections,
-	)
-}
-
-func (inspection Inspection) PrepareOnto(
-	base configuration.PreparedPlan,
-	components []domain.ComponentID,
-	selections []mcpcatalog.Selection,
-) (configuration.PreparedPlan, error) {
-	plan, err := inspection.Plan(components, selections)
-	if err != nil {
-		return configuration.PreparedPlan{}, err
-	}
-	if requiresMigrationForMaterialIntent(plan) {
-		return configuration.PreparedPlan{}, fmt.Errorf(
-			"MCP configuration migration is required before changing Antigravity MCP",
-		)
-	}
-	if plan.Blocking {
-		return configuration.PreparedPlan{}, fmt.Errorf("MCP configuration plan is blocked")
-	}
-	builder := newMCPPreparation(inspection, base)
-	for _, intent := range plan.Intents {
-		if intent.Kind == IntentReady {
-			continue
-		}
-		projection, exists := inspection.projectionByID(intent.ProjectionID)
-		if !exists {
-			return configuration.PreparedPlan{}, fmt.Errorf("unknown MCP projection %q", intent.ProjectionID)
-		}
-		if !projection.SupportsMaterialization() {
-			return configuration.PreparedPlan{}, fmt.Errorf(
-				"MCP projection %q does not support materialization",
-				projection.ID,
-			)
-		}
-		if err := builder.apply(projection, intent); err != nil {
-			return configuration.PreparedPlan{}, fmt.Errorf(
-				"prepare MCP projection %q: %w",
-				projection.ID,
-				err,
-			)
-		}
-	}
-	transitions, err := builder.transitions()
-	if err != nil {
-		return configuration.PreparedPlan{}, err
-	}
-	return configuration.NewPreparedPlan(transitions)
 }
 
 func (inspection Inspection) projectionByID(id string) (releasecontract.MCPProjection, bool) {

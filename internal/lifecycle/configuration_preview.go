@@ -84,10 +84,12 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
+	preservationRoots := service.preservationRoots(request.Components)
 	mcpPlan := mcpconfiguration.Plan{}
 	if service.mcpInspection != nil {
-		mcpPlan, err = service.mcpInspection.Plan(
+		mcpPlan, err = service.mcpInspection.PlanWithPreservation(
 			request.Components,
+			preservationRoots,
 			request.MCPSelections,
 		)
 		if err != nil {
@@ -95,7 +97,7 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 		}
 	}
 	if service.configurationInspection == nil {
-		preserved := service.configurationComponents(service.preservationRoots(request.Components))
+		preserved := service.configurationComponents(preservationRoots)
 		return Preview{
 			Filesystem:    filesystem,
 			Configuration: filterConfigurationPlan(service.configurationFallback, preserved),
@@ -103,7 +105,7 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 		}, nil
 	}
 	included := service.configurationComponents(request.Components)
-	preserved := service.configurationComponents(service.preservationRoots(request.Components))
+	preserved := service.configurationComponents(preservationRoots)
 	configurationPlan, err := service.configurationInspection.PlanWithPreservation(included, preserved)
 	if err != nil {
 		return Preview{}, fmt.Errorf("plan configuration: %w", err)

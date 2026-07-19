@@ -288,6 +288,38 @@ func TestAntigravityLegacyStateDoesNotGateCodexMaterialIntent(t *testing.T) {
 	}
 }
 
+func TestInactiveAntigravityMigrationScopeIgnoresUnrelatedMaterialIntent(t *testing.T) {
+	host := antigravityLegacyHost("", `{"mcpServers":{}}`)
+	inspection, err := mcpconfiguration.Inspect(
+		[]releasecontract.MCPProjection{antigravityProjection(), codexProjection()},
+		catalog(t), host,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := inspection.Plan(
+		[]domain.ComponentID{domain.ComponentCodex}, codexSelection(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Migrations) != 0 || len(plan.Intents) != 1 ||
+		plan.Intents[0].ComponentID != domain.ComponentCodex ||
+		plan.Intents[0].Kind != mcpconfiguration.IntentAdd {
+		t.Fatalf("isolated migration scope plan = %#v", plan)
+	}
+	prepared, err := inspection.Prepare(
+		[]domain.ComponentID{domain.ComponentCodex}, codexSelection(),
+	)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	if transitions := prepared.Transitions(); len(transitions) != 1 ||
+		transitions[0].ResourceIDs[0] != "codex.mcp.context7" {
+		t.Fatalf("transitions = %#v", transitions)
+	}
+}
+
 func antigravityLegacyHost(canonical, legacy string) *fakeHost {
 	host := antigravityPreparedHost(byteOrNil(canonical), nil)
 	if legacy != "" {
