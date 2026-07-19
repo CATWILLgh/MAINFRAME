@@ -70,6 +70,7 @@ func (client AppServerClient) ListHooks(
 		return Listing{}, fmt.Errorf("locate Codex: %w", err)
 	}
 	command := exec.CommandContext(ctx, binary, "app-server", "--stdio")
+	configureCommand(command)
 	stdin, err := command.StdinPipe()
 	if err != nil {
 		return Listing{}, fmt.Errorf("open Codex input: %w", err)
@@ -120,9 +121,33 @@ func writeRequests(writer io.Writer, cwd string) error {
 
 func readHooksList(
 	ctx context.Context,
-	reader io.Reader,
+	reader io.ReadCloser,
 	cwd string,
 ) (Listing, error) {
+	completed := make(chan hooksListReadResult, 1)
+	go func() {
+		listing, err := scanHooksList(reader, cwd)
+		completed <- hooksListReadResult{listing: listing, err: err}
+	}()
+	select {
+	case result := <-completed:
+		if err := ctx.Err(); err != nil {
+			return Listing{}, fmt.Errorf("Codex hook inspection: %w", err)
+		}
+		return result.listing, result.err
+	case <-ctx.Done():
+		_ = reader.Close()
+		<-completed
+		return Listing{}, fmt.Errorf("Codex hook inspection: %w", ctx.Err())
+	}
+}
+
+type hooksListReadResult struct {
+	listing Listing
+	err     error
+}
+
+func scanHooksList(reader io.Reader, cwd string) (Listing, error) {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 4096), maxResponseBytes)
 	for scanner.Scan() {
@@ -137,9 +162,6 @@ func readHooksList(
 	}
 	if err := scanner.Err(); err != nil {
 		return Listing{}, fmt.Errorf("read Codex response: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
-		return Listing{}, fmt.Errorf("Codex hook inspection: %w", err)
 	}
 	return Listing{}, fmt.Errorf("Codex returned no hooks/list response")
 }
@@ -232,8 +254,6 @@ func decodeRequiredArray(
 
 func reap(command *exec.Cmd, stdin io.Closer) {
 	_ = stdin.Close()
-	if command.Process != nil {
-		_ = command.Process.Kill()
-	}
+	_ = terminateCommand(command)
 	_ = command.Wait()
 }

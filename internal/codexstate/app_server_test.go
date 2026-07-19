@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
+	"io"
 	"testing"
 	"time"
 )
@@ -92,19 +91,19 @@ func TestAppServerClientReportsMissingCodexAsUnavailable(t *testing.T) {
 	}
 }
 
-func TestAppServerClientHonorsInspectionDeadline(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "codex")
-	if err := os.WriteFile(binary, []byte("#!/bin/sh\nsleep 10\n"), 0o700); err != nil {
-		t.Fatalf("write fake Codex: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+func TestReadHooksListHonorsDeadlineWhilePipeRemainsOpen(t *testing.T) {
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	fallback := time.AfterFunc(time.Second, func() { _ = writer.Close() })
+	defer fallback.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	_, err := (AppServerClient{Binary: binary}).ListHooks(ctx, "/workspace")
-	if err == nil {
-		t.Fatal("timed-out Codex inspection succeeded")
+	_, err := readHooksList(ctx, reader, "/workspace")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("readHooksList() error = %v", err)
 	}
-	if elapsed := time.Since(started); elapsed > time.Second {
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
 		t.Fatalf("deadline took %s", elapsed)
 	}
 }
