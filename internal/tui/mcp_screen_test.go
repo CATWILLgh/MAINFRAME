@@ -148,6 +148,7 @@ func TestMCPChoiceAppearsInReadOnlyPreview(t *testing.T) {
 	choice.Enabled = true
 	choice.ProfileID = "remote-api-key"
 	choice.Adapters = []domain.ComponentID{domain.ComponentCodex, domain.ComponentClaudeCode}
+	choice.credentialDraft = "test-key"
 
 	updated, command := model.openPreview()
 	if command != nil || updated.screen != screenPreview {

@@ -158,15 +158,22 @@ requires a key. Shared local process hosting is a separate runtime concern;
 direct stdio remains the default until a gateway proves real multi-client
 multiplexing and safe lifecycle ownership.
 
-The first implemented catalog milestone is intentionally read-only. The
-release index verifies a separate bounded MCP catalog by path and SHA-256, and
-the TUI records a choice between environment selection and the final preview.
-It does not yet collect a key or publish adapter configuration. Context7's
-keyless remote profile is verified for Claude Code, Codex, OpenCode, and
-Antigravity 2.x. Its keyed remote profile is verified for Claude Code, Codex,
-and OpenCode; Antigravity 2.x is explicitly unsupported until a plaintext-free
-secret reference is proven. Optional GitHub stars are fetched asynchronously,
-kept only in memory, and discarded when stale or unavailable.
+The current catalog milestone remains preview-only. The release index verifies
+a separate bounded MCP catalog by path and SHA-256, and the TUI records a
+choice between environment selection and the final preview. A keyed profile
+uses password-mode input and requires a non-blank key, but keeps it only in
+private TUI state for the process lifetime. The key never enters lifecycle
+selection types, previews, errors, logs, command arguments, or files, and is
+cleared from model-owned state when the profile no longer needs it or the TUI
+quits. Because Go strings and the input widget do not provide guaranteed memory
+zeroing, the interface promises bounded process-lifetime retention rather than
+cryptographic erasure. This milestone does not publish adapter configuration
+or store credentials. Context7's keyless remote profile is verified for Claude
+Code, Codex, OpenCode, and Antigravity 2.x. Its keyed remote profile is verified
+for Claude Code, Codex, and OpenCode; Antigravity 2.x is explicitly unsupported
+until a plaintext-free secret reference is proven. Optional GitHub stars are
+fetched asynchronously, kept only in memory, and discarded when stale or
+unavailable.
 
 The second read-only milestone gives keyless Context7 exact OpenCode, Claude
 Code, Codex, and Antigravity 2.x projections. Bundle schema version 2 links each

@@ -18,10 +18,11 @@ import (
 const repositoryStatsTimeout = 3 * time.Second
 
 type mcpChoice struct {
-	Initialized bool
-	Enabled     bool
-	ProfileID   mcpcatalog.ProfileID
-	Adapters    []domain.ComponentID
+	Initialized     bool
+	Enabled         bool
+	ProfileID       mcpcatalog.ProfileID
+	Adapters        []domain.ComponentID
+	credentialDraft string
 }
 
 type mcpMenuChoice string
@@ -59,6 +60,12 @@ func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 			return model.openMCP()
 		}
 		model.form = mcpDetailForm(model.catalog, server, model.mcpChoices[server.ID], model.selected)
+	case screenMCPCredential:
+		server, exists := model.catalog.Server(model.activeMCP)
+		if !exists {
+			return model.openMCP()
+		}
+		model.form = mcpCredentialForm(server, model.mcpChoices[server.ID])
 	default:
 		model.selected = selectableSelection(model.targets, model.selected)
 		model.form = selectionForm(model.targets, &model.selected)
@@ -77,27 +84,35 @@ func (model *Model) ensureMCPChoices() {
 			if !choice.Enabled {
 				profile, _ := server.Profile(choice.ProfileID)
 				choice.Adapters = supportedSubset(model.selected, profile)
+				normalizeMCPChoice(server, choice)
 				continue
 			}
 			choice.Adapters = selectedSubset(choice.Adapters, model.selected)
 			if len(choice.Adapters) == 0 {
 				choice.Enabled = false
 			}
+			normalizeMCPChoice(server, choice)
 			continue
 		}
 		choice.Initialized = true
 		choice.ProfileID = defaultProfile(server)
 		profile, _ := server.Profile(choice.ProfileID)
 		choice.Adapters = supportedSubset(model.selected, profile)
+		normalizeMCPChoice(server, choice)
 	}
 }
 
 func (model *Model) reconcileMCPChoices() {
-	for _, choice := range model.mcpChoices {
+	for _, server := range model.catalog.Servers() {
+		choice := model.mcpChoices[server.ID]
+		if choice == nil {
+			continue
+		}
 		choice.Adapters = selectedSubset(choice.Adapters, model.selected)
 		if len(choice.Adapters) == 0 {
 			choice.Enabled = false
 		}
+		normalizeMCPChoice(server, choice)
 	}
 }
 
@@ -173,7 +188,13 @@ func (model *Model) mcpChoiceStatus(serverID mcpcatalog.ServerID) string {
 	for index, adapter := range choice.Adapters {
 		names[index] = componentName(adapter)
 	}
-	return "added to plan, not applied · " + strings.Join(names, ", ")
+	status := "added to plan, not applied · " + strings.Join(names, ", ")
+	server, exists := model.catalog.Server(serverID)
+	if exists && profileRequiresCredential(server, choice.ProfileID) &&
+		credentialDraftProvided(choice.credentialDraft) {
+		status += " · key held in memory"
+	}
+	return status
 }
 
 func (model *Model) mcpServerCard(server mcpcatalog.Server) string {

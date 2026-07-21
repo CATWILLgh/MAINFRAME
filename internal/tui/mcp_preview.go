@@ -9,13 +9,13 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 )
 
-func renderMCPPreview(preview mcpcatalog.OnboardingPreview) string {
+func (model *Model) renderMCPPreview() string {
 	lines := []string{headingStyle.Render("MCP onboarding choices")}
-	if len(preview.Connections) == 0 {
+	if len(model.mcpPreview.Connections) == 0 {
 		lines = append(lines, mutedStyle.Render("No MCP integrations selected."))
 	} else {
-		for _, connection := range preview.Connections {
-			lines = append(lines, renderMCPConnection(connection))
+		for _, connection := range model.mcpPreview.Connections {
+			lines = append(lines, model.renderMCPConnection(connection))
 		}
 	}
 	lines = append(lines, mutedStyle.Render(
@@ -82,19 +82,32 @@ func renderMCPMigrationNotices(
 	return notices
 }
 
-func renderMCPConnection(connection mcpcatalog.Connection) string {
+func (model *Model) renderMCPConnection(connection mcpcatalog.Connection) string {
 	adapters := make([]string, len(connection.Adapters))
 	for index, adapter := range connection.Adapters {
 		adapters[index] = componentName(adapter)
 	}
 	return fmt.Sprintf(
-		"  %s · %s\n    %s\n    %s · %s",
+		"  %s · %s\n    %s\n    %s · %s\n    %s",
 		connection.ServerName,
 		connection.Profile.Name,
 		strings.Join(adapters, ", "),
 		transportName(connection.Profile.Transport),
 		authenticationRequirement(connection.Profile.Authentication.Kind),
+		model.credentialPreviewStatus(connection),
 	)
+}
+
+func (model *Model) credentialPreviewStatus(connection mcpcatalog.Connection) string {
+	if connection.Profile.Authentication.Kind != mcpcatalog.AuthenticationAPIKey &&
+		connection.Profile.ServiceCredential == nil {
+		return "No credential is held in memory."
+	}
+	choice := model.mcpChoices[connection.ServerID]
+	if choice != nil && credentialDraftProvided(choice.credentialDraft) {
+		return "API key provided for this session; not stored or applied."
+	}
+	return "API key is not provided."
 }
 
 func transportName(transport mcpcatalog.Transport) string {

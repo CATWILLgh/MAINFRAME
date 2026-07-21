@@ -24,6 +24,7 @@ const (
 	screenSelection screen = iota
 	screenMCP
 	screenMCPDetail
+	screenMCPCredential
 	screenPreview
 )
 
@@ -93,36 +94,8 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model.applyRepositoryStats(stats)
 	}
 	if key, ok := message.(tea.KeyPressMsg); ok {
-		switch key.String() {
-		case "q", "ctrl+c":
-			return model, tea.Quit
-		case "esc":
-			switch model.screen {
-			case screenSelection:
-				return model, tea.Quit
-			case screenMCP:
-				return model.backToSelection()
-			case screenMCPDetail:
-				return model.backToMCPList()
-			default:
-				if len(model.selected) == 0 {
-					return model.backToSelection()
-				}
-				return model.openMCP()
-			}
-		case "b":
-			if model.screen == screenMCP {
-				return model.backToSelection()
-			}
-			if model.screen == screenMCPDetail {
-				return model.backToMCPList()
-			}
-			if model.screen == screenPreview {
-				if len(model.selected) == 0 {
-					return model.backToSelection()
-				}
-				return model.openMCP()
-			}
+		if updated, command, handled := model.handleGlobalKey(key); handled {
+			return updated, command
 		}
 	}
 	if model.screen == screenPreview {
@@ -131,6 +104,7 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	updated, command := model.form.Update(message)
 	model.form = updated.(*huh.Form)
 	if model.form.State == huh.StateAborted {
+		model.clearCredentialDrafts()
 		return model, tea.Quit
 	}
 	if model.form.State == huh.StateCompleted {
@@ -140,6 +114,8 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case screenMCP:
 			return model.continueFromMCP()
 		case screenMCPDetail:
+			return model.continueFromMCPDetail()
+		case screenMCPCredential:
 			return model.backToMCPList()
 		}
 	}
@@ -152,6 +128,8 @@ func (model *Model) View() tea.View {
 		content = model.mcpView()
 	} else if model.screen == screenMCPDetail {
 		content = model.mcpDetailView()
+	} else if model.screen == screenMCPCredential {
+		content = model.mcpCredentialView()
 	} else if model.screen == screenPreview {
 		content = model.previewView()
 	}
@@ -165,6 +143,10 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 	model.reconcileMCPChoices()
 	mcpPreview, err := model.catalog.Preview(model.selected, model.mcpSelections())
 	if err != nil {
+		model.err = err
+		return model.reinitializeCurrentForm()
+	}
+	if err := model.validateCredentialDrafts(); err != nil {
 		model.err = err
 		return model.reinitializeCurrentForm()
 	}
@@ -243,7 +225,7 @@ func (model *Model) previewView() string {
 	}
 	sections = append(sections, renderConfigurationPlan(model.preview.Configuration))
 	sections = append(sections, renderMCPConfigurationPlan(model.preview.MCP))
-	sections = append(sections, renderMCPPreview(model.mcpPreview))
+	sections = append(sections, model.renderMCPPreview())
 	sections = append(sections, mutedStyle.Render("b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
 }
