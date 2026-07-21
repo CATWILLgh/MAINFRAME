@@ -41,11 +41,23 @@ about making every planned row reachable in the terminal.
 
 - A preview taller than the terminal can be read from first row to last row.
 - Resize events update the viewport without losing the current position.
+- Long plan rows wrap within the current terminal width instead of being
+  clipped, including configuration reasons and logical target paths.
 - Short previews retain the current compact layout.
-- Tests cover scrolling, boundaries, resize, back, and quit behavior.
+- Tests cover scrolling, wrapping, boundaries, resize, back, and quit behavior.
 
 ## Sources
 
 - `internal/tui/model.go:102`
 - `internal/tui/model.go:147`
 - `internal/tui/configuration_view.go:36`
+
+## Re-occurrence noted (2026-07-21)
+
+**Noticed during:** live 80-column smoke test of MCP catalog navigation
+**Where:** final plan rendering in `internal/tui/model.go` and configuration views
+**Additional details:** A long Antigravity observation reason was clipped at the
+right terminal edge. The same missing window-size-aware viewport that hides
+vertical overflow also leaves plan rows without a bounded wrapping width, so
+horizontal readability belongs to this existing ticket rather than a separate
+MCP navigation change.
