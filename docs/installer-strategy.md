@@ -108,6 +108,14 @@ that should receive it. Each adapter owns and observes only its own projected
 configuration; no adapter discovers an MCP server by reading another
 adapter's configuration.
 
+The TUI exposes MCP setup only after at least one environment is selected.
+With no desired environment it skips the catalog and opens the combined plan,
+so a complete uninstall remains possible without entering an irrelevant MCP
+screen. The catalog is a list: opening one server reveals its evidence,
+profiles, and compatible selected adapters. Returning saves only a draft.
+Every screen states that the machine remains unchanged until the complete plan
+is reviewed and confirmed; individual MCP screens never apply partial changes.
+
 A connection profile is one valid combination, not a Cartesian product of
 independent transport and authentication lists. It records the client-facing
 transport, endpoint or command, transport authentication, optional external

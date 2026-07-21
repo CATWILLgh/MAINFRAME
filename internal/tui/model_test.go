@@ -36,8 +36,11 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 
 	view := model.View()
 	for _, text := range []string{
-		"READ-ONLY RELEASE PREVIEW",
-		"Filesystem and supported configuration are inspected. Nothing is applied",
+		"PLAN BEFORE APPLY",
+		"Configure your choices first",
+		"Nothing changes until you review and confirm the complete plan",
+		"This build is preview-only; Apply remains disabled",
+		"MCP integrations are configured on the next step",
 		"Claude Code — installed · configuration 1 not assessed",
 		"Codex — needs attention",
 		"OpenCode — not detected",
@@ -252,7 +255,7 @@ func TestQuitKeysReturnAQuitCommand(t *testing.T) {
 	}
 }
 
-func TestEscapeAbortsSelectionButReturnsFromPreview(t *testing.T) {
+func TestEscapeAbortsSelectionAndReturnsFromPreviewToRelevantStep(t *testing.T) {
 	selection := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	selection.Init()
 	_, command := selection.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
@@ -263,8 +266,15 @@ func TestEscapeAbortsSelectionButReturnsFromPreview(t *testing.T) {
 	preview := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	preview.screen = screenPreview
 	updated, command := preview.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+	if updated.(*Model).screen != screenSelection || command == nil {
+		t.Fatal("empty selection did not return from preview to environments")
+	}
+
+	preview.selected = []domain.ComponentID{domain.ComponentClaudeCode}
+	preview.screen = screenPreview
+	updated, command = preview.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
 	if updated.(*Model).screen != screenMCP || command == nil {
-		t.Fatal("escape did not return from preview to MCP onboarding")
+		t.Fatal("selected environment did not return from preview to MCP catalog")
 	}
 }
 

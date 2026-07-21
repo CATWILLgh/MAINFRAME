@@ -23,6 +23,7 @@ type screen uint8
 const (
 	screenSelection screen = iota
 	screenMCP
+	screenMCPDetail
 	screenPreview
 )
 
@@ -37,6 +38,8 @@ type Model struct {
 	preview         lifecycle.Preview
 	mcpPreview      mcpcatalog.OnboardingPreview
 	mcpChoices      map[mcpcatalog.ServerID]*mcpChoice
+	mcpMenuChoice   mcpMenuChoice
+	activeMCP       mcpcatalog.ServerID
 	repositoryStats map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
 	statsGeneration uint64
 	err             error
@@ -99,14 +102,25 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return model, tea.Quit
 			case screenMCP:
 				return model.backToSelection()
+			case screenMCPDetail:
+				return model.backToMCPList()
 			default:
+				if len(model.selected) == 0 {
+					return model.backToSelection()
+				}
 				return model.openMCP()
 			}
 		case "b":
 			if model.screen == screenMCP {
 				return model.backToSelection()
 			}
+			if model.screen == screenMCPDetail {
+				return model.backToMCPList()
+			}
 			if model.screen == screenPreview {
+				if len(model.selected) == 0 {
+					return model.backToSelection()
+				}
 				return model.openMCP()
 			}
 		}
@@ -120,10 +134,14 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return model, tea.Quit
 	}
 	if model.form.State == huh.StateCompleted {
-		if model.screen == screenSelection {
-			return model.openMCP()
+		switch model.screen {
+		case screenSelection:
+			return model.continueFromSelection()
+		case screenMCP:
+			return model.continueFromMCP()
+		case screenMCPDetail:
+			return model.backToMCPList()
 		}
-		return model.openPreview()
 	}
 	return model, command
 }
@@ -132,6 +150,8 @@ func (model *Model) View() tea.View {
 	content := model.selectionView()
 	if model.screen == screenMCP {
 		content = model.mcpView()
+	} else if model.screen == screenMCPDetail {
+		content = model.mcpDetailView()
 	} else if model.screen == screenPreview {
 		content = model.previewView()
 	}
@@ -142,6 +162,7 @@ func (model *Model) View() tea.View {
 }
 
 func (model *Model) openPreview() (*Model, tea.Cmd) {
+	model.reconcileMCPChoices()
 	mcpPreview, err := model.catalog.Preview(model.selected, model.mcpSelections())
 	if err != nil {
 		model.err = err
@@ -183,6 +204,13 @@ func (model *Model) selectionView() string {
 	}
 	if model.err != nil {
 		sections = append(sections, errorStyle.Render(model.err.Error()))
+	}
+	if len(model.selected) == 0 {
+		sections = append(sections, mutedStyle.Render(
+			"Select at least one environment to configure MCP integrations.\nWith none selected, MCP setup is skipped.",
+		))
+	} else {
+		sections = append(sections, mutedStyle.Render("MCP integrations are configured on the next step."))
 	}
 	sections = append(sections, mutedStyle.Render("space toggle  •  enter next  •  q quit"))
 	return strings.Join(sections, "\n\n")
@@ -246,8 +274,9 @@ func selectionForm(targets []lifecycle.Target, selected *[]domain.ComponentID) *
 func header() string {
 	return strings.Join([]string{
 		brandStyle.Render("MAINFRAME"),
-		bannerStyle.Render("READ-ONLY RELEASE PREVIEW"),
-		mutedStyle.Render("Filesystem and supported configuration are inspected. Nothing is applied."),
+		bannerStyle.Render("PLAN BEFORE APPLY"),
+		mutedStyle.Render("Configure your choices first.\nNothing changes until you review and confirm the complete plan."),
+		mutedStyle.Render("This build is preview-only; Apply remains disabled."),
 	}, "\n")
 }
 

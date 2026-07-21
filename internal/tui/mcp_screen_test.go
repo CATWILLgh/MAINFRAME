@@ -5,34 +5,137 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 )
 
-func TestEnvironmentSelectionOpensMCPOnboardingBeforePreview(t *testing.T) {
+func TestEnvironmentSelectionOpensMCPListThenServerDetail(t *testing.T) {
 	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
+	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
 	updated, command := model.openMCP()
 	if updated.screen != screenMCP {
 		t.Fatalf("screen = %v", updated.screen)
 	}
 	for _, text := range []string{
-		"Optional MCP integrations",
+		"MCP integrations",
 		"Context7",
 		"Current, version-specific library documentation",
-		"github.com/upstash/context7",
-		"context7.com/docs/resources/all-clients",
-		"github.com/upstash/context7#installation",
-		"MIT",
-		"Verified 2026-07-17",
+		"not configured",
+		"Review complete plan",
+		"Nothing has been applied",
 	} {
 		if !strings.Contains(updated.View().Content, text) {
 			t.Fatalf("MCP view does not contain %q:\n%s", text, updated.View().Content)
 		}
 	}
+	if strings.Contains(updated.View().Content, "Repository:") {
+		t.Fatalf("MCP list expanded server details:\n%s", updated.View().Content)
+	}
 	if command == nil {
 		t.Fatal("opening the MCP screen must initialize its form")
+	}
+
+	updated, command = updated.openMCPDetail("context7")
+	if updated.screen != screenMCPDetail || command == nil {
+		t.Fatalf("detail screen = %v, command = %v", updated.screen, command)
+	}
+	for _, text := range []string{
+		"Configure Context7",
+		"github.com/upstash/context7",
+		"context7.com/docs/resources/all-clients",
+		"github.com/upstash/context7#installation",
+		"MIT",
+		"Verified 2026-07-17",
+		"Draft only — changes are applied with the complete plan",
+	} {
+		if !strings.Contains(updated.View().Content, text) {
+			t.Fatalf("MCP detail does not contain %q:\n%s", text, updated.View().Content)
+		}
+	}
+}
+
+func TestEmptyEnvironmentSelectionSkipsMCPAndClearsItsDraft(t *testing.T) {
+	previewer := &fakePreviewer{targets: defaultTargets()}
+	model := newTestModel(t, previewer)
+	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
+	model.openMCP()
+	choice := model.mcpChoices["context7"]
+	choice.Enabled = true
+	choice.Adapters = []domain.ComponentID{domain.ComponentClaudeCode}
+	model.screen = screenSelection
+	model.selected = nil
+	if !strings.Contains(model.View().Content, "With none selected, MCP setup is skipped") {
+		t.Fatalf("empty selection does not explain MCP behavior:\n%s", model.View().Content)
+	}
+
+	updated, command := model.continueFromSelection()
+	if command != nil || updated.screen != screenPreview {
+		t.Fatalf("screen = %v, command = %v", updated.screen, command)
+	}
+	if previewer.calls != 1 || len(previewer.mcpSelections) != 0 || choice.Enabled {
+		t.Fatalf(
+			"preview calls = %d, selections = %#v, choice = %#v",
+			previewer.calls, previewer.mcpSelections, choice,
+		)
+	}
+}
+
+func TestUnconfiguredMCPDefaultsFollowChangedEnvironmentSelection(t *testing.T) {
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
+	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
+	model.openMCP()
+	choice := model.mcpChoices["context7"]
+	if choice.Enabled || len(choice.Adapters) != 1 || choice.Adapters[0] != domain.ComponentClaudeCode {
+		t.Fatalf("initial choice = %#v", choice)
+	}
+
+	model.selected = []domain.ComponentID{domain.ComponentCodex}
+	model.openMCP()
+	if choice.Enabled || len(choice.Adapters) != 1 || choice.Adapters[0] != domain.ComponentCodex {
+		t.Fatalf("choice after environment change = %#v", choice)
+	}
+}
+
+func TestMCPDetailBackReturnsToCatalogWithDraftStatus(t *testing.T) {
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
+	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
+	model.openMCP()
+	model.openMCPDetail("context7")
+	choice := model.mcpChoices["context7"]
+	choice.Enabled = true
+	choice.Adapters = []domain.ComponentID{domain.ComponentClaudeCode}
+
+	updatedModel, command := model.Update(keyPress("b"))
+	updated := updatedModel.(*Model)
+	if updated.screen != screenMCP || command == nil {
+		t.Fatalf("screen = %v, command = %v", updated.screen, command)
+	}
+	for _, text := range []string{"Context7", "Claude Code", "added to plan, not applied"} {
+		if !strings.Contains(updated.View().Content, text) {
+			t.Fatalf("catalog does not contain %q:\n%s", text, updated.View().Content)
+		}
+	}
+}
+
+func TestMCPListEnterOpensFocusedIntegration(t *testing.T) {
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
+	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
+	model.openMCP()
+
+	updatedModel, command := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	for attempt := 0; attempt < 3 && updatedModel.(*Model).screen == screenMCP && command != nil; attempt++ {
+		updatedModel, command = updatedModel.Update(command())
+	}
+	updated := updatedModel.(*Model)
+	if updated.screen != screenMCPDetail || updated.activeMCP != "context7" || command == nil {
+		t.Fatalf(
+			"screen = %v, active MCP = %q, command = %v",
+			updated.screen, updated.activeMCP, command,
+		)
 	}
 }
 

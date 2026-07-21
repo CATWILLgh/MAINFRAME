@@ -24,6 +24,10 @@ type mcpChoice struct {
 	Adapters    []domain.ComponentID
 }
 
+type mcpMenuChoice string
+
+const mcpReviewPlan mcpMenuChoice = ":review-plan"
+
 type repositoryStatsMsg struct {
 	ServerID   mcpcatalog.ServerID
 	Generation uint64
@@ -33,11 +37,12 @@ type repositoryStatsMsg struct {
 
 func (model *Model) openMCP() (*Model, tea.Cmd) {
 	model.screen = screenMCP
+	model.activeMCP = ""
 	model.preview = lifecycle.Preview{}
 	model.mcpPreview = mcpcatalog.OnboardingPreview{}
 	model.err = nil
 	model.ensureMCPChoices()
-	model.form = mcpForm(model.catalog, model.mcpChoices, model.selected)
+	model.form = mcpCatalogForm(model.catalog, model.mcpChoices, &model.mcpMenuChoice)
 	model.statsGeneration++
 	commands := []tea.Cmd{model.form.Init()}
 	commands = append(commands, model.repositoryStatsCommands()...)
@@ -45,9 +50,16 @@ func (model *Model) openMCP() (*Model, tea.Cmd) {
 }
 
 func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
-	if model.screen == screenMCP {
-		model.form = mcpForm(model.catalog, model.mcpChoices, model.selected)
-	} else {
+	switch model.screen {
+	case screenMCP:
+		model.form = mcpCatalogForm(model.catalog, model.mcpChoices, &model.mcpMenuChoice)
+	case screenMCPDetail:
+		server, exists := model.catalog.Server(model.activeMCP)
+		if !exists {
+			return model.openMCP()
+		}
+		model.form = mcpDetailForm(model.catalog, server, model.mcpChoices[server.ID], model.selected)
+	default:
 		model.selected = selectableSelection(model.targets, model.selected)
 		model.form = selectionForm(model.targets, &model.selected)
 	}
@@ -62,13 +74,30 @@ func (model *Model) ensureMCPChoices() {
 			model.mcpChoices[server.ID] = choice
 		}
 		if choice.Initialized {
+			if !choice.Enabled {
+				profile, _ := server.Profile(choice.ProfileID)
+				choice.Adapters = supportedSubset(model.selected, profile)
+				continue
+			}
 			choice.Adapters = selectedSubset(choice.Adapters, model.selected)
+			if len(choice.Adapters) == 0 {
+				choice.Enabled = false
+			}
 			continue
 		}
 		choice.Initialized = true
 		choice.ProfileID = defaultProfile(server)
 		profile, _ := server.Profile(choice.ProfileID)
 		choice.Adapters = supportedSubset(model.selected, profile)
+	}
+}
+
+func (model *Model) reconcileMCPChoices() {
+	for _, choice := range model.mcpChoices {
+		choice.Adapters = selectedSubset(choice.Adapters, model.selected)
+		if len(choice.Adapters) == 0 {
+			choice.Enabled = false
+		}
 	}
 }
 
@@ -88,16 +117,63 @@ func (model *Model) mcpSelections() []mcpcatalog.Selection {
 }
 
 func (model *Model) mcpView() string {
-	sections := []string{header(), headingStyle.Render("Optional MCP integrations")}
+	sections := []string{
+		header(),
+		headingStyle.Render("MCP integrations"),
+		"Open an integration to configure it.\nChoices stay in the draft until the complete plan is reviewed.",
+	}
 	for _, server := range model.catalog.Servers() {
-		sections = append(sections, model.mcpServerCard(server))
+		sections = append(sections, model.mcpServerListItem(server))
 	}
 	sections = append(sections, model.form.View())
 	if model.err != nil {
 		sections = append(sections, errorStyle.Render(model.err.Error()))
 	}
-	sections = append(sections, mutedStyle.Render("space toggle  •  enter preview  •  b back  •  q quit"))
+	sections = append(sections, mutedStyle.Render("Nothing has been applied.  •  enter open  •  b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
+}
+
+func (model *Model) mcpDetailView() string {
+	server, exists := model.catalog.Server(model.activeMCP)
+	if !exists {
+		return strings.Join([]string{header(), errorStyle.Render("Selected MCP integration is unavailable.")}, "\n\n")
+	}
+	sections := []string{
+		header(),
+		headingStyle.Render("Configure " + server.Name),
+		model.mcpServerCard(server),
+		bannerStyle.Render("Draft only — changes are applied with the complete plan."),
+		model.form.View(),
+	}
+	if model.err != nil {
+		sections = append(sections, errorStyle.Render(model.err.Error()))
+	}
+	sections = append(sections, mutedStyle.Render("enter next / save draft  •  b back  •  q quit"))
+	return strings.Join(sections, "\n\n")
+}
+
+func (model *Model) mcpServerListItem(server mcpcatalog.Server) string {
+	lines := []string{
+		headingStyle.Render(server.Name),
+		server.Summary,
+		"Status: " + model.mcpChoiceStatus(server.ID),
+	}
+	if stats, exists := model.repositoryStats[server.ID]; exists {
+		lines = append(lines, fmt.Sprintf("Popularity only: %d stars", stats.Stars))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (model *Model) mcpChoiceStatus(serverID mcpcatalog.ServerID) string {
+	choice := model.mcpChoices[serverID]
+	if choice == nil || !choice.Enabled || len(choice.Adapters) == 0 {
+		return "not configured"
+	}
+	names := make([]string, len(choice.Adapters))
+	for index, adapter := range choice.Adapters {
+		names[index] = componentName(adapter)
+	}
+	return "added to plan, not applied · " + strings.Join(names, ", ")
 }
 
 func (model *Model) mcpServerCard(server mcpcatalog.Server) string {
@@ -119,28 +195,46 @@ func (model *Model) mcpServerCard(server mcpcatalog.Server) string {
 	return strings.Join(lines, "\n")
 }
 
-func mcpForm(
+func mcpCatalogForm(
 	catalog mcpcatalog.Catalog,
 	choices map[mcpcatalog.ServerID]*mcpChoice,
+	selected *mcpMenuChoice,
+) *huh.Form {
+	options := make([]huh.Option[mcpMenuChoice], 0, len(catalog.Servers())+1)
+	for _, server := range catalog.Servers() {
+		status := "not configured"
+		choice := choices[server.ID]
+		if choice != nil && choice.Enabled && len(choice.Adapters) > 0 {
+			status = "draft configured"
+		}
+		options = append(options, huh.NewOption(
+			fmt.Sprintf("%s — %s", server.Name, status), mcpMenuChoice(server.ID),
+		))
+	}
+	options = append(options, huh.NewOption("Review complete plan", mcpReviewPlan))
+	field := huh.NewSelect[mcpMenuChoice]().
+		Title("Choose an integration").
+		Options(options...).
+		Value(selected)
+	return huh.NewForm(huh.NewGroup(field)).WithShowHelp(false)
+}
+
+func mcpDetailForm(
+	catalog mcpcatalog.Catalog,
+	server mcpcatalog.Server,
+	choice *mcpChoice,
 	selected []domain.ComponentID,
 ) *huh.Form {
-	groups := make([]*huh.Group, 0)
-	for _, server := range catalog.Servers() {
-		server := server
-		choice := choices[server.ID]
-		confirm := huh.NewConfirm().
-			Title("Configure " + server.Name + "?").
-			Affirmative("Configure").
-			Negative("Skip").
-			Value(&choice.Enabled)
-		groups = append(groups, huh.NewGroup(confirm))
-		details := huh.NewGroup(
-			profileField(server, choice),
-			adapterField(catalog, server, choice, selected),
-		).WithHideFunc(func() bool { return !choice.Enabled })
-		groups = append(groups, details)
-	}
-	return huh.NewForm(groups...).WithShowHelp(false)
+	confirm := huh.NewConfirm().
+		Title("Include " + server.Name + " in the plan?").
+		Affirmative("Add to plan").
+		Negative("Not configured").
+		Value(&choice.Enabled)
+	details := huh.NewGroup(
+		profileField(server, choice),
+		adapterField(catalog, server, choice, selected),
+	).WithHideFunc(func() bool { return !choice.Enabled })
+	return huh.NewForm(huh.NewGroup(confirm), details).WithShowHelp(false)
 }
 
 func profileField(server mcpcatalog.Server, choice *mcpChoice) *huh.Select[mcpcatalog.ProfileID] {
@@ -219,7 +313,8 @@ func (model *Model) repositoryStatsCommands() []tea.Cmd {
 }
 
 func (model *Model) applyRepositoryStats(message repositoryStatsMsg) (tea.Model, tea.Cmd) {
-	if model.screen != screenMCP || message.Generation != model.statsGeneration || message.Err != nil {
+	if (model.screen != screenMCP && model.screen != screenMCPDetail) ||
+		message.Generation != model.statsGeneration || message.Err != nil {
 		return model, nil
 	}
 	model.repositoryStats[message.ServerID] = message.Stats
