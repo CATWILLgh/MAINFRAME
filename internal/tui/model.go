@@ -21,29 +21,34 @@ type Previewer interface {
 type screen uint8
 
 const (
-	screenSelection screen = iota
+	screenMain screen = iota
+	screenSelection
 	screenMCP
 	screenMCPDetail
 	screenMCPCredential
+	screenDiagnostics
 	screenPreview
 )
 
 type Model struct {
-	previewer       Previewer
-	catalog         mcpcatalog.Catalog
-	stats           mcpcatalog.StatsSource
-	targets         []lifecycle.Target
-	selected        []domain.ComponentID
-	form            *huh.Form
-	screen          screen
-	preview         lifecycle.Preview
-	mcpPreview      mcpcatalog.OnboardingPreview
-	mcpChoices      map[mcpcatalog.ServerID]*mcpChoice
-	mcpMenuChoice   mcpMenuChoice
-	activeMCP       mcpcatalog.ServerID
-	repositoryStats map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
-	statsGeneration uint64
-	err             error
+	previewer           Previewer
+	catalog             mcpcatalog.Catalog
+	stats               mcpcatalog.StatsSource
+	targets             []lifecycle.Target
+	selected            []domain.ComponentID
+	form                *huh.Form
+	screen              screen
+	preview             lifecycle.Preview
+	mcpPreview          mcpcatalog.OnboardingPreview
+	mcpChoices          map[mcpcatalog.ServerID]*mcpChoice
+	mcpMenuChoice       mcpMenuChoice
+	mainMenuChoice      mainMenuChoice
+	diagnostics         diagnosticsChoice
+	diagnosticsSelected []diagnosticsFeature
+	activeMCP           mcpcatalog.ServerID
+	repositoryStats     map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
+	statsGeneration     uint64
+	err                 error
 }
 
 var (
@@ -80,8 +85,9 @@ func NewModel(
 		selected:        selected,
 		mcpChoices:      make(map[mcpcatalog.ServerID]*mcpChoice),
 		repositoryStats: make(map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats),
+		mainMenuChoice:  mainMenuEnvironments,
 	}
-	model.form = selectionForm(targets, &model.selected)
+	model.form = mainMenuForm(model)
 	return model
 }
 
@@ -109,6 +115,8 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if model.form.State == huh.StateCompleted {
 		switch model.screen {
+		case screenMain:
+			return model.continueFromMain()
 		case screenSelection:
 			return model.continueFromSelection()
 		case screenMCP:
@@ -117,19 +125,25 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model.continueFromMCPDetail()
 		case screenMCPCredential:
 			return model.backToMCPList()
+		case screenDiagnostics:
+			return model.continueFromDiagnostics()
 		}
 	}
 	return model, command
 }
 
 func (model *Model) View() tea.View {
-	content := model.selectionView()
-	if model.screen == screenMCP {
+	content := model.mainView()
+	if model.screen == screenSelection {
+		content = model.selectionView()
+	} else if model.screen == screenMCP {
 		content = model.mcpView()
 	} else if model.screen == screenMCPDetail {
 		content = model.mcpDetailView()
 	} else if model.screen == screenMCPCredential {
 		content = model.mcpCredentialView()
+	} else if model.screen == screenDiagnostics {
+		content = model.diagnosticsView()
 	} else if model.screen == screenPreview {
 		content = model.previewView()
 	}
@@ -140,7 +154,7 @@ func (model *Model) View() tea.View {
 }
 
 func (model *Model) openPreview() (*Model, tea.Cmd) {
-	model.reconcileMCPChoices()
+	model.reconcileDependentDrafts()
 	mcpPreview, err := model.catalog.Preview(model.selected, model.mcpSelections())
 	if err != nil {
 		model.err = err
@@ -165,16 +179,6 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 	return model, nil
 }
 
-func (model *Model) backToSelection() (*Model, tea.Cmd) {
-	model.screen = screenSelection
-	model.preview = lifecycle.Preview{}
-	model.mcpPreview = mcpcatalog.OnboardingPreview{}
-	model.err = nil
-	model.selected = selectableSelection(model.targets, model.selected)
-	model.form = selectionForm(model.targets, &model.selected)
-	return model, model.form.Init()
-}
-
 func (model *Model) selectionView() string {
 	sections := []string{
 		header(),
@@ -189,12 +193,14 @@ func (model *Model) selectionView() string {
 	}
 	if len(model.selected) == 0 {
 		sections = append(sections, mutedStyle.Render(
-			"Select at least one environment to configure MCP integrations.\nWith none selected, MCP setup is skipped.",
+			"With none selected, MCP integrations and local diagnostics are unavailable.",
 		))
 	} else {
-		sections = append(sections, mutedStyle.Render("MCP integrations are configured on the next step."))
+		sections = append(sections, mutedStyle.Render(
+			"Return to the overview to configure MCP and local diagnostics.",
+		))
 	}
-	sections = append(sections, mutedStyle.Render("space toggle  •  enter next  •  q quit"))
+	sections = append(sections, mutedStyle.Render("space toggle  •  enter save  •  b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
 }
 
@@ -226,6 +232,7 @@ func (model *Model) previewView() string {
 	sections = append(sections, renderConfigurationPlan(model.preview.Configuration))
 	sections = append(sections, renderMCPConfigurationPlan(model.preview.MCP))
 	sections = append(sections, model.renderMCPPreview())
+	sections = append(sections, model.renderDiagnosticsPreview())
 	sections = append(sections, mutedStyle.Render("b back  •  q quit"))
 	return strings.Join(sections, "\n\n")
 }

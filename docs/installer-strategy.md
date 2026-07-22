@@ -99,6 +99,50 @@ prepared transition or executor journal. Deselection suppresses them without
 revoking external state. An unavailable or incompatible Codex executable
 produces a non-blocking notice rather than a misleading `/hooks` instruction.
 
+## Local diagnostics reuse the DEV instrumentation
+
+The first TUI screen is a settings overview rather than the first step of a
+one-way wizard. It opens environments, MCP integrations, and local diagnostics
+as independent sections. Every section returns to the overview. Only the
+combined plan can eventually apply their desired state, and the current
+preview-only build says so before the user opens any section.
+
+Local diagnostics reuse the mechanisms already proven by `install.sh --dev`:
+
+- `telemetry.py` and `_hooklib.log_event` produce metadata rows in a local
+  SQLite database;
+- `harness-feedback` writes structured local friction reports;
+- `build_hub_page.py` provides reusable static display and query groundwork.
+
+The old `--dev` flag remains an all-in-one Claude Code development shortcut
+until the TUI reaches apply parity. It is not the new product model. The TUI
+separates two choices: local diagnostic events and `harness-feedback` reports.
+Both are off unless the user chooses them, neither sends data over the network,
+and neither is useful until at least one environment is selected.
+
+The TUI may present one concise choice across the selected environments, but
+materialization stays adapter-owned. Each selected adapter receives its own
+activation state, event database, feedback receiver, and reports under its own
+configuration or data root. One adapter never reads another adapter's
+diagnostic data. The neutral `mainframe` command may aggregate those stores for
+the user because it owns the management interface; aggregation does not turn
+the stores into a shared runtime dependency.
+
+A database path is only a locator, never consent. Adapter launchers must not
+set an override that implicitly creates a telemetry directory. Existing data
+is preserved when collection is disabled. Before diagnostics enter an
+executable plan, the lifecycle needs an explicit adapter-local activation
+resource, observation of current state, bounded retention, and `0700`/`0600`
+directory and file permissions.
+
+The current `hub.html` is static, repo-oriented, and reads one legacy database.
+It is not yet the finished local dashboard. A later
+`mainframe diagnostics serve` command may reuse its visual and query layer
+while serving adapter-owned stores on demand over loopback only. It must not
+require an always-running system service; persistence through a per-user
+service can be considered only after the on-demand path is complete and
+measured.
+
 ## MCP onboarding is catalog-driven and adapter-owned
 
 MAINFRAME may ship a verified catalog of MCP server descriptions and adapter
@@ -108,13 +152,14 @@ that should receive it. Each adapter owns and observes only its own projected
 configuration; no adapter discovers an MCP server by reading another
 adapter's configuration.
 
-The TUI exposes MCP setup only after at least one environment is selected.
-With no desired environment it skips the catalog and opens the combined plan,
-so a complete uninstall remains possible without entering an irrelevant MCP
-screen. The catalog is a list: opening one server reveals its evidence,
-profiles, and compatible selected adapters. Returning saves only a draft.
-Every screen states that the machine remains unchanged until the complete plan
-is reviewed and confirmed; individual MCP screens never apply partial changes.
+The TUI exposes MCP setup only after at least one environment is selected. With
+no desired environment the overview keeps MCP and diagnostics unavailable and
+explains why; the combined-plan entry remains available, so a complete
+uninstall is still possible. The catalog is a list: opening one server reveals
+its evidence, profiles, and compatible selected adapters. Returning saves only
+a draft and goes back to the overview. Every screen states that the machine
+remains unchanged until the complete plan is reviewed and confirmed;
+individual MCP screens never apply partial changes.
 
 A connection profile is one valid combination, not a Cartesian product of
 independent transport and authentication lists. It records the client-facing

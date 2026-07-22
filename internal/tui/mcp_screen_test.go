@@ -25,7 +25,7 @@ func TestEnvironmentSelectionOpensMCPListThenServerDetail(t *testing.T) {
 		"Context7",
 		"Current, version-specific library documentation",
 		"not configured",
-		"Review complete plan",
+		"Back to settings overview",
 		"Nothing has been applied",
 	} {
 		if !strings.Contains(updated.View().Content, text) {
@@ -58,7 +58,7 @@ func TestEnvironmentSelectionOpensMCPListThenServerDetail(t *testing.T) {
 	}
 }
 
-func TestEmptyEnvironmentSelectionSkipsMCPAndClearsItsDraft(t *testing.T) {
+func TestEmptyEnvironmentSelectionDisablesMCPAndReturnsToOverview(t *testing.T) {
 	previewer := &fakePreviewer{targets: defaultTargets()}
 	model := newTestModel(t, previewer)
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
@@ -66,17 +66,17 @@ func TestEmptyEnvironmentSelectionSkipsMCPAndClearsItsDraft(t *testing.T) {
 	choice := model.mcpChoices["context7"]
 	choice.Enabled = true
 	choice.Adapters = []domain.ComponentID{domain.ComponentClaudeCode}
-	model.screen = screenSelection
+	model.openSelection()
 	model.selected = nil
-	if !strings.Contains(model.View().Content, "With none selected, MCP setup is skipped") {
+	if !strings.Contains(model.View().Content, "MCP integrations and local diagnostics are unavailable") {
 		t.Fatalf("empty selection does not explain MCP behavior:\n%s", model.View().Content)
 	}
 
 	updated, command := model.continueFromSelection()
-	if command != nil || updated.screen != screenPreview {
+	if command == nil || updated.screen != screenMain {
 		t.Fatalf("screen = %v, command = %v", updated.screen, command)
 	}
-	if previewer.calls != 1 || len(previewer.mcpSelections) != 0 || choice.Enabled {
+	if previewer.calls != 0 || len(previewer.mcpSelections) != 0 || choice.Enabled {
 		t.Fatalf(
 			"preview calls = %d, selections = %#v, choice = %#v",
 			previewer.calls, previewer.mcpSelections, choice,
@@ -276,7 +276,7 @@ func TestMCPStatsFailureDoesNotBlockNavigation(t *testing.T) {
 		t.Fatal("repository metadata must run as an asynchronous command")
 	}
 	updated, navigation := model.Update(keyPress("b"))
-	if updated.(*Model).screen != screenSelection || navigation == nil {
+	if updated.(*Model).screen != screenMain || navigation == nil {
 		t.Fatal("repository metadata prevented immediate back navigation")
 	}
 }

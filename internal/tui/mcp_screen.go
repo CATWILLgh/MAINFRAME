@@ -27,7 +27,7 @@ type mcpChoice struct {
 
 type mcpMenuChoice string
 
-const mcpReviewPlan mcpMenuChoice = ":review-plan"
+const mcpBackToOverview mcpMenuChoice = ":back-to-overview"
 
 type repositoryStatsMsg struct {
 	ServerID   mcpcatalog.ServerID
@@ -52,6 +52,11 @@ func (model *Model) openMCP() (*Model, tea.Cmd) {
 
 func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 	switch model.screen {
+	case screenMain:
+		model.form = mainMenuForm(model)
+	case screenSelection:
+		model.selected = selectableSelection(model.targets, model.selected)
+		model.form = selectionForm(model.targets, &model.selected)
 	case screenMCP:
 		model.form = mcpCatalogForm(model.catalog, model.mcpChoices, &model.mcpMenuChoice)
 	case screenMCPDetail:
@@ -66,9 +71,10 @@ func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 			return model.openMCP()
 		}
 		model.form = mcpCredentialForm(server, model.mcpChoices[server.ID])
+	case screenDiagnostics:
+		model.form = diagnosticsForm(&model.diagnosticsSelected)
 	default:
-		model.selected = selectableSelection(model.targets, model.selected)
-		model.form = selectionForm(model.targets, &model.selected)
+		model.form = mainMenuForm(model)
 	}
 	return model, model.form.Init()
 }
@@ -232,7 +238,7 @@ func mcpCatalogForm(
 			fmt.Sprintf("%s — %s", server.Name, status), mcpMenuChoice(server.ID),
 		))
 	}
-	options = append(options, huh.NewOption("Review complete plan", mcpReviewPlan))
+	options = append(options, huh.NewOption("Back to settings overview", mcpBackToOverview))
 	field := huh.NewSelect[mcpMenuChoice]().
 		Title("Choose an integration").
 		Options(options...).

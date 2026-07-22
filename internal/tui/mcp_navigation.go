@@ -9,16 +9,20 @@ import (
 )
 
 func (model *Model) continueFromSelection() (*Model, tea.Cmd) {
+	model.reconcileDependentDrafts()
+	return model.openMain()
+}
+
+func (model *Model) reconcileDependentDrafts() {
+	model.reconcileMCPChoices()
 	if len(model.selected) == 0 {
-		model.reconcileMCPChoices()
-		return model.openPreview()
+		model.diagnostics = diagnosticsChoice{}
 	}
-	return model.openMCP()
 }
 
 func (model *Model) continueFromMCP() (*Model, tea.Cmd) {
-	if model.mcpMenuChoice == mcpReviewPlan {
-		return model.openPreview()
+	if model.mcpMenuChoice == mcpBackToOverview {
+		return model.openMain()
 	}
 	return model.openMCPDetail(mcpcatalog.ServerID(model.mcpMenuChoice))
 }

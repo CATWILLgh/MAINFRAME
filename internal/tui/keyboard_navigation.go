@@ -25,39 +25,42 @@ func (model *Model) handleGlobalKey(key tea.KeyPressMsg) (*Model, tea.Cmd, bool)
 
 func (model *Model) handleEscape() (*Model, tea.Cmd) {
 	switch model.screen {
-	case screenSelection:
+	case screenMain:
 		model.clearCredentialDrafts()
 		return model, tea.Quit
+	case screenSelection:
+		return model.continueFromSelection()
 	case screenMCP:
-		return model.backToSelection()
+		return model.openMain()
 	case screenMCPDetail:
 		return model.backToMCPList()
 	case screenMCPCredential:
 		return model.backToMCPDetail()
+	case screenDiagnostics:
+		return model.continueFromDiagnostics()
 	default:
-		if len(model.selected) == 0 {
-			return model.backToSelection()
-		}
-		return model.openMCP()
+		return model.openMain()
 	}
 }
 
 func (model *Model) handleBack() (*Model, tea.Cmd, bool) {
 	switch model.screen {
+	case screenSelection:
+		updated, command := model.continueFromSelection()
+		return updated, command, true
+	case screenMCP:
+		updated, command := model.openMain()
+		return updated, command, true
+	case screenDiagnostics:
+		updated, command := model.continueFromDiagnostics()
+		return updated, command, true
 	case screenMCPCredential:
 		return model, nil, false
-	case screenMCP:
-		updated, command := model.backToSelection()
-		return updated, command, true
 	case screenMCPDetail:
 		updated, command := model.backToMCPList()
 		return updated, command, true
 	case screenPreview:
-		if len(model.selected) == 0 {
-			updated, command := model.backToSelection()
-			return updated, command, true
-		}
-		updated, command := model.openMCP()
+		updated, command := model.openMain()
 		return updated, command, true
 	default:
 		return model, nil, false

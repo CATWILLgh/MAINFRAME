@@ -32,7 +32,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 		{ID: domain.ComponentOpenCode, Status: lifecycle.StatusAbsent},
 		{ID: domain.ComponentAntigravity2, Status: lifecycle.StatusAbsent},
 	}})
-	model.Init()
+	model.openSelection()
 
 	view := model.View()
 	for _, text := range []string{
@@ -40,7 +40,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 		"Configure your choices first",
 		"Nothing changes until you review and confirm the complete plan",
 		"This build is preview-only; Apply remains disabled",
-		"MCP integrations are configured on the next step",
+		"Return to the overview to configure MCP and local diagnostics",
 		"Claude Code — installed · configuration 1 not assessed",
 		"Codex — needs attention",
 		"OpenCode — not detected",
@@ -183,7 +183,7 @@ func TestConfigurationLabelsExplainEveryObservationReason(t *testing.T) {
 
 func TestHuhSelectionUpdatesModelOwnedDesiredState(t *testing.T) {
 	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
-	model.Init()
+	model.openSelection()
 	updated, _ := model.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace, Text: " "}))
 	model = updated.(*Model)
 
@@ -204,7 +204,7 @@ func TestPreviewBackPreservesSelection(t *testing.T) {
 
 	updatedModel, command := model.Update(keyPress("b"))
 	updated := updatedModel.(*Model)
-	if updated.screen != screenMCP {
+	if updated.screen != screenMain {
 		t.Fatalf("screen = %v", updated.screen)
 	}
 	if !reflect.DeepEqual(updated.selected, model.selected) {
@@ -234,7 +234,7 @@ func TestPreviewErrorIsRenderedWithoutLeavingSelection(t *testing.T) {
 	})
 
 	updated, command := model.openPreview()
-	if updated.screen != screenSelection {
+	if updated.screen != screenMain {
 		t.Fatalf("screen = %v", updated.screen)
 	}
 	if !strings.Contains(updated.View().Content, "planner unavailable") {
@@ -257,7 +257,7 @@ func TestQuitKeysReturnAQuitCommand(t *testing.T) {
 
 func TestEscapeAbortsSelectionAndReturnsFromPreviewToRelevantStep(t *testing.T) {
 	selection := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
-	selection.Init()
+	selection.openSelection()
 	_, command := selection.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
 	if command == nil {
 		t.Fatal("escape did not abort selection")
@@ -266,15 +266,15 @@ func TestEscapeAbortsSelectionAndReturnsFromPreviewToRelevantStep(t *testing.T) 
 	preview := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	preview.screen = screenPreview
 	updated, command := preview.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-	if updated.(*Model).screen != screenSelection || command == nil {
-		t.Fatal("empty selection did not return from preview to environments")
+	if updated.(*Model).screen != screenMain || command == nil {
+		t.Fatal("empty selection did not return from preview to settings overview")
 	}
 
 	preview.selected = []domain.ComponentID{domain.ComponentClaudeCode}
 	preview.screen = screenPreview
 	updated, command = preview.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
-	if updated.(*Model).screen != screenMCP || command == nil {
-		t.Fatal("selected environment did not return from preview to MCP catalog")
+	if updated.(*Model).screen != screenMain || command == nil {
+		t.Fatal("selected environment did not return from preview to settings overview")
 	}
 }
 

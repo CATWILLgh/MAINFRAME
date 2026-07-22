@@ -23,7 +23,7 @@ func TestSelectionExplainsAndExcludesUnavailableEnvironment(t *testing.T) {
 			},
 		},
 	}})
-	model.Init()
+	model.openSelection()
 
 	view := model.View().Content
 	for _, text := range []string{
@@ -54,7 +54,7 @@ func TestSelectionSanitizesStaleUnavailableSelectionOnRebuild(t *testing.T) {
 		},
 	}})
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode, domain.ComponentAntigravity2}
-	model.backToSelection()
+	model.openSelection()
 	if !reflect.DeepEqual(model.selected, []domain.ComponentID{domain.ComponentClaudeCode}) {
 		t.Fatalf("selected = %#v", model.selected)
 	}
@@ -72,6 +72,7 @@ func TestCompatibilityMessagesDoNotExposeDiscoveryDetails(t *testing.T) {
 				ComponentID: domain.ComponentAntigravity2, Status: status,
 			},
 		}}})
+		model.openSelection()
 		view := model.View().Content
 		if !strings.Contains(view, message) {
 			t.Fatalf("status %q view:\n%s", status, view)
