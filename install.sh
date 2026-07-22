@@ -186,6 +186,7 @@ OPTIONAL_MANAGED_SOURCES=(
 GENERATED_DEV_SOURCES=(
     "workspace/runtime"
 )
+DEV_DIAGNOSTICS_DOCUMENT='{"schema_version":1,"events":true,"feedback":true}'
 SECRET_HELPER_SOURCE="dist/claude-code/scripts/secret"
 CREDENTIALS_INDEX_SOURCE="dist/claude-code/templates/credentials-index.md"
 
@@ -365,6 +366,51 @@ check_required_install_sources() {
         done
     fi
     return "$failed"
+}
+
+_prepare_private_dev_directory() {
+    local path="$1"
+    if [[ -L "$path" || ( -e "$path" && ! -d "$path" ) ]]; then
+        log_error "dev diagnostics path is not a real directory: ${path}"
+        return 1
+    fi
+    mkdir -p "$path" || return 1
+    chmod 700 "$path" || return 1
+}
+
+preflight_dev_runtime() {
+    local runtime="${PROJECT_ROOT}/workspace/runtime"
+    local path config="${runtime}/diagnostics.json"
+    for path in "$runtime" "${runtime}/telemetry" "${runtime}/feedback"; do
+        if [[ -L "$path" || ( -e "$path" && ! -d "$path" ) ]]; then
+            log_error "dev diagnostics path is not a real directory: ${path}"
+            return 1
+        fi
+    done
+    if [[ -L "$config" || ( -e "$config" && ! -f "$config" ) ]]; then
+        log_error "dev diagnostics config is not a regular file: ${config}"
+        return 1
+    fi
+}
+
+bootstrap_dev_runtime() {
+    local runtime="${PROJECT_ROOT}/workspace/runtime"
+    local config="${runtime}/diagnostics.json" temporary
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would create/tighten workspace/runtime/{telemetry,feedback} to 0700"
+        log_action "would write workspace/runtime/diagnostics.json with events/feedback enabled and mode 0600"
+        return 0
+    fi
+    _prepare_private_dev_directory "$runtime" || return 1
+    _prepare_private_dev_directory "${runtime}/telemetry" || return 1
+    _prepare_private_dev_directory "${runtime}/feedback" || return 1
+    temporary="$(mktemp "${config}.tmp.XXXXXX")" || return 1
+    if ! printf '%s\n' "$DEV_DIAGNOSTICS_DOCUMENT" > "$temporary" ||
+            ! chmod 600 "$temporary" || ! mv -f "$temporary" "$config"; then
+        rm -f "$temporary"
+        log_error "could not publish dev diagnostics config: ${config}"
+        return 1
+    fi
 }
 
 # Warn (do NOT fail) if python3 is missing. The hub's hooks (CLAUDE.md/skill
@@ -1438,6 +1484,10 @@ main() {
         log_error "Install aborted before changes because required sources are unavailable."
         return 1
     fi
+    if [[ $DEV -eq 1 ]] && ! preflight_dev_runtime; then
+        log_error "Install aborted before changes because DEV diagnostics state is unsafe."
+        return 1
+    fi
     if [[ $DRY_RUN -eq 0 ]] && ! acquire_transaction_lock; then
         return 1
     fi
@@ -1467,12 +1517,7 @@ main() {
         install_one "$src" "$tgt"
     done
     if [[ $DEV -eq 1 ]]; then
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log_action "would create workspace/runtime/{telemetry,feedback} (hub data, gitignored)"
-        else
-            mkdir -p "${PROJECT_ROOT}/workspace/runtime/telemetry" \
-                     "${PROJECT_ROOT}/workspace/runtime/feedback"
-        fi
+        bootstrap_dev_runtime || return 1
         for entry in "${DEV_ARTIFACTS[@]}"; do
             install_one "${entry%%:*}" "${entry##*:}"
         done

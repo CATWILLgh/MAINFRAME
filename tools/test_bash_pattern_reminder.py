@@ -15,6 +15,11 @@ import tempfile
 
 os.environ["MAINFRAME_TELEMETRY_DB"] = os.path.join(
     tempfile.mkdtemp(prefix="bpr-telemetry-"), "telemetry.db")
+_DIAGNOSTICS_CONFIG = os.path.join(
+    os.path.dirname(os.environ["MAINFRAME_TELEMETRY_DB"]), "diagnostics.json")
+with open(_DIAGNOSTICS_CONFIG, "w", encoding="utf-8") as _config:
+    json.dump({"schema_version": 1, "events": True}, _config)
+os.environ["MAINFRAME_DIAGNOSTICS_CONFIG"] = _DIAGNOSTICS_CONFIG
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(

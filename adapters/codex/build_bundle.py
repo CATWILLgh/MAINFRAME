@@ -208,6 +208,10 @@ def _project_gates(root: Path, output: Path, profile) -> None:
         f'os.path.join({CODEX_CONFIG_EXPRESSION}, "mainframe", '
         '"telemetry", "telemetry.db")'
     )
+    diagnostics = (
+        f'os.path.join({CODEX_CONFIG_EXPRESSION}, "mainframe", '
+        '"diagnostics.json")'
+    )
     for detector in sorted((output / "detectors").rglob("*.py")):
         projected = detector.read_text()
         if detector.name == "_hooklib.py":
@@ -216,6 +220,7 @@ def _project_gates(root: Path, output: Path, profile) -> None:
                 detector,
                 feedback=feedback,
                 telemetry=telemetry,
+                diagnostics=diagnostics,
             )
         projected = projected.replace(
             "~/.claude/hooks/path-validation.py",

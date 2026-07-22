@@ -23,7 +23,9 @@ rejects them before executor resources open.
 The existing DEV implementation is also uneven: Claude Code uses the legacy
 `install.sh --dev` links, while the other adapters already carry projected
 event producers but do not have complete, separately managed activation and
-feedback resources.
+feedback resources. Event and feedback writers now fail closed behind the
+versioned activation document and protect newly written data with private
+permissions; those writers are not yet activated by an executable TUI plan.
 
 ## Why it is a problem
 

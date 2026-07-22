@@ -47,7 +47,9 @@ def fixture_root() -> Path:
         root / "core/gates/detectors/_hooklib.py",
         'FEEDBACK = os.path.expanduser("~/.claude/skills/harness-feedback")\n'
         'TELEMETRY = os.path.expanduser('
-        '"~/.claude/mainframe/telemetry/telemetry.db")\n',
+        '"~/.claude/mainframe/telemetry/telemetry.db")\n'
+        'DIAGNOSTICS = os.path.expanduser('
+        '"~/.claude/mainframe/diagnostics.json")\n',
     )
     write(root / "core/gates/rules/sample.yml", "rules: []\n")
     write(root / "core/memory/store.py", "print('{}')\n")

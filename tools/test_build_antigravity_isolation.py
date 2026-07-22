@@ -24,6 +24,9 @@ ANTIGRAVITY_TELEMETRY = (
     'os.path.expanduser("~/.gemini/antigravity/mainframe-telemetry/'
     'telemetry.db")'
 )
+ANTIGRAVITY_DIAGNOSTICS = (
+    'os.path.expanduser("~/.gemini/antigravity/mainframe/diagnostics.json")'
+)
 ANTIGRAVITY_CREDENTIALS_INDEX = (
     "~/.gemini/antigravity/credentials-index.md"
 )
@@ -41,6 +44,7 @@ def test_real_runtime_artifacts_are_antigravity_owned() -> None:
 
     assert ANTIGRAVITY_FEEDBACK in hooklib
     assert ANTIGRAVITY_TELEMETRY in hooklib
+    assert ANTIGRAVITY_DIAGNOSTICS in hooklib
     assert ANTIGRAVITY_CREDENTIALS_INDEX in secrets
     assert "~/.claude/" not in hooklib
     assert "~/.claude/" not in skills
@@ -53,6 +57,8 @@ def test_runtime_projection_rejects_unmapped_claude_path() -> None:
         'FEEDBACK = os.path.expanduser("~/.claude/skills/harness-feedback")\n'
         'TELEMETRY = os.path.expanduser('
         '"~/.claude/mainframe/telemetry/telemetry.db")\n'
+        'DIAGNOSTICS = os.path.expanduser('
+        '"~/.claude/mainframe/diagnostics.json")\n'
         'OTHER = "~/.claude/unmapped"\n'
     )
 

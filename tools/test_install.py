@@ -183,7 +183,10 @@ def test_hidden_only_item_directory_fails_but_whole_artifact_succeeds() -> None:
 def test_dev_mode_requires_only_its_authored_source() -> None:
     _assert_failed(_run_install(["--dev"]), "dev/skills/harness-feedback")
     result = _run_install(["--dev"], seed_dev=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "telemetry,feedback" in output and "0700" in output
+    assert "diagnostics.json" in output and "0600" in output
 
 
 def test_requested_adapter_requires_its_executable() -> None:

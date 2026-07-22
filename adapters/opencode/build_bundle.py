@@ -201,8 +201,16 @@ def _project_detector(text: str, source: Path, profile) -> str:
             f"os.path.join({OPENCODE_CONFIG_EXPRESSION}, "
             '"opencode", "mainframe", "telemetry", "telemetry.db")'
         )
+        diagnostics = (
+            f"os.path.join({OPENCODE_CONFIG_EXPRESSION}, "
+            '"opencode", "mainframe", "diagnostics.json")'
+        )
         text = project_hooklib_fallbacks(
-            text, source, feedback=feedback, telemetry=telemetry
+            text,
+            source,
+            feedback=feedback,
+            telemetry=telemetry,
+            diagnostics=diagnostics,
         )
     return build_opencode.project_runtime_text(text, profile)
 

@@ -135,6 +135,14 @@ executable plan, the lifecycle needs an explicit adapter-local activation
 resource, observation of current state, bounded retention, and `0700`/`0600`
 directory and file permissions.
 
+The activation contract starts with a versioned adapter-local
+`mainframe/diagnostics.json` document. Schema version 1 contains independent
+boolean `events` and `feedback` fields. Missing, invalid, unreadable, foreign,
+or disabled state fails closed; path overrides remain locators only. Runtime
+writers bind their leaf directories before publication, use `0700` for data
+directories and `0600` for databases and reports, and never remove existing
+diagnostic history while disabling collection.
+
 The current `hub.html` is static, repo-oriented, and reads one legacy database.
 It is not yet the finished local dashboard. A later
 `mainframe diagnostics serve` command may reuse its visual and query layer

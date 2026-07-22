@@ -382,7 +382,10 @@ def test_bundled_plugin_writes_only_to_opted_in_opencode_telemetry():
     project.mkdir()
     home.mkdir()
     telemetry = xdg / "opencode/mainframe/telemetry/telemetry.db"
-    telemetry.parent.mkdir(parents=True)
+    diagnostics = xdg / "opencode/mainframe/diagnostics.json"
+    diagnostics.parent.mkdir(parents=True)
+    diagnostics.write_text(
+        '{"schema_version":1,"events":true,"feedback":false}\n')
     _run_builder(output, home, xdg)
 
     runner = """
@@ -416,6 +419,8 @@ await hooks['tool.execute.after'](
     with sqlite3.connect(telemetry) as connection:
         sources = connection.execute("SELECT DISTINCT source FROM events").fetchall()
     assert sources == [("opencode",)], sources
+    hooklib = (output / "gates/detectors/_hooklib.py").read_text()
+    assert ".claude/mainframe/diagnostics.json" not in hooklib
     assert not (home / ".claude").exists(), list(home.rglob("*"))
 
 

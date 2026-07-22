@@ -189,6 +189,10 @@ def test_telemetry_logged_on_block():
     os.environ["MAINFRAME_FEEDBACK_NUDGE"] = "0"
     db = os.path.join(tempfile.mkdtemp(), "telemetry.db")
     os.environ["MAINFRAME_TELEMETRY_DB"] = db
+    config = os.path.join(os.path.dirname(db), "diagnostics.json")
+    with open(config, "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": 1, "events": True}, fh)
+    os.environ["MAINFRAME_DIAGNOSTICS_CONFIG"] = config
     _drive("git commit -m 'x'", findings=[("aws_access_key", "prod.env")])
     con = sqlite3.connect(db)
     try:
@@ -200,6 +204,7 @@ def test_telemetry_logged_on_block():
     body = json.loads(rows[0][1])
     assert "aws_access_key" in body["types"] and "prod.env" in body["files"]
     del os.environ["MAINFRAME_TELEMETRY_DB"]
+    del os.environ["MAINFRAME_DIAGNOSTICS_CONFIG"]
 
 
 def main():

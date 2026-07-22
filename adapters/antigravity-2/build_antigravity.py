@@ -42,12 +42,11 @@ HOOK_EVENTS = (
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 ANTIGRAVITY_FEEDBACK_FALLBACK = (
     'os.path.expanduser("~/.gemini/config/plugins/mainframe/skills/'
-    'harness-feedback")'
-)
+    'harness-feedback")')
 ANTIGRAVITY_TELEMETRY_FALLBACK = (
-    'os.path.expanduser("~/.gemini/antigravity/mainframe-telemetry/'
-    'telemetry.db")'
-)
+    'os.path.expanduser("~/.gemini/antigravity/mainframe-telemetry/telemetry.db")')
+ANTIGRAVITY_DIAGNOSTICS_FALLBACK = (
+    'os.path.expanduser("~/.gemini/antigravity/mainframe/diagnostics.json")')
 DETECTOR_PATH_REWRITES = (
     (
         "~/.claude/hooks/path-validation.py",
@@ -146,6 +145,7 @@ def _project_detector(source: SourcePath, destination: Path) -> bytes:
             Path(source.label),
             feedback=ANTIGRAVITY_FEEDBACK_FALLBACK,
             telemetry=ANTIGRAVITY_TELEMETRY_FALLBACK,
+            diagnostics=ANTIGRAVITY_DIAGNOSTICS_FALLBACK,
         )
     for claude_path, antigravity_path in DETECTOR_PATH_REWRITES:
         text = text.replace(claude_path, antigravity_path)

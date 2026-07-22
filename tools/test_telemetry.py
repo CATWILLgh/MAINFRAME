@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests for the `_hooklib.log_event` telemetry sink.
 
-Run: `python3 tools/test_telemetry.py` (exit 0 = pass). Stdlib only. Uses a temp
-DB via the `MAINFRAME_TELEMETRY_DB` env var so the real `~/.claude` DB is never
+Run: `python3 tools/test_telemetry.py` (exit 0 = pass). Stdlib only. Uses an
+explicit temp diagnostics config and DB so the real `~/.claude` state is never
 touched. The concurrency test spawns real subprocesses — the actual hook scenario.
 """
 
@@ -15,7 +15,7 @@ import sys
 import tempfile
 
 _SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "..", "dist", "claude-code", "plugin", "hooks", "scripts")
+                        "..", "core", "gates", "detectors")
 sys.path.insert(0, _SCRIPTS)
 import _hooklib
 import telemetry
@@ -25,7 +25,15 @@ def _fresh_db():
     d = tempfile.mkdtemp()
     db = os.path.join(d, "telemetry.db")
     os.environ["MAINFRAME_TELEMETRY_DB"] = db
+    _activate(d)
     return db
+
+
+def _activate(directory, events=True):
+    config = os.path.join(directory, "diagnostics.json")
+    with open(config, "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": 1, "events": events}, fh)
+    os.environ["MAINFRAME_DIAGNOSTICS_CONFIG"] = config
 
 
 def _rows(db):
@@ -110,6 +118,7 @@ def test_schema_and_wal():
 
 def test_fail_safe_bad_path():
     # Unwritable DB path -> silent no-op, never raises.
+    _activate(tempfile.mkdtemp())
     os.environ["MAINFRAME_TELEMETRY_DB"] = "/this/path/does/not/exist/x.db"
     _hooklib.log_event("e", {"k": 1}, {})   # must not raise
 
@@ -138,23 +147,30 @@ def test_privacy_strips_banned_keys():
     assert "leak" not in whole and "secret prompt" not in whole and "id_rsa" not in whole
 
 
-def test_default_path_requires_existing_dir():
-    # Dev-only opt-in: without the env override, log_event must neither create
-    # ~/.claude/mainframe/telemetry nor write anything while the dir is absent.
+def test_default_path_requires_activation_config():
     old_home = os.environ.get("HOME")
+    old_config = os.environ.get("MAINFRAME_DIAGNOSTICS_CONFIG")
     os.environ.pop("MAINFRAME_TELEMETRY_DB", None)
+    os.environ.pop("MAINFRAME_DIAGNOSTICS_CONFIG", None)
     home = tempfile.mkdtemp()
     os.environ["HOME"] = home
     try:
         _hooklib.log_event("e", {"k": 1}, {"session_id": "s"})
         tdir = os.path.join(home, ".claude", "mainframe", "telemetry")
         assert not os.path.exists(tdir), "dir must not be created implicitly"
-        os.makedirs(tdir)
+        mainframe = os.path.join(home, ".claude", "mainframe")
+        os.makedirs(mainframe)
+        _activate(mainframe)
+        os.environ.pop("MAINFRAME_DIAGNOSTICS_CONFIG")
         _hooklib.log_event("e2", {}, {"session_id": "s"})
         assert os.path.exists(os.path.join(tdir, "telemetry.db")), \
-            "opted-in (dir exists) -> row written"
+            "explicit activation config should enable the default database"
     finally:
         os.environ["HOME"] = old_home
+        if old_config is None:
+            os.environ.pop("MAINFRAME_DIAGNOSTICS_CONFIG", None)
+        else:
+            os.environ["MAINFRAME_DIAGNOSTICS_CONFIG"] = old_config
 
 
 def _drive_main(payload):

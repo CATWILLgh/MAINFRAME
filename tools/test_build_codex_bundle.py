@@ -304,7 +304,10 @@ def test_bundle_telemetry_uses_only_codex_local_state():
     output = codex_home / "bundle-v2"
     home.mkdir()
     project.mkdir()
-    (codex_home / "mainframe/telemetry").mkdir(parents=True)
+    (codex_home / "mainframe").mkdir(parents=True)
+    (codex_home / "mainframe/diagnostics.json").write_text(
+        '{"schema_version":1,"events":true,"feedback":false}\n'
+    )
     (home / ".claude/mainframe/telemetry").mkdir(parents=True)
     build_bundle.build(REPO, output)
 
@@ -327,6 +330,8 @@ def test_bundle_telemetry_uses_only_codex_local_state():
     assert proc.returncode == 0, proc.stderr
     assert (codex_home / "mainframe/telemetry/telemetry.db").is_file()
     assert not (home / ".claude/mainframe/telemetry/telemetry.db").exists()
+    hooklib = (output / "gates/detectors/_hooklib.py").read_text()
+    assert ".claude/mainframe/diagnostics.json" not in hooklib
 
 
 def test_bundle_hook_does_not_enable_telemetry_implicitly():

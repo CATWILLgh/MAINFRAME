@@ -22,9 +22,10 @@ import tempfile
 import json
 import os
 import re
-import sqlite3
 import subprocess
 import sys
+
+from _diagnostics import write_event
 
 # Source-code extensions the hooks scan. Prose/config (.md/.json/.yaml/.txt) is
 # skipped on purpose: it legitimately mentions markers (incl. the hub's own docs).
@@ -341,16 +342,17 @@ def tw_engagement_state(session_id):
 
 
 def _telemetry_db_path():
-    # ~/.claude/mainframe is the hub-OWNED namespace (a --dev symlink into the
-    # hub repo). ~/.claude/telemetry is unusable as an opt-in marker: Claude
-    # Code itself creates and uses it, so it exists on every machine.
-    return (os.environ.get("MAINFRAME_TELEMETRY_DB")
-            or os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db"))
+    return (os.environ.get("MAINFRAME_TELEMETRY_DB") or
+            os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db"))
+
+
+def _diagnostics_config_path():
+    return (os.environ.get("MAINFRAME_DIAGNOSTICS_CONFIG") or
+            os.path.expanduser("~/.claude/mainframe/diagnostics.json"))
 
 
 def _telemetry_project_key(cwd):
-    # Stable per-project key that disambiguates same-named dirs without storing
-    # the full (potentially sensitive) path.
+    # Disambiguates same-named dirs without storing the sensitive full path.
     if not cwd:
         return ""
     base = os.path.basename(os.path.normpath(cwd))
@@ -361,11 +363,8 @@ def _telemetry_project_key(cwd):
 def log_event(event, payload=None, hook_payload=None):
     """Append one telemetry row, best-effort — any failure is a silent no-op.
 
-    Passive Bucket-1 sink (ADR 0073). Must never stall or break a session:
-    short busy_timeout, whole body guarded. `payload` is event-specific metadata
-    — banned structural keys are stripped as a secrets second-line-of-defence.
-    `hook_payload` is the hook stdin JSON, read only for session_id / agent_type
-    / cwd, never dumped wholesale.
+    Passive Bucket-1 sink (ADR 0073). Must never stall or break a session;
+    `payload` is filtered metadata, and `hook_payload` supplies only attribution.
     """
     try:
         hp = hook_payload or {}
@@ -384,42 +383,13 @@ def log_event(event, payload=None, hook_payload=None):
             str(hp.get("source") or "claude-code"),
         )
         db = _telemetry_db_path()
-        if os.environ.get("MAINFRAME_TELEMETRY_DB"):
-            os.makedirs(os.path.dirname(db), exist_ok=True)
-        elif not os.path.isdir(os.path.dirname(db)):
-            return  # dir absent = telemetry not opted in (dev-only, install.sh --dev)
-        conn = sqlite3.connect(db, timeout=0.05)
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=50")
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS events ("
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, session_id TEXT, "
-                "agent_type TEXT, project TEXT, event TEXT, payload TEXT, "
-                "source TEXT DEFAULT 'claude-code')")
-            try:
-                # Pre-source DBs: constant default backfills existing rows.
-                conn.execute("ALTER TABLE events ADD COLUMN source TEXT "
-                             "DEFAULT 'claude-code'")
-            except sqlite3.OperationalError:
-                pass
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_events_event_ts ON events(event, ts)")
-            conn.execute(
-                "INSERT INTO events(ts, session_id, agent_type, project, event, "
-                "payload, source) VALUES (?,?,?,?,?,?,?)", row)
-            conn.commit()
-        finally:
-            conn.close()
+        write_event(_diagnostics_config_path(), db, row)
     except Exception:
         pass
 
 
 def run(main_fn):
-    """Fail-safe entrypoint: run main_fn(), swallow any error, always exit 0.
-
-    A hook must never break or noise-up a session because of itself.
-    """
+    """Run fail-safe; a hook must never break or add noise to a session."""
     try:
         main_fn()
     except Exception:
