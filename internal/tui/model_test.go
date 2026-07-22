@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -284,6 +285,7 @@ type fakePreviewer struct {
 	err           error
 	selected      []domain.ComponentID
 	mcpSelections []mcpcatalog.Selection
+	diagnostics   diagnostics.Desired
 	calls         int
 }
 
@@ -295,6 +297,7 @@ func (fake *fakePreviewer) Preview(request lifecycle.PreviewRequest) (lifecycle.
 	fake.calls++
 	fake.selected = append([]domain.ComponentID(nil), request.Components...)
 	fake.mcpSelections = append([]mcpcatalog.Selection(nil), request.MCPSelections...)
+	fake.diagnostics = request.Diagnostics
 	return fake.preview, fake.err
 }
 

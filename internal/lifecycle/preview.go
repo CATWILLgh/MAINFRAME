@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostcompatibility"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
@@ -78,11 +79,13 @@ type Preview struct {
 	Filesystem    domain.Plan
 	Configuration configuration.Plan
 	MCP           mcpconfiguration.Plan
+	Diagnostics   diagnostics.Plan
 }
 
 type PreviewRequest struct {
 	Components    []domain.ComponentID
 	MCPSelections []mcpcatalog.Selection
+	Diagnostics   diagnostics.Desired
 }
 
 type Service struct {

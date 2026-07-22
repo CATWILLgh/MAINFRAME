@@ -94,7 +94,7 @@ func mainMenuForm(model *Model) *huh.Form {
 			mainMenuEnvironments,
 		),
 		huh.NewOption("MCP integrations — "+model.mcpMenuStatus(), mainMenuMCP),
-		huh.NewOption("Local diagnostics — "+model.diagnostics.status(), mainMenuDiagnostics),
+		huh.NewOption("Local diagnostics — "+diagnosticsStatus(model.diagnostics), mainMenuDiagnostics),
 		huh.NewOption("Review complete plan", mainMenuReview),
 		huh.NewOption("Exit", mainMenuExit),
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
@@ -52,7 +53,7 @@ func TestMainMenuRequiresAnEnvironmentForMCPAndDiagnostics(t *testing.T) {
 func TestEnvironmentSelectionReturnsToMainAndClearsDependentDraftsWhenEmpty(t *testing.T) {
 	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
-	model.diagnostics = diagnosticsChoice{Configured: true, Events: true, Feedback: true}
+	model.diagnostics = diagnostics.Desired{Configured: true, Events: true, Feedback: true}
 	model.ensureMCPChoices()
 	model.mcpChoices["context7"].Enabled = true
 	model.mcpChoices["context7"].Adapters = []domain.ComponentID{domain.ComponentClaudeCode}
@@ -63,7 +64,7 @@ func TestEnvironmentSelectionReturnsToMainAndClearsDependentDraftsWhenEmpty(t *t
 	if updated.screen != screenMain || command == nil {
 		t.Fatalf("screen = %v, command = %v", updated.screen, command)
 	}
-	if updated.diagnostics != (diagnosticsChoice{}) {
+	if updated.diagnostics != (diagnostics.Desired{}) {
 		t.Fatalf("diagnostics draft = %#v", updated.diagnostics)
 	}
 	if updated.mcpChoices["context7"].Enabled {
@@ -74,7 +75,7 @@ func TestEnvironmentSelectionReturnsToMainAndClearsDependentDraftsWhenEmpty(t *t
 func TestBackingOutOfEnvironmentSelectionStillReconcilesDependentDrafts(t *testing.T) {
 	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
-	model.diagnostics = diagnosticsChoice{Configured: true, Events: true}
+	model.diagnostics = diagnostics.Desired{Configured: true, Events: true}
 	model.ensureMCPChoices()
 	model.mcpChoices["context7"].Enabled = true
 	model.mcpChoices["context7"].Adapters = []domain.ComponentID{domain.ComponentClaudeCode}
@@ -87,7 +88,7 @@ func TestBackingOutOfEnvironmentSelectionStillReconcilesDependentDrafts(t *testi
 	if updated.screen != screenMain || command == nil {
 		t.Fatalf("screen = %v, command = %v", updated.screen, command)
 	}
-	if updated.diagnostics != (diagnosticsChoice{}) || updated.mcpChoices["context7"].Enabled {
+	if updated.diagnostics != (diagnostics.Desired{}) || updated.mcpChoices["context7"].Enabled {
 		t.Fatalf("dependent drafts remain: diagnostics=%#v MCP=%#v", updated.diagnostics, updated.mcpChoices["context7"])
 	}
 }

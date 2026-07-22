@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
@@ -16,6 +17,7 @@ import (
 type Request struct {
 	Components    []domain.ComponentID
 	MCPSelections []mcpcatalog.Selection
+	Diagnostics   diagnostics.Desired
 }
 
 type Snapshot struct {
@@ -167,6 +169,7 @@ func buildReviewedPlan(
 	lifecycleRequest := lifecycle.PreviewRequest{
 		Components:    append([]domain.ComponentID(nil), request.Components...),
 		MCPSelections: cloneSelections(request.MCPSelections),
+		Diagnostics:   request.Diagnostics,
 	}
 	semantic, err := snapshot.Lifecycle.Preview(lifecycleRequest)
 	if err != nil {
@@ -192,6 +195,7 @@ func cloneRequest(request Request) Request {
 	return Request{
 		Components:    append([]domain.ComponentID(nil), request.Components...),
 		MCPSelections: cloneSelections(request.MCPSelections),
+		Diagnostics:   request.Diagnostics,
 	}
 }
 
@@ -220,6 +224,10 @@ func cloneSemantic(preview lifecycle.Preview) lifecycle.Preview {
 			Intents:    append([]mcpconfiguration.Intent(nil), preview.MCP.Intents...),
 			Migrations: append([]mcpconfiguration.MigrationAssessment(nil), preview.MCP.Migrations...),
 			Blocking:   preview.MCP.Blocking,
+		},
+		Diagnostics: diagnostics.Plan{
+			Intents:    append([]diagnostics.Intent(nil), preview.Diagnostics.Intents...),
+			Executable: preview.Diagnostics.Executable,
 		},
 	}
 }

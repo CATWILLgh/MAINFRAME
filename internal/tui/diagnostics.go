@@ -7,14 +7,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
-
-type diagnosticsChoice struct {
-	Configured bool
-	Events     bool
-	Feedback   bool
-}
 
 type diagnosticsFeature string
 
@@ -23,7 +18,7 @@ const (
 	diagnosticsFeedback diagnosticsFeature = "feedback"
 )
 
-func (choice diagnosticsChoice) status() string {
+func diagnosticsStatus(choice diagnostics.Desired) string {
 	if !choice.Configured {
 		return "not configured"
 	}
@@ -46,7 +41,7 @@ func (model *Model) openDiagnostics() (*Model, tea.Cmd) {
 }
 
 func (model *Model) continueFromDiagnostics() (*Model, tea.Cmd) {
-	model.diagnostics = diagnosticsChoice{
+	model.diagnostics = diagnostics.Desired{
 		Configured: true,
 		Events:     containsDiagnostic(model.diagnosticsSelected, diagnosticsEvents),
 		Feedback:   containsDiagnostic(model.diagnosticsSelected, diagnosticsFeedback),
@@ -89,7 +84,7 @@ func diagnosticsForm(selected *[]diagnosticsFeature) *huh.Form {
 	return huh.NewForm(huh.NewGroup(field)).WithShowHelp(false)
 }
 
-func selectedDiagnostics(choice diagnosticsChoice) []diagnosticsFeature {
+func selectedDiagnostics(choice diagnostics.Desired) []diagnosticsFeature {
 	selected := make([]diagnosticsFeature, 0, 2)
 	if choice.Events {
 		selected = append(selected, diagnosticsEvents)
@@ -111,16 +106,25 @@ func containsDiagnostic(selected []diagnosticsFeature, feature diagnosticsFeatur
 
 func (model *Model) renderDiagnosticsPreview() string {
 	lines := []string{headingStyle.Render("Local diagnostics draft")}
-	if !model.diagnostics.Configured {
+	if len(model.preview.Diagnostics.Intents) == 0 {
 		return strings.Join(append(lines, mutedStyle.Render("Not configured.")), "\n")
 	}
-	targets := componentNames(model.selected)
+	targets := diagnosticsIntentComponents(model.preview.Diagnostics.Intents)
+	first := model.preview.Diagnostics.Intents[0]
 	lines = append(lines,
-		diagnosticsPreviewLine("Local event history", model.diagnostics.Events, targets),
-		diagnosticsPreviewLine("Harness feedback", model.diagnostics.Feedback, targets),
+		diagnosticsPreviewLine("Local event history", first.Events, targets),
+		diagnosticsPreviewLine("Harness feedback", first.Feedback, targets),
 		mutedStyle.Render("Preview only: local diagnostics are not yet part of the executable plan."),
 	)
 	return strings.Join(lines, "\n")
+}
+
+func diagnosticsIntentComponents(intents []diagnostics.Intent) string {
+	components := make([]domain.ComponentID, 0, len(intents))
+	for _, intent := range intents {
+		components = append(components, intent.ComponentID)
+	}
+	return componentNames(components)
 }
 
 func diagnosticsPreviewLine(name string, enabled bool, targets string) string {

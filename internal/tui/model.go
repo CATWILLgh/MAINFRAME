@@ -8,6 +8,7 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -43,7 +44,7 @@ type Model struct {
 	mcpChoices          map[mcpcatalog.ServerID]*mcpChoice
 	mcpMenuChoice       mcpMenuChoice
 	mainMenuChoice      mainMenuChoice
-	diagnostics         diagnosticsChoice
+	diagnostics         diagnostics.Desired
 	diagnosticsSelected []diagnosticsFeature
 	activeMCP           mcpcatalog.ServerID
 	repositoryStats     map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
@@ -167,6 +168,7 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 	result, err := model.previewer.Preview(lifecycle.PreviewRequest{
 		Components:    model.selected,
 		MCPSelections: model.mcpSelections(),
+		Diagnostics:   model.diagnostics,
 	})
 	if err != nil {
 		model.err = err

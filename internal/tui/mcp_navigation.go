@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
@@ -16,7 +17,7 @@ func (model *Model) continueFromSelection() (*Model, tea.Cmd) {
 func (model *Model) reconcileDependentDrafts() {
 	model.reconcileMCPChoices()
 	if len(model.selected) == 0 {
-		model.diagnostics = diagnosticsChoice{}
+		model.diagnostics = diagnostics.Desired{}
 	}
 }
 

@@ -9,6 +9,11 @@ import (
 func (service Service) PrepareConfiguration(
 	request PreviewRequest,
 ) (configuration.PreparedPlan, error) {
+	if request.Diagnostics.Configured {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"configured diagnostics are not executable and cannot be prepared",
+		)
+	}
 	preservationRoots := service.preservationRoots(request.Components)
 	preview, err := service.Preview(request)
 	if err != nil {

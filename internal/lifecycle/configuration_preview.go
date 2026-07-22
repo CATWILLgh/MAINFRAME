@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
@@ -80,6 +81,10 @@ func externalObservationsForInventory(
 }
 
 func (service Service) Preview(request PreviewRequest) (Preview, error) {
+	diagnosticsPlan, err := diagnostics.Build(request.Components, request.Diagnostics)
+	if err != nil {
+		return Preview{}, fmt.Errorf("plan diagnostics: %w", err)
+	}
 	filesystem, err := service.Plan(request.Components)
 	if err != nil {
 		return Preview{}, err
@@ -102,6 +107,7 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 			Filesystem:    filesystem,
 			Configuration: filterConfigurationPlan(service.configurationFallback, preserved),
 			MCP:           mcpPlan,
+			Diagnostics:   diagnosticsPlan,
 		}, nil
 	}
 	included := service.configurationComponents(request.Components)
@@ -118,6 +124,7 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 		Filesystem:    filesystem,
 		Configuration: configurationPlan,
 		MCP:           mcpPlan,
+		Diagnostics:   diagnosticsPlan,
 	}, nil
 }
 

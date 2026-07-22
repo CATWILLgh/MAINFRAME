@@ -13,9 +13,12 @@ tags: ["diagnostics", "telemetry", "feedback", "lifecycle", "privacy"]
 
 ## What was observed
 
-The category-first TUI now records separate drafts for local diagnostic events
-and `harness-feedback`, and renders them in the combined preview. The drafts do
-not yet enter `lifecycle.PreviewRequest` or produce executable operations.
+The category-first TUI records separate drafts for local diagnostic events and
+`harness-feedback`. Those choices now enter the typed lifecycle and reviewed
+application request as exact per-adapter semantic intents, and the combined
+preview renders the lifecycle result rather than reconstructing it locally.
+Configured diagnostics are still explicitly non-executable and preparation
+rejects them before executor resources open.
 
 The existing DEV implementation is also uneven: Claude Code uses the legacy
 `install.sh --dev` links, while the other adapters already carry projected
@@ -63,6 +66,8 @@ TUI contract across every adapter.
 
 - `internal/tui/diagnostics.go`
 - `internal/tui/model.go`
+- `internal/diagnostics/plan.go`
+- `internal/application/service.go`
 - `core/gates/detectors/_hooklib.py:343`
 - `dev/skills/harness-feedback/feedback.py:57`
 - `docs/installer-strategy.md`

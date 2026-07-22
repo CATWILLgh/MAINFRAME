@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
 
 func TestDiagnosticsScreenReusesLocalDEVCapabilitiesAsSeparateChoices(t *testing.T) {
@@ -73,13 +76,20 @@ func TestDiagnosticsNoticesFitANarrowTerminal(t *testing.T) {
 }
 
 func TestDiagnosticsDraftAppearsInCombinedPreviewWithoutExecutableOperations(t *testing.T) {
-	previewer := &fakePreviewer{targets: defaultTargets()}
+	desired := diagnostics.Desired{Configured: true, Events: true, Feedback: true}
+	previewer := &fakePreviewer{
+		targets: defaultTargets(),
+		preview: lifecycle.Preview{Diagnostics: diagnostics.Plan{Intents: []diagnostics.Intent{
+			{ComponentID: domain.ComponentClaudeCode, Events: true},
+			{ComponentID: domain.ComponentOpenCode, Events: true},
+		}}},
+	}
 	model := newTestModel(t, previewer)
 	model.selected = []domain.ComponentID{
 		domain.ComponentClaudeCode,
 		domain.ComponentOpenCode,
 	}
-	model.diagnostics = diagnosticsChoice{Configured: true, Events: true, Feedback: true}
+	model.diagnostics = desired
 
 	updated, command := model.openPreview()
 
@@ -90,7 +100,7 @@ func TestDiagnosticsDraftAppearsInCombinedPreviewWithoutExecutableOperations(t *
 	for _, text := range []string{
 		"Local diagnostics draft",
 		"Local event history — enable for Claude Code, OpenCode",
-		"Harness feedback — enable for Claude Code, OpenCode",
+		"Harness feedback — disable for Claude Code, OpenCode",
 		"not yet part of the executable plan",
 	} {
 		if !strings.Contains(view, text) {
@@ -99,6 +109,9 @@ func TestDiagnosticsDraftAppearsInCombinedPreviewWithoutExecutableOperations(t *
 	}
 	if previewer.calls != 1 {
 		t.Fatalf("preview calls = %d", previewer.calls)
+	}
+	if !reflect.DeepEqual(previewer.diagnostics, desired) {
+		t.Fatalf("diagnostics request = %#v, want %#v", previewer.diagnostics, desired)
 	}
 }
 

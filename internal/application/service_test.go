@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
 
 const testReleaseDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -105,6 +107,57 @@ func TestReviewFailureDoesNotOpenApplyResources(t *testing.T) {
 	}
 	if factory.opens != 0 {
 		t.Fatalf("executor factory opens = %d, want 0", factory.opens)
+	}
+}
+
+func TestReviewRejectsConfiguredDiagnosticsBeforeOpeningApplyResources(t *testing.T) {
+	builder := &fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}}
+	factory := &fakeApplyExecutorFactory{}
+	service, err := New(builder, factory, readyRecoveryFactory())
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := testRequest()
+	request.Diagnostics = diagnostics.Desired{Configured: true, Events: true}
+
+	_, err = service.Review(request)
+	if err == nil || !strings.Contains(err.Error(),
+		"configured diagnostics are not executable and cannot be prepared") {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if factory.opens != 0 {
+		t.Fatalf("executor factory opens = %d, want 0", factory.opens)
+	}
+}
+
+func TestRequestAndSemanticClonesPreserveDiagnostics(t *testing.T) {
+	desired := diagnostics.Desired{Configured: true, Events: true, Feedback: true}
+	request := Request{Diagnostics: desired}
+	if got := cloneRequest(request).Diagnostics; got != desired {
+		t.Fatalf("cloneRequest().Diagnostics = %#v, want %#v", got, desired)
+	}
+	original := lifecycle.Preview{Diagnostics: diagnostics.Plan{Intents: []diagnostics.Intent{{
+		ComponentID: domain.ComponentClaudeCode,
+		Events:      true,
+	}}}}
+	cloned := cloneSemantic(original)
+	cloned.Diagnostics.Intents[0].Events = false
+	if !original.Diagnostics.Intents[0].Events {
+		t.Fatal("cloneSemantic() exposed diagnostics intent storage")
+	}
+}
+
+func TestRequestRefresherPreservesDiagnosticsDesiredState(t *testing.T) {
+	request := testRequest()
+	request.Diagnostics = diagnostics.Desired{Events: true}
+	refresher := requestRefresher{
+		snapshots: &fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}},
+		request:   request,
+	}
+
+	_, err := refresher.Refresh(request.Components)
+	if err == nil || !strings.Contains(err.Error(), "plan diagnostics: diagnostics features require") {
+		t.Fatalf("Refresh() error = %v", err)
 	}
 }
 
