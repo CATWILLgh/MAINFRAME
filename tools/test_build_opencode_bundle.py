@@ -321,7 +321,7 @@ def test_cli_dry_run_preserves_default_output():
     assert (test_support.snapshot_tree(output) if output.exists() else None) == before
 
 
-def test_bundled_plugin_blocks_and_writes_only_opencode_telemetry():
+def test_bundled_plugin_blocks_without_enabling_telemetry_implicitly():
     sandbox = _sandbox()
     output = sandbox / "bundle-v2"
     project = sandbox / "project"
@@ -369,6 +369,49 @@ process.stdout.write(block)
     assert proc.returncode == 0, (proc.stdout, proc.stderr)
     assert "outside project" in proc.stdout, (proc.stdout, proc.stderr)
     telemetry = xdg / "opencode/mainframe/telemetry/telemetry.db"
+    assert not telemetry.parent.exists(), (telemetry, proc.stdout, proc.stderr)
+    assert not (home / ".claude").exists(), list(home.rglob("*"))
+
+
+def test_bundled_plugin_writes_only_to_opted_in_opencode_telemetry():
+    sandbox = _sandbox()
+    output = sandbox / "bundle-v2"
+    project = sandbox / "project"
+    home = sandbox / "home"
+    xdg = sandbox / "xdg config"
+    project.mkdir()
+    home.mkdir()
+    telemetry = xdg / "opencode/mainframe/telemetry/telemetry.db"
+    telemetry.parent.mkdir(parents=True)
+    _run_builder(output, home, xdg)
+
+    runner = """
+import { pathToFileURL } from 'node:url'
+const plugin = await import(pathToFileURL(process.argv[1]).href)
+const hooks = await plugin.MainframeGates({ directory: process.argv[2] })
+const output = { output: '' }
+await hooks['tool.execute.after'](
+  { tool: 'edit', args: { filePath: process.argv[2] + '/sample.py',
+                          oldString: '', newString: 'value = 1' },
+    sessionID: 'bundle-opt-in-test' }, output)
+"""
+    env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(xdg))
+    proc = subprocess.run(
+        [
+            "node",
+            "--input-type=module",
+            "-e",
+            runner,
+            str(output / "plugins/mainframe-gates.js"),
+            str(project),
+        ],
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
     assert telemetry.is_file(), (telemetry, proc.stdout, proc.stderr)
     with sqlite3.connect(telemetry) as connection:
         sources = connection.execute("SELECT DISTINCT source FROM events").fetchall()

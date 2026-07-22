@@ -329,6 +329,36 @@ def test_bundle_telemetry_uses_only_codex_local_state():
     assert not (home / ".claude/mainframe/telemetry/telemetry.db").exists()
 
 
+def test_bundle_hook_does_not_enable_telemetry_implicitly():
+    sandbox = Path(tempfile.mkdtemp())
+    home = sandbox / "home"
+    project = sandbox / "project"
+    codex_home = sandbox / "codex"
+    output = codex_home / "bundle-v2"
+    home.mkdir()
+    project.mkdir()
+    build_bundle.build(REPO, output)
+
+    env = dict(os.environ, HOME=str(home), CODEX_HOME=str(codex_home))
+    payload = json.dumps({
+        "hook_event_name": "SessionStart",
+        "cwd": str(project),
+        "session_id": "codex-no-opt-in",
+        "source": "startup",
+    })
+    proc = subprocess.run(
+        [str(output / "mainframe-hook.sh"), "SessionStart", "telemetry.py"],
+        input=payload,
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert not (codex_home / "mainframe/telemetry").exists()
+
+
 def test_rebuild_removes_stale_files_from_the_managed_bundle():
     output = Path(tempfile.mkdtemp()) / "bundle-v2"
     stale_files = (

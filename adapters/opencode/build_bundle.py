@@ -149,22 +149,17 @@ def _project_plugin(source: Path) -> str:
         text,
         PLUGIN_SCRIPTS,
         '  scriptsDir: fileURLToPath(new URL("../gates/detectors", import.meta.url)),\n'
-        '  feedbackSkillDir: fileURLToPath(new URL("../skills/harness-feedback", import.meta.url)),\n'
-        "  telemetryDb: path.join(process.env.XDG_CONFIG_HOME || "
-        'path.join(process.env.HOME || "", ".config"), "opencode", '
-        '"mainframe", "telemetry", "telemetry.db"),',
+        '  feedbackSkillDir: fileURLToPath(new URL("../skills/harness-feedback", import.meta.url)),',
         source,
     )
     row_env = (
         "        env: { ...process.env, CLAUDE_PROJECT_DIR: payload.project_dir,\n"
-        "               MAINFRAME_FEEDBACK_SKILL_DIR: runtime.feedbackSkillDir,\n"
-        "               MAINFRAME_TELEMETRY_DB: runtime.telemetryDb } },"
+        "               MAINFRAME_FEEDBACK_SKILL_DIR: runtime.feedbackSkillDir } },"
     )
     text = _replace_once(text, PLUGIN_ROW_ENV, row_env, source)
     stop_env = (
         "      { cwd, env: { ...process.env, CLAUDE_PROJECT_DIR: cwd,\n"
-        "                    MAINFRAME_FEEDBACK_SKILL_DIR: runtime.feedbackSkillDir,\n"
-        "                    MAINFRAME_TELEMETRY_DB: runtime.telemetryDb } }, payload)"
+        "                    MAINFRAME_FEEDBACK_SKILL_DIR: runtime.feedbackSkillDir } }, payload)"
     )
     text = _replace_once(text, PLUGIN_STOP_ENV, stop_env, source)
     if "~/.claude" in text or "/.claude/" in text:

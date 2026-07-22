@@ -6,8 +6,7 @@ BUNDLE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 0
 SCRIPT="${BUNDLE_DIR}/gates/detectors/${NAME}"
 CODEX_CONFIG_ROOT="${CODEX_HOME:-$HOME/.codex}"
 : "${MAINFRAME_FEEDBACK_SKILL_DIR:=${CODEX_CONFIG_ROOT}/skills/harness-feedback}"
-: "${MAINFRAME_TELEMETRY_DB:=${CODEX_CONFIG_ROOT}/mainframe/telemetry/telemetry.db}"
-export MAINFRAME_FEEDBACK_SKILL_DIR MAINFRAME_TELEMETRY_DB
+export MAINFRAME_FEEDBACK_SKILL_DIR
 
 [ -f "$SCRIPT" ] || exit 0
 
