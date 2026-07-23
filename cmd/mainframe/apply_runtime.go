@@ -48,6 +48,7 @@ type previewServiceBuilder func(
 	releasecontract.Release,
 	string,
 	codexstate.Client,
+	diagnosticsObservationScope,
 	hostApplicationDiscoverer,
 ) (lifecycle.Service, error)
 
@@ -76,12 +77,14 @@ func newReleaseSnapshotBuilderWithResolver(
 		cwd:         cwd,
 		load:        releasecontract.Load,
 		client:      func() codexstate.Client { return codexstate.NewAppServerClient() },
-		build:       buildPreviewServiceFromContextWithHostDiscovery,
+		build:       buildPreviewServiceFromContextWithObservation,
 		discover:    hostcompatibility.DiscoverApplications,
 	}
 }
 
-func (builder releaseSnapshotBuilder) Build() (application.Snapshot, error) {
+func (builder releaseSnapshotBuilder) Build(
+	request application.Request,
+) (application.Snapshot, error) {
 	if err := builder.validate(); err != nil {
 		return application.Snapshot{}, err
 	}
@@ -101,6 +104,7 @@ func (builder releaseSnapshotBuilder) Build() (application.Snapshot, error) {
 		release,
 		builder.cwd,
 		builder.client(),
+		diagnosticsObservationScopeFor(request),
 		builder.discover,
 	)
 	if err != nil {

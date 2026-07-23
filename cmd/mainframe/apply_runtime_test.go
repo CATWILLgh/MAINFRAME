@@ -9,6 +9,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostcompatibility"
@@ -22,6 +23,7 @@ func TestReleaseSnapshotBuilderReloadsAndReinspectsEveryBuild(t *testing.T) {
 	loads := 0
 	builds := 0
 	clients := 0
+	var scopes []diagnosticsObservationScope
 	builder := releaseSnapshotBuilder{
 		resolveRoot: func() (string, error) { return releaseRoot, nil },
 		cwd:         t.TempDir(),
@@ -45,19 +47,24 @@ func TestReleaseSnapshotBuilderReloadsAndReinspectsEveryBuild(t *testing.T) {
 			release releasecontract.Release,
 			_ string,
 			_ codexstate.Client,
+			scope diagnosticsObservationScope,
 			_ hostApplicationDiscoverer,
 		) (lifecycle.Service, error) {
 			builds++
+			scopes = append(scopes, scope)
 			return lifecycle.New(release.Model, domain.ObservedState{})
 		},
 		discover: hostcompatibility.DiscoverApplications,
 	}
 
-	first, err := builder.Build()
+	first, err := builder.Build(application.Request{
+		Components:  []domain.ComponentID{domain.ComponentCodex},
+		Diagnostics: diagnostics.Desired{Configured: true},
+	})
 	if err != nil {
 		t.Fatalf("first Build() error = %v", err)
 	}
-	second, err := builder.Build()
+	second, err := builder.Build(application.Request{})
 	if err != nil {
 		t.Fatalf("second Build() error = %v", err)
 	}
@@ -65,8 +72,21 @@ func TestReleaseSnapshotBuilderReloadsAndReinspectsEveryBuild(t *testing.T) {
 	if loads != 2 || builds != 2 || clients != 2 {
 		t.Fatalf("loads/builds/clients = %d/%d/%d, want 2/2/2", loads, builds, clients)
 	}
+	assertDiagnosticsObservationScopes(t, scopes)
 	if first.Release == second.Release {
 		t.Fatalf("release identity was reused: %#v", first.Release)
+	}
+}
+
+func assertDiagnosticsObservationScopes(
+	t *testing.T,
+	scopes []diagnosticsObservationScope,
+) {
+	t.Helper()
+	if len(scopes) != 2 || len(scopes[0].components) != 1 ||
+		!scopes[0].components[domain.ComponentCodex] ||
+		len(scopes[1].components) != 0 {
+		t.Fatalf("observation scopes = %#v", scopes)
 	}
 }
 
@@ -207,6 +227,7 @@ func productionTestSnapshotBuilder(
 			release releasecontract.Release,
 			_ string,
 			_ codexstate.Client,
+			_ diagnosticsObservationScope,
 			_ hostApplicationDiscoverer,
 		) (lifecycle.Service, error) {
 			return lifecycle.New(release.Model, domain.ObservedState{})

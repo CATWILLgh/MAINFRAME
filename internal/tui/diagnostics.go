@@ -20,7 +20,7 @@ const (
 
 func diagnosticsStatus(choice diagnostics.Desired) string {
 	if !choice.Configured {
-		return "not configured"
+		return "draft not configured"
 	}
 	enabled := 0
 	if choice.Events {

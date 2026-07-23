@@ -13,14 +13,20 @@ import (
 )
 
 type fakeSnapshotBuilder struct {
-	snapshots []Snapshot
-	errors    []error
-	builds    int
+	snapshots     []Snapshot
+	errors        []error
+	requests      []Request
+	mutateRequest func(*Request)
+	builds        int
 }
 
-func (builder *fakeSnapshotBuilder) Build() (Snapshot, error) {
+func (builder *fakeSnapshotBuilder) Build(request Request) (Snapshot, error) {
 	index := builder.builds
 	builder.builds++
+	builder.requests = append(builder.requests, cloneRequest(request))
+	if builder.mutateRequest != nil {
+		builder.mutateRequest(&request)
+	}
 	if index < len(builder.errors) && builder.errors[index] != nil {
 		return Snapshot{}, builder.errors[index]
 	}

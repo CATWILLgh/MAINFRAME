@@ -26,7 +26,7 @@ type Snapshot struct {
 }
 
 type SnapshotBuilder interface {
-	Build() (Snapshot, error)
+	Build(Request) (Snapshot, error)
 }
 
 type ApplySession interface {
@@ -162,7 +162,7 @@ func buildReviewedPlan(
 	snapshots SnapshotBuilder,
 	request Request,
 ) (ReviewedPlan, error) {
-	snapshot, err := snapshots.Build()
+	snapshot, err := snapshots.Build(cloneRequest(request))
 	if err != nil {
 		return ReviewedPlan{}, fmt.Errorf("build fresh host snapshot: %w", err)
 	}

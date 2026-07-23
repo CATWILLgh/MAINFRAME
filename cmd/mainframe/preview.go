@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/discovery"
@@ -33,6 +34,10 @@ type hostApplicationDiscoverer func(string, []string) hostcompatibility.Applicat
 type readOnlyReleaseSnapshot struct {
 	root    string
 	release releasecontract.Release
+}
+
+type diagnosticsObservationScope struct {
+	components map[domain.ComponentID]bool
 }
 
 func runInteractivePreview(input io.Reader, output io.Writer) error {
@@ -116,6 +121,24 @@ func buildPreviewServiceFromContextWithHostDiscovery(
 	client codexstate.Client,
 	discover hostApplicationDiscoverer,
 ) (lifecycle.Service, error) {
+	return buildPreviewServiceFromContextWithObservation(
+		releaseRoot,
+		release,
+		cwd,
+		client,
+		diagnosticsObservationScope{},
+		discover,
+	)
+}
+
+func buildPreviewServiceFromContextWithObservation(
+	releaseRoot string,
+	release releasecontract.Release,
+	cwd string,
+	client codexstate.Client,
+	scope diagnosticsObservationScope,
+	discover hostApplicationDiscoverer,
+) (lifecycle.Service, error) {
 	environment := hostEnvironment()
 	layout, err := hostlayout.Resolve(environment, releaseRoot)
 	if err != nil {
@@ -140,7 +163,7 @@ func buildPreviewServiceFromContextWithHostDiscovery(
 		return lifecycle.Service{}, fmt.Errorf("discover current installation: %w", err)
 	}
 	service, err := buildInspectedService(
-		releaseRoot, release, cwd, client, layout, inspectionHost, observed,
+		releaseRoot, release, cwd, client, layout, inspectionHost, observed, scope,
 	)
 	if err != nil {
 		return lifecycle.Service{}, err
@@ -173,14 +196,16 @@ func buildInspectedService(
 	layout hostlayout.Layout,
 	inspectionHost configuration.Host,
 	observed domain.ObservedState,
+	scope diagnosticsObservationScope,
 ) (lifecycle.Service, error) {
+	resources := resourcesForDiagnosticsObservation(release.Resources, scope)
 	var external configuration.ExternalObserver
 	if client != nil {
 		observer, err := codexstate.NewObserver(
 			releaseRoot,
 			cwd,
 			layout.Targets(),
-			release.Resources,
+			resources,
 			client,
 		)
 		if err != nil {
@@ -192,7 +217,7 @@ func buildInspectedService(
 		external = observer
 	}
 	configurationInspection, err := configuration.InspectWithExternal(
-		release.Resources,
+		resources,
 		inspectionHost,
 		external,
 	)
@@ -217,6 +242,34 @@ func buildInspectedService(
 		return lifecycle.Service{}, fmt.Errorf("create lifecycle preview: %w", err)
 	}
 	return service, nil
+}
+
+func diagnosticsObservationScopeFor(
+	request application.Request,
+) diagnosticsObservationScope {
+	if !request.Diagnostics.Configured {
+		return diagnosticsObservationScope{}
+	}
+	components := make(map[domain.ComponentID]bool, len(request.Components))
+	for _, component := range request.Components {
+		components[component] = true
+	}
+	return diagnosticsObservationScope{components: components}
+}
+
+func resourcesForDiagnosticsObservation(
+	resources []releasecontract.Resource,
+	scope diagnosticsObservationScope,
+) []releasecontract.Resource {
+	filtered := make([]releasecontract.Resource, 0, len(resources))
+	for _, resource := range resources {
+		if resource.Strategy == releasecontract.StrategyExactJSONDocument &&
+			!scope.components[resource.ComponentID] {
+			continue
+		}
+		filtered = append(filtered, resource)
+	}
+	return filtered
 }
 
 func resolveReleaseRoot() (string, error) {

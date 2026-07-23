@@ -147,6 +147,32 @@ func TestRequestAndSemanticClonesPreserveDiagnostics(t *testing.T) {
 	}
 }
 
+func TestReviewIsolatesRequestFromSnapshotBuilderMutation(t *testing.T) {
+	request := testRequest()
+	original := cloneRequest(request)
+	builder := &fakeSnapshotBuilder{
+		snapshots: []Snapshot{testSnapshot(t)},
+		mutateRequest: func(candidate *Request) {
+			candidate.Components[0] = domain.ComponentCodex
+			candidate.MCPSelections[0].Adapters[0] = domain.ComponentCodex
+		},
+	}
+	service, err := New(builder, &fakeApplyExecutorFactory{}, readyRecoveryFactory())
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	reviewed, err := service.Review(request)
+	if err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if !reflect.DeepEqual(reviewed.Request(), original) {
+		t.Fatalf("reviewed request = %#v, want %#v", reviewed.Request(), original)
+	}
+	if !reflect.DeepEqual(builder.requests, []Request{original}) {
+		t.Fatalf("snapshot requests = %#v, want %#v", builder.requests, []Request{original})
+	}
+}
+
 func TestRequestRefresherPreservesDiagnosticsDesiredState(t *testing.T) {
 	request := testRequest()
 	request.Diagnostics = diagnostics.Desired{Events: true}
@@ -186,6 +212,10 @@ func TestApplyRefreshesTheCompleteReviewedRequestAndClosesSession(t *testing.T) 
 	}
 	if builder.builds != 2 {
 		t.Fatalf("snapshot builds = %d, want 2", builder.builds)
+	}
+	wantRequests := []Request{testRequest(), testRequest()}
+	if !reflect.DeepEqual(builder.requests, wantRequests) {
+		t.Fatalf("snapshot requests = %#v, want %#v", builder.requests, wantRequests)
 	}
 	if factory.opens != 1 || session.applies != 1 || session.closes != 1 {
 		t.Fatalf(
