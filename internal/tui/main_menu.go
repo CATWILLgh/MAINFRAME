@@ -6,9 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-
-	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
-	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
 type mainMenuChoice string
@@ -23,8 +20,7 @@ const (
 
 func (model *Model) openMain() (*Model, tea.Cmd) {
 	model.screen = screenMain
-	model.preview = lifecycle.Preview{}
-	model.mcpPreview = mcpcatalog.OnboardingPreview{}
+	model.clearReviewedPlan()
 	model.err = nil
 	model.form = mainMenuForm(model)
 	return model, model.form.Init()

@@ -12,12 +12,12 @@ import (
 func Run(
 	input io.Reader,
 	output io.Writer,
-	previewer Previewer,
+	reviewer PlanReviewer,
 	catalog mcpcatalog.Catalog,
 	stats mcpcatalog.StatsSource,
 ) error {
 	program := tea.NewProgram(
-		NewModel(previewer, catalog, stats),
+		NewModel(reviewer, catalog, stats),
 		tea.WithInput(input),
 		tea.WithOutput(output),
 	)

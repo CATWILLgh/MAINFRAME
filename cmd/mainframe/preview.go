@@ -40,8 +40,27 @@ type diagnosticsObservationScope struct {
 	components map[domain.ComponentID]bool
 }
 
+type interactivePlanReviewer struct {
+	targets lifecycle.Service
+	service application.Service
+}
+
+func (reviewer interactivePlanReviewer) Targets() []lifecycle.Target {
+	return reviewer.targets.Targets()
+}
+
+func (reviewer interactivePlanReviewer) Review(
+	request application.Request,
+) (tui.ReviewedPlan, error) {
+	reviewed, err := reviewer.service.Review(request)
+	if err != nil {
+		return nil, err
+	}
+	return reviewed, nil
+}
+
 func runInteractivePreview(input io.Reader, output io.Writer) error {
-	service, catalog, err := buildPreviewRuntime()
+	reviewer, catalog, err := buildInteractiveReviewRuntime()
 	if err != nil {
 		return err
 	}
@@ -53,7 +72,7 @@ func runInteractivePreview(input io.Reader, output io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("prepare repository metadata: %w", err)
 	}
-	return tui.Run(input, output, &service, catalog, stats)
+	return tui.Run(input, output, reviewer, catalog, stats)
 }
 
 func buildPreviewService() (lifecycle.Service, error) {
@@ -70,14 +89,55 @@ func buildPreviewRuntime() (lifecycle.Service, mcpcatalog.Catalog, error) {
 	if err != nil {
 		return lifecycle.Service{}, mcpcatalog.Catalog{}, fmt.Errorf("resolve working directory: %w", err)
 	}
-	service, err := buildPreviewServiceFromContextWithHostDiscovery(
+	service, err := buildPreviewServiceForSnapshot(snapshot, cwd)
+	return service, snapshot.release.MCPCatalog, err
+}
+
+func buildInteractiveReviewRuntime() (
+	interactivePlanReviewer,
+	mcpcatalog.Catalog,
+	error,
+) {
+	snapshot, err := loadReadOnlyReleaseSnapshot()
+	if err != nil {
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, err
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, fmt.Errorf(
+			"resolve working directory: %w",
+			err,
+		)
+	}
+	targets, err := buildPreviewServiceForSnapshot(snapshot, cwd)
+	if err != nil {
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, err
+	}
+	identity := executor.ReleaseIdentity{
+		ID:          snapshot.release.ID,
+		IndexSHA256: snapshot.release.IndexSHA256,
+	}
+	service, err := buildPinnedApplyService(snapshot.root, cwd, identity)
+	if err != nil {
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, err
+	}
+	return interactivePlanReviewer{
+		targets: targets,
+		service: service,
+	}, snapshot.release.MCPCatalog, nil
+}
+
+func buildPreviewServiceForSnapshot(
+	snapshot readOnlyReleaseSnapshot,
+	cwd string,
+) (lifecycle.Service, error) {
+	return buildPreviewServiceFromContextWithHostDiscovery(
 		snapshot.root,
 		snapshot.release,
 		cwd,
 		codexstate.NewAppServerClient(),
 		hostcompatibility.DiscoverApplications,
 	)
-	return service, snapshot.release.MCPCatalog, err
 }
 
 func loadReadOnlyReleaseSnapshot() (readOnlyReleaseSnapshot, error) {

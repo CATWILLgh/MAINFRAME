@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
@@ -98,7 +99,7 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 		t.Fatal("opening a synchronous preview returned a command")
 	}
 	view := updated.View().Content
-	for _, text := range []string{
+	assertViewContains(t, view, []string{
 		"Filesystem plan",
 		"Install · 1",
 		"Adopt existing · 1",
@@ -113,13 +114,21 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 		"No configuration changes",
 		"b back",
 		"q quit",
-	} {
+	})
+	if !reflect.DeepEqual(previewer.selected, model.selected) {
+		t.Fatalf("preview selection = %v, want %v", previewer.selected, model.selected)
+	}
+	if updated.reviewedPlan == nil {
+		t.Fatal("successful review did not retain the opaque reviewed plan")
+	}
+}
+
+func assertViewContains(t *testing.T, view string, expected []string) {
+	t.Helper()
+	for _, text := range expected {
 		if !strings.Contains(view, text) {
 			t.Fatalf("preview does not contain %q:\n%s", text, view)
 		}
-	}
-	if !reflect.DeepEqual(previewer.selected, model.selected) {
-		t.Fatalf("preview selection = %v, want %v", previewer.selected, model.selected)
 	}
 }
 
@@ -202,6 +211,7 @@ func TestPreviewBackPreservesSelection(t *testing.T) {
 	}})
 	model.selected = []domain.ComponentID{domain.ComponentOpenCode}
 	model.screen = screenPreview
+	model.reviewedPlan = fakeReviewedPlan{}
 
 	updatedModel, command := model.Update(keyPress("b"))
 	updated := updatedModel.(*Model)
@@ -213,6 +223,9 @@ func TestPreviewBackPreservesSelection(t *testing.T) {
 	}
 	if command == nil {
 		t.Fatal("returning to the form must initialize it")
+	}
+	if updated.reviewedPlan != nil {
+		t.Fatal("returning from preview retained an executable reviewed plan")
 	}
 }
 
@@ -233,6 +246,11 @@ func TestPreviewErrorIsRenderedWithoutLeavingSelection(t *testing.T) {
 		},
 		err: errors.New("planner unavailable"),
 	})
+	model.reviewedPlan = fakeReviewedPlan{}
+	model.preview = lifecycle.Preview{Diagnostics: diagnostics.Plan{Executable: true}}
+	model.mcpPreview = mcpcatalog.OnboardingPreview{
+		Connections: []mcpcatalog.Connection{{}},
+	}
 
 	updated, command := model.openPreview()
 	if updated.screen != screenMain {
@@ -244,14 +262,33 @@ func TestPreviewErrorIsRenderedWithoutLeavingSelection(t *testing.T) {
 	if command == nil {
 		t.Fatal("selection form was not reinitialized after a preview error")
 	}
+	if updated.reviewedPlan != nil ||
+		updated.preview.Diagnostics.Executable ||
+		len(updated.mcpPreview.Connections) != 0 {
+		t.Fatal("failed review retained stale plan state")
+	}
 }
 
 func TestQuitKeysReturnAQuitCommand(t *testing.T) {
 	for _, key := range []string{"q", "ctrl+c"} {
 		model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
-		_, command := model.Update(keyPress(key))
+		model.screen = screenPreview
+		model.reviewedPlan = fakeReviewedPlan{}
+		model.preview = lifecycle.Preview{
+			Diagnostics: diagnostics.Plan{Executable: true},
+		}
+		model.mcpPreview = mcpcatalog.OnboardingPreview{
+			Connections: []mcpcatalog.Connection{{}},
+		}
+		updatedModel, command := model.Update(keyPress(key))
 		if command == nil {
 			t.Fatalf("key %q did not return a quit command", key)
+		}
+		updated := updatedModel.(*Model)
+		if updated.reviewedPlan != nil ||
+			updated.preview.Diagnostics.Executable ||
+			len(updated.mcpPreview.Connections) != 0 {
+			t.Fatalf("key %q retained reviewed plan state", key)
 		}
 	}
 }
@@ -293,12 +330,23 @@ func (fake *fakePreviewer) Targets() []lifecycle.Target {
 	return append([]lifecycle.Target(nil), fake.targets...)
 }
 
-func (fake *fakePreviewer) Preview(request lifecycle.PreviewRequest) (lifecycle.Preview, error) {
+func (fake *fakePreviewer) Review(request application.Request) (ReviewedPlan, error) {
 	fake.calls++
 	fake.selected = append([]domain.ComponentID(nil), request.Components...)
 	fake.mcpSelections = append([]mcpcatalog.Selection(nil), request.MCPSelections...)
 	fake.diagnostics = request.Diagnostics
-	return fake.preview, fake.err
+	if fake.err != nil {
+		return nil, fake.err
+	}
+	return fakeReviewedPlan{semantic: fake.preview}, nil
+}
+
+type fakeReviewedPlan struct {
+	semantic lifecycle.Preview
+}
+
+func (plan fakeReviewedPlan) Semantic() lifecycle.Preview {
+	return plan.semantic
 }
 
 type fakeStatsSource struct {
@@ -313,8 +361,8 @@ func (fake fakeStatsSource) Stats(
 	return fake.stats, fake.err
 }
 
-func newTestModel(t *testing.T, previewer Previewer) *Model {
-	return NewModel(previewer, testCatalog(t), nil)
+func newTestModel(t *testing.T, reviewer PlanReviewer) *Model {
+	return NewModel(reviewer, testCatalog(t), nil)
 }
 
 func testCatalog(t *testing.T) mcpcatalog.Catalog {

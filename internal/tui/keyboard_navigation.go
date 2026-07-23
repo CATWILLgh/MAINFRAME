@@ -8,9 +8,11 @@ func (model *Model) handleGlobalKey(key tea.KeyPressMsg) (*Model, tea.Cmd, bool)
 		if model.screen == screenMCPCredential {
 			return model, nil, false
 		}
+		model.clearReviewedPlan()
 		model.clearCredentialDrafts()
 		return model, tea.Quit, true
 	case "ctrl+c":
+		model.clearReviewedPlan()
 		model.clearCredentialDrafts()
 		return model, tea.Quit, true
 	case "esc":

@@ -53,12 +53,13 @@ type previewServiceBuilder func(
 ) (lifecycle.Service, error)
 
 type releaseSnapshotBuilder struct {
-	resolveRoot releaseRootResolver
-	cwd         string
-	load        releaseLoader
-	client      func() codexstate.Client
-	build       previewServiceBuilder
-	discover    hostApplicationDiscoverer
+	resolveRoot     releaseRootResolver
+	expectedRelease *executor.ReleaseIdentity
+	cwd             string
+	load            releaseLoader
+	client          func() codexstate.Client
+	build           previewServiceBuilder
+	discover        hostApplicationDiscoverer
 }
 
 func newReleaseSnapshotBuilder(releaseRoot, cwd string) releaseSnapshotBuilder {
@@ -99,6 +100,15 @@ func (builder releaseSnapshotBuilder) Build(
 	if err != nil {
 		return application.Snapshot{}, fmt.Errorf("load release: %w", err)
 	}
+	identity := executor.ReleaseIdentity{
+		ID:          release.ID,
+		IndexSHA256: release.IndexSHA256,
+	}
+	if builder.expectedRelease != nil && identity != *builder.expectedRelease {
+		return application.Snapshot{}, fmt.Errorf(
+			"release identity changed during the session",
+		)
+	}
 	service, err := builder.build(
 		releaseRoot,
 		release,
@@ -111,10 +121,7 @@ func (builder releaseSnapshotBuilder) Build(
 		return application.Snapshot{}, err
 	}
 	return application.Snapshot{
-		Release: executor.ReleaseIdentity{
-			ID:          release.ID,
-			IndexSHA256: release.IndexSHA256,
-		},
+		Release:   identity,
 		Lifecycle: service,
 	}, nil
 }
@@ -187,16 +194,40 @@ func (session *productionExecutorSession) Close() error {
 }
 
 func buildApplyService() (application.Service, error) {
-	recoveryFactory, err := newProductionRecoveryExecutorFactory()
-	if err != nil {
-		return application.Service{}, err
-	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return application.Service{}, fmt.Errorf("resolve working directory: %w", err)
 	}
 	releaseRoots := &releaseRootSource{resolve: resolveReleaseRoot}
+	return buildApplyServiceWithSource(releaseRoots, cwd, nil)
+}
+
+func buildPinnedApplyService(
+	releaseRoot string,
+	cwd string,
+	expected executor.ReleaseIdentity,
+) (application.Service, error) {
+	if releaseRoot == "" {
+		return application.Service{}, errors.New("release root must not be empty")
+	}
+	releaseRoots := &releaseRootSource{value: releaseRoot}
+	return buildApplyServiceWithSource(releaseRoots, cwd, &expected)
+}
+
+func buildApplyServiceWithSource(
+	releaseRoots *releaseRootSource,
+	cwd string,
+	expected *executor.ReleaseIdentity,
+) (application.Service, error) {
+	recoveryFactory, err := newProductionRecoveryExecutorFactory()
+	if err != nil {
+		return application.Service{}, err
+	}
 	builder := newReleaseSnapshotBuilderWithResolver(releaseRoots.Resolve, cwd)
+	if expected != nil {
+		identity := *expected
+		builder.expectedRelease = &identity
+	}
 	factory := productionApplyExecutorFactory{
 		resolveRoot: releaseRoots.Resolve,
 		environment: hostEnvironment(),

@@ -78,6 +78,30 @@ func TestReleaseSnapshotBuilderReloadsAndReinspectsEveryBuild(t *testing.T) {
 	}
 }
 
+func TestReleaseSnapshotBuilderRejectsPinnedIdentityDrift(t *testing.T) {
+	expected := executor.ReleaseIdentity{
+		ID:          "release",
+		IndexSHA256: applyRuntimeDigest(1),
+	}
+	builder := productionTestSnapshotBuilder(
+		t,
+		func() (string, error) { return t.TempDir(), nil },
+	)
+	builder.expectedRelease = &expected
+	builder.load = func(string) (releasecontract.Release, error) {
+		return releasecontract.Release{
+			ID:          expected.ID,
+			IndexSHA256: applyRuntimeDigest(2),
+			Model:       previewOwnershipModel(t),
+		}, nil
+	}
+
+	_, err := builder.Build(application.Request{})
+	if err == nil || !strings.Contains(err.Error(), "release identity changed") {
+		t.Fatalf("Build() error = %v", err)
+	}
+}
+
 func assertDiagnosticsObservationScopes(
 	t *testing.T,
 	scopes []diagnosticsObservationScope,

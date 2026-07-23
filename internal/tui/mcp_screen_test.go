@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -217,6 +218,13 @@ func TestMCPPreviewRejectsUnsupportedAdapterWithoutCallingLifecycle(t *testing.T
 	choice.Enabled = true
 	choice.ProfileID = "remote-api-key"
 	choice.Adapters = []domain.ComponentID{domain.ComponentAntigravity2}
+	model.reviewedPlan = fakeReviewedPlan{}
+	model.preview = lifecycle.Preview{
+		Diagnostics: diagnostics.Plan{Executable: true},
+	}
+	model.mcpPreview = mcpcatalog.OnboardingPreview{
+		Connections: []mcpcatalog.Connection{{}},
+	}
 
 	updated, command := model.openPreview()
 	if updated.screen != screenMCP || command == nil {
@@ -227,6 +235,11 @@ func TestMCPPreviewRejectsUnsupportedAdapterWithoutCallingLifecycle(t *testing.T
 	}
 	if previewer.calls != 0 {
 		t.Fatalf("lifecycle preview calls = %d", previewer.calls)
+	}
+	if updated.reviewedPlan != nil ||
+		updated.preview.Diagnostics.Executable ||
+		len(updated.mcpPreview.Connections) != 0 {
+		t.Fatal("MCP validation failure retained stale plan state")
 	}
 }
 

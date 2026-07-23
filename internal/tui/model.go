@@ -8,15 +8,20 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
-type Previewer interface {
+type ReviewedPlan interface {
+	Semantic() lifecycle.Preview
+}
+
+type PlanReviewer interface {
 	Targets() []lifecycle.Target
-	Preview(lifecycle.PreviewRequest) (lifecycle.Preview, error)
+	Review(application.Request) (ReviewedPlan, error)
 }
 
 type screen uint8
@@ -32,7 +37,7 @@ const (
 )
 
 type Model struct {
-	previewer           Previewer
+	reviewer            PlanReviewer
 	catalog             mcpcatalog.Catalog
 	stats               mcpcatalog.StatsSource
 	targets             []lifecycle.Target
@@ -40,6 +45,7 @@ type Model struct {
 	form                *huh.Form
 	screen              screen
 	preview             lifecycle.Preview
+	reviewedPlan        ReviewedPlan
 	mcpPreview          mcpcatalog.OnboardingPreview
 	mcpChoices          map[mcpcatalog.ServerID]*mcpChoice
 	mcpMenuChoice       mcpMenuChoice
@@ -67,11 +73,11 @@ var (
 )
 
 func NewModel(
-	previewer Previewer,
+	reviewer PlanReviewer,
 	catalog mcpcatalog.Catalog,
 	stats mcpcatalog.StatsSource,
 ) *Model {
-	targets := previewer.Targets()
+	targets := reviewer.Targets()
 	selected := make([]domain.ComponentID, 0, len(targets))
 	for _, target := range targets {
 		if target.Selected && targetSelectable(target) {
@@ -79,7 +85,7 @@ func NewModel(
 		}
 	}
 	model := &Model{
-		previewer:       previewer,
+		reviewer:        reviewer,
 		catalog:         catalog,
 		stats:           stats,
 		targets:         targets,
@@ -155,6 +161,7 @@ func (model *Model) View() tea.View {
 }
 
 func (model *Model) openPreview() (*Model, tea.Cmd) {
+	model.clearReviewedPlan()
 	model.reconcileDependentDrafts()
 	mcpPreview, err := model.catalog.Preview(model.selected, model.mcpSelections())
 	if err != nil {
@@ -165,7 +172,7 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 		model.err = err
 		return model.reinitializeCurrentForm()
 	}
-	result, err := model.previewer.Preview(lifecycle.PreviewRequest{
+	reviewed, err := model.reviewer.Review(application.Request{
 		Components:    model.selected,
 		MCPSelections: model.mcpSelections(),
 		Diagnostics:   model.diagnostics,
@@ -174,11 +181,22 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 		model.err = err
 		return model.reinitializeCurrentForm()
 	}
+	if reviewed == nil {
+		model.err = fmt.Errorf("review returned no plan")
+		return model.reinitializeCurrentForm()
+	}
 	model.err = nil
-	model.preview = result
+	model.reviewedPlan = reviewed
+	model.preview = reviewed.Semantic()
 	model.mcpPreview = mcpPreview
 	model.screen = screenPreview
 	return model, nil
+}
+
+func (model *Model) clearReviewedPlan() {
+	model.reviewedPlan = nil
+	model.preview = lifecycle.Preview{}
+	model.mcpPreview = mcpcatalog.OnboardingPreview{}
 }
 
 func (model *Model) selectionView() string {
