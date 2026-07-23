@@ -128,8 +128,8 @@ func TestInspectionPrepareRelinquishOnlyMutatesRegistry(t *testing.T) {
 	if len(mutations) != 1 || mutations[0].Target != registry {
 		t.Fatalf("mutations = %#v, want registry only", mutations)
 	}
-	if strings.Contains(string(mutations[0].After), `"custom *"`) {
-		t.Fatalf("registry adopted user rule: %s", mutations[0].After)
+	if strings.Contains(string(mutations[0].After.Content), `"custom *"`) {
+		t.Fatalf("registry adopted user rule: %s", mutations[0].After.Content)
 	}
 }
 
@@ -161,7 +161,7 @@ func TestInspectionPrepareComposesSharedPhysicalTarget(t *testing.T) {
 	if len(transitions) != 1 || len(transitions[0].Mutations) != 3 {
 		t.Fatalf("transitions = %#v", transitions)
 	}
-	configAfter := string(transitions[0].Mutations[0].After)
+	configAfter := string(transitions[0].Mutations[0].After.Content)
 	for _, expected := range []string{
 		`"bash"`,
 		`"task"`,
@@ -195,7 +195,7 @@ func TestInspectionPrepareIsImmutableAndPerformsNoHostReads(t *testing.T) {
 	}
 	exposed := first.Transitions()
 	exposed[0].ResourceIDs[0] = "forged"
-	exposed[0].Mutations[0].After[0] = '['
+	exposed[0].Mutations[0].After.Content[0] = '['
 
 	second, err := inspection.Prepare([]domain.ComponentID{domain.ComponentOpenCode})
 	if err != nil {
@@ -269,9 +269,9 @@ func assertPreparedMutation(
 		mutation.Before.Mode != mode ||
 		mutation.Before.Device != 7 ||
 		mutation.Before.Inode != inode ||
-		mutation.Mode != mode&0o600 ||
-		string(mutation.After) != after {
-		t.Fatalf("mutation = %#v, after =\n%s", mutation, mutation.After)
+		mutation.After.Mode != mode&0o600 ||
+		string(mutation.After.Content) != after {
+		t.Fatalf("mutation = %#v, after =\n%s", mutation, mutation.After.Content)
 	}
 }
 

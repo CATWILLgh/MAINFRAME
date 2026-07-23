@@ -63,7 +63,7 @@ func TestPrepareAntigravityCreatesMissingFilesPrivately(t *testing.T) {
 		t.Fatalf("mutations = %#v", mutations)
 	}
 	for _, mutation := range mutations {
-		if mutation.Before.Exists || mutation.Mode != 0o600 {
+		if mutation.Before.Exists || mutation.After.Mode != 0o600 {
 			t.Fatalf("missing-file mutation = %#v", mutation)
 		}
 	}

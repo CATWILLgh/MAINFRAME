@@ -13,6 +13,9 @@ import (
 func (workspace Workspace) PublishConfiguration(
 	mutation executor.JournalConfigurationMutation,
 ) (executor.ConfigurationState, error) {
+	if !mutation.After.Exists {
+		return workspace.publishConfigurationRemoval(mutation)
+	}
 	if !validFileIdentity(mutation.StagedIdentity) {
 		return executor.ConfigurationState{}, errors.New("invalid staged configuration identity")
 	}
@@ -59,6 +62,49 @@ func (workspace Workspace) PublishConfiguration(
 	return inferConfigurationPublication(context, mutation, syncErr)
 }
 
+func (workspace Workspace) publishConfigurationRemoval(
+	mutation executor.JournalConfigurationMutation,
+) (executor.ConfigurationState, error) {
+	if !mutation.Before.Exists ||
+		mutation.StagedIdentity != (executor.FileIdentity{}) {
+		return executor.ConfigurationState{}, errors.New(
+			"invalid configuration removal",
+		)
+	}
+	context, err := workspace.openConfigurationMutation(mutation)
+	if err != nil {
+		return executor.ConfigurationState{}, err
+	}
+	defer context.close()
+	public, retained, err := inspectConfigurationPair(context, mutation)
+	if err != nil {
+		return executor.ConfigurationState{}, err
+	}
+	if publishedConfigurationState(public, retained, mutation) {
+		return public, syncRenamedDirectories(context.privateFD, context.parentFD)
+	}
+	if !initialConfigurationState(public, retained, mutation) {
+		return executor.ConfigurationState{}, errors.New(
+			"configuration publication state changed",
+		)
+	}
+	err = renameNoReplace(
+		context.parentFD,
+		context.finalName,
+		context.privateFD,
+		mutation.StagedName,
+	)
+	if err != nil {
+		return inferConfigurationPublication(
+			context,
+			mutation,
+			fmt.Errorf("publish configuration removal: %w", err),
+		)
+	}
+	syncErr := syncRenamedDirectories(context.parentFD, context.privateFD)
+	return inferConfigurationPublication(context, mutation, syncErr)
+}
+
 func inferConfigurationPublication(
 	context configurationContext,
 	mutation executor.JournalConfigurationMutation,
@@ -68,6 +114,13 @@ func inferConfigurationPublication(
 	if inspectErr == nil && publishedConfigurationState(public, staged, mutation) {
 		return public, operationErr
 	}
+	if restoreErr := restoreUnexpectedRemovalSource(context, mutation); restoreErr != nil {
+		return executor.ConfigurationState{}, errors.Join(
+			operationErr,
+			inspectErr,
+			restoreErr,
+		)
+	}
 	if operationErr != nil {
 		return executor.ConfigurationState{}, errors.Join(operationErr, inspectErr)
 	}
@@ -75,6 +128,46 @@ func inferConfigurationPublication(
 		inspectErr,
 		errors.New("published configuration state differs"),
 	)
+}
+
+func restoreUnexpectedRemovalSource(
+	context configurationContext,
+	mutation executor.JournalConfigurationMutation,
+) error {
+	if mutation.After.Exists {
+		return nil
+	}
+	publicExists, err := nameExistsAt(context.parentFD, context.finalName)
+	if err != nil {
+		return err
+	}
+	retainedExists, err := nameExistsAt(
+		context.privateFD,
+		mutation.StagedName,
+	)
+	if err != nil || publicExists || !retainedExists {
+		return err
+	}
+	renameErr := renameNoReplace(
+		context.privateFD,
+		mutation.StagedName,
+		context.parentFD,
+		context.finalName,
+	)
+	syncErr := syncRenamedDirectories(context.privateFD, context.parentFD)
+	return errors.Join(
+		renameErr,
+		syncErr,
+		errors.New("restored changed configuration after removal race"),
+	)
+}
+
+func nameExistsAt(parentFD int, name string) (bool, error) {
+	_, _, err := identityAt(parentFD, name)
+	if isMissing(err) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (workspace Workspace) RollbackConfiguration(
@@ -95,7 +188,14 @@ func (workspace Workspace) RollbackConfiguration(
 	if !publishedConfigurationState(public, staged, mutation) {
 		return errors.New("configuration rollback state changed")
 	}
-	if mutation.Before.Exists {
+	if !mutation.After.Exists {
+		err = renameNoReplace(
+			context.privateFD,
+			mutation.StagedName,
+			context.parentFD,
+			context.finalName,
+		)
+	} else if mutation.Before.Exists {
 		err = renameExchange(
 			context.privateFD,
 			mutation.StagedName,
@@ -148,6 +248,9 @@ func initialConfigurationState(
 	mutation executor.JournalConfigurationMutation,
 ) bool {
 	before := mutation.Before
+	if !mutation.After.Exists {
+		return matchesConfigurationImage(public, before) && !staged.Exists
+	}
 	after := mutation.After
 	after.Entry = mutation.StagedIdentity
 	return matchesConfigurationImage(public, before) &&
@@ -159,6 +262,10 @@ func publishedConfigurationState(
 	mutation executor.JournalConfigurationMutation,
 ) bool {
 	after := mutation.After
+	if !after.Exists {
+		return !public.Exists &&
+			matchesConfigurationImage(staged, mutation.Before)
+	}
 	after.Entry = mutation.StagedIdentity
 	if !matchesConfigurationImage(public, after) {
 		return false
@@ -209,8 +316,10 @@ func finalizedPrivateImage(
 		return mutation.Before, mutation.Before.Exists, nil
 	case executor.StepRolledBack:
 		after := mutation.After
-		after.Entry = mutation.StagedIdentity
-		return after, true, nil
+		if after.Exists {
+			after.Entry = mutation.StagedIdentity
+		}
+		return after, after.Exists, nil
 	default:
 		return executor.ConfigurationFileImage{}, false, errors.New(
 			"configuration is not ready for finalization",

@@ -9,15 +9,24 @@ import (
 )
 
 type ExactJSONDocument struct {
-	ResourceID string
-	Document   []byte
+	ResourceID  string
+	Disposition ExactJSONDisposition
+	Document    []byte
 }
 
+type ExactJSONDisposition string
+
+const (
+	ExactJSONPresent ExactJSONDisposition = "present"
+	ExactJSONAbsent  ExactJSONDisposition = "absent"
+)
+
 type exactJSONState struct {
-	resource releasecontract.Resource
-	snapshot fileSnapshot
-	after    []byte
-	changed  bool
+	resource    releasecontract.Resource
+	snapshot    fileSnapshot
+	disposition ExactJSONDisposition
+	after       []byte
+	changed     bool
 }
 
 func (inspection Inspection) PlanExactJSONDocuments(
@@ -39,9 +48,11 @@ func (inspection Inspection) PlanExactJSONDocuments(
 			continue
 		}
 		if state.changed {
-			kind := ChangeUpdate
-			if !state.snapshot.present {
+			kind := ChangeRemove
+			if state.disposition == ExactJSONPresent && !state.snapshot.present {
 				kind = ChangeAdd
+			} else if state.disposition == ExactJSONPresent {
+				kind = ChangeUpdate
 			}
 			plan.Changes = append(
 				plan.Changes,
@@ -78,10 +89,15 @@ func (inspection Inspection) PrepareExactJSONDocuments(
 		transitions = append(transitions, Transition{
 			ResourceIDs: []string{state.resource.ID},
 			Mutations: []FileMutation{{
+				Disposition: mutationDispositionForExactJSON(
+					state.disposition,
+				),
 				Target: state.resource.Target,
 				Before: beforeImage(state.snapshot),
-				After:  append([]byte(nil), state.after...),
-				Mode:   privateConfigurationMode,
+				After: afterImageForExactJSON(
+					state.disposition,
+					state.after,
+				),
 			}},
 		})
 	}
@@ -104,9 +120,12 @@ func (inspection Inspection) exactJSONStates(
 		if err != nil {
 			return nil, err
 		}
-		after, err := exactJSONAfter(item.ResourceID, canonical)
-		if err != nil {
-			return nil, err
+		var after []byte
+		if item.Disposition == ExactJSONPresent {
+			after, err = exactJSONAfter(item.ResourceID, canonical)
+			if err != nil {
+				return nil, err
+			}
 		}
 		snapshot, exists := inspection.files[resource.Target]
 		if !exists {
@@ -119,9 +138,12 @@ func (inspection Inspection) exactJSONStates(
 				)
 			}
 		}
-		changed := !snapshot.present ||
-			snapshot.mode != privateConfigurationMode
-		if snapshot.present {
+		changed := snapshot.present
+		if item.Disposition == ExactJSONPresent {
+			changed = !snapshot.present ||
+				snapshot.mode != privateConfigurationMode
+		}
+		if item.Disposition == ExactJSONPresent && snapshot.present {
 			current, parseErr := jsondocument.Parse(snapshot.raw)
 			changed = changed ||
 				parseErr != nil ||
@@ -129,7 +151,9 @@ func (inspection Inspection) exactJSONStates(
 		}
 		states = append(states, exactJSONState{
 			resource: resource, snapshot: snapshot,
-			after: after, changed: changed,
+			disposition: item.Disposition,
+			after:       after,
+			changed:     changed,
 		})
 	}
 	sort.Slice(states, func(left, right int) bool {
@@ -144,13 +168,35 @@ func exactJSONDesired(
 	seen map[string]bool,
 ) (releasecontract.Resource, string, error) {
 	resource, exists := resources[item.ResourceID]
-	if !exists || seen[item.ResourceID] || len(item.Document) == 0 {
+	if !exists || seen[item.ResourceID] {
 		return releasecontract.Resource{}, "", fmt.Errorf(
 			"invalid exact JSON desired resource %q",
 			item.ResourceID,
 		)
 	}
 	seen[item.ResourceID] = true
+	switch item.Disposition {
+	case ExactJSONAbsent:
+		if len(item.Document) != 0 {
+			return releasecontract.Resource{}, "", fmt.Errorf(
+				"absent exact JSON desired resource %q has document bytes",
+				item.ResourceID,
+			)
+		}
+		return resource, "", nil
+	case ExactJSONPresent:
+		if len(item.Document) == 0 {
+			return releasecontract.Resource{}, "", fmt.Errorf(
+				"present exact JSON desired resource %q has no document bytes",
+				item.ResourceID,
+			)
+		}
+	default:
+		return releasecontract.Resource{}, "", fmt.Errorf(
+			"invalid exact JSON disposition for resource %q",
+			item.ResourceID,
+		)
+	}
 	canonical, err := resource.ValidateExactJSONDocument(item.Document)
 	if err != nil {
 		return releasecontract.Resource{}, "", fmt.Errorf(
@@ -160,6 +206,29 @@ func exactJSONDesired(
 		)
 	}
 	return resource, canonical, nil
+}
+
+func mutationDispositionForExactJSON(
+	disposition ExactJSONDisposition,
+) MutationDisposition {
+	if disposition == ExactJSONAbsent {
+		return MutationRemoveExactDocument
+	}
+	return MutationPresent
+}
+
+func afterImageForExactJSON(
+	disposition ExactJSONDisposition,
+	content []byte,
+) AfterImage {
+	if disposition == ExactJSONAbsent {
+		return AfterImage{}
+	}
+	return AfterImage{
+		Exists:  true,
+		Content: append([]byte(nil), content...),
+		Mode:    privateConfigurationMode,
+	}
 }
 
 func exactJSONAfter(resourceID string, canonical string) ([]byte, error) {

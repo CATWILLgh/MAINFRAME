@@ -90,6 +90,16 @@ func (executor Executor) adoptStagedConfiguration(
 	if !exists {
 		return nil
 	}
+	if !mutation.After.Exists {
+		if identity != (FileIdentity{}) {
+			return errors.New("adopted removal has a staged identity")
+		}
+		mutation.Phase = StepPublished
+		if err := executor.store.Save(*journal); err != nil {
+			return fmt.Errorf("save adopted removal: %w", err)
+		}
+		return nil
+	}
 	if !validFileIdentity(identity) {
 		return errors.New("adopted configuration identity is invalid")
 	}

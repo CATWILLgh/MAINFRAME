@@ -31,7 +31,7 @@ func TestInspectionPrepareCreatesPrivateMissingFiles(t *testing.T) {
 	}
 	for _, mutation := range mutations {
 		if mutation.Before.Exists || mutation.Before.SHA256 != "" ||
-			mutation.Mode != 0o600 {
+			mutation.After.Mode != 0o600 {
 			t.Fatalf("missing-file mutation = %#v", mutation)
 		}
 	}
@@ -59,10 +59,10 @@ func TestInspectionPrepareCreatesSelectedEmptyOwnedMap(t *testing.T) {
 		t.Fatalf("empty selected map was not materialized: %#v", transitions)
 	}
 	if !strings.Contains(
-		string(transitions[0].Mutations[0].After),
+		string(transitions[0].Mutations[0].After.Content),
 		`"permission": {}`,
 	) {
-		t.Fatalf("configuration map is absent:\n%s", transitions[0].Mutations[0].After)
+		t.Fatalf("configuration map is absent:\n%s", transitions[0].Mutations[0].After.Content)
 	}
 }
 

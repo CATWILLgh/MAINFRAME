@@ -47,6 +47,59 @@ func TestApplyRequiresConfigurationWorkspaceBeforeWrites(t *testing.T) {
 	}
 }
 
+func TestPrepareRemovalCreatesPrivateWithoutStagingPayload(t *testing.T) {
+	fixture := newFixture(Preview{})
+	configurations := newFakeConfigurationWorkspace(fixture.store)
+	executor := fixture.configurationExecutor(configurations)
+	plan := preparedRemovalPlan(t)
+	prepared, err := executor.materializeConfigurations(plan)
+	if err != nil {
+		t.Fatalf("materializeConfigurations() error = %v", err)
+	}
+	mutation := prepared.transitions[0].Mutations[0]
+	configurations.public[mutation.Target] = configurationState(
+		mutation.Before.SHA256,
+		mutation.Before.Mode,
+		FileIdentity{Device: 1, Inode: 1},
+		mutation.Before.Entry,
+	)
+	journal := Journal{Configurations: prepared.transitions}
+
+	if err := executor.prepareConfigurations(&journal, prepared.payloads); err != nil {
+		t.Fatalf("prepareConfigurations() error = %v", err)
+	}
+	got := journal.Configurations[0].Mutations[0]
+	if got.Phase != StepPrivateCreated ||
+		got.StagedIdentity != (FileIdentity{}) ||
+		len(prepared.payloads) != 0 ||
+		containsConfigurationCall(configurations.calls, "stage:settings.json") {
+		t.Fatalf("prepared removal = %#v, calls = %#v", got, configurations.calls)
+	}
+}
+
+func TestPrepareRemovalRejectsStaleBeforeWithoutPrivateWrite(t *testing.T) {
+	fixture := newFixture(Preview{})
+	configurations := newFakeConfigurationWorkspace(fixture.store)
+	executor := fixture.configurationExecutor(configurations)
+	prepared, err := executor.materializeConfigurations(preparedRemovalPlan(t))
+	if err != nil {
+		t.Fatalf("materializeConfigurations() error = %v", err)
+	}
+	mutation := prepared.transitions[0].Mutations[0]
+	configurations.public[mutation.Target] = configurationState(
+		testDigest("changed"),
+		mutation.Before.Mode,
+		FileIdentity{Device: 1, Inode: 1},
+		FileIdentity{Device: 1, Inode: 99},
+	)
+	journal := Journal{Configurations: prepared.transitions}
+
+	err = executor.prepareConfigurations(&journal, prepared.payloads)
+	if err == nil || containsConfigurationCall(configurations.calls, "private:settings.json") {
+		t.Fatalf("prepareConfigurations() error = %v, calls = %#v", err, configurations.calls)
+	}
+}
+
 func TestApplyChecksPrivateModeBeforeConfigurationIntent(t *testing.T) {
 	preview := preparedExecutorPreview(t, `{"bash":"allow"}`)
 	fixture := newFixture(preview)
@@ -289,6 +342,31 @@ func preparedExecutorPreview(
 	)
 	preview.Configuration = prepared
 	return preview
+}
+
+func preparedRemovalPlan(t *testing.T) configuration.PreparedPlan {
+	t.Helper()
+	plan, err := configuration.NewPreparedPlan([]configuration.Transition{{
+		ResourceIDs: []string{"opencode.diagnostics"},
+		Mutations: []configuration.FileMutation{{
+			Disposition: configuration.MutationRemoveExactDocument,
+			Target: testConfigurationLocation(
+				"mainframe/diagnostics.json",
+			),
+			Before: configuration.BeforeImage{
+				Exists: true,
+				SHA256: testDigest("before"),
+				Mode:   0o600,
+				Device: 1,
+				Inode:  2,
+			},
+			After: configuration.AfterImage{},
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("NewPreparedPlan() error = %v", err)
+	}
+	return plan
 }
 
 func configurationTransitions(plan configuration.PreparedPlan) []configuration.Transition {

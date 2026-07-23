@@ -20,16 +20,81 @@ func TestNewPreparedPlanNormalizesAndClonesTransitions(t *testing.T) {
 		t.Fatalf("NewPreparedPlan() error = %v", err)
 	}
 	input[0].ResourceIDs[0] = "forged"
-	input[0].Mutations[0].After[0] = 'x'
+	input[0].Mutations[0].After.Content[0] = 'x'
 
 	got := plan.Transitions()
 	if len(got) != 2 || got[0].ResourceIDs[0] != "a-resource" ||
 		got[1].ResourceIDs[0] != "z-resource" {
 		t.Fatalf("normalized transitions = %#v", got)
 	}
-	got[0].Mutations[0].After[0] = 'x'
+	got[0].Mutations[0].After.Content[0] = 'x'
 	if reflect.DeepEqual(got, plan.Transitions()) {
 		t.Fatal("Transitions() exposed mutable plan storage")
+	}
+}
+
+func TestNewPreparedPlanValidatesAndClonesTypedAfterImages(t *testing.T) {
+	valid := preparedTransition("resource", "config.toml", 23)
+	content := valid.Mutations[0].After.Content
+	plan, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{valid},
+	)
+	if err != nil {
+		t.Fatalf("NewPreparedPlan() error = %v", err)
+	}
+	content[0] = 'x'
+	got := plan.Transitions()
+	if string(got[0].Mutations[0].After.Content) != "after" {
+		t.Fatalf("input content was not cloned: %#v", got)
+	}
+	got[0].Mutations[0].After.Content[0] = 'x'
+	if string(plan.Transitions()[0].Mutations[0].After.Content) != "after" {
+		t.Fatal("Transitions() exposed mutable after-image content")
+	}
+	tests := map[string]configuration.AfterImage{
+		"present without mode": {Exists: true, Content: []byte("after")},
+		"absent with content":  {Content: []byte("after")},
+		"absent with mode":     {Mode: 0o600},
+	}
+	for name, after := range tests {
+		t.Run(name, func(t *testing.T) {
+			transition := preparedTransition("resource", "config.toml", 24)
+			transition.Mutations[0].After = after
+			if _, err := configuration.NewPreparedPlan(
+				[]configuration.Transition{transition},
+			); err == nil {
+				t.Fatalf("NewPreparedPlan() accepted after-image %#v", after)
+			}
+		})
+	}
+}
+
+func TestNewPreparedPlanValidatesExactRemovalAfterImage(t *testing.T) {
+	removal := preparedTransition(
+		"codex.diagnostics",
+		"mainframe/diagnostics.json",
+		25,
+	)
+	removal.Mutations[0].Disposition = configuration.MutationRemoveExactDocument
+	removal.Mutations[0].After = configuration.AfterImage{}
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{removal},
+	); err != nil {
+		t.Fatalf("NewPreparedPlan() rejected valid removal: %v", err)
+	}
+	invalidRemoval := preparedTransition(
+		"codex.diagnostics",
+		"mainframe/diagnostics.json",
+		26,
+	)
+	invalidRemoval.Mutations[0].Disposition =
+		configuration.MutationRemoveExactDocument
+	invalidRemoval.Mutations[0].Before = configuration.BeforeImage{}
+	invalidRemoval.Mutations[0].After = configuration.AfterImage{}
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{invalidRemoval},
+	); err == nil {
+		t.Fatal("NewPreparedPlan() accepted removal without existing before-image")
 	}
 }
 
@@ -99,7 +164,7 @@ func TestNewPreparedPlanRejectsMalformedTransitions(t *testing.T) {
 		},
 		"unsafe mode": func() []configuration.Transition {
 			input := clonePreparedTransitions(valid)
-			input[0].Mutations[0].Mode = 0o666
+			input[0].Mutations[0].After.Mode = 0o666
 			return input
 		},
 		"duplicate resource": func() []configuration.Transition {
@@ -134,9 +199,28 @@ func TestNewPreparedPlanRejectsMalformedTransitions(t *testing.T) {
 
 func TestNewPreparedPlanAllowsAnEmptyAfterImage(t *testing.T) {
 	transition := preparedTransition("resource", "config.toml", 51)
-	transition.Mutations[0].After = []byte{}
+	transition.Mutations[0].After.Content = []byte{}
 	if _, err := configuration.NewPreparedPlan([]configuration.Transition{transition}); err != nil {
 		t.Fatalf("NewPreparedPlan() rejected an empty file image: %v", err)
+	}
+}
+
+func TestNewPreparedPlanRejectsImplicitOrBroadRemoval(t *testing.T) {
+	implicit := preparedTransition("resource", "config.toml", 52)
+	implicit.Mutations[0].Disposition = ""
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{implicit},
+	); err == nil {
+		t.Fatal("NewPreparedPlan() accepted an implicit disposition")
+	}
+
+	broad := preparedTransition("resource", "config.toml", 53)
+	broad.Mutations[0].Disposition = configuration.MutationRemoveExactDocument
+	broad.Mutations[0].After = configuration.AfterImage{}
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{broad},
+	); err == nil {
+		t.Fatal("NewPreparedPlan() accepted removal outside diagnostics")
 	}
 }
 
@@ -146,12 +230,15 @@ func preparedTransition(resource, path string, inode uint64) configuration.Trans
 	return configuration.Transition{
 		ResourceIDs: []string{resource},
 		Mutations: []configuration.FileMutation{{
-			Target: domain.Location{Root: domain.RootCodexConfig, Path: domain.ArtifactPath(path)},
+			Disposition: configuration.MutationPresent,
+			Target:      domain.Location{Root: domain.RootCodexConfig, Path: domain.ArtifactPath(path)},
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: fmt.Sprintf("%x", digest), Mode: 0o600,
 				Device: 7, Inode: inode,
 			},
-			After: []byte("after"), Mode: 0o600,
+			After: configuration.AfterImage{
+				Exists: true, Content: []byte("after"), Mode: 0o600,
+			},
 		}},
 	}
 }
@@ -160,10 +247,17 @@ func clonePreparedTransitions(input configuration.Transition) []configuration.Tr
 	return []configuration.Transition{{
 		ResourceIDs: append([]string(nil), input.ResourceIDs...),
 		Mutations: []configuration.FileMutation{{
-			Target: input.Mutations[0].Target,
-			Before: input.Mutations[0].Before,
-			After:  append([]byte(nil), input.Mutations[0].After...),
-			Mode:   input.Mutations[0].Mode,
+			Disposition: input.Mutations[0].Disposition,
+			Target:      input.Mutations[0].Target,
+			Before:      input.Mutations[0].Before,
+			After: configuration.AfterImage{
+				Exists: true,
+				Content: append(
+					[]byte(nil),
+					input.Mutations[0].After.Content...,
+				),
+				Mode: input.Mutations[0].After.Mode,
+			},
 		}},
 	}}
 }

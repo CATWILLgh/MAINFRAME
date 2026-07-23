@@ -71,6 +71,9 @@ func (workspace Workspace) StageConfiguration(
 func (workspace Workspace) AdoptStagedConfiguration(
 	mutation executor.JournalConfigurationMutation,
 ) (executor.FileIdentity, bool, error) {
+	if !mutation.After.Exists {
+		return workspace.adoptPublishedConfigurationRemoval(mutation)
+	}
 	context, err := workspace.openConfigurationMutation(mutation)
 	if err != nil {
 		return executor.FileIdentity{}, false, err
@@ -99,6 +102,29 @@ func (workspace Workspace) AdoptStagedConfiguration(
 		)
 	}
 	return state.Entry, true, nil
+}
+
+func (workspace Workspace) adoptPublishedConfigurationRemoval(
+	mutation executor.JournalConfigurationMutation,
+) (executor.FileIdentity, bool, error) {
+	context, err := workspace.openConfigurationMutation(mutation)
+	if err != nil {
+		return executor.FileIdentity{}, false, err
+	}
+	defer context.close()
+	public, retained, err := inspectConfigurationPair(context, mutation)
+	if err != nil {
+		return executor.FileIdentity{}, false, err
+	}
+	if initialConfigurationState(public, retained, mutation) {
+		return executor.FileIdentity{}, false, nil
+	}
+	if publishedConfigurationState(public, retained, mutation) {
+		return executor.FileIdentity{}, true, nil
+	}
+	return executor.FileIdentity{}, false, errors.New(
+		"configuration removal recovery state changed",
+	)
 }
 
 func createStagedConfiguration(

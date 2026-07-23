@@ -118,6 +118,9 @@ func (executor Executor) stageAllConfigurations(
 	for transition := range journal.Configurations {
 		for index := range journal.Configurations[transition].Mutations {
 			mutation := &journal.Configurations[transition].Mutations[index]
+			if !mutation.After.Exists {
+				continue
+			}
 			payload, exists := payloads[mutation.Target]
 			if !exists {
 				return fmt.Errorf("configuration payload is unavailable")
@@ -165,7 +168,9 @@ func (executor Executor) publishConfiguration(
 	mutation := &journal.Configurations[transition].Mutations[index]
 	actual, publishErr := executor.configurations.PublishConfiguration(*mutation)
 	expected := mutation.After
-	expected.Entry = mutation.StagedIdentity
+	if expected.Exists {
+		expected.Entry = mutation.StagedIdentity
+	}
 	if !configurationStateMatches(actual, expected, mutation.Parent) {
 		return errors.Join(
 			publishErr,

@@ -26,6 +26,80 @@ func TestJournalJSONUpgradesExactLegacyLinkOnlyShape(t *testing.T) {
 	}
 }
 
+func TestJournalJSONUpgradesValidV2ConfigurationToV3(t *testing.T) {
+	journal := configurationJournalFixture(StepPrivateCreated, TransactionInProgress)
+	journal.SchemaVersion = 2
+	payload := encodeV2JournalFixture(t, journal)
+
+	decoded, err := decodeJournal(payload)
+	if err != nil {
+		t.Fatalf("decodeJournal() error = %v", err)
+	}
+	if decoded.SchemaVersion != 3 {
+		t.Fatalf("schema version = %d, want 3", decoded.SchemaVersion)
+	}
+	got := decoded.Configurations[0].Mutations[0]
+	want := journal.Configurations[0].Mutations[0]
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("upgraded mutation = %#v, want %#v", got, want)
+	}
+}
+
+func TestJournalJSONRejectsV2AbsentAfterImage(t *testing.T) {
+	journal := configurationJournalFixture(StepPrivateCreated, TransactionInProgress)
+	journal.SchemaVersion = 2
+	journal.Configurations[0].Mutations[0].After = ConfigurationFileImage{}
+	payload := encodeV2JournalFixture(t, journal)
+
+	if _, err := decodeJournal(payload); err == nil {
+		t.Fatal("decodeJournal() laundered a v2 absent after-image")
+	}
+}
+
+func TestJournalJSONRejectsImplicitOrBroadV3Removal(t *testing.T) {
+	tests := map[string]func(*JournalConfigurationMutation){
+		"implicit disposition": func(mutation *JournalConfigurationMutation) {
+			mutation.Disposition = ""
+		},
+		"broad removal": func(mutation *JournalConfigurationMutation) {
+			mutation.Disposition = ConfigurationRemoveExactDocument
+			mutation.After = ConfigurationFileImage{}
+			mutation.Target = testLocation("config.json")
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			journal := configurationJournalFixture(
+				StepPrivateCreated,
+				TransactionInProgress,
+			)
+			mutate(&journal.Configurations[0].Mutations[0])
+			payload, err := json.Marshal(journal)
+			if err != nil {
+				t.Fatalf("encode fixture: %v", err)
+			}
+			decoded, err := decodeJournal(payload)
+			if err == nil {
+				err = validateJournal(decoded)
+			}
+			if err == nil {
+				t.Fatal("journal validation accepted unsafe removal")
+			}
+		})
+	}
+}
+
+func encodeV2JournalFixture(t *testing.T, journal Journal) []byte {
+	t.Helper()
+	payload, err := json.Marshal(journal)
+	if err != nil {
+		t.Fatalf("encode v2 fixture: %v", err)
+	}
+	return mutateJournalJSON(t, payload, func(root map[string]any) {
+		delete(firstConfigurationMutation(root), "disposition")
+	})
+}
+
 func TestCurrentInMemoryLinkOnlyJournalEncodesCurrentShape(t *testing.T) {
 	journal := journalWith(
 		TransactionInProgress,
@@ -38,7 +112,7 @@ func TestCurrentInMemoryLinkOnlyJournalEncodesCurrentShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode current fixture: %v", err)
 	}
-	if !strings.Contains(string(payload), `"schema_version":2`) ||
+	if !strings.Contains(string(payload), `"schema_version":3`) ||
 		!strings.Contains(string(payload), `"configurations":[]`) {
 		t.Fatalf("current fixture encoded incorrectly: %s", payload)
 	}
@@ -85,7 +159,7 @@ func TestJournalJSONRejectsExplicitLegacySchemaVersion(t *testing.T) {
 	}
 	explicitVersionZero := strings.Replace(
 		string(payload),
-		`"schema_version":2`,
+		`"schema_version":3`,
 		`"schema_version":0`,
 		1,
 	)
@@ -121,7 +195,7 @@ func TestJournalJSONEncodesCurrentShapeWithoutPreparedBytes(t *testing.T) {
 	}
 	sortStrings(gotFields)
 	if !reflect.DeepEqual(gotFields, wantFields) ||
-		string(root["schema_version"]) != "2" ||
+		string(root["schema_version"]) != "3" ||
 		string(root["configurations"]) == "null" {
 		t.Fatalf("current journal shape = %s", payload)
 	}

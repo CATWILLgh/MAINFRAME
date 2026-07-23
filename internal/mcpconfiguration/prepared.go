@@ -280,10 +280,14 @@ func (builder *mcpPreparation) mutation(
 		return nil, err
 	}
 	return &configuration.FileMutation{
-		Target: target,
-		Before: mcpBeforeImage(snapshot),
-		After:  append([]byte(nil), after...),
-		Mode:   mode,
+		Disposition: configuration.MutationPresent,
+		Target:      target,
+		Before:      mcpBeforeImage(snapshot),
+		After: configuration.AfterImage{
+			Exists:  true,
+			Content: append([]byte(nil), after...),
+			Mode:    mode,
+		},
 	}, nil
 }
 

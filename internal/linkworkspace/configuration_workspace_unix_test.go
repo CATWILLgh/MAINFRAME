@@ -88,6 +88,99 @@ func TestCommittedConfigurationFinalizationDeletesOnlyExactRetainedFile(t *testi
 	assertConfigurationState(t, fixture.inspect(t), []byte("after"), 0o400)
 }
 
+func TestConfigurationRemovalPublishesAndRestoresExactBefore(t *testing.T) {
+	fixture := newConfigurationFixture(t, "settings.json", []byte("before"), 0o600)
+	mutation := fixture.preparedRemovalMutation(t)
+	beforeIdentity := mutation.Before.Entry
+	fixture.prepareRemoval(t, &mutation)
+
+	published, err := fixture.workspace.PublishConfiguration(mutation)
+	if err != nil || published.Exists || published.Entry != (executor.FileIdentity{}) {
+		t.Fatalf("PublishConfiguration() = %#v, %v", published, err)
+	}
+	retried, err := fixture.workspace.PublishConfiguration(mutation)
+	if err != nil || retried != published {
+		t.Fatalf("retry = %#v, %v; want %#v", retried, err, published)
+	}
+	if err := fixture.workspace.RollbackConfiguration(mutation); err != nil {
+		t.Fatalf("RollbackConfiguration() error = %v", err)
+	}
+	if err := fixture.workspace.RollbackConfiguration(mutation); err != nil {
+		t.Fatalf("idempotent RollbackConfiguration() error = %v", err)
+	}
+	restored := fixture.inspect(t)
+	assertConfigurationState(t, restored, []byte("before"), 0o600)
+	if restored.Entry != beforeIdentity {
+		t.Fatalf("restored identity = %#v, want %#v", restored.Entry, beforeIdentity)
+	}
+	mutation.Phase = executor.StepRolledBack
+	fixture.finalize(t, mutation)
+}
+
+func TestCommittedConfigurationRemovalDeletesOnlyExactRetainedBefore(t *testing.T) {
+	fixture := newConfigurationFixture(t, "settings.json", []byte("before"), 0o600)
+	mutation := fixture.preparedRemovalMutation(t)
+	fixture.prepareRemoval(t, &mutation)
+	if _, err := fixture.workspace.PublishConfiguration(mutation); err != nil {
+		t.Fatalf("PublishConfiguration() error = %v", err)
+	}
+	mutation.Phase = executor.StepPublished
+
+	if err := fixture.workspace.FinalizeConfiguration(mutation); err != nil {
+		t.Fatalf("FinalizeConfiguration() error = %v", err)
+	}
+	if err := fixture.workspace.FinalizeConfiguration(mutation); err != nil {
+		t.Fatalf("idempotent FinalizeConfiguration() error = %v", err)
+	}
+	fixture.finalizePrivate(t, mutation)
+	if state := fixture.inspect(t); state.Exists {
+		t.Fatalf("removed configuration remains: %#v", state)
+	}
+}
+
+func TestConfigurationRemovalRejectsChangedPublicAndPrivate(t *testing.T) {
+	t.Run("public", func(t *testing.T) {
+		fixture := newConfigurationFixture(t, "settings.json", []byte("before"), 0o600)
+		mutation := fixture.preparedRemovalMutation(t)
+		fixture.prepareRemoval(t, &mutation)
+		if err := os.Remove(fixture.publicPath()); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fixture.publicPath(), []byte("foreign"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fixture.workspace.PublishConfiguration(mutation); err == nil {
+			t.Fatal("PublishConfiguration() removed a changed public file")
+		}
+	})
+	t.Run("private", func(t *testing.T) {
+		fixture := newConfigurationFixture(t, "settings.json", []byte("before"), 0o600)
+		mutation := fixture.preparedRemovalMutation(t)
+		fixture.prepareRemoval(t, &mutation)
+		if _, err := fixture.workspace.PublishConfiguration(mutation); err != nil {
+			t.Fatalf("PublishConfiguration() error = %v", err)
+		}
+		privatePath := filepath.Join(
+			fixture.target,
+			mutation.Private.Name,
+			mutation.StagedName,
+		)
+		if err := os.Remove(privatePath); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(privatePath, []byte("foreign"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := fixture.workspace.RollbackConfiguration(mutation); err == nil {
+			t.Fatal("RollbackConfiguration() restored a changed private file")
+		}
+		mutation.Phase = executor.StepPublished
+		if err := fixture.workspace.FinalizeConfiguration(mutation); err == nil {
+			t.Fatal("FinalizeConfiguration() deleted a changed private file")
+		}
+	})
+}
+
 func TestInspectConfigurationRejectsSymlinkHardlinkAndWrongType(t *testing.T) {
 	tests := map[string]func(*testing.T, string){
 		"symlink": func(t *testing.T, target string) {

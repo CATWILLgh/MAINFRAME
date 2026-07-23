@@ -42,9 +42,24 @@ func decodeJournal(payload []byte) (Journal, error) {
 	if err != nil {
 		return Journal{}, err
 	}
-	if err := requireJournalShape(payload); err != nil {
+	payload, err = upgradeV2Journal(payload)
+	if err != nil {
 		return Journal{}, err
 	}
+	if err := requireJournalShape(payload, true); err != nil {
+		return Journal{}, err
+	}
+	journal, err := decodeJournalPayload(payload)
+	if err != nil {
+		return Journal{}, err
+	}
+	if err := validateJournalSchema(journal); err != nil {
+		return Journal{}, err
+	}
+	return journal, nil
+}
+
+func decodeJournalPayload(payload []byte) (Journal, error) {
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	var journal Journal
@@ -52,9 +67,6 @@ func decodeJournal(payload []byte) (Journal, error) {
 		return Journal{}, err
 	}
 	if err := expectJSONEnd(decoder); err != nil {
-		return Journal{}, err
-	}
-	if err := validateJournalSchema(journal); err != nil {
 		return Journal{}, err
 	}
 	return journal, nil
@@ -123,7 +135,7 @@ func expectJSONEnd(decoder *json.Decoder) error {
 	return nil
 }
 
-func requireJournalShape(payload []byte) error {
+func requireJournalShape(payload []byte, current bool) error {
 	root, err := requiredObject(
 		payload,
 		"schema_version", "release", "desired", "status", "plan", "roots",
@@ -150,7 +162,7 @@ func requireJournalShape(payload []byte) error {
 	if err := requireRootsShape(root["roots"]); err != nil {
 		return err
 	}
-	if err := requireConfigurationsShape(root["configurations"]); err != nil {
+	if err := requireConfigurationsShape(root["configurations"], current); err != nil {
 		return err
 	}
 	if err := requireDirectoriesShape(root["directories"]); err != nil {

@@ -49,12 +49,12 @@ func TestPrepareClaudeComposesMixedExistingIntents(t *testing.T) {
 	}
 	configAfter := claudeMutationAt(
 		t, transitions[0], claudeLocation(".claude.json"),
-	).After
+	).After.Content
 	registryAfter := claudeMutationAt(
 		t,
 		transitions[0],
 		second.RegistryTarget,
-	).After
+	).After.Content
 	for _, after := range [][]byte{configAfter, registryAfter} {
 		if strings.Contains(string(after), `"docs"`) ||
 			!strings.Contains(string(after), `"https://mcp.context7.com/mcp"`) {

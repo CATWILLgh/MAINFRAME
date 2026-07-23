@@ -136,7 +136,11 @@ func TestPrepareConfigurationComposesOpenCodePermissionsAndMCP(t *testing.T) {
 		transitions[0].ResourceIDs[1] != "opencode.permissions" {
 		t.Fatalf("prepared transitions = %#v", transitions)
 	}
-	after := string(transitions[0].Mutations[0].After)
+	mutation := transitions[0].Mutations[0]
+	if !mutation.After.Exists {
+		t.Fatal("composed configuration has an absent after-image")
+	}
+	after := string(mutation.After.Content)
 	if !strings.Contains(after, `"permission"`) ||
 		!strings.Contains(after, `"context7"`) {
 		t.Fatalf("composed configuration =\n%s", after)

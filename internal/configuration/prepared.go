@@ -22,11 +22,24 @@ type BeforeImage struct {
 	Inode  uint64
 }
 
+type AfterImage struct {
+	Exists  bool
+	Content []byte
+	Mode    uint32
+}
+
+type MutationDisposition string
+
+const (
+	MutationPresent             MutationDisposition = "present"
+	MutationRemoveExactDocument MutationDisposition = "remove_exact_document"
+)
+
 type FileMutation struct {
-	Target domain.Location
-	Before BeforeImage
-	After  []byte
-	Mode   uint32
+	Disposition MutationDisposition
+	Target      domain.Location
+	Before      BeforeImage
+	After       AfterImage
 }
 
 type Transition struct {
@@ -153,7 +166,10 @@ func cloneFileMutations(source []FileMutation) []FileMutation {
 	result := make([]FileMutation, len(source))
 	for index, mutation := range source {
 		result[index] = mutation
-		result[index].After = append([]byte(nil), mutation.After...)
+		result[index].After.Content = append(
+			[]byte(nil),
+			mutation.After.Content...,
+		)
 	}
 	return result
 }
@@ -284,8 +300,14 @@ func (builder *preparationBuilder) mutation(
 		return nil, err
 	}
 	return &FileMutation{
-		Target: target, Before: beforeImage(snapshot),
-		After: append([]byte(nil), after...), Mode: mode,
+		Disposition: MutationPresent,
+		Target:      target,
+		Before:      beforeImage(snapshot),
+		After: AfterImage{
+			Exists:  true,
+			Content: append([]byte(nil), after...),
+			Mode:    mode,
+		},
 	}, nil
 }
 

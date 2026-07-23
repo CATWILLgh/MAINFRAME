@@ -65,8 +65,9 @@ func (fixture configurationTestFixture) preparedMutation(
 		t.Fatalf("AllocatePrivateName() error = %v", err)
 	}
 	return executor.JournalConfigurationMutation{
-		Target: fixture.location,
-		Before: configurationImage(before),
+		Disposition: executor.ConfigurationPresent,
+		Target:      fixture.location,
+		Before:      configurationImage(before),
 		After: executor.ConfigurationFileImage{
 			Exists: true,
 			SHA256: digestBytes(after),
@@ -77,6 +78,16 @@ func (fixture configurationTestFixture) preparedMutation(
 		StagedName: "staged",
 		Phase:      executor.StepPrepared,
 	}
+}
+
+func (fixture configurationTestFixture) preparedRemovalMutation(
+	t *testing.T,
+) executor.JournalConfigurationMutation {
+	t.Helper()
+	mutation := fixture.preparedMutation(t, nil, 0)
+	mutation.Disposition = executor.ConfigurationRemoveExactDocument
+	mutation.After = executor.ConfigurationFileImage{}
+	return mutation
 }
 
 func (fixture configurationTestFixture) prepareAndStage(
@@ -99,6 +110,22 @@ func (fixture configurationTestFixture) prepareAndStage(
 	}
 	mutation.StagedIdentity = staged
 	mutation.Phase = executor.StepStaged
+}
+
+func (fixture configurationTestFixture) prepareRemoval(
+	t *testing.T,
+	mutation *executor.JournalConfigurationMutation,
+) {
+	t.Helper()
+	identity, err := fixture.workspace.PrepareConfigurationPrivate(*mutation)
+	if err != nil {
+		t.Fatalf("PrepareConfigurationPrivate() error = %v", err)
+	}
+	mutation.Private.Identity = identity
+	if err := fixture.workspace.CheckConfigurationCapabilities(*mutation); err != nil {
+		t.Fatalf("CheckConfigurationCapabilities() error = %v", err)
+	}
+	mutation.Phase = executor.StepPrivateCreated
 }
 
 func (fixture configurationTestFixture) finalize(

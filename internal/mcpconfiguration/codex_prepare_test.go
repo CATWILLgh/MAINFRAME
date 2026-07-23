@@ -38,9 +38,9 @@ func TestPrepareCodexAddPreservesUnrelatedTOMLBytes(t *testing.T) {
 		[]byte("\n"+codexManagedBlock("https://mcp.context7.com/mcp", "suffix-newline", "\n"))...,
 	)
 	assertCodexMutation(t, mutations[0], codexLocation("config.toml"), original, 0o644, 101, wantConfig)
-	if !strings.Contains(string(mutations[1].After), `"format": "`+codexManagedFormat+`"`) ||
-		!strings.Contains(string(mutations[1].After), `"entry": {`) {
-		t.Fatalf("registry after-image lacks marker provenance:\n%s", mutations[1].After)
+	if !strings.Contains(string(mutations[1].After.Content), `"format": "`+codexManagedFormat+`"`) ||
+		!strings.Contains(string(mutations[1].After.Content), `"entry": {`) {
+		t.Fatalf("registry after-image lacks marker provenance:\n%s", mutations[1].After.Content)
 	}
 }
 
@@ -59,11 +59,11 @@ func TestPrepareCodexAddToMissingFilesUsesPrivateMode(t *testing.T) {
 		t.Fatalf("mutations = %#v", mutations)
 	}
 	for _, mutation := range mutations {
-		if mutation.Before.Exists || mutation.Mode != 0o600 {
+		if mutation.Before.Exists || mutation.After.Mode != 0o600 {
 			t.Fatalf("missing-file mutation = %#v", mutation)
 		}
 	}
-	if got := string(mutations[0].After); got != codexManagedBlock(
+	if got := string(mutations[0].After.Content); got != codexManagedBlock(
 		"https://mcp.context7.com/mcp", "empty", "\n",
 	) {
 		t.Fatalf("config after-image:\n%s", got)
@@ -92,8 +92,8 @@ func TestPrepareCodexUpdateAndRemoveOwnOnlyTheExactSuffix(t *testing.T) {
 				"https://mcp.context7.com/mcp", "suffix-newline", "\r\n",
 			))...,
 		)
-		if !reflect.DeepEqual(mutations[0].After, want) {
-			t.Fatalf("updated config:\n%s", mutations[0].After)
+		if !reflect.DeepEqual(mutations[0].After.Content, want) {
+			t.Fatalf("updated config:\n%s", mutations[0].After.Content)
 		}
 	})
 
@@ -106,11 +106,11 @@ func TestPrepareCodexUpdateAndRemoveOwnOnlyTheExactSuffix(t *testing.T) {
 			t.Fatal(err)
 		}
 		mutations := prepared.Transitions()[0].Mutations
-		if !reflect.DeepEqual(mutations[0].After, original) {
-			t.Fatalf("remove did not restore original bytes: %q", mutations[0].After)
+		if !reflect.DeepEqual(mutations[0].After.Content, original) {
+			t.Fatalf("remove did not restore original bytes: %q", mutations[0].After.Content)
 		}
-		if strings.Contains(string(mutations[1].After), `"context7"`) {
-			t.Fatalf("registry retained removed ownership:\n%s", mutations[1].After)
+		if strings.Contains(string(mutations[1].After.Content), `"context7"`) {
+			t.Fatalf("registry retained removed ownership:\n%s", mutations[1].After.Content)
 		}
 	})
 }
@@ -129,7 +129,7 @@ func TestPrepareCodexRemoveAllowsAnEmptyTOMLAfterImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := prepared.Transitions()[0].Mutations[0].After; len(got) != 0 {
+	if got := prepared.Transitions()[0].Mutations[0].After.Content; len(got) != 0 {
 		t.Fatalf("removed block left bytes %q", got)
 	}
 }
@@ -149,7 +149,7 @@ func TestPrepareCodexRelinquishMutatesOnlyTheRegistry(t *testing.T) {
 	}
 	mutations := prepared.Transitions()[0].Mutations
 	if len(mutations) != 1 || mutations[0].Target != codexLocation("mainframe/mcp-ownership.json") ||
-		!strings.Contains(string(mutations[0].After), `"context7": null`) {
+		!strings.Contains(string(mutations[0].After.Content), `"context7": null`) {
 		t.Fatalf("relinquish mutations = %#v", mutations)
 	}
 }
@@ -210,7 +210,7 @@ func TestPrepareCodexUsesImmutableDeduplicatedSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	exposed := first.Transitions()
-	exposed[0].Mutations[0].After[0] = 'x'
+	exposed[0].Mutations[0].After.Content[0] = 'x'
 	second, err := inspection.Prepare(
 		[]domain.ComponentID{domain.ComponentCodex}, codexSelection(),
 	)
@@ -218,7 +218,7 @@ func TestPrepareCodexUsesImmutableDeduplicatedSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	if host.reads != reads || reflect.DeepEqual(exposed, second.Transitions()) ||
-		second.Transitions()[0].Mutations[0].After[0] != 'm' {
+		second.Transitions()[0].Mutations[0].After.Content[0] != 'm' {
 		t.Fatalf("preparation was not immutable: reads=%d transitions=%#v", host.reads, second.Transitions())
 	}
 }
@@ -239,7 +239,7 @@ func TestPrepareCodexRejectsUnsafeModesAndPhysicalAliases(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := prepared.Transitions()[0].Mutations[0].Mode; got != 0o400 {
+		if got := prepared.Transitions()[0].Mutations[0].After.Mode; got != 0o400 {
 			t.Fatalf("prepared mode = %#o, want 0400", got)
 		}
 	})
@@ -348,8 +348,8 @@ func assertCodexMutation(
 	if mutation.Target != target || !mutation.Before.Exists ||
 		mutation.Before.SHA256 != fmt.Sprintf("%x", digest) ||
 		mutation.Before.Mode != mode || mutation.Before.Device != 7 ||
-		mutation.Before.Inode != inode || mutation.Mode != mode&0o600 ||
-		!reflect.DeepEqual(mutation.After, after) {
+		mutation.Before.Inode != inode || mutation.After.Mode != mode&0o600 ||
+		!reflect.DeepEqual(mutation.After.Content, after) {
 		t.Fatalf("mutation = %#v", mutation)
 	}
 }

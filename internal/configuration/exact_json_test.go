@@ -35,6 +35,42 @@ func TestExactJSONDocumentRequiresExplicitRuntimeDesiredState(t *testing.T) {
 	}
 }
 
+func TestExactJSONDocumentExplicitPresentAddsMissingResource(t *testing.T) {
+	resource := exactConfigurationResource()
+	inspection, err := configuration.Inspect(
+		[]releasecontract.Resource{resource},
+		preparedHost(nil),
+	)
+	if err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
+	desired := []configuration.ExactJSONDocument{{
+		ResourceID:  resource.ID,
+		Disposition: configuration.ExactJSONPresent,
+		Document:    []byte(resource.ExactJSONExemplar),
+	}}
+	plan, err := inspection.PlanExactJSONDocuments(desired)
+	if err != nil {
+		t.Fatalf("PlanExactJSONDocuments() error = %v", err)
+	}
+	want := configuration.Change{
+		ResourceID: resource.ID, ComponentID: domain.ComponentCodex,
+		Kind: configuration.ChangeAdd,
+	}
+	if !reflect.DeepEqual(plan.Changes, []configuration.Change{want}) {
+		t.Fatalf("changes = %#v", plan.Changes)
+	}
+	prepared, err := inspection.PrepareExactJSONDocuments(desired)
+	if err != nil {
+		t.Fatalf("PrepareExactJSONDocuments() error = %v", err)
+	}
+	mutation := prepared.Transitions()[0].Mutations[0]
+	if mutation.Before.Exists || !mutation.After.Exists ||
+		mutation.After.Mode != 0o600 || len(mutation.After.Content) == 0 {
+		t.Fatalf("mutation = %#v", mutation)
+	}
+}
+
 func TestExactJSONDocumentPlansAndPreparesCanonicalPrivateReplacement(t *testing.T) {
 	resource := exactConfigurationResource()
 	target := resource.Target
@@ -49,8 +85,9 @@ func TestExactJSONDocumentPlansAndPreparesCanonicalPrivateReplacement(t *testing
 		t.Fatalf("Inspect() error = %v", err)
 	}
 	desired := []configuration.ExactJSONDocument{{
-		ResourceID: resource.ID,
-		Document:   []byte(`{"feedback":true,"events":true,"schema_version":1}`),
+		ResourceID:  resource.ID,
+		Disposition: configuration.ExactJSONPresent,
+		Document:    []byte(`{"feedback":true,"events":true,"schema_version":1}`),
 	}}
 	plan, err := inspection.PlanExactJSONDocuments(desired)
 	if err != nil {
@@ -72,8 +109,8 @@ func TestExactJSONDocumentPlansAndPreparesCanonicalPrivateReplacement(t *testing
 		t.Fatalf("transitions = %#v", transitions)
 	}
 	mutation := transitions[0].Mutations[0]
-	if mutation.Target != target || mutation.Mode != 0o600 ||
-		string(mutation.After) !=
+	if mutation.Target != target || mutation.After.Mode != 0o600 ||
+		string(mutation.After.Content) !=
 			"{\n  \"events\": true,\n  \"feedback\": true,\n  \"schema_version\": 1\n}\n" {
 		t.Fatalf("mutation = %#v", mutation)
 	}
@@ -96,7 +133,8 @@ func TestExactJSONDocumentUsesSemanticEqualityButRepairsMode(t *testing.T) {
 		t.Fatalf("Inspect() error = %v", err)
 	}
 	desired := []configuration.ExactJSONDocument{{
-		ResourceID: resource.ID,
+		ResourceID:  resource.ID,
+		Disposition: configuration.ExactJSONPresent,
 		Document: []byte(
 			`{"schema_version":1,"events":true,"feedback":false}`,
 		),
@@ -106,8 +144,8 @@ func TestExactJSONDocumentUsesSemanticEqualityButRepairsMode(t *testing.T) {
 		t.Fatalf("PrepareExactJSONDocuments() error = %v", err)
 	}
 	mutation := prepared.Transitions()[0].Mutations[0]
-	if mutation.Mode != 0o600 {
-		t.Fatalf("mode = %04o, want 0600", mutation.Mode)
+	if mutation.After.Mode != 0o600 {
+		t.Fatalf("mode = %04o, want 0600", mutation.After.Mode)
 	}
 }
 
@@ -132,8 +170,9 @@ func TestExactJSONDocumentRepairsAntigravityDataMode(t *testing.T) {
 	}
 	prepared, err := inspection.PrepareExactJSONDocuments(
 		[]configuration.ExactJSONDocument{{
-			ResourceID: resource.ID,
-			Document:   []byte(resource.ExactJSONExemplar),
+			ResourceID:  resource.ID,
+			Disposition: configuration.ExactJSONPresent,
+			Document:    []byte(resource.ExactJSONExemplar),
 		}},
 	)
 	if err != nil {
@@ -141,7 +180,7 @@ func TestExactJSONDocumentRepairsAntigravityDataMode(t *testing.T) {
 	}
 	mutation := prepared.Transitions()[0].Mutations[0]
 	if mutation.Target.Root != domain.RootAntigravityData ||
-		mutation.Mode != 0o600 {
+		mutation.After.Mode != 0o600 {
 		t.Fatalf("mutation = %#v", mutation)
 	}
 }
@@ -163,7 +202,8 @@ func TestExactJSONDocumentSemanticEqualityAtPrivateModeIsNoOp(t *testing.T) {
 		t.Fatalf("Inspect() error = %v", err)
 	}
 	desired := []configuration.ExactJSONDocument{{
-		ResourceID: resource.ID,
+		ResourceID:  resource.ID,
+		Disposition: configuration.ExactJSONPresent,
 		Document: []byte(
 			`{"schema_version":1,"events":true,"feedback":false}`,
 		),
@@ -188,8 +228,12 @@ func TestExactJSONDocumentRejectsInvalidOrUnknownRuntimeDesiredState(t *testing.
 	}
 	for _, desired := range []configuration.ExactJSONDocument{
 		{ResourceID: resource.ID},
-		{ResourceID: resource.ID, Document: []byte(`{"events":true}`)},
-		{ResourceID: "unknown", Document: []byte(
+		{
+			ResourceID:  resource.ID,
+			Disposition: configuration.ExactJSONPresent,
+			Document:    []byte(`{"events":true}`),
+		},
+		{ResourceID: "unknown", Disposition: configuration.ExactJSONPresent, Document: []byte(
 			`{"schema_version":1,"events":true,"feedback":false}`,
 		)},
 	} {
@@ -200,7 +244,8 @@ func TestExactJSONDocumentRejectsInvalidOrUnknownRuntimeDesiredState(t *testing.
 		}
 	}
 	valid := configuration.ExactJSONDocument{
-		ResourceID: resource.ID,
+		ResourceID:  resource.ID,
+		Disposition: configuration.ExactJSONPresent,
 		Document: []byte(
 			`{"schema_version":1,"events":true,"feedback":false}`,
 		),
@@ -228,7 +273,8 @@ func TestExactJSONDocumentInvalidCurrentSchemaBlocksPreparation(t *testing.T) {
 		t.Fatalf("Inspect() error = %v", err)
 	}
 	desired := []configuration.ExactJSONDocument{{
-		ResourceID: resource.ID,
+		ResourceID:  resource.ID,
+		Disposition: configuration.ExactJSONPresent,
 		Document: []byte(
 			`{"schema_version":1,"events":true,"feedback":false}`,
 		),

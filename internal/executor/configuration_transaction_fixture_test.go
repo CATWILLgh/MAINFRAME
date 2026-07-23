@@ -164,6 +164,17 @@ func (workspace *fakeConfigurationWorkspace) PublishConfiguration(
 	if workspace.fail("publish", false) {
 		return workspace.public[mutation.Target], errConfigurationFailure
 	}
+	if !mutation.After.Exists {
+		retained := workspace.public[mutation.Target]
+		delete(workspace.public, mutation.Target)
+		workspace.staged[mutation.Target] = retained
+		workspace.published[mutation.Target] = true
+		state := ConfigurationState{Parent: mutation.Parent}
+		if workspace.fail("publish", true) {
+			return state, errConfigurationFailure
+		}
+		return state, nil
+	}
 	state := workspace.staged[mutation.Target]
 	workspace.public[mutation.Target] = state
 	workspace.published[mutation.Target] = true
@@ -177,6 +188,12 @@ func (workspace *fakeConfigurationWorkspace) RollbackConfiguration(
 	mutation JournalConfigurationMutation,
 ) error {
 	workspace.record("rollback", mutation.Target)
+	if !mutation.After.Exists {
+		workspace.public[mutation.Target] = workspace.staged[mutation.Target]
+		delete(workspace.staged, mutation.Target)
+		delete(workspace.published, mutation.Target)
+		return nil
+	}
 	delete(workspace.published, mutation.Target)
 	delete(workspace.public, mutation.Target)
 	return nil
@@ -204,6 +221,9 @@ func (workspace *fakeConfigurationWorkspace) AdoptStagedConfiguration(
 	workspace.record("adopt", mutation.Target)
 	if workspace.private[mutation.Target] == (FileIdentity{}) {
 		return FileIdentity{}, false, errConfigurationFailure
+	}
+	if !mutation.After.Exists {
+		return FileIdentity{}, workspace.published[mutation.Target], nil
 	}
 	state, exists := workspace.staged[mutation.Target]
 	return state.Entry, exists, nil

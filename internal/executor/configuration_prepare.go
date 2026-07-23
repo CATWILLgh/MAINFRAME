@@ -11,6 +11,7 @@ import (
 type preparedConfigurations struct {
 	transitions []JournalConfigurationTransition
 	payloads    map[domain.Location][]byte
+	seenTargets map[domain.Location]bool
 	targets     []domain.Location
 }
 
@@ -29,7 +30,8 @@ func (executor Executor) materializeConfigurations(
 			0,
 			len(transitions),
 		),
-		payloads: make(map[domain.Location][]byte),
+		payloads:    make(map[domain.Location][]byte),
+		seenTargets: make(map[domain.Location]bool),
 	}
 	for _, transition := range transitions {
 		materialized, err := executor.materializeConfigurationTransition(
@@ -57,12 +59,13 @@ func (executor Executor) materializeConfigurationTransition(
 		),
 	}
 	for _, mutation := range transition.Mutations {
-		if _, exists := result.payloads[mutation.Target]; exists {
+		if result.seenTargets[mutation.Target] {
 			return JournalConfigurationTransition{}, fmt.Errorf(
 				"duplicate configuration target %v",
 				mutation.Target,
 			)
 		}
+		result.seenTargets[mutation.Target] = true
 		name, err := executor.workspace.AllocatePrivateName()
 		if err != nil {
 			return JournalConfigurationTransition{}, fmt.Errorf(
@@ -75,7 +78,12 @@ func (executor Executor) materializeConfigurationTransition(
 			materialized.Mutations,
 			journalMutation,
 		)
-		result.payloads[mutation.Target] = append([]byte(nil), mutation.After...)
+		if mutation.After.Exists {
+			result.payloads[mutation.Target] = append(
+				[]byte(nil),
+				mutation.After.Content...,
+			)
+		}
 		result.targets = append(result.targets, mutation.Target)
 	}
 	return materialized, nil
@@ -97,19 +105,36 @@ func journalConfigurationMutation(
 			},
 		}
 	}
-	sum := sha256.Sum256(mutation.After)
-	return JournalConfigurationMutation{
-		Target: mutation.Target,
-		Before: before,
-		After: ConfigurationFileImage{
+	after := ConfigurationFileImage{}
+	if mutation.After.Exists {
+		sum := sha256.Sum256(mutation.After.Content)
+		after = ConfigurationFileImage{
 			Exists: true,
 			SHA256: fmt.Sprintf("%x", sum),
-			Mode:   mutation.Mode,
-		},
-		Private:    PrivateDirectory{Name: privateName},
-		StagedName: "staged",
-		Phase:      StepPrepared,
+			Mode:   mutation.After.Mode,
+		}
 	}
+	return JournalConfigurationMutation{
+		Disposition: journalConfigurationDisposition(mutation.Disposition),
+		Target:      mutation.Target,
+		Before:      before,
+		After:       after,
+		Private:     PrivateDirectory{Name: privateName},
+		StagedName:  "staged",
+		Phase:       StepPrepared,
+	}
+}
+
+func journalConfigurationDisposition(
+	disposition configuration.MutationDisposition,
+) ConfigurationMutationDisposition {
+	if disposition == configuration.MutationRemoveExactDocument {
+		return ConfigurationRemoveExactDocument
+	}
+	if disposition == configuration.MutationPresent {
+		return ConfigurationPresent
+	}
+	return ""
 }
 
 func validatePreparedTargets(

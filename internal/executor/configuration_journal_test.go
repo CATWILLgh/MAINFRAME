@@ -22,12 +22,16 @@ func TestValidatePreparedTargetsAcceptsAnEmptyConfigurationFile(t *testing.T) {
 	plan, err := configuration.NewPreparedPlan([]configuration.Transition{{
 		ResourceIDs: []string{"codex.mcp.context7"},
 		Mutations: []configuration.FileMutation{{
-			Target: testLocation("config.toml"),
+			Disposition: configuration.MutationPresent,
+			Target:      testLocation("config.toml"),
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: testDigest("managed block"), Mode: 0o600,
 				Device: 1, Inode: 2,
 			},
-			After: []byte{}, Mode: 0o600,
+			After: configuration.AfterImage{
+				Exists: true,
+				Mode:   0o600,
+			},
 		}},
 	}})
 	if err != nil {
@@ -51,6 +55,52 @@ func TestValidateJournalAcceptsConfigurationLifecyclePhases(t *testing.T) {
 		if err := validateJournal(journal); err != nil {
 			t.Fatalf("validateJournal(%q) error = %v", journal.Configurations[0].Mutations[0].Phase, err)
 		}
+	}
+}
+
+func TestValidateJournalAcceptsRemovalLifecycleWithoutStagedIdentity(t *testing.T) {
+	tests := []struct {
+		phase  StepPhase
+		status TransactionStatus
+	}{
+		{phase: StepPrepared, status: TransactionInProgress},
+		{phase: StepParentBound, status: TransactionInProgress},
+		{phase: StepPrivateCreated, status: TransactionInProgress},
+		{phase: StepPublished, status: TransactionCommitted},
+		{phase: StepRolledBack, status: TransactionInProgress},
+	}
+	for _, test := range tests {
+		journal := configurationRemovalJournalFixture(test.phase, test.status)
+		if err := validateJournal(journal); err != nil {
+			t.Fatalf("validateJournal(%q) error = %v", test.phase, err)
+		}
+	}
+}
+
+func TestValidateJournalRejectsRemovalWithoutBeforeImage(t *testing.T) {
+	journal := configurationRemovalJournalFixture(
+		StepPrepared,
+		TransactionInProgress,
+	)
+	journal.Configurations[0].Mutations[0].Before = ConfigurationFileImage{}
+
+	if err := validateJournal(journal); err == nil {
+		t.Fatal("validateJournal() accepted removal without a before-image")
+	}
+}
+
+func TestValidateJournalRejectsRemovalRuntimeFileIdentity(t *testing.T) {
+	journal := configurationRemovalJournalFixture(
+		StepPublished,
+		TransactionCommitted,
+	)
+	journal.Configurations[0].Mutations[0].StagedIdentity = FileIdentity{
+		Device: 1,
+		Inode:  9,
+	}
+
+	if err := validateJournal(journal); err == nil {
+		t.Fatal("validateJournal() accepted removal staged identity")
 	}
 }
 
@@ -81,7 +131,7 @@ func invalidConfigurationJournalCases() []invalidConfigurationJournalCase {
 func invalidConfigurationStructureCases() []invalidConfigurationJournalCase {
 	return []invalidConfigurationJournalCase{
 		{name: "unsupported schema", mutate: func(journal *Journal) {
-			journal.SchemaVersion = 3
+			journal.SchemaVersion = CurrentJournalSchemaVersion + 1
 		}},
 		{name: "empty resource IDs", mutate: func(journal *Journal) {
 			journal.Configurations[0].ResourceIDs = nil
@@ -176,7 +226,8 @@ func configurationJournalFixture(
 	status TransactionStatus,
 ) Journal {
 	mutation := JournalConfigurationMutation{
-		Target: testLocation("config.json"),
+		Disposition: ConfigurationPresent,
+		Target:      testLocation("config.json"),
 		Before: ConfigurationFileImage{
 			Exists: true, SHA256: testDigest("before"), Mode: 0o644,
 			Entry: FileIdentity{Device: 1, Inode: 2},
@@ -210,6 +261,23 @@ func configurationJournalFixture(
 		Directories: []JournalDirectory{},
 		Steps:       []JournalMutation{},
 	}
+}
+
+func configurationRemovalJournalFixture(
+	phase StepPhase,
+	status TransactionStatus,
+) Journal {
+	journal := configurationJournalFixture(phase, status)
+	mutation := &journal.Configurations[0].Mutations[0]
+	mutation.Disposition = ConfigurationRemoveExactDocument
+	mutation.Target = domain.Location{
+		Root: domain.RootCodexConfig,
+		Path: "mainframe/diagnostics.json",
+	}
+	mutation.After = ConfigurationFileImage{}
+	mutation.StagedIdentity = FileIdentity{}
+	journal.Configurations[0].ResourceIDs = []string{"codex.diagnostics"}
+	return journal
 }
 
 func setConfigurationPhase(

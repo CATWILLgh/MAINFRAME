@@ -26,6 +26,41 @@ func upgradeLegacyJournal(payload []byte) ([]byte, error) {
 	return json.Marshal(root)
 }
 
+func upgradeV2Journal(payload []byte) ([]byte, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &root); err != nil {
+		return nil, err
+	}
+	if string(root["schema_version"]) != "2" {
+		return payload, nil
+	}
+	if err := requireJournalShape(payload, false); err != nil {
+		return nil, err
+	}
+	journal, err := decodeJournalPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateV2Journal(&journal); err != nil {
+		return nil, err
+	}
+	journal.SchemaVersion = CurrentJournalSchemaVersion
+	return json.Marshal(journal)
+}
+
+func validateV2Journal(journal *Journal) error {
+	for transition := range journal.Configurations {
+		for mutation := range journal.Configurations[transition].Mutations {
+			current := &journal.Configurations[transition].Mutations[mutation]
+			if !current.After.Exists {
+				return fmt.Errorf("v2 configuration after-image must exist")
+			}
+			current.Disposition = ConfigurationPresent
+		}
+	}
+	return validateJournalVersion(*journal, 2)
+}
+
 func exactLegacyJournalFields(root map[string]json.RawMessage) bool {
 	if len(root) != len(legacyJournalFields) {
 		return false
@@ -38,7 +73,7 @@ func exactLegacyJournalFields(root map[string]json.RawMessage) bool {
 	return true
 }
 
-func requireConfigurationsShape(payload []byte) error {
+func requireConfigurationsShape(payload []byte, current bool) error {
 	var transitions []json.RawMessage
 	if err := json.Unmarshal(payload, &transitions); err != nil {
 		return fmt.Errorf("configurations: %w", err)
@@ -58,6 +93,7 @@ func requireConfigurationsShape(payload []byte) error {
 		if err := requireConfigurationMutationsShape(
 			index,
 			transition["mutations"],
+			current,
 		); err != nil {
 			return err
 		}
@@ -68,6 +104,7 @@ func requireConfigurationsShape(payload []byte) error {
 func requireConfigurationMutationsShape(
 	transitionIndex int,
 	payload []byte,
+	current bool,
 ) error {
 	var mutations []json.RawMessage
 	if err := json.Unmarshal(payload, &mutations); err != nil {
@@ -78,7 +115,7 @@ func requireConfigurationMutationsShape(
 		)
 	}
 	for index, rawMutation := range mutations {
-		if err := requireConfigurationMutationShape(rawMutation); err != nil {
+		if err := requireConfigurationMutationShape(rawMutation, current); err != nil {
 			return fmt.Errorf(
 				"configuration %d mutation %d: %w",
 				transitionIndex,
@@ -90,11 +127,17 @@ func requireConfigurationMutationsShape(
 	return nil
 }
 
-func requireConfigurationMutationShape(payload []byte) error {
-	mutation, err := requiredObject(
-		payload,
+func requireConfigurationMutationShape(payload []byte, current bool) error {
+	fields := []string{
 		"target", "before", "after", "parent", "private",
 		"staged_name", "staged_identity", "phase", "finalized",
+	}
+	if current {
+		fields = append([]string{"disposition"}, fields...)
+	}
+	mutation, err := requiredObject(
+		payload,
+		fields...,
 	)
 	if err != nil {
 		return err

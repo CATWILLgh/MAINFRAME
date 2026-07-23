@@ -98,7 +98,11 @@ func validateOperations(operations []domain.Operation) error {
 }
 
 func validateJournal(journal Journal) error {
-	if err := validateJournalHeader(journal); err != nil {
+	return validateJournalVersion(journal, CurrentJournalSchemaVersion)
+}
+
+func validateJournalVersion(journal Journal, schemaVersion int) error {
+	if err := validateJournalHeader(journal, schemaVersion); err != nil {
 		return err
 	}
 	locations := make([]domain.Location, 0, len(journal.Steps))
@@ -140,8 +144,8 @@ func validateJournal(journal Journal) error {
 	return validateDistinctLocations(locations)
 }
 
-func validateJournalHeader(journal Journal) error {
-	if err := validateJournalSchema(journal); err != nil {
+func validateJournalHeader(journal Journal, schemaVersion int) error {
+	if err := validateJournalSchemaVersion(journal, schemaVersion); err != nil {
 		return err
 	}
 	if !validRelease(journal.Release) {

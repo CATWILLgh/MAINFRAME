@@ -89,8 +89,27 @@ func validatePreparedMutation(mutation FileMutation) error {
 	if !mutation.Target.Valid() || !mutation.Target.Path.Portable() {
 		return fmt.Errorf("invalid configuration target %v", mutation.Target)
 	}
+	switch mutation.Disposition {
+	case MutationPresent:
+		if !mutation.After.Exists {
+			return fmt.Errorf("present configuration after-image is absent")
+		}
+	case MutationRemoveExactDocument:
+		if len(mutation.After.Content) != 0 || mutation.After.Mode != 0 ||
+			mutation.After.Exists || !mutation.Before.Exists ||
+			!IsExactDiagnosticsTarget(mutation.Target) {
+			return fmt.Errorf("invalid exact document removal")
+		}
+	default:
+		return fmt.Errorf("invalid configuration mutation disposition")
+	}
+	if mutation.After.Exists && (mutation.After.Mode > 0o777 ||
+		mutation.After.Mode&0o400 == 0) {
+		return fmt.Errorf("invalid existing configuration after-image")
+	}
 	if !mutation.Before.Exists {
-		if mutation.Before != (BeforeImage{}) || mutation.Mode != privateConfigurationMode {
+		if mutation.Before != (BeforeImage{}) ||
+			mutation.After.Mode != privateConfigurationMode {
 			return fmt.Errorf("invalid absent configuration before-image")
 		}
 		return nil
@@ -100,8 +119,11 @@ func validatePreparedMutation(mutation FileMutation) error {
 		mutation.Before.Device == 0 || mutation.Before.Inode == 0 {
 		return fmt.Errorf("invalid existing configuration before-image")
 	}
-	if mutation.Mode != mutation.Before.Mode&privateConfigurationMode ||
-		mutation.Mode&0o400 == 0 {
+	if !mutation.After.Exists {
+		return nil
+	}
+	if mutation.After.Mode != mutation.Before.Mode&privateConfigurationMode ||
+		mutation.After.Mode&0o400 == 0 {
 		if !exactDiagnosticsModeUpgrade(mutation) {
 			return fmt.Errorf("invalid prepared configuration mode")
 		}
@@ -110,15 +132,19 @@ func validatePreparedMutation(mutation FileMutation) error {
 }
 
 func exactDiagnosticsModeUpgrade(mutation FileMutation) bool {
+	return IsExactDiagnosticsTarget(mutation.Target) &&
+		mutation.After.Mode == privateConfigurationMode
+}
+
+func IsExactDiagnosticsTarget(target domain.Location) bool {
 	expectedRoots := map[domain.RootID]bool{
 		domain.RootClaudeConfig:    true,
 		domain.RootCodexConfig:     true,
 		domain.RootOpenCodeConfig:  true,
 		domain.RootAntigravityData: true,
 	}
-	return expectedRoots[mutation.Target.Root] &&
-		mutation.Target.Path == "mainframe/diagnostics.json" &&
-		mutation.Mode == privateConfigurationMode
+	return expectedRoots[target.Root] &&
+		target.Path == "mainframe/diagnostics.json"
 }
 
 func sortPreparedTransitions(transitions []Transition) {

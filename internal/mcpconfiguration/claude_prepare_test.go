@@ -55,9 +55,9 @@ func TestPrepareClaudeAddPreservesOrderedUserPreferences(t *testing.T) {
 		transitions[0],
 		domain.Location{Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json"},
 	)
-	if !strings.Contains(string(registry.After), `"type": "http"`) ||
-		strings.Contains(string(registry.After), `"type": "remote"`) {
-		t.Fatalf("Claude registry after-image =\n%s", registry.After)
+	if !strings.Contains(string(registry.After.Content), `"type": "http"`) ||
+		strings.Contains(string(registry.After.Content), `"type": "remote"`) {
+		t.Fatalf("Claude registry after-image =\n%s", registry.After.Content)
 	}
 }
 
@@ -74,7 +74,7 @@ func TestPrepareClaudeCreatesMissingFilesPrivately(t *testing.T) {
 		t.Fatalf("mutations = %#v", mutations)
 	}
 	for _, mutation := range mutations {
-		if mutation.Before.Exists || mutation.Mode != 0o600 {
+		if mutation.Before.Exists || mutation.After.Mode != 0o600 {
 			t.Fatalf("missing-file mutation = %#v", mutation)
 		}
 	}
@@ -143,8 +143,8 @@ func assertClaudePreparedState(t *testing.T, test claudeStateCase) {
 	}
 	if test.wantConfig != "" {
 		config := claudeMutationAt(t, transitions[0], claudeLocation(".claude.json"))
-		if !strings.Contains(string(config.After), test.wantConfig) {
-			t.Fatalf("config after-image =\n%s", config.After)
+		if !strings.Contains(string(config.After.Content), test.wantConfig) {
+			t.Fatalf("config after-image =\n%s", config.After.Content)
 		}
 	}
 	registry := claudeMutationAt(
@@ -152,8 +152,8 @@ func assertClaudePreparedState(t *testing.T, test claudeStateCase) {
 		transitions[0],
 		domain.Location{Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json"},
 	)
-	if !strings.Contains(string(registry.After), test.wantOwned) {
-		t.Fatalf("registry after-image =\n%s", registry.After)
+	if !strings.Contains(string(registry.After.Content), test.wantOwned) {
+		t.Fatalf("registry after-image =\n%s", registry.After.Content)
 	}
 }
 
@@ -165,13 +165,19 @@ func TestPrepareClaudeOntoComposesFutureSharedTarget(t *testing.T) {
 	base, err := configuration.NewPreparedPlan([]configuration.Transition{{
 		ResourceIDs: []string{"claude-code.preferences"},
 		Mutations: []configuration.FileMutation{{
-			Target: claudeLocation(".claude.json"),
+			Disposition: configuration.MutationPresent,
+			Target:      claudeLocation(".claude.json"),
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: hex.EncodeToString(digest[:]),
 				Mode: 0o644, Device: 9, Inode: 201,
 			},
-			After: []byte(`{"preferences":{"theme":"dark"},"mcpServers":{},"userID":"kept"}`),
-			Mode:  0o600,
+			After: configuration.AfterImage{
+				Exists: true,
+				Content: []byte(
+					`{"preferences":{"theme":"dark"},"mcpServers":{},"userID":"kept"}`,
+				),
+				Mode: 0o600,
+			},
 		}},
 	}})
 	if err != nil {
@@ -196,7 +202,7 @@ func TestPrepareClaudeOntoComposesFutureSharedTarget(t *testing.T) {
 	}
 	after := string(claudeMutationAt(
 		t, transitions[0], claudeLocation(".claude.json"),
-	).After)
+	).After.Content)
 	for _, expected := range []string{`"theme": "dark"`, `"context7": {`, `"userID": "kept"`} {
 		if !strings.Contains(after, expected) {
 			t.Fatalf("composed config lacks %s:\n%s", expected, after)
@@ -243,8 +249,8 @@ func TestPrepareClaudeComposesMultipleServers(t *testing.T) {
 		domain.Location{Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json"},
 	)
 	for _, expected := range []string{`"context7": {`, `"docs": {`} {
-		if !strings.Contains(string(config.After), expected) ||
-			!strings.Contains(string(registry.After), expected) {
+		if !strings.Contains(string(config.After.Content), expected) ||
+			!strings.Contains(string(registry.After.Content), expected) {
 			t.Fatalf("multiple-server after-images lack %s: %#v", expected, transition)
 		}
 	}
@@ -297,7 +303,7 @@ func TestPrepareClaudeUsesImmutableSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	exposed := first.Transitions()
-	findPreparedMutation(t, exposed, claudeLocation(".claude.json")).After[0] = '['
+	findPreparedMutation(t, exposed, claudeLocation(".claude.json")).After.Content[0] = '['
 	second, err := inspection.Prepare(
 		[]domain.ComponentID{domain.ComponentClaudeCode}, claudeSelection(),
 	)
@@ -377,8 +383,8 @@ func assertClaudeMutation(
 		!mutation.Before.Exists ||
 		mutation.Before.SHA256 != hex.EncodeToString(digest[:]) ||
 		mutation.Before.Mode != mode || mutation.Before.Device != 9 ||
-		mutation.Before.Inode != inode || mutation.Mode != mode&0o600 ||
-		string(mutation.After) != wantAfter {
+		mutation.Before.Inode != inode || mutation.After.Mode != mode&0o600 ||
+		string(mutation.After.Content) != wantAfter {
 		t.Fatalf("mutation = %#v", mutation)
 	}
 }

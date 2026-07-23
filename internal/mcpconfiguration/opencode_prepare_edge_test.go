@@ -64,8 +64,8 @@ func TestPrepareOpenCodeComposesSharedTargetAndRegistryDeterministically(t *test
 		t.Fatalf("shared preparation = %#v", transitions)
 	}
 	for _, expected := range []string{`"context7": {`, `"docs": {`} {
-		if !strings.Contains(string(transitions[0].Mutations[0].After), expected) ||
-			!strings.Contains(string(transitions[0].Mutations[1].After), expected) {
+		if !strings.Contains(string(transitions[0].Mutations[0].After.Content), expected) ||
+			!strings.Contains(string(transitions[0].Mutations[1].After.Content), expected) {
 			t.Fatalf("shared after-images lack %s: %#v", expected, transitions)
 		}
 	}
@@ -109,16 +109,16 @@ func TestPrepareOpenCodeComposesMixedExistingIntents(t *testing.T) {
 		t.Fatalf("mixed preparation = %#v", transitions)
 	}
 	for _, after := range [][]byte{
-		transitions[0].Mutations[0].After,
-		transitions[0].Mutations[1].After,
+		transitions[0].Mutations[0].After.Content,
+		transitions[0].Mutations[1].After.Content,
 	} {
 		if strings.Contains(string(after), `"docs"`) ||
 			!strings.Contains(string(after), `"https://mcp.context7.com/mcp"`) {
 			t.Fatalf("mixed after-image =\n%s", after)
 		}
 	}
-	if !strings.Contains(string(transitions[0].Mutations[0].After), `"keep": true`) {
-		t.Fatalf("unrelated JSON was lost:\n%s", transitions[0].Mutations[0].After)
+	if !strings.Contains(string(transitions[0].Mutations[0].After.Content), `"keep": true`) {
+		t.Fatalf("unrelated JSON was lost:\n%s", transitions[0].Mutations[0].After.Content)
 	}
 }
 
@@ -190,18 +190,28 @@ func TestPrepareOpenCodeOntoPreservesUnrelatedTransition(t *testing.T) {
 	shared := configuration.Transition{
 		ResourceIDs: []string{"opencode.permissions"},
 		Mutations: []configuration.FileMutation{{
-			Target: location("opencode.json"),
-			Before: openCodeBeforeImage(config, 0o644, 101),
-			After:  []byte(`{"mcp":{},"permission":{"bash":"deny"},"keep":true}`),
-			Mode:   0o600,
+			Disposition: configuration.MutationPresent,
+			Target:      location("opencode.json"),
+			Before:      openCodeBeforeImage(config, 0o644, 101),
+			After: configuration.AfterImage{
+				Exists: true,
+				Content: []byte(
+					`{"mcp":{},"permission":{"bash":"deny"},"keep":true}`,
+				),
+				Mode: 0o600,
+			},
 		}},
 	}
 	unrelated := configuration.Transition{
 		ResourceIDs: []string{"opencode.unrelated"},
 		Mutations: []configuration.FileMutation{{
-			Target: location("unrelated.json"),
-			After:  []byte("{\"owned\":true}\n"),
-			Mode:   0o600,
+			Disposition: configuration.MutationPresent,
+			Target:      location("unrelated.json"),
+			After: configuration.AfterImage{
+				Exists:  true,
+				Content: []byte("{\"owned\":true}\n"),
+				Mode:    0o600,
+			},
 		}},
 	}
 	base, err := configuration.NewPreparedPlan([]configuration.Transition{shared, unrelated})
@@ -301,7 +311,14 @@ func openCodeBasePlan(
 	plan, err := configuration.NewPreparedPlan([]configuration.Transition{{
 		ResourceIDs: []string{resourceID},
 		Mutations: []configuration.FileMutation{{
-			Target: target, Before: before, After: append([]byte(nil), after...), Mode: mode,
+			Disposition: configuration.MutationPresent,
+			Target:      target,
+			Before:      before,
+			After: configuration.AfterImage{
+				Exists:  true,
+				Content: append([]byte(nil), after...),
+				Mode:    mode,
+			},
 		}},
 	}})
 	if err != nil {

@@ -147,6 +147,57 @@ func TestRecoverKeepsEmptyPrivateUntilRollbackStateIsSaved(t *testing.T) {
 	}
 }
 
+func TestRecoverRemovalDistinguishesPreRenameAndUnrecordedPublication(t *testing.T) {
+	tests := []struct {
+		name         string
+		unrecorded   bool
+		wantRollback bool
+	}{
+		{name: "pre-rename"},
+		{name: "unrecorded publication", unrecorded: true, wantRollback: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newFixture(Preview{})
+			configurations := newFakeConfigurationWorkspace(fixture.store)
+			journal := configurationRemovalJournalFixture(
+				StepPrivateCreated,
+				TransactionInProgress,
+			)
+			mutation := journal.Configurations[0].Mutations[0]
+			before := configurationState(
+				mutation.Before.SHA256,
+				mutation.Before.Mode,
+				mutation.Parent,
+				mutation.Before.Entry,
+			)
+			configurations.private[mutation.Target] = mutation.Private.Identity
+			if test.unrecorded {
+				configurations.staged[mutation.Target] = before
+				configurations.published[mutation.Target] = true
+			} else {
+				configurations.public[mutation.Target] = before
+			}
+			fixture.store.journal = &journal
+
+			if _, err := fixture.configurationExecutor(configurations).Recover(); err != nil {
+				t.Fatalf("Recover() error = %v", err)
+			}
+			restored := configurations.public[mutation.Target]
+			if restored != before {
+				t.Fatalf("restored state = %#v, want %#v", restored, before)
+			}
+			gotRollback := containsConfigurationCall(
+				configurations.calls,
+				"rollback:"+string(mutation.Target.Path),
+			)
+			if gotRollback != test.wantRollback {
+				t.Fatalf("rollback called = %v, calls = %#v", gotRollback, configurations.calls)
+			}
+		})
+	}
+}
+
 func TestRecoverChecksPrivateModeOnlyBeforeCreatingConfigurationPrivate(t *testing.T) {
 	tests := []struct {
 		name       string

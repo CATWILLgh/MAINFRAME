@@ -50,7 +50,10 @@ func (builder *mcpPreparation) useBaseAfter(
 	if !exists || snapshot.problem != "" || mutation.Before != mcpBeforeImage(snapshot) {
 		return fmt.Errorf("base plan and MCP inspection before-images differ")
 	}
-	builder.baseAfter[target] = append([]byte(nil), mutation.After...)
+	if !mutation.After.Exists {
+		return fmt.Errorf("base plan removes MCP configuration target %v", target)
+	}
+	builder.baseAfter[target] = append([]byte(nil), mutation.After.Content...)
 	return nil
 }
 
@@ -75,8 +78,8 @@ func (builder *mcpPreparation) mergeBaseTransition(
 	base := &builder.base[reference.transition]
 	for _, mutation := range mcp.Mutations {
 		if mutation.Target == configTarget {
-			base.Mutations[reference.mutation].After = append(
-				[]byte(nil), mutation.After...,
+			base.Mutations[reference.mutation].After.Content = append(
+				[]byte(nil), mutation.After.Content...,
 			)
 			continue
 		}

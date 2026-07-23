@@ -55,9 +55,9 @@ func TestPrepareOpenCodeAddPreservesOrderedUnrelatedJSON(t *testing.T) {
 	assertOpenCodeMutation(
 		t, mutations[0], location("opencode.json"), config, 0o644, 101, want,
 	)
-	if !strings.Contains(string(mutations[1].After), `"context7": {`) ||
-		!strings.Contains(string(mutations[1].After), `"type": "remote"`) {
-		t.Fatalf("registry after-image =\n%s", mutations[1].After)
+	if !strings.Contains(string(mutations[1].After.Content), `"context7": {`) ||
+		!strings.Contains(string(mutations[1].After.Content), `"type": "remote"`) {
+		t.Fatalf("registry after-image =\n%s", mutations[1].After.Content)
 	}
 }
 
@@ -74,7 +74,7 @@ func TestPrepareOpenCodeCreatesMissingFilesPrivately(t *testing.T) {
 		t.Fatalf("mutations = %#v", mutations)
 	}
 	for _, mutation := range mutations {
-		if mutation.Before.Exists || mutation.Mode != 0o600 {
+		if mutation.Before.Exists || mutation.After.Mode != 0o600 {
 			t.Fatalf("missing-file mutation = %#v", mutation)
 		}
 	}
@@ -142,11 +142,11 @@ func assertOpenCodePreparedState(t *testing.T, test openCodeStateCase) {
 	if len(mutations) != test.wantCount {
 		t.Fatalf("mutations = %#v", mutations)
 	}
-	if test.wantConfig != "" && !strings.Contains(string(mutations[0].After), test.wantConfig) {
-		t.Fatalf("config after-image =\n%s", mutations[0].After)
+	if test.wantConfig != "" && !strings.Contains(string(mutations[0].After.Content), test.wantConfig) {
+		t.Fatalf("config after-image =\n%s", mutations[0].After.Content)
 	}
-	if !strings.Contains(string(mutations[len(mutations)-1].After), test.wantOwned) {
-		t.Fatalf("registry after-image =\n%s", mutations[len(mutations)-1].After)
+	if !strings.Contains(string(mutations[len(mutations)-1].After.Content), test.wantOwned) {
+		t.Fatalf("registry after-image =\n%s", mutations[len(mutations)-1].After.Content)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestPrepareOpenCodeOntoComposesSharedTarget(t *testing.T) {
 		) {
 		t.Fatalf("composed transitions = %#v", transitions)
 	}
-	after := string(transitions[0].Mutations[0].After)
+	after := string(transitions[0].Mutations[0].After.Content)
 	for _, expected := range []string{`"bash": "deny"`, `"context7": {`, `"user": true`} {
 		if !strings.Contains(after, expected) {
 			t.Fatalf("composed config lacks %s:\n%s", expected, after)
@@ -234,14 +234,14 @@ func TestPrepareOpenCodeUsesImmutableSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	exposed := first.Transitions()
-	exposed[0].Mutations[0].After[0] = '['
+	exposed[0].Mutations[0].After.Content[0] = '['
 	second, err := inspection.Prepare(
 		[]domain.ComponentID{domain.ComponentOpenCode}, openCodeSelection(),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if host.reads != reads || second.Transitions()[0].Mutations[0].After[0] != '{' {
+	if host.reads != reads || second.Transitions()[0].Mutations[0].After.Content[0] != '{' {
 		t.Fatalf("preparation was not immutable: reads=%d", host.reads)
 	}
 }
@@ -311,12 +311,17 @@ func preparedBasePlan(
 	plan, err := configuration.NewPreparedPlan([]configuration.Transition{{
 		ResourceIDs: []string{"opencode.permissions"},
 		Mutations: []configuration.FileMutation{{
-			Target: target,
+			Disposition: configuration.MutationPresent,
+			Target:      target,
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: hex.EncodeToString(digest[:]),
 				Mode: 0o644, Device: 7, Inode: 101,
 			},
-			After: []byte(`{"permission":{"bash":"deny"}}`), Mode: 0o600,
+			After: configuration.AfterImage{
+				Exists:  true,
+				Content: []byte(`{"permission":{"bash":"deny"}}`),
+				Mode:    0o600,
+			},
 		}},
 	}})
 	if err != nil {
@@ -339,8 +344,8 @@ func assertOpenCodeMutation(
 	if mutation.Target != target || !mutation.Before.Exists ||
 		mutation.Before.SHA256 != hex.EncodeToString(digest[:]) ||
 		mutation.Before.Mode != mode || mutation.Before.Device != 7 ||
-		mutation.Before.Inode != inode || mutation.Mode != mode&0o600 ||
-		string(mutation.After) != wantAfter {
+		mutation.Before.Inode != inode || mutation.After.Mode != mode&0o600 ||
+		string(mutation.After.Content) != wantAfter {
 		t.Fatalf("mutation = %#v", mutation)
 	}
 }

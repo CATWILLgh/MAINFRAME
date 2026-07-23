@@ -13,7 +13,7 @@ func findPreparedAfter(
 	target domain.Location,
 ) []byte {
 	t.Helper()
-	return findPreparedMutation(t, transitions, target).After
+	return findPreparedMutation(t, transitions, target).After.Content
 }
 
 func findPreparedMutation(

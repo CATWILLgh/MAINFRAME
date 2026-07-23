@@ -2,7 +2,14 @@ package executor
 
 import "github.com/CATWILLgh/MAINFRAME/internal/domain"
 
-const CurrentJournalSchemaVersion = 2
+const CurrentJournalSchemaVersion = 3
+
+type ConfigurationMutationDisposition string
+
+const (
+	ConfigurationPresent             ConfigurationMutationDisposition = "present"
+	ConfigurationRemoveExactDocument ConfigurationMutationDisposition = "remove_exact_document"
+)
 
 type ConfigurationFileImage struct {
 	Exists bool         `json:"exists"`
@@ -32,15 +39,16 @@ type ConfigurationWorkspace interface {
 }
 
 type JournalConfigurationMutation struct {
-	Target         domain.Location        `json:"target"`
-	Before         ConfigurationFileImage `json:"before"`
-	After          ConfigurationFileImage `json:"after"`
-	Parent         FileIdentity           `json:"parent"`
-	Private        PrivateDirectory       `json:"private"`
-	StagedName     string                 `json:"staged_name"`
-	StagedIdentity FileIdentity           `json:"staged_identity"`
-	Phase          StepPhase              `json:"phase"`
-	Finalized      bool                   `json:"finalized"`
+	Disposition    ConfigurationMutationDisposition `json:"disposition"`
+	Target         domain.Location                  `json:"target"`
+	Before         ConfigurationFileImage           `json:"before"`
+	After          ConfigurationFileImage           `json:"after"`
+	Parent         FileIdentity                     `json:"parent"`
+	Private        PrivateDirectory                 `json:"private"`
+	StagedName     string                           `json:"staged_name"`
+	StagedIdentity FileIdentity                     `json:"staged_identity"`
+	Phase          StepPhase                        `json:"phase"`
+	Finalized      bool                             `json:"finalized"`
 }
 
 type JournalConfigurationTransition struct {
