@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import tempfile
@@ -13,8 +14,20 @@ from unittest import TestCase
 REPO = Path(__file__).resolve().parent.parent
 ADAPTER = REPO / "adapters" / "antigravity-2"
 sys.path.insert(0, str(ADAPTER))
+sys.path.insert(0, str(REPO / "tools"))
+from release_diagnostics import diagnostics_resource
 build = import_module("build_antigravity")
 projection = import_module("skill_projection")
+DORMANT_DIAGNOSTICS = b'{\n  "schema_version": 1,\n  "events": false,\n  "feedback": false\n}\n'
+
+def bundle_builder():
+    spec = importlib.util.spec_from_file_location(
+        "antigravity_bundle_test", ADAPTER / "build_bundle.py")
+    if spec is None or spec.loader is None:
+        raise AssertionError("cannot load Antigravity bundle builder")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def write(path: Path, content: str | bytes) -> None:
@@ -54,6 +67,8 @@ def fixture_root() -> Path:
     write(root / "core/gates/rules/sample.yml", "rules: []\n")
     write(root / "core/memory/store.py", "print('{}')\n")
     write(root / "core/memory/CONTRACT.md", "# Memory\n")
+    write(root / "core/resources/credentials-index.md", "Credentials\n")
+    write(root / "core/resources/diagnostics.json", DORMANT_DIAGNOSTICS)
     for name, body in {
         "00-preamble.md": "# Antigravity preamble\n",
         "70-memory.md": "# Runtime memory\n",
@@ -360,6 +375,20 @@ def test_check_detects_drift_and_dry_run_does_not_write() -> None:
     assert build.main(["--root", str(root), "--out", str(out), "--check"]) == 0
     (out / "plugin.json").write_text("{}\n")
     assert build.main(["--root", str(root), "--out", str(out), "--check"]) == 1
+
+
+def test_release_bundle_has_dormant_adapter_local_diagnostics() -> None:
+    root = fixture_root()
+    output = root.parent / "bundle"
+    bundle_builder().build(root, output)
+    manifest = json.loads((output / "bundle.json").read_text())
+    assert manifest["schema_version"] == 4
+    resources = manifest["resources"]
+    assert [row["id"] for row in resources] == sorted(row["id"] for row in resources)
+    diagnostics = [row for row in resources if row["strategy"] == "exact-json-document"]
+    assert diagnostics == [diagnostics_resource("antigravity-2")]
+    assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
+    assert not (root / ".gemini/antigravity/mainframe/diagnostics.json").exists()
 
 
 if __name__ == "__main__":

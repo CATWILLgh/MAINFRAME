@@ -29,6 +29,11 @@ from test_build_release import (
 )
 
 
+DORMANT_DIAGNOSTICS = (
+    b'{\n  "schema_version": 1,\n  "events": false,\n  "feedback": false\n}\n'
+)
+
+
 def _target(unit: dict) -> tuple[str, str]:
     target = unit["target"]
     return target["root"], target["path"]
@@ -69,6 +74,7 @@ def _expected_payload_paths() -> set[str]:
     paths = {
         "AGENTS.md",
         "credentials-index.md",
+        "diagnostics.json",
         "hooks.json",
         "mainframe-hook.sh",
         "rules/mainframe.rules",
@@ -87,8 +93,45 @@ def _expected_payload_paths() -> set[str]:
     return paths
 
 
+def _expected_resources() -> dict[str, dict]:
+    return {
+        "codex.credentials-index": {
+            "id": "codex.credentials-index",
+            "strategy": "seed-if-absent",
+            "source": "credentials-index.md",
+            "target": {
+                "root": "codex-config",
+                "path": "credentials-index.md",
+            },
+            "observation": "supported",
+            "apply": "unimplemented",
+        },
+        "codex.diagnostics": {
+            "id": "codex.diagnostics",
+            "strategy": "exact-json-document",
+            "source": "diagnostics.json",
+            "target": {
+                "root": "codex-config",
+                "path": "mainframe/diagnostics.json",
+            },
+            "observation": "supported",
+            "apply": "supported",
+        },
+        "codex.hook-trust": {
+            "id": "codex.hook-trust",
+            "strategy": "manual-action",
+            "source": "hooks.json",
+            "target": {"root": "codex-config", "path": "hooks.json"},
+            "observation": "supported",
+            "apply": "unimplemented",
+            "external_state": {"kind": "codex-hook-trust-v1"},
+        },
+    }
+
+
 def _assert_manifest_contract(output: Path) -> None:
     manifest = release_contract.validate_bundle(output)
+    assert manifest["schema_version"] == 4
     assert manifest["component"] == "codex"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"] == {
@@ -105,28 +148,7 @@ def _assert_manifest_contract(output: Path) -> None:
         _expected_payload_paths()
     )
     resources = {item["id"]: item for item in manifest["resources"]}
-    assert resources == {
-        "codex.credentials-index": {
-            "id": "codex.credentials-index",
-            "strategy": "seed-if-absent",
-            "source": "credentials-index.md",
-            "target": {
-                "root": "codex-config",
-                "path": "credentials-index.md",
-            },
-            "observation": "supported",
-            "apply": "unimplemented",
-        },
-        "codex.hook-trust": {
-            "id": "codex.hook-trust",
-            "strategy": "manual-action",
-            "source": "hooks.json",
-            "target": {"root": "codex-config", "path": "hooks.json"},
-            "observation": "supported",
-            "apply": "unimplemented",
-            "external_state": {"kind": "codex-hook-trust-v1"},
-        },
-    }
+    assert resources == _expected_resources()
     assert manifest["mcp_projections"] == [{
         "id": "codex.mcp.context7",
         "codec": "codex-user-http-v1",
@@ -156,10 +178,12 @@ def test_build_materializes_complete_self_contained_codex_bundle():
         "AGENTS.md",
         "agents/decision-reviewer.toml",
         "credentials-index.md",
+        "diagnostics.json",
         "hooks.json",
         "rules/mainframe.rules",
     ):
         assert (output / relative).is_file()
+    assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
     assert launcher.is_file() and os.access(launcher, os.X_OK)
     assert (detectors / "path-validation.py").is_file()
     assert (detectors / "_hooklib.py").is_file()
@@ -210,6 +234,7 @@ def test_build_isolated_from_user_state_and_other_adapter_bundles():
 
     assert user_state.read_text() == "user owned\n"
     assert other_bundle.read_text() == "other adapter\n"
+    assert not (user_state.parent / "mainframe/diagnostics.json").exists()
     assert not (output / "config.toml").exists()
     assert not (output / "default.rules").exists()
 

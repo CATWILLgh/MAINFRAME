@@ -25,6 +25,8 @@ from bundle_sync import (
 from bundle_publication import publish_bundle
 from detector_projection import project_hooklib_fallbacks
 from release_contract import validate_bundle, write_bundle_manifest
+from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_diagnostics import copy_diagnostics, diagnostics_resource
 import build_opencode
 from permission_config import load_permission_rules, require_restrictive_projection
 
@@ -44,7 +46,8 @@ OPENCODE_CONFIG_EXPRESSION = (
 )
 BUNDLE_ENTRIES = {
     "AGENTS.md", "agents", "bundle.json", "config-fragment.json",
-    "credentials-index.md", "gates", "memory", "plugins", "skills",
+    "credentials-index.md", "diagnostics.json", "gates", "memory", "plugins",
+    "skills",
 }
 
 
@@ -105,6 +108,7 @@ def _resources() -> list[dict]:
             },
             **observed,
         },
+        diagnostics_resource("opencode"),
         {
             "id": "opencode.permissions",
             "strategy": "json-key-merge",
@@ -321,6 +325,7 @@ def materialize(root: Path, output: Path) -> None:
         output / "credentials-index.md",
         build_opencode.project_runtime_text(credentials_source.read_text(), profile),
     )
+    copy_diagnostics(root, output)
     write_bundle_manifest(
         output,
         component="opencode",
@@ -329,6 +334,7 @@ def materialize(root: Path, output: Path) -> None:
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
+        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
     )
 
 

@@ -14,7 +14,8 @@ sys.path.insert(0, str(TOOLS))
 from bundle_publication import publish_bundle
 from bundle_sync import prepare_output_root, remove_path, write_text_file
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import HOST_REQUIREMENTS_SCHEMA_VERSION
+from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 import build_antigravity
 import compatibility
@@ -65,6 +66,7 @@ def _resources() -> list[dict]:
             "observation": "supported",
             "apply": "unimplemented",
         },
+        diagnostics_resource("antigravity-2"),
         {
             "id": "antigravity-2.live-activation",
             "strategy": "manual-action",
@@ -106,10 +108,11 @@ def materialize(root: Path, output: Path) -> None:
     root = root.resolve()
     prepare_output_root(
         output,
-        {"bundle.json", "credentials-index.md", "plugin"},
+        {"bundle.json", "credentials-index.md", "diagnostics.json", "plugin"},
     )
     _write_plugin(root, output / "plugin")
     write_text_file(output / "credentials-index.md", _credentials_index(root))
+    copy_diagnostics(root, output)
     write_bundle_manifest(
         output,
         component="antigravity-2",
@@ -128,7 +131,7 @@ def materialize(root: Path, output: Path) -> None:
         ],
         resources=_resources(),
         mcp_projections=_mcp_projections(),
-        schema_version=HOST_REQUIREMENTS_SCHEMA_VERSION,
+        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
         host_requirements=compatibility.managed_host_requirements(),
     )
 

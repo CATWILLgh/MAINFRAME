@@ -24,6 +24,8 @@ from bundle_publication import publish_bundle
 from detector_projection import project_hooklib_fallbacks
 import build_codex
 from release_contract import validate_bundle, write_bundle_manifest
+from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 
 CODEX_CONFIG_EXPRESSION = (
@@ -34,6 +36,7 @@ CODEX_BUNDLE_ENTRIES = {
     "agents",
     "bundle.json",
     "credentials-index.md",
+    "diagnostics.json",
     "gates",
     "hooks.json",
     "mainframe-hook.sh",
@@ -138,6 +141,7 @@ def _resources() -> list[dict]:
             },
             **supported,
         },
+        diagnostics_resource("codex"),
         {
             "id": "codex.hook-trust",
             "strategy": "manual-action",
@@ -259,6 +263,7 @@ def _stage_bundle(
             (root / "core/resources/credentials-index.md").read_text(), profile
         ),
     )
+    copy_diagnostics(root, staged)
     write_bundle_manifest(
         staged,
         component="codex",
@@ -267,6 +272,7 @@ def _stage_bundle(
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
+        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
     )
 
 

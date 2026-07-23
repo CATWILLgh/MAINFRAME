@@ -69,6 +69,17 @@ def _assert_resources(manifest: dict) -> None:
             "observation": "supported",
             "apply": "unimplemented",
         },
+        "antigravity-2.diagnostics": {
+            "id": "antigravity-2.diagnostics",
+            "strategy": "exact-json-document",
+            "source": "diagnostics.json",
+            "target": {
+                "root": "antigravity-data",
+                "path": "mainframe/diagnostics.json",
+            },
+            "observation": "supported",
+            "apply": "supported",
+        },
         "antigravity-2.live-activation": {
             "id": "antigravity-2.live-activation",
             "strategy": "manual-action",
@@ -87,7 +98,7 @@ def test_bundle_is_self_contained_and_models_external_validation():
     _load_builder().build(REPO, output)
 
     manifest = release_contract.validate_bundle(output)
-    assert manifest["schema_version"] == 3
+    assert manifest["schema_version"] == 4
     assert manifest["component"] == "antigravity-2"
     assert manifest["host_requirements"] == [{
         "kind": "darwin-application-bundle-v1",
@@ -108,6 +119,9 @@ def test_bundle_is_self_contained_and_models_external_validation():
     assert "~/.gemini/antigravity/credentials-index.md" in credentials
     assert "{{mainframe.config_root}}" not in credentials
     assert "~/.claude" not in credentials
+    assert (output / "diagnostics.json").read_bytes() == (
+        REPO / "core/resources/diagnostics.json"
+    ).read_bytes()
     assert (output / "plugin/plugin.json").is_file()
     assert not any(
         unit["target"]["root"] == "antigravity-data"

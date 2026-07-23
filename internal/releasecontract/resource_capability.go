@@ -31,7 +31,7 @@ func (resource Resource) supportsExactJSONDocumentApply() bool {
 		domain.ComponentClaudeCode:   domain.RootClaudeConfig,
 		domain.ComponentCodex:        domain.RootCodexConfig,
 		domain.ComponentOpenCode:     domain.RootOpenCodeConfig,
-		domain.ComponentAntigravity2: domain.RootAntigravityConfig,
+		domain.ComponentAntigravity2: domain.RootAntigravityData,
 	}
 	root, supported := expectedRoots[resource.ComponentID]
 	canonical, exemplarErr := canonicalDiagnosticsDocument(

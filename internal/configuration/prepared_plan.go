@@ -111,10 +111,10 @@ func validatePreparedMutation(mutation FileMutation) error {
 
 func exactDiagnosticsModeUpgrade(mutation FileMutation) bool {
 	expectedRoots := map[domain.RootID]bool{
-		domain.RootClaudeConfig:      true,
-		domain.RootCodexConfig:       true,
-		domain.RootOpenCodeConfig:    true,
-		domain.RootAntigravityConfig: true,
+		domain.RootClaudeConfig:    true,
+		domain.RootCodexConfig:     true,
+		domain.RootOpenCodeConfig:  true,
+		domain.RootAntigravityData: true,
 	}
 	return expectedRoots[mutation.Target.Root] &&
 		mutation.Target.Path == "mainframe/diagnostics.json" &&

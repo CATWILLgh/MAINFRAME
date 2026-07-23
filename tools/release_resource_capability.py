@@ -7,14 +7,7 @@ from release_contract_fields import (
     EXACT_JSON_DOCUMENT_FORBIDDEN_FIELDS,
     EXACT_JSON_DOCUMENT_STRATEGY,
 )
-
-
-EXACT_JSON_DOCUMENT_TARGETS = {
-    "antigravity-2": {"root": "antigravity-config", "path": "mainframe/diagnostics.json"},
-    "claude-code": {"root": "claude-config", "path": "mainframe/diagnostics.json"},
-    "codex": {"root": "codex-config", "path": "mainframe/diagnostics.json"},
-    "opencode": {"root": "opencode-config", "path": "mainframe/diagnostics.json"},
-}
+from release_diagnostics import diagnostics_target
 
 
 def valid_apply_declaration(component: str, resource: dict[str, Any]) -> bool:
@@ -50,7 +43,7 @@ def _valid_exact_json_document_apply(
 ) -> bool:
     return (
         resource["apply"] == "supported"
-        and resource["target"] == EXACT_JSON_DOCUMENT_TARGETS.get(component)
+        and resource["target"] == diagnostics_target(component)
         and resource["observation"] == "supported"
         and not any(
             field in resource

@@ -111,6 +111,41 @@ func TestExactJSONDocumentUsesSemanticEqualityButRepairsMode(t *testing.T) {
 	}
 }
 
+func TestExactJSONDocumentRepairsAntigravityDataMode(t *testing.T) {
+	resource := exactConfigurationResource()
+	resource.ID = "antigravity-2.diagnostics"
+	resource.ComponentID = domain.ComponentAntigravity2
+	resource.SourcePath = "bundles/antigravity-2/diagnostics.json"
+	resource.Target.Root = domain.RootAntigravityData
+	inspection, err := configuration.Inspect(
+		[]releasecontract.Resource{resource},
+		preparedHost(map[domain.Location]hostfs.Entry{
+			resource.Target: preparedEntry(
+				[]byte(resource.ExactJSONExemplar),
+				0o400,
+				87,
+			),
+		}),
+	)
+	if err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
+	prepared, err := inspection.PrepareExactJSONDocuments(
+		[]configuration.ExactJSONDocument{{
+			ResourceID: resource.ID,
+			Document:   []byte(resource.ExactJSONExemplar),
+		}},
+	)
+	if err != nil {
+		t.Fatalf("PrepareExactJSONDocuments() error = %v", err)
+	}
+	mutation := prepared.Transitions()[0].Mutations[0]
+	if mutation.Target.Root != domain.RootAntigravityData ||
+		mutation.Mode != 0o600 {
+		t.Fatalf("mutation = %#v", mutation)
+	}
+}
+
 func TestExactJSONDocumentSemanticEqualityAtPrivateModeIsNoOp(t *testing.T) {
 	resource := exactConfigurationResource()
 	target := resource.Target

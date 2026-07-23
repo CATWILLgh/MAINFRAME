@@ -11,6 +11,7 @@ TOOLS = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS))
 
 import release_contract
+from release_diagnostics import diagnostics_resource
 from release_resource_capability import valid_apply_declaration
 
 
@@ -58,7 +59,7 @@ def test_exact_json_document_apply_capability_is_adapter_local():
         ("claude-code", "claude-config"),
         ("codex", "codex-config"),
         ("opencode", "opencode-config"),
-        ("antigravity-2", "antigravity-config"),
+        ("antigravity-2", "antigravity-data"),
     }
     for component, root in valid_pairs:
         resource = _exact_document_resource(root)
@@ -73,6 +74,27 @@ def test_exact_json_document_apply_capability_is_adapter_local():
         resource = _exact_document_resource(root)
         resource["target"]["path"] = path
         assert not valid_apply_declaration(component, resource)
+
+
+def test_diagnostics_resource_mapping_is_exact_and_copy_safe():
+    roots = {
+        "antigravity-2": "antigravity-data",
+        "claude-code": "claude-config",
+        "codex": "codex-config",
+        "opencode": "opencode-config",
+    }
+    for component, root in roots.items():
+        resource = diagnostics_resource(component)
+        assert resource == {
+            "id": f"{component}.diagnostics",
+            "strategy": "exact-json-document",
+            "source": "diagnostics.json",
+            "target": {"root": root, "path": "mainframe/diagnostics.json"},
+            "observation": "supported",
+            "apply": "supported",
+        }
+        resource["target"]["root"] = "mutated"
+        assert diagnostics_resource(component)["target"]["root"] == root
 
 
 def test_exact_json_document_capability_has_no_foreign_ownership_state():

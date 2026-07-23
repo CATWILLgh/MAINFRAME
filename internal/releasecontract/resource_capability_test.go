@@ -111,6 +111,49 @@ func TestExactJSONDocumentApplyCapabilityIsAdapterLocalAndNarrow(t *testing.T) {
 	}
 }
 
+func TestExactJSONDocumentUsesEachAdapterRuntimeRoot(t *testing.T) {
+	tests := map[string]struct {
+		component domain.ComponentID
+		root      domain.RootID
+		want      bool
+	}{
+		"Claude config": {
+			component: domain.ComponentClaudeCode,
+			root:      domain.RootClaudeConfig,
+			want:      true,
+		},
+		"Codex config": {
+			component: domain.ComponentCodex,
+			root:      domain.RootCodexConfig,
+			want:      true,
+		},
+		"OpenCode config": {
+			component: domain.ComponentOpenCode,
+			root:      domain.RootOpenCodeConfig,
+			want:      true,
+		},
+		"Antigravity data": {
+			component: domain.ComponentAntigravity2,
+			root:      domain.RootAntigravityData,
+			want:      true,
+		},
+		"Antigravity plugin config": {
+			component: domain.ComponentAntigravity2,
+			root:      domain.RootAntigravityConfig,
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			resource := exactJSONResource()
+			resource.ComponentID = test.component
+			resource.Target.Root = test.root
+			if got := resource.SupportsApply(); got != test.want {
+				t.Fatalf("SupportsApply() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
 func TestLoadRequiresFullySupportedExactJSONDocumentLifecycle(t *testing.T) {
 	tests := map[string]func(map[string]any){
 		"unimplemented apply": func(resource map[string]any) {

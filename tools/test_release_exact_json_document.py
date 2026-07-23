@@ -117,13 +117,13 @@ def test_schema_four_allows_optional_non_empty_host_requirements():
 
     _, with_requirements = _write_bundle(
         component="antigravity-2",
-        root="antigravity-config",
+        root="antigravity-data",
         host_requirements=[HOST_REQUIREMENT],
     )
     assert with_requirements["host_requirements"] == [HOST_REQUIREMENT]
     _assert_invalid_write(
         component="antigravity-2",
-        root="antigravity-config",
+        root="antigravity-data",
         host_requirements=[],
     )
     manifest["host_requirements"] = []

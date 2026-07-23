@@ -26,6 +26,8 @@ from bundle_sync import (
 )
 from bundle_publication import publish_bundle
 from release_contract import validate_bundle, write_bundle_manifest
+from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 
 DIRECT_CHILD_ID = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
@@ -140,6 +142,7 @@ def _resources() -> list[dict[str, Any]]:
             "target": {"root": "claude-config", "path": "credentials-index.md"},
             **supported,
         },
+        diagnostics_resource("claude-code"),
         {
             "id": "claude-code.settings",
             "strategy": "json-key-merge",
@@ -239,6 +242,7 @@ def materialize(root: Path, output: Path) -> None:
         "CLAUDE.md",
         "bundle.json",
         "credentials-index.md",
+        "diagnostics.json",
         "plugin",
         "settings.json",
     }
@@ -247,6 +251,7 @@ def materialize(root: Path, output: Path) -> None:
     prepare_output_root(output, expected)
     copy_regular_file(instructions, output / "CLAUDE.md")
     copy_regular_file(settings, output / "settings.json")
+    copy_diagnostics(root, output)
     write_text_file(
         output / "credentials-index.md",
         project_text(credentials.read_text(), profile),
@@ -265,6 +270,7 @@ def materialize(root: Path, output: Path) -> None:
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
+        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
     )
 
 

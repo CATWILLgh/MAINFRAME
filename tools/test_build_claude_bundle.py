@@ -21,6 +21,11 @@ import build_bundle
 from test_build_release import assert_late_failure_preserves_bundle
 
 
+DORMANT_DIAGNOSTICS = (
+    b'{\n  "schema_version": 1,\n  "events": false,\n  "feedback": false\n}\n'
+)
+
+
 def _sandbox() -> Path:
     return Path(tempfile.mkdtemp(prefix="mainframe claude bundle "))
 
@@ -76,6 +81,7 @@ def _fixture_root(sandbox: Path, *, rules: bool = True) -> Path:
         root / "core/resources/credentials-index.md",
         "Index: `{{mainframe.config_root}}/credentials-index.md`\n",
     )
+    (root / "core/resources/diagnostics.json").write_bytes(DORMANT_DIAGNOSTICS)
     return root
 
 
@@ -153,6 +159,17 @@ def _expected_resources() -> list[dict]:
             "apply": "unimplemented",
         },
         {
+            "id": "claude-code.diagnostics",
+            "strategy": "exact-json-document",
+            "source": "diagnostics.json",
+            "target": {
+                "root": "claude-config",
+                "path": "mainframe/diagnostics.json",
+            },
+            "observation": "supported",
+            "apply": "supported",
+        },
+        {
             "id": "claude-code.settings",
             "strategy": "json-key-merge",
             "source": "settings.json",
@@ -199,6 +216,7 @@ def test_manifest_records_exact_units_resources_and_integrity():
     build_bundle.build(root, output)
     manifest = build_bundle.validate_bundle(output)
 
+    assert manifest["schema_version"] == 4
     assert manifest["component"] == "claude-code"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"] == {
@@ -217,6 +235,7 @@ def test_manifest_records_exact_units_resources_and_integrity():
     assert (output / "credentials-index.md").read_text() == (
         "Index: `~/.claude/credentials-index.md`\n"
     )
+    assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
     payload = {item["path"]: item for item in manifest["payload_files"]}
     assert payload["plugin/hooks/run.sh"]["mode"] == "0755"
     assert payload["plugin/hooks/run.sh"]["size"] == len("#!/bin/sh\nexit 0\n")
@@ -311,6 +330,7 @@ def test_cli_build_does_not_read_or_modify_user_state():
 
     for path, expected in before.items():
         assert (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) == expected
+    assert not (home / ".claude/mainframe/diagnostics.json").exists()
     assert build_bundle.validate_bundle(output)["component"] == "claude-code"
 
 

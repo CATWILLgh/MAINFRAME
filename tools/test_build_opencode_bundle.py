@@ -23,6 +23,11 @@ import release_contract
 import test_build_release as test_support
 
 
+DORMANT_DIAGNOSTICS = (
+    b'{\n  "schema_version": 1,\n  "events": false,\n  "feedback": false\n}\n'
+)
+
+
 def _load_builder():
     spec = importlib.util.spec_from_file_location(
         "mainframe_opencode_bundle_test", BUILDER
@@ -118,6 +123,7 @@ def _assert_bundle_layout(output: Path) -> None:
     assert (output / "AGENTS.md").is_file()
     assert (output / "skills/task-workflow/SKILL.md").is_file()
     assert (output / "agents/decision-reviewer.md").is_file()
+    assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
     assert (output / "gates/detectors/path-validation.py").is_file()
     assert (output / "plugins/mainframe-gates.js").is_file()
     assert (output / "plugins/mainframe-memory.js").is_file()
@@ -128,6 +134,7 @@ def _assert_bundle_layout(output: Path) -> None:
 
 
 def _assert_manifest_header(manifest: dict) -> None:
+    assert manifest["schema_version"] == 4
     assert manifest["component"] == "opencode"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"]["config_root"] == (
@@ -182,6 +189,17 @@ def _assert_manifest_resources(manifest: dict, output: Path) -> None:
     }
     assert resources["opencode.credentials-index"]["observation"] == "supported"
     assert resources["opencode.credentials-index"]["apply"] == "unimplemented"
+    assert resources["opencode.diagnostics"] == {
+        "id": "opencode.diagnostics",
+        "strategy": "exact-json-document",
+        "source": "diagnostics.json",
+        "target": {
+            "root": "opencode-config",
+            "path": "mainframe/diagnostics.json",
+        },
+        "observation": "supported",
+        "apply": "supported",
+    }
     credentials_index = (output / "credentials-index.md").read_text()
     assert "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/credentials-index.md" in (
         credentials_index
@@ -279,6 +297,7 @@ def test_cli_build_is_pure_and_projects_an_isolated_bundle():
 
     for path, expected in before.items():
         assert (path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) == expected
+    assert not (config.parent / "mainframe/diagnostics.json").exists()
     _assert_bundle_layout(output)
     manifest = release_contract.validate_bundle(output)
     _assert_manifest_header(manifest)
