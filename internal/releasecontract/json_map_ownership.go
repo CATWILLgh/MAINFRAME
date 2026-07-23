@@ -189,7 +189,11 @@ func validateGlobalOwnershipRegistries(
 			return fmt.Errorf("resource %q ownership registry: %w", registry.resourceID, err)
 		}
 		if err := rejectResourceOverlap(
-			registry.resourceID, registry.target, MCPProjectionDocumentJSON, resourceTargets,
+			registry.resourceID,
+			StrategyJSONKeyMerge,
+			registry.target,
+			MCPProjectionDocumentJSON,
+			resourceTargets,
 		); err != nil {
 			return fmt.Errorf("resource %q ownership registry: %w", registry.resourceID, err)
 		}

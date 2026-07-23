@@ -143,6 +143,15 @@ writers bind their leaf directories before publication, use `0700` for data
 directories and `0600` for databases and reports, and never remove existing
 diagnostic history while disabling collection.
 
+Bundle schema version 4 reserves this activation file through the narrow
+`exact-json-document` strategy. The release exemplar proves that the adapter
+ships a valid document, but never becomes user consent or implicit desired
+state. Planning requires separate runtime intent, owns the whole document,
+allows no overlapping install, resource, or MCP claim, and prepares a
+canonical `0600` replacement through the existing journaled configuration
+boundary. Adapter manifests do not advertise this resource until selected
+adapter observation and executable lifecycle wiring are complete.
+
 The current `hub.html` is static, repo-oriented, and reads one legacy database.
 It is not yet the finished local dashboard. A later
 `mainframe diagnostics serve` command may reuse its visual and query layer

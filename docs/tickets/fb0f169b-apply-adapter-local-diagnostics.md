@@ -20,6 +20,14 @@ preview renders the lifecycle result rather than reconstructing it locally.
 Configured diagnostics are still explicitly non-executable and preparation
 rejects them before executor resources open.
 
+Bundle schema version 4 and the dormant `exact-json-document` strategy now
+provide the release and preparation foundation. The contract authenticates a
+strict schema-v1 exemplar, requires separate runtime desired bytes, reserves
+the complete adapter-local `mainframe/diagnostics.json` target, rejects
+overlapping claims, compares JSON semantically, and prepares private `0600`
+publication through the existing configuration journal. No adapter manifest
+advertises the resource yet, so this foundation cannot activate diagnostics.
+
 The existing DEV implementation is also uneven: Claude Code uses the legacy
 `install.sh --dev` links, while the other adapters already carry projected
 event producers but do not have complete, separately managed activation and
@@ -41,16 +49,18 @@ this ticket owns installer observation, activation, and adapter-local delivery.
 The legacy Claude Code symlink decision is also narrower than the release and
 TUI contract across every adapter.
 
-## What probably needs to be done
+## What remains to be done
 
-- Add explicit adapter-local activation resources to the release contract.
-- Observe current event and feedback state without treating a database path as
-  consent.
+- Emit explicit adapter-local activation resources from each selected adapter
+  bundle.
+- Make release observation request-aware so an unselected adapter is never
+  inspected.
+- Connect exact runtime intent to lifecycle preparation without treating the
+  release exemplar or a database path as consent.
 - Package and activate `harness-feedback` independently for each adapter.
 - Preserve existing databases and reports when collection is disabled.
-- Prepare and journal the changes through the same atomic apply boundary as the
-  environment and MCP plan.
-- Enforce `0700` directories and `0600` sensitive local files.
+- Cover update, disable, recovery, and uninstall across the combined executor
+  boundary.
 
 ## Acceptance criteria
 

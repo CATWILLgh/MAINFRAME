@@ -12,9 +12,16 @@ BUNDLE_FIELDS_V2 = {
     "mcp_projections",
 }
 HOST_REQUIREMENTS_SCHEMA_VERSION = 3
+EXACT_JSON_DOCUMENT_SCHEMA_VERSION = 4
+BUNDLE_REQUIRED_FIELDS = {
+    2: BUNDLE_FIELDS_V2,
+    HOST_REQUIREMENTS_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
+    EXACT_JSON_DOCUMENT_SCHEMA_VERSION: BUNDLE_FIELDS_V2,
+}
 BUNDLE_FIELDS = {
     2: BUNDLE_FIELDS_V2,
     HOST_REQUIREMENTS_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
+    EXACT_JSON_DOCUMENT_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
 }
 INDEX_FIELDS = {"schema_version", "kind", "release_id", "mcp_catalog", "manifests"}
 UNIT_REQUIRED_FIELDS = {"id", "kind", "source", "target"}
@@ -27,9 +34,17 @@ RESOURCE_OPTIONAL_FIELDS = {
 }
 PAYLOAD_FIELDS = {"path", "mode", "size", "sha256"}
 ENTRY_FIELDS = {"component", "path", "sha256"}
-SOURCE_STRATEGIES = {"json-key-merge", "seed-if-absent", "shell-line", "shell-line-if-present"}
+EXACT_JSON_DOCUMENT_STRATEGY = "exact-json-document"
+SOURCE_STRATEGIES = {
+    EXACT_JSON_DOCUMENT_STRATEGY, "json-key-merge", "seed-if-absent",
+    "shell-line", "shell-line-if-present",
+}
 SOURCELESS_STRATEGIES = {"ensure-directory", "manual-action"}
 OBSERVABLE_STRATEGIES = {
-    "ensure-directory", "seed-if-absent", "shell-line", "shell-line-if-present",
+    EXACT_JSON_DOCUMENT_STRATEGY, "ensure-directory", "seed-if-absent",
+    "shell-line", "shell-line-if-present",
 }
 SHELL_STRATEGIES = {"shell-line", "shell-line-if-present"}
+EXACT_JSON_DOCUMENT_FORBIDDEN_FIELDS = {
+    "external_state", "legacy_source_suffixes", "owned_json_pointers", "ownership",
+}

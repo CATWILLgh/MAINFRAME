@@ -133,6 +133,9 @@ func observeResource(
 	if resource.Strategy == releasecontract.StrategyJSONKeyMerge {
 		return observeJSONResource(resource, host, jsonSnapshots), nil
 	}
+	if resource.Strategy == releasecontract.StrategyExactJSONDocument {
+		return observeExactJSONDocument(resource, host, jsonSnapshots), nil
+	}
 	readContent := resource.Strategy == releasecontract.StrategyShellLine ||
 		resource.Strategy == releasecontract.StrategyShellLineIfPresent
 	if readContent && resource.DesiredLine == "" {
@@ -152,6 +155,46 @@ func observeResource(
 		return result, nil
 	}
 	return classifyExisting(resource, entry, result), nil
+}
+
+func observeExactJSONDocument(
+	resource releasecontract.Resource,
+	host Host,
+	snapshots map[domain.Location]jsonSnapshot,
+) Observation {
+	result := Observation{ResourceID: resource.ID, ComponentID: resource.ComponentID}
+	snapshot := jsonSnapshotFor(resource.Target, host, snapshots)
+	if errors.Is(snapshot.err, fs.ErrNotExist) {
+		result.Status, result.Reason = NeedsChange, ResourceMissing
+		return result
+	}
+	if snapshot.err != nil {
+		result.Status, result.Reason = Attention, InspectionFailed
+		return result
+	}
+	if snapshot.entry.Kind == hostfs.EntrySymlink {
+		result.Status, result.Reason = Attention, SymbolicLink
+		return result
+	}
+	if snapshot.entry.Kind != hostfs.EntryRegular {
+		result.Status, result.Reason = Attention, WrongKind
+		return result
+	}
+	if snapshot.parseErr != nil {
+		result.Status, result.Reason = Attention, JSONDocumentInvalid
+		return result
+	}
+	if _, err := resource.ValidateExactJSONDocument(snapshot.entry.Content); err != nil {
+		result.Status, result.Reason = Attention, JSONDocumentInvalid
+		return result
+	}
+	if snapshot.document.Canonical() == resource.ExactJSONExemplar &&
+		snapshot.entry.Mode == privateConfigurationMode {
+		result.Status, result.Reason = Ready, JSONFieldsMatch
+		return result
+	}
+	result.Status, result.Reason = NeedsChange, JSONFieldsDrifted
+	return result
 }
 
 func observeExternalResource(

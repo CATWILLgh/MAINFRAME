@@ -13,6 +13,7 @@ func supportedStrategy(strategy releasecontract.ResourceStrategy) bool {
 	switch strategy {
 	case releasecontract.StrategySeedIfAbsent,
 		releasecontract.StrategyJSONKeyMerge,
+		releasecontract.StrategyExactJSONDocument,
 		releasecontract.StrategyEnsureDir,
 		releasecontract.StrategyShellLine,
 		releasecontract.StrategyShellLineIfPresent:
@@ -58,6 +59,12 @@ func validateResource(resource releasecontract.Resource) error {
 	}
 	if resource.Strategy == releasecontract.StrategyJSONKeyMerge {
 		return validateJSONResource(resource)
+	}
+	if resource.Strategy == releasecontract.StrategyExactJSONDocument {
+		if !resource.SupportsApply() {
+			return fmt.Errorf("invalid exact JSON document capability")
+		}
+		return nil
 	}
 	if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil {
 		return fmt.Errorf("JSON ownership requires JSON merge strategy")
@@ -288,6 +295,10 @@ func validObservation(resource releasecontract.Resource, observation Observation
 func reasonMatchesStrategy(strategy releasecontract.ResourceStrategy, reason Reason) bool {
 	switch strategy {
 	case releasecontract.StrategyJSONKeyMerge:
+		return reason == JSONFieldsMatch || reason == JSONFieldsDrifted ||
+			reason == ResourceMissing || reason == SymbolicLink || reason == WrongKind ||
+			reason == InspectionFailed || reason == JSONDocumentInvalid
+	case releasecontract.StrategyExactJSONDocument:
 		return reason == JSONFieldsMatch || reason == JSONFieldsDrifted ||
 			reason == ResourceMissing || reason == SymbolicLink || reason == WrongKind ||
 			reason == InspectionFailed || reason == JSONDocumentInvalid

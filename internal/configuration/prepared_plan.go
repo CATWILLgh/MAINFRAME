@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
 var preparedResourceIDPattern = regexp.MustCompile(
@@ -100,9 +102,23 @@ func validatePreparedMutation(mutation FileMutation) error {
 	}
 	if mutation.Mode != mutation.Before.Mode&privateConfigurationMode ||
 		mutation.Mode&0o400 == 0 {
-		return fmt.Errorf("invalid prepared configuration mode")
+		if !exactDiagnosticsModeUpgrade(mutation) {
+			return fmt.Errorf("invalid prepared configuration mode")
+		}
 	}
 	return nil
+}
+
+func exactDiagnosticsModeUpgrade(mutation FileMutation) bool {
+	expectedRoots := map[domain.RootID]bool{
+		domain.RootClaudeConfig:      true,
+		domain.RootCodexConfig:       true,
+		domain.RootOpenCodeConfig:    true,
+		domain.RootAntigravityConfig: true,
+	}
+	return expectedRoots[mutation.Target.Root] &&
+		mutation.Target.Path == "mainframe/diagnostics.json" &&
+		mutation.Mode == privateConfigurationMode
 }
 
 func sortPreparedTransitions(transitions []Transition) {

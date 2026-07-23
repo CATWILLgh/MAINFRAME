@@ -10,6 +10,7 @@ import (
 func validateResources(
 	releaseRoot, bundleRoot, sourceBase string,
 	component domain.ComponentID,
+	schemaVersion int,
 	records []resourceRecord,
 	payloadRows []payloadFile,
 ) ([]Resource, error) {
@@ -19,6 +20,7 @@ func validateResources(
 		identifiers[index] = record.ID
 		resource, err := validateResourceRecord(
 			releaseRoot, bundleRoot, sourceBase, component, record, payloadRows,
+			schemaVersion,
 		)
 		if err != nil {
 			return nil, err
@@ -36,10 +38,25 @@ func validateResourceRecord(
 	component domain.ComponentID,
 	record resourceRecord,
 	payloadRows []payloadFile,
+	schemaVersion int,
 ) (Resource, error) {
 	strategy := ResourceStrategy(record.Strategy)
 	if !itemPattern.MatchString(record.ID) || !strategy.valid() {
 		return Resource{}, fmt.Errorf("component %q has invalid resource %q", component, record.ID)
+	}
+	if strategy == StrategyExactJSONDocument &&
+		schemaVersion != bundleSchemaVersionV4 {
+		return Resource{}, fmt.Errorf(
+			"resource %q requires bundle schema version 4",
+			record.ID,
+		)
+	}
+	if strategy == StrategyExactJSONDocument &&
+		record.LegacySourceSuffixes.Present {
+		return Resource{}, fmt.Errorf(
+			"resource %q exact JSON document has foreign claim metadata",
+			record.ID,
+		)
 	}
 	source, target, legacySources, err := validateResourceLocations(
 		bundleRoot, sourceBase, component, record, strategy,
@@ -67,12 +84,24 @@ func validateResourceRecord(
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
 	}
+	exemplar, err := loadExactJSONExemplar(
+		releaseRoot,
+		sourceBase,
+		record.Source,
+		strategy,
+		observation,
+		payloadRows,
+	)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
 	resource := Resource{
 		ID: record.ID, ComponentID: component, Strategy: strategy,
 		SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
 		Observation: observation, Apply: SupportStatus(record.Apply), DesiredLine: desiredLine,
 		OwnedJSONFields: ownedFields, JSONMapOwnership: mapOwnership,
-		ExternalState: externalState,
+		ExternalState:     externalState,
+		ExactJSONExemplar: exemplar,
 	}
 	if !validApplyDeclaration(resource) {
 		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
@@ -117,6 +146,7 @@ func validateResourceLocations(
 ) (domain.ArtifactPath, domain.Location, []domain.ArtifactPath, error) {
 	requiresSource := strategy == StrategyJSONKeyMerge || strategy == StrategySeedIfAbsent ||
 		strategy == StrategyShellLine || strategy == StrategyShellLineIfPresent ||
+		strategy == StrategyExactJSONDocument ||
 		record.ExternalState.Present
 	if requiresSource != (record.Source != "") {
 		return "", domain.Location{}, nil, fmt.Errorf(
@@ -138,7 +168,7 @@ func validateResourceLocations(
 	if err := validateComponentTarget(component, target, "resource"); err != nil {
 		return "", domain.Location{}, nil, err
 	}
-	legacySources, err := portablePaths(record.LegacySourceSuffixes, true)
+	legacySources, err := portablePaths(record.LegacySourceSuffixes.Values, true)
 	if err != nil {
 		return "", domain.Location{}, nil, fmt.Errorf("resource %q: %w", record.ID, err)
 	}
@@ -161,7 +191,8 @@ func validObservationSupport(
 		StrategySeedIfAbsent,
 		StrategyEnsureDir,
 		StrategyShellLine,
-		StrategyShellLineIfPresent:
+		StrategyShellLineIfPresent,
+		StrategyExactJSONDocument:
 		return true
 	case StrategyManualAction:
 		return hasExternalState

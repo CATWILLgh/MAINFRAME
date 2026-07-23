@@ -8,6 +8,7 @@ from typing import Any
 
 from release_graph import reject_dependency_cycles
 from release_component_roots import validate_component_dependency
+from release_contract_fields import EXACT_JSON_DOCUMENT_STRATEGY
 from release_json import (
     MAX_OWNED_JSON_POINTERS,
     json_pointer_tokens,
@@ -127,6 +128,36 @@ def _validate_global_json_ownership(
         parse_location=parse_location,
         locations_overlap=locations_overlap,
     )
+    _validate_exact_json_document_targets(
+        manifests,
+        install_targets,
+        resource_targets,
+        parse_location=parse_location,
+        locations_overlap=locations_overlap,
+    )
+
+
+def _validate_exact_json_document_targets(
+    manifests: list[dict[str, Any]],
+    install_targets: list[Location],
+    resource_targets: list[tuple[str, str, Location]],
+    *,
+    parse_location: Callable[[Any, str], Location],
+    locations_overlap: Callable[[Location, Location], bool],
+) -> None:
+    for manifest in manifests:
+        for resource in manifest["resources"]:
+            if resource["strategy"] != EXACT_JSON_DOCUMENT_STRATEGY:
+                continue
+            target = parse_location(resource["target"], "exact JSON document target")
+            if any(locations_overlap(target, item) for item in install_targets):
+                raise ValueError("exact JSON document overlaps install target")
+            for identifier, strategy, other in resource_targets:
+                if identifier == resource["id"] or not locations_overlap(target, other):
+                    continue
+                if strategy == "ensure-directory" and _location_ancestor(other, target):
+                    continue
+                raise ValueError("exact JSON document overlaps resource target")
 
 
 def _claim_json_pointers(

@@ -17,7 +17,6 @@ from release_contract_io import (
     write_json as _write_json,
 )
 from release_global import validate_global_contract, validate_local_target_isolation
-from release_json import validate_owned_json_source, validate_shell_source
 from release_component_roots import validate_component_targets
 from release_external_state_contract import validate_external_state_units
 from mcp_catalog_contract import catalog_entry, validate_catalog_entry
@@ -36,7 +35,9 @@ from release_contract_helpers import (
     unique_identifier as _unique_identifier,
 )
 import release_host_requirements as host_contract
-from release_resource_capability import valid_apply_declaration
+from release_resource_contract import validate_resources
+
+
 BUNDLE_SCHEMA_VERSION = 2
 RELEASE_SCHEMA_VERSION = 2
 BUNDLE_KIND = "mainframe-bundle"
@@ -79,12 +80,15 @@ def write_bundle_manifest(
             mcp_projections or [], key=lambda item: item.get("id", "")
         ),
     }
-    if schema_version == fields.HOST_REQUIREMENTS_SCHEMA_VERSION:
+    if schema_version == fields.HOST_REQUIREMENTS_SCHEMA_VERSION or (
+        schema_version == fields.EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+        and host_requirements is not None
+    ):
         manifest["host_requirements"] = host_contract.canonical_host_requirements(
             host_requirements
         )
     elif host_requirements is not None:
-        raise ValueError("host requirements require bundle schema version 3")
+        raise ValueError("host requirements require bundle schema version 3 or 4")
     _validate_bundle_document(root, manifest)
     _write_json(root / "bundle.json", manifest)
     return manifest
@@ -170,8 +174,9 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
     schema_version = manifest.get("schema_version")
     if type(schema_version) is not int or schema_version not in fields.BUNDLE_FIELDS:
         raise ValueError("unsupported bundle schema version")
-    contract_fields = fields.BUNDLE_FIELDS[schema_version]
-    _require_fields(manifest, contract_fields, contract_fields, "bundle manifest")
+    allowed_fields = fields.BUNDLE_FIELDS[schema_version]
+    required_fields = fields.BUNDLE_REQUIRED_FIELDS[schema_version]
+    _require_fields(manifest, required_fields, allowed_fields, "bundle manifest")
     if manifest["kind"] != BUNDLE_KIND:
         raise ValueError("invalid bundle kind")
     component = manifest["component"]
@@ -184,7 +189,7 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
     _require_object(profile, "runtime profile")
     if not all(isinstance(key, str) and isinstance(value, str) for key, value in profile.items()):
         raise ValueError("runtime profile values must be strings")
-    if schema_version == fields.HOST_REQUIREMENTS_SCHEMA_VERSION:
+    if "host_requirements" in manifest:
         host_contract.validate_host_requirements(manifest["host_requirements"])
     _validate_units(root, manifest["install_units"])
     _validate_legacy_artifacts(manifest["legacy_artifacts"])
@@ -194,7 +199,13 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
         locations_overlap=_locations_overlap,
     )
     _validate_payload_rows(manifest["payload_files"])
-    _validate_resources(component, root, manifest["resources"], manifest["payload_files"])
+    validate_resources(
+        component,
+        schema_version,
+        root,
+        manifest["resources"],
+        manifest["payload_files"],
+    )
     validate_external_state_units(manifest)
     validate_component_targets(component, manifest)
     validate_manifest_projections(
@@ -257,83 +268,6 @@ def _validate_legacy_artifacts(artifacts: Any) -> None:
         raise ValueError("legacy_artifacts must be sorted by target")
 
 
-def _validate_resources(
-    component: str,
-    root: Path,
-    resources: Any,
-    payload_rows: list[dict[str, Any]],
-) -> None:
-    if not isinstance(resources, list):
-        raise ValueError("resources must be a list")
-    seen_ids: set[str] = set()
-    payload_by_path = {row["path"]: row for row in payload_rows}
-    for resource in resources:
-        _require_object(resource, "resource")
-        allowed = fields.RESOURCE_REQUIRED_FIELDS | fields.RESOURCE_OPTIONAL_FIELDS
-        _require_fields(resource, fields.RESOURCE_REQUIRED_FIELDS, allowed, "resource")
-        identifier = _unique_identifier(resource["id"], seen_ids, "resource")
-        strategy = resource["strategy"]
-        if strategy not in fields.SOURCE_STRATEGIES | fields.SOURCELESS_STRATEGIES:
-            raise ValueError(f"resource {identifier!r} has invalid strategy")
-        has_external_state = "external_state" in resource
-        external_state = resource.get("external_state")
-        has_source = "source" in resource
-        if ((strategy in fields.SOURCE_STRATEGIES) or has_external_state) != has_source:
-            raise ValueError(f"resource {identifier!r} has inconsistent source")
-        if has_source:
-            source = _portable_path(resource["source"], f"resource {identifier!r} source")
-            _reject_symlink_segments(root, source)
-            source_path = root / Path(source)
-            _require_regular_file(source_path, f"resource {identifier!r} source")
-        if not _sorted_portable_paths(resource.get("legacy_source_suffixes", [])):
-            raise ValueError(f"resource {identifier!r} has invalid legacy sources")
-        _location(resource["target"], f"resource {identifier!r} target")
-        observation = resource["observation"]
-        if observation not in {
-            "supported",
-            "unimplemented",
-        }:
-            raise ValueError(f"resource {identifier!r} overstates lifecycle support")
-        if has_external_state:
-            _require_object(external_state, f"resource {identifier!r} external state")
-            _require_fields(
-                external_state,
-                {"kind"},
-                {"kind"},
-                f"resource {identifier!r} external state",
-            )
-            if (
-                component != "codex"
-                or strategy != "manual-action"
-                or observation != "supported"
-                or external_state["kind"] != "codex-hook-trust-v1"
-                or resource["target"] != {"root": "codex-config", "path": "hooks.json"}
-            ):
-                raise ValueError(f"resource {identifier!r} has invalid external state boundary")
-        elif strategy == "manual-action" and observation == "supported":
-            raise ValueError(f"resource {identifier!r} overstates lifecycle support")
-        if observation == "supported" and strategy not in fields.OBSERVABLE_STRATEGIES:
-            if strategy != "json-key-merge" and not has_external_state:
-                raise ValueError(f"resource {identifier!r} overstates lifecycle support")
-        if observation == "supported" and strategy in fields.SHELL_STRATEGIES:
-            validate_shell_source(source_path, identifier)
-        if observation == "supported" and strategy == "json-key-merge":
-            expected = payload_by_path.get(source)
-            if expected is None:
-                raise ValueError(f"resource {identifier!r} source is absent from payload inventory")
-            validate_owned_json_source(
-                root, source, expected, resource, identifier, parse_location=_location
-            )
-        elif "ownership" in resource:
-            raise ValueError(f"resource {identifier!r} ownership requires supported JSON observation")
-        elif "owned_json_pointers" in resource:
-            raise ValueError(
-                f"resource {identifier!r} owned_json_pointers require supported JSON observation"
-            )
-        if not valid_apply_declaration(component, resource):
-            raise ValueError(f"resource {identifier!r} overstates lifecycle support")
-    if [resource["id"] for resource in resources] != sorted(seen_ids):
-        raise ValueError("resources must be sorted by id")
 def _validate_payload_rows(rows: Any) -> None:
     if not isinstance(rows, list):
         raise ValueError("payload_files must be a list")

@@ -18,6 +18,7 @@ OWNERSHIP_REGISTRY_FIELDS = {"target", "schema_version", "entries_pointer"}
 OWNERSHIP_KIND = "json-map-entry-registry-v1"
 OWNERSHIP_ENTRY_SCHEMA = "decision-rule-v1"
 DECISIONS = frozenset({"allow", "ask", "deny"})
+EXACT_JSON_DOCUMENT_FIELDS = {"schema_version", "events", "feedback"}
 
 
 def validate_shell_source(source: Path, identifier: str) -> None:
@@ -41,6 +42,34 @@ def validate_shell_source(source: Path, identifier: str) -> None:
     ):
         raise ValueError(
             f"resource {identifier!r} source must contain one non-empty logical line"
+        )
+
+
+def validate_exact_json_document_source(
+    root: Path,
+    relative: str,
+    expected: dict[str, Any],
+    identifier: str,
+) -> None:
+    payload = read_verified_bytes(
+        root,
+        relative,
+        expected,
+        max_bytes=MAX_OBSERVED_JSON_SIZE,
+    )
+    document = decode_json(payload, f"resource {identifier!r} exact JSON source")
+    if not isinstance(document, dict) or set(document) != EXACT_JSON_DOCUMENT_FIELDS:
+        raise ValueError(
+            f"resource {identifier!r} exact JSON source has invalid fields"
+        )
+    if (
+        type(document["schema_version"]) is not int
+        or document["schema_version"] != 1
+        or type(document["events"]) is not bool
+        or type(document["feedback"]) is not bool
+    ):
+        raise ValueError(
+            f"resource {identifier!r} exact JSON source has invalid values"
         )
 
 

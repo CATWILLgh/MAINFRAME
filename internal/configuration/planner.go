@@ -98,6 +98,9 @@ func (inspection Inspection) PlanWithPreservation(
 		if preserveOnly[resource.ComponentID] {
 			continue
 		}
+		if resource.Strategy == releasecontract.StrategyExactJSONDocument {
+			continue
+		}
 		observation := observations[resource.ID]
 		if resource.ExternalState != nil {
 			planExternalState(

@@ -9,6 +9,7 @@ import (
 const (
 	bundleSchemaVersionV2 = 2
 	bundleSchemaVersionV3 = 3
+	bundleSchemaVersionV4 = 4
 	releaseSchemaVersion  = 2
 	mcpCatalogPath        = "metadata/mcp-catalog.json"
 )
@@ -27,6 +28,7 @@ const (
 	StrategyShellLine          ResourceStrategy = "shell-line"
 	StrategyShellLineIfPresent ResourceStrategy = "shell-line-if-present"
 	StrategyManualAction       ResourceStrategy = "manual-action"
+	StrategyExactJSONDocument  ResourceStrategy = "exact-json-document"
 )
 
 func (strategy ResourceStrategy) valid() bool {
@@ -36,7 +38,8 @@ func (strategy ResourceStrategy) valid() bool {
 		StrategyEnsureDir,
 		StrategyShellLine,
 		StrategyShellLineIfPresent,
-		StrategyManualAction:
+		StrategyManualAction,
+		StrategyExactJSONDocument:
 		return true
 	default:
 		return false
@@ -69,6 +72,7 @@ type Resource struct {
 	OwnedJSONFields      []JSONField
 	JSONMapOwnership     *JSONMapOwnership
 	ExternalState        *ExternalStateDescriptor
+	ExactJSONExemplar    string
 }
 
 type JSONField struct {
@@ -222,7 +226,7 @@ type resourceRecord struct {
 	Strategy             string                   `json:"strategy"`
 	Source               string                   `json:"source,omitempty"`
 	Target               locationRecord           `json:"target"`
-	LegacySourceSuffixes []string                 `json:"legacy_source_suffixes,omitempty"`
+	LegacySourceSuffixes optionalStringList       `json:"legacy_source_suffixes,omitempty"`
 	Observation          string                   `json:"observation"`
 	Apply                string                   `json:"apply"`
 	OwnedJSONPointers    optionalStringList       `json:"owned_json_pointers,omitempty"`

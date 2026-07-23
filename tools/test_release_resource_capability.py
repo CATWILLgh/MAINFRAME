@@ -53,6 +53,47 @@ def test_bundle_contract_preserves_supported_opencode_apply():
     assert manifest["resources"][0]["apply"] == "supported"
 
 
+def test_exact_json_document_apply_capability_is_adapter_local():
+    valid_pairs = {
+        ("claude-code", "claude-config"),
+        ("codex", "codex-config"),
+        ("opencode", "opencode-config"),
+        ("antigravity-2", "antigravity-config"),
+    }
+    for component, root in valid_pairs:
+        resource = _exact_document_resource(root)
+        assert valid_apply_declaration(component, resource)
+
+    invalid_cases = (
+        ("credential-tools", "credentials-config", "mainframe/diagnostics.json"),
+        ("codex", "claude-config", "mainframe/diagnostics.json"),
+        ("codex", "codex-config", "diagnostics.json"),
+    )
+    for component, root, path in invalid_cases:
+        resource = _exact_document_resource(root)
+        resource["target"]["path"] = path
+        assert not valid_apply_declaration(component, resource)
+
+
+def test_exact_json_document_capability_has_no_foreign_ownership_state():
+    for field, value in (
+        ("legacy_source_suffixes", []),
+        ("owned_json_pointers", ["/events"]),
+        ("ownership", {}),
+        ("external_state", {}),
+    ):
+        resource = _exact_document_resource("codex-config")
+        resource[field] = value
+        assert not valid_apply_declaration("codex", resource)
+
+
+def test_exact_json_document_capability_requires_supported_lifecycle():
+    for field in ("observation", "apply"):
+        resource = _exact_document_resource("codex-config")
+        resource[field] = "unimplemented"
+        assert not valid_apply_declaration("codex", resource)
+
+
 def _supported_resource() -> dict:
     return {
         "id": "opencode.permissions",
@@ -74,6 +115,17 @@ def _supported_resource() -> dict:
                 "entries_pointer": "/actions",
             },
         },
+    }
+
+
+def _exact_document_resource(root: str) -> dict:
+    return {
+        "id": "adapter.diagnostics",
+        "strategy": "exact-json-document",
+        "source": "diagnostics.json",
+        "target": {"root": root, "path": "mainframe/diagnostics.json"},
+        "observation": "supported",
+        "apply": "supported",
     }
 
 

@@ -106,6 +106,7 @@ func validateBundle(
 		bundleRoot,
 		sourceBase,
 		component,
+		manifest.SchemaVersion,
 		manifest.Resources,
 		manifest.PayloadFiles,
 	)
@@ -166,17 +167,23 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 		return !manifest.HostRequirements.Present
 	case bundleSchemaVersionV3:
 		return manifest.HostRequirements.Present
+	case bundleSchemaVersionV4:
+		return true
 	default:
 		return false
 	}
 }
 
 func supportedBundleSchemaVersion(version int) bool {
-	return version == bundleSchemaVersionV2 || version == bundleSchemaVersionV3
+	return version == bundleSchemaVersionV2 ||
+		version == bundleSchemaVersionV3 ||
+		version == bundleSchemaVersionV4
 }
 
 func validateHostRequirements(component domain.ComponentID, manifest bundleManifest) error {
-	if manifest.SchemaVersion == bundleSchemaVersionV2 {
+	if manifest.SchemaVersion == bundleSchemaVersionV2 ||
+		(manifest.SchemaVersion == bundleSchemaVersionV4 &&
+			!manifest.HostRequirements.Present) {
 		return nil
 	}
 	rows := manifest.HostRequirements.Values
