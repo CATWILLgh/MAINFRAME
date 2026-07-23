@@ -32,7 +32,10 @@ def _fresh_db():
 def _activate(directory, events=True):
     config = os.path.join(directory, "diagnostics.json")
     with open(config, "w", encoding="utf-8") as fh:
-        json.dump({"schema_version": 1, "events": events}, fh)
+        json.dump(
+            {"schema_version": 1, "events": events, "feedback": False},
+            fh,
+        )
     os.environ["MAINFRAME_DIAGNOSTICS_CONFIG"] = config
 
 

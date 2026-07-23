@@ -25,7 +25,10 @@ _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
 def _run_hook(payload, tmpdir):
     config = os.path.join(tmpdir, "diagnostics.json")
     with open(config, "w", encoding="utf-8") as fh:
-        json.dump({"schema_version": 1, "events": True}, fh)
+        json.dump(
+            {"schema_version": 1, "events": True, "feedback": False},
+            fh,
+        )
     env = dict(
         os.environ,
         MAINFRAME_TELEMETRY_DB=os.path.join(tmpdir, "telemetry.db"),

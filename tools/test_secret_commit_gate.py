@@ -191,7 +191,10 @@ def test_telemetry_logged_on_block():
     os.environ["MAINFRAME_TELEMETRY_DB"] = db
     config = os.path.join(os.path.dirname(db), "diagnostics.json")
     with open(config, "w", encoding="utf-8") as fh:
-        json.dump({"schema_version": 1, "events": True}, fh)
+        json.dump(
+            {"schema_version": 1, "events": True, "feedback": False},
+            fh,
+        )
     os.environ["MAINFRAME_DIAGNOSTICS_CONFIG"] = config
     _drive("git commit -m 'x'", findings=[("aws_access_key", "prod.env")])
     con = sqlite3.connect(db)

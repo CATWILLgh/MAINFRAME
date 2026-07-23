@@ -12,10 +12,12 @@ anchors on the repo-relative path, never the basename (basenames collide).
 import importlib.util
 import os
 import subprocess
+import sys
 import tempfile
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
                        "dist", "claude-code", "plugin", "hooks", "scripts", "_hooklib.py")
+sys.path.insert(0, os.path.dirname(_SCRIPT))
 spec = importlib.util.spec_from_file_location("hooklib_ds", _SCRIPT)
 hooklib = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hooklib)
