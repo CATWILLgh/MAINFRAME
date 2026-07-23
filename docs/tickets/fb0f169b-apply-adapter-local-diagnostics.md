@@ -13,23 +13,23 @@ tags: ["diagnostics", "telemetry", "feedback", "lifecycle", "privacy"]
 
 ## What was observed
 
-The category-first TUI records separate drafts for local diagnostic events and
-`harness-feedback`. Those choices now enter the typed lifecycle and reviewed
-application request as exact per-adapter semantic intents, and the combined
-preview renders the lifecycle result rather than reconstructing it locally.
+The category-first TUI records a `DEV` draft and exposes `harness-feedback`
+only as an optional capability inside it. That hierarchy now enters the typed
+lifecycle and reviewed application request as exact per-adapter semantic
+intents, and the combined preview renders the lifecycle result rather than
+reconstructing it locally.
 Request-scoped application review now turns those intents into exact prepared
 configuration mutations. Static TUI startup still omits activation inspection,
 but the final screen now sends the complete request through application review
 and renders its request-scoped semantic plan.
 
-Bundle schema version 4 and the dormant `exact-json-document` strategy now
+Bundle schema version 5 and the dormant `exact-json-document` strategy now
 provide the release and preparation foundation. The contract authenticates a
 strict schema-v1 exemplar, requires separate runtime desired bytes, reserves
 the complete adapter-local `mainframe/diagnostics.json` target, rejects
 overlapping claims, compares JSON semantically, and prepares private `0600`
-publication through the existing configuration journal. No adapter manifest
-used to advertise the resource, so the foundation could not prove that a
-release carried per-adapter activation documents.
+publication through the existing configuration journal. Optional install units
+carry the typed `dev.harness-feedback` feature identifier.
 
 All four adapter manifests now advertise a dormant exact resource backed by
 the same canonical disabled exemplar. Antigravity correctly targets its runtime
@@ -52,12 +52,13 @@ disabled features remove it. Unconfigured requests remain untouched. Adapter
 deselection and complete uninstall still need deliberate removal semantics
 outside this section.
 
-The existing DEV implementation is also uneven: Claude Code uses the legacy
-`install.sh --dev` links, while the other adapters already carry projected
-event producers but do not have complete, separately managed activation and
-feedback resources. Event and feedback writers now fail closed behind the
+All four release bundles now carry an adapter-local feedback receiver behind
+the optional feature unit. Claude Code uses a separate namespaced DEV plugin;
+Codex, OpenCode, and Antigravity use only their own skill roots. The legacy
+`install.sh --dev` path migrates only the exact old repo-owned Claude symlink
+and preserves foreign paths. Event and feedback writers fail closed behind the
 versioned activation document and protect newly written data with private
-permissions; those writers are not yet activated by an executable TUI plan.
+permissions; the TUI still cannot apply the reviewed plan.
 
 ## Why it is a problem
 
@@ -75,7 +76,6 @@ TUI contract across every adapter.
 
 ## What remains to be done
 
-- Package and activate `harness-feedback` independently for each adapter.
 - Map adapter deselection and complete uninstall to explicit exact-document
   removal intents outside the selected-adapter diagnostics section.
 - Cover those lifecycle transitions together with update and re-enablement;
@@ -83,8 +83,9 @@ TUI contract across every adapter.
 
 ## Acceptance criteria
 
-- The two TUI choices produce exact per-adapter intents and executable plan
-  operations for every selected environment.
+- The `DEV` choice and its nested feedback choice produce exact per-adapter
+  intents and executable plan operations for every selected environment.
+- Feedback cannot be enabled or installed while `DEV` is disabled.
 - An unselected adapter is neither inspected through another adapter nor
   changed.
 - Enabling, disabling, re-enabling, update, recovery, and complete uninstall
@@ -99,6 +100,6 @@ TUI contract across every adapter.
 - `internal/tui/model.go`
 - `internal/diagnostics/plan.go`
 - `internal/application/service.go`
-- `core/gates/detectors/_hooklib.py:343`
-- `dev/skills/harness-feedback/feedback.py:57`
+- `core/gates/detectors/_hooklib.py`
+- `dev/harness-feedback-plugin/skills/harness-feedback/feedback.py`
 - `docs/installer-strategy.md`

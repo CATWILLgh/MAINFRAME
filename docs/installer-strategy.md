@@ -102,10 +102,10 @@ produces a non-blocking notice rather than a misleading `/hooks` instruction.
 ## Local diagnostics reuse the DEV instrumentation
 
 The first TUI screen is a settings overview rather than the first step of a
-one-way wizard. It opens environments, MCP integrations, and local diagnostics
-as independent sections. Every section returns to the overview. Only the
-combined plan can eventually apply their desired state, and the current
-preview-only build says so before the user opens any section.
+one-way wizard. It opens environments, MCP integrations, and additional tools
+as separate sections. Every section returns to the overview. Only the combined
+plan can eventually apply their desired state, and the current preview-only
+build says so before the user opens any section.
 
 Local diagnostics reuse the mechanisms already proven by `install.sh --dev`:
 
@@ -115,10 +115,12 @@ Local diagnostics reuse the mechanisms already proven by `install.sh --dev`:
 - `build_hub_page.py` provides reusable static display and query groundwork.
 
 The old `--dev` flag remains an all-in-one Claude Code development shortcut
-until the TUI reaches apply parity. It is not the new product model. The TUI
-separates two choices: local diagnostic events and `harness-feedback` reports.
-Both are off unless the user chooses them, neither sends data over the network,
-and neither is useful until at least one environment is selected.
+until the TUI reaches apply parity. The TUI preserves the same hierarchy:
+`DEV` is the parent choice, and `harness-feedback` is an optional capability
+inside it. The feedback choice stays hidden while `DEV` is off, and the
+lifecycle rejects `feedback=true` with `events=false`. Both are off unless the
+user chooses them, neither sends data over the network, and neither is useful
+until at least one environment is selected.
 
 The TUI may present one concise choice across the selected environments, but
 materialization stays adapter-owned. Each selected adapter receives its own
@@ -136,30 +138,38 @@ resource, observation of current state, bounded retention, and `0700`/`0600`
 directory and file permissions.
 
 The activation contract starts with a versioned adapter-local
-`mainframe/diagnostics.json` document. Schema version 1 contains independent
-boolean `events` and `feedback` fields. Missing, invalid, unreadable, foreign,
-or disabled state fails closed; path overrides remain locators only. Runtime
-writers bind their leaf directories before publication, use `0700` for data
-directories and `0600` for databases and reports, and never remove existing
-diagnostic history while disabling collection.
+`mainframe/diagnostics.json` document. Schema version 1 stores boolean `events`
+and `feedback` fields, but valid desired state has the invariant
+`feedback => events`. Missing, invalid, unreadable, foreign, or disabled state
+fails closed; path overrides remain locators only. Runtime writers bind their
+leaf directories before publication, use `0700` for data directories and
+`0600` for databases and reports, and never remove existing diagnostic history
+while disabling collection.
 
-Bundle schema version 4 reserves this activation file through the narrow
-`exact-json-document` strategy. The release exemplar proves that the adapter
-ships a valid document, but never becomes user consent or implicit desired
-state. Planning requires separate runtime intent, owns the whole document,
-allows no overlapping install, resource, or MCP claim, and prepares a
-canonical `0600` replacement through the existing journaled configuration
-boundary. Adapter manifests advertise the dormant resource so a release proves
-that every adapter can manage its own activation document. Static TUI startup
-does not inspect these exact targets. The final TUI screen sends the complete
-user request through application review, which rebuilds a fresh observation
-scoped to the selected adapters. Startup targets and final review are pinned to
-the same release identity for the session. The lifecycle maps that scoped
-request into exact configuration changes. If either feature is enabled, it
-prepares the complete schema-v1 document with both booleans. If both are
-disabled, it prepares explicit removal of the activation document. An
-unconfigured diagnostics section supplies no exact desired state and leaves
-every target untouched. Preparation fails closed when even one selected
+Bundle schema version 5 keeps the version-4 activation resource and adds an
+optional feature identifier to ordinary install units. Every adapter ships a
+dormant `dev.harness-feedback` unit in the authenticated release: Claude Code
+targets the separate `mainframe-dev` plugin, while Codex, OpenCode, and
+Antigravity target their own skill roots. A dormant unit may exist in the
+release cache, but the planner installs it only when feedback is enabled and
+removes an owned installed unit when feedback is disabled. It never affects
+the base installed status of an adapter.
+
+The release exemplar proves that the adapter ships a valid activation
+document, but never becomes user consent or implicit desired state. Planning
+owns the whole document, allows no overlapping install, resource, or MCP
+claim, and prepares a canonical `0600` replacement through the existing
+journaled configuration boundary. Static TUI startup does not inspect these
+exact targets. The final TUI screen sends the complete user request through
+application review, which rebuilds a fresh observation scoped to the selected
+adapters. Startup targets and final review are pinned to the same release
+identity for the session. The lifecycle derives the optional install feature
+from the validated diagnostics choice rather than accepting a second
+independent feature list. `DEV` prepares a complete schema-v1 document; its
+feedback field controls the optional skill unit. If `DEV` is disabled, planning
+prepares explicit removal of the activation document and of any owned feedback
+unit. An unconfigured diagnostics section supplies no exact desired state and
+leaves every target untouched. Preparation fails closed when even one selected
 adapter lacks exactly one matching activation resource. The TUI retains the
 reviewed plan opaquely but still exposes no Apply capability.
 
