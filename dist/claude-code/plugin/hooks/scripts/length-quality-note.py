@@ -20,7 +20,8 @@ metric, `fallow-quality-note.py`, is Stop-only for the same reason.
 File-length applies to `_length_check.FILE_LENGTH_EXTENSIONS` (excludes
 .sql/.vue/.svelte -- see that module for why). Function-length is Python-only
 (`ast`-based); a `SyntaxError` on malformed Python skips the function check
-for that file only, the file-length check still runs.
+for that file only, the file-length check still runs. Files whose comment
+headers identify them as machine-generated are skipped by both checks.
 
 Never blocks (user decision 2026-07-06): only `emit_note`, matching
 `fallow-quality-note.py`'s severity, never `emit_block`. No throttle: unlike
@@ -40,7 +41,7 @@ try:
                           stop_guard_cwd, tickets_mentioning)
     from _length_check import (FILE_LENGTH_EXTENSIONS, FILE_LENGTH_THRESHOLD,
                                FUNCTION_LENGTH_THRESHOLD, count_lines,
-                               over_threshold_functions)
+                               is_machine_generated, over_threshold_functions)
 except Exception:
     sys.exit(0)
 
@@ -76,11 +77,11 @@ def _untracked_files(cwd, exts):
 
 
 def _scan(cwd):
-    """(file_over, func_over) for changed files with no ticket naming them.
+    """(file_over, func_over) for human-maintained, unticketed changed files.
 
     file_over: [(path, line_count)]. func_over: [(path, qualname, start, length)].
-    A ticketed file is skipped entirely -- suppression is uniform, per file,
-    for both checks (mirrors the security scan's per-file ticket gate).
+    Ticketed and machine-generated files are skipped entirely -- suppression is
+    uniform, per file, for both checks.
     """
     file_over, func_over = [], []
     candidates = set(changed_files(cwd, FILE_LENGTH_EXTENSIONS))
@@ -92,6 +93,8 @@ def _scan(cwd):
             with open(path, encoding="utf-8", errors="replace") as fh:
                 text = fh.read()
         except OSError:
+            continue
+        if is_machine_generated(text):
             continue
         n = count_lines(text)
         if n > FILE_LENGTH_THRESHOLD:
