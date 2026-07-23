@@ -37,6 +37,9 @@ func Build(selected []domain.ComponentID, desired Desired) (Plan, error) {
 		}
 		return Plan{}, nil
 	}
+	if desired.Feedback && !desired.Events {
+		return Plan{}, errors.New("harness feedback requires DEV mode")
+	}
 	selectedSet := make(map[domain.ComponentID]bool, len(selected))
 	for _, componentID := range selected {
 		selectedSet[componentID] = true

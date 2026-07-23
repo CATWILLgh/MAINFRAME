@@ -17,6 +17,7 @@ type Artifact struct {
 	UnitID     string
 	Target     domain.Location
 	SourcePath domain.ArtifactPath
+	Feature    domain.FeatureID
 }
 
 type Catalog struct {
@@ -39,6 +40,9 @@ func New(components []Component) (Catalog, error) {
 			}
 			if !artifact.SourcePath.Portable() {
 				return Catalog{}, fmt.Errorf("invalid source path %q for component %q", artifact.SourcePath, component.ID)
+			}
+			if artifact.Feature != "" && !artifact.Feature.Valid() {
+				return Catalog{}, fmt.Errorf("invalid feature %q for component %q", artifact.Feature, component.ID)
 			}
 			if owner, exists := artifactOwners[artifact.Target]; exists {
 				return Catalog{}, fmt.Errorf(
@@ -66,6 +70,17 @@ func (catalog Catalog) Knows(id domain.ComponentID) bool {
 func (catalog Catalog) Component(id domain.ComponentID) (Component, bool) {
 	component, exists := catalog.components[id]
 	return cloneComponent(component), exists
+}
+
+func (catalog Catalog) KnowsFeature(feature domain.FeatureID) bool {
+	for _, component := range catalog.components {
+		for _, artifact := range component.Artifacts {
+			if artifact.Feature == feature {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (catalog Catalog) DependencyClosure(requested []domain.ComponentID) ([]domain.ComponentID, error) {

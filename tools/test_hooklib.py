@@ -105,6 +105,32 @@ def test_feedback_skill_directory_can_be_adapter_local():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_default_feedback_skill_directory_uses_namespaced_dev_plugin():
+    root = tempfile.mkdtemp()
+    previous_home = os.environ.get("HOME")
+    skill = os.path.join(
+        root,
+        ".claude",
+        "skills",
+        "mainframe-dev",
+        "skills",
+        "harness-feedback",
+    )
+    try:
+        os.environ.pop("MAINFRAME_FEEDBACK_NUDGE", None)
+        os.environ.pop("MAINFRAME_FEEDBACK_SKILL_DIR", None)
+        os.environ["HOME"] = root
+        assert not _hooklib.feedback_skill_installed()
+        os.makedirs(skill)
+        assert _hooklib.feedback_skill_installed()
+    finally:
+        if previous_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = previous_home
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_added_lines_by_file():
     d = _repo()
     try:

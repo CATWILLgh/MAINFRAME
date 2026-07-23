@@ -44,8 +44,12 @@ func TestReviewCarriesScopedDiagnosticsIntoExecutableConfiguration(t *testing.T)
 		wantPresent bool
 	}{
 		{
-			name:        "enable feedback",
-			desired:     diagnostics.Desired{Configured: true, Feedback: true},
+			name: "enable feedback",
+			desired: diagnostics.Desired{
+				Configured: true,
+				Events:     true,
+				Feedback:   true,
+			},
 			wantPresent: true,
 		},
 		{
@@ -100,7 +104,18 @@ func TestReviewCarriesScopedDiagnosticsIntoExecutableConfiguration(t *testing.T)
 func applicationDiagnosticsSnapshot(t *testing.T, current []byte) Snapshot {
 	t.Helper()
 	model, err := installmodel.New([]installmodel.ComponentSpec{
-		{ID: domain.ComponentClaudeCode},
+		{
+			ID: domain.ComponentClaudeCode,
+			Artifacts: []installmodel.ArtifactSpec{{
+				UnitID: "claude-code.dev.harness-feedback",
+				Target: domain.Location{
+					Root: domain.RootClaudeConfig,
+					Path: "skills/mainframe-dev",
+				},
+				SourcePath: "dev/harness-feedback-plugin",
+				Feature:    domain.FeatureHarnessFeedback,
+			}},
+		},
 		{ID: domain.ComponentCodex},
 		{ID: domain.ComponentOpenCode},
 		{ID: domain.ComponentAntigravity2},

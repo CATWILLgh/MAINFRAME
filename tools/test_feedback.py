@@ -17,8 +17,14 @@ from unittest import mock
 
 sys.dont_write_bytecode = True   # keep __pycache__ out of the validated skill dir
 
-_SKILL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "..", "dev", "skills", "harness-feedback")
+_SKILL_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "dev",
+    "harness-feedback-plugin",
+    "skills",
+    "harness-feedback",
+)
 sys.path.insert(0, _SKILL_DIR)
 import feedback
 
@@ -55,10 +61,16 @@ def _base_args():
             "--severity", "medium", "--title", "rm -r blocked on build dir"]
 
 
-def _config(path, *, feedback_enabled=True, schema_version=1):
+def _config(
+    path,
+    *,
+    events_enabled=True,
+    feedback_enabled=True,
+    schema_version=1,
+):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump({"schema_version": schema_version,
-                   "events": False,
+                   "events": events_enabled,
                    "feedback": feedback_enabled,
                    "ignored_extra_key": "allowed"}, fh)
     return path
@@ -69,6 +81,18 @@ def test_partial_activation_document_is_rejected():
     config = os.path.join(_tmp(), "diagnostics.json")
     with open(config, "w", encoding="utf-8") as stream:
         json.dump({"schema_version": 1, "feedback": True}, stream)
+    result = _run(_base_args(), env_extra={
+        "MAINFRAME_FEEDBACK_DIR": directory,
+        "MAINFRAME_DIAGNOSTICS_CONFIG": config,
+    })
+    assert result.returncode != 0
+    assert not os.path.exists(directory)
+
+
+def test_feedback_enabled_without_dev_is_rejected():
+    directory = os.path.join(_tmp(), "feedback")
+    config = os.path.join(_tmp(), "diagnostics.json")
+    _config(config, events_enabled=False, feedback_enabled=True)
     result = _run(_base_args(), env_extra={
         "MAINFRAME_FEEDBACK_DIR": directory,
         "MAINFRAME_DIAGNOSTICS_CONFIG": config,

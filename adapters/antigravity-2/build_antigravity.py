@@ -41,7 +41,7 @@ HOOK_EVENTS = (
 )
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 ANTIGRAVITY_FEEDBACK_FALLBACK = (
-    'os.path.expanduser("~/.gemini/config/plugins/mainframe/skills/'
+    'os.path.expanduser("~/.gemini/config/skills/'
     'harness-feedback")')
 ANTIGRAVITY_TELEMETRY_FALLBACK = (
     'os.path.expanduser("~/.gemini/antigravity/mainframe-telemetry/telemetry.db")')

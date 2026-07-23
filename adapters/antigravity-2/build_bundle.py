@@ -13,8 +13,9 @@ sys.path.insert(0, str(TOOLS))
 
 from bundle_publication import publish_bundle
 from bundle_sync import prepare_output_root, remove_path, write_text_file
+from feedback_projection import project_adapter_feedback_skill
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 import build_antigravity
@@ -108,9 +109,20 @@ def materialize(root: Path, output: Path) -> None:
     root = root.resolve()
     prepare_output_root(
         output,
-        {"bundle.json", "credentials-index.md", "diagnostics.json", "plugin"},
+        {
+            "bundle.json",
+            "credentials-index.md",
+            "diagnostics.json",
+            "plugin",
+            "skills",
+        },
     )
     _write_plugin(root, output / "plugin")
+    project_adapter_feedback_skill(
+        root / "dev/harness-feedback-plugin/skills/harness-feedback",
+        output / "skills/harness-feedback",
+        "antigravity-2",
+    )
     write_text_file(output / "credentials-index.md", _credentials_index(root))
     copy_diagnostics(root, output)
     write_bundle_manifest(
@@ -118,6 +130,16 @@ def materialize(root: Path, output: Path) -> None:
         component="antigravity-2",
         dependencies=["credential-tools", "mainframe-cli"],
         install_units=[
+            {
+                "id": "antigravity-2.dev.harness-feedback",
+                "kind": "tree",
+                "source": "skills/harness-feedback",
+                "target": {
+                    "root": "antigravity-config",
+                    "path": "skills/harness-feedback",
+                },
+                "feature": "dev.harness-feedback",
+            },
             {
                 "id": "antigravity-2.plugin",
                 "kind": "tree",
@@ -131,7 +153,7 @@ def materialize(root: Path, output: Path) -> None:
         ],
         resources=_resources(),
         mcp_projections=_mcp_projections(),
-        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
+        schema_version=FEATURE_INSTALL_UNIT_SCHEMA_VERSION,
         host_requirements=compatibility.managed_host_requirements(),
     )
 

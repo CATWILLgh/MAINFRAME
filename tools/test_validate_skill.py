@@ -121,10 +121,13 @@ def test_supp_line_cap_and_format():
     cleanup(s)
 
 
-def test_live_roots_accept_three_and_reject_outside():
+def test_live_roots_accept_core_render_and_nested_dev_plugin():
     base = Path(tempfile.mkdtemp(prefix="vs-roots-"))
     roots = [base / n for n in (
-        "core/skills", "dist/claude-code/plugin/skills", "dev/skills")]
+        "core/skills",
+        "dist/claude-code/plugin/skills",
+        "dev/harness-feedback-plugin/skills",
+    )]
     for r in roots:
         (r / "sk").mkdir(parents=True)
     old_live, old_summary = vs.LIVE_ROOTS, vs.SUMMARY_ROOTS

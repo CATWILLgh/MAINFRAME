@@ -56,9 +56,13 @@ func TestPrepareConfigurationMapsDiagnosticsDesiredState(t *testing.T) {
 			wantChanges: 1, wantPresent: true, wantEvents: true,
 		},
 		{
-			name:        "feedback only",
-			desired:     diagnostics.Desired{Configured: true, Feedback: true},
-			wantChanges: 1, wantPresent: true, wantFeedback: true,
+			name: "feedback inside DEV",
+			desired: diagnostics.Desired{
+				Configured: true,
+				Events:     true,
+				Feedback:   true,
+			},
+			wantChanges: 1, wantPresent: true, wantEvents: true, wantFeedback: true,
 		},
 		{
 			name:        "explicit disable",

@@ -6,7 +6,10 @@ from __future__ import annotations
 from pathlib import Path
 
 
-FEEDBACK_FALLBACK = 'os.path.expanduser("~/.claude/skills/harness-feedback")'
+FEEDBACK_FALLBACK = (
+    'os.path.expanduser('
+    '"~/.claude/skills/mainframe-dev/skills/harness-feedback")'
+)
 TELEMETRY_FALLBACK = (
     'os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db")'
 )

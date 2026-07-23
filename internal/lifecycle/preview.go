@@ -92,6 +92,7 @@ type Service struct {
 	planner                 plan.Planner
 	observed                domain.ObservedState
 	desiredCounts           map[domain.ComponentID]int
+	featureTargets          map[domain.ComponentID]map[domain.Location]bool
 	dependencies            map[domain.ComponentID][]domain.ComponentID
 	configuration           map[domain.ComponentID][]ConfigurationResource
 	configurationInspection *configuration.Inspection
@@ -162,11 +163,12 @@ func newService(
 		return Service{}, err
 	}
 	return Service{
-		planner:       planner,
-		observed:      cloneObserved(observed),
-		desiredCounts: countDesiredArtifacts(model),
-		dependencies:  dependencies,
-		configuration: configurationInventory,
+		planner:        planner,
+		observed:       cloneObserved(observed),
+		desiredCounts:  countDesiredArtifacts(model),
+		featureTargets: featureArtifactTargets(model),
+		dependencies:   dependencies,
+		configuration:  configurationInventory,
 	}, nil
 }
 
@@ -239,6 +241,13 @@ func visibleDependencyClosures(model installmodel.Model) (map[domain.ComponentID
 }
 
 func (service Service) Plan(components []domain.ComponentID) (domain.Plan, error) {
+	return service.planFilesystem(components, nil)
+}
+
+func (service Service) planFilesystem(
+	components []domain.ComponentID,
+	features []domain.FeatureID,
+) (domain.Plan, error) {
 	seen := make(map[domain.ComponentID]bool, len(components))
 	for _, id := range components {
 		if !selectable(id) {
@@ -253,7 +262,10 @@ func (service Service) Plan(components []domain.ComponentID) (domain.Plan, error
 		seen[id] = true
 	}
 	return service.planner.PlanWithPreservation(domain.PlanRequest{
-		Desired:  domain.DesiredState{Components: append([]domain.ComponentID(nil), components...)},
+		Desired: domain.DesiredState{
+			Components: append([]domain.ComponentID(nil), components...),
+			Features:   append([]domain.FeatureID(nil), features...),
+		},
 		Observed: cloneObserved(service.observed),
 	}, service.preservationRoots(components))
 }
@@ -320,31 +332,6 @@ func validHostStatus(status hostcompatibility.Status) bool {
 	}
 }
 
-func (service Service) status(
-	id domain.ComponentID,
-	observed map[domain.ComponentID]domain.ObservedComponent,
-) TargetStatus {
-	if observed[id].ID == "" {
-		return StatusAbsent
-	}
-	for _, componentID := range service.dependencies[id] {
-		expected := service.desiredCounts[componentID]
-		if expected == 0 {
-			continue
-		}
-		component, exists := observed[componentID]
-		if !exists || len(component.Artifacts) != expected {
-			return StatusAttention
-		}
-		for _, artifact := range component.Artifacts {
-			if artifact.Ownership != domain.OwnershipManagedExact {
-				return StatusAttention
-			}
-		}
-	}
-	return StatusManaged
-}
-
 func selectable(id domain.ComponentID) bool {
 	for _, candidate := range visibleTargets {
 		if id == candidate {
@@ -352,16 +339,6 @@ func selectable(id domain.ComponentID) bool {
 		}
 	}
 	return false
-}
-
-func countDesiredArtifacts(model installmodel.Model) map[domain.ComponentID]int {
-	counts := make(map[domain.ComponentID]int)
-	for _, artifact := range model.Artifacts() {
-		if !artifact.LegacyOnly {
-			counts[artifact.ComponentID]++
-		}
-	}
-	return counts
 }
 
 func cloneObserved(observed domain.ObservedState) domain.ObservedState {

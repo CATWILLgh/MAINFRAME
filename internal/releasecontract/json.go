@@ -57,3 +57,11 @@ func (requirements *optionalHostRequirements) UnmarshalJSON(payload []byte) erro
 	}
 	return decodeStrict(payload, &requirements.Values)
 }
+
+func (feature *optionalFeature) UnmarshalJSON(payload []byte) error {
+	feature.Present = true
+	if bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return fmt.Errorf("feature must not be null")
+	}
+	return json.Unmarshal(payload, &feature.Value)
+}

@@ -42,7 +42,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 		"Configure your choices first",
 		"Nothing changes until you review and confirm the complete plan",
 		"This build is preview-only; Apply remains disabled",
-		"Return to the overview to configure MCP and local diagnostics",
+		"Return to the overview to configure MCP and additional DEV tools",
 		"Claude Code — installed · configuration 1 not assessed",
 		"Codex — needs attention",
 		"OpenCode — not detected",

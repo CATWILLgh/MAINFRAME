@@ -104,9 +104,15 @@ def test_schema_three_rejects_noncanonical_requirements():
 
 
 def test_schema_two_forbids_host_requirements():
-    bundle, manifest = _write_bundle(schema_version=release_contract.BUNDLE_SCHEMA_VERSION)
+    bundle, manifest = _write_bundle(schema_version=2)
     assert "host_requirements" not in manifest
     _assert_invalid(bundle, {**manifest, "host_requirements": []})
+    try:
+        _write_bundle(schema_version=2, requirements=[REQUIREMENT])
+    except ValueError as exc:
+        assert "schema version 3 through 5" in str(exc)
+    else:
+        raise AssertionError("schema version 2 writer accepted host requirements")
 
 
 def _run_all():

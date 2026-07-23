@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Validator for skills in MAINFRAME hub (core/skills/** — the source of truth —
-plus dev/skills/**; per-edit validation also accepts the dist render).
+plus dev plugin skills; per-edit validation also accepts the dist render).
 
 Checks Anthropic spec + hub discipline limits (see docs/layers/skills.md).
 
@@ -54,7 +54,9 @@ except ImportError as e:
 # signal even though `render_core.py --check` is the drift guard.
 CORE_SKILLS_DIR = PROJECT_ROOT / "core" / "skills"
 SKILLS_DIR = PROJECT_ROOT / "dist" / "claude-code" / "plugin" / "skills"
-DEV_SKILLS_DIR = PROJECT_ROOT / "dev" / "skills"
+DEV_SKILLS_DIR = (
+    PROJECT_ROOT / "dev" / "harness-feedback-plugin" / "skills"
+)
 LIVE_ROOTS = (CORE_SKILLS_DIR, SKILLS_DIR, DEV_SKILLS_DIR)
 SUMMARY_ROOTS = (CORE_SKILLS_DIR, DEV_SKILLS_DIR)
 
@@ -330,7 +332,7 @@ def format_human(target: Path, issues: list[dict]) -> str:
 
 def find_skill_dir_for_file(file_path: Path) -> Path | None:
     """Find the enclosing skill directory — an immediate child of
-    core/skills/, dist/claude-code/plugin/skills/ or dev/skills/. None if outside."""
+    core/skills/, the Claude render, or a DEV plugin skill root. None if outside."""
     for root in LIVE_ROOTS:
         try:
             rel = file_path.resolve().relative_to(root.resolve())
@@ -355,9 +357,9 @@ def all_skill_dirs() -> list[Path]:
 def run_session_start() -> int:
     skills = all_skill_dirs()
     if not skills:
-        print("## Skills (core/skills/ + dev/skills/) — no skills yet")
+        print("## Skills (core + DEV plugin sources) — no skills yet")
         return 0
-    print("## Skills validation (core/skills/ + dev/skills/)")
+    print("## Skills validation (core + DEV plugin sources)")
     for s in skills:
         iss = validate_skill(s)
         errors = [i for i in iss if i["level"] == "error"]
@@ -400,7 +402,11 @@ def run_from_hook() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validator for hub skills (source of truth: core/skills/).")
     parser.add_argument("path", nargs="?", help="Path to a skill directory or any file inside one.")
-    parser.add_argument("--all", action="store_true", help="Validate every skill under core/skills/ and dev/skills/.")
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Validate every skill under core/skills/ and DEV plugin skill roots.",
+    )
     parser.add_argument("--json", action="store_true", help="JSON output (CLI mode).")
     parser.add_argument("--from-hook", action="store_true", help="PostToolUse hook mode (reads stdin).")
     parser.add_argument("--session-start", action="store_true", help="SessionStart hook mode (short summary).")

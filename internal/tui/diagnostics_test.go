@@ -12,7 +12,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
 
-func TestDiagnosticsScreenReusesLocalDEVCapabilitiesAsSeparateChoices(t *testing.T) {
+func TestAdditionalScreenMakesHarnessFeedbackSubordinateToDEV(t *testing.T) {
 	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	model.selected = []domain.ComponentID{
 		domain.ComponentClaudeCode,
@@ -26,28 +26,42 @@ func TestDiagnosticsScreenReusesLocalDEVCapabilitiesAsSeparateChoices(t *testing
 	}
 	view := updated.View().Content
 	for _, text := range []string{
-		"Local diagnostics",
-		"Choose what to keep locally",
-		"Diagnostic event history",
-		"Harness feedback reports",
+		"Additional",
+		"Enable DEV mode",
 		"Nothing is sent over the network",
 		"Each environment keeps its own MAINFRAME data",
+		"Harness feedback becomes available inside DEV mode",
 		"Draft only",
 	} {
 		if !strings.Contains(view, text) {
 			t.Fatalf("diagnostics view does not contain %q:\n%s", text, view)
 		}
 	}
+	if strings.Contains(view, "Enable harness feedback") {
+		t.Fatalf("feedback question is visible before DEV is enabled:\n%s", view)
+	}
+	updatedModel, command := model.Update(keyPress("left"))
+	updated = updatedModel.(*Model)
+	for attempt := 0; attempt < 3 && command != nil; attempt++ {
+		updatedModel, command = updatedModel.Update(command())
+	}
+	updatedModel, command = updatedModel.Update(keyPress("enter"))
+	updated = updatedModel.(*Model)
+	for attempt := 0; attempt < 3 && command != nil; attempt++ {
+		updatedModel, command = updatedModel.Update(command())
+	}
+	updated = updatedModel.(*Model)
+	if view = updated.View().Content; !strings.Contains(view, "Enable harness feedback") {
+		t.Fatalf("feedback question is hidden after DEV is enabled:\n%s", view)
+	}
 }
 
-func TestDiagnosticsFeaturesMapToIndependentDraftChoices(t *testing.T) {
+func TestAdditionalChoicesMapDEVAndFeedbackToOneDraft(t *testing.T) {
 	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
 	model.openDiagnostics()
-	model.diagnosticsSelected = []diagnosticsFeature{
-		diagnosticsEvents,
-		diagnosticsFeedback,
-	}
+	model.diagnosticsDEVEnabled = true
+	model.diagnosticsFeedbackEnabled = true
 
 	updated, command := model.continueFromDiagnostics()
 
@@ -55,6 +69,25 @@ func TestDiagnosticsFeaturesMapToIndependentDraftChoices(t *testing.T) {
 		t.Fatalf("screen = %v, command = %v", updated.screen, command)
 	}
 	if !updated.diagnostics.Events || !updated.diagnostics.Feedback {
+		t.Fatalf("diagnostics draft = %#v", updated.diagnostics)
+	}
+}
+
+func TestDisablingDEVAlsoDisablesHarnessFeedback(t *testing.T) {
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
+	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
+	model.diagnostics = diagnostics.Desired{
+		Configured: true,
+		Events:     true,
+		Feedback:   true,
+	}
+	model.openDiagnostics()
+	model.diagnosticsDEVEnabled = false
+
+	updated, _ := model.continueFromDiagnostics()
+
+	if !updated.diagnostics.Configured || updated.diagnostics.Events ||
+		updated.diagnostics.Feedback {
 		t.Fatalf("diagnostics draft = %#v", updated.diagnostics)
 	}
 }
@@ -98,8 +131,8 @@ func TestDiagnosticsDraftExplainsActivationRemovalAndRetainedHistory(t *testing.
 	}
 	view := updated.View().Content
 	for _, text := range []string{
-		"Local diagnostics draft",
-		"Local event history — disable for Claude Code, OpenCode",
+		"DEV tools draft",
+		"DEV event history — disable for Claude Code, OpenCode",
 		"Harness feedback — disable for Claude Code, OpenCode",
 		"ensure the activation configuration is absent",
 		"Stored diagnostic history stays",
@@ -120,7 +153,7 @@ func TestBackingOutOfDiagnosticsSavesItsDraft(t *testing.T) {
 	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
 	model.openDiagnostics()
-	model.diagnosticsSelected = []diagnosticsFeature{diagnosticsEvents}
+	model.diagnosticsDEVEnabled = true
 
 	updatedModel, command := model.Update(keyPress("b"))
 	updated := updatedModel.(*Model)

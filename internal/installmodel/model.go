@@ -14,6 +14,7 @@ type ArtifactSpec struct {
 	Target               domain.Location
 	SourcePath           domain.ArtifactPath
 	LegacyTargetSuffixes []domain.ArtifactPath
+	Feature              domain.FeatureID
 }
 
 type LegacyArtifactSpec struct {
@@ -35,6 +36,7 @@ type Artifact struct {
 	SourcePath           domain.ArtifactPath
 	LegacyTargetSuffixes []domain.ArtifactPath
 	LegacyOnly           bool
+	Feature              domain.FeatureID
 }
 
 type Model struct {
@@ -93,6 +95,9 @@ func validateDesired(id domain.ComponentID, spec ArtifactSpec) error {
 	if !spec.SourcePath.Portable() {
 		return fmt.Errorf("component %q has invalid source path %q", id, spec.SourcePath)
 	}
+	if spec.Feature != "" && !spec.Feature.Valid() {
+		return fmt.Errorf("component %q has invalid feature %q", id, spec.Feature)
+	}
 	for _, suffix := range spec.LegacyTargetSuffixes {
 		if !suffix.Portable() {
 			return fmt.Errorf("component %q has invalid legacy target suffix %q", id, suffix)
@@ -139,7 +144,8 @@ func deriveCatalog(components []ComponentSpec) (catalog.Catalog, error) {
 		artifacts := make([]catalog.Artifact, 0, len(component.Artifacts))
 		for _, spec := range component.Artifacts {
 			artifacts = append(artifacts, catalog.Artifact{
-				UnitID: spec.UnitID, Target: spec.Target, SourcePath: spec.SourcePath,
+				UnitID: spec.UnitID, Target: spec.Target,
+				SourcePath: spec.SourcePath, Feature: spec.Feature,
 			})
 		}
 		definitions = append(definitions, catalog.Component{ID: component.ID, Dependencies: component.Dependencies, Artifacts: artifacts})
@@ -148,7 +154,7 @@ func deriveCatalog(components []ComponentSpec) (catalog.Catalog, error) {
 }
 
 func desiredArtifact(id domain.ComponentID, spec ArtifactSpec) Artifact {
-	return Artifact{UnitID: spec.UnitID, ComponentID: id, Target: spec.Target, SourcePath: spec.SourcePath, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...)}
+	return Artifact{UnitID: spec.UnitID, ComponentID: id, Target: spec.Target, SourcePath: spec.SourcePath, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...), Feature: spec.Feature}
 }
 
 func legacyArtifact(id domain.ComponentID, spec LegacyArtifactSpec) Artifact {

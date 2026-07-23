@@ -25,8 +25,9 @@ from bundle_sync import (
     write_text_file,
 )
 from bundle_publication import publish_bundle
+from feedback_projection import project_adapter_feedback_skill
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 
@@ -186,6 +187,16 @@ def _install_units(
 ) -> list[dict[str, Any]]:
     units = [
         {
+            "id": "claude-code.dev.harness-feedback",
+            "kind": "tree",
+            "source": "dev/harness-feedback-plugin",
+            "target": {
+                "root": "claude-config",
+                "path": "skills/mainframe-dev",
+            },
+            "feature": "dev.harness-feedback",
+        },
+        {
             "id": "claude-code.instructions",
             "kind": "file",
             "source": "CLAUDE.md",
@@ -225,12 +236,14 @@ def materialize(root: Path, output: Path) -> None:
     """Materialize release inputs without reading or mutating user state."""
     instructions = root / "dist/claude-code/CLAUDE.md"
     plugin = root / "dist/claude-code/plugin"
+    feedback_plugin = root / "dev/harness-feedback-plugin"
     styles = root / "dist/claude-code/output-styles"
     rules = root / "dist/claude-code/rules"
     settings = root / "dist/claude-code/settings.json"
     credentials = root / "core/resources/credentials-index.md"
     _require_file(instructions)
     _require_tree(plugin)
+    _require_tree(feedback_plugin)
     style_children = _direct_children(styles)
     rule_children = _direct_children(rules, optional=True)
     _require_file(settings)
@@ -243,6 +256,7 @@ def materialize(root: Path, output: Path) -> None:
         "bundle.json",
         "credentials-index.md",
         "diagnostics.json",
+        "dev",
         "plugin",
         "settings.json",
     }
@@ -257,6 +271,12 @@ def materialize(root: Path, output: Path) -> None:
         project_text(credentials.read_text(), profile),
     )
     sync_tree(plugin, output / "plugin")
+    sync_tree(feedback_plugin, output / "dev/harness-feedback-plugin")
+    project_adapter_feedback_skill(
+        feedback_plugin / "skills/harness-feedback",
+        output / "dev/harness-feedback-plugin/skills/harness-feedback",
+        "claude-code",
+    )
     if style_children:
         sync_tree(styles, output / "output-styles")
     if rule_children:
@@ -270,7 +290,7 @@ def materialize(root: Path, output: Path) -> None:
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
-        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
+        schema_version=FEATURE_INSTALL_UNIT_SCHEMA_VERSION,
     )
 
 

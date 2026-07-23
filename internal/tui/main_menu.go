@@ -76,7 +76,7 @@ func (model *Model) mainView() string {
 	}
 	if len(model.selected) == 0 {
 		sections = append(sections, mutedStyle.Render(
-			"MCP integrations and local diagnostics require at least one environment.",
+			"MCP integrations and additional DEV tools require at least one environment.",
 		))
 	}
 	sections = append(sections, mutedStyle.Render("enter open  •  q quit"))
@@ -90,7 +90,7 @@ func mainMenuForm(model *Model) *huh.Form {
 			mainMenuEnvironments,
 		),
 		huh.NewOption("MCP integrations — "+model.mcpMenuStatus(), mainMenuMCP),
-		huh.NewOption("Local diagnostics — "+diagnosticsStatus(model.diagnostics), mainMenuDiagnostics),
+		huh.NewOption("Additional — "+diagnosticsStatus(model.diagnostics), mainMenuDiagnostics),
 		huh.NewOption("Review complete plan", mainMenuReview),
 		huh.NewOption("Exit", mainMenuExit),
 	}

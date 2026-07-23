@@ -103,10 +103,10 @@ def _validate_strategy(
         raise ValueError(f"resource {identifier!r} has invalid strategy")
     if (
         strategy == fields.EXACT_JSON_DOCUMENT_STRATEGY
-        and schema_version != fields.EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+        and schema_version < fields.EXACT_JSON_DOCUMENT_SCHEMA_VERSION
     ):
         raise ValueError(
-            f"resource {identifier!r} exact JSON document requires schema version 4"
+            f"resource {identifier!r} exact JSON document requires schema version 4 or newer"
         )
     if strategy == fields.EXACT_JSON_DOCUMENT_STRATEGY and any(
         field in resource

@@ -36,9 +36,13 @@ func (planner Planner) PlanWithPreservation(
 		return domain.Plan{}, err
 	}
 	preserveOnly := componentDifference(preserved, desired)
-	expectedOwners := planner.expectedOwners(desired)
+	features, err := planner.desiredFeatures(request.Desired.Features)
+	if err != nil {
+		return domain.Plan{}, err
+	}
+	expectedOwners := planner.expectedOwners(desired, features)
 	observedByLocation := indexObservedArtifacts(request.Observed)
-	operations := planner.operationsForDesired(desired, observedByLocation)
+	operations := planner.operationsForDesired(desired, features, observedByLocation)
 	operations = append(
 		operations,
 		planner.operationsForObserved(request.Observed, expectedOwners, preserveOnly)...,
@@ -49,12 +53,16 @@ func (planner Planner) PlanWithPreservation(
 
 func (planner Planner) operationsForDesired(
 	desired []domain.ComponentID,
+	features map[domain.FeatureID]bool,
 	observedByLocation map[domain.Location]observedArtifact,
 ) []domain.Operation {
 	operations := make([]domain.Operation, 0)
 	for _, id := range desired {
 		component, _ := planner.catalog.Component(id)
 		for _, expected := range component.Artifacts {
+			if !artifactDesired(expected, features) {
+				continue
+			}
 			observed, exists := observedByLocation[expected.Target]
 			if exists && observed.componentID == id &&
 				observed.artifact.Ownership == domain.OwnershipManagedExact &&
@@ -170,15 +178,44 @@ func (planner Planner) declaredArtifact(id domain.ComponentID, location domain.L
 	return catalog.Artifact{}, false
 }
 
-func (planner Planner) expectedOwners(desired []domain.ComponentID) map[domain.Location]domain.ComponentID {
+func (planner Planner) expectedOwners(
+	desired []domain.ComponentID,
+	features map[domain.FeatureID]bool,
+) map[domain.Location]domain.ComponentID {
 	owners := make(map[domain.Location]domain.ComponentID)
 	for _, id := range desired {
 		component, _ := planner.catalog.Component(id)
 		for _, artifact := range component.Artifacts {
+			if !artifactDesired(artifact, features) {
+				continue
+			}
 			owners[artifact.Target] = id
 		}
 	}
 	return owners
+}
+
+func (planner Planner) desiredFeatures(
+	features []domain.FeatureID,
+) (map[domain.FeatureID]bool, error) {
+	selected := make(map[domain.FeatureID]bool, len(features))
+	for _, feature := range features {
+		if selected[feature] {
+			return nil, fmt.Errorf("duplicate feature %q", feature)
+		}
+		if !feature.Valid() || !planner.catalog.KnowsFeature(feature) {
+			return nil, fmt.Errorf("unknown feature %q", feature)
+		}
+		selected[feature] = true
+	}
+	return selected, nil
+}
+
+func artifactDesired(
+	artifact catalog.Artifact,
+	features map[domain.FeatureID]bool,
+) bool {
+	return artifact.Feature == "" || features[artifact.Feature]
 }
 
 func sortOperations(operations []domain.Operation) {

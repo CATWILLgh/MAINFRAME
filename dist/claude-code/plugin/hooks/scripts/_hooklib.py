@@ -120,8 +120,10 @@ def feedback_skill_installed():
     override = os.environ.get("MAINFRAME_FEEDBACK_NUDGE")
     if override is not None:
         return override == "1"
-    skill_dir = (os.environ.get("MAINFRAME_FEEDBACK_SKILL_DIR")
-                 or os.path.expanduser("~/.claude/skills/harness-feedback"))
+    skill_dir = (
+        os.environ.get("MAINFRAME_FEEDBACK_SKILL_DIR")
+        or os.path.expanduser("~/.claude/skills/mainframe-dev/skills/harness-feedback")
+    )
     return os.path.isdir(skill_dir)
 
 

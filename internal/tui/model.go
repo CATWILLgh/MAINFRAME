@@ -37,25 +37,26 @@ const (
 )
 
 type Model struct {
-	reviewer            PlanReviewer
-	catalog             mcpcatalog.Catalog
-	stats               mcpcatalog.StatsSource
-	targets             []lifecycle.Target
-	selected            []domain.ComponentID
-	form                *huh.Form
-	screen              screen
-	preview             lifecycle.Preview
-	reviewedPlan        ReviewedPlan
-	mcpPreview          mcpcatalog.OnboardingPreview
-	mcpChoices          map[mcpcatalog.ServerID]*mcpChoice
-	mcpMenuChoice       mcpMenuChoice
-	mainMenuChoice      mainMenuChoice
-	diagnostics         diagnostics.Desired
-	diagnosticsSelected []diagnosticsFeature
-	activeMCP           mcpcatalog.ServerID
-	repositoryStats     map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
-	statsGeneration     uint64
-	err                 error
+	reviewer                   PlanReviewer
+	catalog                    mcpcatalog.Catalog
+	stats                      mcpcatalog.StatsSource
+	targets                    []lifecycle.Target
+	selected                   []domain.ComponentID
+	form                       *huh.Form
+	screen                     screen
+	preview                    lifecycle.Preview
+	reviewedPlan               ReviewedPlan
+	mcpPreview                 mcpcatalog.OnboardingPreview
+	mcpChoices                 map[mcpcatalog.ServerID]*mcpChoice
+	mcpMenuChoice              mcpMenuChoice
+	mainMenuChoice             mainMenuChoice
+	diagnostics                diagnostics.Desired
+	diagnosticsDEVEnabled      bool
+	diagnosticsFeedbackEnabled bool
+	activeMCP                  mcpcatalog.ServerID
+	repositoryStats            map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
+	statsGeneration            uint64
+	err                        error
 }
 
 var (
@@ -213,11 +214,11 @@ func (model *Model) selectionView() string {
 	}
 	if len(model.selected) == 0 {
 		sections = append(sections, mutedStyle.Render(
-			"With none selected, MCP integrations and local diagnostics are unavailable.",
+			"With none selected, MCP integrations and additional DEV tools are unavailable.",
 		))
 	} else {
 		sections = append(sections, mutedStyle.Render(
-			"Return to the overview to configure MCP and local diagnostics.",
+			"Return to the overview to configure MCP and additional DEV tools.",
 		))
 	}
 	sections = append(sections, mutedStyle.Render("space toggle  •  enter save  •  b back  •  q quit"))

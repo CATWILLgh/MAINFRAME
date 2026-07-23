@@ -82,6 +82,10 @@ def _fixture_root(sandbox: Path, rules: str) -> Path:
     root = sandbox / "root"
     for relative in ("core/agents", "core/gates", "core/skills", "core/memory"):
         shutil.copytree(REPO / relative, root / relative)
+    shutil.copytree(
+        REPO / "dev/harness-feedback-plugin",
+        root / "dev/harness-feedback-plugin",
+    )
     for relative in (
         "adapters/runtime-profiles.json",
         "adapters/opencode/plugins/mainframe-gates.js",
@@ -122,6 +126,15 @@ def _assert_invalid_rules_preserve_output(rules: str) -> None:
 def _assert_bundle_layout(output: Path) -> None:
     assert (output / "AGENTS.md").is_file()
     assert (output / "skills/task-workflow/SKILL.md").is_file()
+    feedback = (output / "skills/harness-feedback/feedback.py").read_text()
+    prose = (output / "skills/harness-feedback/SKILL.md").read_text()
+    assert "XDG_CONFIG_HOME" in feedback
+    assert (
+        "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/mainframe/feedback" in prose
+    )
+    assert "~/.claude" not in feedback + prose
+    assert "CODEX_HOME" not in feedback + prose
+    assert "~/.gemini" not in feedback + prose
     assert (output / "agents/decision-reviewer.md").is_file()
     assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
     assert (output / "gates/detectors/path-validation.py").is_file()
@@ -134,7 +147,7 @@ def _assert_bundle_layout(output: Path) -> None:
 
 
 def _assert_manifest_header(manifest: dict) -> None:
-    assert manifest["schema_version"] == 4
+    assert manifest["schema_version"] == 5
     assert manifest["component"] == "opencode"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"]["config_root"] == (
@@ -168,6 +181,9 @@ def _assert_manifest_units(manifest: dict) -> None:
         "path": "AGENTS.md",
     }
     assert units["skills/task-workflow"]["kind"] == "tree"
+    feedback = units["skills/harness-feedback"]
+    assert feedback["kind"] == "tree"
+    assert feedback["feature"] == "dev.harness-feedback"
     assert units["agents/decision-reviewer.md"]["kind"] == "file"
     assert units["gates/detectors/path-validation.py"]["kind"] == "file"
     assert units["plugins/mainframe-gates.js"]["kind"] == "file"

@@ -98,7 +98,7 @@ def test_bundle_is_self_contained_and_models_external_validation():
     _load_builder().build(REPO, output)
 
     manifest = release_contract.validate_bundle(output)
-    assert manifest["schema_version"] == 4
+    assert manifest["schema_version"] == 5
     assert manifest["component"] == "antigravity-2"
     assert manifest["host_requirements"] == [{
         "kind": "darwin-application-bundle-v1",
@@ -106,13 +106,25 @@ def test_bundle_is_self_contained_and_models_external_validation():
         "exact_versions": ["2.2.1"],
     }]
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
-    assert manifest["install_units"] == [{
-        "id": "antigravity-2.plugin",
-        "kind": "tree",
-        "source": "plugin",
-        "target": {"root": "antigravity-config", "path": "plugins/mainframe"},
-        "legacy_source_suffixes": ["dist/antigravity-2/plugin"],
-    }]
+    assert manifest["install_units"] == [
+        {
+            "id": "antigravity-2.dev.harness-feedback",
+            "kind": "tree",
+            "source": "skills/harness-feedback",
+            "target": {
+                "root": "antigravity-config",
+                "path": "skills/harness-feedback",
+            },
+            "feature": "dev.harness-feedback",
+        },
+        {
+            "id": "antigravity-2.plugin",
+            "kind": "tree",
+            "source": "plugin",
+            "target": {"root": "antigravity-config", "path": "plugins/mainframe"},
+            "legacy_source_suffixes": ["dist/antigravity-2/plugin"],
+        },
+    ]
     assert manifest["mcp_projections"] == [_mcp_projection()]
     _assert_resources(manifest)
     credentials = (output / "credentials-index.md").read_text()
@@ -123,6 +135,13 @@ def test_bundle_is_self_contained_and_models_external_validation():
         REPO / "core/resources/diagnostics.json"
     ).read_bytes()
     assert (output / "plugin/plugin.json").is_file()
+    feedback = (output / "skills/harness-feedback/feedback.py").read_text()
+    prose = (output / "skills/harness-feedback/SKILL.md").read_text()
+    assert "~/.gemini/antigravity/mainframe/feedback" in feedback + prose
+    assert "~/.gemini/antigravity/mainframe/diagnostics.json" in feedback
+    assert "~/.claude" not in feedback + prose
+    assert "CODEX_HOME" not in feedback + prose
+    assert "opencode" not in feedback + prose
     assert not any(
         unit["target"]["root"] == "antigravity-data"
         for unit in manifest["install_units"]

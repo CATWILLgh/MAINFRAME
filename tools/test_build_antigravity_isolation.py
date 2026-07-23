@@ -17,7 +17,7 @@ build = import_module("build_antigravity")
 fixtures = import_module("test_build_antigravity")
 
 ANTIGRAVITY_FEEDBACK = (
-    'os.path.expanduser("~/.gemini/config/plugins/mainframe/skills/'
+    'os.path.expanduser("~/.gemini/config/skills/'
     'harness-feedback")'
 )
 ANTIGRAVITY_TELEMETRY = (
@@ -54,7 +54,8 @@ def test_runtime_projection_rejects_unmapped_claude_path() -> None:
     root = fixtures.fixture_root()
     hooklib = root / "core/gates/detectors/_hooklib.py"
     hooklib.write_text(
-        'FEEDBACK = os.path.expanduser("~/.claude/skills/harness-feedback")\n'
+        'FEEDBACK = os.path.expanduser('
+        '"~/.claude/skills/mainframe-dev/skills/harness-feedback")\n'
         'TELEMETRY = os.path.expanduser('
         '"~/.claude/mainframe/telemetry/telemetry.db")\n'
         'DIAGNOSTICS = os.path.expanduser('

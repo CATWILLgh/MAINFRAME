@@ -53,6 +53,7 @@ def _expected_install_targets() -> set[tuple[str, str]]:
         ("codex-config", "hooks.json"),
         ("codex-config", "mainframe-hook.sh"),
         ("codex-config", "rules/mainframe.rules"),
+        ("codex-config", "skills/harness-feedback"),
     }
     targets.update(
         ("codex-config", f"skills/{name}") for name, _ in skills
@@ -78,6 +79,8 @@ def _expected_payload_paths() -> set[str]:
         "hooks.json",
         "mainframe-hook.sh",
         "rules/mainframe.rules",
+        "skills/harness-feedback/SKILL.md",
+        "skills/harness-feedback/feedback.py",
     }
     paths.update(
         f"skills/{name}/{relative.as_posix()}"
@@ -131,7 +134,7 @@ def _expected_resources() -> dict[str, dict]:
 
 def _assert_manifest_contract(output: Path) -> None:
     manifest = release_contract.validate_bundle(output)
-    assert manifest["schema_version"] == 4
+    assert manifest["schema_version"] == 5
     assert manifest["component"] == "codex"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"] == {
@@ -144,6 +147,10 @@ def _assert_manifest_contract(output: Path) -> None:
     assert {_target(unit) for unit in units} == _expected_install_targets()
     assert all(unit["id"].startswith("codex.") for unit in units)
     assert len({unit["id"] for unit in units}) == len(units)
+    feedback_unit = next(
+        unit for unit in units if unit["id"] == "codex.dev.harness-feedback"
+    )
+    assert feedback_unit["feature"] == "dev.harness-feedback"
     assert {item["path"] for item in manifest["payload_files"]} == (
         _expected_payload_paths()
     )
@@ -181,9 +188,18 @@ def test_build_materializes_complete_self_contained_codex_bundle():
         "diagnostics.json",
         "hooks.json",
         "rules/mainframe.rules",
+        "skills/harness-feedback/SKILL.md",
+        "skills/harness-feedback/feedback.py",
     ):
         assert (output / relative).is_file()
     assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
+    feedback = (output / "skills/harness-feedback/feedback.py").read_text()
+    prose = (output / "skills/harness-feedback/SKILL.md").read_text()
+    assert "CODEX_HOME" in feedback
+    assert "${CODEX_HOME:-$HOME/.codex}/mainframe/feedback" in prose
+    assert "~/.claude" not in feedback + prose
+    assert "opencode" not in feedback + prose
+    assert "~/.gemini" not in feedback + prose
     assert launcher.is_file() and os.access(launcher, os.X_OK)
     assert (detectors / "path-validation.py").is_file()
     assert (detectors / "_hooklib.py").is_file()

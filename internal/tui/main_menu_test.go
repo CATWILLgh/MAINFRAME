@@ -24,7 +24,7 @@ func TestMainMenuIsTheFirstScreenAndExplainsCombinedApply(t *testing.T) {
 		"Settings overview",
 		"Environments — 1 selected",
 		"MCP integrations — not configured",
-		"Local diagnostics — draft not configured",
+		"Additional — not configured",
 		"Review complete plan",
 		"Nothing changes until you review and confirm the complete plan",
 	} {

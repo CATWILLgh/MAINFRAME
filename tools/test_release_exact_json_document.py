@@ -151,7 +151,13 @@ def test_schema_four_exact_document_validates_through_release_index():
     assert release_contract.validate_release(root) == index
 
 
-def test_exact_json_document_is_schema_four_only():
+def test_schema_five_preserves_exact_json_document_support():
+    bundle, manifest = _write_bundle(schema_version=5)
+    assert manifest["schema_version"] == 5
+    assert release_contract.validate_bundle(bundle) == manifest
+
+
+def test_exact_json_document_requires_schema_four_or_newer():
     for schema_version in (2, 3):
         requirements = [HOST_REQUIREMENT] if schema_version == 3 else None
         _assert_invalid_write(

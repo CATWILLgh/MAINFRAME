@@ -80,7 +80,8 @@ layout in this repository.
 Usage:
   $0                  Install (creates symlinks; backs up existing files).
   $0 --dev            Install PLUS the hub-development instrumentation:
-                      the 'harness-feedback' skill and the hub data
+                      the namespaced 'mainframe-dev:harness-feedback' skill and
+                      the hub data
                       namespace ~/.claude/mainframe -> workspace/runtime/
                       in this repo (gitignored), holding friction reports
                       (feedback/) and local usage telemetry (telemetry/ —
@@ -162,9 +163,11 @@ ARTIFACTS=(
 # only while it exists. ~/.claude/telemetry cannot serve as the opt-in marker —
 # Claude Code itself creates and uses that directory on every machine.
 DEV_ARTIFACTS=(
-    "dev/skills/harness-feedback:${CLAUDE_DIR}/skills/harness-feedback"
+    "dev/harness-feedback-plugin:${CLAUDE_DIR}/skills/mainframe-dev"
     "workspace/runtime:${CLAUDE_DIR}/mainframe"
 )
+LEGACY_DEV_FEEDBACK_SOURCE="dev/skills/harness-feedback"
+LEGACY_DEV_FEEDBACK_TARGET="${CLAUDE_DIR}/skills/harness-feedback"
 
 # Directories whose CONTENTS are linked item-by-item into ~/.claude/<dir>/.
 # These layers have no plugin-format equivalent, so they stay outside the plugin and
@@ -543,6 +546,20 @@ uninstall_one() {
     else
         rm "$target"
         log_ok "removed symlink ${target}"
+    fi
+}
+
+remove_legacy_dev_feedback_link() {
+    local source="${PROJECT_ROOT}/${LEGACY_DEV_FEEDBACK_SOURCE}"
+    local target="$LEGACY_DEV_FEEDBACK_TARGET"
+    if [[ ! -L "$target" || "$(readlink_safe "$target")" != "$source" ]]; then
+        return 0
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would remove legacy repo-owned symlink ${target}"
+    else
+        rm "$target"
+        log_ok "removed legacy repo-owned symlink ${target}"
     fi
 }
 
@@ -1466,6 +1483,7 @@ main() {
         for entry in "${DEV_ARTIFACTS[@]}"; do
             uninstall_one "${entry%%:*}" "${entry##*:}"
         done
+        remove_legacy_dev_feedback_link
         for entry in "${MANAGED_DIRS[@]}"; do
             uninstall_dir_contents "${entry%%:*}" "${entry##*:}"
         done
@@ -1521,6 +1539,7 @@ main() {
         for entry in "${DEV_ARTIFACTS[@]}"; do
             install_one "${entry%%:*}" "${entry##*:}"
         done
+        remove_legacy_dev_feedback_link
         # Local hub reference page (dev-only, gitignored output). Best-effort:
         # a missing .venv warns rather than failing the install.
         if [[ $DRY_RUN -eq 1 ]]; then

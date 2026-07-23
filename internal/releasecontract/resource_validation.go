@@ -45,9 +45,9 @@ func validateResourceRecord(
 		return Resource{}, fmt.Errorf("component %q has invalid resource %q", component, record.ID)
 	}
 	if strategy == StrategyExactJSONDocument &&
-		schemaVersion != bundleSchemaVersionV4 {
+		schemaVersion < bundleSchemaVersionV4 {
 		return Resource{}, fmt.Errorf(
-			"resource %q requires bundle schema version 4",
+			"resource %q requires bundle schema version 4 or newer",
 			record.ID,
 		)
 	}

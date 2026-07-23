@@ -35,6 +35,14 @@ def _fixture_repo():
            "description: The universal cycle.\nwhen_to_use: Any modifying task.\n---\n\n"
            "See [`surface-ticket`](../surface-ticket/SKILL.md) and "
            "[`web-search`](../../agents/web-search.md).\n")
+    _write(
+        os.path.join(
+            root,
+            "dev/harness-feedback-plugin/skills/harness-feedback/SKILL.md",
+        ),
+        "---\nname: harness-feedback\n"
+        "description: Record local harness feedback.\n---\n\nbody\n",
+    )
     _write(os.path.join(root, "dist/claude-code/plugin/agents/decision-reviewer.md"),
            "---\nname: decision-reviewer\ndescription: Adversarial review.\n"
            "model: opus\nskills:\n  - surface-ticket\n  - task-workflow\n"
@@ -74,12 +82,13 @@ def test_parse_frontmatter_no_frontmatter_returns_empty_meta():
 def test_collect_skills_reads_fields_and_crossrefs():
     root = _fixture_repo()
     skills = {s["name"]: s for s in bhp.collect_skills(root)}
-    assert set(skills) == {"surface-ticket", "task-workflow"}
+    assert set(skills) == {"surface-ticket", "task-workflow", "harness-feedback"}
     assert skills["surface-ticket"]["user_invocable"] is False
     assert skills["surface-ticket"]["description"].startswith("Capture")
     assert "surface-ticket" in skills["task-workflow"]["crossrefs"]
     assert "web-search" in skills["task-workflow"]["crossrefs"]
     assert skills["surface-ticket"]["crossrefs"] == []
+    assert skills["harness-feedback"]["dev"] is True
 
 
 def test_collect_agents_reads_skills_list():
@@ -502,6 +511,7 @@ def test_collect_skills_and_agents_carry_tool_tag():
     skills = {s["name"]: s for s in bhp.collect_skills(root)}
     # shipped (non-dev) skills are delivered to BOTH tools via install.sh --opencode
     assert skills["surface-ticket"]["tool"] == "both"
+    assert skills["harness-feedback"]["tool"] == "both"
     agents = {a["name"]: a for a in bhp.collect_agents(root)}
     assert agents["decision-reviewer"]["tool"] == "both"
 

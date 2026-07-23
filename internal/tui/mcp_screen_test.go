@@ -69,7 +69,7 @@ func TestEmptyEnvironmentSelectionDisablesMCPAndReturnsToOverview(t *testing.T) 
 	choice.Adapters = []domain.ComponentID{domain.ComponentClaudeCode}
 	model.openSelection()
 	model.selected = nil
-	if !strings.Contains(model.View().Content, "MCP integrations and local diagnostics are unavailable") {
+	if !strings.Contains(model.View().Content, "MCP integrations and additional DEV tools are unavailable") {
 		t.Fatalf("empty selection does not explain MCP behavior:\n%s", model.View().Content)
 	}
 

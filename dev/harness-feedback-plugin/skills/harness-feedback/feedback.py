@@ -11,8 +11,8 @@ Usage (body on stdin, all metadata as flags):
     EOF
 
 Requires an enabled diagnostics document from `$MAINFRAME_DIAGNOSTICS_CONFIG`
-(default `~/.claude/mainframe/diagnostics.json`). Writes one private report to
-`$MAINFRAME_FEEDBACK_DIR` (default `~/.claude/mainframe/feedback/`) and prints
+(default `{{mainframe.diagnostics_config}}`). Writes one private report to
+`$MAINFRAME_FEEDBACK_DIR` (default `{{mainframe.feedback_dir}}`) and prints
 the written path. Exit 0 = written; non-zero = rejected, reason on stderr.
 Stdlib only.
 """
@@ -93,6 +93,8 @@ def _load_activation():
             or type(document.get("events")) is not bool
             or type(document.get("feedback")) is not bool):
         raise SystemExit("feedback.py: invalid diagnostics config schema")
+    if not document["events"]:
+        raise SystemExit("feedback.py: DEV is disabled in diagnostics config")
     if not document["feedback"]:
         raise SystemExit("feedback.py: feedback is disabled in diagnostics config")
 

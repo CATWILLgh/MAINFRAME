@@ -38,7 +38,7 @@ import release_host_requirements as host_contract
 from release_resource_contract import validate_resources
 
 
-BUNDLE_SCHEMA_VERSION = 2
+BUNDLE_SCHEMA_VERSION = fields.FEATURE_INSTALL_UNIT_SCHEMA_VERSION
 RELEASE_SCHEMA_VERSION = 2
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
@@ -81,14 +81,14 @@ def write_bundle_manifest(
         ),
     }
     if schema_version == fields.HOST_REQUIREMENTS_SCHEMA_VERSION or (
-        schema_version == fields.EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+        schema_version >= fields.EXACT_JSON_DOCUMENT_SCHEMA_VERSION
         and host_requirements is not None
     ):
         manifest["host_requirements"] = host_contract.canonical_host_requirements(
             host_requirements
         )
     elif host_requirements is not None:
-        raise ValueError("host requirements require bundle schema version 3 or 4")
+        raise ValueError("host requirements require bundle schema version 3 through 5")
     _validate_bundle_document(root, manifest)
     _write_json(root / "bundle.json", manifest)
     return manifest
@@ -191,7 +191,7 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
         raise ValueError("runtime profile values must be strings")
     if "host_requirements" in manifest:
         host_contract.validate_host_requirements(manifest["host_requirements"])
-    _validate_units(root, manifest["install_units"])
+    _validate_units(root, manifest["install_units"], schema_version)
     _validate_legacy_artifacts(manifest["legacy_artifacts"])
     validate_local_target_isolation(
         manifest,
@@ -215,17 +215,20 @@ def _validate_bundle_document(root: Path, manifest: Any) -> None:
     )
 
 
-def _validate_units(root: Path, units: Any) -> None:
+def _validate_units(root: Path, units: Any, schema_version: int) -> None:
     if not isinstance(units, list):
         raise ValueError("install_units must be a list")
     seen_ids: set[str] = set()
     targets: list[tuple[str, str]] = []
     for unit in units:
         _require_object(unit, "install unit")
+        allowed_fields = fields.UNIT_REQUIRED_FIELDS | fields.UNIT_OPTIONAL_FIELDS
+        if schema_version >= fields.FEATURE_INSTALL_UNIT_SCHEMA_VERSION:
+            allowed_fields = fields.UNIT_FEATURE_FIELDS
         _require_fields(
             unit,
             fields.UNIT_REQUIRED_FIELDS,
-            fields.UNIT_REQUIRED_FIELDS | fields.UNIT_OPTIONAL_FIELDS,
+            allowed_fields,
             "install unit",
         )
         identifier = _unique_identifier(unit["id"], seen_ids, "install unit")
@@ -245,6 +248,13 @@ def _validate_units(root: Path, units: Any) -> None:
             raise ValueError(
                 f"install unit {identifier!r} has invalid legacy source suffixes"
             )
+        if "feature" in unit:
+            feature = unit["feature"]
+            if (
+                not isinstance(feature, str)
+                or not fields.IDENTIFIER.fullmatch(feature)
+            ):
+                raise ValueError(f"install unit {identifier!r} has invalid feature")
         for previous in targets:
             if _locations_overlap(previous, target):
                 raise ValueError(f"install unit targets {previous!r} and {target!r} overlap")

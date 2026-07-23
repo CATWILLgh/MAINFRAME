@@ -24,10 +24,12 @@ from bundle_sync import (
 )
 from bundle_publication import publish_bundle
 from detector_projection import project_hooklib_fallbacks
+from feedback_projection import project_adapter_feedback_skill
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 import build_opencode
+from opencode_bundle_sources import require_sources
 from permission_config import load_permission_rules, require_restrictive_projection
 
 
@@ -69,7 +71,12 @@ def _legacy_sources(source: str) -> list[str]:
     return []
 
 
-def _install_unit(source: str, kind: str) -> dict:
+def _install_unit(
+    source: str,
+    kind: str,
+    *,
+    feature: str | None = None,
+) -> dict:
     unit = {
         "id": f"opencode.{source.lower()}",
         "kind": kind,
@@ -79,6 +86,8 @@ def _install_unit(source: str, kind: str) -> dict:
     legacy = _legacy_sources(source)
     if legacy:
         unit["legacy_source_suffixes"] = legacy
+    if feature is not None:
+        unit["feature"] = feature
     return unit
 
 
@@ -87,7 +96,18 @@ def _install_units(output: Path) -> list[dict]:
     for path in sorted((output / "agents").iterdir()):
         units.append(_install_unit(path.relative_to(output).as_posix(), "file"))
     for path in sorted((output / "skills").iterdir()):
-        units.append(_install_unit(path.relative_to(output).as_posix(), "tree"))
+        source = path.relative_to(output).as_posix()
+        units.append(
+            _install_unit(
+                source,
+                "tree",
+                feature=(
+                    "dev.harness-feedback"
+                    if source == "skills/harness-feedback"
+                    else None
+                ),
+            )
+        )
     for directory in (output / "gates", output / "memory", output / "plugins"):
         for path in sorted(item for item in directory.rglob("*") if item.is_file()):
             units.append(_install_unit(path.relative_to(output).as_posix(), "file"))
@@ -279,28 +299,13 @@ def _mcp_projections() -> list[dict]:
 def materialize(root: Path, output: Path) -> None:
     """Materialize OpenCode release inputs without reading user state."""
     profile = load_profiles(root)["opencode"]
-    agents_source = root / "dist/opencode/AGENTS.md"
-    gates_plugin_source = root / "adapters/opencode/plugins/mainframe-gates.js"
-    memory_plugin_source = root / "adapters/opencode/plugins/mainframe-memory.js"
-    rules_source = root / "core/permissions/rules.json"
-    credentials_source = root / "core/resources/credentials-index.md"
-    for source in (
-        root / "core/skills",
-        root / "core/gates/detectors",
-        root / "core/gates/rules",
-    ):
-        if not source.is_dir():
-            raise FileNotFoundError(source)
-    for source in (
+    (
         agents_source,
         gates_plugin_source,
         memory_plugin_source,
         rules_source,
         credentials_source,
-    ):
-        if source.is_symlink() or not source.is_file():
-            raise ValueError(f"bundle source must be a regular file: {source}")
-    _validate_agent_sources(root)
+    ) = require_sources(root, _validate_agent_sources)
     rules = load_permission_rules(str(rules_source))
     permission, _ = build_opencode.project_permissions(rules)
     require_restrictive_projection(permission)
@@ -309,6 +314,11 @@ def materialize(root: Path, output: Path) -> None:
     _project_gates(root, output / "gates", profile)
     _project_memory(root, output / "memory")
     _project_skills(root, output / "skills", profile)
+    project_adapter_feedback_skill(
+        root / "dev/harness-feedback-plugin/skills/harness-feedback",
+        output / "skills/harness-feedback",
+        "opencode",
+    )
     _project_agents(root, output / "agents", profile)
 
     agents_text = build_opencode.project_runtime_text(
@@ -334,7 +344,7 @@ def materialize(root: Path, output: Path) -> None:
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
-        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
+        schema_version=FEATURE_INSTALL_UNIT_SCHEMA_VERSION,
     )
 
 

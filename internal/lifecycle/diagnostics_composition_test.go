@@ -48,7 +48,11 @@ func TestPrepareConfigurationComposesGenericMCPAndDiagnostics(t *testing.T) {
 			ServerID: "context7", ProfileID: "remote-keyless",
 			Adapters: []domain.ComponentID{domain.ComponentOpenCode},
 		}},
-		Diagnostics: diagnostics.Desired{Configured: true, Feedback: true},
+		Diagnostics: diagnostics.Desired{
+			Configured: true,
+			Events:     true,
+			Feedback:   true,
+		},
 	})
 	if err != nil {
 		t.Fatalf("PrepareConfiguration() error = %v", err)

@@ -1,0 +1,11 @@
+{
+  "name": "mainframe-dev",
+  "description": "Optional local diagnostics feedback for MAINFRAME harness development.",
+  "version": "0.1.0",
+  "author": {
+    "name": "CATWILLgh",
+    "url": "https://github.com/CATWILLgh"
+  },
+  "homepage": "https://github.com/CATWILLgh/MAINFRAME",
+  "license": "MIT"
+}

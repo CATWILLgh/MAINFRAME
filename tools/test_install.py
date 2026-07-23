@@ -61,7 +61,13 @@ def _configure_fixture(
     if venv_requires is not None:
         _write_argument_check(repo / ".venv/bin/python3", venv_requires)
     if seed_dev:
-        _write(repo / "dev/skills/harness-feedback/SKILL.md")
+        _write(
+            repo / "dev/harness-feedback-plugin/.claude-plugin/plugin.json",
+            '{"name":"mainframe-dev","version":"0.1.0"}\n',
+        )
+        _write(
+            repo / "dev/harness-feedback-plugin/skills/harness-feedback/SKILL.md"
+        )
     if missing:
         path = repo / missing
         if path.is_dir():
@@ -181,7 +187,10 @@ def test_hidden_only_item_directory_fails_but_whole_artifact_succeeds() -> None:
 
 
 def test_dev_mode_requires_only_its_authored_source() -> None:
-    _assert_failed(_run_install(["--dev"]), "dev/skills/harness-feedback")
+    _assert_failed(
+        _run_install(["--dev"]),
+        "dev/harness-feedback-plugin",
+    )
     result = _run_install(["--dev"], seed_dev=True)
     output = result.stdout + result.stderr
     assert result.returncode == 0, output

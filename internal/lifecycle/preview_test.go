@@ -318,6 +318,15 @@ func testModel(t *testing.T) installmodel.Model {
 			ID: domain.ComponentClaudeCode,
 			Artifacts: []installmodel.ArtifactSpec{
 				desired(domain.RootClaudeConfig, "CLAUDE.md", "claude/CLAUDE.md"),
+				{
+					UnitID: "claude-code.dev.harness-feedback",
+					Target: domain.Location{
+						Root: domain.RootClaudeConfig,
+						Path: "skills/mainframe-dev",
+					},
+					SourcePath: "dev/harness-feedback-plugin",
+					Feature:    domain.FeatureHarnessFeedback,
+				},
 			},
 		},
 		{

@@ -74,6 +74,16 @@ func TestBuildRejectsContradictoryDesiredState(t *testing.T) {
 	}
 }
 
+func TestBuildRequiresDEVForHarnessFeedback(t *testing.T) {
+	_, err := Build(
+		[]domain.ComponentID{domain.ComponentClaudeCode},
+		Desired{Configured: true, Feedback: true},
+	)
+	if err == nil || !strings.Contains(err.Error(), "feedback requires DEV mode") {
+		t.Fatalf("Build() error = %v", err)
+	}
+}
+
 func TestBuildRequiresAVisibleAdapterWhenConfigured(t *testing.T) {
 	if _, err := Build(
 		[]domain.ComponentID{"internal-component"},

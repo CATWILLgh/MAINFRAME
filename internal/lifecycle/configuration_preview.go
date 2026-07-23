@@ -85,7 +85,11 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, fmt.Errorf("plan diagnostics: %w", err)
 	}
-	filesystem, err := service.Plan(request.Components)
+	features := make([]domain.FeatureID, 0, 1)
+	if request.Diagnostics.Feedback {
+		features = append(features, domain.FeatureHarnessFeedback)
+	}
+	filesystem, err := service.planFilesystem(request.Components, features)
 	if err != nil {
 		return Preview{}, err
 	}

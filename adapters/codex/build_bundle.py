@@ -22,9 +22,10 @@ from bundle_sync import (
 )
 from bundle_publication import publish_bundle
 from detector_projection import project_hooklib_fallbacks
+from feedback_projection import project_adapter_feedback_skill
 import build_codex
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import EXACT_JSON_DOCUMENT_SCHEMA_VERSION
+from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 
@@ -51,6 +52,7 @@ def _unit(
     source: str,
     target: str,
     legacy: list[str] | None = None,
+    feature: str | None = None,
 ) -> dict:
     unit = {
         "id": identifier,
@@ -60,6 +62,8 @@ def _unit(
     }
     if legacy:
         unit["legacy_source_suffixes"] = sorted(legacy)
+    if feature is not None:
+        unit["feature"] = feature
     return unit
 
 
@@ -75,6 +79,13 @@ def _gate_units(root: Path) -> list[dict]:
 
 def _install_units(root: Path, skills, agents) -> list[dict]:
     units = [
+        _unit(
+            "codex.dev.harness-feedback",
+            "tree",
+            "skills/harness-feedback",
+            "skills/harness-feedback",
+            feature="dev.harness-feedback",
+        ),
         _unit(
             "codex.instructions",
             "file",
@@ -180,6 +191,7 @@ def _validate_sources(root: Path) -> None:
         "core/agents",
         "core/gates/detectors",
         "core/gates/rules",
+        "dev/harness-feedback-plugin/skills/harness-feedback",
     ):
         source_files(root / relative)
     for relative in (
@@ -248,6 +260,11 @@ def _stage_bundle(
 ) -> None:
     _project_gates(root, staged / "gates", profile)
     build_codex.write_skills(staged / "skills", skills)
+    project_adapter_feedback_skill(
+        root / "dev/harness-feedback-plugin/skills/harness-feedback",
+        staged / "skills/harness-feedback",
+        "codex",
+    )
     build_codex._write_agents(staged / "agents", agents)
     write_text_file(staged / "rules/mainframe.rules", rules_text)
     write_text_file(staged / "hooks.json", hooks_text)
@@ -272,7 +289,7 @@ def _stage_bundle(
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
-        schema_version=EXACT_JSON_DOCUMENT_SCHEMA_VERSION,
+        schema_version=FEATURE_INSTALL_UNIT_SCHEMA_VERSION,
     )
 
 

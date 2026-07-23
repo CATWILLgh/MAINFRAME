@@ -9,6 +9,8 @@ import (
 
 type ComponentID string
 
+type FeatureID string
+
 type RootID string
 
 const (
@@ -45,8 +47,37 @@ const (
 	ComponentSharedGateDetectors ComponentID = "shared-gate-detectors"
 )
 
+const FeatureHarnessFeedback FeatureID = "dev.harness-feedback"
+
 type DesiredState struct {
 	Components []ComponentID `json:"components"`
+	Features   []FeatureID   `json:"features,omitempty"`
+}
+
+func (feature FeatureID) Valid() bool {
+	value := string(feature)
+	if value == "" {
+		return false
+	}
+	separator := false
+	for index, character := range value {
+		if index == 0 && (character < 'a' || character > 'z') {
+			return false
+		}
+		if character == '.' || character == '-' {
+			if separator {
+				return false
+			}
+			separator = true
+			continue
+		}
+		if (character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') {
+			return false
+		}
+		separator = false
+	}
+	return !separator
 }
 
 type ObservedState struct {

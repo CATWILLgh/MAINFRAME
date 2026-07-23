@@ -72,7 +72,10 @@ func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 		}
 		model.form = mcpCredentialForm(server, model.mcpChoices[server.ID])
 	case screenDiagnostics:
-		model.form = diagnosticsForm(&model.diagnosticsSelected)
+		model.form = diagnosticsForm(
+			&model.diagnosticsDEVEnabled,
+			&model.diagnosticsFeedbackEnabled,
+		)
 	default:
 		model.form = mainMenuForm(model)
 	}

@@ -79,9 +79,13 @@ def _read(path):
 
 
 def collect_skills(root):
-    """Skills from dist/claude-code/plugin/skills/ (and dev/skills/, flagged dev=True)."""
+    """Collect shipped skills and the optional development feedback skill."""
     out = []
-    for base, dev in (("dist/claude-code/plugin/skills", False), ("dev/skills", True)):
+    skill_roots = (
+        ("dist/claude-code/plugin/skills", False),
+        ("dev/harness-feedback-plugin/skills", True),
+    )
+    for base, dev in skill_roots:
         sdir = os.path.join(root, base)
         if not os.path.isdir(sdir):
             continue
@@ -97,9 +101,7 @@ def collect_skills(root):
                 "user_invocable": bool(fm.get("user-invocable", False)),
                 "crossrefs": _crossrefs(body),
                 "dev": dev,
-                # Shipped skills are linked into both tools by install.sh;
-                # dev/skills remains a Claude Code-only development surface.
-                "tool": "claude-code" if dev else "both",
+                "tool": "both",
             })
     return out
 

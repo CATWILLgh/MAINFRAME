@@ -11,7 +11,7 @@ import (
 
 func TestModelOwnsCatalogAndDeterministicArtifacts(t *testing.T) {
 	model, err := installmodel.New([]installmodel.ComponentSpec{
-		{ID: "z", Dependencies: []domain.ComponentID{"a"}, Artifacts: []installmodel.ArtifactSpec{{Target: loc(domain.RootHome, "z/file"), SourcePath: "dist/z/file"}}},
+		{ID: "z", Dependencies: []domain.ComponentID{"a"}, Artifacts: []installmodel.ArtifactSpec{{Target: loc(domain.RootHome, "z/file"), SourcePath: "dist/z/file", Feature: domain.FeatureHarnessFeedback}}},
 		{ID: "a", Artifacts: []installmodel.ArtifactSpec{{Target: loc(domain.RootCodexConfig, "same"), SourcePath: "dist/a/file", LegacyTargetSuffixes: []domain.ArtifactPath{"old/a/file"}}}, LegacyArtifacts: []installmodel.LegacyArtifactSpec{{Target: loc(domain.RootHome, "a/legacy"), TargetSuffixes: []domain.ArtifactPath{"old/a/legacy"}}}},
 	})
 	if err != nil {
@@ -28,7 +28,7 @@ func TestModelOwnsCatalogAndDeterministicArtifacts(t *testing.T) {
 	want := []installmodel.Artifact{
 		{ComponentID: "a", Target: loc(domain.RootCodexConfig, "same"), SourcePath: "dist/a/file", LegacyTargetSuffixes: []domain.ArtifactPath{"old/a/file"}},
 		{ComponentID: "a", Target: loc(domain.RootHome, "a/legacy"), LegacyTargetSuffixes: []domain.ArtifactPath{"old/a/legacy"}, LegacyOnly: true},
-		{ComponentID: "z", Target: loc(domain.RootHome, "z/file"), SourcePath: "dist/z/file"},
+		{ComponentID: "z", Target: loc(domain.RootHome, "z/file"), SourcePath: "dist/z/file", Feature: domain.FeatureHarnessFeedback},
 	}
 	if got := model.Artifacts(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("artifacts = %#v, want %#v", got, want)
@@ -85,6 +85,7 @@ func TestModelRejectsInvalidDefinitions(t *testing.T) {
 		{name: "non-portable desired target", components: desiredComponent(loc(domain.RootHome, "é/file"), "source/file"), message: "target"},
 		{name: "invalid source", components: desiredComponent(loc(domain.RootHome, "file"), "../source"), message: "source path"},
 		{name: "non-portable source", components: desiredComponent(loc(domain.RootHome, "file"), "source/é"), message: "source path"},
+		{name: "invalid feature", components: []installmodel.ComponentSpec{{ID: "a", Artifacts: []installmodel.ArtifactSpec{{Target: loc(domain.RootHome, "file"), SourcePath: "source/file", Feature: "Invalid_Feature"}}}}, message: "feature"},
 		{name: "invalid desired suffix", components: []installmodel.ComponentSpec{{ID: "a", Artifacts: []installmodel.ArtifactSpec{{Target: loc(domain.RootHome, "file"), SourcePath: "source/file", LegacyTargetSuffixes: []domain.ArtifactPath{"../legacy"}}}}}, message: "legacy target suffix"},
 		{name: "non-portable desired suffix", components: []installmodel.ComponentSpec{{ID: "a", Artifacts: []installmodel.ArtifactSpec{{Target: loc(domain.RootHome, "file"), SourcePath: "source/file", LegacyTargetSuffixes: []domain.ArtifactPath{"legacy/é"}}}}}, message: "legacy target suffix"},
 		{name: "legacy without suffix", components: []installmodel.ComponentSpec{{ID: "a", LegacyArtifacts: []installmodel.LegacyArtifactSpec{{Target: loc(domain.RootHome, "legacy")}}}}, message: "at least one"},

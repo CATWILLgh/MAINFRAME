@@ -46,6 +46,15 @@ def _fixture_root(sandbox: Path, *, rules: bool = True) -> Path:
     )
     _write(root / "dist/claude-code/CLAUDE.md", "# Instructions\n")
     _write(root / "dist/claude-code/plugin/SKILL.md", "# Plugin\n")
+    _write(root / "dev/harness-feedback-plugin/.claude-plugin/plugin.json", '{"name":"mainframe-dev","version":"0.1.0"}\n')
+    _write(root / "dev/harness-feedback-plugin/skills/harness-feedback/SKILL.md",
+           "Queue: `{{mainframe.feedback_dir}}`\n")
+    _write(
+        root / "dev/harness-feedback-plugin/skills/harness-feedback/feedback.py",
+        'FEEDBACK = os.path.expanduser("~/.claude/mainframe/feedback")\n'
+        'DIAGNOSTICS = os.path.expanduser('
+        '"~/.claude/mainframe/diagnostics.json")\n',
+    )
     _write(
         root / "dist/claude-code/plugin/hooks/run.sh",
         "#!/bin/sh\nexit 0\n",
@@ -91,18 +100,31 @@ def _unit(
     source: str,
     path: str,
     legacy: list[str],
+    feature: str | None = None,
 ) -> dict:
-    return {
+    unit = {
         "id": identifier,
         "kind": kind,
         "source": source,
         "target": {"root": "claude-config", "path": path},
-        "legacy_source_suffixes": legacy,
     }
+    if legacy:
+        unit["legacy_source_suffixes"] = legacy
+    if feature is not None:
+        unit["feature"] = feature
+    return unit
 
 
 def _expected_units() -> list[dict]:
     return [
+        _unit(
+            "claude-code.dev.harness-feedback",
+            "tree",
+            "dev/harness-feedback-plugin",
+            "skills/mainframe-dev",
+            [],
+            "dev.harness-feedback",
+        ),
         _unit(
             "claude-code.instructions",
             "file",
@@ -216,7 +238,7 @@ def test_manifest_records_exact_units_resources_and_integrity():
     build_bundle.build(root, output)
     manifest = build_bundle.validate_bundle(output)
 
-    assert manifest["schema_version"] == 4
+    assert manifest["schema_version"] == 5
     assert manifest["component"] == "claude-code"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"] == {
@@ -236,6 +258,14 @@ def test_manifest_records_exact_units_resources_and_integrity():
         "Index: `~/.claude/credentials-index.md`\n"
     )
     assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
+    feedback = output / "dev/harness-feedback-plugin"
+    assert (feedback / ".claude-plugin/plugin.json").is_file()
+    prose = (feedback / "skills/harness-feedback/SKILL.md").read_text()
+    receiver = (feedback / "skills/harness-feedback/feedback.py").read_text()
+    assert "~/.claude/mainframe/feedback" in prose
+    assert "~/.claude/mainframe/feedback" in receiver
+    assert "~/.claude/mainframe/diagnostics.json" in receiver
+    assert "{{mainframe." not in prose + receiver
     payload = {item["path"]: item for item in manifest["payload_files"]}
     assert payload["plugin/hooks/run.sh"]["mode"] == "0755"
     assert payload["plugin/hooks/run.sh"]["size"] == len("#!/bin/sh\nexit 0\n")
