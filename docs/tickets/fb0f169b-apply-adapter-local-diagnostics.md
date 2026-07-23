@@ -18,8 +18,9 @@ The category-first TUI records separate drafts for local diagnostic events and
 application request as exact per-adapter semantic intents, and the combined
 preview renders the lifecycle result rather than reconstructing it locally.
 Request-scoped application review now turns those intents into exact prepared
-configuration mutations. Static TUI preview remains non-executable because it
-intentionally does not inspect activation files at startup.
+configuration mutations. Static TUI startup still omits activation inspection,
+but the final screen now sends the complete request through application review
+and renders its request-scoped semantic plan.
 
 Bundle schema version 4 and the dormant `exact-json-document` strategy now
 provide the release and preparation foundation. The contract authenticates a
@@ -35,8 +36,9 @@ the same canonical disabled exemplar. Antigravity correctly targets its runtime
 data root rather than its separate configuration root. Static TUI startup and
 unconfigured requests skip all exact diagnostic targets; configured
 application review scopes observation to the selected adapters only. The TUI
-still presents this state explicitly as a draft, does not yet hand the final
-request to application review, and its global Apply action remains disabled.
+retains the reviewed plan behind a read-only interface, preserves the separate
+MCP onboarding and credential summary, and invalidates the retained plan when
+the user leaves or retries review. Its global Apply action remains disabled.
 Therefore no user-facing TUI path writes or activates diagnostics yet.
 
 The configuration transaction now has the missing low-level removal primitive.
@@ -59,10 +61,10 @@ permissions; those writers are not yet activated by an executable TUI plan.
 
 ## Why it is a problem
 
-The screen is intentionally honest about being preview-only, but it cannot
-replace `--dev` until the desired state can be observed, safely applied,
-disabled without deleting data, and restored independently for every selected
-adapter.
+The screen is intentionally honest about being preview-only. It now observes
+and prepares the desired state safely, but it cannot replace `--dev` until that
+reviewed state can be applied, disabled without deleting data, and restored
+independently for every selected adapter.
 
 ## Why it is not a duplicate
 
@@ -73,7 +75,6 @@ TUI contract across every adapter.
 
 ## What remains to be done
 
-- Connect the final TUI request to request-aware application review.
 - Package and activate `harness-feedback` independently for each adapter.
 - Map adapter deselection and complete uninstall to explicit exact-document
   removal intents outside the selected-adapter diagnostics section.

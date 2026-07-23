@@ -151,14 +151,17 @@ allows no overlapping install, resource, or MCP claim, and prepares a
 canonical `0600` replacement through the existing journaled configuration
 boundary. Adapter manifests advertise the dormant resource so a release proves
 that every adapter can manage its own activation document. Static TUI startup
-does not inspect these exact targets. Application review may observe only the
-selected adapters after the user explicitly configures diagnostics, and the
-lifecycle now maps that scoped request into exact configuration changes. If
-either feature is enabled, it prepares the complete schema-v1 document with
-both booleans. If both are disabled, it prepares explicit removal of the
-activation document. An unconfigured diagnostics section supplies no exact
-desired state and leaves every target untouched. Preparation fails closed when
-even one selected adapter lacks exactly one matching activation resource.
+does not inspect these exact targets. The final TUI screen sends the complete
+user request through application review, which rebuilds a fresh observation
+scoped to the selected adapters. Startup targets and final review are pinned to
+the same release identity for the session. The lifecycle maps that scoped
+request into exact configuration changes. If either feature is enabled, it
+prepares the complete schema-v1 document with both booleans. If both are
+disabled, it prepares explicit removal of the activation document. An
+unconfigured diagnostics section supplies no exact desired state and leaves
+every target untouched. Preparation fails closed when even one selected
+adapter lacks exactly one matching activation resource. The TUI retains the
+reviewed plan opaquely but still exposes no Apply capability.
 
 The configuration boundary expresses removal through both a named `absent`
 intent and a non-zero `remove_exact_document` mutation disposition. That
