@@ -153,16 +153,22 @@ boundary. Adapter manifests advertise the dormant resource so a release proves
 that every adapter can manage its own activation document. Static TUI startup
 does not inspect these exact targets. Application review may observe only the
 selected adapters after the user explicitly configures diagnostics, and the
-lifecycle still rejects execution until explicit disable and
-complete-uninstall intent is mapped safely. The configuration boundary can
-already express an explicit absent after-image for an exact document: omission
-means untouched, while removal requires both a named `absent` intent and a
-non-zero `remove_exact_document` mutation disposition. That destructive
-disposition is valid only for `mainframe/diagnostics.json` under the four
-adapter-owned roots. Removal moves only the exact observed activation file
-into the private transaction workspace, supports rollback after an interrupted
-rename, and never touches adapter-local databases, reports, or other diagnostic
-history.
+lifecycle now maps that scoped request into exact configuration changes. If
+either feature is enabled, it prepares the complete schema-v1 document with
+both booleans. If both are disabled, it prepares explicit removal of the
+activation document. An unconfigured diagnostics section supplies no exact
+desired state and leaves every target untouched. Preparation fails closed when
+even one selected adapter lacks exactly one matching activation resource.
+
+The configuration boundary expresses removal through both a named `absent`
+intent and a non-zero `remove_exact_document` mutation disposition. That
+destructive disposition is valid only for `mainframe/diagnostics.json` under
+the four adapter-owned roots. Removal moves only the exact observed activation
+file into the private transaction workspace, supports rollback after an
+interrupted rename, and never touches adapter-local databases, reports, or
+other diagnostic history. Adapter deselection and complete uninstall still
+need their own request semantics because the diagnostics section currently
+targets only environments that remain selected.
 
 The current `hub.html` is static, repo-oriented, and reads one legacy database.
 It is not yet the finished local dashboard. A later

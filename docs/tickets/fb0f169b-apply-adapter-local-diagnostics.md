@@ -17,8 +17,9 @@ The category-first TUI records separate drafts for local diagnostic events and
 `harness-feedback`. Those choices now enter the typed lifecycle and reviewed
 application request as exact per-adapter semantic intents, and the combined
 preview renders the lifecycle result rather than reconstructing it locally.
-Configured diagnostics are still explicitly non-executable and preparation
-rejects them before executor resources open.
+Request-scoped application review now turns those intents into exact prepared
+configuration mutations. Static TUI preview remains non-executable because it
+intentionally does not inspect activation files at startup.
 
 Bundle schema version 4 and the dormant `exact-json-document` strategy now
 provide the release and preparation foundation. The contract authenticates a
@@ -35,17 +36,19 @@ data root rather than its separate configuration root. Static TUI startup and
 unconfigured requests skip all exact diagnostic targets; configured
 application review scopes observation to the selected adapters only. The TUI
 still presents this state explicitly as a draft, does not yet hand the final
-request to application review, and the lifecycle execution guard remains in
-place. Therefore packaging cannot write or activate diagnostics.
+request to application review, and its global Apply action remains disabled.
+Therefore no user-facing TUI path writes or activates diagnostics yet.
 
 The configuration transaction now has the missing low-level removal primitive.
 Exact documents use an explicit present-or-absent desired state, omission
 leaves a resource untouched, and journal schema version 3 can recover or roll
 back an atomic removal without staging an empty file. Removal is limited to the
 observed activation document and does not delete databases, reports, or
-feedback history. The lifecycle guard remains because the TUI and lifecycle
-still need to map disable, adapter deselection, and complete uninstall to that
-primitive deliberately.
+feedback history. The lifecycle now maps configured choices for selected
+adapters: either enabled feature publishes the complete document, while both
+disabled features remove it. Unconfigured requests remain untouched. Adapter
+deselection and complete uninstall still need deliberate removal semantics
+outside this section.
 
 The existing DEV implementation is also uneven: Claude Code uses the legacy
 `install.sh --dev` links, while the other adapters already carry projected
@@ -71,12 +74,9 @@ TUI contract across every adapter.
 ## What remains to be done
 
 - Connect the final TUI request to request-aware application review.
-- Connect exact runtime intent to lifecycle preparation without treating the
-  release exemplar or a database path as consent.
 - Package and activate `harness-feedback` independently for each adapter.
-- Preserve existing databases and reports when collection is disabled.
-- Map deselection, disable, and complete uninstall to explicit exact-document
-  removal intents at the lifecycle boundary.
+- Map adapter deselection and complete uninstall to explicit exact-document
+  removal intents outside the selected-adapter diagnostics section.
 - Cover those lifecycle transitions together with update and re-enablement;
   the lower configuration executor already covers atomic removal and recovery.
 
