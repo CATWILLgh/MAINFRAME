@@ -109,12 +109,12 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
 
 ### 2.1. Current skills in `core/skills/`
 
-18 skills as verified in `core/skills/` on 2026-07-14. Claude Code receives the rendered byte-copy through the `mainframe` plugin; OpenCode links that copy; Codex receives its transformed native projection; Antigravity receives a plugin-compatible projection. `core/skills/` is the single source of truth, guarded by `python3 tools/render_core.py --check` for the Claude copy and `.venv/bin/python3 tools/validate-skill.py --all` for source validation. Roles:
+19 skills as verified in `core/skills/` on 2026-07-23. Claude Code receives the rendered byte-copy through the `mainframe` plugin; OpenCode links that copy; Codex receives its transformed native projection; Antigravity receives a plugin-compatible projection. `core/skills/` is the single source of truth, guarded by `python3 tools/render_core.py --check` for the Claude copy and `.venv/bin/python3 tools/validate-skill.py --all` for source validation. Roles:
 
 - **Process / workflow:** `task-workflow`, `code-audit`, `decision-review`, `git-conventional-commits`.
 - **Quality discipline (gates / self-checks):** `no-suppression-markers`, `severity-calibration`, `surface-ticket`, `testing-strategy`, `secrets-handling`.
 - **Stack patterns (preloaded into the engineer agents via `disable-model-invocation: true`):** `python-backend-patterns`, `nestjs-backend-patterns`, `nextjs-backend-patterns`, `react-frontend-patterns`, `frontend-design`, `shadcn`.
-- **Ops / external services:** `ops-app-server-safety`, `dokploy-api`, `curl-requests`.
+- **Ops / external services:** `ops-app-server-safety`, `dokploy-api`, `curl-requests`, `codex-exec` (delegation to the external Codex agent; excluded from the Codex adapter projection as self-referential — see `UNPROJECTABLE_SKILLS`).
 
 The `description + when_to_use` split in neutral, situation-based phrasing (describe the trigger, not its source) is the standard; combined chars stay within the validator limit (1536).
 

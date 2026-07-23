@@ -108,7 +108,7 @@ def test_auxiliary_files_are_preserved_and_markdown_adapted():
 def test_projectability_filter_drops_harness_skills_only():
     root = _fixture_root()
     for name in ("task-workflow", "update-config", "keybindings-help",
-                 "claude-code-research"):
+                 "claude-code-research", "codex-exec"):
         text = SKILL.replace("sample-skill", name)
         _write(root / f"core/skills/{name}/SKILL.md", text)
     skills, dropped = bc.collect_skills(root)

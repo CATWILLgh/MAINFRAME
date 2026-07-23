@@ -55,6 +55,7 @@ _YAML_NOTE = (
 # present in this checkout.
 UNPROJECTABLE_SKILLS = {
     "claude-code-research": "research workflow depends on Claude Code-specific harness behavior",
+    "codex-exec": "teaches delegating work TO Codex; self-referential inside Codex itself",
     "keybindings-help": "edits Claude Code keybindings and has no Codex Phase-1 analogue",
     "update-config": "mutates Claude Code configuration and has no Codex Phase-1 analogue",
 }

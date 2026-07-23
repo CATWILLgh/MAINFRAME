@@ -21,6 +21,7 @@ class ProjectionMode(str, Enum):
 
 SKILL_PROJECTION_POLICIES = {
     "code-audit": ProjectionMode.BINDINGS_ONLY,
+    "codex-exec": ProjectionMode.BINDINGS_ONLY,
     "curl-requests": ProjectionMode.OVERLAY,
     "decision-review": ProjectionMode.BINDINGS_ONLY,
     "frontend-design": ProjectionMode.BINDINGS_ONLY,
