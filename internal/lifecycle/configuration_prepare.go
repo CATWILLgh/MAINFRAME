@@ -4,31 +4,62 @@ import (
 	"fmt"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
+	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
 func (service Service) PrepareConfiguration(
 	request PreviewRequest,
 ) (configuration.PreparedPlan, error) {
-	if request.Diagnostics.Configured {
-		return configuration.PreparedPlan{}, fmt.Errorf(
-			"configured diagnostics are not executable and cannot be prepared",
-		)
-	}
 	preservationRoots := service.preservationRoots(request.Components)
 	preview, err := service.Preview(request)
 	if err != nil {
 		return configuration.PreparedPlan{}, err
 	}
+	if err := validateConfigurationPreview(request, preview); err != nil {
+		return configuration.PreparedPlan{}, err
+	}
+	base, err := service.prepareBaseConfiguration(request, preservationRoots)
+	if err != nil {
+		return configuration.PreparedPlan{}, err
+	}
+	if !request.Diagnostics.Configured {
+		return base, nil
+	}
+	exact, err := service.prepareDiagnosticsConfiguration(preview.Diagnostics)
+	if err != nil {
+		return configuration.PreparedPlan{}, err
+	}
+	combined, err := configuration.CombinePreparedPlans(base, exact)
+	if err != nil {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"combine diagnostics configuration: %w",
+			err,
+		)
+	}
+	return combined, nil
+}
+
+func validateConfigurationPreview(request PreviewRequest, preview Preview) error {
 	if len(preview.Configuration.Issues) > 0 ||
 		len(preview.Configuration.ManualActions) > 0 ||
 		preview.MCP.Blocking {
-		return configuration.PreparedPlan{}, fmt.Errorf(
-			"configuration preview requires attention",
-		)
+		return fmt.Errorf("configuration preview requires attention")
 	}
-	generic := configuration.PreparedPlan{}
+	if request.Diagnostics.Configured && !preview.Diagnostics.Executable {
+		return fmt.Errorf("scoped diagnostics resource is unavailable")
+	}
+	return nil
+}
+
+func (service Service) prepareBaseConfiguration(
+	request PreviewRequest,
+	preservationRoots []domain.ComponentID,
+) (configuration.PreparedPlan, error) {
+	prepared := configuration.PreparedPlan{}
+	var err error
 	if service.configurationInspection != nil {
-		generic, err = service.configurationInspection.PrepareWithPreservation(
+		prepared, err = service.configurationInspection.PrepareWithPreservation(
 			service.configurationComponents(request.Components),
 			service.configurationComponents(preservationRoots),
 		)
@@ -39,19 +70,52 @@ func (service Service) PrepareConfiguration(
 			)
 		}
 	}
-	if service.mcpInspection != nil {
-		generic, err = service.mcpInspection.PrepareOntoWithPreservation(
-			generic,
-			request.Components,
-			preservationRoots,
-			request.MCPSelections,
-		)
-		if err != nil {
-			return configuration.PreparedPlan{}, fmt.Errorf(
-				"prepare MCP configuration: %w",
-				err,
-			)
-		}
+	if service.mcpInspection == nil {
+		return prepared, nil
 	}
-	return generic, nil
+	prepared, err = service.mcpInspection.PrepareOntoWithPreservation(
+		prepared,
+		request.Components,
+		preservationRoots,
+		request.MCPSelections,
+	)
+	if err != nil {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"prepare MCP configuration: %w",
+			err,
+		)
+	}
+	return prepared, nil
+}
+
+func (service Service) prepareDiagnosticsConfiguration(
+	plan diagnostics.Plan,
+) (configuration.PreparedPlan, error) {
+	if service.configurationInspection == nil {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"scoped diagnostics resource is unavailable",
+		)
+	}
+	documents, available, err := diagnosticsExactDocuments(
+		plan,
+		service.configurationInspection.Resources(),
+	)
+	if err != nil {
+		return configuration.PreparedPlan{}, err
+	}
+	if !available {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"scoped diagnostics resource is unavailable",
+		)
+	}
+	prepared, err := service.configurationInspection.PrepareExactJSONDocuments(
+		documents,
+	)
+	if err != nil {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"prepare diagnostics configuration: %w",
+			err,
+		)
+	}
+	return prepared, nil
 }

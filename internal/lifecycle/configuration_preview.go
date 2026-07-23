@@ -101,31 +101,80 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 			return Preview{}, fmt.Errorf("plan MCP configuration: %w", err)
 		}
 	}
-	if service.configurationInspection == nil {
-		preserved := service.configurationComponents(preservationRoots)
-		return Preview{
-			Filesystem:    filesystem,
-			Configuration: filterConfigurationPlan(service.configurationFallback, preserved),
-			MCP:           mcpPlan,
-			Diagnostics:   diagnosticsPlan,
-		}, nil
-	}
-	included := service.configurationComponents(request.Components)
-	preserved := service.configurationComponents(preservationRoots)
-	configurationPlan, err := service.configurationInspection.PlanWithPreservation(included, preserved)
-	if err != nil {
-		return Preview{}, fmt.Errorf("plan configuration: %w", err)
-	}
-	service.requireReviewAfterExternalTargetChange(
-		&configurationPlan,
-		included,
+	configurationPlan, err := service.planManagedConfiguration(
+		request.Components,
+		preservationRoots,
 	)
+	if err != nil {
+		return Preview{}, err
+	}
+	exactPlan, executable, err := service.planDiagnosticsConfiguration(
+		diagnosticsPlan,
+	)
+	if err != nil {
+		return Preview{}, err
+	}
+	if executable {
+		configurationPlan = mergeConfigurationPlans(
+			configurationPlan,
+			exactPlan,
+		)
+		diagnosticsPlan.Executable = true
+	}
 	return Preview{
 		Filesystem:    filesystem,
 		Configuration: configurationPlan,
 		MCP:           mcpPlan,
 		Diagnostics:   diagnosticsPlan,
 	}, nil
+}
+
+func (service Service) planManagedConfiguration(
+	components []domain.ComponentID,
+	preservationRoots []domain.ComponentID,
+) (configuration.Plan, error) {
+	preserved := service.configurationComponents(preservationRoots)
+	if service.configurationInspection == nil {
+		return filterConfigurationPlan(
+			service.configurationFallback,
+			preserved,
+		), nil
+	}
+	included := service.configurationComponents(components)
+	plan, err := service.configurationInspection.PlanWithPreservation(
+		included,
+		preserved,
+	)
+	if err != nil {
+		return configuration.Plan{}, fmt.Errorf("plan configuration: %w", err)
+	}
+	service.requireReviewAfterExternalTargetChange(&plan, included)
+	return plan, nil
+}
+
+func (service Service) planDiagnosticsConfiguration(
+	plan diagnostics.Plan,
+) (configuration.Plan, bool, error) {
+	if service.configurationInspection == nil {
+		return configuration.Plan{}, false, nil
+	}
+	documents, available, err := diagnosticsExactDocuments(
+		plan,
+		service.configurationInspection.Resources(),
+	)
+	if err != nil || !available {
+		return configuration.Plan{}, false, err
+	}
+	exact, err := service.configurationInspection.PlanExactJSONDocuments(
+		documents,
+	)
+	if err != nil {
+		return configuration.Plan{}, false, fmt.Errorf(
+			"plan diagnostics configuration: %w",
+			err,
+		)
+	}
+	return exact, true, nil
 }
 
 func (service Service) requireReviewAfterExternalTargetChange(

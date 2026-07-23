@@ -75,13 +75,13 @@ func TestDiagnosticsNoticesFitANarrowTerminal(t *testing.T) {
 	}
 }
 
-func TestDiagnosticsDraftAppearsInCombinedPreviewWithoutExecutableOperations(t *testing.T) {
+func TestDiagnosticsDraftExplainsActivationRemovalAndRetainedHistory(t *testing.T) {
 	desired := diagnostics.Desired{Configured: true, Events: true, Feedback: true}
 	previewer := &fakePreviewer{
 		targets: defaultTargets(),
 		preview: lifecycle.Preview{Diagnostics: diagnostics.Plan{Intents: []diagnostics.Intent{
-			{ComponentID: domain.ComponentClaudeCode, Events: true},
-			{ComponentID: domain.ComponentOpenCode, Events: true},
+			{ComponentID: domain.ComponentClaudeCode},
+			{ComponentID: domain.ComponentOpenCode},
 		}}},
 	}
 	model := newTestModel(t, previewer)
@@ -99,9 +99,10 @@ func TestDiagnosticsDraftAppearsInCombinedPreviewWithoutExecutableOperations(t *
 	view := updated.View().Content
 	for _, text := range []string{
 		"Local diagnostics draft",
-		"Local event history — enable for Claude Code, OpenCode",
+		"Local event history — disable for Claude Code, OpenCode",
 		"Harness feedback — disable for Claude Code, OpenCode",
-		"not yet part of the executable plan",
+		"ensure the activation configuration is absent",
+		"Stored diagnostic history stays",
 	} {
 		if !strings.Contains(view, text) {
 			t.Fatalf("preview does not contain %q:\n%s", text, view)

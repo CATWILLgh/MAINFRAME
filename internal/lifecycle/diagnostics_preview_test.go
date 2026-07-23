@@ -28,6 +28,9 @@ func TestPreviewBuildsDiagnosticsPlan(t *testing.T) {
 	if !reflect.DeepEqual(result.Diagnostics, want) {
 		t.Fatalf("diagnostics = %#v, want %#v", result.Diagnostics, want)
 	}
+	if result.Diagnostics.Executable {
+		t.Fatal("unscoped diagnostics preview became executable")
+	}
 }
 
 func TestPreviewAddsContextToDiagnosticsErrors(t *testing.T) {
@@ -41,14 +44,13 @@ func TestPreviewAddsContextToDiagnosticsErrors(t *testing.T) {
 	}
 }
 
-func TestPrepareConfigurationRejectsConfiguredDiagnostics(t *testing.T) {
+func TestPrepareConfigurationRejectsUnscopedDiagnostics(t *testing.T) {
 	service := newTestService(t, domain.ObservedState{})
 	prepared, err := service.PrepareConfiguration(PreviewRequest{
 		Components:  []domain.ComponentID{domain.ComponentClaudeCode},
 		Diagnostics: diagnostics.Desired{Configured: true, Feedback: true},
 	})
-	if err == nil || err.Error() !=
-		"configured diagnostics are not executable and cannot be prepared" {
+	if err == nil || !strings.Contains(err.Error(), "diagnostics resource") {
 		t.Fatalf("PrepareConfiguration() = %#v, %v", prepared, err)
 	}
 }

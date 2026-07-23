@@ -110,26 +110,6 @@ func TestReviewFailureDoesNotOpenApplyResources(t *testing.T) {
 	}
 }
 
-func TestReviewRejectsConfiguredDiagnosticsBeforeOpeningApplyResources(t *testing.T) {
-	builder := &fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}}
-	factory := &fakeApplyExecutorFactory{}
-	service, err := New(builder, factory, readyRecoveryFactory())
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	request := testRequest()
-	request.Diagnostics = diagnostics.Desired{Configured: true, Events: true}
-
-	_, err = service.Review(request)
-	if err == nil || !strings.Contains(err.Error(),
-		"configured diagnostics are not executable and cannot be prepared") {
-		t.Fatalf("Review() error = %v", err)
-	}
-	if factory.opens != 0 {
-		t.Fatalf("executor factory opens = %d, want 0", factory.opens)
-	}
-}
-
 func TestRequestAndSemanticClonesPreserveDiagnostics(t *testing.T) {
 	desired := diagnostics.Desired{Configured: true, Events: true, Feedback: true}
 	request := Request{Diagnostics: desired}

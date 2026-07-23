@@ -114,8 +114,25 @@ func (model *Model) renderDiagnosticsPreview() string {
 	lines = append(lines,
 		diagnosticsPreviewLine("Local event history", first.Events, targets),
 		diagnosticsPreviewLine("Harness feedback", first.Feedback, targets),
-		mutedStyle.Render("Preview only: local diagnostics are not yet part of the executable plan."),
 	)
+	if !first.Events && !first.Feedback {
+		lines = append(
+			lines,
+			mutedStyle.Render(
+				"The final reviewed plan will ensure the activation configuration is absent.",
+			),
+			mutedStyle.Render("Stored diagnostic history stays on this computer."),
+		)
+	} else {
+		lines = append(lines, mutedStyle.Render(
+			"The final reviewed plan will ensure each adapter is configured.",
+		))
+	}
+	if !model.preview.Diagnostics.Executable {
+		lines = append(lines, mutedStyle.Render(
+			"Request-scoped review will validate these changes before Apply is enabled.",
+		))
+	}
 	return strings.Join(lines, "\n")
 }
 
