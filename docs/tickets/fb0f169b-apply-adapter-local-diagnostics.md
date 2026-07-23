@@ -26,7 +26,17 @@ strict schema-v1 exemplar, requires separate runtime desired bytes, reserves
 the complete adapter-local `mainframe/diagnostics.json` target, rejects
 overlapping claims, compares JSON semantically, and prepares private `0600`
 publication through the existing configuration journal. No adapter manifest
-advertises the resource yet, so this foundation cannot activate diagnostics.
+used to advertise the resource, so the foundation could not prove that a
+release carried per-adapter activation documents.
+
+All four adapter manifests now advertise a dormant exact resource backed by
+the same canonical disabled exemplar. Antigravity correctly targets its runtime
+data root rather than its separate configuration root. Static TUI startup and
+unconfigured requests skip all exact diagnostic targets; configured
+application review scopes observation to the selected adapters only. The TUI
+still presents this state explicitly as a draft, does not yet hand the final
+request to application review, and the lifecycle execution guard remains in
+place. Therefore packaging cannot write or activate diagnostics.
 
 The existing DEV implementation is also uneven: Claude Code uses the legacy
 `install.sh --dev` links, while the other adapters already carry projected
@@ -51,15 +61,13 @@ TUI contract across every adapter.
 
 ## What remains to be done
 
-- Emit explicit adapter-local activation resources from each selected adapter
-  bundle.
-- Make release observation request-aware so an unselected adapter is never
-  inspected.
+- Connect the final TUI request to request-aware application review.
 - Connect exact runtime intent to lifecycle preparation without treating the
   release exemplar or a database path as consent.
 - Package and activate `harness-feedback` independently for each adapter.
 - Preserve existing databases and reports when collection is disabled.
-- Cover update, disable, recovery, and uninstall across the combined executor
+- Define removal operations for deselection, disable, and complete uninstall,
+  then cover update, recovery, and removal across the combined executor
   boundary.
 
 ## Acceptance criteria

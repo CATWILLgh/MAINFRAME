@@ -149,8 +149,12 @@ ships a valid document, but never becomes user consent or implicit desired
 state. Planning requires separate runtime intent, owns the whole document,
 allows no overlapping install, resource, or MCP claim, and prepares a
 canonical `0600` replacement through the existing journaled configuration
-boundary. Adapter manifests do not advertise this resource until selected
-adapter observation and executable lifecycle wiring are complete.
+boundary. Adapter manifests advertise the dormant resource so a release proves
+that every adapter can manage its own activation document. Static TUI startup
+does not inspect these exact targets. Application review may observe only the
+selected adapters after the user explicitly configures diagnostics, and the
+lifecycle still rejects execution until disable and complete-uninstall
+semantics are safe.
 
 The current `hub.html` is static, repo-oriented, and reads one legacy database.
 It is not yet the finished local dashboard. A later
