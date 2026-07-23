@@ -38,6 +38,15 @@ still presents this state explicitly as a draft, does not yet hand the final
 request to application review, and the lifecycle execution guard remains in
 place. Therefore packaging cannot write or activate diagnostics.
 
+The configuration transaction now has the missing low-level removal primitive.
+Exact documents use an explicit present-or-absent desired state, omission
+leaves a resource untouched, and journal schema version 3 can recover or roll
+back an atomic removal without staging an empty file. Removal is limited to the
+observed activation document and does not delete databases, reports, or
+feedback history. The lifecycle guard remains because the TUI and lifecycle
+still need to map disable, adapter deselection, and complete uninstall to that
+primitive deliberately.
+
 The existing DEV implementation is also uneven: Claude Code uses the legacy
 `install.sh --dev` links, while the other adapters already carry projected
 event producers but do not have complete, separately managed activation and
@@ -66,9 +75,10 @@ TUI contract across every adapter.
   release exemplar or a database path as consent.
 - Package and activate `harness-feedback` independently for each adapter.
 - Preserve existing databases and reports when collection is disabled.
-- Define removal operations for deselection, disable, and complete uninstall,
-  then cover update, recovery, and removal across the combined executor
-  boundary.
+- Map deselection, disable, and complete uninstall to explicit exact-document
+  removal intents at the lifecycle boundary.
+- Cover those lifecycle transitions together with update and re-enablement;
+  the lower configuration executor already covers atomic removal and recovery.
 
 ## Acceptance criteria
 

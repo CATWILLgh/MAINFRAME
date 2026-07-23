@@ -153,8 +153,16 @@ boundary. Adapter manifests advertise the dormant resource so a release proves
 that every adapter can manage its own activation document. Static TUI startup
 does not inspect these exact targets. Application review may observe only the
 selected adapters after the user explicitly configures diagnostics, and the
-lifecycle still rejects execution until disable and complete-uninstall
-semantics are safe.
+lifecycle still rejects execution until explicit disable and
+complete-uninstall intent is mapped safely. The configuration boundary can
+already express an explicit absent after-image for an exact document: omission
+means untouched, while removal requires both a named `absent` intent and a
+non-zero `remove_exact_document` mutation disposition. That destructive
+disposition is valid only for `mainframe/diagnostics.json` under the four
+adapter-owned roots. Removal moves only the exact observed activation file
+into the private transaction workspace, supports rollback after an interrupted
+rename, and never touches adapter-local databases, reports, or other diagnostic
+history.
 
 The current `hub.html` is static, repo-oriented, and reads one legacy database.
 It is not yet the finished local dashboard. A later
@@ -459,11 +467,14 @@ replacement inode is retained rather than unlinked, but its public name may be
 moved.
 
 Configuration changes participate in the same lock and transaction as link and
-directory changes. Journal schema version 2 records only targets, content
-digests, modes, file identities, and private names; configuration bytes remain
-in the immutable prepared plan held by the process. The decoder accepts only
-the exact prior unversioned journal shape and upgrades it as a link-only
-transaction, so an interrupted legacy operation remains recoverable.
+directory changes. Journal schema version 3 records explicit present or absent
+configuration after-images using only targets, content digests, modes, file
+identities, and private names; configuration bytes remain in the immutable
+prepared plan held by the process. The decoder accepts only the exact prior
+unversioned journal shape and valid version 2 journals, upgrading them in order
+to version 3 so interrupted legacy operations remain recoverable. A version 2
+journal cannot claim an absent after-image because that state did not exist in
+its contract.
 
 Before staging, each configuration target is rebound to the exact current
 parent and before-image captured during preview. Staged bytes are written with
@@ -477,6 +488,14 @@ directory before any public link or configuration name is changed.
 
 Creating a configuration file uses a no-replace rename. Replacing one uses an
 atomic exchange, retaining the previous inode inside the private directory.
+Removing an exact configuration uses an explicit absent after-image and
+atomically moves the verified public before-image into that same private
+directory; it does not stage an empty replacement file. A crash before the
+rename leaves the public file in place, while a crash after the rename is
+recognized from the retained before-image and rolled back from the journal.
+If another same-user process substitutes the source during the rename window,
+the mismatched file is moved back to the still-empty public name before the
+transaction fails.
 Each publication boundary is saved independently, configuration rollback runs
 in reverse order before link and directory rollback, and committed recovery
 removes only entries whose identities still match the journal. Probe remnants
