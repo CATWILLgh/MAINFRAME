@@ -161,17 +161,18 @@ owns the whole document, allows no overlapping install, resource, or MCP
 claim, and prepares a canonical `0600` replacement through the existing
 journaled configuration boundary. Static TUI startup does not inspect these
 exact targets. The final TUI screen sends the complete user request through
-application review, which rebuilds a fresh observation scoped to the selected
-adapters. Startup targets and final review are pinned to the same release
-identity for the session. The lifecycle derives the optional install feature
-from the validated diagnostics choice rather than accepting a second
-independent feature list. `DEV` prepares a complete schema-v1 document; its
-feedback field controls the optional skill unit. If `DEV` is disabled, planning
-prepares explicit removal of the activation document and of any owned feedback
-unit. An unconfigured diagnostics section supplies no exact desired state and
-leaves every target untouched. Preparation fails closed when even one selected
-adapter lacks exactly one matching activation resource. The TUI retains the
-reviewed plan opaquely but still exposes no Apply capability.
+application review, which rebuilds a fresh observation scoped to selected
+adapters whose `DEV` state was configured and previously managed adapters that
+are being deselected. A selected adapter with an unconfigured diagnostics
+section remains untouched. Startup targets and final review are pinned to the
+same release identity for the session. The lifecycle derives the optional
+install feature from the validated diagnostics choice rather than accepting a
+second independent feature list. `DEV` prepares a complete schema-v1 document;
+its feedback field controls the optional skill unit. Disabling `DEV`, removing
+an adapter, or requesting complete uninstall prepares explicit removal of the
+activation document and of any owned feedback unit. Preparation fails closed
+when an in-scope adapter lacks exactly one matching activation resource. The
+TUI retains the reviewed plan opaquely but still exposes no Apply capability.
 
 The configuration boundary expresses removal through both a named `absent`
 intent and a non-zero `remove_exact_document` mutation disposition. That
@@ -179,9 +180,10 @@ destructive disposition is valid only for `mainframe/diagnostics.json` under
 the four adapter-owned roots. Removal moves only the exact observed activation
 file into the private transaction workspace, supports rollback after an
 interrupted rename, and never touches adapter-local databases, reports, or
-other diagnostic history. Adapter deselection and complete uninstall still
-need their own request semantics because the diagnostics section currently
-targets only environments that remain selected.
+other diagnostic history. Adapter deselection and complete uninstall derive
+removal only from registry-backed managed installation state. Foreign,
+unclaimed, selected-but-unconfigured, and host-incompatible adapters are not
+changed.
 
 The current `hub.html` is static, repo-oriented, and reads one legacy database.
 It is not yet the finished local dashboard. A later

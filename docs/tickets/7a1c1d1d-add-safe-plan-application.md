@@ -129,6 +129,8 @@ The final product must install, update, remove, and replace selected adapters. A
   release unit ID, component, logical target, raw link target, release ID, and
   release-index digest. Discovery now trusts only exact registry claims and
   captures live device/inode identities separately for the reviewed plan.
+- Full uninstall now serializes an empty ownership registry as a valid empty
+  list rather than `null`, so the next review and reinstallation can load it.
 - Added one-time adoption for exact live links created by `install.sh` from the
   currently validated release. Adoption writes only the claim and never
   replaces the existing public link. It rechecks the target and inode before
@@ -146,6 +148,10 @@ The final product must install, update, remove, and replace selected adapters. A
 - Extended the packaged release test across Claude Code, Codex, OpenCode, and
   Antigravity 2.x. It verifies initial dependency closure, isolated adapter
   deselection, and previous-release replacement against the built manifests.
+- Added a real-filesystem diagnostics lifecycle test that removes managed base
+  and optional DEV links together with the activation document, preserves
+  diagnostic history, and then reinstalls and re-enables the complete state.
+  The test is enabled on both Darwin and native Linux.
 - Kept ownership identities internal to planning. Public CLI JSON contains only
   the operation, logical target, ownership classification, and source path.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
