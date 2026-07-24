@@ -36,10 +36,6 @@ type readOnlyReleaseSnapshot struct {
 	release releasecontract.Release
 }
 
-type diagnosticsObservationScope struct {
-	components map[domain.ComponentID]bool
-}
-
 type interactivePlanReviewer struct {
 	targets lifecycle.Service
 	service application.Service
@@ -258,7 +254,11 @@ func buildInspectedService(
 	observed domain.ObservedState,
 	scope diagnosticsObservationScope,
 ) (lifecycle.Service, error) {
-	resources := resourcesForDiagnosticsObservation(release.Resources, scope)
+	resources := resourcesForDiagnosticsObservation(
+		release.Resources,
+		scope,
+		observed,
+	)
 	var external configuration.ExternalObserver
 	if client != nil {
 		observer, err := codexstate.NewObserver(
@@ -302,34 +302,6 @@ func buildInspectedService(
 		return lifecycle.Service{}, fmt.Errorf("create lifecycle preview: %w", err)
 	}
 	return service, nil
-}
-
-func diagnosticsObservationScopeFor(
-	request application.Request,
-) diagnosticsObservationScope {
-	if !request.Diagnostics.Configured {
-		return diagnosticsObservationScope{}
-	}
-	components := make(map[domain.ComponentID]bool, len(request.Components))
-	for _, component := range request.Components {
-		components[component] = true
-	}
-	return diagnosticsObservationScope{components: components}
-}
-
-func resourcesForDiagnosticsObservation(
-	resources []releasecontract.Resource,
-	scope diagnosticsObservationScope,
-) []releasecontract.Resource {
-	filtered := make([]releasecontract.Resource, 0, len(resources))
-	for _, resource := range resources {
-		if resource.Strategy == releasecontract.StrategyExactJSONDocument &&
-			!scope.components[resource.ComponentID] {
-			continue
-		}
-		filtered = append(filtered, resource)
-	}
-	return filtered
 }
 
 func resolveReleaseRoot() (string, error) {

@@ -25,24 +25,32 @@ func TestDiagnosticsObservationFiltersExactResourcesBeforeHostReads(t *testing.T
 		),
 	}
 	tests := map[string]struct {
-		request application.Request
-		want    []domain.Location
+		scope diagnosticsObservationScope
+		want  []domain.Location
 	}{
 		"static preview": {
 			want: []domain.Location{resources[0].Target},
 		},
+		"complete uninstall": {
+			scope: diagnosticsObservationScopeFor(application.Request{}),
+			want:  []domain.Location{resources[0].Target, resources[1].Target},
+		},
 		"unconfigured request": {
-			request: application.Request{
+			scope: diagnosticsObservationScopeFor(application.Request{
 				Components: []domain.ComponentID{domain.ComponentCodex},
-			},
-			want: []domain.Location{resources[0].Target},
+			}),
+			want: []domain.Location{resources[0].Target, resources[1].Target},
 		},
 		"configured selected adapter": {
-			request: application.Request{
+			scope: diagnosticsObservationScopeFor(application.Request{
 				Components:  []domain.ComponentID{domain.ComponentCodex},
 				Diagnostics: diagnostics.Desired{Configured: true},
+			}),
+			want: []domain.Location{
+				resources[0].Target,
+				resources[1].Target,
+				resources[2].Target,
 			},
-			want: []domain.Location{resources[0].Target, resources[2].Target},
 		},
 	}
 	for name, test := range tests {
@@ -54,8 +62,8 @@ func TestDiagnosticsObservationFiltersExactResourcesBeforeHostReads(t *testing.T
 			}
 			_, err := buildInspectedService(
 				"", release, "", nil, hostlayout.Layout{}, host,
-				domain.ObservedState{},
-				diagnosticsObservationScopeFor(test.request),
+				diagnosticsObservationInstalledClaude(),
+				test.scope,
 			)
 			if err != nil {
 				t.Fatalf("buildInspectedService() error = %v", err)
@@ -65,6 +73,50 @@ func TestDiagnosticsObservationFiltersExactResourcesBeforeHostReads(t *testing.T
 			}
 		})
 	}
+}
+
+func TestDiagnosticsObservationDoesNotInspectForeignDeselectedAdapter(t *testing.T) {
+	resources := []releasecontract.Resource{
+		diagnosticsObservationGenericResource(),
+		diagnosticsObservationExactResource(
+			domain.ComponentClaudeCode,
+			domain.RootClaudeConfig,
+		),
+	}
+	host := &diagnosticsObservationHost{}
+	foreign := diagnosticsObservationInstalledClaude()
+	foreign.Components[0].Artifacts[0].UnitID = ""
+	foreign.Components[0].Artifacts[0].Ownership = domain.OwnershipForeign
+	release := releasecontract.Release{
+		Model:     previewOwnershipModel(t),
+		Resources: resources,
+	}
+	_, err := buildInspectedService(
+		"", release, "", nil, hostlayout.Layout{}, host,
+		foreign,
+		diagnosticsObservationScopeFor(application.Request{}),
+	)
+	if err != nil {
+		t.Fatalf("buildInspectedService() error = %v", err)
+	}
+	want := []domain.Location{resources[0].Target}
+	if !sameLocations(host.locations, want) {
+		t.Fatalf("inspected locations = %#v, want %#v", host.locations, want)
+	}
+}
+
+func diagnosticsObservationInstalledClaude() domain.ObservedState {
+	return domain.ObservedState{Components: []domain.ObservedComponent{{
+		ID: domain.ComponentClaudeCode,
+		Artifacts: []domain.Artifact{{
+			Location: domain.Location{
+				Root: domain.RootClaudeConfig,
+				Path: "CLAUDE.md",
+			},
+			UnitID:    "claude-code.instructions",
+			Ownership: domain.OwnershipManagedExact,
+		}},
+	}}}
 }
 
 type diagnosticsObservationHost struct {

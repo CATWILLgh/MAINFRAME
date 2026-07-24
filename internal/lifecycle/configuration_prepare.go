@@ -16,14 +16,14 @@ func (service Service) PrepareConfiguration(
 	if err != nil {
 		return configuration.PreparedPlan{}, err
 	}
-	if err := validateConfigurationPreview(request, preview); err != nil {
+	if err := validateConfigurationPreview(preview); err != nil {
 		return configuration.PreparedPlan{}, err
 	}
 	base, err := service.prepareBaseConfiguration(request, preservationRoots)
 	if err != nil {
 		return configuration.PreparedPlan{}, err
 	}
-	if !request.Diagnostics.Configured {
+	if len(preview.Diagnostics.Intents) == 0 {
 		return base, nil
 	}
 	exact, err := service.prepareDiagnosticsConfiguration(preview.Diagnostics)
@@ -40,13 +40,14 @@ func (service Service) PrepareConfiguration(
 	return combined, nil
 }
 
-func validateConfigurationPreview(request PreviewRequest, preview Preview) error {
+func validateConfigurationPreview(preview Preview) error {
 	if len(preview.Configuration.Issues) > 0 ||
 		len(preview.Configuration.ManualActions) > 0 ||
 		preview.MCP.Blocking {
 		return fmt.Errorf("configuration preview requires attention")
 	}
-	if request.Diagnostics.Configured && !preview.Diagnostics.Executable {
+	if len(preview.Diagnostics.Intents) > 0 &&
+		!preview.Diagnostics.Executable {
 		return fmt.Errorf("scoped diagnostics resource is unavailable")
 	}
 	return nil

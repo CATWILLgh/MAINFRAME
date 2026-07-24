@@ -96,9 +96,10 @@ func TestLocationJSONAndValidity(t *testing.T) {
 	}
 }
 
-func TestOnlyManagedExactIsRemovable(t *testing.T) {
+func TestOnlyRegistryOwnedLinksAreRemovable(t *testing.T) {
 	statuses := []domain.OwnershipStatus{
 		domain.OwnershipManagedExact,
+		domain.OwnershipManagedPrevious,
 		domain.OwnershipManagedDrifted,
 		domain.OwnershipManagedMissing,
 		domain.OwnershipExactAdoptable,
@@ -108,10 +109,46 @@ func TestOnlyManagedExactIsRemovable(t *testing.T) {
 	}
 
 	for _, status := range statuses {
-		want := status == domain.OwnershipManagedExact
+		want := status == domain.OwnershipManagedExact ||
+			status == domain.OwnershipManagedPrevious
 		if got := status.Removable(); got != want {
 			t.Errorf("Removable(%q) = %v, want %v", status, got, want)
 		}
+	}
+}
+
+func TestManagedOwnershipStatusesRemainRegistryBound(t *testing.T) {
+	tests := map[domain.OwnershipStatus]bool{
+		domain.OwnershipManagedExact:    true,
+		domain.OwnershipManagedPrevious: true,
+		domain.OwnershipManagedDrifted:  true,
+		domain.OwnershipManagedMissing:  true,
+		domain.OwnershipExactAdoptable:  false,
+		domain.OwnershipLegacyAdoptable: false,
+		domain.OwnershipForeign:         false,
+		domain.OwnershipConflict:        false,
+	}
+	for status, want := range tests {
+		if got := status.Managed(); got != want {
+			t.Errorf("Managed(%q) = %v, want %v", status, got, want)
+		}
+	}
+}
+
+func TestObservedComponentIsManagedOnlyThroughAClaimedArtifact(t *testing.T) {
+	component := domain.ObservedComponent{Artifacts: []domain.Artifact{
+		{UnitID: "claude-code.base", Ownership: domain.OwnershipForeign},
+		{Ownership: domain.OwnershipManagedExact},
+	}}
+	if component.Managed() {
+		t.Fatal("ObservedComponent.Managed() accepted unclaimed state")
+	}
+	component.Artifacts = append(component.Artifacts, domain.Artifact{
+		UnitID:    "claude-code.dev.harness-feedback",
+		Ownership: domain.OwnershipManagedMissing,
+	})
+	if !component.Managed() {
+		t.Fatal("ObservedComponent.Managed() rejected claimed state")
 	}
 }
 

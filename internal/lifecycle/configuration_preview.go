@@ -81,7 +81,15 @@ func externalObservationsForInventory(
 }
 
 func (service Service) Preview(request PreviewRequest) (Preview, error) {
-	diagnosticsPlan, err := diagnostics.Build(request.Components, request.Diagnostics)
+	preservationRoots := service.preservationRoots(request.Components)
+	diagnosticsPlan, err := diagnostics.BuildLifecycle(
+		request.Components,
+		service.diagnosticsRemovalComponents(
+			request.Components,
+			preservationRoots,
+		),
+		request.Diagnostics,
+	)
 	if err != nil {
 		return Preview{}, fmt.Errorf("plan diagnostics: %w", err)
 	}
@@ -93,7 +101,6 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	preservationRoots := service.preservationRoots(request.Components)
 	mcpPlan := mcpconfiguration.Plan{}
 	if service.mcpInspection != nil {
 		mcpPlan, err = service.mcpInspection.PlanWithPreservation(

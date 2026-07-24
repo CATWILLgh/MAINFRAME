@@ -107,8 +107,13 @@ func assertDiagnosticsObservationScopes(
 	scopes []diagnosticsObservationScope,
 ) {
 	t.Helper()
-	if len(scopes) != 2 || len(scopes[0].components) != 1 ||
+	if len(scopes) != 2 ||
+		!scopes[0].reviewed ||
+		!scopes[0].configured ||
+		len(scopes[0].components) != 1 ||
 		!scopes[0].components[domain.ComponentCodex] ||
+		!scopes[1].reviewed ||
+		scopes[1].configured ||
 		len(scopes[1].components) != 0 {
 		t.Fatalf("observation scopes = %#v", scopes)
 	}

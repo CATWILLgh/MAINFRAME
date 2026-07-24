@@ -101,7 +101,48 @@ func TestReviewCarriesScopedDiagnosticsIntoExecutableConfiguration(t *testing.T)
 	}
 }
 
+func TestReviewCarriesDeselectedDiagnosticsRemovalIntoExecutablePlan(t *testing.T) {
+	snapshot := applicationDiagnosticsSnapshotWithObserved(
+		t,
+		[]byte(`{"events":true,"feedback":true,"schema_version":1}`),
+		true,
+	)
+	builder := &fakeSnapshotBuilder{snapshots: []Snapshot{snapshot}}
+	factory := &fakeApplyExecutorFactory{}
+	service, err := New(builder, factory, readyRecoveryFactory())
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	reviewed, err := service.Review(Request{})
+	if err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if !reviewed.Semantic().Diagnostics.Executable ||
+		len(reviewed.Executable().Plan.Operations) != 1 ||
+		reviewed.Executable().Plan.Operations[0].Kind != domain.OperationRemove {
+		t.Fatalf("reviewed plan = %#v", reviewed.Executable())
+	}
+	transitions := reviewed.Executable().Configuration.Transitions()
+	if len(transitions) != 1 ||
+		transitions[0].ResourceIDs[0] != "claude-code.diagnostics" ||
+		transitions[0].Mutations[0].After.Exists {
+		t.Fatalf("configuration transitions = %#v", transitions)
+	}
+	if factory.opens != 0 {
+		t.Fatalf("Review() opened executor resources: %d", factory.opens)
+	}
+}
+
 func applicationDiagnosticsSnapshot(t *testing.T, current []byte) Snapshot {
+	return applicationDiagnosticsSnapshotWithObserved(t, current, false)
+}
+
+func applicationDiagnosticsSnapshotWithObserved(
+	t *testing.T,
+	current []byte,
+	installed bool,
+) Snapshot {
 	t.Helper()
 	model, err := installmodel.New([]installmodel.ComponentSpec{
 		{
@@ -150,9 +191,23 @@ func applicationDiagnosticsSnapshot(t *testing.T, current []byte) Snapshot {
 	if err != nil {
 		t.Fatalf("configuration.Inspect() error = %v", err)
 	}
+	observed := domain.ObservedState{}
+	if installed {
+		observed.Components = []domain.ObservedComponent{{
+			ID: domain.ComponentClaudeCode,
+			Artifacts: []domain.Artifact{{
+				Location: domain.Location{
+					Root: domain.RootClaudeConfig,
+					Path: "skills/mainframe-dev",
+				},
+				UnitID:    "claude-code.dev.harness-feedback",
+				Ownership: domain.OwnershipManagedExact,
+			}},
+		}}
+	}
 	lifecycleService, err := lifecycle.NewWithInspection(
 		model,
-		domain.ObservedState{},
+		observed,
 		inspection,
 	)
 	if err != nil {

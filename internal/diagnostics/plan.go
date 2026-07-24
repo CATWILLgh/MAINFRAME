@@ -31,11 +31,18 @@ type Plan struct {
 }
 
 func Build(selected []domain.ComponentID, desired Desired) (Plan, error) {
+	return BuildLifecycle(selected, nil, desired)
+}
+
+func BuildLifecycle(
+	selected []domain.ComponentID,
+	remove []domain.ComponentID,
+	desired Desired,
+) (Plan, error) {
 	if !desired.Configured {
 		if desired.Events || desired.Feedback {
 			return Plan{}, errors.New("diagnostics features require diagnostics to be configured")
 		}
-		return Plan{}, nil
 	}
 	if desired.Feedback && !desired.Events {
 		return Plan{}, errors.New("harness feedback requires DEV mode")
@@ -44,17 +51,27 @@ func Build(selected []domain.ComponentID, desired Desired) (Plan, error) {
 	for _, componentID := range selected {
 		selectedSet[componentID] = true
 	}
+	removeSet := make(map[domain.ComponentID]bool, len(remove))
+	for _, componentID := range remove {
+		if !selectedSet[componentID] {
+			removeSet[componentID] = true
+		}
+	}
 	intents := make([]Intent, 0, len(canonicalAdapters))
 	for _, componentID := range canonicalAdapters {
-		if selectedSet[componentID] {
+		if desired.Configured && selectedSet[componentID] {
 			intents = append(intents, Intent{
 				ComponentID: componentID,
 				Events:      desired.Events,
 				Feedback:    desired.Feedback,
 			})
+			continue
+		}
+		if removeSet[componentID] {
+			intents = append(intents, Intent{ComponentID: componentID})
 		}
 	}
-	if len(intents) == 0 {
+	if desired.Configured && len(intents) == 0 {
 		return Plan{}, errors.New("configured diagnostics require at least one supported environment")
 	}
 	return Plan{Intents: intents}, nil

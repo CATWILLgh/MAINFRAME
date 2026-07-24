@@ -92,3 +92,44 @@ func TestBuildRequiresAVisibleAdapterWhenConfigured(t *testing.T) {
 		t.Fatalf("Build() error = %v", err)
 	}
 }
+
+func TestBuildLifecycleAddsStableRemovalIntentsForDeselectedAdapters(t *testing.T) {
+	got, err := BuildLifecycle(
+		[]domain.ComponentID{domain.ComponentCodex},
+		[]domain.ComponentID{
+			domain.ComponentAntigravity2,
+			domain.ComponentClaudeCode,
+			domain.ComponentCodex,
+			"internal-component",
+		},
+		Desired{},
+	)
+	if err != nil {
+		t.Fatalf("BuildLifecycle() error = %v", err)
+	}
+	want := Plan{Intents: []Intent{
+		{ComponentID: domain.ComponentClaudeCode},
+		{ComponentID: domain.ComponentAntigravity2},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("BuildLifecycle() = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildLifecycleAllowsCompleteUninstallAfterConfiguredDEV(t *testing.T) {
+	got, err := BuildLifecycle(
+		nil,
+		[]domain.ComponentID{domain.ComponentClaudeCode, domain.ComponentCodex},
+		Desired{Configured: true, Events: true, Feedback: true},
+	)
+	if err != nil {
+		t.Fatalf("BuildLifecycle() error = %v", err)
+	}
+	want := Plan{Intents: []Intent{
+		{ComponentID: domain.ComponentClaudeCode},
+		{ComponentID: domain.ComponentCodex},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("BuildLifecycle() = %#v, want %#v", got, want)
+	}
+}

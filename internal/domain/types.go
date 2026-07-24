@@ -162,6 +162,27 @@ func (status OwnershipStatus) Removable() bool {
 	return status == OwnershipManagedExact || status == OwnershipManagedPrevious
 }
 
+func (status OwnershipStatus) Managed() bool {
+	switch status {
+	case OwnershipManagedExact,
+		OwnershipManagedPrevious,
+		OwnershipManagedDrifted,
+		OwnershipManagedMissing:
+		return true
+	default:
+		return false
+	}
+}
+
+func (component ObservedComponent) Managed() bool {
+	for _, artifact := range component.Artifacts {
+		if artifact.UnitID != "" && artifact.Ownership.Managed() {
+			return true
+		}
+	}
+	return false
+}
+
 func (status OwnershipStatus) Valid() bool {
 	switch status {
 	case OwnershipManagedExact,
