@@ -58,7 +58,11 @@ func New(claims []Claim) (Registry, error) {
 }
 
 func (registry Registry) Claims() []Claim {
-	return append([]Claim(nil), registry.claims...)
+	result := append([]Claim(nil), registry.claims...)
+	if result == nil {
+		return []Claim{}
+	}
+	return result
 }
 
 func (registry Registry) ClaimAt(target domain.Location) (Claim, bool) {

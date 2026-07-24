@@ -68,6 +68,16 @@ func TestRegistryReplacesAndRemovesClaimsByExactTarget(t *testing.T) {
 	if !removed || len(registry.Claims()) != 0 {
 		t.Fatalf("Remove() = %#v, %t", registry.Claims(), removed)
 	}
+	encoded, err := linkownership.Encode(registry)
+	if err != nil {
+		t.Fatalf("Encode(empty) error = %v", err)
+	}
+	if string(encoded) != `{"schema_version":1,"claims":[]}`+"\n" {
+		t.Fatalf("Encode(empty) = %s", encoded)
+	}
+	if _, err := linkownership.Decode(encoded); err != nil {
+		t.Fatalf("Decode(empty) error = %v", err)
+	}
 }
 
 func TestRegistryRejectsAmbiguousOrUnsafeClaims(t *testing.T) {
