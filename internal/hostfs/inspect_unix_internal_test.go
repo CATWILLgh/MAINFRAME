@@ -27,13 +27,22 @@ func TestInspectRegularRejectsConcurrentReplacementWithoutBlocking(t *testing.T)
 			if err := os.WriteFile(path, []byte("original"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			parent, err := unix.Open(directory, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+			parent, err := unix.Open(
+				directory,
+				unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC,
+				0,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer unix.Close(parent)
 			var expected unix.Stat_t
-			if err := unix.Fstatat(parent, "target", &expected, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+			if err := unix.Fstatat(
+				parent,
+				"target",
+				&expected,
+				unix.AT_SYMLINK_NOFOLLOW,
+			); err != nil {
 				t.Fatal(err)
 			}
 			if err := os.Rename(path, filepath.Join(directory, "original")); err != nil {
@@ -71,5 +80,52 @@ func TestSameFileSnapshotDetectsContentMetadataChanges(t *testing.T) {
 	}
 	if !sameFileSnapshot(base, base) {
 		t.Fatal("identical file metadata was rejected")
+	}
+}
+
+func TestInspectSymlinkRejectsReplacementAfterTargetRead(t *testing.T) {
+	directory := t.TempDir()
+	parent, err := unix.Open(
+		directory,
+		unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC,
+		0,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(parent)
+
+	const name = "mcp_config.json"
+	if err := unix.Symlinkat("canonical.json", parent, name); err != nil {
+		t.Fatal(err)
+	}
+	var expected unix.Stat_t
+	if err := unix.Fstatat(parent, name, &expected, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		t.Fatal(err)
+	}
+
+	readAndReplace := func(parent int, name string, buffer []byte) (int, error) {
+		count, err := unix.Readlinkat(parent, name, buffer)
+		if err != nil {
+			return 0, err
+		}
+		if err := unix.Unlinkat(parent, name, 0); err != nil {
+			return 0, err
+		}
+		if err := unix.Symlinkat("foreign.json", parent, name); err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
+
+	_, err = inspectSymlinkWithReadlink(
+		parent,
+		name,
+		filepath.Join(directory, name),
+		expected,
+		readAndReplace,
+	)
+	if err == nil || !strings.Contains(err.Error(), "changed while being inspected") {
+		t.Fatalf("inspectSymlinkWithReadlink() error = %v", err)
 	}
 }

@@ -38,6 +38,57 @@ func TestInspectReadsRegularFileWithoutFollowingFinalSymlink(t *testing.T) {
 	}
 }
 
+func TestInspectCapturesFinalSymlinkTargetWithoutFollowingIt(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	config := filepath.Join(home, ".gemini", "config")
+	legacy := filepath.Join(home, ".gemini", "antigravity")
+	mustMkdirAll(t, config)
+	mustMkdirAll(t, legacy)
+	target := filepath.Join(config, "mcp_config.json")
+	writeHostFile(t, target, "{}\n")
+	canonicalTarget, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalLegacy, err := filepath.EvalSymlinks(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	namespace := openTestNamespace(t, home, filepath.Join(base, "release"))
+
+	for _, test := range []struct {
+		name   string
+		target string
+	}{
+		{name: "absolute", target: canonicalTarget},
+		{name: "relative", target: "../config/mcp_config.json"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			link := filepath.Join(legacy, test.name)
+			mustSymlink(t, test.target, link)
+			entry, err := namespace.Inspect(
+				domain.Location{
+					Root: domain.RootHome,
+					Path: domain.ArtifactPath(
+						filepath.Join(".gemini", "antigravity", test.name),
+					),
+				},
+				true,
+			)
+			if err != nil {
+				t.Fatalf("Inspect() error = %v", err)
+			}
+			if entry.Kind != hostfs.EntrySymlink ||
+				entry.Path != filepath.Join(canonicalLegacy, test.name) ||
+				entry.SymlinkTargetPath != canonicalTarget ||
+				entry.Content != nil {
+				t.Fatalf("symlink entry = %#v", entry)
+			}
+		})
+	}
+}
+
 func TestInspectRejectsSymlinkedAncestorAndInvalidLocation(t *testing.T) {
 	base := t.TempDir()
 	home := filepath.Join(base, "home")

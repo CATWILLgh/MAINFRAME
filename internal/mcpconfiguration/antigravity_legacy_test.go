@@ -124,7 +124,37 @@ func TestPlanTreatsUnsafeLegacyAntigravityFilesAsInvalid(t *testing.T) {
 		entry hostfs.Entry
 		err   error
 	}{
-		{name: "symbolic link", entry: hostfs.Entry{Kind: hostfs.EntrySymlink}},
+		{
+			name: "foreign symbolic link",
+			entry: hostfs.Entry{
+				Kind:              hostfs.EntrySymlink,
+				Path:              "/home/test/.gemini/antigravity/mcp_config.json",
+				SymlinkTargetPath: "/home/test/foreign/mcp_config.json",
+			},
+		},
+		{
+			name: "unresolved symbolic link",
+			entry: hostfs.Entry{
+				Kind: hostfs.EntrySymlink,
+				Path: "/home/test/.gemini/antigravity/mcp_config.json",
+			},
+		},
+		{
+			name: "chained symbolic link",
+			entry: hostfs.Entry{
+				Kind:              hostfs.EntrySymlink,
+				Path:              "/home/test/.gemini/antigravity/mcp_config.json",
+				SymlinkTargetPath: "/home/test/.gemini/antigravity/intermediate",
+			},
+		},
+		{
+			name: "cyclic symbolic link",
+			entry: hostfs.Entry{
+				Kind:              hostfs.EntrySymlink,
+				Path:              "/home/test/.gemini/antigravity/mcp_config.json",
+				SymlinkTargetPath: "/home/test/.gemini/antigravity/mcp_config.json",
+			},
+		},
 		{name: "non regular", entry: hostfs.Entry{Kind: hostfs.EntryDirectory}},
 		{name: "inspection failure", err: fs.ErrPermission},
 	}
@@ -343,6 +373,10 @@ func antigravityMigrationHost(configEntry, registryEntry string) *fakeHost {
 
 func antigravityLegacyLocation() domain.Location {
 	return domain.Location{Root: domain.RootAntigravityData, Path: "mcp_config.json"}
+}
+
+func antigravityCanonicalLocation() domain.Location {
+	return domain.Location{Root: domain.RootAntigravityConfig, Path: "mcp_config.json"}
 }
 
 func byteOrNil(value string) []byte {

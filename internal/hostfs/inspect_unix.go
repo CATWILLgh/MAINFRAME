@@ -6,14 +6,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/unix"
 )
 
 const maxInspectedFileSize = 1 << 20
+const maxInspectedSymlinkSize = 1 << 16
 
 func inspectNoFollow(root, relative string, includeContent bool) (Entry, error) {
+	path := filepath.Clean(filepath.Join("/", root, relative))
 	segments := append(strings.Split(root, "/"), strings.Split(relative, "/")...)
 	parent, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
@@ -38,10 +41,16 @@ func inspectNoFollow(root, relative string, includeContent bool) (Entry, error) 
 	}
 	kind := entryKind(uint32(metadata.Mode))
 	entry := Entry{
-		Kind:   kind,
-		Mode:   uint32(metadata.Mode) & 0o777,
-		Device: uint64(metadata.Dev),
-		Inode:  uint64(metadata.Ino),
+		Kind: kind, Path: path, Mode: uint32(metadata.Mode) & 0o777,
+		Device: uint64(metadata.Dev), Inode: uint64(metadata.Ino),
+	}
+	if kind == EntrySymlink {
+		target, err := inspectSymlinkNoFollow(parent, name, path, metadata)
+		if err != nil {
+			return Entry{}, err
+		}
+		entry.SymlinkTargetPath = target
+		return entry, nil
 	}
 	if kind == EntryDirectory {
 		if err := verifyDirectoryNoFollow(parent, name, metadata); err != nil {
@@ -57,6 +66,48 @@ func inspectNoFollow(root, relative string, includeContent bool) (Entry, error) 
 		entry.Content = content
 	}
 	return entry, nil
+}
+
+func inspectSymlinkNoFollow(
+	parent int,
+	name string,
+	path string,
+	expected unix.Stat_t,
+) (string, error) {
+	return inspectSymlinkWithReadlink(
+		parent, name, path, expected, unix.Readlinkat,
+	)
+}
+
+type readlinkatFunc func(int, string, []byte) (int, error)
+
+func inspectSymlinkWithReadlink(
+	parent int,
+	name string,
+	path string,
+	expected unix.Stat_t,
+	readlink readlinkatFunc,
+) (string, error) {
+	buffer := make([]byte, maxInspectedSymlinkSize+1)
+	count, err := readlink(parent, name, buffer)
+	if err != nil {
+		return "", err
+	}
+	if count == 0 || count > maxInspectedSymlinkSize {
+		return "", fmt.Errorf("symbolic link %q has an invalid target", name)
+	}
+	var after unix.Stat_t
+	if err := unix.Fstatat(parent, name, &after, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return "", err
+	}
+	if !sameFileSnapshot(expected, after) {
+		return "", fmt.Errorf("%q changed while being inspected", name)
+	}
+	target := string(buffer[:count])
+	if filepath.IsAbs(target) {
+		return filepath.Clean(target), nil
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(path), target)), nil
 }
 
 func openDirectoryNoFollow(parent int, name string) (int, error) {

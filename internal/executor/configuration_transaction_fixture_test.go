@@ -68,6 +68,8 @@ type testingT interface {
 type fakeConfigurationWorkspace struct {
 	store                  *fakeStore
 	calls                  []string
+	preconditions          map[domain.Location]configuration.ReadPrecondition
+	preconditionErr        error
 	payloads               map[domain.Location][]byte
 	public                 map[domain.Location]ConfigurationState
 	staged                 map[domain.Location]ConfigurationState
@@ -86,6 +88,7 @@ func newFakeConfigurationWorkspace(
 ) *fakeConfigurationWorkspace {
 	return &fakeConfigurationWorkspace{
 		store:         store,
+		preconditions: make(map[domain.Location]configuration.ReadPrecondition),
 		payloads:      make(map[domain.Location][]byte),
 		public:        make(map[domain.Location]ConfigurationState),
 		staged:        make(map[domain.Location]ConfigurationState),
@@ -94,6 +97,14 @@ func newFakeConfigurationWorkspace(
 		nextInode:     1000,
 		firstCallSave: make(map[string]int),
 	}
+}
+
+func (workspace *fakeConfigurationWorkspace) CheckReadPrecondition(
+	precondition configuration.ReadPrecondition,
+) error {
+	workspace.record("precondition", precondition.Target)
+	workspace.preconditions[precondition.Target] = precondition
+	return workspace.preconditionErr
 }
 
 func (workspace *fakeConfigurationWorkspace) InspectConfiguration(

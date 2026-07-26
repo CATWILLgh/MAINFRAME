@@ -1,6 +1,9 @@
 package executor
 
-import "github.com/CATWILLgh/MAINFRAME/internal/domain"
+import (
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+)
 
 const CurrentJournalSchemaVersion = 3
 
@@ -27,6 +30,7 @@ type ConfigurationState struct {
 }
 
 type ConfigurationWorkspace interface {
+	CheckReadPrecondition(configuration.ReadPrecondition) error
 	InspectConfiguration(domain.Location) (ConfigurationState, error)
 	PrepareConfigurationPrivate(JournalConfigurationMutation) (FileIdentity, error)
 	CheckConfigurationCapabilities(JournalConfigurationMutation) error

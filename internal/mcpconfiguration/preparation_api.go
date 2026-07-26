@@ -77,5 +77,14 @@ func (inspection Inspection) PrepareOntoWithPreservation(
 	if err != nil {
 		return configuration.PreparedPlan{}, err
 	}
-	return configuration.NewPreparedPlan(transitions)
+	preconditions := base.Preconditions()
+	if hasMaterialIntent(plan.Intents, domain.ComponentAntigravity2) {
+		if precondition, exists := inspection.antigravityAliasPrecondition(); exists {
+			preconditions = append(preconditions, precondition)
+		}
+	}
+	return configuration.NewPreparedPlanWithPreconditions(
+		transitions,
+		preconditions,
+	)
 }

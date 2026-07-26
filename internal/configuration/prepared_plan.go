@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 
@@ -15,20 +16,48 @@ var preparedResourceIDPattern = regexp.MustCompile(
 var preparedDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func NewPreparedPlan(transitions []Transition) (PreparedPlan, error) {
+	return NewPreparedPlanWithPreconditions(transitions, nil)
+}
+
+func NewPreparedPlanWithPreconditions(
+	transitions []Transition,
+	preconditions []ReadPrecondition,
+) (PreparedPlan, error) {
 	normalized := cloneTransitions(transitions)
 	if err := validatePreparedTransitions(normalized); err != nil {
 		return PreparedPlan{}, err
 	}
+	normalizedPreconditions := append(
+		[]ReadPrecondition(nil),
+		preconditions...,
+	)
+	if err := validateReadPreconditions(
+		normalized,
+		normalizedPreconditions,
+	); err != nil {
+		return PreparedPlan{}, err
+	}
 	sortPreparedTransitions(normalized)
-	return PreparedPlan{transitions: normalized}, nil
+	sort.Slice(normalizedPreconditions, func(left, right int) bool {
+		return locationLess(
+			normalizedPreconditions[left].Target,
+			normalizedPreconditions[right].Target,
+		)
+	})
+	return PreparedPlan{
+		transitions:   normalized,
+		preconditions: normalizedPreconditions,
+	}, nil
 }
 
 func CombinePreparedPlans(plans ...PreparedPlan) (PreparedPlan, error) {
 	var transitions []Transition
+	var preconditions []ReadPrecondition
 	for _, plan := range plans {
 		transitions = append(transitions, plan.Transitions()...)
+		preconditions = append(preconditions, plan.Preconditions()...)
 	}
-	return NewPreparedPlan(transitions)
+	return NewPreparedPlanWithPreconditions(transitions, preconditions)
 }
 
 func cloneTransitions(source []Transition) []Transition {
@@ -81,6 +110,52 @@ func validatePreparedTransitions(transitions []Transition) error {
 	}
 	if err := rejectPhysicalAliases(transitions); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateReadPreconditions(
+	transitions []Transition,
+	preconditions []ReadPrecondition,
+) error {
+	targets := make(map[domain.Location]bool, len(preconditions))
+	for _, precondition := range preconditions {
+		if precondition.Kind != ReadPreconditionSymlink {
+			return fmt.Errorf("invalid read precondition kind")
+		}
+		if !precondition.Target.Valid() ||
+			!precondition.Target.Path.Portable() {
+			return fmt.Errorf(
+				"invalid read precondition target %v",
+				precondition.Target,
+			)
+		}
+		if precondition.Device == 0 || precondition.Inode == 0 {
+			return fmt.Errorf("read precondition identity is incomplete")
+		}
+		if !filepath.IsAbs(precondition.ExpectedTargetPath) ||
+			filepath.Clean(precondition.ExpectedTargetPath) !=
+				precondition.ExpectedTargetPath {
+			return fmt.Errorf("invalid expected symlink target path")
+		}
+		if targets[precondition.Target] {
+			return fmt.Errorf(
+				"duplicate read precondition target %v",
+				precondition.Target,
+			)
+		}
+		for _, transition := range transitions {
+			for _, mutation := range transition.Mutations {
+				if locationsOverlap(precondition.Target, mutation.Target) {
+					return fmt.Errorf(
+						"read precondition target %v overlaps configuration target %v",
+						precondition.Target,
+						mutation.Target,
+					)
+				}
+			}
+		}
+		targets[precondition.Target] = true
 	}
 	return nil
 }

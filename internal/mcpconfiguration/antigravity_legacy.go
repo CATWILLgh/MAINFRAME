@@ -3,7 +3,9 @@ package mcpconfiguration
 import (
 	"encoding/json"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/jsondocument"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
@@ -58,6 +60,9 @@ func (inspection Inspection) migrationAssessments(
 func assessAntigravityMigration(
 	snapshot migrationSnapshot,
 ) (MigrationAssessment, bool) {
+	if isCanonicalAntigravityAlias(snapshot) {
+		return canonicalAntigravityMigration(), true
+	}
 	if snapshot.legacy.problem != "" {
 		return invalidLegacyMigration(
 			"legacy Antigravity MCP configuration cannot be safely inspected",
@@ -67,11 +72,7 @@ func assessAntigravityMigration(
 		if !snapshot.canonical.present {
 			return MigrationAssessment{}, false
 		}
-		return MigrationAssessment{
-			ComponentID: domain.ComponentAntigravity2,
-			State:       MigrationCanonicalOnly,
-			Reason:      "canonical Antigravity MCP configuration location is in use",
-		}, true
+		return canonicalAntigravityMigration(), true
 	}
 	legacy, err := jsondocument.Parse(snapshot.legacy.raw)
 	if err != nil {
@@ -110,6 +111,39 @@ func assessAntigravityMigration(
 	return conflictingAntigravityMigration(
 		"Antigravity MCP configuration locations contain different data",
 	), true
+}
+
+func isCanonicalAntigravityAlias(snapshot migrationSnapshot) bool {
+	return snapshot.legacy.kind == hostfs.EntrySymlink &&
+		snapshot.legacy.path != "" &&
+		snapshot.legacy.symlinkTargetPath == snapshot.canonical.path &&
+		snapshot.canonical.present &&
+		snapshot.canonical.problem == ""
+}
+
+func (inspection Inspection) antigravityAliasPrecondition() (
+	configuration.ReadPrecondition,
+	bool,
+) {
+	snapshot, exists := inspection.migrations[domain.ComponentAntigravity2]
+	if !exists || !isCanonicalAntigravityAlias(snapshot) {
+		return configuration.ReadPrecondition{}, false
+	}
+	return configuration.ReadPrecondition{
+		Kind:               configuration.ReadPreconditionSymlink,
+		Target:             antigravityLegacyMCPLocation,
+		Device:             snapshot.legacy.device,
+		Inode:              snapshot.legacy.inode,
+		ExpectedTargetPath: snapshot.legacy.symlinkTargetPath,
+	}, true
+}
+
+func canonicalAntigravityMigration() MigrationAssessment {
+	return MigrationAssessment{
+		ComponentID: domain.ComponentAntigravity2,
+		State:       MigrationCanonicalOnly,
+		Reason:      "canonical Antigravity MCP configuration location is in use",
+	}
 }
 
 func invalidLegacyMigration(reason string) MigrationAssessment {

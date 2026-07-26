@@ -13,23 +13,23 @@ tags: ["antigravity", "mcp", "migration", "tui", "configuration"]
 
 ## What was observed
 
-Current Antigravity documentation places the global MCP configuration at
-`~/.gemini/config/mcp_config.json`. Other current official Google documentation
-still names `~/.gemini/antigravity/mcp_config.json`. A live check against
-Antigravity 2.2.1 confirmed that a synthetic MCP command from the canonical path
-is executed and that the equivalent command from a regular file present only at
-the legacy path is not executed. The installer observes both locations but
-writes neither during migration detection.
+Current Antigravity IDE 2.x documentation places the global MCP configuration at
+`~/.gemini/config/mcp_config.json`. On the verified development host,
+`~/.gemini/antigravity/mcp_config.json` is a direct symbolic link to that
+canonical file, so the two paths identify one configuration rather than two
+independent files. A live check against Antigravity 2.2.1 also confirmed that a
+synthetic MCP command from the canonical path is executed and that the equivalent
+command from a standalone regular file present only at the noncanonical path is
+not executed.
 
 ## Why it is a problem
 
-Detection and privacy-safe preview are implemented, but official sources do not
-define version boundaries or precedence. Live checks now show that only
-canonical-path synthetic MCP commands execute on 2.2.1 when both paths are valid
-regular files, whether server keys collide or differ. Automatic migration or
-deletion would still risk choosing the wrong source of truth on other supported
-versions, so that behavior must remain unavailable until the supported-version
-policy is explicit.
+The installer originally classified every symbolic link at the noncanonical
+path as an invalid legacy configuration. That creates a false conflict when the
+link points directly to the independently inspected canonical regular file.
+Standalone files at the noncanonical path remain unresolved: Antigravity IDE 2.x
+does not document them as a supported configuration surface, and automatic
+migration or deletion could still activate or destroy user-owned data.
 
 ## Why it is not a duplicate
 
@@ -43,6 +43,12 @@ policy is explicit.
 Completed in the installer branch:
 
 - Both locations are inspected once through immutable snapshots.
+- A direct alias to the independently inspected canonical regular file is
+  classified as canonical-only; foreign, unresolved, or unsafe links remain
+  invalid.
+- Material changes carry the alias identity and exact target as a read-only
+  transaction precondition; a replacement after preview aborts before journaling
+  or filesystem writes.
 - Preview exposes fixed, credential-free states for legacy-only, canonical-only,
   equivalent dual, conflicting dual, and invalid legacy configuration.
 - Material Antigravity MCP preparation is rejected while migration is required;
@@ -64,6 +70,10 @@ Remaining work:
 
 - [x] Tier 1 tests cover legacy-only, canonical-only, equivalent, conflicting,
   invalid, unreadable, symbolic-link, and non-regular states.
+- [x] Tier 1 tests distinguish an exact canonical alias from foreign or
+  unresolved symbolic links without following the link.
+- [x] Applying a prepared material change revalidates the alias before any
+  persistent transaction state or configuration write.
 - [x] Preview reports legacy presence without exposing configuration values.
 - [x] Preparation cannot silently create a second active definition while
   legacy state is unresolved.
@@ -140,5 +150,3 @@ shapes, or behavior on other versions. Automatic migration remains gated.
 - `docs/tickets/cd5f584d-complete-configuration-lifecycle-semantics.md`
 - [Antigravity MCP documentation](https://antigravity.google/docs/mcp)
 - [Antigravity changelog](https://antigravity.google/changelog?app=antigravity)
-- [Google Workspace Sheets MCP guide](https://developers.google.com/workspace/sheets/api/guides/configure-mcp-server)
-- [Antigravity Gemini CLI migration](https://antigravity.google/docs/gcli-migration)

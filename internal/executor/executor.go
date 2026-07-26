@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
@@ -88,6 +89,11 @@ func (executor Executor) withLock(operation func() (Result, error)) (result Resu
 }
 
 func (executor Executor) execute(preview Preview) (Result, error) {
+	if err := executor.checkReadPreconditions(
+		preview.Configuration.Preconditions(),
+	); err != nil {
+		return Result{}, err
+	}
 	prepared, err := executor.materializeConfigurations(preview.Configuration)
 	if err != nil {
 		return Result{}, err
@@ -136,6 +142,27 @@ func (executor Executor) execute(preview Preview) (Result, error) {
 		return Result{Warnings: []string{fmt.Sprintf("cleanup committed journal: %v", err)}}, nil
 	}
 	return Result{}, nil
+}
+
+func (executor Executor) checkReadPreconditions(
+	preconditions []configuration.ReadPrecondition,
+) error {
+	if len(preconditions) == 0 {
+		return nil
+	}
+	if executor.configurations == nil {
+		return errors.New("configuration workspace is required")
+	}
+	for _, precondition := range preconditions {
+		if err := executor.configurations.CheckReadPrecondition(precondition); err != nil {
+			return fmt.Errorf(
+				"check configuration read precondition for %v: %w",
+				precondition.Target,
+				err,
+			)
+		}
+	}
+	return nil
 }
 
 func (executor Executor) initializeJournal(

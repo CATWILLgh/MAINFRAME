@@ -357,9 +357,13 @@ Antigravity Context7 preparation owns only the exact canonical
 `~/.gemini/config/mcp_config.json` `mcpServers.<server>` entry and the registry
 under `~/.gemini/antigravity/mainframe/`. The ordered-JSON materializer
 preserves unrelated servers and unknown top-level fields while emitting only
-the canonical `serverUrl` dialect. It never writes the legacy
-`~/.gemini/antigravity/mcp_config.json`; detection and migration of that older
-location is an explicit prerequisite before Antigravity MCP Apply.
+the canonical `serverUrl` dialect. It never writes
+`~/.gemini/antigravity/mcp_config.json`. A direct symbolic link from that path
+to the independently inspected canonical regular file represents the same
+configuration and requires no migration. Its identity and exact target become a
+read-only transaction precondition, so replacement after preview aborts before
+any write. Any standalone file or other link at the noncanonical path requires
+explicit resolution before Antigravity MCP Apply.
 
 OpenCode Context7 preparation uses the same ordered-JSON boundary as its
 permission ownership without sharing ownership between them. When both change

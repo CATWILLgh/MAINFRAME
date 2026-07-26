@@ -38,12 +38,15 @@ type projectionSnapshot struct {
 }
 
 type mcpFileSnapshot struct {
-	present bool
-	raw     []byte
-	mode    uint32
-	device  uint64
-	inode   uint64
-	problem string
+	kind              hostfs.EntryKind
+	path              string
+	symlinkTargetPath string
+	present           bool
+	raw               []byte
+	mode              uint32
+	device            uint64
+	inode             uint64
+	problem           string
 }
 
 func Inspect(
@@ -88,6 +91,7 @@ func (inspection *Inspection) captureFile(location domain.Location, host Host) {
 		return
 	}
 	snapshot := mcpFileSnapshot{
+		kind: entry.Kind, path: entry.Path, symlinkTargetPath: entry.SymlinkTargetPath,
 		mode: entry.Mode, device: entry.Device, inode: entry.Inode,
 	}
 	switch entry.Kind {

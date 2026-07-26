@@ -47,8 +47,21 @@ type Transition struct {
 	Mutations   []FileMutation
 }
 
+type ReadPreconditionKind string
+
+const ReadPreconditionSymlink ReadPreconditionKind = "symlink"
+
+type ReadPrecondition struct {
+	Kind               ReadPreconditionKind
+	Target             domain.Location
+	Device             uint64
+	Inode              uint64
+	ExpectedTargetPath string
+}
+
 type PreparedPlan struct {
-	transitions []Transition
+	transitions   []Transition
+	preconditions []ReadPrecondition
 }
 
 func (plan PreparedPlan) Transitions() []Transition {
@@ -60,6 +73,10 @@ func (plan PreparedPlan) Transitions() []Transition {
 		}
 	}
 	return result
+}
+
+func (plan PreparedPlan) Preconditions() []ReadPrecondition {
+	return append([]ReadPrecondition(nil), plan.preconditions...)
 }
 
 func (inspection Inspection) Prepare(
