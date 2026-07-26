@@ -13,22 +13,29 @@ tags: ["antigravity", "mcp", "migration", "tui", "configuration"]
 
 ## What was observed
 
-Current Antigravity IDE 2.x documentation places the global MCP configuration at
-`~/.gemini/config/mcp_config.json`. On the verified development host,
-`~/.gemini/antigravity/mcp_config.json` is a direct symbolic link to that
-canonical file, so the two paths identify one configuration rather than two
-independent files. A live check against Antigravity 2.2.1 also confirmed that a
-synthetic MCP command from the canonical path is executed and that the equivalent
-command from a standalone regular file present only at the noncanonical path is
-not executed.
+Antigravity 2.0 is the standalone desktop product targeted by this adapter; it is
+separate from Antigravity IDE. The official Antigravity 2.0 documentation names
+`~/.gemini/antigravity` as its runtime root and `~/.gemini/config` as the shared
+customization root. Its product-specific MCP section describes configuration
+through the application interface but does not publish a raw global MCP filename.
+On the verified standalone Antigravity 2.2.1 host,
+`~/.gemini/antigravity/mcp_config.json` is a direct symbolic link to
+`~/.gemini/config/mcp_config.json`, so the two paths identify one configuration
+rather than two independent files. A live check on that host also confirmed that
+a synthetic MCP command from the latter path is executed and that the equivalent
+command from a standalone regular file present only at the former path is not
+executed.
+
+The terms “canonical”, “noncanonical”, and “legacy” in this ticket are MAINFRAME
+classification terms, not names assigned to these paths by the product vendor.
 
 ## Why it is a problem
 
 The installer originally classified every symbolic link at the noncanonical
 path as an invalid legacy configuration. That creates a false conflict when the
 link points directly to the independently inspected canonical regular file.
-Standalone files at the noncanonical path remain unresolved: Antigravity IDE 2.x
-does not document them as a supported configuration surface, and automatic
+Standalone files at the noncanonical path remain unresolved: the Antigravity 2.0
+documentation does not define that file or its migration semantics, and automatic
 migration or deletion could still activate or destroy user-owned data.
 
 ## Why it is not a duplicate
@@ -102,7 +109,7 @@ the ticket stays open for those boundaries.
 
 ## Live verification (2026-07-17)
 
-**Version:** Antigravity 2.2.1 (`com.google.antigravity`)
+**Version:** standalone Antigravity 2.2.1 (`com.google.antigravity`)
 
 **Method:** The existing credential-bearing configuration was moved into a
 private same-filesystem backup and never launched. Each candidate path was then
@@ -135,11 +142,13 @@ verified after restoration.
   artifacts were removed.
 
 This establishes canonical-only synthetic MCP command execution for the tested
-Antigravity 2.2.1 cases when both paths are valid regular files: same-key command
-execution resolves to canonical, and a distinct legacy-key command does not
-execute alongside the canonical command. It does not establish whether the
-legacy file is read or parsed, behavior for non-synthetic entries or other file
-shapes, or behavior on other versions. Automatic migration remains gated.
+standalone Antigravity 2.2.1 cases when both paths are valid regular files:
+same-key command execution resolves to canonical, and a distinct legacy-key
+command does not execute alongside the canonical command. The raw filename is an
+observed compatibility contract for this exact supported host, not a guarantee
+imported from Antigravity IDE. The check does not establish whether the legacy
+file is read or parsed, behavior for non-synthetic entries or other file shapes,
+or behavior on other versions. Automatic migration remains gated.
 
 ## Sources
 
@@ -148,5 +157,8 @@ shapes, or behavior on other versions. Automatic migration remains gated.
 - `internal/tui/mcp_preview.go`
 - `internal/hostlayout/layout.go:55-63`
 - `docs/tickets/cd5f584d-complete-configuration-lifecycle-semantics.md`
+- [Introducing Google Antigravity 2](https://antigravity.google/blog/introducing-google-antigravity-2?hl=en)
+- [Antigravity 2.0 overview](https://antigravity.google/docs/overview?hl=en)
+- [Antigravity hooks documentation](https://antigravity.google/docs/hooks)
 - [Antigravity MCP documentation](https://antigravity.google/docs/mcp)
 - [Antigravity changelog](https://antigravity.google/changelog?app=antigravity)

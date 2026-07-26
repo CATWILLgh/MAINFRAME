@@ -314,11 +314,14 @@ access to the home root. Its ownership registry lives separately under
 `mcp_servers.context7` in its own global `config.toml` through a strict TOML
 codec and keeps its ownership registry under its own `mainframe/` directory.
 The codec rejects invalid or redefined TOML and never treats temporal or
-non-finite TOML values as equivalent JSON ownership state. Antigravity owns
-only `mcpServers.context7` in its canonical global
-`~/.gemini/config/mcp_config.json` and emits the adapter-native `serverUrl`
-field. Its ownership registry remains under Antigravity's separate data root,
-not in another adapter or the runtime-consumed MCP file.
+non-finite TOML values as equivalent JSON ownership state. On the exact
+supported standalone Antigravity 2.2.1 host, MAINFRAME owns only
+`mcpServers.context7` in `~/.gemini/config/mcp_config.json` and emits the
+adapter-native `serverUrl` field. Its ownership registry remains under
+Antigravity's separate data root, not in another adapter or the
+runtime-consumed MCP file. Live probes establish only that this host executes a
+synthetic command from that path instead of a standalone file at the observed
+alternative path.
 
 Every loaded projection is revalidated before host inspection. An unsafe state
 in one selected adapter makes the combined plan blocking without hiding valid
@@ -332,8 +335,10 @@ The adapter capability boundary was verified on 2026-07-17 against the
 [Claude Code MCP contract](https://code.claude.com/docs/en/mcp),
 [Codex MCP contract](https://developers.openai.com/codex/mcp/),
 [Codex configuration contract](https://developers.openai.com/codex/config-reference/),
-[OpenCode MCP contract](https://opencode.ai/docs/mcp-servers/), and
-[Antigravity MCP contract](https://antigravity.google/docs/mcp).
+[OpenCode MCP contract](https://opencode.ai/docs/mcp-servers/), the official
+[Antigravity 2.0 product boundary](https://antigravity.google/docs/overview?hl=en),
+the product-specific [Antigravity MCP guidance](https://antigravity.google/docs/mcp),
+and live probes of the exact supported standalone Antigravity 2.2.1 host.
 
 Before execution, the immutable inspection can materialize a private prepared
 plan without writing. It preserves complete user JSON, composes non-overlapping
@@ -353,17 +358,22 @@ their captured identity, and relinquishment changes only the registry. The
 home root remains available only through the exact release-validated
 `.claude.json` projection; it does not become a general Claude Code target.
 
-Antigravity Context7 preparation owns only the exact canonical
+Antigravity Context7 preparation owns only the exact
 `~/.gemini/config/mcp_config.json` `mcpServers.<server>` entry and the registry
 under `~/.gemini/antigravity/mainframe/`. The ordered-JSON materializer
 preserves unrelated servers and unknown top-level fields while emitting only
-the canonical `serverUrl` dialect. It never writes
+the `serverUrl` dialect selected by MAINFRAME. It never writes
 `~/.gemini/antigravity/mcp_config.json`. A direct symbolic link from that path
 to the independently inspected canonical regular file represents the same
 configuration and requires no migration. Its identity and exact target become a
 read-only transaction precondition, so replacement after preview aborts before
 any write. Any standalone file or other link at the noncanonical path requires
-explicit resolution before Antigravity MCP Apply.
+explicit resolution before Antigravity MCP Apply. These raw-path semantics are
+an observed compatibility contract based on synthetic-command probes of the
+exact supported standalone Antigravity 2.2.1 host, not a behavior inferred from
+Antigravity IDE documentation. The probes do not establish ownership scope or
+configuration dialect. “Canonical”, “noncanonical”, and “legacy” are MAINFRAME
+classification terms, not vendor labels for these paths.
 
 OpenCode Context7 preparation uses the same ordered-JSON boundary as its
 permission ownership without sharing ownership between them. When both change
