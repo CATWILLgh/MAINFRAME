@@ -238,11 +238,11 @@ shown as optional time-stamped popularity metadata. They are never a security
 or trust signal, never gate installation, and their absence or refresh failure
 must not block an otherwise verified offline catalog entry.
 
-Credentials never enter the release, project files, previews, logs, or
-executor journal. The TUI may collect an API key through masked input and
-store it in the neutral credential store only after the selected adapter
-recipe proves that it can consume a reference without leaking the value. If
-an adapter cannot do so safely, that profile is unsupported for that adapter
+Credential values never enter the release, project files, previews, logs, or
+executor journal. The TUI accepts and previews only validated secret-reference
+names. A keyed MCP profile selects a compatible user-owned credential instance;
+it never collects an API key value. If an adapter cannot consume a reference
+without leaking the value, that profile is unsupported for that adapter
 instead of embedding the key in clear text.
 
 Credential descriptions use a strict versioned contract with three owners:
@@ -273,7 +273,8 @@ internal structs. It explicitly reports `secret_availability` as `unchecked`
 and exposes only definitions, instance metadata, and validated secret-reference
 names. The command does not inspect referenced environment-variable values,
 invoke `secret`, read `secrets.env`, migrate legacy indexes, write user state,
-resolve values, or edit credentials through the TUI.
+or resolve values. User state editing belongs to the terminal interface
+described below.
 
 Context7 is the first reference catalog entry. Its
 [maintained repository](https://github.com/upstash/context7#installation)
@@ -288,22 +289,30 @@ requires a key. Shared local process hosting is a separate runtime concern;
 direct stdio remains the default until a gateway proves real multi-client
 multiplexing and safe lifecycle ownership.
 
-The current catalog milestone remains preview-only. The release index verifies
-a separate bounded MCP catalog by path and SHA-256, and the TUI records a
-choice between environment selection and the final preview. A keyed profile
-uses password-mode input and requires a non-blank key, but keeps it only in
-private TUI state for the process lifetime. The key never enters lifecycle
-selection types, previews, errors, logs, command arguments, or files, and is
-cleared from model-owned state when the profile no longer needs it or the TUI
-quits. Because Go strings and the input widget do not provide guaranteed memory
-zeroing, the interface promises bounded process-lifetime retention rather than
-cryptographic erasure. This milestone does not publish adapter configuration
-or store credentials. Context7's keyless remote profile is verified for Claude
-Code, Codex, OpenCode, and Antigravity 2.x. Its keyed remote profile is verified
-for Claude Code, Codex, and OpenCode; Antigravity 2.x is explicitly unsupported
-until a plaintext-free secret reference is proven. Optional GitHub stars are
-fetched asynchronously, kept only in memory, and discarded when stale or
-unavailable.
+The terminal interface now includes a neutral credential-service list that is
+available independently of adapter selection. Creating or editing an instance
+changes only an in-memory draft until the complete review shows the exact
+metadata change. The user must then open a second confirmation screen. Apply is
+enabled only when the executable plan contains the single
+`credentials-config/mainframe/instances.json` mutation and no adapter, MCP, or
+DEV mutation. The application revalidates the exact canonical after-image
+before publication, then uses the common transaction for refreshed inspection,
+atomic publication, rollback, and crash recovery. The TUI completes any
+previously authorized unfinished transaction before it loads settings and
+reports recovery warnings. Credential confirmation itself uses a
+non-recovering executor path, so a new pending journal that appears after review
+blocks the write instead of changing an unrelated target.
+
+Existing state must be a regular strict-version document with mode `0600`;
+missing state is created with mode `0600` and newly created parents use `0700`.
+Malformed, unknown-version, symbolic-link, unsafe-mode, or concurrently changed
+state fails closed without replacing user data. A keyed MCP profile selects a
+matching credential instance and never accepts a raw key. Context7's keyless
+remote profile is verified for Claude Code, Codex, OpenCode, and Antigravity
+2.x. Its keyed remote profile is verified for Claude Code, Codex, and OpenCode;
+Antigravity 2.x is explicitly unsupported until a plaintext-free secret
+reference is proven. Optional GitHub stars are fetched asynchronously, kept
+only in memory, and discarded when stale or unavailable.
 
 The second read-only milestone gives keyless Context7 exact OpenCode, Claude
 Code, Codex, and Antigravity 2.x projections. Bundle schema version 2 links each
