@@ -52,14 +52,19 @@ interface:
 
 - `mainframe-cli` owns the `mainframe` launcher in `user-bin`.
 - `credential-tools` owns the `secret` launcher, the credentials store, and
-  the shell integration required to load that store.
+  the shell integration required to load that store. It is also the only
+  component allowed to own user credential-instance metadata.
 
 Plans, memory, telemetry, feedback, permissions, hooks, skills, agents, and
 runtime configuration are not neutral interfaces. Every adapter packages and
-stores its own versions. Each adapter also seeds its own editable credentials
-index while the secret store and `secret` command remain neutral. Migration
-code may inspect legacy locations belonging to the same runtime, but must not
-discover state through another runtime.
+stores its own versions. The current compatibility release still seeds
+adapter-local editable credential indexes. New code must not extend that
+legacy arrangement; the central credential contract below replaces it with
+one neutral catalog owned by `credential-tools`. Until an explicit migration
+is implemented, existing adapter-local indexes remain untouched and are not
+treated as authoritative. Migration code may inspect legacy locations
+belonging to the same runtime, but must not discover state through another
+runtime.
 
 Configuration ownership is explicit release data. Static JSON ownership uses
 non-overlapping RFC 6901 pointers. OpenCode permission ownership instead uses a
@@ -239,6 +244,24 @@ store it in the neutral credential store only after the selected adapter
 recipe proves that it can consume a reference without leaking the value. If
 an adapter cannot do so safely, that profile is unsupported for that adapter
 instead of embedding the key in clear text.
+
+Credential descriptions use a strict versioned contract with three owners:
+MAINFRAME ships immutable service definitions, the user owns neutral instance
+metadata, and a secret backend owns values. Catalog documents contain only
+validated secret references. Several instances may use one service definition;
+there is no implicit default when more than one matches.
+
+A credential may name another credential needed to use, obtain, rotate, or
+recover it. Relations are directed, advisory, and non-transitive. They never
+authorize automatic retrieval or execution; duplicate, self, missing, and
+cyclic relations are invalid. MCP-backed definitions reference the MCP catalog
+instead of duplicating connection or evidence fields.
+
+Parsing is read-only and fails closed on unknown versions, fields, malformed
+or oversized documents, and invalid references without rewriting user data.
+Structural validity does not claim that a secret exists. The current milestone
+does not migrate legacy indexes, write user state, resolve values, or edit
+credentials through the TUI.
 
 Context7 is the first reference catalog entry. Its
 [maintained repository](https://github.com/upstash/context7#installation)
