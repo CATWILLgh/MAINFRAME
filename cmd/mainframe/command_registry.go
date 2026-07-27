@@ -11,6 +11,7 @@ type commandContext struct {
 	output        io.Writer
 	errorOutput   io.Writer
 	launchPreview previewLauncher
+	reviewDraft   draftReviewRunner
 }
 
 type commandHandler func(commandContext, map[string]string) int
@@ -24,6 +25,7 @@ type commandConfirmation string
 const (
 	handlerTUI              commandHandlerKind = "tui"
 	handlerPlan             commandHandlerKind = "plan"
+	handlerDraftReview      commandHandlerKind = "draft-review"
 	handlerCredentialList   commandHandlerKind = "credential-list"
 	handlerCredentialUses   commandHandlerKind = "credential-uses"
 	handlerCredentialReview commandHandlerKind = "credential-review"
@@ -71,111 +73,6 @@ type commandSpec struct {
 	Handler       commandHandler
 }
 
-var registeredCommands = []commandSpec{
-	{
-		ID: "tui.open", Usage: "mainframe",
-		Summary:       "Open the terminal interface.",
-		Input:         inputTerminal,
-		Output:        outputTerminal,
-		Effect:        effectReviewedWrite,
-		Confirmation:  confirmationTerminal,
-		Documentation: "overview",
-		HandlerKind:   handlerTUI,
-	},
-	{
-		ID: "plan", Pattern: []string{"plan"},
-		Usage:         "mainframe plan",
-		Summary:       "Build a read-only installation plan from JSON on standard input.",
-		Input:         inputJSON,
-		Output:        outputJSON,
-		Effect:        effectReadOnly,
-		Confirmation:  confirmationNone,
-		Documentation: "agent-automation",
-		HandlerKind:   handlerPlan,
-	},
-	{
-		ID: "credentials.catalog", Pattern: []string{"credentials"},
-		Usage:         "mainframe credentials",
-		Summary:       "List credential definitions and user-owned instances without values.",
-		Input:         inputNone,
-		Output:        outputJSON,
-		Effect:        effectReadOnly,
-		Confirmation:  confirmationNone,
-		Documentation: "credentials",
-		HandlerKind:   handlerCredentialList,
-	},
-	{
-		ID: "credentials.uses", Pattern: []string{"credentials", "uses", "<name>"},
-		Usage:         "mainframe credentials uses <name>",
-		Summary:       "List credential-instance roles that reference one secret name.",
-		Input:         inputArguments,
-		Output:        outputJSON,
-		Effect:        effectReadOnly,
-		Confirmation:  confirmationNone,
-		Documentation: "credentials",
-		HandlerKind:   handlerCredentialUses,
-	},
-	{
-		ID:            "credentials.instance.review",
-		Pattern:       []string{"credentials", "instance", "review"},
-		Usage:         "mainframe credentials instance review",
-		Summary:       "Review a credential-instance create or edit request.",
-		Input:         inputJSON,
-		Output:        outputJSON,
-		Effect:        effectReadOnly,
-		Confirmation:  confirmationNone,
-		Documentation: "credentials",
-		HandlerKind:   handlerCredentialReview,
-	},
-	{
-		ID: "credentials.instance.apply",
-		Pattern: []string{
-			"credentials", "instance", "apply", "--confirm", "<digest>",
-		},
-		Usage:         "mainframe credentials instance apply --confirm <digest>",
-		Summary:       "Apply the exact credential-instance change returned by review.",
-		Input:         inputJSON,
-		Output:        outputJSON,
-		Effect:        effectReviewedWrite,
-		Confirmation:  confirmationDigest,
-		Documentation: "credentials",
-		HandlerKind:   handlerCredentialApply,
-	},
-	{
-		ID: "docs.list", Pattern: []string{"docs", "list"},
-		Usage:         "mainframe docs list",
-		Summary:       "List documentation embedded in this executable.",
-		Input:         inputNone,
-		Output:        outputText,
-		Effect:        effectReadOnly,
-		Confirmation:  confirmationNone,
-		Documentation: "overview",
-		HandlerKind:   handlerDocsList,
-	},
-	{
-		ID: "docs.show", Pattern: []string{"docs", "show", "<topic>"},
-		Usage:         "mainframe docs show <topic>",
-		Summary:       "Print one embedded documentation topic.",
-		Input:         inputArguments,
-		Output:        outputText,
-		Effect:        effectReadOnly,
-		Confirmation:  confirmationNone,
-		Documentation: "overview",
-		HandlerKind:   handlerDocsShow,
-	},
-	{
-		ID: "capabilities", Pattern: []string{"capabilities", "--json"},
-		Usage:         "mainframe capabilities --json",
-		Summary:       "Describe the installed command and documentation contract for agents.",
-		Input:         inputNone,
-		Output:        outputJSON,
-		Effect:        effectReadOnly,
-		Confirmation:  confirmationNone,
-		Documentation: "agent-automation",
-		HandlerKind:   handlerCapabilities,
-	},
-}
-
 func commandRegistry() []commandSpec {
 	commands := append([]commandSpec(nil), registeredCommands...)
 	for index := range commands {
@@ -190,6 +87,8 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runTUICommand
 	case handlerPlan:
 		return runPlanCommand
+	case handlerDraftReview:
+		return runDraftReviewFromRegistry
 	case handlerCredentialList:
 		return runCredentialCatalogCommand
 	case handlerCredentialUses:

@@ -11,9 +11,10 @@ import (
 )
 
 type MCPCredentialBinding struct {
-	ServerID   mcpcatalog.ServerID
-	ProfileID  mcpcatalog.ProfileID
-	InstanceID credentialcatalog.InstanceID
+	ComponentID domain.ComponentID
+	ServerID    mcpcatalog.ServerID
+	ProfileID   mcpcatalog.ProfileID
+	InstanceID  credentialcatalog.InstanceID
 }
 
 func buildLifecycleRequest(
@@ -46,20 +47,21 @@ func resolveMCPCredentials(
 	if request.CredentialInstances != nil {
 		instances = request.CredentialInstances.Clone()
 	}
-	seen := make(map[mcpcatalog.ServerID]bool)
+	seen := make(map[string]bool)
 	result := make([]mcpconfiguration.CredentialBinding, 0, len(request.MCPCredentials))
 	for _, binding := range request.MCPCredentials {
-		if seen[binding.ServerID] {
-			return nil, fmt.Errorf(
-				"duplicate MCP credential binding for server %q",
-				binding.ServerID,
-			)
-		}
-		seen[binding.ServerID] = true
 		adapter, err := adapterForBinding(request.MCPSelections, binding)
 		if err != nil {
 			return nil, err
 		}
+		key := string(binding.ServerID) + "\x00" + string(adapter)
+		if seen[key] {
+			return nil, fmt.Errorf(
+				"duplicate MCP credential binding for server %q and adapter %q",
+				binding.ServerID, adapter,
+			)
+		}
+		seen[key] = true
 		secret, err := snapshot.Credentials.ResolveMCPSecret(
 			instances,
 			binding.ServerID,
@@ -92,8 +94,18 @@ func adapterForBinding(
 			selection.ProfileID != binding.ProfileID {
 			continue
 		}
+		if binding.ComponentID != "" {
+			if !SupportsMCPCredentialBinding(binding.ComponentID) ||
+				!containsAdapter(selection.Adapters, binding.ComponentID) {
+				return "", fmt.Errorf(
+					"credential-bound MCP adapter %q is not supported by the selection",
+					binding.ComponentID,
+				)
+			}
+			return binding.ComponentID, nil
+		}
 		if len(selection.Adapters) != 1 ||
-			!credentialBindingAdapterSupported(selection.Adapters[0]) {
+			!SupportsMCPCredentialBinding(selection.Adapters[0]) {
 			return "", fmt.Errorf(
 				"credential-bound MCP profile requires one supported adapter",
 			)
@@ -106,7 +118,19 @@ func adapterForBinding(
 	)
 }
 
-func credentialBindingAdapterSupported(component domain.ComponentID) bool {
+func containsAdapter(
+	adapters []domain.ComponentID,
+	expected domain.ComponentID,
+) bool {
+	for _, adapter := range adapters {
+		if adapter == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func SupportsMCPCredentialBinding(component domain.ComponentID) bool {
 	return component == domain.ComponentOpenCode ||
 		component == domain.ComponentAntigravity2
 }

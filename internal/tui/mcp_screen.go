@@ -171,11 +171,14 @@ func (model *Model) mcpCredentialBindings() []application.MCPCredentialBinding {
 			choice.credentialInstanceID == "" {
 			continue
 		}
-		bindings = append(bindings, application.MCPCredentialBinding{
-			ServerID:   server.ID,
-			ProfileID:  choice.ProfileID,
-			InstanceID: choice.credentialInstanceID,
-		})
+		for _, adapter := range choice.Adapters {
+			bindings = append(bindings, application.MCPCredentialBinding{
+				ComponentID: adapter,
+				ServerID:    server.ID,
+				ProfileID:   choice.ProfileID,
+				InstanceID:  choice.credentialInstanceID,
+			})
+		}
 	}
 	return bindings
 }

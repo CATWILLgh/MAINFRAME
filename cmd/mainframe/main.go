@@ -54,6 +54,7 @@ func runWithPreview(
 	context := commandContext{
 		input: input, output: output, errorOutput: errorOutput,
 		launchPreview: launchPreview,
+		reviewDraft:   reviewDraft,
 	}
 	if exitCode, matched := dispatchRegisteredCommand(args, context); matched {
 		return exitCode

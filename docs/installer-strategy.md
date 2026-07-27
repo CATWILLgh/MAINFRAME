@@ -334,6 +334,34 @@ CLI binary is already an integrity-indexed release payload, so this keeps the
 executable, its human guidance, and its agent contract on one version without
 adding a second runtime lookup.
 
+### Read-only machine draft review
+
+`mainframe draft review` is the first agent-facing installation interface. It
+accepts one strict, versioned JSON document containing the complete desired
+adapter and MCP state and returns dedicated public review types. Omitted
+MAINFRAME-owned adapters and MCP projections are deliberate removals, not
+implicit preservation.
+
+The required diagnostics policy is `preserve-retained-adapters`: existing
+diagnostics stay unchanged on retained adapters and are removed only with an
+adapter that leaves the complete desired state. This command cannot enable or
+reconfigure diagnostics.
+
+Credential-bearing MCP choices carry only an existing credential-instance ID.
+The field is required for keyed profiles and rejected for keyless profiles.
+One instance may bind the same MCP profile to several supported adapters;
+resolution produces adapter-specific secret references without reading a
+value. The response excludes executable after-images, target paths, journals,
+and secret-reference implementation details.
+
+The machine reviewer depends only on a fresh snapshot builder. It has no
+recovery service, apply executor, confirmation token, or apply command. Its
+Codex observation client is disabled because starting a new
+`codex app-server` may update Codex-owned runtime state; external Codex hook
+trust is reported as not assessed instead. The legacy `mainframe plan` remains
+a caller-supplied release-model planner and is documented separately so agents
+do not mistake it for live machine observation.
+
 Context7 is the first reference catalog entry. Its
 [maintained repository](https://github.com/upstash/context7#installation)
 describes an API key as recommended for higher rate limits rather than a

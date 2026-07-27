@@ -86,6 +86,7 @@ func documentationRegistry() []documentationTopic {
 			CommandIDs: []string{
 				"capabilities",
 				"plan",
+				"draft.review",
 				"credentials.catalog",
 				"credentials.uses",
 				"credentials.instance.review",

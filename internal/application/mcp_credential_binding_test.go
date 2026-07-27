@@ -214,6 +214,57 @@ func TestReviewClonesMCPCredentialBindingProvenance(t *testing.T) {
 	}
 }
 
+func TestResolveMCPSecretReusesOneInstanceAcrossSupportedAdapters(t *testing.T) {
+	definitions := applicationCredentialDefinitions(t)
+	existing := applicationCredentialInstances(t, definitions)
+	credentials := applicationCredentialSnapshot(
+		t,
+		definitions,
+		existing.All(),
+	)
+	request := Request{
+		Components: []domain.ComponentID{
+			domain.ComponentOpenCode,
+			domain.ComponentAntigravity2,
+		},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-api-key",
+			Adapters: []domain.ComponentID{
+				domain.ComponentOpenCode,
+				domain.ComponentAntigravity2,
+			},
+		}},
+		MCPCredentials: []MCPCredentialBinding{
+			{
+				ComponentID: domain.ComponentOpenCode,
+				ServerID:    "context7", ProfileID: "remote-api-key",
+				InstanceID: "context7-home",
+			},
+			{
+				ComponentID: domain.ComponentAntigravity2,
+				ServerID:    "context7", ProfileID: "remote-api-key",
+				InstanceID: "context7-home",
+			},
+		},
+	}
+
+	resolved, err := resolveMCPCredentials(
+		Snapshot{Credentials: &credentials},
+		request,
+	)
+	if err != nil {
+		t.Fatalf("resolveMCPCredentials() error = %v", err)
+	}
+	if len(resolved) != 2 ||
+		resolved[0].ComponentID != domain.ComponentOpenCode ||
+		resolved[1].ComponentID != domain.ComponentAntigravity2 {
+		t.Fatalf("resolved bindings = %#v", resolved)
+	}
+	if resolved[0].EnvironmentVariable != resolved[1].EnvironmentVariable {
+		t.Fatalf("shared instance resolved to different references: %#v", resolved)
+	}
+}
+
 func TestApplyConfirmedRevalidatesLockedMCPCredentialBinding(t *testing.T) {
 	definitions := applicationCredentialDefinitions(t)
 	existing := applicationCredentialInstances(t, definitions)

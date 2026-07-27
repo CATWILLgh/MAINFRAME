@@ -64,7 +64,7 @@ func exactContext7Request(request Request) (domain.ComponentID, bool) {
 		return "", false
 	}
 	adapter := selection.Adapters[0]
-	if !credentialBindingAdapterSupported(adapter) ||
+	if !SupportsMCPCredentialBinding(adapter) ||
 		!containsComponent(request.Components, adapter) {
 		return "", false
 	}

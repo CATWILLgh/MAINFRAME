@@ -95,7 +95,8 @@ func TestMCPPreviewRequiresMatchingCredentialInstance(t *testing.T) {
 		t.Fatalf("complete-plan notice is absent:\n%s", updated.View().Content)
 	}
 	want := []application.MCPCredentialBinding{{
-		ServerID: "context7", ProfileID: "remote-api-key",
+		ComponentID: domain.ComponentClaudeCode,
+		ServerID:    "context7", ProfileID: "remote-api-key",
 		InstanceID: "context7-home",
 	}}
 	if !reflect.DeepEqual(previewer.mcpCredentials, want) {

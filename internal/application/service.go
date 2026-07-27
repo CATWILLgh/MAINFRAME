@@ -82,11 +82,7 @@ func New(
 }
 
 func (service Service) Review(request Request) (ReviewedPlan, error) {
-	reviewed, err := buildReviewedPlan(service.snapshots, cloneRequest(request))
-	if err != nil {
-		return ReviewedPlan{}, fmt.Errorf("review installation plan: %w", err)
-	}
-	return reviewed, nil
+	return Reviewer{snapshots: service.snapshots}.Review(request)
 }
 
 func (service Service) Recover() (executor.Result, error) {
@@ -211,17 +207,12 @@ func buildReviewedPlan(
 	snapshots SnapshotBuilder,
 	request Request,
 ) (ReviewedPlan, error) {
-	snapshot, err := snapshots.Build(cloneRequest(request))
-	if err != nil {
-		return ReviewedPlan{}, fmt.Errorf("build fresh host snapshot: %w", err)
-	}
-	lifecycleRequest, err := buildLifecycleRequest(snapshot, request)
+	snapshot, lifecycleRequest, semantic, err := buildSemanticPreview(
+		snapshots,
+		request,
+	)
 	if err != nil {
 		return ReviewedPlan{}, err
-	}
-	semantic, err := snapshot.Lifecycle.Preview(lifecycleRequest)
-	if err != nil {
-		return ReviewedPlan{}, fmt.Errorf("build semantic preview: %w", err)
 	}
 	prepared, err := snapshot.Lifecycle.PrepareConfiguration(lifecycleRequest)
 	if err != nil {

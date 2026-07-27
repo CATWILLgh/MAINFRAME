@@ -17,6 +17,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 import build_release
 import release_contract
+from release_draft_assertions import assert_machine_draft_reviews
 from release_lifecycle_assertions import (
     assert_adapter_lifecycle_plans,
     assert_adapter_plans,
@@ -173,6 +174,7 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
         XDG_STATE_HOME=str(home / ".local/state"),
     )
     _assert_embedded_cli_guidance(binary, sandbox, env)
+    assert_machine_draft_reviews(binary, home, sandbox, env, snapshot_tree)
     _assert_tui_launch(binary, sandbox, env)
     assert_adapter_plans(binary, output, sandbox, env)
     assert_adapter_lifecycle_plans(binary, output, sandbox, env)
