@@ -57,20 +57,27 @@ func (factory *fakeApplyExecutorFactory) Open(refresher executor.Refresher) (App
 }
 
 type fakeApplySession struct {
-	refresher      executor.Refresher
-	refresh        bool
-	refreshDesired []domain.ComponentID
-	fresh          executor.Preview
-	applies        int
-	closes         int
-	applyErr       error
-	closeErr       error
-	result         executor.Result
-	events         *[]string
+	refresher            executor.Refresher
+	refresh              bool
+	refreshDesired       []domain.ComponentID
+	fresh                executor.Preview
+	applies              int
+	nonRecoveringApplies int
+	closes               int
+	applyErr             error
+	closeErr             error
+	result               executor.Result
+	events               *[]string
 }
 
 func (session *fakeApplySession) Apply(preview executor.Preview) (executor.Result, error) {
 	session.applies++
+	return session.apply(preview)
+}
+
+func (session *fakeApplySession) apply(
+	preview executor.Preview,
+) (executor.Result, error) {
 	appendEvent(session.events, "apply")
 	if session.refresh {
 		desired := preview.Desired
@@ -87,6 +94,13 @@ func (session *fakeApplySession) Apply(preview executor.Preview) (executor.Resul
 		}
 	}
 	return session.result, session.applyErr
+}
+
+func (session *fakeApplySession) ApplyWithoutRecovery(
+	preview executor.Preview,
+) (executor.Result, error) {
+	session.nonRecoveringApplies++
+	return session.apply(preview)
 }
 
 func (session *fakeApplySession) Close() error {

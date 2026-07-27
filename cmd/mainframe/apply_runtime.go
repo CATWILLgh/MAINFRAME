@@ -206,6 +206,12 @@ func (session *productionExecutorSession) Apply(
 	return session.executor.Apply(preview)
 }
 
+func (session *productionExecutorSession) ApplyWithoutRecovery(
+	preview executor.Preview,
+) (executor.Result, error) {
+	return session.executor.ApplyWithoutRecovery(preview)
+}
+
 func (session *productionExecutorSession) Recover() (executor.Result, error) {
 	return session.executor.Recover()
 }

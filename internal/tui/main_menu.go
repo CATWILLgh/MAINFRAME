@@ -77,6 +77,16 @@ func (model *Model) mainView() string {
 	if model.err != nil {
 		sections = append(sections, errorStyle.Render(model.err.Error()))
 	}
+	if model.startupRecovered {
+		sections = append(sections, bannerStyle.Render(
+			"MAINFRAME recovered an unfinished earlier operation before loading these settings.",
+		))
+	}
+	if len(model.startupWarnings) > 0 {
+		sections = append(sections, bannerStyle.Render(
+			"Recovery warnings:\n"+strings.Join(model.startupWarnings, "\n"),
+		))
+	}
 	if len(model.selected) == 0 {
 		sections = append(sections, mutedStyle.Render(
 			"MCP integrations and additional DEV tools require at least one environment.",

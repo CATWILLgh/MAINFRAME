@@ -30,7 +30,7 @@ func (executor Executor) recoverLocked() (Result, error) {
 		if err := executor.store.Cleanup(); err != nil {
 			return Result{}, fmt.Errorf("cleanup committed journal: %w", err)
 		}
-		return Result{}, nil
+		return Result{Recovered: true}, nil
 	}
 	if err := executor.checkDirectoryModes(
 		preparedDirectoryRequirements(journal.Directories),
@@ -44,7 +44,7 @@ func (executor Executor) recoverLocked() (Result, error) {
 	if err := executor.store.Cleanup(); err != nil {
 		return Result{}, fmt.Errorf("cleanup rolled back journal: %w", err)
 	}
-	return Result{}, nil
+	return Result{Recovered: true}, nil
 }
 
 func preparedDirectoryRequirements(

@@ -45,12 +45,14 @@ func (model *Model) confirmCredentialApply() (*Model, tea.Cmd) {
 		model.screen = screenPreview
 		return model, nil
 	}
-	if err := applier.ApplyCredentialPlan(model.reviewedPlan); err != nil {
+	result, err := applier.ApplyCredentialPlan(model.reviewedPlan)
+	if err != nil {
 		model.err = err
 		model.screen = screenPreview
 		return model, nil
 	}
 	model.credentialDirty = false
+	model.appliedWarnings = append([]string(nil), result.Warnings...)
 	model.screen = screenApplied
 	model.err = nil
 	model.form = nil
@@ -113,11 +115,20 @@ func (model *Model) applyConfirmView() string {
 }
 
 func (model *Model) appliedView() string {
-	return strings.Join([]string{
+	sections := []string{
 		header(),
 		headingStyle.Render("Credential metadata updated"),
 		"The reviewed instances.json document was written successfully.",
 		"Secret values were not read or written.",
-		mutedStyle.Render("q quit"),
-	}, "\n\n")
+	}
+	if len(model.appliedWarnings) > 0 {
+		sections = append(sections, bannerStyle.Render(
+			"Completed with warnings:\n"+strings.Join(
+				model.appliedWarnings,
+				"\n",
+			),
+		))
+	}
+	sections = append(sections, mutedStyle.Render("q quit"))
+	return strings.Join(sections, "\n\n")
 }

@@ -34,6 +34,7 @@ type SnapshotBuilder interface {
 
 type ApplySession interface {
 	Apply(executor.Preview) (executor.Result, error)
+	ApplyWithoutRecovery(executor.Preview) (executor.Result, error)
 	Close() error
 }
 
@@ -86,6 +87,10 @@ func (service Service) Review(request Request) (ReviewedPlan, error) {
 	return reviewed, nil
 }
 
+func (service Service) Recover() (executor.Result, error) {
+	return service.recovery.Recover()
+}
+
 func (service Service) Apply(
 	plan ReviewedPlan,
 ) (executor.Result, error) {
@@ -96,7 +101,7 @@ func (service Service) Apply(
 	if err != nil {
 		return recovered, fmt.Errorf("recover before apply: %w", err)
 	}
-	applied, err := service.applyReviewed(plan)
+	applied, err := service.applyReviewed(plan, false)
 	applied.Warnings = append(recovered.Warnings, applied.Warnings...)
 	return applied, err
 }
@@ -118,11 +123,12 @@ func (service Service) ApplyCredentials(
 			"plan contains changes outside credential metadata",
 		)
 	}
-	return service.Apply(plan)
+	return service.applyReviewed(plan, true)
 }
 
 func (service Service) applyReviewed(
 	plan ReviewedPlan,
+	withoutRecovery bool,
 ) (result executor.Result, err error) {
 	request := cloneRequest(plan.request)
 	refresher := requestRefresher{snapshots: service.snapshots, request: request}
@@ -145,7 +151,11 @@ func (service Service) applyReviewed(
 		}
 		result.Warnings = append(result.Warnings, wrapped.Error())
 	}()
-	return session.Apply(cloneExecutable(plan.executable))
+	executable := cloneExecutable(plan.executable)
+	if withoutRecovery {
+		return session.ApplyWithoutRecovery(executable)
+	}
+	return session.Apply(executable)
 }
 
 func (plan ReviewedPlan) Request() Request {

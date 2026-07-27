@@ -13,6 +13,8 @@ import (
 type CredentialState struct {
 	Definitions credentialcatalog.Definitions
 	Instances   credentialcatalog.Instances
+	Recovered   bool
+	Warnings    []string
 }
 
 func Run(

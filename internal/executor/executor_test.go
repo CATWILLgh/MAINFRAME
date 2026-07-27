@@ -86,6 +86,23 @@ func TestApplyDeniesConcurrentTransaction(t *testing.T) {
 	}
 }
 
+func TestApplyWithoutRecoveryRejectsPendingJournalBeforeRefresh(t *testing.T) {
+	preview := testPreview("release", "digest", []domain.ComponentID{"codex"})
+	fixture := newFixture(preview)
+	fixture.store.journal = &Journal{}
+
+	_, err := fixture.executor().ApplyWithoutRecovery(preview)
+
+	if err == nil || !strings.Contains(err.Error(), "unfinished transaction") {
+		t.Fatalf("pending journal error = %v", err)
+	}
+	if fixture.refresher.calls != 0 ||
+		fixture.workspace.writeCount() != 0 ||
+		fixture.store.cleanupCalls != 0 {
+		t.Fatal("credential-safe apply recovered or continued past pending state")
+	}
+}
+
 func TestApplyReportsUnlockFailureAfterCommitAsWarning(t *testing.T) {
 	preview := testPreview("release", "digest", []domain.ComponentID{"codex"})
 	fixture := newFixture(preview)

@@ -36,7 +36,11 @@ type credentialReviewedPlan interface {
 }
 
 type credentialPlanApplier interface {
-	ApplyCredentialPlan(ReviewedPlan) error
+	ApplyCredentialPlan(ReviewedPlan) (CredentialApplyResult, error)
+}
+
+type CredentialApplyResult struct {
+	Warnings []string
 }
 
 func (model *Model) openCredentials() (*Model, tea.Cmd) {

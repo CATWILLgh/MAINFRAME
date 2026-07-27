@@ -26,6 +26,29 @@ func TestCredentialServicesAreAvailableWithoutSelectedEnvironment(t *testing.T) 
 	}
 }
 
+func TestMainMenuReportsStartupRecoveryAndWarnings(t *testing.T) {
+	state := testCredentialState(t)
+	state.Recovered = true
+	state.Warnings = []string{"cleanup needs attention"}
+	model := NewModel(
+		&fakePreviewer{targets: defaultTargets()},
+		testCatalog(t),
+		nil,
+		state,
+	)
+
+	view := model.mainView()
+	for _, text := range []string{
+		"recovered an unfinished earlier operation",
+		"Recovery warnings",
+		"cleanup needs attention",
+	} {
+		if !strings.Contains(view, text) {
+			t.Fatalf("main view does not contain %q:\n%s", text, view)
+		}
+	}
+}
+
 func TestCredentialEditRemainsDraftUntilCompleteReview(t *testing.T) {
 	previewer := &fakePreviewer{targets: defaultTargets()}
 	model := NewModel(
@@ -126,6 +149,18 @@ func TestCredentialOnlyPreviewRequiresExplicitConfirmationBeforeApply(
 	}
 }
 
+func TestAppliedCredentialViewShowsExecutorWarnings(t *testing.T) {
+	model := newTestModel(t, &fakePreviewer{targets: defaultTargets()})
+	model.screen = screenApplied
+	model.appliedWarnings = []string{"transaction cleanup needs attention"}
+
+	view := model.View().Content
+	if !strings.Contains(view, "Completed with warnings") ||
+		!strings.Contains(view, "transaction cleanup needs attention") {
+		t.Fatalf("apply warnings are absent:\n%s", view)
+	}
+}
+
 func TestMixedPreviewCannotOpenCredentialApplyConfirmation(t *testing.T) {
 	state := testCredentialState(t)
 	instance := state.Instances.All()[0]
@@ -167,9 +202,9 @@ func (reviewer *credentialTUIReviewer) Review(
 
 func (reviewer *credentialTUIReviewer) ApplyCredentialPlan(
 	ReviewedPlan,
-) error {
+) (CredentialApplyResult, error) {
 	reviewer.applies++
-	return nil
+	return CredentialApplyResult{}, nil
 }
 
 type credentialTUIPlan struct {

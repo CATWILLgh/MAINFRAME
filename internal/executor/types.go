@@ -19,7 +19,8 @@ type Preview struct {
 }
 
 type Result struct {
-	Warnings []string
+	Warnings  []string
+	Recovered bool
 }
 
 type Lock interface {

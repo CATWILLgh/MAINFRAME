@@ -66,6 +66,9 @@ type Model struct {
 	activeCredential           credentialcatalog.InstanceID
 	credentialDraft            credentialInstanceDraft
 	applyConfirmed             bool
+	appliedWarnings            []string
+	startupRecovered           bool
+	startupWarnings            []string
 	statsGeneration            uint64
 	err                        error
 }
@@ -96,6 +99,11 @@ func NewModel(
 	if len(credentialStates) > 0 {
 		model.credentialDefinitions = credentialStates[0].Definitions
 		model.credentialInstances = credentialStates[0].Instances.Clone()
+		model.startupRecovered = credentialStates[0].Recovered
+		model.startupWarnings = append(
+			[]string(nil),
+			credentialStates[0].Warnings...,
+		)
 	}
 	model.form = mainMenuForm(model)
 	return model
@@ -312,19 +320,6 @@ func selectionForm(targets []lifecycle.Target, selected *[]domain.ComponentID) *
 		Filterable(false).
 		Value(selected)
 	return huh.NewForm(huh.NewGroup(field)).WithShowHelp(false)
-}
-
-func operationsByKind(
-	operations []domain.Operation,
-	kind domain.OperationKind,
-) []domain.Operation {
-	filtered := make([]domain.Operation, 0)
-	for _, operation := range operations {
-		if operation.Kind == kind {
-			filtered = append(filtered, operation)
-		}
-	}
-	return filtered
 }
 
 func renderOperations(title string, operations []domain.Operation) string {

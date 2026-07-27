@@ -152,6 +152,58 @@ func TestApplyCredentialsRejectsMixedPlanBeforeRecovery(t *testing.T) {
 	}
 }
 
+func TestApplyCredentialsUsesNonRecoveringExecutorPath(t *testing.T) {
+	definitions := applicationCredentialDefinitions(t)
+	credentialSnapshot, err := credentialcatalog.ObserveInstances(
+		applicationCredentialHost{},
+		definitions,
+	)
+	if err != nil {
+		t.Fatalf("ObserveInstances() error = %v", err)
+	}
+	snapshot := testSnapshot(t)
+	snapshot.Credentials = &credentialSnapshot
+	session := &fakeApplySession{}
+	apply := &fakeApplyExecutorFactory{session: session}
+	recovery := &fakeRecoveryExecutorFactory{
+		session: &fakeRecoverySession{},
+	}
+	service, err := New(
+		&fakeSnapshotBuilder{snapshots: []Snapshot{snapshot}},
+		apply,
+		recovery,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	desired, err := credentialcatalog.BuildInstances(
+		[]credentialcatalog.Instance{applicationCredentialInstance()},
+		definitions,
+	)
+	if err != nil {
+		t.Fatalf("BuildInstances() error = %v", err)
+	}
+	reviewed, err := service.Review(
+		Request{CredentialInstances: &desired},
+	)
+	if err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+
+	if _, err := service.ApplyCredentials(reviewed); err != nil {
+		t.Fatalf("ApplyCredentials() error = %v", err)
+	}
+	if recovery.opens != 0 || session.nonRecoveringApplies != 1 ||
+		session.applies != 0 {
+		t.Fatalf(
+			"recovery/apply paths = %d/%d/%d",
+			recovery.opens,
+			session.nonRecoveringApplies,
+			session.applies,
+		)
+	}
+}
+
 func TestReviewRequiresCredentialSnapshotForCredentialIntent(t *testing.T) {
 	service, err := New(
 		&fakeSnapshotBuilder{snapshots: []Snapshot{testSnapshot(t)}},

@@ -3,7 +3,6 @@ package executor
 import (
 	"errors"
 	"fmt"
-	"reflect"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
@@ -43,25 +42,6 @@ func NewWithConfiguration(
 	executor := New(locker, store, refresher, workspace)
 	executor.configurations = configurations
 	return executor
-}
-
-func (executor Executor) Apply(preview Preview) (Result, error) {
-	return executor.withLock(func() (Result, error) {
-		if _, err := executor.recoverLocked(); err != nil {
-			return Result{}, fmt.Errorf("recover unfinished transaction: %w", err)
-		}
-		fresh, err := executor.refresher.Refresh(append([]domain.ComponentID(nil), preview.Desired...))
-		if err != nil {
-			return Result{}, fmt.Errorf("refresh preview: %w", err)
-		}
-		if !reflect.DeepEqual(preview, fresh) {
-			return Result{}, errors.New("preview changed; review the fresh plan before applying")
-		}
-		if err := validatePreview(fresh); err != nil {
-			return Result{}, err
-		}
-		return executor.execute(fresh)
-	})
 }
 
 func (executor Executor) Recover() (Result, error) {
