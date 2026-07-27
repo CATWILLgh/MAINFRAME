@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -170,10 +172,48 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
         XDG_CONFIG_HOME=str(home / ".config"),
         XDG_STATE_HOME=str(home / ".local/state"),
     )
+    _assert_embedded_cli_guidance(binary, sandbox, env)
     _assert_tui_launch(binary, sandbox, env)
     assert_adapter_plans(binary, output, sandbox, env)
     assert_adapter_lifecycle_plans(binary, output, sandbox, env)
     _assert_no_publication_residue(output)
+
+
+def _assert_embedded_cli_guidance(
+    binary: Path,
+    sandbox: Path,
+    env: dict[str, str],
+) -> None:
+    standalone = sandbox / "standalone-mainframe"
+    shutil.copy2(binary, standalone)
+    detached_env = dict(env, MAINFRAME_RELEASE_ROOT="/does/not/exist")
+    checks = [
+        (["--help"], "written only after a final preview and confirmation"),
+        (["docs", "list"], "agent-automation"),
+        (["docs", "show", "overview"], "# MAINFRAME overview"),
+    ]
+    for args, expected in checks:
+        result = subprocess.run(
+            [str(standalone), *args],
+            text=True,
+            capture_output=True,
+            env=detached_env,
+            check=True,
+            timeout=10,
+        )
+        assert result.stderr == ""
+        assert expected in result.stdout
+    capabilities = subprocess.run(
+        [str(standalone), "capabilities", "--json"],
+        text=True,
+        capture_output=True,
+        env=detached_env,
+        check=True,
+        timeout=10,
+    )
+    contract = json.loads(capabilities.stdout)
+    assert contract["schema_version"] == 1
+    assert contract["kind"] == "mainframe-capabilities"
 
 
 def _assert_secret_help(output: Path) -> None:

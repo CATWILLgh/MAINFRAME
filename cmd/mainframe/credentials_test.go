@@ -314,7 +314,7 @@ func TestCredentialsCommandRejectsArguments(t *testing.T) {
 	)
 	if exitCode != 2 ||
 		stderr.String() !=
-			"credentials: expected no arguments, uses NAME, instance review, or instance apply --confirm DIGEST\n" {
+			"unknown command; run mainframe --help\n" {
 		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
 	}
 }

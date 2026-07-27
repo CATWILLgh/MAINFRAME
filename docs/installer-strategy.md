@@ -303,6 +303,37 @@ Create and edit never imply deletion, and an edit cannot change instance
 identity or service. Secret entry remains a direct human action rather than an
 agent-visible payload.
 
+### Self-describing command interface
+
+The installed `mainframe` executable is the discovery source for both people
+and agents. Adapter instructions may tell an agent to inspect the executable,
+but they must not duplicate its command grammar or operational guidance.
+
+- `mainframe --help`, `mainframe help [command ...]`, and contextual `--help`
+  provide concise human syntax.
+- `mainframe docs list` and `mainframe docs show <topic>` expose the detailed
+  documentation embedded in that exact executable.
+- `mainframe capabilities --json` exposes a dedicated, versioned, deterministic
+  machine contract for command syntax, input and output channels, write
+  effects, confirmation requirements, and documentation topics.
+
+One declarative command registry owns executable dispatch and supplies both
+help and the public capability response. The capability response uses
+dedicated public types rather than serializing the registry itself. Embedded
+documentation metadata references registered command IDs and is validated
+against the same registry.
+
+Help, documentation, and capability discovery do not resolve a release root,
+inspect adapters, or read credential state. They therefore remain available
+when the executable is copied outside a release tree. Operational commands
+retain the normal immutable-release validation boundary. Running `mainframe`
+without arguments still opens the TUI directly.
+
+Documentation is embedded rather than published as loose runtime files. The
+CLI binary is already an integrity-indexed release payload, so this keeps the
+executable, its human guidance, and its agent contract on one version without
+adding a second runtime lookup.
+
 Context7 is the first reference catalog entry. Its
 [maintained repository](https://github.com/upstash/context7#installation)
 describes an API key as recommended for higher rate limits rather than a

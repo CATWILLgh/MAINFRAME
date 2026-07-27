@@ -44,34 +44,22 @@ func runWithPreview(
 	output, errorOutput io.Writer,
 	launchPreview previewLauncher,
 ) int {
-	if len(args) == 0 {
-		if err := launchPreview(input, output); err != nil {
-			fmt.Fprintf(errorOutput, "preview: %v\n", err)
-			return 1
+	if path, requested := helpPath(args); requested {
+		if err := renderCommandHelp(path, output); err != nil {
+			fmt.Fprintln(errorOutput, err)
+			return 2
 		}
 		return 0
 	}
-	if args[0] == "credentials" {
-		return runCredentialsCommand(
-			args[1:],
-			input,
-			output,
-			errorOutput,
-		)
+	context := commandContext{
+		input: input, output: output, errorOutput: errorOutput,
+		launchPreview: launchPreview,
 	}
-	if len(args) != 1 || args[0] != "plan" {
-		fmt.Fprintf(
-			errorOutput,
-			"unknown command %q; expected credentials, plan, or no arguments\n",
-			args[0],
-		)
-		return 2
+	if exitCode, matched := dispatchRegisteredCommand(args, context); matched {
+		return exitCode
 	}
-	if err := runPlan(input, output); err != nil {
-		fmt.Fprintf(errorOutput, "plan: %v\n", err)
-		return 1
-	}
-	return 0
+	fmt.Fprintln(errorOutput, "unknown command; run mainframe --help")
+	return 2
 }
 
 func runPlan(input io.Reader, output io.Writer) error {

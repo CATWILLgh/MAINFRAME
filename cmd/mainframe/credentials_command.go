@@ -14,44 +14,6 @@ var credentialConfirmationPattern = regexp.MustCompile(
 	`^sha256:[0-9a-f]{64}$`,
 )
 
-func runCredentialsCommand(
-	args []string,
-	input io.Reader,
-	output, errorOutput io.Writer,
-) int {
-	if len(args) == 0 {
-		if err := runCredentials(output); err != nil {
-			fmt.Fprintf(errorOutput, "credentials: %v\n", err)
-			return 1
-		}
-		return 0
-	}
-	if len(args) == 2 && args[0] == "uses" {
-		return runCredentialUsesCommand(args[1], output, errorOutput)
-	}
-	if len(args) == 2 &&
-		args[0] == "instance" &&
-		args[1] == "review" {
-		return runCredentialReviewCommand(input, output, errorOutput)
-	}
-	if len(args) == 4 &&
-		args[0] == "instance" &&
-		args[1] == "apply" &&
-		args[2] == "--confirm" {
-		return runCredentialApplyCommand(
-			args[3],
-			input,
-			output,
-			errorOutput,
-		)
-	}
-	fmt.Fprintln(
-		errorOutput,
-		"credentials: expected no arguments, uses NAME, instance review, or instance apply --confirm DIGEST",
-	)
-	return 2
-}
-
 func runCredentialUsesCommand(
 	name string,
 	output, errorOutput io.Writer,
