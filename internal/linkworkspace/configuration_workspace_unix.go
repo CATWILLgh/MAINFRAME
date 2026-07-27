@@ -76,8 +76,12 @@ func inspectConfigurationAt(
 			errors.New("configuration changed while being inspected"),
 		)
 	}
+	opened, err := identityFromFD(fd, after)
+	if err != nil {
+		return executor.ConfigurationState{}, err
+	}
 	named, _, err := identityAt(parentFD, name)
-	if err != nil || named != identityOfStat(after) {
+	if err != nil || named != opened {
 		return executor.ConfigurationState{}, errors.Join(
 			err,
 			errors.New("configuration name changed while being inspected"),
@@ -88,7 +92,7 @@ func inspectConfigurationAt(
 		SHA256: hex.EncodeToString(hash.Sum(nil)),
 		Mode:   uint32(after.Mode) & 0o777,
 		Parent: parent,
-		Entry:  identityOfStat(after),
+		Entry:  opened,
 	}, nil
 }
 

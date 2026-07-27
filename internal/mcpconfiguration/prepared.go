@@ -299,6 +299,8 @@ func mcpBeforeImage(snapshot mcpFileSnapshot) configuration.BeforeImage {
 	return configuration.BeforeImage{
 		Exists: true, SHA256: hex.EncodeToString(digest[:]),
 		Mode: snapshot.mode, Device: snapshot.device, Inode: snapshot.inode,
+		BirthSeconds:     snapshot.birthSeconds,
+		BirthNanoseconds: snapshot.birthNanoseconds,
 	}
 }
 
@@ -306,7 +308,11 @@ func mcpPreparedMode(snapshot mcpFileSnapshot) (uint32, error) {
 	if !snapshot.present {
 		return 0o600, nil
 	}
-	if snapshot.device == 0 || snapshot.inode == 0 || snapshot.mode&0o400 == 0 {
+	if snapshot.device == 0 || snapshot.inode == 0 ||
+		snapshot.birthSeconds <= 0 ||
+		snapshot.birthNanoseconds < 0 ||
+		snapshot.birthNanoseconds >= 1_000_000_000 ||
+		snapshot.mode&0o400 == 0 {
 		return 0, fmt.Errorf("existing MCP target metadata is incomplete or unsafe")
 	}
 	return snapshot.mode & 0o600, nil

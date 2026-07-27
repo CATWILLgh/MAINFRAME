@@ -316,6 +316,7 @@ func preparedBasePlan(
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: hex.EncodeToString(digest[:]),
 				Mode: 0o644, Device: 7, Inode: 101,
+				BirthSeconds: 102,
 			},
 			After: configuration.AfterImage{
 				Exists:  true,

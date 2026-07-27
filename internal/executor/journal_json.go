@@ -46,7 +46,11 @@ func decodeJournal(payload []byte) (Journal, error) {
 	if err != nil {
 		return Journal{}, err
 	}
-	if err := requireJournalShape(payload, true); err != nil {
+	payload, err = upgradeV3Journal(payload)
+	if err != nil {
+		return Journal{}, err
+	}
+	if err := requireJournalShape(payload, CurrentJournalSchemaVersion); err != nil {
 		return Journal{}, err
 	}
 	journal, err := decodeJournalPayload(payload)
@@ -135,7 +139,7 @@ func expectJSONEnd(decoder *json.Decoder) error {
 	return nil
 }
 
-func requireJournalShape(payload []byte, current bool) error {
+func requireJournalShape(payload []byte, schemaVersion int) error {
 	root, err := requiredObject(
 		payload,
 		"schema_version", "release", "desired", "status", "plan", "roots",
@@ -159,19 +163,22 @@ func requireJournalShape(payload []byte, current bool) error {
 	if err := requireOperationsShape(plan["operations"]); err != nil {
 		return err
 	}
-	if err := requireRootsShape(root["roots"]); err != nil {
+	if err := requireRootsShape(root["roots"], schemaVersion); err != nil {
 		return err
 	}
-	if err := requireConfigurationsShape(root["configurations"], current); err != nil {
+	if err := requireConfigurationsShape(
+		root["configurations"],
+		schemaVersion,
+	); err != nil {
 		return err
 	}
-	if err := requireDirectoriesShape(root["directories"]); err != nil {
+	if err := requireDirectoriesShape(root["directories"], schemaVersion); err != nil {
 		return err
 	}
-	return requireStepsShape(root["steps"])
+	return requireStepsShape(root["steps"], schemaVersion)
 }
 
-func requireStepsShape(payload []byte) error {
+func requireStepsShape(payload []byte, schemaVersion int) error {
 	var steps []json.RawMessage
 	if err := json.Unmarshal(payload, &steps); err != nil {
 		return fmt.Errorf("steps: %w", err)
@@ -190,9 +197,9 @@ func requireStepsShape(payload []byte) error {
 			"location":        {"root", "path"},
 			"before":          {"exists", "raw_target", "entry"},
 			"after":           {"exists", "raw_target", "entry"},
-			"parent":          {"device", "inode"},
+			"parent":          identityFields(schemaVersion),
 			"private":         {"name", "identity"},
-			"staged_identity": {"device", "inode"},
+			"staged_identity": identityFields(schemaVersion),
 		} {
 			if _, err := requiredObject(step[name], fields...); err != nil {
 				return fmt.Errorf("step %d %s: %w", index, name, err)
@@ -203,7 +210,10 @@ func requireStepsShape(payload []byte) error {
 			if err := json.Unmarshal(step[name], &image); err != nil {
 				return fmt.Errorf("step %d %s: %w", index, name, err)
 			}
-			if _, err := requiredObject(image["entry"], "device", "inode"); err != nil {
+			if _, err := requiredObject(
+				image["entry"],
+				identityFields(schemaVersion)...,
+			); err != nil {
 				return fmt.Errorf("step %d %s entry: %w", index, name, err)
 			}
 		}
@@ -211,7 +221,10 @@ func requireStepsShape(payload []byte) error {
 		if err := json.Unmarshal(step["private"], &private); err != nil {
 			return fmt.Errorf("step %d private: %w", index, err)
 		}
-		if _, err := requiredObject(private["identity"], "device", "inode"); err != nil {
+		if _, err := requiredObject(
+			private["identity"],
+			identityFields(schemaVersion)...,
+		); err != nil {
 			return fmt.Errorf("step %d private identity: %w", index, err)
 		}
 	}
@@ -242,7 +255,7 @@ func requireOperationsShape(payload []byte) error {
 	return nil
 }
 
-func requireRootsShape(payload []byte) error {
+func requireRootsShape(payload []byte, schemaVersion int) error {
 	var roots []json.RawMessage
 	if err := json.Unmarshal(payload, &roots); err != nil {
 		return fmt.Errorf("roots: %w", err)
@@ -255,14 +268,17 @@ func requireRootsShape(payload []byte) error {
 		if err != nil {
 			return fmt.Errorf("root %d: %w", index, err)
 		}
-		if _, err := requiredObject(root["anchor_identity"], "device", "inode"); err != nil {
+		if _, err := requiredObject(
+			root["anchor_identity"],
+			identityFields(schemaVersion)...,
+		); err != nil {
 			return fmt.Errorf("root %d anchor identity: %w", index, err)
 		}
 	}
 	return nil
 }
 
-func requireDirectoriesShape(payload []byte) error {
+func requireDirectoriesShape(payload []byte, schemaVersion int) error {
 	var directories []json.RawMessage
 	if err := json.Unmarshal(payload, &directories); err != nil {
 		return fmt.Errorf("directories: %w", err)
@@ -277,8 +293,8 @@ func requireDirectoriesShape(payload []byte) error {
 		}
 		for name, fields := range map[string][]string{
 			"target": {"root", "path"},
-			"parent": {"device", "inode"},
-			"entry":  {"device", "inode"},
+			"parent": identityFields(schemaVersion),
+			"entry":  identityFields(schemaVersion),
 		} {
 			if _, err := requiredObject(directory[name], fields...); err != nil {
 				return fmt.Errorf("directory %d %s: %w", index, name, err)
@@ -286,6 +302,14 @@ func requireDirectoriesShape(payload []byte) error {
 		}
 	}
 	return nil
+}
+
+func identityFields(schemaVersion int) []string {
+	fields := []string{"device", "inode"}
+	if schemaVersion >= 4 {
+		fields = append(fields, "birth_seconds", "birth_nanoseconds")
+	}
+	return fields
 }
 
 func requiredObject(payload []byte, fields ...string) (map[string]json.RawMessage, error) {

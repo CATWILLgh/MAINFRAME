@@ -164,6 +164,9 @@ func invalidJournalCases() []struct {
 		{name: "invalid path", mutate: func(journal *Journal) { journal.Steps[0].Location.Path = "../escape" }},
 		{name: "invalid raw target", mutate: func(journal *Journal) { journal.Steps[0].After.RawTarget = "bad\nlink" }},
 		{name: "invalid parent", mutate: func(journal *Journal) { journal.Steps[0].Parent.Inode = 0 }},
+		{name: "incomplete parent identity", mutate: func(journal *Journal) {
+			journal.Steps[0].Parent.BirthSeconds = 0
+		}},
 		{name: "unsafe private name", mutate: func(journal *Journal) {
 			journal.Steps[0].Private.Name = "../escape"
 		}},
@@ -202,7 +205,7 @@ func journalWith(status TransactionStatus, steps ...JournalMutation) *Journal {
 		roots = append(roots, RootSnapshot{
 			Root:           domain.RootCodexConfig,
 			AnchorPath:     "/home/user",
-			AnchorIdentity: FileIdentity{Device: 1, Inode: 1},
+			AnchorIdentity: testIdentity(1, 1),
 			RootPath:       ".codex-config",
 		})
 	}
@@ -232,16 +235,16 @@ func installJournalStep(path domain.ArtifactPath, phase StepPhase) JournalMutati
 		SourcePath: domain.ArtifactPath("source/" + string(path)),
 		Before:     LinkImage{},
 		After:      LinkImage{Exists: true, RawTarget: "source/" + string(path)},
-		Parent:     FileIdentity{Device: 1, Inode: 1},
+		Parent:     testIdentity(1, 1),
 		Private: PrivateDirectory{
 			Name:     ".mainframe-" + testDigest(string(path))[:32],
-			Identity: FileIdentity{Device: 1, Inode: 10},
+			Identity: testIdentity(1, 10),
 		},
 		StagedName: "staged",
 		Phase:      phase,
 	}
 	if phase != StepPrepared {
-		step.StagedIdentity = FileIdentity{Device: 1, Inode: 2}
+		step.StagedIdentity = testIdentity(1, 2)
 	}
 	if phase == StepPublished {
 		step.After.Entry = step.StagedIdentity

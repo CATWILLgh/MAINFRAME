@@ -16,6 +16,10 @@ type Namespace struct {
 	roots      discovery.Roots
 }
 
+type namespaceFilesystem struct {
+	fs.ReadLinkFS
+}
+
 func Open(layout hostlayout.Layout) (Namespace, error) {
 	filesystem, ok := os.DirFS("/").(fs.ReadLinkFS)
 	if !ok {
@@ -30,11 +34,31 @@ func Open(layout hostlayout.Layout) (Namespace, error) {
 		return Namespace{}, err
 	}
 	return Namespace{
-		filesystem: filesystem,
+		filesystem: namespaceFilesystem{ReadLinkFS: filesystem},
 		roots: discovery.Roots{
 			Source:  source,
 			Targets: targets,
 		},
+	}, nil
+}
+
+func (filesystem namespaceFilesystem) StableLinkIdentity(
+	name string,
+	info fs.FileInfo,
+) (domain.LinkIdentity, error) {
+	entry, err := inspectNoFollow("/", name, false)
+	if err != nil {
+		return domain.LinkIdentity{}, err
+	}
+	observed := linkIdentityFromFileInfo(info)
+	if observed.Device != entry.Device || observed.Inode != entry.Inode {
+		return domain.LinkIdentity{}, fmt.Errorf("link identity changed during discovery")
+	}
+	return domain.LinkIdentity{
+		Device:           entry.Device,
+		Inode:            entry.Inode,
+		BirthSeconds:     entry.BirthSeconds,
+		BirthNanoseconds: entry.BirthNanoseconds,
 	}, nil
 }
 

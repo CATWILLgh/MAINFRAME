@@ -34,18 +34,59 @@ func upgradeV2Journal(payload []byte) ([]byte, error) {
 	if string(root["schema_version"]) != "2" {
 		return payload, nil
 	}
-	if err := requireJournalShape(payload, false); err != nil {
+	if err := requireJournalShape(payload, 2); err != nil {
 		return nil, err
 	}
 	journal, err := decodeJournalPayload(payload)
 	if err != nil {
 		return nil, err
 	}
+	if journalHasPersistedIdentity(journal) {
+		return nil, legacyIdentityError(2)
+	}
 	if err := validateV2Journal(&journal); err != nil {
 		return nil, err
 	}
+	journal.SchemaVersion = 3
+	return json.Marshal(journal)
+}
+
+func upgradeV3Journal(payload []byte) ([]byte, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &root); err != nil {
+		return nil, err
+	}
+	if string(root["schema_version"]) != "3" {
+		return payload, nil
+	}
+	if err := requireJournalShape(payload, 3); err != nil {
+		return nil, err
+	}
+	journal, err := decodeJournalPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	if journalHasPersistedIdentity(journal) {
+		return nil, legacyIdentityError(3)
+	}
 	journal.SchemaVersion = CurrentJournalSchemaVersion
 	return json.Marshal(journal)
+}
+
+func journalHasPersistedIdentity(journal Journal) bool {
+	return len(journal.Roots) != 0 ||
+		len(journal.Configurations) != 0 ||
+		len(journal.Directories) != 0 ||
+		len(journal.Steps) != 0
+}
+
+func legacyIdentityError(schemaVersion int) error {
+	return fmt.Errorf(
+		"schema %d identity cannot be recovered safely; preserve transaction.json "+
+			"and recover it with a schema-%d-compatible mainframe binary",
+		schemaVersion,
+		schemaVersion,
+	)
 }
 
 func validateV2Journal(journal *Journal) error {
@@ -73,7 +114,7 @@ func exactLegacyJournalFields(root map[string]json.RawMessage) bool {
 	return true
 }
 
-func requireConfigurationsShape(payload []byte, current bool) error {
+func requireConfigurationsShape(payload []byte, schemaVersion int) error {
 	var transitions []json.RawMessage
 	if err := json.Unmarshal(payload, &transitions); err != nil {
 		return fmt.Errorf("configurations: %w", err)
@@ -93,7 +134,7 @@ func requireConfigurationsShape(payload []byte, current bool) error {
 		if err := requireConfigurationMutationsShape(
 			index,
 			transition["mutations"],
-			current,
+			schemaVersion,
 		); err != nil {
 			return err
 		}
@@ -104,7 +145,7 @@ func requireConfigurationsShape(payload []byte, current bool) error {
 func requireConfigurationMutationsShape(
 	transitionIndex int,
 	payload []byte,
-	current bool,
+	schemaVersion int,
 ) error {
 	var mutations []json.RawMessage
 	if err := json.Unmarshal(payload, &mutations); err != nil {
@@ -115,7 +156,10 @@ func requireConfigurationMutationsShape(
 		)
 	}
 	for index, rawMutation := range mutations {
-		if err := requireConfigurationMutationShape(rawMutation, current); err != nil {
+		if err := requireConfigurationMutationShape(
+			rawMutation,
+			schemaVersion,
+		); err != nil {
 			return fmt.Errorf(
 				"configuration %d mutation %d: %w",
 				transitionIndex,
@@ -127,12 +171,12 @@ func requireConfigurationMutationsShape(
 	return nil
 }
 
-func requireConfigurationMutationShape(payload []byte, current bool) error {
+func requireConfigurationMutationShape(payload []byte, schemaVersion int) error {
 	fields := []string{
 		"target", "before", "after", "parent", "private",
 		"staged_name", "staged_identity", "phase", "finalized",
 	}
-	if current {
+	if schemaVersion >= 3 {
 		fields = append([]string{"disposition"}, fields...)
 	}
 	mutation, err := requiredObject(
@@ -146,9 +190,9 @@ func requireConfigurationMutationShape(payload []byte, current bool) error {
 		"target":          {"root", "path"},
 		"before":          {"exists", "sha256", "mode", "entry"},
 		"after":           {"exists", "sha256", "mode", "entry"},
-		"parent":          {"device", "inode"},
+		"parent":          identityFields(schemaVersion),
 		"private":         {"name", "identity"},
-		"staged_identity": {"device", "inode"},
+		"staged_identity": identityFields(schemaVersion),
 	} {
 		if _, err := requiredObject(mutation[name], fields...); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
@@ -159,7 +203,10 @@ func requireConfigurationMutationShape(payload []byte, current bool) error {
 		if err := json.Unmarshal(mutation[name], &image); err != nil {
 			return err
 		}
-		if _, err := requiredObject(image["entry"], "device", "inode"); err != nil {
+		if _, err := requiredObject(
+			image["entry"],
+			identityFields(schemaVersion)...,
+		); err != nil {
 			return fmt.Errorf("%s entry: %w", name, err)
 		}
 	}
@@ -167,7 +214,10 @@ func requireConfigurationMutationShape(payload []byte, current bool) error {
 	if err := json.Unmarshal(mutation["private"], &private); err != nil {
 		return err
 	}
-	if _, err := requiredObject(private["identity"], "device", "inode"); err != nil {
+	if _, err := requiredObject(
+		private["identity"],
+		identityFields(schemaVersion)...,
+	); err != nil {
 		return fmt.Errorf("private identity: %w", err)
 	}
 	return nil

@@ -22,6 +22,11 @@ type preparedRoots struct {
 	targets map[domain.RootID]domain.ArtifactPath
 }
 
+type StableIdentityFS interface {
+	fs.ReadLinkFS
+	StableLinkIdentity(string, fs.FileInfo) (domain.LinkIdentity, error)
+}
+
 func Discover(model installmodel.Model, filesystem fs.ReadLinkFS, roots Roots) (domain.ObservedState, error) {
 	return discover(model, filesystem, roots, nil)
 }
@@ -132,11 +137,16 @@ func inspectArtifact(
 		if registry != nil {
 			claim, claimed := registry.ClaimAt(spec.Target)
 			if claimed && claim.ComponentID == spec.ComponentID && claim.UnitID == spec.UnitID {
-				identity := linkIdentity(info)
+				identity, err := stableLinkIdentity(filesystem, location, info)
+				if err != nil {
+					return domain.Artifact{}, false, err
+				}
 				return domain.Artifact{
 					Location: spec.Target, UnitID: claim.UnitID,
 					Ownership:  domain.OwnershipManagedDrifted,
 					LinkDevice: identity.Device, LinkInode: identity.Inode,
+					LinkBirthSeconds:     identity.BirthSeconds,
+					LinkBirthNanoseconds: identity.BirthNanoseconds,
 				}, true, nil
 			}
 		}
@@ -146,7 +156,11 @@ func inspectArtifact(
 		}
 		return observedArtifact(spec.Target, ownership), true, nil
 	}
-	return inspectLink(filesystem, roots, spec, location, linkIdentity(info), registry)
+	identity, err := stableLinkIdentity(filesystem, location, info)
+	if err != nil {
+		return domain.Artifact{}, false, err
+	}
+	return inspectLink(filesystem, roots, spec, location, identity, registry)
 }
 
 func inspectLink(
@@ -309,6 +323,8 @@ func observedLink(
 	return domain.Artifact{
 		Location: spec.Target, UnitID: spec.UnitID, Ownership: ownership,
 		RawTarget: rawTarget, LinkDevice: identity.Device, LinkInode: identity.Inode,
+		LinkBirthSeconds:     identity.BirthSeconds,
+		LinkBirthNanoseconds: identity.BirthNanoseconds,
 	}
 }
 
@@ -355,11 +371,16 @@ func inspectClaim(
 		return domain.Artifact{}, false, fmt.Errorf("inspect ownership claim %#v: %w", claim.Target, err)
 	}
 	if info.Mode()&fs.ModeSymlink == 0 {
-		identity := linkIdentity(info)
+		identity, identityErr := stableLinkIdentity(filesystem, location, info)
+		if identityErr != nil {
+			return domain.Artifact{}, false, identityErr
+		}
 		return domain.Artifact{
 			Location: claim.Target, UnitID: claim.UnitID,
 			Ownership:  domain.OwnershipManagedDrifted,
 			LinkDevice: identity.Device, LinkInode: identity.Inode,
+			LinkBirthSeconds:     identity.BirthSeconds,
+			LinkBirthNanoseconds: identity.BirthNanoseconds,
 		}, true, nil
 	}
 	rawTarget, err := filesystem.ReadLink(location)
@@ -370,11 +391,28 @@ func inspectClaim(
 	if rawTarget != claim.RawTarget {
 		status = domain.OwnershipManagedDrifted
 	}
+	identity, err := stableLinkIdentity(filesystem, location, info)
+	if err != nil {
+		return domain.Artifact{}, false, err
+	}
 	return domain.Artifact{
 		Location: claim.Target, UnitID: claim.UnitID, Ownership: status,
 		RawTarget:  rawTarget,
-		LinkDevice: linkIdentity(info).Device, LinkInode: linkIdentity(info).Inode,
+		LinkDevice: identity.Device, LinkInode: identity.Inode,
+		LinkBirthSeconds:     identity.BirthSeconds,
+		LinkBirthNanoseconds: identity.BirthNanoseconds,
 	}, true, nil
+}
+
+func stableLinkIdentity(
+	filesystem fs.ReadLinkFS,
+	name string,
+	info fs.FileInfo,
+) (domain.LinkIdentity, error) {
+	if stable, ok := filesystem.(StableIdentityFS); ok {
+		return stable.StableLinkIdentity(name, info)
+	}
+	return linkIdentity(info), nil
 }
 
 func validPath(artifactPath domain.ArtifactPath) bool {

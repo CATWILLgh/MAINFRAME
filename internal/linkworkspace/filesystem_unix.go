@@ -185,7 +185,7 @@ func identityOfFD(fd int) (executor.FileIdentity, error) {
 	if err := unix.Fstat(fd, &stat); err != nil {
 		return executor.FileIdentity{}, err
 	}
-	return identityOfStat(stat), nil
+	return identityFromFD(fd, stat)
 }
 
 func identityAt(parentFD int, name string) (executor.FileIdentity, uint32, error) {
@@ -193,11 +193,8 @@ func identityAt(parentFD int, name string) (executor.FileIdentity, uint32, error
 	if err := unix.Fstatat(parentFD, name, &stat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return executor.FileIdentity{}, 0, err
 	}
-	return identityOfStat(stat), uint32(stat.Mode), nil
-}
-
-func identityOfStat(stat unix.Stat_t) executor.FileIdentity {
-	return executor.FileIdentity{Device: uint64(stat.Dev), Inode: uint64(stat.Ino)}
+	identity, err := identityFromName(parentFD, name, stat)
+	return identity, uint32(stat.Mode), err
 }
 
 func readLinkAt(parentFD int, name string) (string, error) {

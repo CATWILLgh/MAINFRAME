@@ -58,7 +58,7 @@ func (workspace *fakeWorkspace) Inspect(location domain.Location) (LinkState, er
 	}
 	state, exists := workspace.links[location]
 	if !exists {
-		state.Parent = FileIdentity{Device: 1, Inode: 1}
+		state.Parent = testIdentity(1, 1)
 	}
 	return state, nil
 }
@@ -92,7 +92,7 @@ func (workspace *fakeWorkspace) PreparePrivate(
 	if entry == nil {
 		workspace.nextInode++
 		entry = &fakePrivateDirectory{
-			identity: FileIdentity{Device: 1, Inode: 10 + workspace.nextInode},
+			identity: testIdentity(1, 10+workspace.nextInode),
 		}
 		workspace.private[key] = entry
 	}
@@ -113,7 +113,7 @@ func (workspace *fakeWorkspace) StageInstall(mutation WorkspaceMutation) (FileId
 		state := stateOf(
 			LinkImage{
 				Exists: true, RawTarget: mutation.SourceTarget,
-				Entry: FileIdentity{Device: 1, Inode: 100 + workspace.nextInode},
+				Entry: testIdentity(1, 100+workspace.nextInode),
 			},
 			mutation.Parent,
 		)

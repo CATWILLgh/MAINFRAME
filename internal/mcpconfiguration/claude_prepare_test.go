@@ -170,6 +170,7 @@ func TestPrepareClaudeOntoComposesFutureSharedTarget(t *testing.T) {
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: hex.EncodeToString(digest[:]),
 				Mode: 0o644, Device: 9, Inode: 201,
+				BirthSeconds: 202,
 			},
 			After: configuration.AfterImage{
 				Exists: true,

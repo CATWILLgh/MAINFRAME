@@ -40,9 +40,15 @@ func inspectNoFollow(root, relative string, includeContent bool) (Entry, error) 
 		return Entry{}, err
 	}
 	kind := entryKind(uint32(metadata.Mode))
+	identity, err := stableIdentityAt(parent, name, metadata)
+	if err != nil {
+		return Entry{}, err
+	}
 	entry := Entry{
 		Kind: kind, Path: path, Mode: uint32(metadata.Mode) & 0o777,
-		Device: uint64(metadata.Dev), Inode: uint64(metadata.Ino),
+		Device: identity.device, Inode: identity.inode,
+		BirthSeconds:     identity.birthSeconds,
+		BirthNanoseconds: identity.birthNanoseconds,
 	}
 	if kind == EntrySymlink {
 		target, err := inspectSymlinkNoFollow(parent, name, path, metadata)

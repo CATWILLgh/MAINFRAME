@@ -10,6 +10,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"golang.org/x/sys/unix"
 )
 
 func TestCheckReadPreconditionAcceptsExactRelativeSymlink(t *testing.T) {
@@ -146,16 +147,22 @@ func symlinkReadPrecondition(
 	expected string,
 ) configuration.ReadPrecondition {
 	t.Helper()
-	info, err := os.Lstat(fixture.publicPath())
+	parentFD, name, _, err := fixture.workspace.openLocationParent(fixture.location)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stat := info.Sys().(*syscall.Stat_t)
+	defer unix.Close(parentFD)
+	identity, _, err := identityAt(parentFD, name)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return configuration.ReadPrecondition{
 		Kind:               configuration.ReadPreconditionSymlink,
 		Target:             fixture.location,
-		Device:             uint64(stat.Dev),
-		Inode:              uint64(stat.Ino),
+		Device:             identity.Device,
+		Inode:              identity.Inode,
+		BirthSeconds:       identity.BirthSeconds,
+		BirthNanoseconds:   identity.BirthNanoseconds,
 		ExpectedTargetPath: expected,
 	}
 }

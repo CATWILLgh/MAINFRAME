@@ -26,22 +26,14 @@ func TestJournalJSONUpgradesExactLegacyLinkOnlyShape(t *testing.T) {
 	}
 }
 
-func TestJournalJSONUpgradesValidV2ConfigurationToV3(t *testing.T) {
+func TestJournalJSONRejectsIdentityBearingV2Configuration(t *testing.T) {
 	journal := configurationJournalFixture(StepPrivateCreated, TransactionInProgress)
 	journal.SchemaVersion = 2
 	payload := encodeV2JournalFixture(t, journal)
 
-	decoded, err := decodeJournal(payload)
-	if err != nil {
+	if _, err := decodeJournal(payload); err == nil ||
+		!strings.Contains(err.Error(), "schema 2 identity") {
 		t.Fatalf("decodeJournal() error = %v", err)
-	}
-	if decoded.SchemaVersion != 3 {
-		t.Fatalf("schema version = %d, want 3", decoded.SchemaVersion)
-	}
-	got := decoded.Configurations[0].Mutations[0]
-	want := journal.Configurations[0].Mutations[0]
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("upgraded mutation = %#v, want %#v", got, want)
 	}
 }
 
@@ -97,6 +89,7 @@ func encodeV2JournalFixture(t *testing.T, journal Journal) []byte {
 	}
 	return mutateJournalJSON(t, payload, func(root map[string]any) {
 		delete(firstConfigurationMutation(root), "disposition")
+		removeBirthFields(root)
 	})
 }
 
@@ -112,7 +105,7 @@ func TestCurrentInMemoryLinkOnlyJournalEncodesCurrentShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode current fixture: %v", err)
 	}
-	if !strings.Contains(string(payload), `"schema_version":3`) ||
+	if !strings.Contains(string(payload), `"schema_version":4`) ||
 		!strings.Contains(string(payload), `"configurations":[]`) {
 		t.Fatalf("current fixture encoded incorrectly: %s", payload)
 	}
@@ -159,13 +152,69 @@ func TestJournalJSONRejectsExplicitLegacySchemaVersion(t *testing.T) {
 	}
 	explicitVersionZero := strings.Replace(
 		string(payload),
-		`"schema_version":3`,
+		`"schema_version":4`,
 		`"schema_version":0`,
 		1,
 	)
 
 	if _, err := decodeJournal([]byte(explicitVersionZero)); err == nil {
 		t.Fatal("decodeJournal() accepted explicit schema version 0")
+	}
+}
+
+func TestJournalJSONRejectsIdentityBearingV3Journal(t *testing.T) {
+	payload, err := encodeJournal(*journalWith(
+		TransactionInProgress,
+		installJournalStep("one", StepPrepared),
+	))
+	if err != nil {
+		t.Fatalf("encodeJournal() error = %v", err)
+	}
+	payload = encodeV3JournalFixture(t, payload)
+
+	if _, err := decodeJournal(payload); err == nil ||
+		!strings.Contains(err.Error(), "schema 3 identity") {
+		t.Fatalf("decodeJournal() error = %v", err)
+	}
+}
+
+func encodeV3JournalFixture(t *testing.T, payload []byte) []byte {
+	t.Helper()
+	return mutateJournalJSON(t, payload, func(root map[string]any) {
+		root["schema_version"] = float64(3)
+		removeBirthFields(root)
+	})
+}
+
+func removeBirthFields(value any) {
+	switch current := value.(type) {
+	case map[string]any:
+		delete(current, "birth_seconds")
+		delete(current, "birth_nanoseconds")
+		for _, child := range current {
+			removeBirthFields(child)
+		}
+	case []any:
+		for _, child := range current {
+			removeBirthFields(child)
+		}
+	}
+}
+
+func TestJournalJSONUpgradesEmptyV3JournalToV4(t *testing.T) {
+	payload := []byte(fmt.Sprintf(
+		`{"schema_version":3,"release":{"id":"release","index_sha256":"%s"},`+
+			`"desired":[],"status":"committed","plan":{"operations":[]},`+
+			`"roots":[],"configurations":[],"directories":[],"steps":[]}`,
+		testDigest("empty-v3"),
+	))
+
+	journal, err := decodeJournal(payload)
+	if err != nil {
+		t.Fatalf("decodeJournal() error = %v", err)
+	}
+	if journal.SchemaVersion != 4 {
+		t.Fatalf("schema version = %d, want 4", journal.SchemaVersion)
 	}
 }
 
@@ -195,7 +244,7 @@ func TestJournalJSONEncodesCurrentShapeWithoutPreparedBytes(t *testing.T) {
 	}
 	sortStrings(gotFields)
 	if !reflect.DeepEqual(gotFields, wantFields) ||
-		string(root["schema_version"]) != "3" ||
+		string(root["schema_version"]) != "4" ||
 		string(root["configurations"]) == "null" {
 		t.Fatalf("current journal shape = %s", payload)
 	}
@@ -223,6 +272,11 @@ func TestJournalJSONRejectsInexactCurrentConfigurationShapes(t *testing.T) {
 		},
 		"missing mutation field": func(root map[string]any) {
 			delete(firstConfigurationMutation(root), "after")
+		},
+		"missing identity birth": func(root map[string]any) {
+			before := firstConfigurationMutation(root)["before"].(map[string]any)
+			entry := before["entry"].(map[string]any)
+			delete(entry, "birth_seconds")
 		},
 	}
 	for name, mutate := range tests {

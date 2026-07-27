@@ -26,11 +26,13 @@ type ownedMapSnapshot struct {
 }
 
 type fileSnapshot struct {
-	present bool
-	raw     []byte
-	mode    uint32
-	device  uint64
-	inode   uint64
+	present          bool
+	raw              []byte
+	mode             uint32
+	device           uint64
+	inode            uint64
+	birthSeconds     int64
+	birthNanoseconds int64
 }
 
 func Inspect(resources []releasecontract.Resource, host Host) (Inspection, error) {
@@ -161,11 +163,13 @@ func captureFileSnapshots(
 			continue
 		}
 		result[location] = fileSnapshot{
-			present: true,
-			raw:     append([]byte(nil), snapshot.entry.Content...),
-			mode:    snapshot.entry.Mode,
-			device:  snapshot.entry.Device,
-			inode:   snapshot.entry.Inode,
+			present:          true,
+			raw:              append([]byte(nil), snapshot.entry.Content...),
+			mode:             snapshot.entry.Mode,
+			device:           snapshot.entry.Device,
+			inode:            snapshot.entry.Inode,
+			birthSeconds:     snapshot.entry.BirthSeconds,
+			birthNanoseconds: snapshot.entry.BirthNanoseconds,
 		}
 	}
 	return result

@@ -67,8 +67,10 @@ type LinkWorkspace interface {
 }
 
 type FileIdentity struct {
-	Device uint64 `json:"device"`
-	Inode  uint64 `json:"inode"`
+	Device           uint64 `json:"device"`
+	Inode            uint64 `json:"inode"`
+	BirthSeconds     int64  `json:"birth_seconds"`
+	BirthNanoseconds int64  `json:"birth_nanoseconds"`
 }
 
 const ManagedDirectoryMode uint32 = 0o700

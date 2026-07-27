@@ -28,8 +28,10 @@ func (workspace Workspace) CheckReadPrecondition(
 		return fmt.Errorf("inspect read precondition target: %w", err)
 	}
 	expected := executor.FileIdentity{
-		Device: precondition.Device,
-		Inode:  precondition.Inode,
+		Device:           precondition.Device,
+		Inode:            precondition.Inode,
+		BirthSeconds:     precondition.BirthSeconds,
+		BirthNanoseconds: precondition.BirthNanoseconds,
 	}
 	if fileType(beforeMode) != unix.S_IFLNK || before != expected {
 		return errors.New("read precondition target changed")

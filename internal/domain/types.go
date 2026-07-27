@@ -132,17 +132,21 @@ func (location Location) Valid() bool {
 }
 
 type Artifact struct {
-	Location   Location        `json:"location"`
-	UnitID     string          `json:"unit_id,omitempty"`
-	Ownership  OwnershipStatus `json:"ownership,omitempty"`
-	RawTarget  string          `json:"raw_target,omitempty"`
-	LinkDevice uint64          `json:"link_device,omitempty"`
-	LinkInode  uint64          `json:"link_inode,omitempty"`
+	Location             Location        `json:"location"`
+	UnitID               string          `json:"unit_id,omitempty"`
+	Ownership            OwnershipStatus `json:"ownership,omitempty"`
+	RawTarget            string          `json:"raw_target,omitempty"`
+	LinkDevice           uint64          `json:"link_device,omitempty"`
+	LinkInode            uint64          `json:"link_inode,omitempty"`
+	LinkBirthSeconds     int64           `json:"link_birth_seconds,omitempty"`
+	LinkBirthNanoseconds int64           `json:"link_birth_nanoseconds,omitempty"`
 }
 
 type LinkIdentity struct {
-	Device uint64 `json:"device"`
-	Inode  uint64 `json:"inode"`
+	Device           uint64 `json:"device"`
+	Inode            uint64 `json:"inode"`
+	BirthSeconds     int64  `json:"birth_seconds"`
+	BirthNanoseconds int64  `json:"birth_nanoseconds"`
 }
 
 type OwnershipStatus string

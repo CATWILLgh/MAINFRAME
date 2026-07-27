@@ -67,7 +67,7 @@ func directoryJournalFixture() Journal {
 		Plan:          domain.Plan{Operations: []domain.Operation{operation}},
 		Roots: []RootSnapshot{{
 			Root: domain.RootCodexConfig, AnchorPath: "/home/user",
-			AnchorIdentity: FileIdentity{Device: 1, Inode: 1},
+			AnchorIdentity: testIdentity(1, 1),
 			RootPath:       ".codex",
 		}},
 		Directories: []JournalDirectory{
@@ -86,9 +86,9 @@ func publishedDirectory(
 	return JournalDirectory{
 		Target:      DirectoryTarget{Root: domain.RootCodexConfig, Path: target},
 		Mode:        0o700,
-		Parent:      FileIdentity{Device: 1, Inode: parentInode},
+		Parent:      testIdentity(1, parentInode),
 		PrivateName: ".mainframe-" + fixedHex(nameSuffix),
-		Entry:       FileIdentity{Device: 1, Inode: entryInode},
+		Entry:       testIdentity(1, entryInode),
 		Phase:       StepPublished,
 	}
 }

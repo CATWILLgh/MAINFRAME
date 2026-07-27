@@ -60,7 +60,7 @@ func TestPrepareRemovalCreatesPrivateWithoutStagingPayload(t *testing.T) {
 	configurations.public[mutation.Target] = configurationState(
 		mutation.Before.SHA256,
 		mutation.Before.Mode,
-		FileIdentity{Device: 1, Inode: 1},
+		testIdentity(1, 1),
 		mutation.Before.Entry,
 	)
 	journal := Journal{Configurations: prepared.transitions}
@@ -89,8 +89,8 @@ func TestPrepareRemovalRejectsStaleBeforeWithoutPrivateWrite(t *testing.T) {
 	configurations.public[mutation.Target] = configurationState(
 		testDigest("changed"),
 		mutation.Before.Mode,
-		FileIdentity{Device: 1, Inode: 1},
-		FileIdentity{Device: 1, Inode: 99},
+		testIdentity(1, 1),
+		testIdentity(1, 99),
 	)
 	journal := Journal{Configurations: prepared.transitions}
 
@@ -354,11 +354,12 @@ func preparedRemovalPlan(t *testing.T) configuration.PreparedPlan {
 				"mainframe/diagnostics.json",
 			),
 			Before: configuration.BeforeImage{
-				Exists: true,
-				SHA256: testDigest("before"),
-				Mode:   0o600,
-				Device: 1,
-				Inode:  2,
+				Exists:       true,
+				SHA256:       testDigest("before"),
+				Mode:         0o600,
+				Device:       1,
+				Inode:        2,
+				BirthSeconds: 3,
 			},
 			After: configuration.AfterImage{},
 		}},

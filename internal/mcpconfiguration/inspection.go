@@ -46,6 +46,8 @@ type mcpFileSnapshot struct {
 	mode              uint32
 	device            uint64
 	inode             uint64
+	birthSeconds      int64
+	birthNanoseconds  int64
 	problem           string
 }
 
@@ -93,6 +95,8 @@ func (inspection *Inspection) captureFile(location domain.Location, host Host) {
 	snapshot := mcpFileSnapshot{
 		kind: entry.Kind, path: entry.Path, symlinkTargetPath: entry.SymlinkTargetPath,
 		mode: entry.Mode, device: entry.Device, inode: entry.Inode,
+		birthSeconds:     entry.BirthSeconds,
+		birthNanoseconds: entry.BirthNanoseconds,
 	}
 	switch entry.Kind {
 	case hostfs.EntrySymlink:

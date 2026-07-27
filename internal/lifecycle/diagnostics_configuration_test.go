@@ -264,5 +264,6 @@ func lifecycleDiagnosticsEntry(content []byte) hostfs.Entry {
 	return hostfs.Entry{
 		Kind: hostfs.EntryRegular, Content: append([]byte(nil), content...),
 		Mode: 0o600, Device: 1, Inode: 77,
+		BirthSeconds: 78,
 	}
 }

@@ -357,5 +357,8 @@ func (host *fakeHost) Inspect(location domain.Location, includeContent bool) (ho
 	if !exists {
 		return hostfs.Entry{}, fs.ErrNotExist
 	}
+	if entry.Device != 0 && entry.Inode != 0 && entry.BirthSeconds == 0 {
+		entry.BirthSeconds = int64(entry.Inode) + 1
+	}
 	return entry, nil
 }

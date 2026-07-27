@@ -235,6 +235,7 @@ func preparedTransition(resource, path string, inode uint64) configuration.Trans
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: fmt.Sprintf("%x", digest), Mode: 0o600,
 				Device: 7, Inode: inode,
+				BirthSeconds: int64(inode) + 1,
 			},
 			After: configuration.AfterImage{
 				Exists: true, Content: []byte("after"), Mode: 0o600,

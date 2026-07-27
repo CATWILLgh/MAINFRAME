@@ -134,6 +134,8 @@ func (inspection Inspection) antigravityAliasPrecondition() (
 		Target:             antigravityLegacyMCPLocation,
 		Device:             snapshot.legacy.device,
 		Inode:              snapshot.legacy.inode,
+		BirthSeconds:       snapshot.legacy.birthSeconds,
+		BirthNanoseconds:   snapshot.legacy.birthNanoseconds,
 		ExpectedTargetPath: snapshot.legacy.symlinkTargetPath,
 	}, true
 }

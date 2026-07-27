@@ -53,10 +53,7 @@ func TestRecoverAdoptsPrivateDirectoryCreatedBeforeIdentitySave(t *testing.T) {
 		TransactionInProgress,
 	)
 	mutation := journal.Configurations[0].Mutations[0]
-	configurations.private[mutation.Target] = FileIdentity{
-		Device: 1,
-		Inode:  9001,
-	}
+	configurations.private[mutation.Target] = testIdentity(1, 9001)
 	fixture.store.journal = &journal
 
 	if _, err := fixture.configurationExecutor(configurations).Recover(); err != nil {

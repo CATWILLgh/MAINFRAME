@@ -15,11 +15,13 @@ import (
 const privateConfigurationMode uint32 = 0o600
 
 type BeforeImage struct {
-	Exists bool
-	SHA256 string
-	Mode   uint32
-	Device uint64
-	Inode  uint64
+	Exists           bool
+	SHA256           string
+	Mode             uint32
+	Device           uint64
+	Inode            uint64
+	BirthSeconds     int64
+	BirthNanoseconds int64
 }
 
 type AfterImage struct {
@@ -56,6 +58,8 @@ type ReadPrecondition struct {
 	Target             domain.Location
 	Device             uint64
 	Inode              uint64
+	BirthSeconds       int64
+	BirthNanoseconds   int64
 	ExpectedTargetPath string
 }
 
@@ -336,6 +340,8 @@ func beforeImage(snapshot fileSnapshot) BeforeImage {
 	return BeforeImage{
 		Exists: true, SHA256: hex.EncodeToString(digest[:]),
 		Mode: snapshot.mode, Device: snapshot.device, Inode: snapshot.inode,
+		BirthSeconds:     snapshot.birthSeconds,
+		BirthNanoseconds: snapshot.birthNanoseconds,
 	}
 }
 
@@ -344,6 +350,9 @@ func preparedMode(snapshot fileSnapshot) (uint32, error) {
 		return privateConfigurationMode, nil
 	}
 	if snapshot.device == 0 || snapshot.inode == 0 ||
+		snapshot.birthSeconds <= 0 ||
+		snapshot.birthNanoseconds < 0 ||
+		snapshot.birthNanoseconds >= 1_000_000_000 ||
 		snapshot.mode&0o400 == 0 {
 		return 0, fmt.Errorf("existing target metadata is incomplete or unsafe")
 	}

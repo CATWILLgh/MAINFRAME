@@ -29,7 +29,7 @@ func (workspace *fakeWorkspace) PlanDirectories(plan domain.Plan) (DirectoryPlan
 		result.Roots = append(result.Roots, RootSnapshot{
 			Root:           root,
 			AnchorPath:     "/home/user",
-			AnchorIdentity: FileIdentity{Device: 1, Inode: 1},
+			AnchorIdentity: testIdentity(1, 1),
 			RootPath:       fakeRootPath(root),
 		})
 	}
@@ -81,7 +81,7 @@ func (workspace *fakeWorkspace) StageDirectory(
 		return identity, nil
 	}
 	workspace.nextInode++
-	identity := FileIdentity{Device: 1, Inode: 300 + workspace.nextInode}
+	identity := testIdentity(1, 300+workspace.nextInode)
 	workspace.privateDirectories[mutation.PrivateName] = identity
 	return identity, nil
 }

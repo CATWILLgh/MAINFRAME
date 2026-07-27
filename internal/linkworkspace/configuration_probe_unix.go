@@ -269,8 +269,12 @@ func verifyConfigurationProbe(
 			errors.New("configuration capability probe changed"),
 		)
 	}
+	opened, err := identityFromFD(fd, after)
+	if err != nil {
+		return err
+	}
 	named, _, err := identityAt(directory, name)
-	if err != nil || named != identityOfStat(after) {
+	if err != nil || named != opened {
 		return errors.Join(
 			err,
 			errors.New("configuration capability probe name changed"),

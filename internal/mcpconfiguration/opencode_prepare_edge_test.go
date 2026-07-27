@@ -131,18 +131,27 @@ func TestPrepareOpenCodeOntoRejectsEveryBeforeImageMismatch(t *testing.T) {
 		"digest": {
 			Exists: true, SHA256: openCodeDigest([]byte(`{"different":true}`)),
 			Mode: 0o644, Device: 7, Inode: 101,
+			BirthSeconds: 102,
 		},
 		"mode": {
 			Exists: true, SHA256: exact.SHA256,
 			Mode: 0o400, Device: 7, Inode: 101,
+			BirthSeconds: 102,
 		},
 		"device": {
 			Exists: true, SHA256: exact.SHA256,
 			Mode: 0o644, Device: 8, Inode: 101,
+			BirthSeconds: 102,
 		},
 		"inode": {
 			Exists: true, SHA256: exact.SHA256,
 			Mode: 0o644, Device: 7, Inode: 202,
+			BirthSeconds: 102,
+		},
+		"birth": {
+			Exists: true, SHA256: exact.SHA256,
+			Mode: 0o644, Device: 7, Inode: 101,
+			BirthSeconds: 999,
 		},
 	}
 	for name, before := range tests {
@@ -335,6 +344,7 @@ func openCodeBeforeImage(
 	return configuration.BeforeImage{
 		Exists: true, SHA256: openCodeDigest(raw),
 		Mode: mode, Device: 7, Inode: inode,
+		BirthSeconds: int64(inode) + 1,
 	}
 }
 

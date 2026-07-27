@@ -28,7 +28,7 @@ func TestApplyPersistsPreparedMutationBeforeAtomicReplacement(t *testing.T) {
 	if prepared.Phase != StepPrepared || prepared.Location != testLocation("one") ||
 		prepared.SourcePath != "source/one" || prepared.Before.Exists ||
 		prepared.After != (LinkImage{Exists: true, RawTarget: "source/one"}) ||
-		prepared.Parent != (FileIdentity{Device: 1, Inode: 1}) {
+		prepared.Parent != testIdentity(1, 1) {
 		t.Fatalf("prepared journal mutation = %#v", prepared)
 	}
 	staged := fixture.store.saves[2].Steps[0]
@@ -210,7 +210,7 @@ func TestApplyRestoresRemovedRawLinkOnLaterFailure(t *testing.T) {
 	}
 	got := fixture.workspace.links[location]
 	if !got.Exists || got.RawTarget != "source/old" ||
-		got.Parent != (FileIdentity{Device: 1, Inode: 1}) {
+		got.Parent != testIdentity(1, 1) {
 		t.Fatalf("removed link restored as %#v", got)
 	}
 }
@@ -305,8 +305,8 @@ func remove(path domain.ArtifactPath) domain.Operation {
 func linkState(target string) LinkState {
 	return LinkState{
 		Exists: true, RawTarget: target,
-		Parent: FileIdentity{Device: 1, Inode: 1},
-		Entry:  FileIdentity{Device: 1, Inode: 2},
+		Parent: testIdentity(1, 1),
+		Entry:  testIdentity(1, 2),
 	}
 }
 

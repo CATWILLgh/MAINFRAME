@@ -180,11 +180,12 @@ func applicationDiagnosticsSnapshotWithObserved(
 	host := applicationDiagnosticsHost{}
 	if current != nil {
 		host[resource.Target] = hostfs.Entry{
-			Kind:    hostfs.EntryRegular,
-			Content: append([]byte(nil), current...),
-			Mode:    0o600,
-			Device:  1,
-			Inode:   77,
+			Kind:         hostfs.EntryRegular,
+			Content:      append([]byte(nil), current...),
+			Mode:         0o600,
+			Device:       1,
+			Inode:        77,
+			BirthSeconds: 78,
 		}
 	}
 	inspection, err := configuration.Inspect([]releasecontract.Resource{resource}, host)

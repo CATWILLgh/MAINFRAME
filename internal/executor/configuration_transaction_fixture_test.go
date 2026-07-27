@@ -116,7 +116,7 @@ func (workspace *fakeConfigurationWorkspace) InspectConfiguration(
 	}
 	state := workspace.public[target]
 	if state.Parent == (FileIdentity{}) {
-		state.Parent = FileIdentity{Device: 1, Inode: 1}
+		state.Parent = testIdentity(1, 1)
 	}
 	return state, nil
 }
@@ -262,7 +262,7 @@ func (workspace *fakeConfigurationWorkspace) fail(
 
 func (workspace *fakeConfigurationWorkspace) identity() FileIdentity {
 	workspace.nextInode++
-	return FileIdentity{Device: 1, Inode: workspace.nextInode}
+	return testIdentity(1, workspace.nextInode)
 }
 
 func configurationState(

@@ -16,6 +16,7 @@ func TestApplyChecksReadPreconditionsBeforeAnyWrite(t *testing.T) {
 		Target:             testConfigurationLocation("legacy.json"),
 		Device:             8,
 		Inode:              13,
+		BirthSeconds:       14,
 		ExpectedTargetPath: "/home/test/.config/opencode/opencode.json",
 	}
 	prepared, err := configuration.NewPreparedPlanWithPreconditions(
@@ -62,6 +63,7 @@ func TestApplyRequiresWorkspaceForReadPreconditionBeforeWrites(t *testing.T) {
 			Target:             testConfigurationLocation("legacy.json"),
 			Device:             8,
 			Inode:              13,
+			BirthSeconds:       14,
 			ExpectedTargetPath: "/home/test/.config/opencode/opencode.json",
 		}},
 	)

@@ -362,7 +362,11 @@ func imageOf(state LinkState) LinkImage {
 }
 
 func validFileIdentity(identity FileIdentity) bool {
-	return identity.Device != 0 && identity.Inode != 0
+	return identity.Device != 0 &&
+		identity.Inode != 0 &&
+		identity.BirthSeconds > 0 &&
+		identity.BirthNanoseconds >= 0 &&
+		identity.BirthNanoseconds < 1_000_000_000
 }
 
 func stateOf(image LinkImage, parent FileIdentity) LinkState {

@@ -130,7 +130,11 @@ func validateReadPreconditions(
 				precondition.Target,
 			)
 		}
-		if precondition.Device == 0 || precondition.Inode == 0 {
+		if precondition.Device == 0 ||
+			precondition.Inode == 0 ||
+			precondition.BirthSeconds <= 0 ||
+			precondition.BirthNanoseconds < 0 ||
+			precondition.BirthNanoseconds >= 1_000_000_000 {
 			return fmt.Errorf("read precondition identity is incomplete")
 		}
 		if !filepath.IsAbs(precondition.ExpectedTargetPath) ||
@@ -191,7 +195,10 @@ func validatePreparedMutation(mutation FileMutation) error {
 	}
 	if !preparedDigestPattern.MatchString(mutation.Before.SHA256) ||
 		mutation.Before.Mode > 0o777 || mutation.Before.Mode&0o400 == 0 ||
-		mutation.Before.Device == 0 || mutation.Before.Inode == 0 {
+		mutation.Before.Device == 0 || mutation.Before.Inode == 0 ||
+		mutation.Before.BirthSeconds <= 0 ||
+		mutation.Before.BirthNanoseconds < 0 ||
+		mutation.Before.BirthNanoseconds >= 1_000_000_000 {
 		return fmt.Errorf("invalid existing configuration before-image")
 	}
 	if !mutation.After.Exists {

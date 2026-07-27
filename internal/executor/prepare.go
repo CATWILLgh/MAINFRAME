@@ -90,12 +90,17 @@ func newMutation(
 }
 
 func validateFreshObservation(operation domain.Operation, before LinkState) error {
-	if operation.Artifact.LinkDevice == 0 && operation.Artifact.LinkInode == 0 {
+	if operation.Artifact.LinkDevice == 0 &&
+		operation.Artifact.LinkInode == 0 &&
+		operation.Artifact.LinkBirthSeconds == 0 &&
+		operation.Artifact.LinkBirthNanoseconds == 0 {
 		return nil
 	}
 	expected := FileIdentity{
-		Device: operation.Artifact.LinkDevice,
-		Inode:  operation.Artifact.LinkInode,
+		Device:           operation.Artifact.LinkDevice,
+		Inode:            operation.Artifact.LinkInode,
+		BirthSeconds:     operation.Artifact.LinkBirthSeconds,
+		BirthNanoseconds: operation.Artifact.LinkBirthNanoseconds,
 	}
 	if !before.Exists || before.RawTarget != operation.Artifact.RawTarget || before.Entry != expected {
 		return errors.New("link identity changed after preview")

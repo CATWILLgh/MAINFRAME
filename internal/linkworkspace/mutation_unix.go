@@ -333,5 +333,9 @@ func installImage(mutation executor.WorkspaceMutation) executor.LinkImage {
 }
 
 func validFileIdentity(identity executor.FileIdentity) bool {
-	return identity.Device != 0 && identity.Inode != 0
+	return identity.Device != 0 &&
+		identity.Inode != 0 &&
+		identity.BirthSeconds > 0 &&
+		identity.BirthNanoseconds >= 0 &&
+		identity.BirthNanoseconds < 1_000_000_000
 }

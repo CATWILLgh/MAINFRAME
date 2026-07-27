@@ -61,7 +61,7 @@ func TestRecoverChecksDirectoryModeBeforePreparedDirectoryMutation(t *testing.T)
 		Directories: []JournalDirectory{{
 			Target:      directoryPlan.Missing[0].Target,
 			Mode:        directoryPlan.Missing[0].Mode,
-			Parent:      FileIdentity{Device: 1, Inode: 1},
+			Parent:      testIdentity(1, 1),
 			PrivateName: ".mainframe-00000000000000000000000000000001",
 			Phase:       StepPrepared,
 		}},
@@ -258,7 +258,7 @@ func managedDirectoryPlan(paths ...string) *DirectoryPlan {
 	root := RootSnapshot{
 		Root:           domain.RootCodexConfig,
 		AnchorPath:     "/home/user",
-		AnchorIdentity: FileIdentity{Device: 1, Inode: 1},
+		AnchorIdentity: testIdentity(1, 1),
 		RootPath:       ".codex",
 	}
 	plan := &DirectoryPlan{Roots: []RootSnapshot{root}}

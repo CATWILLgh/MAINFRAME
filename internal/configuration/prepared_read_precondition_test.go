@@ -60,6 +60,16 @@ func TestNewPreparedPlanWithPreconditionsRejectsMalformedInput(t *testing.T) {
 			input[0].Inode = 0
 			return input
 		},
+		"missing birth": func() []configuration.ReadPrecondition {
+			input := []configuration.ReadPrecondition{valid}
+			input[0].BirthSeconds = 0
+			return input
+		},
+		"invalid birth nanoseconds": func() []configuration.ReadPrecondition {
+			input := []configuration.ReadPrecondition{valid}
+			input[0].BirthNanoseconds = 1_000_000_000
+			return input
+		},
 		"relative expected target": func() []configuration.ReadPrecondition {
 			input := []configuration.ReadPrecondition{valid}
 			input[0].ExpectedTargetPath = "current.json"
@@ -174,6 +184,7 @@ func preparedReadPrecondition(
 		},
 		Device:             7,
 		Inode:              inode,
+		BirthSeconds:       int64(inode) + 1,
 		ExpectedTargetPath: expectedTargetPath,
 	}
 }

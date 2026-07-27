@@ -106,6 +106,8 @@ func TestApplyRejectsAdoptionWithoutStableUnitID(t *testing.T) {
 			Location: location, Ownership: domain.OwnershipExactAdoptable,
 			RawTarget:  before.RawTarget,
 			LinkDevice: before.Entry.Device, LinkInode: before.Entry.Inode,
+			LinkBirthSeconds:     before.Entry.BirthSeconds,
+			LinkBirthNanoseconds: before.Entry.BirthNanoseconds,
 		},
 	}
 	preview := testPreview("release", "digest", []domain.ComponentID{"codex"}, operation)
@@ -169,7 +171,7 @@ func TestApplyRejectsSameTargetIdentitySubstitutionAfterRefresh(t *testing.T) {
 	fixture.workspace.links[location] = observed
 	fixture.workspace.links[location] = LinkState{
 		Exists: true, RawTarget: observed.RawTarget, Parent: observed.Parent,
-		Entry: FileIdentity{Device: observed.Entry.Device, Inode: observed.Entry.Inode + 1},
+		Entry: testIdentity(observed.Entry.Device, observed.Entry.Inode+1),
 	}
 	fixture.store.ownership = registryWith(t, claimFor(operation, observed.RawTarget, "old-release", testDigest("old")))
 
@@ -261,6 +263,7 @@ func TestApplyRelinquishesDriftedClaimWithoutInspectingTargetKind(t *testing.T) 
 			Location: location, UnitID: "codex.one",
 			Ownership:  domain.OwnershipManagedDrifted,
 			LinkDevice: 7, LinkInode: 8,
+			LinkBirthSeconds: 9,
 		},
 	}
 	preview := testPreview("release", "digest", nil, operation)
@@ -325,6 +328,8 @@ func claimedMutation(kind domain.OperationKind, location domain.Location, before
 			Location: location, UnitID: "codex.one", Ownership: domain.OwnershipManagedPrevious,
 			RawTarget:  before.RawTarget,
 			LinkDevice: before.Entry.Device, LinkInode: before.Entry.Inode,
+			LinkBirthSeconds:     before.Entry.BirthSeconds,
+			LinkBirthNanoseconds: before.Entry.BirthNanoseconds,
 		},
 		SourcePath: source,
 	}

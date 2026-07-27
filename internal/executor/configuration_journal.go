@@ -5,7 +5,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
-const CurrentJournalSchemaVersion = 3
+const CurrentJournalSchemaVersion = 4
 
 type ConfigurationMutationDisposition string
 

@@ -23,6 +23,8 @@ type Entry struct {
 	Mode              uint32
 	Device            uint64
 	Inode             uint64
+	BirthSeconds      int64
+	BirthNanoseconds  int64
 }
 
 func (namespace Namespace) Inspect(location domain.Location, includeContent bool) (Entry, error) {

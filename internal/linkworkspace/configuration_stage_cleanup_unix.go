@@ -109,7 +109,10 @@ func inspectDisposableConfigurationStage(
 			errors.New("interrupted configuration stage metadata differs"),
 		)
 	}
-	identity := identityOfStat(stat)
+	identity, err := identityFromFD(fd, stat)
+	if err != nil {
+		return executor.FileIdentity{}, false, err
+	}
 	named, _, err := identityAt(privateFD, name)
 	if err != nil || named != identity {
 		return executor.FileIdentity{}, false, errors.Join(

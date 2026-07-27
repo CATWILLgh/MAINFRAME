@@ -100,8 +100,10 @@ func journalConfigurationMutation(
 			SHA256: mutation.Before.SHA256,
 			Mode:   mutation.Before.Mode,
 			Entry: FileIdentity{
-				Device: mutation.Before.Device,
-				Inode:  mutation.Before.Inode,
+				Device:           mutation.Before.Device,
+				Inode:            mutation.Before.Inode,
+				BirthSeconds:     mutation.Before.BirthSeconds,
+				BirthNanoseconds: mutation.Before.BirthNanoseconds,
 			},
 		}
 	}

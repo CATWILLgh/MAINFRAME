@@ -27,6 +27,7 @@ func TestValidatePreparedTargetsAcceptsAnEmptyConfigurationFile(t *testing.T) {
 			Before: configuration.BeforeImage{
 				Exists: true, SHA256: testDigest("managed block"), Mode: 0o600,
 				Device: 1, Inode: 2,
+				BirthSeconds: 3,
 			},
 			After: configuration.AfterImage{
 				Exists: true,
@@ -189,11 +190,11 @@ func invalidConfigurationMutationCases() []invalidConfigurationJournalCase {
 			mutation.StagedName = "payload"
 		})},
 		{name: "prepared staged identity", mutate: mutateConfiguration(func(mutation *JournalConfigurationMutation) {
-			mutation.StagedIdentity = FileIdentity{Device: 1, Inode: 9}
+			mutation.StagedIdentity = testIdentity(1, 9)
 		})},
 		{name: "parent-bound published identity", mutate: mutateConfiguration(func(mutation *JournalConfigurationMutation) {
 			setConfigurationPhase(mutation, StepParentBound)
-			mutation.After.Entry = FileIdentity{Device: 1, Inode: 9}
+			mutation.After.Entry = testIdentity(1, 9)
 		})},
 		{name: "staged missing identities", mutate: mutateConfiguration(func(mutation *JournalConfigurationMutation) {
 			mutation.Phase = StepStaged
@@ -201,11 +202,11 @@ func invalidConfigurationMutationCases() []invalidConfigurationJournalCase {
 		{name: "finalized pre-private rollback has staged identity", mutate: mutateConfiguration(func(mutation *JournalConfigurationMutation) {
 			mutation.Phase = StepRolledBack
 			mutation.Finalized = true
-			mutation.StagedIdentity = FileIdentity{Device: 1, Inode: 9}
+			mutation.StagedIdentity = testIdentity(1, 9)
 		})},
 		{name: "published identity mismatch", mutate: mutateConfiguration(func(mutation *JournalConfigurationMutation) {
 			setConfigurationPhase(mutation, StepPublished)
-			mutation.After.Entry = FileIdentity{Device: 2, Inode: 99}
+			mutation.After.Entry = testIdentity(2, 99)
 		})},
 		{name: "finalized prepared mutation", mutate: mutateConfiguration(func(mutation *JournalConfigurationMutation) {
 			mutation.Finalized = true
@@ -230,7 +231,7 @@ func configurationJournalFixture(
 		Target:      testLocation("config.json"),
 		Before: ConfigurationFileImage{
 			Exists: true, SHA256: testDigest("before"), Mode: 0o644,
-			Entry: FileIdentity{Device: 1, Inode: 2},
+			Entry: testIdentity(1, 2),
 		},
 		After: ConfigurationFileImage{
 			Exists: true, SHA256: testDigest("after"), Mode: 0o600,
@@ -251,7 +252,7 @@ func configurationJournalFixture(
 		Roots: []RootSnapshot{{
 			Root:           domain.RootCodexConfig,
 			AnchorPath:     "/home/user",
-			AnchorIdentity: FileIdentity{Device: 1, Inode: 1},
+			AnchorIdentity: testIdentity(1, 1),
 			RootPath:       ".codex-config",
 		}},
 		Configurations: []JournalConfigurationTransition{{
@@ -288,15 +289,15 @@ func setConfigurationPhase(
 	if phase == StepPrepared {
 		return
 	}
-	mutation.Parent = FileIdentity{Device: 1, Inode: 3}
+	mutation.Parent = testIdentity(1, 3)
 	if phase == StepParentBound {
 		return
 	}
-	mutation.Private.Identity = FileIdentity{Device: 1, Inode: 4}
+	mutation.Private.Identity = testIdentity(1, 4)
 	if phase == StepPrivateCreated {
 		return
 	}
-	mutation.StagedIdentity = FileIdentity{Device: 1, Inode: 5}
+	mutation.StagedIdentity = testIdentity(1, 5)
 	if phase == StepPublished {
 		mutation.After.Entry = mutation.StagedIdentity
 	}

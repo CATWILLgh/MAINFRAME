@@ -206,7 +206,7 @@ func validateJournalStep(step JournalMutation) error {
 	if claimOnlyMutation(step.Kind) {
 		return validateClaimOnlyStep(step)
 	}
-	if step.Parent.Device == 0 || step.Parent.Inode == 0 {
+	if !validFileIdentity(step.Parent) {
 		return fmt.Errorf("invalid parent identity")
 	}
 	if !privateNamePattern.MatchString(step.Private.Name) ||
