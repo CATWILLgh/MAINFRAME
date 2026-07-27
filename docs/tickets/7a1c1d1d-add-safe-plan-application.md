@@ -94,7 +94,8 @@ The final product must install, update, remove, and replace selected adapters. A
 - Added pure configuration transaction preparation. It composes ordered JSON
   changes per physical target, groups OpenCode configuration with its ownership
   registry, and binds every existing before-image by content digest, mode,
-  device, and inode without writing or placing secret bytes in the journal.
+  device, inode, and birth timestamp without writing or placing secret bytes in
+  the journal.
 - Extended the same transaction journal to configuration files. Prepared
   transitions now preflight every target, stage owner-only bytes in
   identity-bound private directories, use no-replace creation or atomic
@@ -154,6 +155,13 @@ The final product must install, update, remove, and replace selected adapters. A
   The test is enabled on both Darwin and native Linux.
 - Kept ownership identities internal to planning. Public CLI JSON contains only
   the operation, logical target, ownership classification, and source path.
+- Strengthened all persisted transaction identities from device and inode to
+  a device, inode, and birth-timestamp fingerprint. This reduces but does not
+  eliminate same-inode ABA risk on filesystems with coarse timestamp resolution.
+  Journal schema version 4 upgrades only empty older journals; identity-bearing
+  version 2 or 3 journals fail closed because a missing birth timestamp cannot
+  be reconstructed safely. Darwin runtime coverage is green, while native Linux
+  execution remains part of the Linux CI gate.
 - Kept CLI and TUI application unavailable. Remaining activation gates are
   tracked by [#d3b15da9](d3b15da9-authenticate-release-publisher.md),
   [#66ab4af8](66ab4af8-make-bundle-publication-atomic.md),

@@ -343,8 +343,9 @@ and live probes of the exact supported standalone Antigravity 2.2.1 host.
 Before execution, the immutable inspection can materialize a private prepared
 plan without writing. It preserves complete user JSON, composes non-overlapping
 resources sharing one physical file, and groups each configuration with its
-ownership registry. Every file mutation is bound to exact captured bytes,
-mode, device, and inode; missing files use an explicit absence precondition.
+ownership registry. Every file mutation is bound to exact captured bytes, mode,
+and a strengthened identity fingerprint containing device, inode, and birth
+timestamp; missing files use an explicit absence precondition.
 Prepared bytes remain outside the executor journal. Any unresolved issue,
 unsupported changed strategy, incomplete snapshot, or target collision fails
 the whole preparation with no partial result.
@@ -468,12 +469,12 @@ Automatic link ownership comes only from the durable registry at
 `${XDG_STATE_HOME:-$HOME/.local/state}/mainframe/link-ownership.json`. Each
 claim binds one stable release unit ID and component to one logical target,
 the exact raw symbolic-link target, and the release ID plus index digest that
-created it. Device and inode numbers are deliberately not persisted there;
-discovery captures the live link identity for every preview, and Apply checks
-that fresh identity again before changing a public name. A claim whose link
-was removed can be repaired or relinquished without requiring the old release
-payload. A user-changed link or non-link entry is never removed: MAINFRAME
-drops only its claim and leaves the user entry untouched.
+created it. Device, inode, and birth timestamp are deliberately not persisted
+there; discovery captures the complete live link identity for every preview,
+and Apply checks that fresh identity again before changing a public name. A
+claim whose link was removed can be repaired or relinquished without requiring
+the old release payload. A user-changed link or non-link entry is never removed:
+MAINFRAME drops only its claim and leaves the user entry untouched.
 
 An exact link created earlier by `install.sh` has no registry claim. When it
 points to a live artifact in the currently validated release, the plan exposes
@@ -502,14 +503,28 @@ replacement inode is retained rather than unlinked, but its public name may be
 moved.
 
 Configuration changes participate in the same lock and transaction as link and
-directory changes. Journal schema version 3 records explicit present or absent
+directory changes. Journal schema version 4 records explicit present or absent
 configuration after-images using only targets, content digests, modes, file
-identities, and private names; configuration bytes remain in the immutable
-prepared plan held by the process. The decoder accepts only the exact prior
-unversioned journal shape and valid version 2 journals, upgrading them in order
-to version 3 so interrupted legacy operations remain recoverable. A version 2
-journal cannot claim an absent after-image because that state did not exist in
-its contract.
+identity fingerprints, and private names; configuration bytes remain in
+the immutable prepared plan held by the process. Every persisted fingerprint
+combines device, inode, and birth timestamp. Darwin support is limited to local
+APFS and HFS filesystems and reads their native birth timestamp from `stat`;
+Linux requires `statx` to return `STATX_BTIME`. Apply fails closed when the
+supported filesystem cannot provide that signal.
+
+The birth timestamp materially reduces the inode-reuse window but is not a
+filesystem generation number. A filesystem may expose it at coarse resolution,
+so a same-inode recreation inside one timestamp quantum remains a residual
+collision risk. The executor must not describe this fingerprint as an absolute
+ABA-prevention guarantee; a future generation or file-handle signal is still
+needed where the platform can provide one safely.
+
+Only empty prior journals can be upgraded automatically to schema version 4.
+An identity-bearing version 2 or 3 journal cannot recover a birth timestamp
+after the fact, so it fails closed and instructs the operator to recover it
+with a binary that understands its original schema. A version 2 journal also
+cannot claim an absent after-image because that state did not exist in its
+contract.
 
 Before staging, each configuration target is rebound to the exact current
 parent and before-image captured during preview. Staged bytes are written with

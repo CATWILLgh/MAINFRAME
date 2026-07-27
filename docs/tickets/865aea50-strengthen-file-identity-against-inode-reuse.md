@@ -48,13 +48,37 @@ strong enough against an ABA-style replacement.
 
 ## Acceptance criteria
 
-- A recreated entry cannot compare equal to the inspected entry solely because
-  Linux reused its inode.
-- Existing journals either migrate safely or fail closed with an actionable
+- [x] Persisted identity no longer compares an entry by device and inode alone.
+- [ ] A recreated entry remains distinguishable when Linux reuses an inode
+  inside one birth-timestamp resolution quantum.
+- [x] Existing journals either migrate safely or fail closed with an actionable
   compatibility error.
-- Darwin and Linux tests cover link, configuration, directory, and recovery
+- [ ] Darwin and Linux tests cover link, configuration, directory, and recovery
   identity checks.
-- No identity metadata permits traversal through symbolic-link ancestors.
+- [x] No identity metadata permits traversal through symbolic-link ancestors.
+
+## Progress (2026-07-26)
+
+- Persisted file identity now combines device, inode, and birth timestamp for
+  links, configuration files, managed directories, pinned roots, prepared read
+  preconditions, and transaction recovery. This is a stronger fingerprint, not
+  a filesystem generation number: coarse birth-timestamp resolution leaves a
+  residual same-inode collision risk, so the absolute ABA criterion remains open.
+- Darwin reads the birth timestamp from `stat`. Linux requires `statx` with a
+  returned `STATX_BTIME` bit and fails closed when the filesystem cannot supply
+  it. Darwin mutation support remains limited to local APFS and HFS filesystems,
+  which provide native creation timestamps. Identity inspection remains
+  descriptor-relative and does not follow a symbolic-link leaf.
+- Journal schema version 4 persists the complete identity. Empty older journals
+  can upgrade, while identity-bearing version 2 or 3 journals fail closed with
+  recovery guidance because their missing birth timestamp cannot be recreated
+  safely.
+- Real Darwin tests cover stable directory and renamed-link identities plus
+  recreated entries. Linux-specific tests cover a missing `STATX_BTIME` result
+  and a changed birth timestamp with the same device and inode. The complete
+  Linux suite still needs to execute natively in CI; cross-compilation alone
+  does not satisfy the remaining acceptance item.
+- Public CLI JSON continues to omit all internal identity fields.
 
 ## Sources
 
@@ -63,3 +87,6 @@ strong enough against an ABA-style replacement.
 - `internal/linkworkspace/mutation_unix.go:317`
 - `internal/linkworkspace/workspace_unix_test.go:194`
 - Ubuntu CI run `29687225528`
+- [Linux `inode(7)`](https://man7.org/linux/man-pages/man7/inode.7.html)
+- [Linux `statx(2)`](https://man7.org/linux/man-pages/man2/statx.2.html)
+- [Apple `stat(2)`](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/stat.2.html)
