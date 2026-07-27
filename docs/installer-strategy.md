@@ -238,12 +238,13 @@ shown as optional time-stamped popularity metadata. They are never a security
 or trust signal, never gate installation, and their absence or refresh failure
 must not block an otherwise verified offline catalog entry.
 
-Credential values never enter the release, project files, previews, logs, or
-executor journal. The TUI accepts and previews only validated secret-reference
-names. A keyed MCP profile selects a compatible user-owned credential instance;
-it never collects an API key value. If an adapter cannot consume a reference
-without leaking the value, that profile is unsupported for that adapter
-instead of embedding the key in clear text.
+Credential values never enter the release, project files, previews, logs,
+ownership metadata, or executor journal. The TUI accepts and previews only
+validated secret-reference names. A keyed MCP profile selects a compatible
+user-owned credential instance; it never collects an API key value. Adapters
+normally consume the validated reference directly. An adapter that cannot do
+so requires an explicit adapter-local storage contract before keyed activation
+can be supported.
 
 Credential descriptions use a strict versioned contract with three owners:
 MAINFRAME ships immutable service definitions, the user owns neutral instance
@@ -295,11 +296,14 @@ changes only an in-memory draft until the complete review shows the exact
 metadata change. The user must then open a second confirmation screen. Apply is
 enabled for the existing credential-only plan and for the first exact mixed
 slice: keyed Context7 projected only to OpenCode, with no diagnostics changes.
+The same exact Context7 lifecycle is executable for standalone Antigravity
+2.x: keyed activation, keyless activation, profile switching, and removal.
 Other adapter and diagnostics plans remain preview-only until their own live
-validation is complete. Existing selected adapters may remain in that plan, but
-any actual filesystem, configuration, or MCP mutation outside OpenCode keeps
-Apply disabled. Every applicable plan must contain at least one change and no
-blocking conflict. The confirmation screen repeats the complete
+validation is complete. Existing selected adapters may remain in an OpenCode
+plan, but any actual filesystem, configuration, or MCP mutation outside the
+selected executable adapter keeps Apply disabled. Every applicable plan must
+contain at least one change and no blocking conflict. The confirmation screen
+repeats the complete
 filesystem, configuration, MCP, diagnostics, and credential plan; one
 confirmation applies that exact plan as one transaction. This permits a new
 credential instance and the adapter configuration that references it to land
@@ -317,12 +321,12 @@ Existing state must be a regular strict-version document with mode `0600`;
 missing state is created with mode `0600` and newly created parents use `0700`.
 Malformed, unknown-version, symbolic-link, unsafe-mode, or concurrently changed
 state fails closed without replacing user data. A keyed MCP profile selects a
-matching credential instance and never accepts a raw key. Context7's keyless
+matching credential instance and never accepts a raw key from the interface.
+Context7's keyless
 remote profile is verified for Claude Code, Codex, OpenCode, and Antigravity
-2.x. Its keyed remote profile is verified for Claude Code, Codex, and OpenCode;
-Antigravity 2.x is explicitly unsupported until a plaintext-free secret
-reference is proven. Optional GitHub stars are fetched asynchronously, kept
-only in memory, and discarded when stale or unavailable.
+2.x. Its keyed remote profile is executable for OpenCode and standalone
+Antigravity 2.x. Optional GitHub stars are fetched asynchronously, kept only in
+memory, and discarded when stale or unavailable.
 
 OpenCode is the first executable keyed MCP slice. The shared credential catalog
 resolves the selected Context7 instance to a validated environment-variable
@@ -330,21 +334,28 @@ reference without reading that variable. The adapter-local projection writes
 only OpenCode's documented `CONTEXT7_API_KEY` header placeholder in the form
 `{env:NAME}`. Keyed and keyless Context7 remain two profiles of one owned
 `mcp.context7` entry, so switching either direction is an update that removes
-stale headers while preserving unrelated OpenCode configuration. No other
-adapter receives this runtime binding until its plaintext-free dialect has its
-own executable contract.
+stale headers while preserving unrelated OpenCode configuration.
 
-Standalone Antigravity `2.2.1` does not satisfy that contract. Its MCP
+Standalone Antigravity `2.2.1` does not expand a secret reference in remote MCP
+headers. Its MCP
 documentation shows direct string values for remote `headers`, provides no
 environment-reference syntax for them, and documents `env` only for stdio
 servers. An isolated probe against the installed
 `com.google.antigravity` application configured a synthetic header as
 `${MAINFRAME_ANTIGRAVITY_PROBE}` with that variable present in the process
 environment; the local MCP endpoint received the placeholder literally.
-MAINFRAME therefore keeps the keyed Antigravity profile fail-closed. Enabling
-it requires either a documented plaintext-free host reference or a separately
-approved secret-injecting transport; writing the key into Antigravity
-configuration is not an acceptable fallback.
+For keyed Context7, MAINFRAME therefore uses Antigravity's standard
+configuration storage. The review shows a calm factual notice that this host
+cannot use a secret reference for remote headers. Only after final confirmation
+does the executor call the installed `secret get NAME` helper and place the
+returned value into the exact standalone Antigravity MCP entry. The value never
+enters the reviewed plan, diff, ownership registry, transaction journal, logs,
+or errors. The ownership registry stores the reference name and a digest of the
+canonical managed entry, so unchanged reapplication is a no-op, key rotation is
+detected at Apply time, user edits relinquish ownership, and switching to
+keyless or deselecting Context7 removes the keyed header without reading the
+secret. Both configuration and ownership files use mode `0600`; the common
+transaction retains rollback, crash recovery, and concurrent-change checks.
 
 The second read-only milestone gives keyless Context7 exact OpenCode, Claude
 Code, Codex, and Antigravity 2.x projections. Bundle schema version 2 links each

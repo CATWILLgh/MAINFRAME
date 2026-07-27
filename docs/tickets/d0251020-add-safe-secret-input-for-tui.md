@@ -47,8 +47,9 @@ executable until a safer channel exists.
   atomic replacement behavior.
 - Clear transient byte buffers where practical and make failure messages name
   only the credential identifier, never its value.
-- Enable keyed MCP profiles only after each selected adapter proves it consumes
-  a plaintext-free reference to the stored secret.
+- Enable keyed MCP profiles only after each selected adapter proves either a
+  plaintext-free reference or an explicitly approved adapter-local standard
+  storage contract.
 
 ## Acceptance criteria
 
@@ -58,10 +59,11 @@ executable until a safer channel exists.
 - Tests cover empty input, invalid names, newline policy, interrupted writes,
   concurrent storage, and absence of secret bytes from errors and previews.
 - Context7 keyed onboarding stores the key once in the neutral credential store
-  and publishes only adapter-local references for Claude Code, Codex, and
-  OpenCode.
-- Antigravity remains unsupported for the keyed profile until a plaintext-free
-  reference mechanism is verified.
+  and publishes adapter-local references where the host supports them.
+- Standalone Antigravity keyed activation resolves the selected reference only
+  during confirmed Apply and writes the value only to Antigravity's standard
+  MCP configuration. The value is absent from previews, ownership metadata,
+  journals, logs, errors, and all other adapter roots.
 
 ## Sources
 
@@ -84,10 +86,15 @@ home, a synthetic local MCP endpoint received
 `${MAINFRAME_ANTIGRAVITY_PROBE}` literally even though that variable was
 present in the standalone language-server environment. The process was launched
 with isolated configuration roots and did not receive or change live user
-configuration. This narrows the Antigravity acceptance criterion: keyed support
-must remain disabled until the host documents and implements a plaintext-free
-header reference, or MAINFRAME separately approves and designs a
-secret-injecting transport.
+configuration. This established that a reference-only projection cannot work
+for this host.
+
+The product decision was superseded on 2026-07-27. Standalone Antigravity keyed
+Context7 now uses its standard configuration storage through MAINFRAME's common
+confirmed-Apply transaction. The TUI never collects or displays the value; the
+executor resolves the already selected user-owned reference at Apply time.
+This does not close the ticket's original masked-input scope for storing a new
+secret without putting it in process arguments.
 
 **Source:** <https://antigravity.google/docs/mcp>, accessed 2026-07-27.
 
