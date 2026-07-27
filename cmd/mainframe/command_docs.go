@@ -87,6 +87,7 @@ func documentationRegistry() []documentationTopic {
 				"capabilities",
 				"plan",
 				"draft.review",
+				"draft.apply",
 				"credentials.catalog",
 				"credentials.uses",
 				"credentials.instance.review",

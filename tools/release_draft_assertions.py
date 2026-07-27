@@ -1,4 +1,4 @@
-"""Packaged CLI assertions for read-only machine draft review."""
+"""Packaged CLI assertions for machine draft review and exact application."""
 
 from __future__ import annotations
 

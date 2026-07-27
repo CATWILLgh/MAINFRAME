@@ -8,6 +8,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
@@ -35,15 +36,102 @@ func reviewDraft(request draftReviewRequest) (draftReviewResponse, error) {
 	if err != nil {
 		return draftReviewResponse{}, fmt.Errorf("build read-only reviewer: %w", err)
 	}
-	preview, err := reviewer.Preview(internal)
+	return reviewDraftWithReviewer(
+		reviewer,
+		internal,
+		normalized,
+		onboarding,
+		snapshot.root,
+		cwd,
+	)
+}
+
+func reviewDraftWithReviewer(
+	reviewer application.Reviewer,
+	internal application.Request,
+	normalized draftDesiredState,
+	onboarding mcpcatalog.OnboardingPreview,
+	releaseRoot string,
+	cwd string,
+) (draftReviewResponse, error) {
+	reviewed, err := reviewer.Review(internal)
 	if err != nil {
-		return draftReviewResponse{}, err
+		semantic, previewErr := reviewer.Preview(internal)
+		if previewErr != nil {
+			return draftReviewResponse{}, err
+		}
+		if !draftReviewOnlyPlan(semantic) {
+			return draftReviewResponse{}, err
+		}
+		return publicDraftReview(
+			normalized,
+			semantic,
+			onboarding,
+			false,
+			"",
+		), nil
+	}
+	confirmation := ""
+	if reviewed.Applicable() {
+		scope, err := buildDraftCommitmentScope(releaseRoot, cwd)
+		if err != nil {
+			return draftReviewResponse{}, err
+		}
+		confirmation, err = draftReviewCommitment(
+			normalized,
+			reviewed.Executable(),
+			scope,
+		)
+		if err != nil {
+			return draftReviewResponse{}, err
+		}
 	}
 	return publicDraftReview(
 		normalized,
-		preview,
+		reviewed.Semantic(),
 		onboarding,
+		reviewed.Applicable(),
+		confirmation,
 	), nil
+}
+
+func draftReviewOnlyPlan(preview lifecycle.Preview) bool {
+	return len(preview.Configuration.Issues) > 0 ||
+		len(preview.Configuration.ManualActions) > 0 ||
+		preview.MCP.Blocking ||
+		!preview.Diagnostics.Executable
+}
+
+func buildDraftCommitmentScope(
+	releaseRoot string,
+	cwd string,
+) (draftCommitmentScope, error) {
+	layout, err := hostlayout.Resolve(hostEnvironment(), releaseRoot)
+	if err != nil {
+		return draftCommitmentScope{}, fmt.Errorf(
+			"resolve draft host layout: %w",
+			err,
+		)
+	}
+	targets := layout.Targets()
+	committedTargets := make(
+		[]draftCommitmentTarget,
+		0,
+		len(targets),
+	)
+	for root, path := range targets {
+		committedTargets = append(committedTargets, draftCommitmentTarget{
+			Root: root,
+			Path: path,
+		})
+	}
+	return draftCommitmentScope{
+		WorkingDirectory: cwd,
+		ReleaseRoot:      releaseRoot,
+		SourceRoot:       layout.Source(),
+		TransactionState: layout.State(),
+		Targets:          committedTargets,
+	}, nil
 }
 
 func newMachineDraftSnapshotBuilder(
@@ -62,6 +150,8 @@ func publicDraftReview(
 	desired draftDesiredState,
 	preview lifecycle.Preview,
 	onboarding mcpcatalog.OnboardingPreview,
+	applicable bool,
+	confirmation string,
 ) draftReviewResponse {
 	return draftReviewResponse{
 		SchemaVersion:  draftProtocolVersion,
@@ -70,7 +160,10 @@ func publicDraftReview(
 		Desired:        desired,
 		Preview:        publicDraftSemanticPreview(preview),
 		Onboarding:     publicDraftOnboarding(desired, onboarding),
-		Apply:          draftApplyAvailability{CommandAvailable: false},
+		Apply: draftApplyAvailability{
+			CommandAvailable: applicable,
+			Confirmation:     confirmation,
+		},
 	}
 }
 

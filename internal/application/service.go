@@ -99,7 +99,7 @@ func (service Service) Apply(
 	if err != nil {
 		return recovered, fmt.Errorf("recover before apply: %w", err)
 	}
-	applied, err := service.applyReviewed(plan, false)
+	applied, err := service.applyReviewed(plan, false, false)
 	applied.Warnings = append(recovered.Warnings, applied.Warnings...)
 	return applied, err
 }
@@ -121,15 +121,19 @@ func (service Service) ApplyCredentials(
 			"plan contains changes outside credential metadata",
 		)
 	}
-	return service.applyReviewed(plan, true)
+	return service.applyReviewed(plan, true, false)
 }
 
 func (service Service) applyReviewed(
 	plan ReviewedPlan,
 	withoutRecovery bool,
+	requireApplicable bool,
 ) (result executor.Result, err error) {
 	request := cloneRequest(plan.request)
-	refresher := requestRefresher{snapshots: service.snapshots, request: request}
+	refresher := requestRefresher{
+		snapshots: service.snapshots, request: request,
+		requireApplicable: requireApplicable,
+	}
 	session, err := service.executors.Open(refresher)
 	if err != nil {
 		return executor.Result{}, fmt.Errorf("open apply executor: %w", err)
@@ -181,8 +185,9 @@ func (plan ReviewedPlan) Applicable() bool {
 }
 
 type requestRefresher struct {
-	snapshots SnapshotBuilder
-	request   Request
+	snapshots         SnapshotBuilder
+	request           Request
+	requireApplicable bool
 }
 
 func (refresher requestRefresher) Refresh(
@@ -200,7 +205,19 @@ func (refresher requestRefresher) Refresh(
 	if err != nil {
 		return executor.Preview{}, err
 	}
+	if refresher.requireApplicable {
+		if err := requireApplicableRefresh(reviewed); err != nil {
+			return executor.Preview{}, err
+		}
+	}
 	return reviewed.Executable(), nil
+}
+
+func requireApplicableRefresh(reviewed ReviewedPlan) error {
+	if !reviewed.Applicable() {
+		return errors.New("reviewed plan is no longer applicable")
+	}
+	return nil
 }
 
 func buildReviewedPlan(

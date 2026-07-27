@@ -334,7 +334,7 @@ CLI binary is already an integrity-indexed release payload, so this keeps the
 executable, its human guidance, and its agent contract on one version without
 adding a second runtime lookup.
 
-### Read-only machine draft review
+### Machine draft review and exact application
 
 `mainframe draft review` is the first agent-facing installation interface. It
 accepts one strict, versioned JSON document containing the complete desired
@@ -354,9 +354,16 @@ resolution produces adapter-specific secret references without reading a
 value. The response excludes executable after-images, target paths, journals,
 and secret-reference implementation details.
 
-The machine reviewer depends only on a fresh snapshot builder. It has no
-recovery service, apply executor, confirmation token, or apply command. Its
-Codex observation client is disabled because starting a new
+The machine reviewer builds the same immutable `ReviewedPlan` as application
+and exposes only a redacted semantic preview. Applicable plans receive an
+opaque SHA-256 confirmation that binds the normalized request, release,
+physical host scope, and complete executable plan without embedding secret
+values. Supplying `--confirm` explicitly authorizes recovery of an unfinished
+transaction before `mainframe draft apply` rebuilds the pinned plan with Codex
+observation disabled, rejects stale confirmation, and delegates the matched
+plan to `Service.ApplyConfirmed`.
+
+The Codex observation client is disabled because starting a new
 `codex app-server` may update Codex-owned runtime state; external Codex hook
 trust is reported as not assessed instead. The legacy `mainframe plan` remains
 a caller-supplied release-model planner and is documented separately so agents

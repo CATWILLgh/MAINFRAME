@@ -30,7 +30,18 @@ action through the masked terminal interface.
 
 `mainframe draft review` safely observes the current installation and returns
 the same adapter, configuration, MCP, and diagnostics plan used by the terminal
-interface. It has no apply companion and cannot recover or start a transaction.
+interface. When the exact plan is supported for machine application, the
+response contains `command_available: true` and a secret-free confirmation
+digest. Apply the unchanged request with:
+
+```text
+mainframe draft apply --confirm <digest>
+```
+
+Providing `--confirm` authorizes MAINFRAME to recover an unfinished transaction
+before it rebuilds the current plan. A changed release, host layout, desired state, file identity,
+configuration, or deferred secret reference makes the digest stale and
+requires a new review. The digest is opaque: do not inspect or alter it.
 The request describes the complete desired adapter and MCP state:
 
 ```json
@@ -60,7 +71,7 @@ Keyed profiles require `credential_instance_id`; keyless profiles reject it.
 The field contains an existing instance identifier, never a value. The same
 instance may be used for each currently supported adapter in one connection.
 
-The review deliberately does not start `codex app-server`; Codex external hook
+Review and apply deliberately do not start `codex app-server`; Codex external hook
 trust is therefore reported as not assessed when it cannot be proven from
 files. This keeps the command from changing Codex runtime state.
 
@@ -68,8 +79,8 @@ files. This keeps the command from changing Codex runtime state.
 observed snapshot and may expose target locations; do not confuse it with live
 machine observation. Credential-instance writes use the explicit review and
 apply commands documented in the `credentials` topic. Other installation
-changes should go through the terminal interface until the capability response
-explicitly advertises a corresponding machine command.
+Unsupported drafts remain review-only with `command_available: false`. Other
+installation changes should go through the terminal interface.
 
 The plan request is one strict JSON document:
 

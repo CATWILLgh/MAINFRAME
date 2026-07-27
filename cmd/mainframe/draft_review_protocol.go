@@ -19,6 +19,7 @@ const (
 	draftProtocolVersion    = 1
 	draftRequestKind        = "mainframe-draft"
 	draftReviewResponseKind = "mainframe-draft-review"
+	draftApplyResponseKind  = "mainframe-draft-apply-result"
 	draftStateSemantics     = "complete-desired-state"
 	draftDiagnosticsPolicy  = "preserve-retained-adapters"
 )
@@ -154,7 +155,15 @@ type draftOnboardingConnection struct {
 }
 
 type draftApplyAvailability struct {
-	CommandAvailable bool `json:"command_available"`
+	CommandAvailable bool   `json:"command_available"`
+	Confirmation     string `json:"confirmation,omitempty"`
+}
+
+type draftApplyResponse struct {
+	SchemaVersion int      `json:"schema_version"`
+	Kind          string   `json:"kind"`
+	Applied       bool     `json:"applied"`
+	Warnings      []string `json:"warnings"`
 }
 
 func decodeDraftReviewRequest(input io.Reader) (draftReviewRequest, error) {

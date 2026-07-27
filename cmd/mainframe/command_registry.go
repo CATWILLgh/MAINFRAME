@@ -12,6 +12,7 @@ type commandContext struct {
 	errorOutput   io.Writer
 	launchPreview previewLauncher
 	reviewDraft   draftReviewRunner
+	applyDraft    draftApplyRunner
 }
 
 type commandHandler func(commandContext, map[string]string) int
@@ -26,6 +27,7 @@ const (
 	handlerTUI              commandHandlerKind = "tui"
 	handlerPlan             commandHandlerKind = "plan"
 	handlerDraftReview      commandHandlerKind = "draft-review"
+	handlerDraftApply       commandHandlerKind = "draft-apply"
 	handlerCredentialList   commandHandlerKind = "credential-list"
 	handlerCredentialUses   commandHandlerKind = "credential-uses"
 	handlerCredentialReview commandHandlerKind = "credential-review"
@@ -89,6 +91,8 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runPlanCommand
 	case handlerDraftReview:
 		return runDraftReviewFromRegistry
+	case handlerDraftApply:
+		return runDraftApplyFromRegistry
 	case handlerCredentialList:
 		return runCredentialCatalogCommand
 	case handlerCredentialUses:

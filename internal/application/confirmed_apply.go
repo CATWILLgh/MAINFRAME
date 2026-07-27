@@ -17,7 +17,7 @@ func (service Service) ApplyConfirmed(
 	if !plan.applicable {
 		return executor.Result{}, errors.New("reviewed plan has no applicable changes")
 	}
-	return service.applyReviewed(plan, true)
+	return service.applyReviewed(plan, true, true)
 }
 
 func context7Applicable(

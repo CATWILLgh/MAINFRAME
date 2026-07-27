@@ -26,7 +26,8 @@ func TestDraftReviewCommandWritesOnlyTheReviewedResponse(t *testing.T) {
 			SchemaVersion: 1,
 			Kind:          draftReviewResponseKind,
 			Apply: draftApplyAvailability{
-				CommandAvailable: false,
+				CommandAvailable: true,
+				Confirmation:     "sha256:" + strings.Repeat("a", 64),
 			},
 		}, nil
 	}
@@ -41,7 +42,8 @@ func TestDraftReviewCommandWritesOnlyTheReviewedResponse(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 	if response.Kind != draftReviewResponseKind ||
-		response.Apply.CommandAvailable {
+		!response.Apply.CommandAvailable ||
+		response.Apply.Confirmation == "" {
 		t.Fatalf("response = %#v", response)
 	}
 }
@@ -184,6 +186,8 @@ func TestPublicDraftReviewOmitsExecutablePathsAndSecretMaterial(t *testing.T) {
 				Adapters: []domain.ComponentID{domain.ComponentOpenCode},
 			}},
 		},
+		true,
+		"sha256:"+strings.Repeat("a", 64),
 	)
 
 	payload, err := json.Marshal(response)
@@ -201,9 +205,67 @@ func TestPublicDraftReviewOmitsExecutablePathsAndSecretMaterial(t *testing.T) {
 			t.Fatalf("public review contains %q: %s", forbidden, text)
 		}
 	}
-	if !strings.Contains(text, `"command_available":false`) ||
+	if !strings.Contains(text, `"command_available":true`) ||
+		!strings.Contains(text, `"confirmation":"sha256:`) ||
 		!strings.Contains(text, `"state_semantics":"complete-desired-state"`) {
 		t.Fatalf("public review omits safety contract: %s", text)
+	}
+}
+
+func TestDraftApplyCommandReturnsOnlySafeResult(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	context := validDraftCommandContext(&stdout, &stderr)
+	context.applyDraft = func(
+		draftReviewRequest,
+		string,
+	) (draftApplyResponse, error) {
+		return draftApplyResponse{
+			SchemaVersion: draftProtocolVersion,
+			Kind:          draftApplyResponseKind,
+			Applied:       true,
+			Warnings:      []string{},
+		}, nil
+	}
+
+	exitCode := runDraftApplyFromRegistry(context, map[string]string{
+		"digest": "sha256:" + strings.Repeat("a", 64),
+	})
+
+	if exitCode != 0 || stderr.Len() != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
+	}
+	var response draftApplyResponse
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !response.Applied || response.Kind != draftApplyResponseKind {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
+func TestDraftApplyCommandDoesNotReflectRuntimeErrors(t *testing.T) {
+	const marker = "runtime-secret-must-not-appear"
+	var stdout, stderr bytes.Buffer
+	context := validDraftCommandContext(&stdout, &stderr)
+	context.applyDraft = func(
+		draftReviewRequest,
+		string,
+	) (draftApplyResponse, error) {
+		return draftApplyResponse{}, errors.New(marker)
+	}
+
+	exitCode := runDraftApplyFromRegistry(context, map[string]string{
+		"digest": "sha256:" + strings.Repeat("a", 64),
+	})
+
+	if exitCode != 1 || stdout.Len() != 0 ||
+		strings.Contains(stderr.String(), marker) {
+		t.Fatalf(
+			"exit code = %d, stdout = %q, stderr = %q",
+			exitCode,
+			stdout.String(),
+			stderr.String(),
+		)
 	}
 }
 

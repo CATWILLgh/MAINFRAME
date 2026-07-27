@@ -34,6 +34,20 @@ var registeredCommands = []commandSpec{
 		HandlerKind:   handlerDraftReview,
 	},
 	{
+		ID: "draft.apply",
+		Pattern: []string{
+			"draft", "apply", "--confirm", "<digest>",
+		},
+		Usage:         "mainframe draft apply --confirm <digest>",
+		Summary:       "Apply the exact applicable adapter and MCP draft returned by review.",
+		Input:         inputJSON,
+		Output:        outputJSON,
+		Effect:        effectReviewedWrite,
+		Confirmation:  confirmationDigest,
+		Documentation: "agent-automation",
+		HandlerKind:   handlerDraftApply,
+	},
+	{
 		ID: "credentials.catalog", Pattern: []string{"credentials"},
 		Usage:         "mainframe credentials",
 		Summary:       "List credential definitions and user-owned instances without values.",

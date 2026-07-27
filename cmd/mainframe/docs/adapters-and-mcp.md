@@ -33,8 +33,9 @@ Context7 is the first catalogued MCP service. Keyed and keyless profiles are
 separate choices. A credential instance can be reused by several supported
 projections without copying its value into MAINFRAME's catalog.
 
-`mainframe draft review` is the read-only machine interface for a complete
-adapter and MCP draft. OpenCode and standalone Antigravity 2.x currently
+`mainframe draft review` is the machine review interface for a complete
+adapter and MCP draft. Applicable exact plans can be passed unchanged to
+`mainframe draft apply --confirm <digest>`. OpenCode and standalone Antigravity 2.x currently
 support credential-bound Context7 projection. They may reference the same
 credential instance in one draft; MAINFRAME resolves only its secret reference
 while reviewing.
