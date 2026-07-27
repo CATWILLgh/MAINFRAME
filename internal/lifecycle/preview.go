@@ -83,9 +83,10 @@ type Preview struct {
 }
 
 type PreviewRequest struct {
-	Components    []domain.ComponentID
-	MCPSelections []mcpcatalog.Selection
-	Diagnostics   diagnostics.Desired
+	Components     []domain.ComponentID
+	MCPSelections  []mcpcatalog.Selection
+	MCPCredentials []mcpconfiguration.CredentialBinding
+	Diagnostics    diagnostics.Desired
 }
 
 type Service struct {

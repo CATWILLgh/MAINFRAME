@@ -55,23 +55,23 @@ func (reviewer interactivePlanReviewer) Review(
 	return reviewed, nil
 }
 
-func (reviewer interactivePlanReviewer) ApplyCredentialPlan(
+func (reviewer interactivePlanReviewer) ApplyPlan(
 	plan tui.ReviewedPlan,
-) (tui.CredentialApplyResult, error) {
+) (tui.ApplyResult, error) {
 	reviewed, ok := plan.(application.ReviewedPlan)
 	if !ok {
-		return tui.CredentialApplyResult{}, fmt.Errorf(
-			"credential plan was not produced by the application",
+		return tui.ApplyResult{}, fmt.Errorf(
+			"plan was not produced by the application",
 		)
 	}
-	result, err := reviewer.service.ApplyCredentials(reviewed)
+	result, err := reviewer.service.ApplyConfirmed(reviewed)
 	if err != nil {
-		return tui.CredentialApplyResult{}, fmt.Errorf(
-			"apply credential metadata: %w",
+		return tui.ApplyResult{}, fmt.Errorf(
+			"apply reviewed plan: %w",
 			err,
 		)
 	}
-	return tui.CredentialApplyResult{
+	return tui.ApplyResult{
 		Warnings: append([]string(nil), result.Warnings...),
 	}, nil
 }

@@ -166,7 +166,7 @@ func TestMCPChoiceAppearsInReadOnlyPreview(t *testing.T) {
 		"Remote with API key",
 		"Claude Code, Codex",
 		"API key required",
-		"Configuration and credentials are not changed",
+		"Draft choice. Configuration changes only after complete-plan confirmation.",
 	} {
 		if !strings.Contains(updated.View().Content, text) {
 			t.Fatalf("preview does not contain %q:\n%s", text, updated.View().Content)

@@ -74,7 +74,16 @@ func (service Service) prepareBaseConfiguration(
 	if service.mcpInspection == nil {
 		return prepared, nil
 	}
-	prepared, err = service.mcpInspection.PrepareOntoWithPreservation(
+	inspection, err := service.mcpInspection.WithCredentialBindings(
+		request.MCPCredentials,
+	)
+	if err != nil {
+		return configuration.PreparedPlan{}, fmt.Errorf(
+			"bind MCP credentials: %w",
+			err,
+		)
+	}
+	prepared, err = inspection.PrepareOntoWithPreservation(
 		prepared,
 		request.Components,
 		preservationRoots,

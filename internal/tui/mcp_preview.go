@@ -19,7 +19,7 @@ func (model *Model) renderMCPPreview() string {
 		}
 	}
 	lines = append(lines, mutedStyle.Render(
-		"Read-only choice. Configuration and credentials are not changed.",
+		"Draft choice. Configuration changes only after complete-plan confirmation.",
 	))
 	return strings.Join(lines, "\n")
 }
@@ -105,6 +105,15 @@ func (model *Model) credentialPreviewStatus(connection mcpcatalog.Connection) st
 	}
 	choice := model.mcpChoices[connection.ServerID]
 	if choice != nil && choice.credentialInstanceID != "" {
+		for _, instance := range model.credentialInstances.All() {
+			if instance.ID == choice.credentialInstanceID {
+				return fmt.Sprintf(
+					"Credential instance: %s (%s); secret value remains external.",
+					instance.Name,
+					instance.ID,
+				)
+			}
+		}
 		return "Credential instance selected; secret value remains external."
 	}
 	return "Credential instance is not selected."

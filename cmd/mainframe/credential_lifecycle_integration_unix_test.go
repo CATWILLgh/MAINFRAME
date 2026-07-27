@@ -193,7 +193,7 @@ func (builder credentialLifecycleSnapshotBuilder) Build(
 		},
 		Lifecycle: builder.lifecycle,
 	}
-	if request.CredentialInstances != nil {
+	if request.CredentialInstances != nil || len(request.MCPCredentials) > 0 {
 		credentials, err := credentialcatalog.ObserveInstances(
 			builder.namespace,
 			builder.definitions,

@@ -131,7 +131,7 @@ func (builder releaseSnapshotBuilder) Build(
 		Release:   identity,
 		Lifecycle: service,
 	}
-	if request.CredentialInstances != nil {
+	if request.CredentialInstances != nil || len(request.MCPCredentials) > 0 {
 		if builder.loadCredentials == nil {
 			return application.Snapshot{}, errors.New(
 				"credential snapshot loader must not be nil",

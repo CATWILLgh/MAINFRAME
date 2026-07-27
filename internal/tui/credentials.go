@@ -32,14 +32,17 @@ type credentialInstanceDraft struct {
 
 type credentialReviewedPlan interface {
 	CredentialChanges() []credentialcatalog.InstanceChange
-	CredentialOnlyApplicable() bool
 }
 
-type credentialPlanApplier interface {
-	ApplyCredentialPlan(ReviewedPlan) (CredentialApplyResult, error)
+type applicableReviewedPlan interface {
+	Applicable() bool
 }
 
-type CredentialApplyResult struct {
+type planApplier interface {
+	ApplyPlan(ReviewedPlan) (ApplyResult, error)
+}
+
+type ApplyResult struct {
 	Warnings []string
 }
 

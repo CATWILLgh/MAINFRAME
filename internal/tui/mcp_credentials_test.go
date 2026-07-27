@@ -2,9 +2,11 @@ package tui
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -47,6 +49,7 @@ func TestMCPCredentialScreenSelectsMetadataWithoutAcceptingValues(t *testing.T) 
 }
 
 func TestMCPPreviewRequiresMatchingCredentialInstance(t *testing.T) {
+	t.Setenv("CONTEXT7_HOME_KEY", "raw-secret-must-not-appear")
 	state := testCredentialState(t)
 	previewer := &fakePreviewer{targets: defaultTargets()}
 	model := NewModel(previewer, testCatalog(t), nil, state)
@@ -78,9 +81,29 @@ func TestMCPPreviewRequiresMatchingCredentialInstance(t *testing.T) {
 	}
 	if !strings.Contains(
 		updated.View().Content,
-		"Credential instance selected; secret value remains external",
+		"Credential instance: Home (context7-home); secret value remains external.",
 	) {
 		t.Fatalf("selected instance status is absent:\n%s", updated.View().Content)
+	}
+	if strings.Contains(updated.View().Content, "raw-secret-must-not-appear") {
+		t.Fatalf("credential value leaked into preview:\n%s", updated.View().Content)
+	}
+	if !strings.Contains(
+		updated.View().Content,
+		"Draft choice. Configuration changes only after complete-plan confirmation.",
+	) {
+		t.Fatalf("complete-plan notice is absent:\n%s", updated.View().Content)
+	}
+	want := []application.MCPCredentialBinding{{
+		ServerID: "context7", ProfileID: "remote-api-key",
+		InstanceID: "context7-home",
+	}}
+	if !reflect.DeepEqual(previewer.mcpCredentials, want) {
+		t.Fatalf(
+			"MCP credential bindings = %#v, want %#v",
+			previewer.mcpCredentials,
+			want,
+		)
 	}
 }
 

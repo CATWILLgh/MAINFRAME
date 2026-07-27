@@ -78,6 +78,42 @@ func TestReleaseSnapshotBuilderReloadsAndReinspectsEveryBuild(t *testing.T) {
 	}
 }
 
+func TestReleaseSnapshotBuilderLoadsCredentialsForMCPInstanceBinding(t *testing.T) {
+	releaseRoot := t.TempDir()
+	builder := productionTestSnapshotBuilder(
+		t,
+		func() (string, error) { return releaseRoot, nil },
+	)
+	loads := 0
+	builder.loadCredentials = func(
+		root string,
+		release releasecontract.Release,
+	) (credentialRuntimeState, error) {
+		loads++
+		if root != releaseRoot || release.ID != "release" {
+			t.Fatalf("credential load context = %q/%q", root, release.ID)
+		}
+		return credentialRuntimeState{}, nil
+	}
+
+	snapshot, err := builder.Build(application.Request{
+		MCPCredentials: []application.MCPCredentialBinding{{
+			ServerID: "context7", ProfileID: "remote-api-key",
+			InstanceID: "context7-home",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if loads != 1 || snapshot.Credentials == nil {
+		t.Fatalf(
+			"credential loads/snapshot = %d/%#v",
+			loads,
+			snapshot.Credentials,
+		)
+	}
+}
+
 func TestReleaseSnapshotBuilderRejectsPinnedIdentityDrift(t *testing.T) {
 	expected := executor.ReleaseIdentity{
 		ID:          "release",

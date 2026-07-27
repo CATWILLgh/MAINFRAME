@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
@@ -91,7 +92,10 @@ func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 	case screenApplyConfirm:
 		model.form = huh.NewForm(huh.NewGroup(
 			huh.NewConfirm().
-				Title("Write the reviewed credential metadata now?").
+				Title("Apply every reviewed change now?").
+				Description(
+					"The complete plan above is one transaction. Secret values are not read or written.",
+				).
 				Value(&model.applyConfirmed),
 		)).WithShowHelp(false)
 	default:
@@ -156,6 +160,23 @@ func (model *Model) mcpSelections() []mcpcatalog.Selection {
 		})
 	}
 	return selections
+}
+
+func (model *Model) mcpCredentialBindings() []application.MCPCredentialBinding {
+	bindings := make([]application.MCPCredentialBinding, 0)
+	for _, server := range model.catalog.Servers() {
+		choice := model.mcpChoices[server.ID]
+		if choice == nil || !choice.Enabled ||
+			choice.credentialInstanceID == "" {
+			continue
+		}
+		bindings = append(bindings, application.MCPCredentialBinding{
+			ServerID:   server.ID,
+			ProfileID:  choice.ProfileID,
+			InstanceID: choice.credentialInstanceID,
+		})
+	}
+	return bindings
 }
 
 func (model *Model) mcpView() string {

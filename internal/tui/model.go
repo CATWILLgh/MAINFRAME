@@ -153,14 +153,14 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case screenCredentialEdit:
 			return model.saveCredentialDraft()
 		case screenApplyConfirm:
-			return model.confirmCredentialApply()
+			return model.confirmPlanApply()
 		}
 	}
 	return model, command
 }
 
 func (model *Model) View() tea.View {
-	content := model.mainView()
+	var content string
 	if model.screen == screenSelection {
 		content = model.selectionView()
 	} else if model.screen == screenMCP {
@@ -181,6 +181,8 @@ func (model *Model) View() tea.View {
 		content = model.appliedView()
 	} else if model.screen == screenPreview {
 		content = model.previewView()
+	} else {
+		content = model.mainView()
 	}
 	view := tea.NewView(content)
 	view.AltScreen = true
@@ -201,9 +203,10 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 		return model.reinitializeCurrentForm()
 	}
 	request := application.Request{
-		Components:    model.selected,
-		MCPSelections: model.mcpSelections(),
-		Diagnostics:   model.diagnostics,
+		Components:     model.selected,
+		MCPSelections:  model.mcpSelections(),
+		MCPCredentials: model.mcpCredentialBindings(),
+		Diagnostics:    model.diagnostics,
 	}
 	if model.credentialDirty {
 		instances := model.credentialInstances.Clone()
@@ -257,8 +260,8 @@ func (model *Model) selectionView() string {
 	return strings.Join(sections, "\n\n")
 }
 
-func (model *Model) previewView() string {
-	sections := []string{header(), headingStyle.Render("Filesystem plan")}
+func (model *Model) reviewedPlanSections() []string {
+	sections := []string{headingStyle.Render("Filesystem plan")}
 	groups := []struct {
 		title string
 		kind  domain.OperationKind
@@ -287,16 +290,7 @@ func (model *Model) previewView() string {
 	sections = append(sections, model.renderMCPPreview())
 	sections = append(sections, model.renderDiagnosticsPreview())
 	sections = append(sections, model.renderCredentialPreview())
-	if model.err != nil {
-		sections = append(sections, errorStyle.Render(model.err.Error()))
-	}
-	footer := "b back  •  q quit"
-	if plan, ok := model.reviewedPlan.(credentialReviewedPlan); ok &&
-		plan.CredentialOnlyApplicable() {
-		footer = "a apply credential metadata  •  " + footer
-	}
-	sections = append(sections, mutedStyle.Render(footer))
-	return strings.Join(sections, "\n\n")
+	return sections
 }
 
 func selectionForm(targets []lifecycle.Target, selected *[]domain.ComponentID) *huh.Form {

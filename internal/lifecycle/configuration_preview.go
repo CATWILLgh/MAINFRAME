@@ -101,16 +101,9 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	mcpPlan := mcpconfiguration.Plan{}
-	if service.mcpInspection != nil {
-		mcpPlan, err = service.mcpInspection.PlanWithPreservation(
-			request.Components,
-			preservationRoots,
-			request.MCPSelections,
-		)
-		if err != nil {
-			return Preview{}, fmt.Errorf("plan MCP configuration: %w", err)
-		}
+	mcpPlan, err := service.planMCP(request, preservationRoots)
+	if err != nil {
+		return Preview{}, err
 	}
 	configurationPlan, err := service.planManagedConfiguration(
 		request.Components,
@@ -138,6 +131,36 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 		MCP:           mcpPlan,
 		Diagnostics:   diagnosticsPlan,
 	}, nil
+}
+
+func (service Service) planMCP(
+	request PreviewRequest,
+	preservationRoots []domain.ComponentID,
+) (mcpconfiguration.Plan, error) {
+	if service.mcpInspection == nil {
+		return mcpconfiguration.Plan{}, nil
+	}
+	inspection, err := service.mcpInspection.WithCredentialBindings(
+		request.MCPCredentials,
+	)
+	if err != nil {
+		return mcpconfiguration.Plan{}, fmt.Errorf(
+			"bind MCP credentials: %w",
+			err,
+		)
+	}
+	plan, err := inspection.PlanWithPreservation(
+		request.Components,
+		preservationRoots,
+		request.MCPSelections,
+	)
+	if err != nil {
+		return mcpconfiguration.Plan{}, fmt.Errorf(
+			"plan MCP configuration: %w",
+			err,
+		)
+	}
+	return plan, nil
 }
 
 func (service Service) planManagedConfiguration(

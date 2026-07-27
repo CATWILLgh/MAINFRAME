@@ -18,6 +18,7 @@ import (
 type Request struct {
 	Components          []domain.ComponentID
 	MCPSelections       []mcpcatalog.Selection
+	MCPCredentials      []MCPCredentialBinding
 	Diagnostics         diagnostics.Desired
 	CredentialInstances *credentialcatalog.Instances
 }
@@ -53,6 +54,7 @@ type ReviewedPlan struct {
 	semantic                 lifecycle.Preview
 	executable               executor.Preview
 	credentials              []credentialcatalog.InstanceChange
+	applicable               bool
 	credentialOnlyApplicable bool
 	reviewed                 bool
 }
@@ -178,6 +180,10 @@ func (plan ReviewedPlan) CredentialOnlyApplicable() bool {
 	return plan.credentialOnlyApplicable
 }
 
+func (plan ReviewedPlan) Applicable() bool {
+	return plan.applicable
+}
+
 type requestRefresher struct {
 	snapshots SnapshotBuilder
 	request   Request
@@ -209,10 +215,9 @@ func buildReviewedPlan(
 	if err != nil {
 		return ReviewedPlan{}, fmt.Errorf("build fresh host snapshot: %w", err)
 	}
-	lifecycleRequest := lifecycle.PreviewRequest{
-		Components:    append([]domain.ComponentID(nil), request.Components...),
-		MCPSelections: cloneSelections(request.MCPSelections),
-		Diagnostics:   request.Diagnostics,
+	lifecycleRequest, err := buildLifecycleRequest(snapshot, request)
+	if err != nil {
+		return ReviewedPlan{}, err
 	}
 	semantic, err := snapshot.Lifecycle.Preview(lifecycleRequest)
 	if err != nil {
@@ -245,14 +250,17 @@ func buildReviewedPlan(
 		Plan:          cloneDomainPlan(semantic.Filesystem),
 		Configuration: prepared,
 	}
+	credentialOnlyApplicable := len(credentialChanges) > 0 &&
+		len(executable.Plan.Operations) == 0 &&
+		credentialcatalog.IsInstancesOnlyPlan(prepared)
 	return ReviewedPlan{
 		request: cloneRequest(request), semantic: cloneSemantic(semantic),
 		executable:  cloneExecutable(executable),
 		credentials: cloneCredentialChanges(credentialChanges),
-		credentialOnlyApplicable: len(credentialChanges) > 0 &&
-			len(executable.Plan.Operations) == 0 &&
-			credentialcatalog.IsInstancesOnlyPlan(prepared),
-		reviewed: true,
+		applicable: credentialOnlyApplicable ||
+			openCodeContext7Applicable(request, semantic, executable),
+		credentialOnlyApplicable: credentialOnlyApplicable,
+		reviewed:                 true,
 	}, nil
 }
 
@@ -295,7 +303,11 @@ func cloneRequest(request Request) Request {
 	cloned := Request{
 		Components:    append([]domain.ComponentID(nil), request.Components...),
 		MCPSelections: cloneSelections(request.MCPSelections),
-		Diagnostics:   request.Diagnostics,
+		MCPCredentials: append(
+			[]MCPCredentialBinding(nil),
+			request.MCPCredentials...,
+		),
+		Diagnostics: request.Diagnostics,
 	}
 	if request.CredentialInstances != nil {
 		instances := request.CredentialInstances.Clone()

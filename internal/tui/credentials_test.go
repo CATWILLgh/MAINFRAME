@@ -6,6 +6,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
 
@@ -83,31 +84,10 @@ func TestCredentialEditRemainsDraftUntilCompleteReview(t *testing.T) {
 	}
 }
 
-func TestCredentialOnlyPreviewRequiresExplicitConfirmationBeforeApply(
+func TestMixedPreviewRequiresOneExplicitConfirmationBeforeApply(
 	t *testing.T,
 ) {
-	state := testCredentialState(t)
-	updatedInstance := state.Instances.All()[0]
-	updatedInstance.Name = "Home updated"
-	change := credentialcatalog.InstanceChange{
-		Kind:   credentialcatalog.ChangeUpdate,
-		Before: state.Instances.All()[0],
-		After:  updatedInstance,
-	}
-	reviewer := &credentialTUIReviewer{
-		plan: credentialTUIPlan{
-			changes:    []credentialcatalog.InstanceChange{change},
-			applicable: true,
-		},
-	}
-	model := NewModel(reviewer, testCatalog(t), nil, state)
-	model.credentialDirty = true
-	model.credentialInstances, _, _ = credentialcatalog.EditInstance(
-		state.Instances,
-		"context7-home",
-		updatedInstance,
-		state.Definitions,
-	)
+	model, reviewer := mixedApplicableModel(t)
 
 	updated, command := model.openPreview()
 	if command != nil || updated.screen != screenPreview {
@@ -116,16 +96,11 @@ func TestCredentialOnlyPreviewRequiresExplicitConfirmationBeforeApply(
 	if reviewer.applies != 0 {
 		t.Fatal("review applied credential metadata")
 	}
-	view := updated.View().Content
-	for _, text := range []string{
+	assertContainsAll(t, updated.View().Content, []string{
 		"Credential metadata · 1",
 		"Update Home updated",
-		"Press a to confirm",
-	} {
-		if !strings.Contains(view, text) {
-			t.Fatalf("preview does not contain %q:\n%s", text, view)
-		}
-	}
+		"a review and apply",
+	})
 
 	next, command := updated.updatePreview(keyPress("a"))
 	confirm := next.(*Model)
@@ -137,8 +112,12 @@ func TestCredentialOnlyPreviewRequiresExplicitConfirmationBeforeApply(
 			reviewer.applies,
 		)
 	}
+	assertContainsAll(t, confirm.View().Content, []string{
+		"Configuration plan",
+		"Credential metadata · 1",
+	})
 	confirm.applyConfirmed = true
-	applied, command := confirm.confirmCredentialApply()
+	applied, command := confirm.confirmPlanApply()
 	if command != nil || applied.screen != screenApplied ||
 		reviewer.applies != 1 {
 		t.Fatalf(
@@ -146,6 +125,52 @@ func TestCredentialOnlyPreviewRequiresExplicitConfirmationBeforeApply(
 			applied.screen,
 			reviewer.applies,
 		)
+	}
+	if !strings.Contains(
+		applied.View().Content,
+		"transaction cleanup needs attention",
+	) {
+		t.Fatalf("confirmed apply warning is absent:\n%s", applied.View().Content)
+	}
+}
+
+func mixedApplicableModel(t *testing.T) (*Model, *credentialTUIReviewer) {
+	t.Helper()
+	state := testCredentialState(t)
+	updated := state.Instances.All()[0]
+	updated.Name = "Home updated"
+	reviewer := &credentialTUIReviewer{
+		result: ApplyResult{Warnings: []string{"transaction cleanup needs attention"}},
+		plan: credentialTUIPlan{
+			changes: []credentialcatalog.InstanceChange{{
+				Kind:   credentialcatalog.ChangeUpdate,
+				Before: state.Instances.All()[0], After: updated,
+			}},
+			applicable: true,
+			semantic:   configurationPlanFixture,
+		},
+	}
+	model := NewModel(reviewer, testCatalog(t), nil, state)
+	model.selected = []domain.ComponentID{domain.ComponentOpenCode}
+	model.openMCP()
+	choice := model.mcpChoices["context7"]
+	choice.Enabled = true
+	choice.ProfileID = "remote-api-key"
+	choice.Adapters = []domain.ComponentID{domain.ComponentOpenCode}
+	choice.credentialInstanceID = "context7-home"
+	model.credentialDirty = true
+	model.credentialInstances, _, _ = credentialcatalog.EditInstance(
+		state.Instances, "context7-home", updated, state.Definitions,
+	)
+	return model, reviewer
+}
+
+func assertContainsAll(t *testing.T, view string, values []string) {
+	t.Helper()
+	for _, value := range values {
+		if !strings.Contains(view, value) {
+			t.Fatalf("view does not contain %q:\n%s", value, view)
+		}
 	}
 }
 
@@ -161,7 +186,7 @@ func TestAppliedCredentialViewShowsExecutorWarnings(t *testing.T) {
 	}
 }
 
-func TestMixedPreviewCannotOpenCredentialApplyConfirmation(t *testing.T) {
+func TestNonApplicablePreviewCannotOpenApplyConfirmation(t *testing.T) {
 	state := testCredentialState(t)
 	instance := state.Instances.All()[0]
 	reviewer := &credentialTUIReviewer{
@@ -176,6 +201,13 @@ func TestMixedPreviewCannotOpenCredentialApplyConfirmation(t *testing.T) {
 	model.screen = screenPreview
 	model.reviewedPlan = reviewer.plan
 
+	view := model.View().Content
+	if !strings.Contains(
+		view,
+		"Preview only. No safe apply action is available for this plan.",
+	) {
+		t.Fatalf("preview-only reason is absent:\n%s", view)
+	}
 	next, command := model.updatePreview(keyPress("a"))
 	if command != nil || next.(*Model).screen != screenPreview ||
 		reviewer.applies != 0 {
@@ -186,6 +218,7 @@ func TestMixedPreviewCannotOpenCredentialApplyConfirmation(t *testing.T) {
 type credentialTUIReviewer struct {
 	plan    credentialTUIPlan
 	request application.Request
+	result  ApplyResult
 	applies int
 }
 
@@ -200,26 +233,27 @@ func (reviewer *credentialTUIReviewer) Review(
 	return reviewer.plan, nil
 }
 
-func (reviewer *credentialTUIReviewer) ApplyCredentialPlan(
+func (reviewer *credentialTUIReviewer) ApplyPlan(
 	ReviewedPlan,
-) (CredentialApplyResult, error) {
+) (ApplyResult, error) {
 	reviewer.applies++
-	return CredentialApplyResult{}, nil
+	return reviewer.result, nil
 }
 
 type credentialTUIPlan struct {
 	changes    []credentialcatalog.InstanceChange
 	applicable bool
+	semantic   lifecycle.Preview
 }
 
 func (plan credentialTUIPlan) Semantic() lifecycle.Preview {
-	return lifecycle.Preview{}
+	return plan.semantic
 }
 
 func (plan credentialTUIPlan) CredentialChanges() []credentialcatalog.InstanceChange {
 	return append([]credentialcatalog.InstanceChange(nil), plan.changes...)
 }
 
-func (plan credentialTUIPlan) CredentialOnlyApplicable() bool {
+func (plan credentialTUIPlan) Applicable() bool {
 	return plan.applicable
 }

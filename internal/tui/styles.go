@@ -28,7 +28,7 @@ func header() string {
 			"Configure your choices first.\nNothing changes until you review and confirm the complete plan.",
 		),
 		mutedStyle.Render(
-			"Only a confirmed credential-only plan can be applied in this build.\nEnvironment, MCP, and DEV changes remain preview-only.",
+			"When safe apply is available, one confirmation applies the reviewed changes as one transaction.\nSecret values remain outside MAINFRAME.",
 		),
 	}, "\n")
 }
