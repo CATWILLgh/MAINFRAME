@@ -334,6 +334,18 @@ stale headers while preserving unrelated OpenCode configuration. No other
 adapter receives this runtime binding until its plaintext-free dialect has its
 own executable contract.
 
+Standalone Antigravity `2.2.1` does not satisfy that contract. Its MCP
+documentation shows direct string values for remote `headers`, provides no
+environment-reference syntax for them, and documents `env` only for stdio
+servers. An isolated probe against the installed
+`com.google.antigravity` application configured a synthetic header as
+`${MAINFRAME_ANTIGRAVITY_PROBE}` with that variable present in the process
+environment; the local MCP endpoint received the placeholder literally.
+MAINFRAME therefore keeps the keyed Antigravity profile fail-closed. Enabling
+it requires either a documented plaintext-free host reference or a separately
+approved secret-injecting transport; writing the key into Antigravity
+configuration is not an acceptable fallback.
+
 The second read-only milestone gives keyless Context7 exact OpenCode, Claude
 Code, Codex, and Antigravity 2.x projections. Bundle schema version 2 links each
 projection to the catalog server and profile instead of repeating the endpoint

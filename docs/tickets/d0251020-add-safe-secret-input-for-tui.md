@@ -69,3 +69,88 @@ executable until a safer channel exists.
 - `docs/installer-strategy.md`
 - `internal/mcpcatalog/catalog.json`
 - <https://cwe.mitre.org/data/definitions/214.html>
+
+## Re-occurrence noted (2026-07-27)
+
+**Noticed during:** the proposed Context7 credential-instance projection for
+standalone Antigravity 2.x
+
+**Where:** `com.google.antigravity` version `2.2.1`
+
+**Additional details:** Antigravity's MCP documentation shows direct string
+values for remote `headers`, provides no environment-reference syntax for
+them, and documents `env` only for stdio servers. In an isolated temporary
+home, a synthetic local MCP endpoint received
+`${MAINFRAME_ANTIGRAVITY_PROBE}` literally even though that variable was
+present in the standalone language-server environment. The process was launched
+with isolated configuration roots and did not receive or change live user
+configuration. This narrows the Antigravity acceptance criterion: keyed support
+must remain disabled until the host documents and implements a plaintext-free
+header reference, or MAINFRAME separately approves and designs a
+secret-injecting transport.
+
+**Source:** <https://antigravity.google/docs/mcp>, accessed 2026-07-27.
+
+### Reproduction record
+
+The probe used only the synthetic value `reference-expanded`. Create an
+isolated root and place this MCP configuration at
+`$PROBE_ROOT/gemini/config/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mainframe-env-reference-probe": {
+      "serverUrl": "http://127.0.0.1:49321/mcp",
+      "headers": {
+        "X-Mainframe-Probe": "${MAINFRAME_ANTIGRAVITY_PROBE}"
+      }
+    }
+  }
+}
+```
+
+Create the root and start the repository's loopback-only synthetic MCP server:
+
+```sh
+export PROBE_ROOT="$(mktemp -d /tmp/mainframe-antigravity-probe.XXXXXX)"
+echo "$PROBE_ROOT"
+mkdir -p "$PROBE_ROOT/gemini/config"
+python3 tools/probe_antigravity_mcp_headers.py --port 49321
+```
+
+The server records `X-Mainframe-Probe`, answers `initialize` and `tools/list`,
+and accepts notifications. In a second terminal, export the printed
+`PROBE_ROOT` path and launch the exact installed binary:
+
+```sh
+export PROBE_ROOT=/tmp/mainframe-antigravity-probe.<printed-suffix>
+HOME="$PROBE_ROOT" \
+MAINFRAME_ANTIGRAVITY_PROBE=reference-expanded \
+/Applications/Antigravity.app/Contents/Resources/bin/language_server \
+  -gemini_dir="$PROBE_ROOT/gemini" \
+  -config_dir=config \
+  -app_data_dir=antigravity \
+  -standalone \
+  -headless \
+  -disable_telemetry \
+  -use_mocked_data \
+  -use_ls_chrome_devtools_mcp=false
+```
+
+When the isolated mocked-data process asks for a redirect URL, enter
+`http://localhost/invalid`; no real account authorization is used. The process
+then initializes the configured MCP connection.
+
+The isolated `2.2.1` run sent two requests. The exact captured lines were:
+
+```text
+REQUEST_1_X-Mainframe-Probe=${MAINFRAME_ANTIGRAVITY_PROBE}
+REQUEST_2_X-Mainframe-Probe=${MAINFRAME_ANTIGRAVITY_PROBE}
+```
+
+Stop both processes normally after capture and verify that port `49321` has no
+listener. The observed filesystem writes stayed under `$PROBE_ROOT`; live
+Claude Code and Codex configuration was neither supplied to the process nor
+changed. A later host version must be rechecked rather than assumed to behave
+identically.
