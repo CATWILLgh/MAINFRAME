@@ -37,7 +37,7 @@ def snapshot_tree(path: Path) -> dict[str, tuple[int, bytes | str | None]]:
 
 
 def run_dry_run(builder: Path, root: Path) -> subprocess.CompletedProcess[str]:
-    sandbox = Path(tempfile.mkdtemp())
+    sandbox = Path(tempfile.mkdtemp()).resolve(strict=True)
     temporary = sandbox / "temporary"
     temporary.mkdir()
     result = subprocess.run(
@@ -220,7 +220,7 @@ def _assert_no_publication_residue(output: Path) -> None:
 
 
 def test_build_creates_complete_indexed_release_and_executable_layout():
-    sandbox = Path(tempfile.mkdtemp())
+    sandbox = Path(tempfile.mkdtemp()).resolve(strict=True)
     output = sandbox / "mainframe-test"
 
     build_release.build(REPO, output, release_id="test-release")
@@ -231,7 +231,7 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
 
 
 def test_build_rejects_existing_destination_without_mutation():
-    sandbox = Path(tempfile.mkdtemp())
+    sandbox = Path(tempfile.mkdtemp()).resolve(strict=True)
     output = sandbox / "release"
     output.mkdir()
     sentinel = output / "keep.txt"
