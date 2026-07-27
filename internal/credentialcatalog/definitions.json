@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "mainframe-credential-definitions",
+  "services": [
+    {
+      "id": "context7",
+      "name": "Context7",
+      "summary": "Credential guidance for the verified Context7 MCP profile.",
+      "source": {
+        "kind": "mcp-profile",
+        "server_id": "context7",
+        "profile_id": "remote-api-key"
+      },
+      "credential_roles": [
+        {
+          "id": "api-key",
+          "name": "API key",
+          "purpose": "Authenticate the selected Context7 remote connection.",
+          "acquisition": "Use the authoritative instructions referenced by the Context7 MCP profile."
+        }
+      ]
+    }
+  ]
+}
