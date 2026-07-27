@@ -54,7 +54,11 @@ func (executor Executor) bindConfigurationParent(
 	}
 	if !configurationStateMatches(state, mutation.Before, state.Parent) ||
 		!validFileIdentity(state.Parent) {
-		return fmt.Errorf("configuration %v changed after preview", mutation.Target)
+		return fmt.Errorf(
+			"configuration %v changed after preview (%s)",
+			mutation.Target,
+			configurationStateDifference(state, mutation.Before),
+		)
 	}
 	mutation.Parent = state.Parent
 	mutation.Phase = StepParentBound
@@ -62,6 +66,26 @@ func (executor Executor) bindConfigurationParent(
 		return fmt.Errorf("save configuration parent: %w", err)
 	}
 	return nil
+}
+
+func configurationStateDifference(
+	state ConfigurationState,
+	image ConfigurationFileImage,
+) string {
+	switch {
+	case state.Exists != image.Exists:
+		return "existence differs"
+	case state.SHA256 != image.SHA256:
+		return "content differs"
+	case state.Mode != image.Mode:
+		return "permissions differ"
+	case state.Entry != image.Entry:
+		return "file identity differs"
+	case !validFileIdentity(state.Parent):
+		return "parent identity is invalid"
+	default:
+		return "state differs"
+	}
 }
 
 func (executor Executor) prepareConfigurationPrivate(

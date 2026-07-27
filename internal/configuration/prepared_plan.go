@@ -15,6 +15,34 @@ var preparedResourceIDPattern = regexp.MustCompile(
 
 var preparedDigestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+type PreparedPlan struct {
+	transitions      []Transition
+	preconditions    []ReadPrecondition
+	materializations []SecretMaterializationRecipe
+}
+
+func (plan PreparedPlan) Transitions() []Transition {
+	result := make([]Transition, len(plan.transitions))
+	for index, transition := range plan.transitions {
+		result[index] = Transition{
+			ResourceIDs: append([]string(nil), transition.ResourceIDs...),
+			Mutations:   cloneFileMutations(transition.Mutations),
+		}
+	}
+	return result
+}
+
+func (plan PreparedPlan) Preconditions() []ReadPrecondition {
+	return append([]ReadPrecondition(nil), plan.preconditions...)
+}
+
+func (plan PreparedPlan) Materializations() []SecretMaterializationRecipe {
+	return append(
+		[]SecretMaterializationRecipe(nil),
+		plan.materializations...,
+	)
+}
+
 func NewPreparedPlan(transitions []Transition) (PreparedPlan, error) {
 	return NewPreparedPlanWithPreconditions(transitions, nil)
 }
@@ -22,6 +50,18 @@ func NewPreparedPlan(transitions []Transition) (PreparedPlan, error) {
 func NewPreparedPlanWithPreconditions(
 	transitions []Transition,
 	preconditions []ReadPrecondition,
+) (PreparedPlan, error) {
+	return NewPreparedPlanWithMaterializations(
+		transitions,
+		preconditions,
+		nil,
+	)
+}
+
+func NewPreparedPlanWithMaterializations(
+	transitions []Transition,
+	preconditions []ReadPrecondition,
+	materializations []SecretMaterializationRecipe,
 ) (PreparedPlan, error) {
 	normalized := cloneTransitions(transitions)
 	if err := validatePreparedTransitions(normalized); err != nil {
@@ -37,6 +77,15 @@ func NewPreparedPlanWithPreconditions(
 	); err != nil {
 		return PreparedPlan{}, err
 	}
+	normalizedMaterializations := cloneSecretMaterializations(
+		materializations,
+	)
+	if err := validateSecretMaterializations(
+		normalized,
+		normalizedMaterializations,
+	); err != nil {
+		return PreparedPlan{}, err
+	}
 	sortPreparedTransitions(normalized)
 	sort.Slice(normalizedPreconditions, func(left, right int) bool {
 		return locationLess(
@@ -45,19 +94,29 @@ func NewPreparedPlanWithPreconditions(
 		)
 	})
 	return PreparedPlan{
-		transitions:   normalized,
-		preconditions: normalizedPreconditions,
+		transitions:      normalized,
+		preconditions:    normalizedPreconditions,
+		materializations: normalizedMaterializations,
 	}, nil
 }
 
 func CombinePreparedPlans(plans ...PreparedPlan) (PreparedPlan, error) {
 	var transitions []Transition
 	var preconditions []ReadPrecondition
+	var materializations []SecretMaterializationRecipe
 	for _, plan := range plans {
 		transitions = append(transitions, plan.Transitions()...)
 		preconditions = append(preconditions, plan.Preconditions()...)
+		materializations = append(
+			materializations,
+			plan.Materializations()...,
+		)
 	}
-	return NewPreparedPlanWithPreconditions(transitions, preconditions)
+	return NewPreparedPlanWithMaterializations(
+		transitions,
+		preconditions,
+		materializations,
+	)
 }
 
 func cloneTransitions(source []Transition) []Transition {

@@ -7,7 +7,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -206,40 +205,6 @@ func TestMCPConfigurationIntentAppearsInPreview(t *testing.T) {
 		if !strings.Contains(updated.View().Content, text) {
 			t.Fatalf("configuration preview does not contain %q:\n%s", text, updated.View().Content)
 		}
-	}
-}
-
-func TestMCPPreviewRejectsUnsupportedAdapterWithoutCallingLifecycle(t *testing.T) {
-	previewer := &fakePreviewer{targets: defaultTargets()}
-	model := newTestModel(t, previewer)
-	model.selected = []domain.ComponentID{domain.ComponentAntigravity2}
-	model.openMCP()
-	choice := model.mcpChoices["context7"]
-	choice.Enabled = true
-	choice.ProfileID = "remote-api-key"
-	choice.Adapters = []domain.ComponentID{domain.ComponentAntigravity2}
-	model.reviewedPlan = fakeReviewedPlan{}
-	model.preview = lifecycle.Preview{
-		Diagnostics: diagnostics.Plan{Executable: true},
-	}
-	model.mcpPreview = mcpcatalog.OnboardingPreview{
-		Connections: []mcpcatalog.Connection{{}},
-	}
-
-	updated, command := model.openPreview()
-	if updated.screen != screenMCP || command == nil {
-		t.Fatalf("screen = %v, command = %v", updated.screen, command)
-	}
-	if !strings.Contains(updated.View().Content, "plaintext-free secret reference") {
-		t.Fatalf("compatibility error is missing:\n%s", updated.View().Content)
-	}
-	if previewer.calls != 0 {
-		t.Fatalf("lifecycle preview calls = %d", previewer.calls)
-	}
-	if updated.reviewedPlan != nil ||
-		updated.preview.Diagnostics.Executable ||
-		len(updated.mcpPreview.Connections) != 0 {
-		t.Fatal("MCP validation failure retained stale plan state")
 	}
 }
 

@@ -114,7 +114,7 @@ func (model *Model) appliedView() string {
 		header(),
 		headingStyle.Render("Reviewed plan applied"),
 		"Every confirmed change was applied successfully.",
-		"Secret values were not read or written.",
+		"Secret values were not shown in the interface or stored in MAINFRAME metadata.",
 	}
 	if len(model.appliedWarnings) > 0 {
 		sections = append(sections, bannerStyle.Render(

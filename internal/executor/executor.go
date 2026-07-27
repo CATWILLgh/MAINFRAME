@@ -14,6 +14,7 @@ type Executor struct {
 	refresher      Refresher
 	workspace      LinkWorkspace
 	configurations ConfigurationWorkspace
+	secrets        configuration.SecretResolver
 	ownership      OwnershipStore
 }
 
@@ -41,6 +42,25 @@ func NewWithConfiguration(
 ) Executor {
 	executor := New(locker, store, refresher, workspace)
 	executor.configurations = configurations
+	return executor
+}
+
+func NewWithConfigurationAndSecrets(
+	locker Locker,
+	store JournalStore,
+	refresher Refresher,
+	workspace LinkWorkspace,
+	configurations ConfigurationWorkspace,
+	secrets configuration.SecretResolver,
+) Executor {
+	executor := NewWithConfiguration(
+		locker,
+		store,
+		refresher,
+		workspace,
+		configurations,
+	)
+	executor.secrets = secrets
 	return executor
 }
 

@@ -32,16 +32,12 @@ func TestPreviewValidatesAndSortsAdapterSelections(t *testing.T) {
 	}
 }
 
-func TestPreviewRejectsUnsupportedUnselectedAndDuplicateAdapters(t *testing.T) {
+func TestPreviewRejectsUnselectedAndDuplicateAdapters(t *testing.T) {
 	catalog, err := Parse(validCatalogJSON())
 	if err != nil {
 		t.Fatalf("parse catalog: %v", err)
 	}
 	tests := map[string]Selection{
-		"unsupported profile": {
-			ServerID: "context7", ProfileID: "remote-api-key",
-			Adapters: []domain.ComponentID{domain.ComponentAntigravity2},
-		},
 		"environment not selected": {
 			ServerID: "context7", ProfileID: "remote-keyless",
 			Adapters: []domain.ComponentID{domain.ComponentOpenCode},

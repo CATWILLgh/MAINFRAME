@@ -20,6 +20,7 @@ type Host interface {
 type Inspection struct {
 	projections []releasecontract.MCPProjection
 	catalog     mcpcatalog.Catalog
+	credentials map[string]CredentialBinding
 	snapshots   map[string]projectionSnapshot
 	files       map[domain.Location]mcpFileSnapshot
 	migrations  map[domain.ComponentID]migrationSnapshot
@@ -66,6 +67,7 @@ func Inspect(
 	inspection := Inspection{
 		projections: cloned,
 		catalog:     catalog,
+		credentials: make(map[string]CredentialBinding),
 		snapshots:   make(map[string]projectionSnapshot, len(cloned)),
 		files:       make(map[domain.Location]mcpFileSnapshot),
 		migrations:  make(map[domain.ComponentID]migrationSnapshot),
@@ -127,7 +129,11 @@ func (inspection Inspection) inspectProjection(
 	if registryMissing || registryProblem != "" {
 		return snapshot
 	}
-	owned, tombstone, present, materializable, err := registryEntry(registry, projection)
+	owned, tombstone, present, materializable, err := registryEntry(
+		registry,
+		projection,
+		existing,
+	)
 	if err != nil {
 		snapshot.registryProblem = err.Error()
 		return snapshot
@@ -184,6 +190,7 @@ func inspectDocument(
 func registryEntry(
 	document jsondocument.Document,
 	projection releasecontract.MCPProjection,
+	existing targetEntryObservation,
 ) (string, bool, bool, bool, error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(document.Canonical()), &root); err != nil ||
@@ -209,6 +216,16 @@ func registryEntry(
 	var object map[string]any
 	if err := json.Unmarshal([]byte(raw), &object); err != nil || object == nil {
 		return "", false, false, false, fmt.Errorf("MCP ownership registry entry is invalid")
+	}
+	if projection.ComponentID == domain.ComponentAntigravity2 {
+		owned, materializable, recognized, decodeErr :=
+			decodeAntigravitySecretRegistryEntry(raw, existing)
+		if decodeErr != nil {
+			return "", false, false, false, decodeErr
+		}
+		if recognized {
+			return owned, false, true, materializable, nil
+		}
 	}
 	if projection.TargetDocumentFormat() != releasecontract.MCPProjectionDocumentTOML {
 		return raw, false, true, true, nil

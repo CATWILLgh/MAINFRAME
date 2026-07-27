@@ -95,8 +95,84 @@ func TestOpenCodeContext7ApplicabilityRejectsForeignAdapterMutation(
 		}},
 	}}
 
-	if openCodeContext7Applicable(request, semantic, executable) {
+	if context7Applicable(request, semantic, executable) {
 		t.Fatal("foreign adapter removal was considered applicable")
+	}
+}
+
+func TestAntigravityContext7ApplicabilityIncludesKeylessAndRemoval(t *testing.T) {
+	semantic := lifecycle.Preview{
+		MCP: mcpconfiguration.Plan{Intents: []mcpconfiguration.Intent{{
+			ComponentID: domain.ComponentAntigravity2,
+			ServerID:    "context7",
+		}}},
+	}
+	executable := executor.Preview{Plan: domain.Plan{
+		Operations: []domain.Operation{{
+			ComponentID: domain.ComponentAntigravity2,
+			Kind:        domain.OperationInstall,
+		}},
+	}}
+	keyless := Request{
+		Components: []domain.ComponentID{domain.ComponentAntigravity2},
+		MCPSelections: []mcpcatalog.Selection{{
+			ServerID: "context7", ProfileID: "remote-keyless",
+			Adapters: []domain.ComponentID{domain.ComponentAntigravity2},
+		}},
+	}
+	removal := Request{
+		Components: []domain.ComponentID{domain.ComponentAntigravity2},
+	}
+
+	if !context7Applicable(keyless, semantic, executable) {
+		t.Fatal("keyless Antigravity Context7 change was not applicable")
+	}
+	if !context7Applicable(removal, semantic, executable) {
+		t.Fatal("Antigravity Context7 removal was not applicable")
+	}
+}
+
+func TestReviewAcceptsExactAntigravityContext7CredentialBinding(t *testing.T) {
+	definitions := applicationCredentialDefinitions(t)
+	existing := applicationCredentialInstances(t, definitions)
+	credentialSnapshot := applicationCredentialSnapshot(
+		t,
+		definitions,
+		existing.All(),
+	)
+	snapshot := applicationAntigravityMCPSnapshot(t)
+	snapshot.Credentials = &credentialSnapshot
+	service, err := New(
+		&fakeSnapshotBuilder{snapshots: []Snapshot{snapshot}},
+		&fakeApplyExecutorFactory{},
+		readyRecoveryFactory(),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := testRequest()
+	request.Components = []domain.ComponentID{domain.ComponentAntigravity2}
+	request.MCPSelections[0].Adapters = request.Components
+	request.MCPCredentials = []MCPCredentialBinding{context7MCPBinding()}
+
+	reviewed, err := service.Review(request)
+	if err != nil {
+		t.Fatalf("Review() error = %v", err)
+	}
+	if !reviewed.Applicable() {
+		t.Fatal("exact Antigravity Context7 plan was not applicable")
+	}
+	for _, transition := range reviewed.Executable().Configuration.Transitions() {
+		for _, mutation := range transition.Mutations {
+			content := string(mutation.After.Content)
+			if strings.Contains(content, "application-fake-secret-value") {
+				t.Fatal("reviewed after-image contains a secret value")
+			}
+			if mutation.Target.Root == domain.RootAntigravityConfig &&
+				strings.Contains(content, "CONTEXT7_HOME_KEY") {
+				t.Fatal("Antigravity configuration contains a secret reference")
+			}
+		}
 	}
 }
 
@@ -346,6 +422,76 @@ func applicationOpenCodeMCPSnapshot(t *testing.T) Snapshot {
 		t.Fatalf("lifecycle.NewWithInspections() error = %v", err)
 	}
 	return Snapshot{Release: testReleaseIdentity(), Lifecycle: service}
+}
+
+func applicationAntigravityMCPSnapshot(t *testing.T) Snapshot {
+	t.Helper()
+	return applicationMCPSnapshot(t, applicationAntigravityProjection())
+}
+
+func applicationMCPSnapshot(
+	t *testing.T,
+	projection releasecontract.MCPProjection,
+) Snapshot {
+	t.Helper()
+	host := applicationCredentialHost{}
+	base, err := configuration.Inspect(nil, host)
+	if err != nil {
+		t.Fatalf("configuration.Inspect() error = %v", err)
+	}
+	catalog := applicationMCPCatalog(t)
+	mcp, err := mcpconfiguration.Inspect(
+		[]releasecontract.MCPProjection{projection},
+		catalog,
+		host,
+	)
+	if err != nil {
+		t.Fatalf("mcpconfiguration.Inspect() error = %v", err)
+	}
+	model, err := applicationMCPInstallModel()
+	if err != nil {
+		t.Fatalf("installmodel.New() error = %v", err)
+	}
+	service, err := lifecycle.NewWithInspections(
+		model,
+		domain.ObservedState{},
+		base,
+		mcp,
+	)
+	if err != nil {
+		t.Fatalf("lifecycle.NewWithInspections() error = %v", err)
+	}
+	return Snapshot{Release: testReleaseIdentity(), Lifecycle: service}
+}
+
+func applicationMCPInstallModel() (installmodel.Model, error) {
+	return installmodel.New(
+		[]installmodel.ComponentSpec{
+			{ID: domain.ComponentClaudeCode},
+			{ID: domain.ComponentCodex},
+			{ID: domain.ComponentOpenCode},
+			{ID: domain.ComponentAntigravity2},
+			{ID: domain.ComponentCodexGates},
+		},
+	)
+}
+
+func applicationAntigravityProjection() releasecontract.MCPProjection {
+	return releasecontract.MCPProjection{
+		ID: "antigravity-2.mcp.context7", ComponentID: domain.ComponentAntigravity2,
+		Codec:    releasecontract.MCPProjectionAntigravityGlobalHTTP,
+		ServerID: "context7", ProfileID: "remote-keyless",
+		Target: domain.Location{
+			Root: domain.RootAntigravityConfig, Path: "mcp_config.json",
+		},
+		MapPointer: "/mcpServers", EntryKey: "context7",
+		RegistryTarget: domain.Location{
+			Root: domain.RootAntigravityData,
+			Path: "mainframe/mcp-ownership.json",
+		},
+		RegistrySchemaVersion: 1, RegistryEntriesPointer: "/servers",
+		DesiredEntry: `{"serverUrl":"https://mcp.context7.com/mcp"}`,
+	}
 }
 
 func applicationMCPCatalog(t *testing.T) mcpcatalog.Catalog {

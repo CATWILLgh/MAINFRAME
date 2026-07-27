@@ -41,7 +41,7 @@ func TestParseAcceptsCompleteContext7Profiles(t *testing.T) {
 	if !exists || keyed.Authentication.EnvironmentVariable != "CONTEXT7_API_KEY" {
 		t.Fatalf("keyed profile = %#v", keyed)
 	}
-	if support, reason := keyed.Support(domain.ComponentAntigravity2); support != Unsupported || !strings.Contains(reason, "secret reference") {
+	if support, reason := keyed.Support(domain.ComponentAntigravity2); support != Supported || reason != "" {
 		t.Fatalf("Antigravity keyed support = %q, %q", support, reason)
 	}
 }
@@ -113,7 +113,7 @@ func validCatalogJSON() []byte {
       "endpoint": "https://mcp.context7.com/mcp",
       "authentication": {"kind": "api-key", "placement": "header", "environment_variable": "CONTEXT7_API_KEY"},
       "compatibility": [
-        {"adapter": "antigravity-2", "status": "unsupported", "reason": "A plaintext-free secret reference is not verified."},
+        {"adapter": "antigravity-2", "status": "supported", "reason": ""},
         {"adapter": "claude-code", "status": "supported", "reason": ""},
         {"adapter": "codex", "status": "supported", "reason": ""},
         {"adapter": "opencode", "status": "supported", "reason": ""}

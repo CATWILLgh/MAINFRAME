@@ -63,26 +63,6 @@ type ReadPrecondition struct {
 	ExpectedTargetPath string
 }
 
-type PreparedPlan struct {
-	transitions   []Transition
-	preconditions []ReadPrecondition
-}
-
-func (plan PreparedPlan) Transitions() []Transition {
-	result := make([]Transition, len(plan.transitions))
-	for index, transition := range plan.transitions {
-		result[index] = Transition{
-			ResourceIDs: append([]string(nil), transition.ResourceIDs...),
-			Mutations:   cloneFileMutations(transition.Mutations),
-		}
-	}
-	return result
-}
-
-func (plan PreparedPlan) Preconditions() []ReadPrecondition {
-	return append([]ReadPrecondition(nil), plan.preconditions...)
-}
-
 func (inspection Inspection) Prepare(
 	included []domain.ComponentID,
 ) (PreparedPlan, error) {

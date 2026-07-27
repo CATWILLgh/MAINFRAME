@@ -20,7 +20,7 @@ def _catalog():
     return json.loads((REPO / "internal/mcpcatalog/catalog.json").read_text())
 
 
-def test_source_catalog_is_valid_and_contains_explicit_antigravity_boundary():
+def test_source_catalog_is_valid_and_supports_antigravity_standard_storage():
     catalog = _catalog()
     mcp_catalog_contract.validate_catalog(catalog)
 
@@ -28,8 +28,8 @@ def test_source_catalog_is_valid_and_contains_explicit_antigravity_boundary():
     antigravity = keyed["compatibility"][0]
     assert antigravity == {
         "adapter": "antigravity-2",
-        "status": "unsupported",
-        "reason": "A plaintext-free secret reference is not verified for Antigravity 2.x.",
+        "status": "supported",
+        "reason": "",
     }
 
 

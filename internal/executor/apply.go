@@ -49,5 +49,19 @@ func (executor Executor) applyFresh(preview Preview) (Result, error) {
 	if err := validatePreview(fresh); err != nil {
 		return Result{}, err
 	}
+	hasMaterializations := len(fresh.Configuration.Materializations()) > 0
+	materialized, err := fresh.Configuration.MaterializeSecrets(
+		executor.secrets,
+	)
+	if err != nil {
+		return Result{}, fmt.Errorf("materialize configuration secrets: %w", err)
+	}
+	if hasMaterializations {
+		materialized, err = executor.collapseConfigurationNoOps(materialized)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+	fresh.Configuration = materialized
 	return executor.execute(fresh)
 }

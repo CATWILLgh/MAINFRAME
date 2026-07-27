@@ -206,8 +206,8 @@ func (model *Model) mcpDetailView() string {
 		headingStyle.Render("Configure " + server.Name),
 		model.mcpServerCard(server),
 		bannerStyle.Render("Draft only — changes are applied with the complete plan."),
-		model.form.View(),
 	}
+	sections = append(sections, model.form.View())
 	if model.err != nil {
 		sections = append(sections, errorStyle.Render(model.err.Error()))
 	}

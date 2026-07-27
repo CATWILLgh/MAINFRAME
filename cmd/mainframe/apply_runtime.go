@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/codexstate"
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostcompatibility"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
@@ -185,12 +187,17 @@ func (factory productionApplyExecutorFactory) Open(
 	if err != nil {
 		return nil, fmt.Errorf("open transaction state: %w", err)
 	}
-	runner := executor.NewWithConfiguration(
+	secretHelper := filepath.Join(
+		layout.Targets()[domain.RootUserBin],
+		"secret",
+	)
+	runner := executor.NewWithConfigurationAndSecrets(
 		state,
 		state,
 		refresher,
 		workspace,
 		workspace,
+		newSecretHelperResolver(secretHelper),
 	)
 	return &productionExecutorSession{executor: runner, state: state}, nil
 }

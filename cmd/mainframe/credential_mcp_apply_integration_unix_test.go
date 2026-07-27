@@ -92,7 +92,7 @@ func credentialMCPNamespace(
 
 func credentialMCPApplyService(
 	t *testing.T,
-	builder credentialLifecycleSnapshotBuilder,
+	builder application.SnapshotBuilder,
 	environment hostlayout.Environment,
 	releaseRoot string,
 ) application.Service {

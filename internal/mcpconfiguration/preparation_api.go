@@ -83,8 +83,9 @@ func (inspection Inspection) PrepareOntoWithPreservation(
 			preconditions = append(preconditions, precondition)
 		}
 	}
-	return configuration.NewPreparedPlanWithPreconditions(
+	return configuration.NewPreparedPlanWithMaterializations(
 		transitions,
 		preconditions,
+		builder.secretMaterializations(plan),
 	)
 }

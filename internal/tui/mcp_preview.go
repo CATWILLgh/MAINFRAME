@@ -18,6 +18,9 @@ func (model *Model) renderMCPPreview() string {
 			lines = append(lines, model.renderMCPConnection(connection))
 		}
 	}
+	if notice := model.reviewedMCPNotice(); notice != "" {
+		lines = append(lines, notice)
+	}
 	lines = append(lines, mutedStyle.Render(
 		"Draft choice. Configuration changes only after complete-plan confirmation.",
 	))
@@ -107,6 +110,13 @@ func (model *Model) credentialPreviewStatus(connection mcpcatalog.Connection) st
 	if choice != nil && choice.credentialInstanceID != "" {
 		for _, instance := range model.credentialInstances.All() {
 			if instance.ID == choice.credentialInstanceID {
+				if isKeyedAntigravityConnection(connection) {
+					return fmt.Sprintf(
+						"Credential instance: %s (%s); value is resolved only during final Apply and stored in Antigravity's standard configuration.",
+						instance.Name,
+						instance.ID,
+					)
+				}
 				return fmt.Sprintf(
 					"Credential instance: %s (%s); secret value remains external.",
 					instance.Name,

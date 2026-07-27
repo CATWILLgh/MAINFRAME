@@ -23,6 +23,10 @@ func (inspection Inspection) WithCredentialBindings(
 		[]releasecontract.MCPProjection(nil),
 		inspection.projections...,
 	)
+	bound.credentials = make(map[string]CredentialBinding, len(inspection.credentials))
+	for projectionID, binding := range inspection.credentials {
+		bound.credentials[projectionID] = binding
+	}
 	seen := make(map[domain.ComponentID]map[mcpcatalog.ServerID]bool)
 	for _, binding := range bindings {
 		if duplicateCredentialBinding(seen, binding) {
@@ -51,6 +55,9 @@ func (inspection Inspection) WithCredentialBindings(
 			)
 		}
 		bound.projections[index] = projection
+		if projection.ComponentID == domain.ComponentAntigravity2 {
+			bound.credentials[projection.ID] = binding
+		}
 	}
 	return bound, nil
 }

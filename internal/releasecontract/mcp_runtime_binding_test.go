@@ -10,6 +10,7 @@ import (
 )
 
 const keyedOpenCodeDesired = `{"headers":{"CONTEXT7_API_KEY":"{env:CUSTOM_CONTEXT7_KEY}"},"type":"remote","url":"https://mcp.context7.com/mcp"}`
+const keyedAntigravityDesired = `{"headers":{"CONTEXT7_API_KEY":"$MAINFRAME_DEFERRED_SECRET_VALUE"},"serverUrl":"https://mcp.context7.com/mcp"}`
 
 func TestBindMCPProjectionProfileDerivesKeyedOpenCodeEntryWithoutReadingSecret(t *testing.T) {
 	t.Setenv("CUSTOM_CONTEXT7_KEY", "raw-secret-must-not-appear")
@@ -33,6 +34,29 @@ func TestBindMCPProjectionProfileDerivesKeyedOpenCodeEntryWithoutReadingSecret(t
 	}
 }
 
+func TestBindMCPProjectionProfileDefersKeyedAntigravitySecret(t *testing.T) {
+	t.Setenv("CUSTOM_CONTEXT7_KEY", "raw-secret-must-not-appear")
+	projection := loadAntigravityProjection(t)
+
+	bound, err := releasecontract.BindMCPProjectionProfile(
+		projection, runtimeBindingCatalog(t), "remote-api-key", "CUSTOM_CONTEXT7_KEY",
+	)
+	if err != nil {
+		t.Fatalf("BindMCPProjectionProfile() error = %v", err)
+	}
+	if bound.ID != projection.ID ||
+		bound.Target != projection.Target ||
+		bound.RegistryTarget != projection.RegistryTarget ||
+		bound.ProfileID != "remote-api-key" ||
+		bound.DesiredEntry != keyedAntigravityDesired {
+		t.Fatalf("bound projection = %#v", bound)
+	}
+	if strings.Contains(bound.DesiredEntry, "raw-secret-must-not-appear") ||
+		strings.Contains(bound.DesiredEntry, "CUSTOM_CONTEXT7_KEY") {
+		t.Fatalf("bound desired entry exposes secret provenance: %s", bound.DesiredEntry)
+	}
+}
+
 func TestBindMCPProjectionProfileFailsClosedForUnsafeBindings(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -49,10 +73,6 @@ func TestBindMCPProjectionProfileFailsClosedForUnsafeBindings(t *testing.T) {
 		},
 		{
 			name: "Codex keyed binding", projection: loadCodexProjection,
-			environment: "CUSTOM_CONTEXT7_KEY",
-		},
-		{
-			name: "Antigravity keyed binding", projection: loadAntigravityProjection,
 			environment: "CUSTOM_CONTEXT7_KEY",
 		},
 	}

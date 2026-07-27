@@ -29,8 +29,8 @@
           "compatibility": [
             {
               "adapter": "antigravity-2",
-              "status": "unsupported",
-              "reason": "A plaintext-free secret reference is not verified for Antigravity 2.x."
+              "status": "supported",
+              "reason": ""
             },
             {
               "adapter": "claude-code",

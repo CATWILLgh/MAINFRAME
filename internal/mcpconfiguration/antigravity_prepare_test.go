@@ -1,9 +1,12 @@
 package mcpconfiguration_test
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -12,6 +15,7 @@ import (
 )
 
 const antigravityDesired = `{"serverUrl":"https://mcp.context7.com/mcp"}`
+const antigravityFakeSecret = "fake-antigravity-context7-value"
 
 func TestPrepareAntigravityAddPreservesUnrelatedConfiguration(t *testing.T) {
 	config := []byte(
@@ -47,6 +51,133 @@ func TestPrepareAntigravityAddPreservesUnrelatedConfiguration(t *testing.T) {
 	if !strings.Contains(registryAfter, `"serverUrl": "https://mcp.context7.com/mcp"`) ||
 		strings.Contains(registryAfter, `"url"`) || strings.Contains(registryAfter, `"type"`) {
 		t.Fatalf("Antigravity registry dialect =\n%s", registryAfter)
+	}
+}
+
+func TestPrepareKeyedAntigravityDefersSecretAndStoresDigestOwnership(t *testing.T) {
+	t.Setenv("CONTEXT7_HOME_KEY", antigravityFakeSecret)
+	inspection := inspectAntigravityPrepared(
+		t,
+		antigravityPreparedHost(nil, nil),
+	)
+	bound, err := inspection.WithCredentialBindings([]mcpconfiguration.CredentialBinding{{
+		ComponentID: domain.ComponentAntigravity2,
+		ServerID:    "context7", ProfileID: "remote-api-key",
+		EnvironmentVariable: "CONTEXT7_HOME_KEY",
+	}})
+	if err != nil {
+		t.Fatalf("WithCredentialBindings() error = %v", err)
+	}
+
+	prepared, err := bound.Prepare(
+		[]domain.ComponentID{domain.ComponentAntigravity2},
+		keyedAntigravitySelection(),
+	)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	recipes := prepared.Materializations()
+	if len(recipes) != 1 {
+		t.Fatalf("materializations = %#v", recipes)
+	}
+	recipe := recipes[0]
+	if recipe.ResourceID != "antigravity-2.mcp.context7" ||
+		recipe.ConfigTarget != antigravityConfigLocation() ||
+		recipe.ConfigEntryPointer != "/mcpServers/context7" ||
+		recipe.ConfigValuePointer != "/mcpServers/context7/headers/CONTEXT7_API_KEY" ||
+		recipe.RegistryTarget != antigravityRegistryLocation() ||
+		recipe.RegistryDigestPointer != "/servers/context7/entry_sha256" ||
+		recipe.SecretReference != "CONTEXT7_HOME_KEY" {
+		t.Fatalf("materialization = %#v", recipe)
+	}
+	for _, transition := range prepared.Transitions() {
+		for _, mutation := range transition.Mutations {
+			content := string(mutation.After.Content)
+			if strings.Contains(content, antigravityFakeSecret) {
+				t.Fatalf("prepared content contains secret value: %s", content)
+			}
+		}
+	}
+	configAfter := string(findPreparedAfter(
+		t,
+		prepared.Transitions(),
+		antigravityConfigLocation(),
+	))
+	if !strings.Contains(configAfter, configuration.DeferredSecretJSONPlaceholder) ||
+		strings.Contains(configAfter, "CONTEXT7_HOME_KEY") {
+		t.Fatalf("deferred config = %s", configAfter)
+	}
+	registryAfter := string(findPreparedAfter(
+		t,
+		prepared.Transitions(),
+		antigravityRegistryLocation(),
+	))
+	for _, expected := range []string{
+		`"format": "antigravity-literal-secret-v1"`,
+		`"profile": "remote-api-key"`,
+		`"secret_reference": "CONTEXT7_HOME_KEY"`,
+		`"entry_sha256": "` + configuration.DeferredSecretDigestPlaceholder + `"`,
+	} {
+		if !strings.Contains(registryAfter, expected) {
+			t.Fatalf("ownership registry lacks %s:\n%s", expected, registryAfter)
+		}
+	}
+}
+
+func TestKeyedAntigravityDigestOwnershipDetectsDrift(t *testing.T) {
+	managed := `{"headers":{"CONTEXT7_API_KEY":"old-fake-value"},"serverUrl":"https://mcp.context7.com/mcp"}`
+	registry := antigravitySecretOwned(managed, "CONTEXT7_HOME_KEY")
+	tests := []struct {
+		name        string
+		configEntry string
+		wantRecipe  bool
+		wantNull    bool
+	}{
+		{name: "owned entry refreshes", configEntry: managed, wantRecipe: true},
+		{
+			name:        "user change relinquishes",
+			configEntry: `{"serverUrl":"https://user.example/mcp"}`,
+			wantNull:    true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config := `{"mcpServers":{"context7":` + test.configEntry + `}}`
+			inspection := inspectAntigravityPrepared(
+				t,
+				antigravityPreparedHost([]byte(config), []byte(registry)),
+			)
+			bound, err := inspection.WithCredentialBindings(
+				[]mcpconfiguration.CredentialBinding{{
+					ComponentID: domain.ComponentAntigravity2,
+					ServerID:    "context7", ProfileID: "remote-api-key",
+					EnvironmentVariable: "CONTEXT7_HOME_KEY",
+				}},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prepared, err := bound.Prepare(
+				[]domain.ComponentID{domain.ComponentAntigravity2},
+				keyedAntigravitySelection(),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(prepared.Materializations()) == 1; got != test.wantRecipe {
+				t.Fatalf("has materialization = %v, want %v", got, test.wantRecipe)
+			}
+			if test.wantNull {
+				after := string(findPreparedAfter(
+					t,
+					prepared.Transitions(),
+					antigravityRegistryLocation(),
+				))
+				if !strings.Contains(after, `"context7": null`) {
+					t.Fatalf("relinquished registry = %s", after)
+				}
+			}
+		})
 	}
 }
 
@@ -182,6 +313,13 @@ func antigravitySelection() []mcpcatalog.Selection {
 	}}
 }
 
+func keyedAntigravitySelection() []mcpcatalog.Selection {
+	return []mcpcatalog.Selection{{
+		ServerID: "context7", ProfileID: "remote-api-key",
+		Adapters: []domain.ComponentID{domain.ComponentAntigravity2},
+	}}
+}
+
 func antigravityPreparedHost(config, registry []byte) *fakeHost {
 	host := &fakeHost{entries: make(map[domain.Location]hostfs.Entry)}
 	if config != nil {
@@ -211,4 +349,13 @@ func antigravityRegistryLocation() domain.Location {
 
 func antigravityOwned(value string) string {
 	return `{"version":1,"servers":{"context7":` + value + `}}`
+}
+
+func antigravitySecretOwned(value string, reference string) string {
+	digest := sha256.Sum256([]byte(value))
+	return fmt.Sprintf(
+		`{"version":1,"servers":{"context7":{"format":"antigravity-literal-secret-v1","profile":"remote-api-key","secret_backend":"environment","secret_reference":%q,"entry_sha256":"%x"}}}`,
+		reference,
+		digest,
+	)
 }

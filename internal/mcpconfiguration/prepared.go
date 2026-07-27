@@ -50,7 +50,7 @@ func (builder *mcpPreparation) apply(
 			return err
 		}
 	} else {
-		owned, encodeErr := mcpRegistryEntry(projection)
+		owned, encodeErr := builder.mcpRegistryEntry(projection)
 		if encodeErr != nil {
 			return encodeErr
 		}
@@ -84,11 +84,14 @@ func (builder *mcpPreparation) materializeConfig(
 	}
 }
 
-func mcpRegistryEntry(
+func (builder *mcpPreparation) mcpRegistryEntry(
 	projection releasecontract.MCPProjection,
 ) (string, error) {
 	if projection.ComponentID == domain.ComponentAntigravity2 &&
 		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON {
+		if binding, exists := builder.inspection.credentials[projection.ID]; exists {
+			return encodeAntigravitySecretRegistryEntry(projection, binding)
+		}
 		return projection.DesiredEntry, nil
 	}
 	if projection.ComponentID == domain.ComponentClaudeCode &&

@@ -56,7 +56,7 @@ func resolveMCPCredentials(
 			)
 		}
 		seen[binding.ServerID] = true
-		adapter, err := openCodeAdapterForBinding(request.MCPSelections, binding)
+		adapter, err := adapterForBinding(request.MCPSelections, binding)
 		if err != nil {
 			return nil, err
 		}
@@ -83,7 +83,7 @@ func resolveMCPCredentials(
 	return result, nil
 }
 
-func openCodeAdapterForBinding(
+func adapterForBinding(
 	selections []mcpcatalog.Selection,
 	binding MCPCredentialBinding,
 ) (domain.ComponentID, error) {
@@ -93,15 +93,20 @@ func openCodeAdapterForBinding(
 			continue
 		}
 		if len(selection.Adapters) != 1 ||
-			selection.Adapters[0] != domain.ComponentOpenCode {
+			!credentialBindingAdapterSupported(selection.Adapters[0]) {
 			return "", fmt.Errorf(
-				"credential-bound MCP profile is currently supported only for OpenCode",
+				"credential-bound MCP profile requires one supported adapter",
 			)
 		}
-		return domain.ComponentOpenCode, nil
+		return selection.Adapters[0], nil
 	}
 	return "", fmt.Errorf(
 		"MCP credential binding for %q has no matching selection",
 		binding.ServerID,
 	)
+}
+
+func credentialBindingAdapterSupported(component domain.ComponentID) bool {
+	return component == domain.ComponentOpenCode ||
+		component == domain.ComponentAntigravity2
 }
