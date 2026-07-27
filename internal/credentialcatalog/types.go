@@ -96,6 +96,10 @@ func (instances Instances) All() []Instance {
 	return cloneInstances(instances.instances)
 }
 
+func (instances Instances) Clone() Instances {
+	return Instances{instances: instances.All()}
+}
+
 func (instances Instances) ForService(id ServiceID) []Instance {
 	var matches []Instance
 	for _, instance := range instances.instances {
@@ -139,4 +143,8 @@ func cloneInstance(source Instance) Instance {
 		source.Credentials[index] = cloned
 	}
 	return source
+}
+
+func (instance Instance) Clone() Instance {
+	return cloneInstance(instance)
 }

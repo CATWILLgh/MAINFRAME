@@ -61,7 +61,7 @@ func TestEnvironmentSelectionOpensMCPListThenServerDetail(t *testing.T) {
 
 func TestEmptyEnvironmentSelectionDisablesMCPAndReturnsToOverview(t *testing.T) {
 	previewer := &fakePreviewer{targets: defaultTargets()}
-	model := newTestModel(t, previewer)
+	model := NewModel(previewer, testCatalog(t), nil, testCredentialState(t))
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode}
 	model.openMCP()
 	choice := model.mcpChoices["context7"]
@@ -142,14 +142,14 @@ func TestMCPListEnterOpensFocusedIntegration(t *testing.T) {
 
 func TestMCPChoiceAppearsInReadOnlyPreview(t *testing.T) {
 	previewer := &fakePreviewer{targets: defaultTargets()}
-	model := newTestModel(t, previewer)
+	model := NewModel(previewer, testCatalog(t), nil, testCredentialState(t))
 	model.selected = []domain.ComponentID{domain.ComponentClaudeCode, domain.ComponentCodex}
 	model.openMCP()
 	choice := model.mcpChoices["context7"]
 	choice.Enabled = true
 	choice.ProfileID = "remote-api-key"
 	choice.Adapters = []domain.ComponentID{domain.ComponentCodex, domain.ComponentClaudeCode}
-	choice.credentialDraft = "test-key"
+	choice.credentialInstanceID = "context7-home"
 
 	updated, command := model.openPreview()
 	if command != nil || updated.screen != screenPreview {

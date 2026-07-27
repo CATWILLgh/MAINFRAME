@@ -52,6 +52,11 @@ type previewServiceBuilder func(
 	hostApplicationDiscoverer,
 ) (lifecycle.Service, error)
 
+type credentialSnapshotLoader func(
+	string,
+	releasecontract.Release,
+) (credentialRuntimeState, error)
+
 type releaseSnapshotBuilder struct {
 	resolveRoot     releaseRootResolver
 	expectedRelease *executor.ReleaseIdentity
@@ -60,6 +65,7 @@ type releaseSnapshotBuilder struct {
 	client          func() codexstate.Client
 	build           previewServiceBuilder
 	discover        hostApplicationDiscoverer
+	loadCredentials credentialSnapshotLoader
 }
 
 func newReleaseSnapshotBuilder(releaseRoot, cwd string) releaseSnapshotBuilder {
@@ -74,12 +80,13 @@ func newReleaseSnapshotBuilderWithResolver(
 	cwd string,
 ) releaseSnapshotBuilder {
 	return releaseSnapshotBuilder{
-		resolveRoot: resolveRoot,
-		cwd:         cwd,
-		load:        releasecontract.Load,
-		client:      func() codexstate.Client { return codexstate.NewAppServerClient() },
-		build:       buildPreviewServiceFromContextWithObservation,
-		discover:    hostcompatibility.DiscoverApplications,
+		resolveRoot:     resolveRoot,
+		cwd:             cwd,
+		load:            releasecontract.Load,
+		client:          func() codexstate.Client { return codexstate.NewAppServerClient() },
+		build:           buildPreviewServiceFromContextWithObservation,
+		discover:        hostcompatibility.DiscoverApplications,
+		loadCredentials: loadCredentialRuntime,
 	}
 }
 
@@ -120,10 +127,24 @@ func (builder releaseSnapshotBuilder) Build(
 	if err != nil {
 		return application.Snapshot{}, err
 	}
-	return application.Snapshot{
+	snapshot := application.Snapshot{
 		Release:   identity,
 		Lifecycle: service,
-	}, nil
+	}
+	if request.CredentialInstances != nil {
+		if builder.loadCredentials == nil {
+			return application.Snapshot{}, errors.New(
+				"credential snapshot loader must not be nil",
+			)
+		}
+		credentials, err := builder.loadCredentials(releaseRoot, release)
+		if err != nil {
+			return application.Snapshot{}, err
+		}
+		credentialSnapshot := credentials.snapshot
+		snapshot.Credentials = &credentialSnapshot
+	}
+	return snapshot, nil
 }
 
 func (builder releaseSnapshotBuilder) validate() error {

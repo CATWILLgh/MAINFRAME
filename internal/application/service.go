@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
@@ -15,14 +16,16 @@ import (
 )
 
 type Request struct {
-	Components    []domain.ComponentID
-	MCPSelections []mcpcatalog.Selection
-	Diagnostics   diagnostics.Desired
+	Components          []domain.ComponentID
+	MCPSelections       []mcpcatalog.Selection
+	Diagnostics         diagnostics.Desired
+	CredentialInstances *credentialcatalog.Instances
 }
 
 type Snapshot struct {
-	Release   executor.ReleaseIdentity
-	Lifecycle lifecycle.Service
+	Release     executor.ReleaseIdentity
+	Lifecycle   lifecycle.Service
+	Credentials *credentialcatalog.InstanceSnapshot
 }
 
 type SnapshotBuilder interface {
@@ -45,10 +48,12 @@ type Service struct {
 }
 
 type ReviewedPlan struct {
-	request    Request
-	semantic   lifecycle.Preview
-	executable executor.Preview
-	reviewed   bool
+	request                  Request
+	semantic                 lifecycle.Preview
+	executable               executor.Preview
+	credentials              []credentialcatalog.InstanceChange
+	credentialOnlyApplicable bool
+	reviewed                 bool
 }
 
 func New(
@@ -96,6 +101,26 @@ func (service Service) Apply(
 	return applied, err
 }
 
+func (service Service) ApplyCredentials(
+	plan ReviewedPlan,
+) (executor.Result, error) {
+	if !plan.reviewed {
+		return executor.Result{}, errors.New("plan was not produced by Review")
+	}
+	if !plan.credentialOnlyApplicable ||
+		len(plan.executable.Plan.Operations) != 0 ||
+		plan.request.CredentialInstances == nil ||
+		credentialcatalog.ValidateInstancesOnlyPlan(
+			plan.executable.Configuration,
+			*plan.request.CredentialInstances,
+		) != nil {
+		return executor.Result{}, errors.New(
+			"plan contains changes outside credential metadata",
+		)
+	}
+	return service.Apply(plan)
+}
+
 func (service Service) applyReviewed(
 	plan ReviewedPlan,
 ) (result executor.Result, err error) {
@@ -133,6 +158,14 @@ func (plan ReviewedPlan) Semantic() lifecycle.Preview {
 
 func (plan ReviewedPlan) Executable() executor.Preview {
 	return cloneExecutable(plan.executable)
+}
+
+func (plan ReviewedPlan) CredentialChanges() []credentialcatalog.InstanceChange {
+	return cloneCredentialChanges(plan.credentials)
+}
+
+func (plan ReviewedPlan) CredentialOnlyApplicable() bool {
+	return plan.credentialOnlyApplicable
 }
 
 type requestRefresher struct {
@@ -179,6 +212,23 @@ func buildReviewedPlan(
 	if err != nil {
 		return ReviewedPlan{}, fmt.Errorf("prepare configuration preview: %w", err)
 	}
+	credentialChanges, credentialPrepared, err := prepareCredentials(
+		snapshot,
+		request,
+	)
+	if err != nil {
+		return ReviewedPlan{}, err
+	}
+	prepared, err = configuration.CombinePreparedPlans(
+		prepared,
+		credentialPrepared,
+	)
+	if err != nil {
+		return ReviewedPlan{}, fmt.Errorf(
+			"combine configuration preview: %w",
+			err,
+		)
+	}
 	executable := executor.Preview{
 		Release:       snapshot.Release,
 		Desired:       append([]domain.ComponentID(nil), request.Components...),
@@ -187,16 +237,75 @@ func buildReviewedPlan(
 	}
 	return ReviewedPlan{
 		request: cloneRequest(request), semantic: cloneSemantic(semantic),
-		executable: cloneExecutable(executable), reviewed: true,
+		executable:  cloneExecutable(executable),
+		credentials: cloneCredentialChanges(credentialChanges),
+		credentialOnlyApplicable: len(credentialChanges) > 0 &&
+			len(executable.Plan.Operations) == 0 &&
+			credentialcatalog.IsInstancesOnlyPlan(prepared),
+		reviewed: true,
 	}, nil
 }
 
+func prepareCredentials(
+	snapshot Snapshot,
+	request Request,
+) ([]credentialcatalog.InstanceChange, configuration.PreparedPlan, error) {
+	if request.CredentialInstances == nil {
+		return nil, configuration.PreparedPlan{}, nil
+	}
+	if snapshot.Credentials == nil {
+		return nil, configuration.PreparedPlan{}, fmt.Errorf(
+			"credential snapshot is unavailable",
+		)
+	}
+	current := snapshot.Credentials.Instances()
+	changes, err := credentialcatalog.PlanInstanceChanges(
+		current,
+		*request.CredentialInstances,
+	)
+	if err != nil {
+		return nil, configuration.PreparedPlan{}, fmt.Errorf(
+			"plan credential instances: %w",
+			err,
+		)
+	}
+	prepared, err := snapshot.Credentials.Prepare(
+		*request.CredentialInstances,
+	)
+	if err != nil {
+		return nil, configuration.PreparedPlan{}, fmt.Errorf(
+			"prepare credential instances: %w",
+			err,
+		)
+	}
+	return changes, prepared, nil
+}
+
 func cloneRequest(request Request) Request {
-	return Request{
+	cloned := Request{
 		Components:    append([]domain.ComponentID(nil), request.Components...),
 		MCPSelections: cloneSelections(request.MCPSelections),
 		Diagnostics:   request.Diagnostics,
 	}
+	if request.CredentialInstances != nil {
+		instances := request.CredentialInstances.Clone()
+		cloned.CredentialInstances = &instances
+	}
+	return cloned
+}
+
+func cloneCredentialChanges(
+	changes []credentialcatalog.InstanceChange,
+) []credentialcatalog.InstanceChange {
+	result := make([]credentialcatalog.InstanceChange, len(changes))
+	for index, change := range changes {
+		result[index] = credentialcatalog.InstanceChange{
+			Kind:   change.Kind,
+			Before: change.Before.Clone(),
+			After:  change.After.Clone(),
+		}
+	}
+	return result
 }
 
 func cloneSelections(selections []mcpcatalog.Selection) []mcpcatalog.Selection {

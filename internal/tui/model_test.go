@@ -41,7 +41,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 		"PLAN BEFORE APPLY",
 		"Configure your choices first",
 		"Nothing changes until you review and confirm the complete plan",
-		"This build is preview-only; Apply remains disabled",
+		"Only a confirmed credential-only plan can be applied in this build",
 		"Return to the overview to configure MCP and additional DEV tools",
 		"Claude Code — installed · configuration 1 not assessed",
 		"Codex — needs attention",

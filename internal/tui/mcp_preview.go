@@ -101,13 +101,13 @@ func (model *Model) renderMCPConnection(connection mcpcatalog.Connection) string
 func (model *Model) credentialPreviewStatus(connection mcpcatalog.Connection) string {
 	if connection.Profile.Authentication.Kind != mcpcatalog.AuthenticationAPIKey &&
 		connection.Profile.ServiceCredential == nil {
-		return "No credential is held in memory."
+		return "No credential instance is required."
 	}
 	choice := model.mcpChoices[connection.ServerID]
-	if choice != nil && credentialDraftProvided(choice.credentialDraft) {
-		return "API key provided for this session; not stored or applied."
+	if choice != nil && choice.credentialInstanceID != "" {
+		return "Credential instance selected; secret value remains external."
 	}
-	return "API key is not provided."
+	return "Credential instance is not selected."
 }
 
 func transportName(transport mcpcatalog.Transport) string {

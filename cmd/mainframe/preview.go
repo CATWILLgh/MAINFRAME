@@ -55,8 +55,21 @@ func (reviewer interactivePlanReviewer) Review(
 	return reviewed, nil
 }
 
+func (reviewer interactivePlanReviewer) ApplyCredentialPlan(
+	plan tui.ReviewedPlan,
+) error {
+	reviewed, ok := plan.(application.ReviewedPlan)
+	if !ok {
+		return fmt.Errorf("credential plan was not produced by the application")
+	}
+	if _, err := reviewer.service.ApplyCredentials(reviewed); err != nil {
+		return fmt.Errorf("apply credential metadata: %w", err)
+	}
+	return nil
+}
+
 func runInteractivePreview(input io.Reader, output io.Writer) error {
-	reviewer, catalog, err := buildInteractiveReviewRuntime()
+	reviewer, catalog, credentials, err := buildInteractiveReviewRuntime()
 	if err != nil {
 		return err
 	}
@@ -68,7 +81,7 @@ func runInteractivePreview(input io.Reader, output io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("prepare repository metadata: %w", err)
 	}
-	return tui.Run(input, output, reviewer, catalog, stats)
+	return tui.Run(input, output, reviewer, catalog, stats, credentials)
 }
 
 func buildPreviewService() (lifecycle.Service, error) {
@@ -92,22 +105,27 @@ func buildPreviewRuntime() (lifecycle.Service, mcpcatalog.Catalog, error) {
 func buildInteractiveReviewRuntime() (
 	interactivePlanReviewer,
 	mcpcatalog.Catalog,
+	tui.CredentialState,
 	error,
 ) {
 	snapshot, err := loadReadOnlyReleaseSnapshot()
 	if err != nil {
-		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, err
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, tui.CredentialState{}, err
+	}
+	credentials, err := loadCredentialRuntime(snapshot.root, snapshot.release)
+	if err != nil {
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, tui.CredentialState{}, err
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, fmt.Errorf(
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, tui.CredentialState{}, fmt.Errorf(
 			"resolve working directory: %w",
 			err,
 		)
 	}
 	targets, err := buildPreviewServiceForSnapshot(snapshot, cwd)
 	if err != nil {
-		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, err
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, tui.CredentialState{}, err
 	}
 	identity := executor.ReleaseIdentity{
 		ID:          snapshot.release.ID,
@@ -115,12 +133,15 @@ func buildInteractiveReviewRuntime() (
 	}
 	service, err := buildPinnedApplyService(snapshot.root, cwd, identity)
 	if err != nil {
-		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, err
+		return interactivePlanReviewer{}, mcpcatalog.Catalog{}, tui.CredentialState{}, err
 	}
 	return interactivePlanReviewer{
-		targets: targets,
-		service: service,
-	}, snapshot.release.MCPCatalog, nil
+			targets: targets,
+			service: service,
+		}, snapshot.release.MCPCatalog, tui.CredentialState{
+			Definitions: credentials.definitions,
+			Instances:   credentials.snapshot.Instances(),
+		}, nil
 }
 
 func buildPreviewServiceForSnapshot(

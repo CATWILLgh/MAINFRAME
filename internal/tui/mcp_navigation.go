@@ -65,7 +65,12 @@ func (model *Model) openMCPCredential(serverID mcpcatalog.ServerID) (*Model, tea
 	model.screen = screenMCPCredential
 	model.activeMCP = serverID
 	model.err = nil
-	model.form = mcpCredentialForm(server, model.mcpChoices[serverID])
+	model.form = mcpCredentialForm(
+		server,
+		model.mcpChoices[serverID],
+		model.credentialDefinitions,
+		model.credentialInstances,
+	)
 	return model, model.form.Init()
 }
 

@@ -40,6 +40,13 @@ func (model *Model) handleEscape() (*Model, tea.Cmd) {
 		return model.backToMCPDetail()
 	case screenDiagnostics:
 		return model.continueFromDiagnostics()
+	case screenCredentials:
+		return model.openMain()
+	case screenCredentialEdit:
+		return model.openCredentials()
+	case screenApplyConfirm:
+		model.screen = screenPreview
+		return model, nil
 	default:
 		return model.openMain()
 	}
@@ -56,6 +63,15 @@ func (model *Model) handleBack() (*Model, tea.Cmd, bool) {
 	case screenDiagnostics:
 		updated, command := model.continueFromDiagnostics()
 		return updated, command, true
+	case screenCredentials:
+		updated, command := model.openMain()
+		return updated, command, true
+	case screenCredentialEdit:
+		updated, command := model.openCredentials()
+		return updated, command, true
+	case screenApplyConfirm:
+		model.screen = screenPreview
+		return model, nil, true
 	case screenMCPCredential:
 		return model, nil, false
 	case screenMCPDetail:

@@ -6,9 +6,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
@@ -33,6 +33,10 @@ const (
 	screenMCPDetail
 	screenMCPCredential
 	screenDiagnostics
+	screenCredentials
+	screenCredentialEdit
+	screenApplyConfirm
+	screenApplied
 	screenPreview
 )
 
@@ -55,28 +59,22 @@ type Model struct {
 	diagnosticsFeedbackEnabled bool
 	activeMCP                  mcpcatalog.ServerID
 	repositoryStats            map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
+	credentialDefinitions      credentialcatalog.Definitions
+	credentialInstances        credentialcatalog.Instances
+	credentialDirty            bool
+	credentialMenuChoice       credentialMenuChoice
+	activeCredential           credentialcatalog.InstanceID
+	credentialDraft            credentialInstanceDraft
+	applyConfirmed             bool
 	statsGeneration            uint64
 	err                        error
 }
-
-var (
-	brandStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#7C6CFF"))
-	bannerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#F4BF75"))
-	headingStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#D7D5FF"))
-	mutedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#77758C"))
-	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B8A"))
-)
 
 func NewModel(
 	reviewer PlanReviewer,
 	catalog mcpcatalog.Catalog,
 	stats mcpcatalog.StatsSource,
+	credentialStates ...CredentialState,
 ) *Model {
 	targets := reviewer.Targets()
 	selected := make([]domain.ComponentID, 0, len(targets))
@@ -94,6 +92,10 @@ func NewModel(
 		mcpChoices:      make(map[mcpcatalog.ServerID]*mcpChoice),
 		repositoryStats: make(map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats),
 		mainMenuChoice:  mainMenuEnvironments,
+	}
+	if len(credentialStates) > 0 {
+		model.credentialDefinitions = credentialStates[0].Definitions
+		model.credentialInstances = credentialStates[0].Instances.Clone()
 	}
 	model.form = mainMenuForm(model)
 	return model
@@ -113,6 +115,9 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if model.screen == screenPreview {
+		return model.updatePreview(message)
+	}
+	if model.screen == screenApplied {
 		return model, nil
 	}
 	updated, command := model.form.Update(message)
@@ -135,6 +140,12 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model.backToMCPList()
 		case screenDiagnostics:
 			return model.continueFromDiagnostics()
+		case screenCredentials:
+			return model.continueFromCredentials()
+		case screenCredentialEdit:
+			return model.saveCredentialDraft()
+		case screenApplyConfirm:
+			return model.confirmCredentialApply()
 		}
 	}
 	return model, command
@@ -152,6 +163,14 @@ func (model *Model) View() tea.View {
 		content = model.mcpCredentialView()
 	} else if model.screen == screenDiagnostics {
 		content = model.diagnosticsView()
+	} else if model.screen == screenCredentials {
+		content = model.credentialsView()
+	} else if model.screen == screenCredentialEdit {
+		content = model.credentialEditView()
+	} else if model.screen == screenApplyConfirm {
+		content = model.applyConfirmView()
+	} else if model.screen == screenApplied {
+		content = model.appliedView()
 	} else if model.screen == screenPreview {
 		content = model.previewView()
 	}
@@ -173,11 +192,16 @@ func (model *Model) openPreview() (*Model, tea.Cmd) {
 		model.err = err
 		return model.reinitializeCurrentForm()
 	}
-	reviewed, err := model.reviewer.Review(application.Request{
+	request := application.Request{
 		Components:    model.selected,
 		MCPSelections: model.mcpSelections(),
 		Diagnostics:   model.diagnostics,
-	})
+	}
+	if model.credentialDirty {
+		instances := model.credentialInstances.Clone()
+		request.CredentialInstances = &instances
+	}
+	reviewed, err := model.reviewer.Review(request)
 	if err != nil {
 		model.err = err
 		return model.reinitializeCurrentForm()
@@ -254,7 +278,16 @@ func (model *Model) previewView() string {
 	sections = append(sections, renderMCPConfigurationPlan(model.preview.MCP))
 	sections = append(sections, model.renderMCPPreview())
 	sections = append(sections, model.renderDiagnosticsPreview())
-	sections = append(sections, mutedStyle.Render("b back  •  q quit"))
+	sections = append(sections, model.renderCredentialPreview())
+	if model.err != nil {
+		sections = append(sections, errorStyle.Render(model.err.Error()))
+	}
+	footer := "b back  •  q quit"
+	if plan, ok := model.reviewedPlan.(credentialReviewedPlan); ok &&
+		plan.CredentialOnlyApplicable() {
+		footer = "a apply credential metadata  •  " + footer
+	}
+	sections = append(sections, mutedStyle.Render(footer))
 	return strings.Join(sections, "\n\n")
 }
 
@@ -279,15 +312,6 @@ func selectionForm(targets []lifecycle.Target, selected *[]domain.ComponentID) *
 		Filterable(false).
 		Value(selected)
 	return huh.NewForm(huh.NewGroup(field)).WithShowHelp(false)
-}
-
-func header() string {
-	return strings.Join([]string{
-		brandStyle.Render("MAINFRAME"),
-		bannerStyle.Render("PLAN BEFORE APPLY"),
-		mutedStyle.Render("Configure your choices first.\nNothing changes until you review and confirm the complete plan."),
-		mutedStyle.Render("This build is preview-only; Apply remains disabled."),
-	}, "\n")
 }
 
 func operationsByKind(

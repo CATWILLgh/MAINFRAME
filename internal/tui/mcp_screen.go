@@ -3,13 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -18,11 +18,11 @@ import (
 const repositoryStatsTimeout = 3 * time.Second
 
 type mcpChoice struct {
-	Initialized     bool
-	Enabled         bool
-	ProfileID       mcpcatalog.ProfileID
-	Adapters        []domain.ComponentID
-	credentialDraft string
+	Initialized          bool
+	Enabled              bool
+	ProfileID            mcpcatalog.ProfileID
+	Adapters             []domain.ComponentID
+	credentialInstanceID credentialcatalog.InstanceID
 }
 
 type mcpMenuChoice string
@@ -70,12 +70,30 @@ func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 		if !exists {
 			return model.openMCP()
 		}
-		model.form = mcpCredentialForm(server, model.mcpChoices[server.ID])
+		model.form = mcpCredentialForm(
+			server,
+			model.mcpChoices[server.ID],
+			model.credentialDefinitions,
+			model.credentialInstances,
+		)
 	case screenDiagnostics:
 		model.form = diagnosticsForm(
 			&model.diagnosticsDEVEnabled,
 			&model.diagnosticsFeedbackEnabled,
 		)
+	case screenCredentials:
+		model.form = credentialCatalogForm(model)
+	case screenCredentialEdit:
+		model.form = credentialInstanceForm(
+			&model.credentialDraft,
+			model.credentialDefinitions,
+		)
+	case screenApplyConfirm:
+		model.form = huh.NewForm(huh.NewGroup(
+			huh.NewConfirm().
+				Title("Write the reviewed credential metadata now?").
+				Value(&model.applyConfirmed),
+		)).WithShowHelp(false)
 	default:
 		model.form = mainMenuForm(model)
 	}
@@ -200,8 +218,8 @@ func (model *Model) mcpChoiceStatus(serverID mcpcatalog.ServerID) string {
 	status := "added to plan, not applied · " + strings.Join(names, ", ")
 	server, exists := model.catalog.Server(serverID)
 	if exists && profileRequiresCredential(server, choice.ProfileID) &&
-		credentialDraftProvided(choice.credentialDraft) {
-		status += " · key held in memory"
+		choice.credentialInstanceID != "" {
+		status += " · credential instance selected"
 	}
 	return status
 }
@@ -349,49 +367,4 @@ func (model *Model) applyRepositoryStats(message repositoryStatsMsg) (tea.Model,
 	}
 	model.repositoryStats[message.ServerID] = message.Stats
 	return model, nil
-}
-
-func defaultProfile(server mcpcatalog.Server) mcpcatalog.ProfileID {
-	for _, profile := range server.Profiles {
-		if profile.Authentication.Kind == mcpcatalog.AuthenticationNone {
-			return profile.ID
-		}
-	}
-	return server.Profiles[0].ID
-}
-
-func supportedSubset(selected []domain.ComponentID, profile mcpcatalog.Profile) []domain.ComponentID {
-	result := make([]domain.ComponentID, 0, len(selected))
-	for _, adapter := range selected {
-		if status, _ := profile.Support(adapter); status == mcpcatalog.Supported {
-			result = append(result, adapter)
-		}
-	}
-	return result
-}
-
-func selectedSubset(chosen, selected []domain.ComponentID) []domain.ComponentID {
-	result := make([]domain.ComponentID, 0, len(chosen))
-	for _, adapter := range chosen {
-		if contains(selected, adapter) {
-			result = append(result, adapter)
-		}
-	}
-	return result
-}
-
-func verifiedOn(server mcpcatalog.Server) string {
-	dates := make([]string, 0, len(server.Profiles))
-	for _, profile := range server.Profiles {
-		dates = append(dates, profile.Evidence.VerifiedOn)
-	}
-	sort.Strings(dates)
-	return dates[len(dates)-1]
-}
-
-func authenticationName(kind mcpcatalog.AuthenticationKind) string {
-	if kind == mcpcatalog.AuthenticationAPIKey {
-		return "API key"
-	}
-	return "no key"
 }

@@ -14,6 +14,7 @@ const (
 	mainMenuEnvironments mainMenuChoice = "environments"
 	mainMenuMCP          mainMenuChoice = "mcp"
 	mainMenuDiagnostics  mainMenuChoice = "diagnostics"
+	mainMenuCredentials  mainMenuChoice = "credentials"
 	mainMenuReview       mainMenuChoice = "review"
 	mainMenuExit         mainMenuChoice = "exit"
 )
@@ -40,6 +41,8 @@ func (model *Model) continueFromMain() (*Model, tea.Cmd) {
 			return model.blockMainCategory()
 		}
 		return model.openDiagnostics()
+	case mainMenuCredentials:
+		return model.openCredentials()
 	case mainMenuReview:
 		return model.openPreview()
 	case mainMenuExit:
@@ -91,6 +94,13 @@ func mainMenuForm(model *Model) *huh.Form {
 		),
 		huh.NewOption("MCP integrations — "+model.mcpMenuStatus(), mainMenuMCP),
 		huh.NewOption("Additional — "+diagnosticsStatus(model.diagnostics), mainMenuDiagnostics),
+		huh.NewOption(
+			fmt.Sprintf(
+				"Credential services — %d instances",
+				len(model.credentialInstances.All()),
+			),
+			mainMenuCredentials,
+		),
 		huh.NewOption("Review complete plan", mainMenuReview),
 		huh.NewOption("Exit", mainMenuExit),
 	}
