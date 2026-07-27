@@ -4,12 +4,15 @@ type ServiceID string
 type RoleID string
 type InstanceID string
 type SourceKind string
+type CredentialKind string
 type SecretBackend string
 type RequirementAction string
 
 const (
 	SourceStandalone SourceKind = "standalone"
 	SourceMCPProfile SourceKind = "mcp-profile"
+
+	CredentialAPIKey CredentialKind = "api-key"
 
 	BackendSecretEnvironment SecretBackend = "secret-env"
 
@@ -28,9 +31,10 @@ type ServiceDefinition struct {
 }
 
 type SourceReference struct {
-	Kind      SourceKind `json:"kind"`
-	ServerID  string     `json:"server_id,omitempty"`
-	ProfileID string     `json:"profile_id,omitempty"`
+	Kind           SourceKind     `json:"kind"`
+	ServerID       string         `json:"server_id,omitempty"`
+	ProfileID      string         `json:"profile_id,omitempty"`
+	CredentialKind CredentialKind `json:"credential_kind,omitempty"`
 }
 
 type CredentialRole struct {

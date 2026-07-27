@@ -53,8 +53,23 @@ func runWithPreview(
 		}
 		return 0
 	}
+	if args[0] == "credentials" {
+		if len(args) != 1 {
+			fmt.Fprintln(errorOutput, "credentials does not accept arguments")
+			return 2
+		}
+		if err := runCredentials(output); err != nil {
+			fmt.Fprintf(errorOutput, "credentials: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if len(args) != 1 || args[0] != "plan" {
-		fmt.Fprintf(errorOutput, "unknown command %q; expected plan or no arguments\n", args[0])
+		fmt.Fprintf(
+			errorOutput,
+			"unknown command %q; expected credentials, plan, or no arguments\n",
+			args[0],
+		)
 		return 2
 	}
 	if err := runPlan(input, output); err != nil {

@@ -68,7 +68,9 @@ func validateService(
 func validateSource(source SourceReference, mcp mcpcatalog.Catalog) error {
 	switch source.Kind {
 	case SourceStandalone:
-		if source.ServerID != "" || source.ProfileID != "" {
+		if source.ServerID != "" ||
+			source.ProfileID != "" ||
+			source.CredentialKind != "" {
 			return fmt.Errorf("standalone source must not name an MCP profile")
 		}
 	case SourceMCPProfile:
@@ -76,13 +78,31 @@ func validateSource(source SourceReference, mcp mcpcatalog.Catalog) error {
 		if !exists {
 			return fmt.Errorf("MCP source server %q does not exist", source.ServerID)
 		}
-		if _, exists := server.Profile(mcpcatalog.ProfileID(source.ProfileID)); !exists {
+		profile, exists := server.Profile(mcpcatalog.ProfileID(source.ProfileID))
+		if !exists {
 			return fmt.Errorf("MCP source profile %q does not exist", source.ProfileID)
+		}
+		if !profileProvidesCredential(profile, source.CredentialKind) {
+			return fmt.Errorf("MCP source profile credential kind does not match")
 		}
 	default:
 		return fmt.Errorf("unsupported source kind %q", source.Kind)
 	}
 	return nil
+}
+
+func profileProvidesCredential(
+	profile mcpcatalog.Profile,
+	kind CredentialKind,
+) bool {
+	if kind != CredentialAPIKey {
+		return false
+	}
+	if string(profile.Authentication.Kind) == string(kind) {
+		return true
+	}
+	return profile.ServiceCredential != nil &&
+		string(profile.ServiceCredential.Kind) == string(kind)
 }
 
 func validIdentifier(value string) bool {

@@ -108,12 +108,19 @@ func TestParseDefinitionsRejectsDriftAndDuplicateOwnership(t *testing.T) {
 			`"server_id": "absent"`,
 			1,
 		),
+		"MCP credential drift": strings.Replace(
+			string(BundledDefinitionsJSON()),
+			`"profile_id": "remote-api-key"`,
+			`"profile_id": "remote-keyless"`,
+			1,
+		),
 		"duplicate service": strings.Replace(
 			string(BundledDefinitionsJSON()),
 			`"services": [`,
 			`"services": [
 				{"id":"context7","name":"Duplicate","summary":"Duplicate definition.",
-			 "source":{"kind":"mcp-profile","server_id":"context7","profile_id":"remote-api-key"},
+			 "source":{"kind":"mcp-profile","server_id":"context7","profile_id":"remote-api-key",
+			 "credential_kind":"api-key"},
 			 "credential_roles":[{"id":"api-key","name":"API key","purpose":"Duplicate role.",
 			 "acquisition":"Use the source instructions."}]},`,
 			1,
@@ -125,6 +132,43 @@ func TestParseDefinitionsRejectsDriftAndDuplicateOwnership(t *testing.T) {
 				t.Fatal("ParseDefinitions() accepted an invalid catalog")
 			}
 		})
+	}
+}
+
+func TestParseDefinitionsAcceptsMCPServiceCredential(t *testing.T) {
+	payload, err := os.ReadFile("../mcpcatalog/catalog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(
+		string(payload),
+		`"kind": "api-key",
+            "placement": "header",
+            "environment_variable": "CONTEXT7_API_KEY"`,
+		`"kind": "none",
+            "placement": "none",
+            "environment_variable": ""`,
+		1,
+	)
+	updated = strings.Replace(
+		updated,
+		`"compatibility": [`,
+		`"service_credential": {
+            "kind": "api-key",
+            "environment_variable": "CONTEXT7_API_KEY"
+          },
+          "compatibility": [`,
+		1,
+	)
+	if updated == string(payload) {
+		t.Fatal("MCP catalog fixture did not contain the expected authentication block")
+	}
+	catalog, err := mcpcatalog.Parse([]byte(updated))
+	if err != nil {
+		t.Fatalf("Parse() service credential fixture error = %v", err)
+	}
+	if _, err := ParseDefinitions(BundledDefinitionsJSON(), catalog); err != nil {
+		t.Fatalf("ParseDefinitions() service credential error = %v", err)
 	}
 }
 

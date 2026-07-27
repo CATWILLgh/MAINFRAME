@@ -9,7 +9,8 @@
       "source": {
         "kind": "mcp-profile",
         "server_id": "context7",
-        "profile_id": "remote-api-key"
+        "profile_id": "remote-api-key",
+        "credential_kind": "api-key"
       },
       "credential_roles": [
         {
