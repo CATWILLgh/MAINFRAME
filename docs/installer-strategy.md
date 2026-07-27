@@ -255,13 +255,25 @@ A credential may name another credential needed to use, obtain, rotate, or
 recover it. Relations are directed, advisory, and non-transitive. They never
 authorize automatic retrieval or execution; duplicate, self, missing, and
 cyclic relations are invalid. MCP-backed definitions reference the MCP catalog
-instead of duplicating connection or evidence fields.
+instead of duplicating connection or evidence fields, and declare the expected
+credential kind so a retained profile identifier cannot hide authentication
+drift.
 
 Parsing is read-only and fails closed on unknown versions, fields, malformed
 or oversized documents, and invalid references without rewriting user data.
 Structural validity does not claim that a secret exists. The current milestone
-does not migrate legacy indexes, write user state, resolve values, or edit
-credentials through the TUI.
+adds the machine-readable `mainframe credentials` command. It reads the
+optional user document from
+`credentials-config/mainframe/instances.json` through the no-follow,
+identity-checked host reader. Missing state is an empty instance list; unsafe
+or invalid state fails without partial output or reflected metadata.
+
+The response is a dedicated versioned JSON contract, not a serialization of
+internal structs. It explicitly reports `secret_availability` as `unchecked`
+and exposes only definitions, instance metadata, and validated secret-reference
+names. The command does not inspect referenced environment-variable values,
+invoke `secret`, read `secrets.env`, migrate legacy indexes, write user state,
+resolve values, or edit credentials through the TUI.
 
 Context7 is the first reference catalog entry. Its
 [maintained repository](https://github.com/upstash/context7#installation)

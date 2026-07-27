@@ -35,11 +35,10 @@ secret values.
 
 ## What probably needs to be done
 
-- Define the neutral user-instance path, file modes, ownership, atomic writes,
-  journal behavior, and recovery.
+- Define file modes, write ownership, atomic writes, journal behavior, and
+  recovery for the adopted neutral user-instance path.
 - Inventory every legacy adapter-local index and design a previewed merge that
   preserves divergent user content without deleting the originals.
-- Add a read-only `mainframe credentials` interface before enabling edits.
 - Teach shipped agent guidance to consume the merged catalog through that
   interface rather than reading an adapter-local file.
 - Add TUI instance selection and editing only after read-only behavior is
@@ -58,6 +57,17 @@ secret values.
   logs, errors, and executor journals.
 - Installation, update, adapter deselection, uninstall, interruption, and
   recovery tests preserve user-owned credential metadata.
+
+## Progress
+
+- `mainframe credentials` now provides a read-only, versioned JSON view.
+- The neutral user document path is
+  `credentials-config/mainframe/instances.json`.
+- Missing user state succeeds with an empty list. Present state is read through
+  the no-follow bounded host reader and strictly validated.
+- The response explicitly reports secret availability as unchecked. It never
+  resolves values, reads the secret store, or falls back to adapter-local
+  indexes.
 
 ## Sources
 
