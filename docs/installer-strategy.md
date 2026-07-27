@@ -293,15 +293,25 @@ The terminal interface now includes a neutral credential-service list that is
 available independently of adapter selection. Creating or editing an instance
 changes only an in-memory draft until the complete review shows the exact
 metadata change. The user must then open a second confirmation screen. Apply is
-enabled only when the executable plan contains the single
-`credentials-config/mainframe/instances.json` mutation and no adapter, MCP, or
-DEV mutation. The application revalidates the exact canonical after-image
-before publication, then uses the common transaction for refreshed inspection,
-atomic publication, rollback, and crash recovery. The TUI completes any
-previously authorized unfinished transaction before it loads settings and
-reports recovery warnings. Credential confirmation itself uses a
+enabled for the existing credential-only plan and for the first exact mixed
+slice: keyed Context7 projected only to OpenCode, with no diagnostics changes.
+Other adapter and diagnostics plans remain preview-only until their own live
+validation is complete. Existing selected adapters may remain in that plan, but
+any actual filesystem, configuration, or MCP mutation outside OpenCode keeps
+Apply disabled. Every applicable plan must contain at least one change and no
+blocking conflict. The confirmation screen repeats the complete
+filesystem, configuration, MCP, diagnostics, and credential plan; one
+confirmation applies that exact plan as one transaction. This permits a new
+credential instance and the adapter configuration that references it to land
+together instead of requiring an intermediate partial write.
+
+The application revalidates the complete reviewed request and every canonical
+after-image under the transaction lock before publication, then uses the common
+transaction for atomic publication, rollback, and crash recovery. The TUI
+completes any previously authorized unfinished transaction before it loads
+settings and reports recovery warnings. Confirmed Apply itself uses a
 non-recovering executor path, so a new pending journal that appears after review
-blocks the write instead of changing an unrelated target.
+blocks the operation instead of changing an unrelated target.
 
 Existing state must be a regular strict-version document with mode `0600`;
 missing state is created with mode `0600` and newly created parents use `0700`.
@@ -313,6 +323,16 @@ remote profile is verified for Claude Code, Codex, OpenCode, and Antigravity
 Antigravity 2.x is explicitly unsupported until a plaintext-free secret
 reference is proven. Optional GitHub stars are fetched asynchronously, kept
 only in memory, and discarded when stale or unavailable.
+
+OpenCode is the first executable keyed MCP slice. The shared credential catalog
+resolves the selected Context7 instance to a validated environment-variable
+reference without reading that variable. The adapter-local projection writes
+only OpenCode's documented `CONTEXT7_API_KEY` header placeholder in the form
+`{env:NAME}`. Keyed and keyless Context7 remain two profiles of one owned
+`mcp.context7` entry, so switching either direction is an update that removes
+stale headers while preserving unrelated OpenCode configuration. No other
+adapter receives this runtime binding until its plaintext-free dialect has its
+own executable contract.
 
 The second read-only milestone gives keyless Context7 exact OpenCode, Claude
 Code, Codex, and Antigravity 2.x projections. Bundle schema version 2 links each

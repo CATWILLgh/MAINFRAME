@@ -204,3 +204,15 @@ workspaces without loading or validating the current release. Application calls
 it before opening the source-pinned Apply executor; the executor keeps its own
 locked recovery as a defensive check. No explicit CLI or TUI recovery action is
 exposed while the remaining activation gates are open.
+
+## Re-occurrence noted (2026-07-27)
+
+**Noticed during:** First executable Context7 to OpenCode vertical slice
+**Where:** `internal/application/confirmed_apply.go` and
+`cmd/mainframe/credential_mcp_apply_integration_unix_test.go`
+**Additional details:** Unit coverage now proves that already selected Claude
+Code and Codex adapters may remain in the reviewed request while any actual
+non-OpenCode mutation keeps Apply disabled. The Unix end-to-end fixture still
+starts from an empty host. Add a defence-in-depth fixture with already managed
+Claude Code and Codex state, keep both selected, apply only the OpenCode
+Context7 change, and assert their files and configurations remain byte-identical.
