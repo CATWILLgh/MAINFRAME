@@ -36,6 +36,21 @@ type credentialsSecretReference struct {
 	Name    string `json:"name"`
 }
 
+type credentialUsesContract struct {
+	SchemaVersion int                        `json:"schema_version"`
+	Kind          string                     `json:"kind"`
+	Scope         string                     `json:"scope"`
+	Secret        credentialsSecretReference `json:"secret"`
+	Uses          []credentialUse            `json:"uses"`
+}
+
+type credentialUse struct {
+	InstanceID   string `json:"instance_id"`
+	ServiceID    string `json:"service_id"`
+	InstanceName string `json:"instance_name"`
+	RoleID       string `json:"role_id"`
+}
+
 func TestCredentialsCommandShowsDefinitionsWhenUserStateIsAbsent(t *testing.T) {
 	useCredentialsEnvironment(t)
 	var stdout, stderr bytes.Buffer
@@ -133,6 +148,84 @@ func TestCredentialsCommandShowsEveryInstanceWithoutResolvingSecrets(t *testing.
 	}
 }
 
+func TestCredentialsUsesCommandReportsEverySharedInstanceReference(t *testing.T) {
+	path := useCredentialsEnvironment(t)
+	writeFixtureFile(t, path, []byte(`{
+		"schema_version":1,
+		"kind":"mainframe-credential-instances",
+		"instances":[
+			{"id":"context7-home","service_id":"context7","name":"Home",
+			 "purpose":"Personal research","credentials":[
+				{"role_id":"api-key","secret":{"backend":"secret-env","name":"CONTEXT7_SHARED_KEY"}}
+			 ]},
+			{"id":"context7-work","service_id":"context7","name":"Work",
+			 "purpose":"Company research","credentials":[
+				{"role_id":"api-key","secret":{"backend":"secret-env","name":"CONTEXT7_SHARED_KEY"}}
+			 ]}
+		]
+	}`), 0o600)
+	t.Setenv("CONTEXT7_SHARED_KEY", "credential-value-must-not-appear")
+	var stdout, stderr bytes.Buffer
+
+	exitCode := run(
+		[]string{"credentials", "uses", "CONTEXT7_SHARED_KEY"},
+		strings.NewReader(""),
+		&stdout,
+		&stderr,
+	)
+
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
+	}
+	var response credentialUsesContract
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("decode credentials uses output: %v", err)
+	}
+	if response.SchemaVersion != 1 ||
+		response.Kind != "mainframe-credential-secret-uses" ||
+		response.Scope != "credential-instance-references" ||
+		response.Secret.Name != "CONTEXT7_SHARED_KEY" ||
+		len(response.Uses) != 2 {
+		t.Fatalf("credentials uses contract = %#v", response)
+	}
+	if response.Uses[0].InstanceID != "context7-home" ||
+		response.Uses[1].InstanceID != "context7-work" {
+		t.Fatalf("uses = %#v", response.Uses)
+	}
+	if strings.Contains(
+		stdout.String()+stderr.String(),
+		"credential-value-must-not-appear",
+	) {
+		t.Fatal("credential value leaked into uses output")
+	}
+}
+
+func TestCredentialsUsesCommandRejectsInvalidReferenceWithoutReadingState(
+	t *testing.T,
+) {
+	path := useCredentialsEnvironment(t)
+	writeFixtureFile(t, path, []byte("not-json"), 0o600)
+	var stdout, stderr bytes.Buffer
+
+	exitCode := run(
+		[]string{"credentials", "uses", "invalid-reference"},
+		strings.NewReader(""),
+		&stdout,
+		&stderr,
+	)
+
+	if exitCode != 2 ||
+		stderr.String() != "credentials uses: secret reference is invalid\n" ||
+		stdout.Len() != 0 {
+		t.Fatalf(
+			"exit code = %d, stdout = %q, stderr = %q",
+			exitCode,
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+}
+
 func TestCredentialsCommandRejectsInvalidUserStateWithoutReflectingIt(t *testing.T) {
 	canary := "credential-value-must-not-be-reflected"
 	payloads := []string{
@@ -220,7 +313,8 @@ func TestCredentialsCommandRejectsArguments(t *testing.T) {
 		&stderr,
 	)
 	if exitCode != 2 ||
-		stderr.String() != "credentials does not accept arguments\n" {
+		stderr.String() !=
+			"credentials: expected no arguments, uses NAME, instance review, or instance apply --confirm DIGEST\n" {
 		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
 	}
 }

@@ -60,6 +60,7 @@ func TestCredentialEditRemainsDraftUntilCompleteReview(t *testing.T) {
 	)
 	model.openCredentialEdit("context7-home")
 	model.credentialDraft.name = "Home updated"
+	model.credentialDraft.credentials[0].referenceChoice = manualSecretReference
 	model.credentialDraft.credentials[0].name = "CONTEXT7_HOME_KEY_V2"
 
 	updated, command := model.saveCredentialDraft()

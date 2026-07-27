@@ -88,6 +88,7 @@ func (model *Model) reinitializeCurrentForm() (*Model, tea.Cmd) {
 		model.form = credentialInstanceForm(
 			&model.credentialDraft,
 			model.credentialDefinitions,
+			model.credentialInstances,
 		)
 	case screenApplyConfirm:
 		model.form = huh.NewForm(huh.NewGroup(

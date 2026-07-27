@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -54,15 +52,12 @@ func runWithPreview(
 		return 0
 	}
 	if args[0] == "credentials" {
-		if len(args) != 1 {
-			fmt.Fprintln(errorOutput, "credentials does not accept arguments")
-			return 2
-		}
-		if err := runCredentials(output); err != nil {
-			fmt.Fprintf(errorOutput, "credentials: %v\n", err)
-			return 1
-		}
-		return 0
+		return runCredentialsCommand(
+			args[1:],
+			input,
+			output,
+			errorOutput,
+		)
 	}
 	if len(args) != 1 || args[0] != "plan" {
 		fmt.Fprintf(
@@ -114,80 +109,5 @@ func publicPlanResponse(source domain.Plan) planResponse {
 }
 
 func decodeRequest(input io.Reader) (domain.PlanRequest, error) {
-	payload, err := io.ReadAll(io.LimitReader(input, maxPlanRequestBytes+1))
-	if err != nil {
-		return domain.PlanRequest{}, fmt.Errorf("read request: %w", err)
-	}
-	if len(payload) > maxPlanRequestBytes {
-		return domain.PlanRequest{}, fmt.Errorf("request exceeds %d bytes", maxPlanRequestBytes)
-	}
-	if err := rejectDuplicateJSONKeys(payload); err != nil {
-		return domain.PlanRequest{}, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	var request *domain.PlanRequest
-	if err := decoder.Decode(&request); err != nil {
-		return domain.PlanRequest{}, fmt.Errorf("decode request: %w", err)
-	}
-	if request == nil {
-		return domain.PlanRequest{}, fmt.Errorf("request must not be null")
-	}
-	var trailing json.RawMessage
-	err = decoder.Decode(&trailing)
-	if !errors.Is(err, io.EOF) {
-		return domain.PlanRequest{}, fmt.Errorf("expected a single JSON request")
-	}
-	return *request, nil
-}
-
-func rejectDuplicateJSONKeys(payload []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	if err := scanJSONValue(decoder); err != nil {
-		return fmt.Errorf("decode request: %w", err)
-	}
-	return nil
-}
-
-func scanJSONValue(decoder *json.Decoder) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, composite := token.(json.Delim)
-	if !composite {
-		return nil
-	}
-	if delimiter == '[' {
-		for decoder.More() {
-			if err := scanJSONValue(decoder); err != nil {
-				return err
-			}
-		}
-		_, err = decoder.Token()
-		return err
-	}
-	if delimiter != '{' {
-		return fmt.Errorf("unexpected JSON delimiter %q", delimiter)
-	}
-	keys := make(map[string]bool)
-	for decoder.More() {
-		keyToken, err := decoder.Token()
-		if err != nil {
-			return err
-		}
-		key, valid := keyToken.(string)
-		if !valid {
-			return fmt.Errorf("JSON object key must be a string")
-		}
-		if keys[key] {
-			return fmt.Errorf("duplicate JSON key %q", key)
-		}
-		keys[key] = true
-		if err := scanJSONValue(decoder); err != nil {
-			return err
-		}
-	}
-	_, err = decoder.Token()
-	return err
+	return decodeStrictJSON[domain.PlanRequest](input)
 }

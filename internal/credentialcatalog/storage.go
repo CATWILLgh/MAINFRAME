@@ -114,6 +114,7 @@ func IsInstancesOnlyPlan(plan configuration.PreparedPlan) bool {
 	transitions := plan.Transitions()
 	if len(transitions) != 1 ||
 		len(plan.Preconditions()) != 0 ||
+		len(plan.Materializations()) != 0 ||
 		len(transitions[0].ResourceIDs) != 1 ||
 		transitions[0].ResourceIDs[0] != credentialResourceID ||
 		len(transitions[0].Mutations) != 1 {

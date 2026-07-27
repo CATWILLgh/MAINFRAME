@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,12 +13,17 @@ import (
 
 type credentialMenuChoice string
 
-const credentialBack credentialMenuChoice = ":back"
+const (
+	credentialBack         credentialMenuChoice = ":back"
+	credentialCreateSecret credentialMenuChoice = ":create-secret"
+	manualSecretReference                       = ":manual-secret-reference"
+)
 
 type credentialBindingDraft struct {
-	roleID       credentialcatalog.RoleID
-	name         string
-	requirements []credentialcatalog.Requirement
+	roleID          credentialcatalog.RoleID
+	name            string
+	requirements    []credentialcatalog.Requirement
+	referenceChoice string
 }
 
 type credentialInstanceDraft struct {
@@ -62,6 +68,11 @@ func credentialCatalogForm(model *Model) *huh.Form {
 			credentialMenuChoice("create:"+service.ID),
 		))
 	}
+	if model.secretCreator != nil {
+		options = append(options, huh.NewOption(
+			"Create a new secret", credentialCreateSecret,
+		))
+	}
 	for _, instance := range model.credentialInstances.All() {
 		options = append(options, huh.NewOption(
 			"Edit "+instance.Name+" ("+string(instance.ID)+")",
@@ -80,6 +91,9 @@ func (model *Model) continueFromCredentials() (*Model, tea.Cmd) {
 	value := string(model.credentialMenuChoice)
 	if model.credentialMenuChoice == credentialBack {
 		return model.openMain()
+	}
+	if model.credentialMenuChoice == credentialCreateSecret {
+		return model.openSecretCreate()
 	}
 	if strings.HasPrefix(value, "create:") {
 		return model.openCredentialCreate(
@@ -136,6 +150,7 @@ func draftFromInstance(
 	for index, binding := range instance.Credentials {
 		draft.credentials[index] = credentialBindingDraft{
 			roleID: binding.RoleID, name: binding.Secret.Name,
+			referenceChoice: binding.Secret.Name,
 			requirements: append(
 				[]credentialcatalog.Requirement(nil),
 				binding.Requirements...,
@@ -155,6 +170,7 @@ func (model *Model) openCredentialDraft(
 	model.form = credentialInstanceForm(
 		&model.credentialDraft,
 		model.credentialDefinitions,
+		model.credentialInstances,
 	)
 	return model, model.form.Init()
 }
@@ -162,7 +178,9 @@ func (model *Model) openCredentialDraft(
 func credentialInstanceForm(
 	draft *credentialInstanceDraft,
 	definitions credentialcatalog.Definitions,
+	instances credentialcatalog.Instances,
 ) *huh.Form {
+	groups := make([]*huh.Group, 0)
 	fields := make([]huh.Field, 0)
 	if draft.create {
 		fields = append(fields, huh.NewInput().
@@ -175,15 +193,61 @@ func credentialInstanceForm(
 		huh.NewInput().Title("Purpose").Value(&draft.purpose),
 		huh.NewInput().Title("Locator (optional)").Value(&draft.locator),
 	)
+	groups = append(groups, huh.NewGroup(fields...))
 	service, _ := definitions.Service(draft.serviceID)
 	for index := range draft.credentials {
 		role, _ := credentialRole(service, draft.credentials[index].roleID)
-		fields = append(fields, huh.NewInput().
-			Title(role.Name+" secret reference").
-			Description("Name only, for example CONTEXT7_WORK_KEY. The key value is never read.").
-			Value(&draft.credentials[index].name))
+		credential := &draft.credentials[index]
+		if credential.referenceChoice == "" {
+			credential.referenceChoice = credential.name
+		}
+		groups = append(groups, huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(role.Name+" secret reference").
+				Description("Known references are metadata only. Choose manual entry for a new name.").
+				Options(credentialReferenceOptions(instances)...).
+				Value(&credential.referenceChoice),
+		))
+		groups = append(groups, huh.NewGroup(
+			huh.NewInput().
+				Title(role.Name+" new secret reference").
+				Description("Name only, for example CONTEXT7_WORK_KEY. The key value is never read.").
+				Value(&credential.name).
+				Validate(validateSecretReferenceName),
+		).WithHideFunc(func() bool {
+			return credential.referenceChoice != manualSecretReference
+		}))
 	}
-	return huh.NewForm(huh.NewGroup(fields...)).WithShowHelp(false)
+	return huh.NewForm(groups...).WithShowHelp(false)
+}
+
+func credentialReferenceOptions(
+	instances credentialcatalog.Instances,
+) []huh.Option[string] {
+	counts := make(map[string]int)
+	for _, instance := range instances.All() {
+		for _, credential := range instance.Credentials {
+			reference := credential.Secret
+			if credentialcatalog.ValidateSecretReference(reference) == nil {
+				counts[reference.Name]++
+			}
+		}
+	}
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	options := make([]huh.Option[string], 0, len(names)+1)
+	options = append(options, huh.NewOption(
+		"Enter a new reference name", manualSecretReference,
+	))
+	for _, name := range names {
+		options = append(options, huh.NewOption(fmt.Sprintf(
+			"%s — %d credential-instance references", name, counts[name],
+		), name))
+	}
+	return options
 }
 
 func credentialRole(
@@ -223,6 +287,7 @@ func (model *Model) saveCredentialDraft() (*Model, tea.Cmd) {
 		model.form = credentialInstanceForm(
 			&model.credentialDraft,
 			model.credentialDefinitions,
+			model.credentialInstances,
 		)
 		return model, model.form.Init()
 	}
@@ -238,7 +303,7 @@ func (draft credentialInstanceDraft) instance() credentialcatalog.Instance {
 			RoleID: credential.roleID,
 			Secret: credentialcatalog.SecretReference{
 				Backend: credentialcatalog.BackendSecretEnvironment,
-				Name:    strings.TrimSpace(credential.name),
+				Name:    credential.referenceName(),
 			},
 			Requirements: append(
 				[]credentialcatalog.Requirement(nil),
@@ -254,6 +319,13 @@ func (draft credentialInstanceDraft) instance() credentialcatalog.Instance {
 	}
 }
 
+func (draft credentialBindingDraft) referenceName() string {
+	if draft.referenceChoice != manualSecretReference {
+		return strings.TrimSpace(draft.referenceChoice)
+	}
+	return strings.TrimSpace(draft.name)
+}
+
 func (model *Model) credentialsView() string {
 	sections := []string{
 		header(),
@@ -264,8 +336,15 @@ func (model *Model) credentialsView() string {
 	if model.err != nil {
 		sections = append(sections, errorStyle.Render(model.err.Error()))
 	}
+	if model.secretCreateNotice != "" {
+		sections = append(sections, model.secretCreateNotice)
+	}
+	status := "Nothing has been written."
+	if model.secretCreateNotice != "" {
+		status = "No credential metadata or adapter configuration was changed."
+	}
 	sections = append(sections, mutedStyle.Render(
-		"Nothing has been written.  •  enter open  •  b back  •  q quit",
+		status+"  •  enter open  •  b back  •  q quit",
 	))
 	return strings.Join(sections, "\n\n")
 }

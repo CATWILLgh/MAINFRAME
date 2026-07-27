@@ -239,12 +239,14 @@ or trust signal, never gate installation, and their absence or refresh failure
 must not block an otherwise verified offline catalog entry.
 
 Credential values never enter the release, project files, previews, logs,
-ownership metadata, or executor journal. The TUI accepts and previews only
-validated secret-reference names. A keyed MCP profile selects a compatible
-user-owned credential instance; it never collects an API key value. Adapters
-normally consume the validated reference directly. An adapter that cannot do
-so requires an explicit adapter-local storage contract before keyed activation
-can be supported.
+ownership metadata, or executor journal. Existing values are represented only
+by validated secret-reference names. The TUI may create a new value through a
+dedicated masked input with paste support, but the value stays outside the
+installation request and reviewed plan. After a separate value-free
+confirmation it is sent only through standard input to a create-only helper
+operation. Adapters normally consume the validated reference directly. An
+adapter that cannot do so requires an explicit adapter-local storage contract
+before keyed activation can be supported.
 
 Credential descriptions use a strict versioned contract with three owners:
 MAINFRAME ships immutable service definitions, the user owns neutral instance
@@ -272,10 +274,34 @@ or invalid state fails without partial output or reflected metadata.
 The response is a dedicated versioned JSON contract, not a serialization of
 internal structs. It explicitly reports `secret_availability` as `unchecked`
 and exposes only definitions, instance metadata, and validated secret-reference
-names. The command does not inspect referenced environment-variable values,
-invoke `secret`, read `secrets.env`, migrate legacy indexes, write user state,
-or resolve values. User state editing belongs to the terminal interface
-described below.
+names. `mainframe credentials uses NAME` provides a second versioned,
+value-free response listing every credential-instance role that references one
+name. This is deliberately labelled as credential-instance scope; it does not
+claim to enumerate already published adapter configuration. Neither command
+inspects referenced values, invokes `secret`, reads `secrets.env`, migrates
+legacy indexes, writes user state, or resolves values.
+
+Human and agent interfaces must share the same application core instead of an
+agent scraping the terminal interface. The agent-facing interface supports
+read-only catalog and reference-impact discovery plus credential-instance
+creation and editing through two versioned machine commands:
+
+- `mainframe credentials instance review` accepts one strict create or edit
+  request on standard input and returns a value-free change summary, a
+  normalized apply request, and an `expected_review` digest.
+- `mainframe credentials instance apply --confirm DIGEST` accepts only that
+  normalized request and applies it when a fresh credential-only review still
+  produces exactly the same single-instance change and digest.
+
+The digest is a stale-review marker, not a password or authorization token. It
+binds the release, exact credential file before-image, intended after-image,
+and normalized desired instance document. Apply then retains the stronger
+transaction-lock refresh and exact-plan comparison. Review observes only the
+pinned release and the neutral credential-instance document; it does not
+inspect adapter configuration, MCP state, diagnostics, or secret values.
+Create and edit never imply deletion, and an edit cannot change instance
+identity or service. Secret entry remains a direct human action rather than an
+agent-visible payload.
 
 Context7 is the first reference catalog entry. Its
 [maintained repository](https://github.com/upstash/context7#installation)
@@ -308,6 +334,15 @@ filesystem, configuration, MCP, diagnostics, and credential plan; one
 confirmation applies that exact plan as one transaction. This permits a new
 credential instance and the adapter configuration that references it to land
 together instead of requiring an intermediate partial write.
+
+Known reference names are offered as reusable choices with the number of
+credential-instance bindings that already use each name. Reuse never copies a
+value: several bindings point to the same backend-owned secret. Creating a new
+value is a separate create-only action with its own value-free preview and
+confirmation. It cannot replace an existing name. If later metadata Apply
+fails, the safely stored value may remain unreferenced; the interface does not
+claim a cross-store transaction. Rotation and deletion require a separate
+impact-aware lifecycle and are not inferred from creation.
 
 The application revalidates the complete reviewed request and every canonical
 after-image under the transaction lock before publication, then uses the common

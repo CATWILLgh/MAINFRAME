@@ -64,7 +64,7 @@ func validateInstance(
 		if !roleIDs[credential.RoleID] {
 			return fmt.Errorf("unknown role %q", credential.RoleID)
 		}
-		if err := validateSecretReference(credential.Secret); err != nil {
+		if err := ValidateSecretReference(credential.Secret); err != nil {
 			return fmt.Errorf("role %q: %w", credential.RoleID, err)
 		}
 		bindings[bindingKey{instance: instance.ID, role: credential.RoleID}] = credential
@@ -83,7 +83,7 @@ func roleSet(service ServiceDefinition) map[RoleID]bool {
 	return result
 }
 
-func validateSecretReference(reference SecretReference) error {
+func ValidateSecretReference(reference SecretReference) error {
 	if reference.Backend != BackendSecretEnvironment ||
 		!secretNamePattern.MatchString(reference.Name) {
 		return fmt.Errorf("invalid secret reference")

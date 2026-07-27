@@ -35,6 +35,8 @@ const (
 	screenDiagnostics
 	screenCredentials
 	screenCredentialEdit
+	screenSecretCreate
+	screenSecretCreateConfirm
 	screenApplyConfirm
 	screenApplied
 	screenPreview
@@ -65,6 +67,10 @@ type Model struct {
 	credentialMenuChoice       credentialMenuChoice
 	activeCredential           credentialcatalog.InstanceID
 	credentialDraft            credentialInstanceDraft
+	secretCreator              SecretCreator
+	secretDraft                secretDraft
+	secretCreateConfirmed      bool
+	secretCreateNotice         string
 	applyConfirmed             bool
 	appliedWarnings            []string
 	startupRecovered           bool
@@ -99,6 +105,7 @@ func NewModel(
 	if len(credentialStates) > 0 {
 		model.credentialDefinitions = credentialStates[0].Definitions
 		model.credentialInstances = credentialStates[0].Instances.Clone()
+		model.secretCreator = credentialStates[0].SecretCreator
 		model.startupRecovered = credentialStates[0].Recovered
 		model.startupWarnings = append(
 			[]string(nil),
@@ -131,6 +138,7 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	updated, command := model.form.Update(message)
 	model.form = updated.(*huh.Form)
 	if model.form.State == huh.StateAborted {
+		model.discardSecretDraft()
 		model.clearCredentialDrafts()
 		return model, tea.Quit
 	}
@@ -152,6 +160,10 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model.continueFromCredentials()
 		case screenCredentialEdit:
 			return model.saveCredentialDraft()
+		case screenSecretCreate:
+			return model.continueSecretCreate()
+		case screenSecretCreateConfirm:
+			return model.confirmSecretCreate()
 		case screenApplyConfirm:
 			return model.confirmPlanApply()
 		}
@@ -175,6 +187,10 @@ func (model *Model) View() tea.View {
 		content = model.credentialsView()
 	} else if model.screen == screenCredentialEdit {
 		content = model.credentialEditView()
+	} else if model.screen == screenSecretCreate {
+		content = model.secretCreateView()
+	} else if model.screen == screenSecretCreateConfirm {
+		content = model.secretCreateConfirmView()
 	} else if model.screen == screenApplyConfirm {
 		content = model.applyConfirmView()
 	} else if model.screen == screenApplied {

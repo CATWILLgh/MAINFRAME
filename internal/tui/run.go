@@ -11,10 +11,15 @@ import (
 )
 
 type CredentialState struct {
-	Definitions credentialcatalog.Definitions
-	Instances   credentialcatalog.Instances
-	Recovered   bool
-	Warnings    []string
+	Definitions   credentialcatalog.Definitions
+	Instances     credentialcatalog.Instances
+	SecretCreator SecretCreator
+	Recovered     bool
+	Warnings      []string
+}
+
+type SecretCreator interface {
+	CreateSecret(reference string, value []byte) error
 }
 
 func Run(

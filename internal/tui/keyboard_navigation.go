@@ -5,20 +5,26 @@ import tea "charm.land/bubbletea/v2"
 func (model *Model) handleGlobalKey(key tea.KeyPressMsg) (*Model, tea.Cmd, bool) {
 	switch key.String() {
 	case "q":
-		if model.screen == screenMCPCredential {
+		if model.screen == screenMCPCredential ||
+			model.screen == screenSecretCreate {
 			return model, nil, false
 		}
 		model.clearReviewedPlan()
+		model.discardSecretDraft()
 		model.clearCredentialDrafts()
 		return model, tea.Quit, true
 	case "ctrl+c":
 		model.clearReviewedPlan()
+		model.discardSecretDraft()
 		model.clearCredentialDrafts()
 		return model, tea.Quit, true
 	case "esc":
 		updated, command := model.handleEscape()
 		return updated, command, true
 	case "b":
+		if model.screen == screenSecretCreate {
+			return model, nil, false
+		}
 		return model.handleBack()
 	default:
 		return model, nil, false
@@ -44,6 +50,9 @@ func (model *Model) handleEscape() (*Model, tea.Cmd) {
 		return model.openMain()
 	case screenCredentialEdit:
 		return model.openCredentials()
+	case screenSecretCreate, screenSecretCreateConfirm:
+		model.discardSecretDraft()
+		return model.openCredentials()
 	case screenApplyConfirm:
 		model.screen = screenPreview
 		return model, nil
@@ -67,6 +76,10 @@ func (model *Model) handleBack() (*Model, tea.Cmd, bool) {
 		updated, command := model.openMain()
 		return updated, command, true
 	case screenCredentialEdit:
+		updated, command := model.openCredentials()
+		return updated, command, true
+	case screenSecretCreate, screenSecretCreateConfirm:
+		model.discardSecretDraft()
 		updated, command := model.openCredentials()
 		return updated, command, true
 	case screenApplyConfirm:

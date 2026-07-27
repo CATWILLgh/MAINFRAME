@@ -156,6 +156,12 @@ func buildInteractiveReviewRuntime() (
 			Instances:   credentials.snapshot.Instances(),
 			Recovered:   recovery.Recovered,
 			Warnings:    append([]string(nil), recovery.Warnings...),
+			SecretCreator: newSecretHelperCreator(filepath.Join(
+				snapshot.root,
+				"bundles",
+				"credential-tools",
+				"secret",
+			)),
 		}, nil
 }
 

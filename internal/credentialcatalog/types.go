@@ -64,6 +64,13 @@ type SecretReference struct {
 	Name    string        `json:"name"`
 }
 
+type SecretUse struct {
+	InstanceID   InstanceID
+	ServiceID    ServiceID
+	InstanceName string
+	RoleID       RoleID
+}
+
 type Requirement struct {
 	Action     RequirementAction `json:"action"`
 	InstanceID InstanceID        `json:"instance_id"`
@@ -108,6 +115,21 @@ func (instances Instances) ForService(id ServiceID) []Instance {
 		}
 	}
 	return matches
+}
+
+func (instances Instances) Uses(reference SecretReference) []SecretUse {
+	var uses []SecretUse
+	for _, instance := range instances.instances {
+		for _, credential := range instance.Credentials {
+			if credential.Secret == reference {
+				uses = append(uses, SecretUse{
+					InstanceID: instance.ID, ServiceID: instance.ServiceID,
+					InstanceName: instance.Name, RoleID: credential.RoleID,
+				})
+			}
+		}
+	}
+	return uses
 }
 
 func cloneServices(source []ServiceDefinition) []ServiceDefinition {

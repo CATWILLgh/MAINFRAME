@@ -161,3 +161,16 @@ listener. The observed filesystem writes stayed under `$PROBE_ROOT`; live
 Claude Code and Codex configuration was neither supplied to the process nor
 changed. A later host version must be rechecked rather than assumed to behave
 identically.
+
+## Progress (2026-07-27)
+
+- The TUI now provides masked, paste-capable input with a separate
+  value-free confirmation.
+- The release-bundled helper exposes `create-stdin NAME`; the value is sent
+  only through standard input and existing names cannot be overwritten.
+- Invalid, empty, multiline, NUL-containing, and oversized input is rejected
+  without reflecting content. Publication retains the existing lock, private
+  modes, same-filesystem atomic replacement, and unrelated entries.
+- Rotation and deletion remain deliberately separate because changing a shared
+  name affects every consumer. Their future confirmation must include a
+  refreshed impact view rather than reusing create-only behavior.

@@ -13,12 +13,11 @@ tags: ["credentials", "tui", "migration", "security"]
 
 ## What was observed
 
-The central contract in `docs/installer-strategy.md` and
-`internal/credentialcatalog` establish strict read-only service definitions
-and user-instance parsing. The current installer still seeds adapter-local
-Markdown indexes, and neither the CLI nor TUI can load, merge, edit, or persist
-the new user instance document. Live secret resolution and adapter injection
-are also intentionally absent.
+The central contract, TUI, and machine CLI now load, review, create, edit, and
+persist the neutral user-instance document without reading secret values. The
+current installer still seeds adapter-local Markdown indexes, and the
+remaining migration must preserve any divergent user content before those
+legacy indexes can be retired.
 
 ## Why it is a problem
 
@@ -35,16 +34,12 @@ secret values.
 
 ## What probably needs to be done
 
-- Define file modes, write ownership, atomic writes, journal behavior, and
-  recovery for the adopted neutral user-instance path.
 - Inventory every legacy adapter-local index and design a previewed merge that
   preserves divergent user content without deleting the originals.
 - Teach shipped agent guidance to consume the merged catalog through that
   interface rather than reading an adapter-local file.
-- Add TUI instance selection and editing only after read-only behavior is
-  verified.
-- Resolve values only at the final application boundary and prove that values
-  cannot enter arguments, previews, logs, errors, or journals.
+- Complete adapter-specific consumption without reintroducing cross-adapter
+  ownership or direct reads of the secret store.
 
 ## Acceptance criteria
 
@@ -61,6 +56,8 @@ secret values.
 ## Progress
 
 - `mainframe credentials` now provides a read-only, versioned JSON view.
+- `mainframe credentials uses NAME` reports every credential-instance role
+  that shares one validated reference without reading the value.
 - The neutral user document path is
   `credentials-config/mainframe/instances.json`.
 - Missing user state succeeds with an empty list. Present state is read through
@@ -68,6 +65,16 @@ secret values.
 - The response explicitly reports secret availability as unchecked. It never
   resolves values, reads the secret store, or falls back to adapter-local
   indexes.
+- The TUI creates and edits instance metadata through the common reviewed
+  transaction and offers known references as reusable choices.
+- New secret input is masked and pasteable. A separate value-free confirmation
+  calls a create-only stdin helper operation, so existing shared values cannot
+  be rotated accidentally.
+- Agent-facing create and edit use the versioned `credentials instance
+  review` and `credentials instance apply --confirm` protocol over the common
+  application transaction. The confirmation binds release, physical target,
+  transaction state, exact file before-image, and normalized desired state.
+  Secret input remains human-only.
 
 ## Sources
 

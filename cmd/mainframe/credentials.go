@@ -87,57 +87,125 @@ type credentialRequirement struct {
 	Summary    string `json:"summary"`
 }
 
+type credentialUsesResponse struct {
+	SchemaVersion int                       `json:"schema_version"`
+	Kind          string                    `json:"kind"`
+	Scope         string                    `json:"scope"`
+	Secret        credentialSecretReference `json:"secret"`
+	Uses          []credentialUseResponse   `json:"uses"`
+}
+
+type credentialUseResponse struct {
+	InstanceID   string `json:"instance_id"`
+	ServiceID    string `json:"service_id"`
+	InstanceName string `json:"instance_name"`
+	RoleID       string `json:"role_id"`
+}
+
 func runCredentials(output io.Writer) error {
-	snapshot, err := loadReadOnlyReleaseSnapshot()
+	definitions, instances, err := loadCredentialCatalog()
 	if err != nil {
 		return err
+	}
+	encoder := json.NewEncoder(output)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(publicCredentialResponse(
+		definitions,
+		instances.All(),
+	)); err != nil {
+		return fmt.Errorf("encode response: %w", err)
+	}
+	return nil
+}
+
+func runCredentialUses(
+	reference credentialcatalog.SecretReference,
+	output io.Writer,
+) error {
+	_, instances, err := loadCredentialCatalog()
+	if err != nil {
+		return err
+	}
+	response := publicCredentialUses(reference, instances)
+	encoder := json.NewEncoder(output)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(response); err != nil {
+		return fmt.Errorf("encode response: %w", err)
+	}
+	return nil
+}
+
+func loadCredentialCatalog() (
+	credentialcatalog.Definitions,
+	credentialcatalog.Instances,
+	error,
+) {
+	snapshot, err := loadReadOnlyReleaseSnapshot()
+	if err != nil {
+		return credentialcatalog.Definitions{}, credentialcatalog.Instances{}, err
 	}
 	definitions, err := credentialcatalog.ParseDefinitions(
 		credentialcatalog.BundledDefinitionsJSON(),
 		snapshot.release.MCPCatalog,
 	)
 	if err != nil {
-		return errCredentialDefinitions
+		return credentialcatalog.Definitions{}, credentialcatalog.Instances{},
+			errCredentialDefinitions
 	}
 	instances, err := loadCredentialInstances(snapshot, definitions)
-	if err != nil {
-		return err
-	}
-	encoder := json.NewEncoder(output)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(publicCredentialResponse(definitions, instances)); err != nil {
-		return fmt.Errorf("encode response: %w", err)
-	}
-	return nil
+	return definitions, instances, err
 }
 
 func loadCredentialInstances(
 	snapshot readOnlyReleaseSnapshot,
 	definitions credentialcatalog.Definitions,
-) ([]credentialcatalog.Instance, error) {
+) (credentialcatalog.Instances, error) {
 	layout, err := hostlayout.Resolve(hostEnvironment(), snapshot.root)
 	if err != nil {
-		return nil, errCredentialLocation
+		return credentialcatalog.Instances{}, errCredentialLocation
 	}
 	namespace, err := hostfs.Open(layout)
 	if err != nil {
-		return nil, errCredentialLocation
+		return credentialcatalog.Instances{}, errCredentialLocation
 	}
 	entry, err := namespace.Inspect(domain.Location{
 		Root: domain.RootCredentialsConfig,
 		Path: credentialcatalog.UserInstancesPath,
 	}, true)
 	if errors.Is(err, fs.ErrNotExist) {
-		return []credentialcatalog.Instance{}, nil
+		return credentialcatalog.BuildInstances(nil, definitions)
 	}
 	if err != nil || entry.Kind != hostfs.EntryRegular {
-		return nil, errCredentialInstancesUnsafe
+		return credentialcatalog.Instances{}, errCredentialInstancesUnsafe
 	}
 	instances, err := credentialcatalog.ParseInstances(entry.Content, definitions)
 	if err != nil {
-		return nil, errCredentialInstancesInvalid
+		return credentialcatalog.Instances{}, errCredentialInstancesInvalid
 	}
-	return instances.All(), nil
+	return instances, nil
+}
+
+func publicCredentialUses(
+	reference credentialcatalog.SecretReference,
+	instances credentialcatalog.Instances,
+) credentialUsesResponse {
+	uses := instances.Uses(reference)
+	publicUses := make([]credentialUseResponse, len(uses))
+	for index, use := range uses {
+		publicUses[index] = credentialUseResponse{
+			InstanceID: string(use.InstanceID), ServiceID: string(use.ServiceID),
+			InstanceName: use.InstanceName, RoleID: string(use.RoleID),
+		}
+	}
+	return credentialUsesResponse{
+		SchemaVersion: credentialsResponseSchemaVersion,
+		Kind:          "mainframe-credential-secret-uses",
+		Scope:         "credential-instance-references",
+		Secret: credentialSecretReference{
+			Backend: string(reference.Backend), Name: reference.Name,
+		},
+		Uses: publicUses,
+	}
 }
 
 func publicCredentialResponse(

@@ -253,14 +253,21 @@ func buildApplyServiceWithSource(
 	cwd string,
 	expected *executor.ReleaseIdentity,
 ) (application.Service, error) {
-	recoveryFactory, err := newProductionRecoveryExecutorFactory()
-	if err != nil {
-		return application.Service{}, err
-	}
 	builder := newReleaseSnapshotBuilderWithResolver(releaseRoots.Resolve, cwd)
 	if expected != nil {
 		identity := *expected
 		builder.expectedRelease = &identity
+	}
+	return buildApplyServiceWithSnapshotBuilder(releaseRoots, builder)
+}
+
+func buildApplyServiceWithSnapshotBuilder(
+	releaseRoots *releaseRootSource,
+	builder application.SnapshotBuilder,
+) (application.Service, error) {
+	recoveryFactory, err := newProductionRecoveryExecutorFactory()
+	if err != nil {
+		return application.Service{}, err
 	}
 	factory := productionApplyExecutorFactory{
 		resolveRoot: releaseRoots.Resolve,

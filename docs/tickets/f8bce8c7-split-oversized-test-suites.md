@@ -13,10 +13,11 @@ tags: ["maintainability", "tests", "file-size", "refactor"]
 
 ## What was observed
 
-The final size sweep found four pre-existing test files above the repository's
+The final size sweep found five pre-existing test files above the repository's
 400-line limit:
 
 - `internal/tui/model_test.go` — 410 lines;
+- `internal/credentialcatalog/catalog_test.go` — 422 lines;
 - `tools/test_build_codex_bundle.py` — 469 lines;
 - `tools/test_build_opencode_bundle.py` — 481 lines;
 - `tools/test_build_hub_page.py` — 535 lines.
@@ -49,12 +50,23 @@ together.
 
 - Every listed test file and extracted helper is at most 400 lines.
 - Test counts and assertions remain unchanged.
-- `go test ./internal/tui` and every affected Python suite pass.
+- `go test ./internal/tui ./internal/credentialcatalog` and every affected
+  Python suite pass.
 - The full `tools/test_*.py` loop remains green.
 
 ## Sources
 
 - `internal/tui/model_test.go`
+- `internal/credentialcatalog/catalog_test.go`
 - `tools/test_build_codex_bundle.py`
 - `tools/test_build_opencode_bundle.py`
 - `tools/test_build_hub_page.py`
+
+## Re-occurrence noted (2026-07-27)
+
+**Noticed during:** final size review of shared credential-reference tests
+**Where:** `internal/credentialcatalog/catalog_test.go`
+**Additional details:** The new shared-reference tests were moved into a
+dedicated file, leaving the pre-existing catalog suite unchanged at 422 lines.
+The oversized suite is now included in this ticket's inventory and acceptance
+scope.
