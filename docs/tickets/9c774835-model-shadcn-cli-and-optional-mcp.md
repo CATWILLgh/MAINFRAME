@@ -36,7 +36,7 @@ the optional adapter-specific MCP layer separate.
 - [#8b9e48c4](8b9e48c4-model-external-tooling-lifecycle.md) owns the general
   model for external executables and package-manager prerequisites. This
   ticket defines only the shadcn-specific projection onto that model.
-- [#67546598](67546598-share-local-stdio-mcp-processes.md) owns shared local
+- [#67546598](67546598-evaluate-shared-local-mcp-gateway.md) owns shared local
   MCP process lifecycle. This ticket only decides when shadcn uses direct CLI
   or requests an optional adapter MCP configuration.
 
@@ -67,7 +67,7 @@ the optional adapter-specific MCP layer separate.
 - `core/skills/shadcn/SKILL.md:14`
 - `core/skills/shadcn/SKILL.md:154`
 - `docs/tickets/8b9e48c4-model-external-tooling-lifecycle.md`
-- `docs/tickets/67546598-share-local-stdio-mcp-processes.md`
+- `docs/tickets/67546598-evaluate-shared-local-mcp-gateway.md`
 - https://ui.shadcn.com/docs/cli
 - https://ui.shadcn.com/docs/mcp
 - https://ui.shadcn.com/docs/changelog/2025-08-cli-3-mcp

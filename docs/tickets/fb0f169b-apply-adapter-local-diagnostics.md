@@ -63,7 +63,7 @@ and preserves foreign paths. Event and feedback writers fail closed behind the
 versioned activation document and protect newly written data with private
 permissions; the TUI still cannot apply the reviewed plan.
 
-## Why it was a problem
+## Why it is a problem
 
 The screen is intentionally honest about being preview-only. It now observes
 and prepares the desired state safely, but it cannot replace `--dev` until that
@@ -76,6 +76,14 @@ Existing runtime-state work covers bounded retention after data exists, while
 this ticket owns installer observation, activation, and adapter-local delivery.
 The legacy Claude Code symlink decision is also narrower than the release and
 TUI contract across every adapter.
+
+## What probably needs to be done
+
+- Carry each adapter's diagnostics choices through one typed review request.
+- Prepare activation creation and removal through the common transaction.
+- Keep diagnostic history when activation is disabled or an adapter is removed.
+- Deliver feedback support only inside each adapter's own projection.
+- Prove removal, rollback, recovery, reinstall, and re-enable on Darwin and Linux.
 
 ## Resolution (2026-07-24)
 

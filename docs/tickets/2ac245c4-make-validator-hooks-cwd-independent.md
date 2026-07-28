@@ -1,6 +1,6 @@
 ---
 id: 2ac245c4
-title: Make global validator hooks independent of the tool working directory
+title: Make project validator hooks independent of the tool working directory
 status: open
 priority: low
 component: hooks
@@ -9,14 +9,19 @@ discovered-from: []
 tags: ["hooks", "paths", "validation"]
 ---
 
-# 2ac245c4: Make global validator hooks independent of the tool working directory
+# 2ac245c4: Make project validator hooks independent of the tool working directory
 
 ## What was observed
 
-After each `apply_patch` operation in the installer worktree, the global
-validation hook invokes Python with `/tools/validate-claude-md.py` and
-`/tools/smoke-hooklib.py`. Both commands fail because the paths are resolved
-from `/` instead of the MAINFRAME checkout. The requested patch still applies.
+After each `apply_patch` operation in the installer worktree, the project-local
+`.codex/hooks.json` invoked validators through
+`${CLAUDE_PROJECT_DIR}/tools/...`. Codex did not set the Claude-specific
+variable, so Python tried `/tools/validate-claude-md.py` and
+`/tools/smoke-hooklib.py`. The requested patch still applied.
+
+The broken untracked hook file was removed during repository cleanup on
+2026-07-28. Its durable source and supported Codex project-root contract remain
+unresolved.
 
 ## Why it is a problem
 
@@ -25,14 +30,14 @@ it claims to enforce. Repeated false failures can hide a real validation error.
 
 ## Why it is not a duplicate
 
-No existing ticket describes validator scripts being resolved against the
-tool's working directory.
+This ticket supersedes the untracked `63bbc12b`, which recorded the same
+project-local failure with more precise provenance.
 
 ## What probably needs to be done
 
-- Locate the hook command that builds both script paths.
+- Establish a tracked source for project-local Codex validator hooks.
 - Resolve shipped validators from the installed MAINFRAME root rather than the
-  caller's current working directory.
+  caller's current working directory or a Claude-only environment variable.
 - Exercise the hook from `/`, the repository root, and a linked worktree.
 
 ## Acceptance criteria
@@ -46,7 +51,7 @@ tool's working directory.
 
 - `tools/validate-claude-md.py`
 - `tools/smoke-hooklib.py`
-- Failure observed after `apply_patch` on 2026-07-16
+- Removed local `.codex/hooks.json`, inspected during cleanup on 2026-07-28
 
 ## Re-occurrence noted (2026-07-19)
 
