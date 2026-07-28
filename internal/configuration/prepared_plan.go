@@ -252,7 +252,7 @@ func validatePreparedMutation(mutation FileMutation) error {
 	case MutationRemoveManagedSecret:
 		if len(mutation.After.Content) != 0 || mutation.After.Mode != 0 ||
 			mutation.After.Exists || !mutation.Before.Exists ||
-			!IsOpenCodeContext7SecretTarget(mutation.Target) {
+			!IsManagedSecretTarget(mutation.Target) {
 			return fmt.Errorf("invalid managed secret removal")
 		}
 	default:
@@ -292,6 +292,12 @@ func validatePreparedMutation(mutation FileMutation) error {
 func IsOpenCodeContext7SecretTarget(target domain.Location) bool {
 	return target.Root == domain.RootOpenCodeConfig &&
 		target.Path == "mainframe/secrets/context7-api-key"
+}
+
+func IsManagedSecretTarget(target domain.Location) bool {
+	return IsOpenCodeContext7SecretTarget(target) ||
+		(target.Root == domain.RootCredentialsConfig &&
+			target.Path == "secrets.env")
 }
 
 func exactDiagnosticsModeUpgrade(mutation FileMutation) bool {

@@ -39,7 +39,7 @@ import release_host_requirements as host_contract
 from release_resource_contract import validate_resources
 
 
-BUNDLE_SCHEMA_VERSION = fields.FEATURE_INSTALL_UNIT_SCHEMA_VERSION
+BUNDLE_SCHEMA_VERSION = fields.MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION
 RELEASE_SCHEMA_VERSION = 2
 BUNDLE_KIND = "mainframe-bundle"
 RELEASE_KIND = "mainframe-release"
@@ -89,7 +89,7 @@ def write_bundle_manifest(
             host_requirements
         )
     elif host_requirements is not None:
-        raise ValueError("host requirements require bundle schema version 3 through 5")
+        raise ValueError("host requirements require bundle schema version 3 or newer")
     _validate_bundle_document(root, manifest)
     _write_json(root / "bundle.json", manifest)
     return manifest

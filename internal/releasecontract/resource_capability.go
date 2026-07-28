@@ -4,15 +4,44 @@ import "github.com/CATWILLgh/MAINFRAME/internal/domain"
 
 // SupportsApply reports whether the advertised capability matches a complete ownership contract.
 func (resource Resource) SupportsApply() bool {
+	if resource.Strategy == StrategySeedIfAbsent {
+		return resource.supportsManagedSeedApply()
+	}
 	if resource.Strategy == StrategyExactJSONDocument {
 		return resource.supportsExactJSONDocumentApply()
 	}
 	return resource.supportsOpenCodeMapApply()
 }
 
+func (resource Resource) supportsManagedSeedApply() bool {
+	ownership := resource.FileOwnership
+	return resource.ID == "credential-tools.secrets-store" &&
+		resource.ComponentID == "credential-tools" &&
+		resource.Apply == SupportSupported &&
+		resource.Observation == SupportSupported &&
+		resource.SourcePath != "" &&
+		resource.SourceContent != nil &&
+		resource.Target == (domain.Location{
+			Root: domain.RootCredentialsConfig, Path: "secrets.env",
+		}) &&
+		ownership != nil &&
+		ownership.RegistryTarget == (domain.Location{
+			Root: domain.RootCredentialsConfig,
+			Path: "mainframe/file-ownership.json",
+		}) &&
+		ownership.RegistrySchemaVersion == 1 &&
+		len(resource.LegacySourceSuffixes) == 0 &&
+		len(resource.OwnedJSONFields) == 0 &&
+		resource.JSONMapOwnership == nil &&
+		resource.ExternalState == nil
+}
+
 // SupportsPreparation reports whether validated release data can produce an immutable after-image.
 func (resource Resource) SupportsPreparation() bool {
 	if resource.Strategy != StrategySeedIfAbsent {
+		return resource.SupportsApply()
+	}
+	if resource.FileOwnership != nil {
 		return resource.SupportsApply()
 	}
 	expectedRoots := map[domain.ComponentID]domain.RootID{
@@ -77,6 +106,9 @@ func (resource Resource) supportsExactJSONDocumentApply() bool {
 }
 
 func validApplyDeclaration(resource Resource) bool {
+	if resource.FileOwnership != nil {
+		return resource.SupportsApply()
+	}
 	if resource.Strategy == StrategyExactJSONDocument {
 		return resource.SupportsApply()
 	}

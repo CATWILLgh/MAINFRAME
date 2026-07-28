@@ -11,6 +11,7 @@ const (
 	bundleSchemaVersionV3 = 3
 	bundleSchemaVersionV4 = 4
 	bundleSchemaVersionV5 = 5
+	bundleSchemaVersionV6 = 6
 	releaseSchemaVersion  = 2
 	mcpCatalogPath        = "metadata/mcp-catalog.json"
 )
@@ -73,6 +74,7 @@ type Resource struct {
 	DesiredLine          string
 	OwnedJSONFields      []JSONField
 	JSONMapOwnership     *JSONMapOwnership
+	FileOwnership        *FileOwnership
 	ExternalState        *ExternalStateDescriptor
 	ExactJSONExemplar    string
 }
@@ -89,6 +91,11 @@ type JSONMapOwnership struct {
 	RegistryTarget        domain.Location
 	RegistrySchemaVersion int
 	EntriesPointer        string
+}
+
+type FileOwnership struct {
+	RegistryTarget        domain.Location
+	RegistrySchemaVersion int
 }
 
 type ExternalStateDescriptor struct {
@@ -247,6 +254,7 @@ type resourceRecord struct {
 	Apply                string                   `json:"apply"`
 	OwnedJSONPointers    optionalStringList       `json:"owned_json_pointers,omitempty"`
 	Ownership            optionalJSONMapOwnership `json:"ownership,omitempty"`
+	FileOwnership        optionalFileOwnership    `json:"file_ownership,omitempty"`
 	ExternalState        optionalExternalState    `json:"external_state,omitempty"`
 }
 
@@ -271,6 +279,21 @@ type ownershipRegistryRecord struct {
 	Target         locationRecord `json:"target"`
 	SchemaVersion  int            `json:"schema_version"`
 	EntriesPointer string         `json:"entries_pointer"`
+}
+
+type optionalFileOwnership struct {
+	Present bool
+	Value   fileOwnershipRecord
+}
+
+type fileOwnershipRecord struct {
+	Kind     string                      `json:"kind"`
+	Registry fileOwnershipRegistryRecord `json:"registry"`
+}
+
+type fileOwnershipRegistryRecord struct {
+	Target        locationRecord `json:"target"`
+	SchemaVersion int            `json:"schema_version"`
 }
 
 type externalStateRecord struct {

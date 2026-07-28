@@ -40,13 +40,23 @@ def _load_builder(name: str, path: Path):
 
 
 def _credential_resources() -> list[dict]:
-    lifecycle = {"observation": "supported", "apply": "unimplemented"}
+    lifecycle = {"observation": "supported", "apply": "supported"}
     return [
         {
             "id": "credential-tools.secrets-store",
             "strategy": "seed-if-absent",
             "source": "secrets.env",
             "target": {"root": "credentials-config", "path": "secrets.env"},
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "credentials-config",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
             **lifecycle,
         },
     ]

@@ -96,7 +96,7 @@ func validateJournalConfigurationMutation(
 		}
 	case ConfigurationRemoveManagedSecret:
 		if mutation.After.Exists ||
-			!configuration.IsOpenCodeContext7SecretTarget(mutation.Target) {
+			!configuration.IsManagedSecretTarget(mutation.Target) {
 			return fmt.Errorf("invalid managed secret removal")
 		}
 	default:

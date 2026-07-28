@@ -123,8 +123,16 @@ and trusted.
   [#38b9fb12](38b9fb12-compose-codex-mcp-managed-region.md).
 - Combined MCP plans retain every selected adapter's intent while remaining
   blocking if any adapter conflicts. Unselected sibling state is ignored.
-- Apply remains unavailable. Antigravity legacy-path migration and other
-  strategies still need safe deselection semantics.
+- The shared `credential-tools.secrets-store` seed now has schema-v6,
+  digest-bound ownership in its own registry. MAINFRAME observes the store
+  without exposing its content, preserves unowned or user-modified files,
+  creates and updates only claimed state, and prepares exact removal,
+  relinquishment, reload, and reinstall through the existing recoverable
+  configuration transaction.
+- General Apply remains unavailable. The managed store is admitted only inside
+  the existing exact Context7 transaction; adapter credential-index migration,
+  Antigravity legacy-path migration, and other strategies still need safe
+  deselection semantics.
 
 ## Acceptance criteria
 

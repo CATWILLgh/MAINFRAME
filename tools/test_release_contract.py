@@ -63,7 +63,7 @@ def test_bundle_manifest_records_units_resources_and_payload_integrity():
 
     manifest = release_contract.validate_bundle(bundle)
 
-    assert manifest["schema_version"] == 5
+    assert manifest["schema_version"] == 6
     assert "host_requirements" not in manifest
     assert manifest["mcp_projections"] == []
     assert manifest["kind"] == "mainframe-bundle"

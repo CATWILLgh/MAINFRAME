@@ -181,7 +181,7 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 		return manifest.HostRequirements.Present
 	case bundleSchemaVersionV4:
 		return true
-	case bundleSchemaVersionV5:
+	case bundleSchemaVersionV5, bundleSchemaVersionV6:
 		return true
 	default:
 		return false
@@ -189,10 +189,8 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 }
 
 func supportedBundleSchemaVersion(version int) bool {
-	return version == bundleSchemaVersionV2 ||
-		version == bundleSchemaVersionV3 ||
-		version == bundleSchemaVersionV4 ||
-		version == bundleSchemaVersionV5
+	return version >= bundleSchemaVersionV2 &&
+		version <= bundleSchemaVersionV6
 }
 
 func validateHostRequirements(component domain.ComponentID, manifest bundleManifest) error {

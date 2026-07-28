@@ -41,7 +41,8 @@ func (executor Executor) retainChangedConfigurations(
 	transition configuration.Transition,
 ) (configuration.Transition, error) {
 	retained := configuration.Transition{
-		ResourceIDs: append([]string(nil), transition.ResourceIDs...),
+		ResourceIDs:     append([]string(nil), transition.ResourceIDs...),
+		PreparationOnly: transition.PreparationOnly,
 		Mutations: make(
 			[]configuration.FileMutation,
 			0,

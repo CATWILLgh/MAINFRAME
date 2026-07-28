@@ -109,6 +109,14 @@ func (inspection Inspection) PlanWithPreservation(
 				observation,
 				selected[resource.ComponentID],
 			)
+		} else if resource.FileOwnership != nil {
+			planManagedFile(
+				&plan,
+				resource,
+				observation,
+				inspection.managedFiles[resource.ID],
+				selected[resource.ComponentID],
+			)
 		} else if resource.JSONMapOwnership != nil {
 			planOwnedMap(&plan, resource, observation, inspection.ownedMaps, selected)
 		} else {

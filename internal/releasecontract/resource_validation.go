@@ -44,19 +44,8 @@ func validateResourceRecord(
 	if !itemPattern.MatchString(record.ID) || !strategy.valid() {
 		return Resource{}, fmt.Errorf("component %q has invalid resource %q", component, record.ID)
 	}
-	if strategy == StrategyExactJSONDocument &&
-		schemaVersion < bundleSchemaVersionV4 {
-		return Resource{}, fmt.Errorf(
-			"resource %q requires bundle schema version 4 or newer",
-			record.ID,
-		)
-	}
-	if strategy == StrategyExactJSONDocument &&
-		record.LegacySourceSuffixes.Present {
-		return Resource{}, fmt.Errorf(
-			"resource %q exact JSON document has foreign claim metadata",
-			record.ID,
-		)
+	if err := validateResourceSchema(record, strategy, schemaVersion); err != nil {
+		return Resource{}, err
 	}
 	source, target, legacySources, err := validateResourceLocations(
 		bundleRoot, sourceBase, component, record, strategy,
@@ -74,9 +63,69 @@ func validateResourceRecord(
 	if !validObservationSupport(strategy, observation, externalState != nil) {
 		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
 	}
-	desiredLine, err := loadDesiredLine(bundleRoot, record.Source, strategy, observation)
+	desired, err := loadResourceDesiredState(
+		releaseRoot, bundleRoot, sourceBase, component,
+		record, target, strategy, observation, payloadRows,
+	)
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
+	resource := desired.resource(record, component, source, target, legacySources, externalState)
+	if !validApplyDeclaration(resource) {
+		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
+	}
+	return resource, nil
+}
+
+func validateResourceSchema(
+	record resourceRecord,
+	strategy ResourceStrategy,
+	schemaVersion int,
+) error {
+	if strategy == StrategyExactJSONDocument &&
+		schemaVersion < bundleSchemaVersionV4 {
+		return fmt.Errorf(
+			"resource %q requires bundle schema version 4 or newer",
+			record.ID,
+		)
+	}
+	if strategy == StrategyExactJSONDocument &&
+		record.LegacySourceSuffixes.Present {
+		return fmt.Errorf(
+			"resource %q exact JSON document has foreign claim metadata",
+			record.ID,
+		)
+	}
+	if record.FileOwnership.Present && schemaVersion < bundleSchemaVersionV6 {
+		return fmt.Errorf(
+			"resource %q file ownership requires bundle schema version 6",
+			record.ID,
+		)
+	}
+	return nil
+}
+
+type resourceDesiredState struct {
+	line          string
+	content       []byte
+	mapOwnership  *JSONMapOwnership
+	ownedFields   []JSONField
+	fileOwnership *FileOwnership
+	exemplar      string
+}
+
+func loadResourceDesiredState(
+	releaseRoot, bundleRoot, sourceBase string,
+	component domain.ComponentID,
+	record resourceRecord,
+	target domain.Location,
+	strategy ResourceStrategy,
+	observation SupportStatus,
+	payloadRows []payloadFile,
+) (resourceDesiredState, error) {
+	desiredLine, err := loadDesiredLine(bundleRoot, record.Source, strategy, observation)
+	if err != nil {
+		return resourceDesiredState{}, err
 	}
 	sourceContent, err := loadSeedContent(
 		releaseRoot,
@@ -87,13 +136,19 @@ func validateResourceRecord(
 		payloadRows,
 	)
 	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+		return resourceDesiredState{}, err
 	}
 	mapOwnership, ownedFields, err := validateResourceOwnership(
 		releaseRoot, sourceBase, component, record, target, strategy, observation, payloadRows,
 	)
 	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+		return resourceDesiredState{}, err
+	}
+	fileOwnership, err := validateFileOwnership(
+		record, component, target, strategy, observation,
+	)
+	if err != nil {
+		return resourceDesiredState{}, err
 	}
 	exemplar, err := loadExactJSONExemplar(
 		releaseRoot,
@@ -104,21 +159,66 @@ func validateResourceRecord(
 		payloadRows,
 	)
 	if err != nil {
-		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+		return resourceDesiredState{}, err
 	}
-	resource := Resource{
-		ID: record.ID, ComponentID: component, Strategy: strategy,
+	return resourceDesiredState{
+		line: desiredLine, content: sourceContent,
+		mapOwnership: mapOwnership, ownedFields: ownedFields,
+		fileOwnership: fileOwnership, exemplar: exemplar,
+	}, nil
+}
+
+func (desired resourceDesiredState) resource(
+	record resourceRecord,
+	component domain.ComponentID,
+	source domain.ArtifactPath,
+	target domain.Location,
+	legacySources []domain.ArtifactPath,
+	externalState *ExternalStateDescriptor,
+) Resource {
+	return Resource{
+		ID: record.ID, ComponentID: component,
+		Strategy:   ResourceStrategy(record.Strategy),
 		SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
-		Observation: observation, Apply: SupportStatus(record.Apply),
-		SourceContent: sourceContent, DesiredLine: desiredLine,
-		OwnedJSONFields: ownedFields, JSONMapOwnership: mapOwnership,
+		Observation:   SupportStatus(record.Observation),
+		Apply:         SupportStatus(record.Apply),
+		SourceContent: desired.content, DesiredLine: desired.line,
+		OwnedJSONFields: desired.ownedFields, JSONMapOwnership: desired.mapOwnership,
+		FileOwnership:     desired.fileOwnership,
 		ExternalState:     externalState,
-		ExactJSONExemplar: exemplar,
+		ExactJSONExemplar: desired.exemplar,
 	}
-	if !validApplyDeclaration(resource) {
-		return Resource{}, fmt.Errorf("resource %q overstates lifecycle support", record.ID)
+}
+
+func validateFileOwnership(
+	record resourceRecord,
+	component domain.ComponentID,
+	target domain.Location,
+	strategy ResourceStrategy,
+	observation SupportStatus,
+) (*FileOwnership, error) {
+	if !record.FileOwnership.Present {
+		return nil, nil
 	}
-	return resource, nil
+	value := record.FileOwnership.Value
+	registry, err := location(value.Registry.Target)
+	if err != nil {
+		return nil, fmt.Errorf("invalid file ownership registry target: %w", err)
+	}
+	if value.Kind != "managed-file-registry-v1" ||
+		value.Registry.SchemaVersion != 1 ||
+		strategy != StrategySeedIfAbsent ||
+		observation != SupportSupported ||
+		registry.Root != target.Root ||
+		locationsOverlap(target, registry) {
+		return nil, fmt.Errorf("invalid file ownership")
+	}
+	if err := validateComponentTarget(component, registry, "file ownership registry"); err != nil {
+		return nil, err
+	}
+	return &FileOwnership{
+		RegistryTarget: registry, RegistrySchemaVersion: 1,
+	}, nil
 }
 
 func validateResourceOwnership(

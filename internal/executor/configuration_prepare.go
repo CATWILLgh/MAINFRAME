@@ -18,6 +18,11 @@ type preparedConfigurations struct {
 func (executor Executor) materializeConfigurations(
 	plan configuration.PreparedPlan,
 ) (preparedConfigurations, error) {
+	if plan.HasPreparationOnly() {
+		return preparedConfigurations{}, fmt.Errorf(
+			"preparation-only configuration transition is not executable",
+		)
+	}
 	transitions := plan.Transitions()
 	if len(transitions) > 0 && executor.configurations == nil {
 		return preparedConfigurations{}, fmt.Errorf(

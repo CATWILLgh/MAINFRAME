@@ -95,28 +95,12 @@ func (inspection Inspection) PrepareWithPreservation(
 	}
 	builder := newPreparationBuilder(inspection.files)
 	selected := selectedComponents(included)
-	for _, resource := range resources {
-		if resource.Strategy == releasecontract.StrategySeedIfAbsent {
-			if err := builder.applySeed(resource, selected[resource.ComponentID]); err != nil {
-				return PreparedPlan{}, fmt.Errorf(
-					"prepare configuration resource %q: %w",
-					resource.ID,
-					err,
-				)
-			}
-			continue
-		}
-		if err := builder.applyOwnedMap(
-			resource,
-			inspection.ownedMaps[resource.ID],
-			selected[resource.ComponentID],
-		); err != nil {
-			return PreparedPlan{}, fmt.Errorf(
-				"prepare configuration resource %q: %w",
-				resource.ID,
-				err,
-			)
-		}
+	if err := inspection.applyPreparedResources(
+		builder,
+		resources,
+		selected,
+	); err != nil {
+		return PreparedPlan{}, err
 	}
 	transitions, err := builder.transitions()
 	if err != nil {
@@ -195,6 +179,7 @@ type preparationBuilder struct {
 	groupByTarget   map[domain.Location]domain.Location
 	touch           map[domain.Location]bool
 	rawAfter        map[domain.Location][]byte
+	removeAfter     map[domain.Location]bool
 	preparationOnly map[domain.Location]bool
 }
 
@@ -207,76 +192,9 @@ func newPreparationBuilder(
 		groupByTarget:   make(map[domain.Location]domain.Location),
 		touch:           make(map[domain.Location]bool),
 		rawAfter:        make(map[domain.Location][]byte),
+		removeAfter:     make(map[domain.Location]bool),
 		preparationOnly: make(map[domain.Location]bool),
 	}
-}
-
-func (builder *preparationBuilder) applySeed(
-	resource releasecontract.Resource,
-	selected bool,
-) error {
-	if !selected {
-		return nil
-	}
-	snapshot, exists := builder.files[resource.Target]
-	if !exists {
-		return fmt.Errorf("target snapshot is unavailable")
-	}
-	if snapshot.present {
-		return fmt.Errorf("seed target unexpectedly exists")
-	}
-	builder.rawAfter[resource.Target] = append(
-		[]byte{},
-		resource.SourceContent...,
-	)
-	builder.groups[resource.Target] = map[string]bool{resource.ID: true}
-	builder.touch[resource.Target] = true
-	builder.preparationOnly[resource.Target] = true
-	return nil
-}
-
-func (builder *preparationBuilder) document(
-	target domain.Location,
-) (jsondocument.Document, error) {
-	if document, exists := builder.docs[target]; exists {
-		return document, nil
-	}
-	snapshot, exists := builder.files[target]
-	if !exists {
-		return jsondocument.Document{}, fmt.Errorf("target snapshot is unavailable")
-	}
-	raw := snapshot.raw
-	if !snapshot.present {
-		raw = []byte(`{}`)
-	}
-	document, err := jsondocument.Parse(raw)
-	if err != nil {
-		return jsondocument.Document{}, err
-	}
-	builder.docs[target] = document
-	return document, nil
-}
-
-func (builder *preparationBuilder) set(
-	target domain.Location,
-	pointer string,
-	raw string,
-) error {
-	document, err := builder.document(target)
-	if err != nil {
-		return err
-	}
-	parsed, err := jsondocument.ParsePointer(pointer)
-	if err != nil {
-		return err
-	}
-	updated, err := document.Set(parsed, []byte(raw))
-	if err != nil {
-		return err
-	}
-	builder.docs[target] = updated
-	builder.touch[target] = true
-	return nil
 }
 
 func (builder *preparationBuilder) transitions() ([]Transition, error) {
@@ -337,6 +255,17 @@ func (builder *preparationBuilder) mutation(
 	if !exists {
 		return nil, fmt.Errorf("target snapshot is unavailable")
 	}
+	if builder.removeAfter[target] {
+		if !snapshot.present {
+			return nil, nil
+		}
+		return &FileMutation{
+			Disposition: MutationRemoveManagedSecret,
+			Target:      target,
+			Before:      beforeImage(snapshot),
+			After:       AfterImage{},
+		}, nil
+	}
 	after, exists := builder.rawAfter[target]
 	if !exists {
 		after = builder.docs[target].Indented()
@@ -364,9 +293,13 @@ func beforeImage(snapshot fileSnapshot) BeforeImage {
 	if !snapshot.present {
 		return BeforeImage{}
 	}
-	digest := sha256.Sum256(snapshot.raw)
+	digest := snapshot.sha256
+	if digest == "" {
+		sum := sha256.Sum256(snapshot.raw)
+		digest = hex.EncodeToString(sum[:])
+	}
 	return BeforeImage{
-		Exists: true, SHA256: hex.EncodeToString(digest[:]),
+		Exists: true, SHA256: digest,
 		Mode: snapshot.mode, Device: snapshot.device, Inode: snapshot.inode,
 		BirthSeconds:     snapshot.birthSeconds,
 		BirthNanoseconds: snapshot.birthNanoseconds,

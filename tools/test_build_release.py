@@ -135,6 +135,7 @@ def _assert_component_contracts(output: Path, index: dict) -> Path:
         }
     ]
     credentials = by_component["credential-tools"]
+    assert credentials["schema_version"] == 6
     assert credentials["install_units"][0]["target"] == {
         "root": "user-bin",
         "path": "secret",
@@ -150,10 +151,26 @@ def _assert_component_contracts(output: Path, index: dict) -> Path:
         resource["observation"] == "supported"
         for resource in credentials["resources"]
     )
-    assert all(
-        resource["apply"] == "unimplemented"
-        for resource in credentials["resources"]
-    )
+    assert credentials["resources"] == [
+        {
+            "id": "credential-tools.secrets-store",
+            "strategy": "seed-if-absent",
+            "source": "secrets.env",
+            "target": {"root": "credentials-config", "path": "secrets.env"},
+            "observation": "supported",
+            "apply": "supported",
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "credentials-config",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
+        }
+    ]
     return output / "bin/mainframe"
 
 

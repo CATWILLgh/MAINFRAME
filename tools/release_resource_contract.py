@@ -64,6 +64,7 @@ def _validate_resource(
     identifier = unique_identifier(resource["id"], seen_ids, "resource")
     strategy = resource["strategy"]
     _validate_strategy(schema_version, resource, identifier)
+    _validate_file_ownership(schema_version, resource, identifier)
     has_external_state = "external_state" in resource
     has_source = "source" in resource
     if ((strategy in fields.SOURCE_STRATEGIES) or has_external_state) != has_source:
@@ -91,6 +92,50 @@ def _validate_resource(
     )
     if not valid_apply_declaration(component, resource):
         raise ValueError(f"resource {identifier!r} overstates lifecycle support")
+
+
+def _validate_file_ownership(
+    schema_version: int,
+    resource: dict[str, Any],
+    identifier: str,
+) -> None:
+    ownership = resource.get("file_ownership")
+    if ownership is None:
+        return
+    if schema_version < fields.MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION:
+        raise ValueError(
+            f"resource {identifier!r} file ownership requires schema version 6"
+        )
+    label = f"resource {identifier!r} file ownership"
+    require_object(ownership, label)
+    require_fields(ownership, {"kind", "registry"}, {"kind", "registry"}, label)
+    registry = ownership["registry"]
+    require_object(registry, f"{label} registry")
+    require_fields(
+        registry,
+        {"target", "schema_version"},
+        {"target", "schema_version"},
+        f"{label} registry",
+    )
+    target = location(resource["target"], f"resource {identifier!r} target")
+    registry_target = location(registry["target"], f"{label} registry target")
+    if (
+        ownership["kind"] != "managed-file-registry-v1"
+        or type(registry["schema_version"]) is not int
+        or registry["schema_version"] != 1
+        or resource["strategy"] != "seed-if-absent"
+        or registry_target[0] != target[0]
+        or _locations_overlap(target, registry_target)
+    ):
+        raise ValueError(f"resource {identifier!r} has invalid file ownership")
+
+
+def _locations_overlap(left: tuple[str, str], right: tuple[str, str]) -> bool:
+    return left[0] == right[0] and (
+        left[1] == right[1]
+        or left[1].startswith(right[1] + "/")
+        or right[1].startswith(left[1] + "/")
+    )
 
 
 def _validate_strategy(

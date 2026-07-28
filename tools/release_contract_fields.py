@@ -14,17 +14,20 @@ BUNDLE_FIELDS_V2 = {
 HOST_REQUIREMENTS_SCHEMA_VERSION = 3
 EXACT_JSON_DOCUMENT_SCHEMA_VERSION = 4
 FEATURE_INSTALL_UNIT_SCHEMA_VERSION = 5
+MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION = 6
 BUNDLE_REQUIRED_FIELDS = {
     2: BUNDLE_FIELDS_V2,
     HOST_REQUIREMENTS_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
     EXACT_JSON_DOCUMENT_SCHEMA_VERSION: BUNDLE_FIELDS_V2,
     FEATURE_INSTALL_UNIT_SCHEMA_VERSION: BUNDLE_FIELDS_V2,
+    MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION: BUNDLE_FIELDS_V2,
 }
 BUNDLE_FIELDS = {
     2: BUNDLE_FIELDS_V2,
     HOST_REQUIREMENTS_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
     EXACT_JSON_DOCUMENT_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
     FEATURE_INSTALL_UNIT_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
+    MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION: BUNDLE_FIELDS_V2 | {"host_requirements"},
 }
 INDEX_FIELDS = {"schema_version", "kind", "release_id", "mcp_catalog", "manifests"}
 UNIT_REQUIRED_FIELDS = {"id", "kind", "source", "target"}
@@ -35,6 +38,7 @@ RESOURCE_REQUIRED_FIELDS = {"id", "strategy", "target", "observation", "apply"}
 RESOURCE_OPTIONAL_FIELDS = {
     "source", "legacy_source_suffixes", "owned_json_pointers", "ownership",
     "external_state",
+    "file_ownership",
 }
 PAYLOAD_FIELDS = {"path", "mode", "size", "sha256"}
 ENTRY_FIELDS = {"component", "path", "sha256"}

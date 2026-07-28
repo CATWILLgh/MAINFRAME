@@ -135,6 +135,64 @@ def _validate_global_json_ownership(
         parse_location=parse_location,
         locations_overlap=locations_overlap,
     )
+    _validate_file_ownership_targets(
+        manifests,
+        install_targets,
+        resource_targets,
+        parse_location=parse_location,
+        locations_overlap=locations_overlap,
+    )
+
+
+def _validate_file_ownership_targets(
+    manifests: list[dict[str, Any]],
+    install_targets: list[Location],
+    resource_targets: list[tuple[str, str, Location]],
+    *,
+    parse_location: Callable[[Any, str], Location],
+    locations_overlap: Callable[[Location, Location], bool],
+) -> None:
+    registries: list[tuple[str, Location]] = []
+    reserved_registries = [
+        parse_location(
+            resource["ownership"]["registry"]["target"],
+            "ownership registry target",
+        )
+        for manifest in manifests
+        for resource in manifest["resources"]
+        if "ownership" in resource
+    ]
+    reserved_registries.extend(
+        parse_location(
+            projection["registry"]["target"],
+            "MCP ownership registry target",
+        )
+        for manifest in manifests
+        for projection in manifest["mcp_projections"]
+    )
+    for manifest in manifests:
+        for resource in manifest["resources"]:
+            if "file_ownership" not in resource:
+                continue
+            target = parse_location(
+                resource["file_ownership"]["registry"]["target"],
+                "file ownership registry target",
+            )
+            if any(locations_overlap(target, item) for item in install_targets):
+                raise ValueError("file ownership registry overlaps install target")
+            _reject_resource_overlap(
+                resource["id"], target, resource_targets, locations_overlap
+            )
+            if any(locations_overlap(target, item[1]) for item in registries):
+                raise ValueError("file ownership registry targets overlap")
+            if any(
+                locations_overlap(target, item)
+                for item in reserved_registries
+            ):
+                raise ValueError(
+                    "file ownership registry overlaps another ownership registry"
+                )
+            registries.append((resource["id"], target))
 
 
 def _validate_exact_json_document_targets(

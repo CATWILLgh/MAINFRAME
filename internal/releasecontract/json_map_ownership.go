@@ -210,17 +210,26 @@ func ownershipRegistryTargets(
 	var targets []ownershipRegistryTarget
 	for _, manifest := range manifests {
 		for _, resource := range manifest.Resources {
-			if !resource.Ownership.Present {
-				continue
+			if resource.Ownership.Present {
+				target, err := location(resource.Ownership.Value.Registry.Target)
+				if err != nil {
+					return nil, err
+				}
+				targets = append(targets, ownershipRegistryTarget{
+					resourceID: resource.ID,
+					target:     target,
+				})
 			}
-			target, err := location(resource.Ownership.Value.Registry.Target)
-			if err != nil {
-				return nil, err
+			if resource.FileOwnership.Present {
+				target, err := location(resource.FileOwnership.Value.Registry.Target)
+				if err != nil {
+					return nil, err
+				}
+				targets = append(targets, ownershipRegistryTarget{
+					resourceID: resource.ID,
+					target:     target,
+				})
 			}
-			targets = append(targets, ownershipRegistryTarget{
-				resourceID: resource.ID,
-				target:     target,
-			})
 		}
 		for _, projection := range manifest.MCPProjections {
 			target, err := location(projection.Registry.Target)

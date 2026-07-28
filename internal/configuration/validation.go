@@ -30,7 +30,7 @@ func validateResource(resource releasecontract.Resource) error {
 	}
 	if resource.Observation == releasecontract.SupportUnimplemented {
 		if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil ||
-			resource.ExternalState != nil {
+			resource.FileOwnership != nil || resource.ExternalState != nil {
 			return fmt.Errorf("unimplemented observation has lifecycle metadata")
 		}
 		return nil
@@ -63,6 +63,13 @@ func validateResource(resource releasecontract.Resource) error {
 	if resource.Strategy == releasecontract.StrategyExactJSONDocument {
 		if !resource.SupportsApply() {
 			return fmt.Errorf("invalid exact JSON document capability")
+		}
+		return nil
+	}
+	if resource.FileOwnership != nil {
+		if resource.Strategy != releasecontract.StrategySeedIfAbsent ||
+			!resource.SupportsApply() {
+			return fmt.Errorf("invalid file ownership")
 		}
 		return nil
 	}
@@ -169,6 +176,16 @@ func validateOwnershipCompatibility(
 			return err
 		}
 	}
+	if left.FileOwnership != nil {
+		if err := validateRegistryAgainstResource(left.FileOwnership.RegistryTarget, right); err != nil {
+			return err
+		}
+	}
+	if right.FileOwnership != nil {
+		if err := validateRegistryAgainstResource(right.FileOwnership.RegistryTarget, left); err != nil {
+			return err
+		}
+	}
 	if left.JSONMapOwnership != nil && right.JSONMapOwnership != nil &&
 		locationsOverlap(
 			left.JSONMapOwnership.RegistryTarget,
@@ -176,7 +193,27 @@ func validateOwnershipCompatibility(
 		) {
 		return fmt.Errorf("ownership registry targets overlap")
 	}
+	leftRegistries := ownershipRegistries(left)
+	rightRegistries := ownershipRegistries(right)
+	for _, leftRegistry := range leftRegistries {
+		for _, rightRegistry := range rightRegistries {
+			if locationsOverlap(leftRegistry, rightRegistry) {
+				return fmt.Errorf("ownership registry targets overlap")
+			}
+		}
+	}
 	return nil
+}
+
+func ownershipRegistries(resource releasecontract.Resource) []domain.Location {
+	var result []domain.Location
+	if resource.JSONMapOwnership != nil {
+		result = append(result, resource.JSONMapOwnership.RegistryTarget)
+	}
+	if resource.FileOwnership != nil {
+		result = append(result, resource.FileOwnership.RegistryTarget)
+	}
+	return result
 }
 
 func validateRegistryAgainstResource(
@@ -289,11 +326,11 @@ func validObservation(resource releasecontract.Resource, observation Observation
 	if !valid[observation.Status][observation.Reason] {
 		return false
 	}
-	return reasonMatchesStrategy(resource.Strategy, observation.Reason)
+	return reasonMatchesStrategy(resource, observation.Reason)
 }
 
-func reasonMatchesStrategy(strategy releasecontract.ResourceStrategy, reason Reason) bool {
-	switch strategy {
+func reasonMatchesStrategy(resource releasecontract.Resource, reason Reason) bool {
+	switch resource.Strategy {
 	case releasecontract.StrategyJSONKeyMerge:
 		return reason == JSONFieldsMatch || reason == JSONFieldsDrifted ||
 			reason == ResourceMissing || reason == SymbolicLink || reason == WrongKind ||
@@ -304,7 +341,9 @@ func reasonMatchesStrategy(strategy releasecontract.ResourceStrategy, reason Rea
 			reason == InspectionFailed || reason == JSONDocumentInvalid
 	case releasecontract.StrategySeedIfAbsent:
 		return reason == ResourceExists || reason == ResourceMissing || reason == SymbolicLink ||
-			reason == WrongKind || reason == InspectionFailed
+			reason == WrongKind || reason == InspectionFailed ||
+			(resource.FileOwnership != nil &&
+				(reason == JSONFieldsDrifted || reason == JSONDocumentInvalid))
 	case releasecontract.StrategyEnsureDir:
 		return reason == DirectoryExists || reason == DirectoryMissing || reason == SymbolicLink ||
 			reason == WrongKind || reason == InspectionFailed

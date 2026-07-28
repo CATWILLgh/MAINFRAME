@@ -3,6 +3,8 @@ package application
 import (
 	"errors"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
@@ -30,7 +32,7 @@ func context7Applicable(
 		len(semantic.Diagnostics.Intents) != 0 ||
 		len(semantic.MCP.Intents) == 0 ||
 		preview.Configuration.HasPreparationOnly() ||
-		!credentialMutationScope(adapter, semantic, preview) {
+		!credentialMutationScope(adapter, request, semantic, preview) {
 		return false
 	}
 	for _, intent := range semantic.MCP.Intents {
@@ -97,6 +99,7 @@ func exactContext7Removal(
 
 func credentialMutationScope(
 	adapter domain.ComponentID,
+	request Request,
 	semantic lifecycle.Preview,
 	preview executor.Preview,
 ) bool {
@@ -107,11 +110,24 @@ func credentialMutationScope(
 		}
 	}
 	for _, change := range semantic.Configuration.Changes {
-		if change.ComponentID != adapter {
+		if change.ComponentID != adapter &&
+			!managedSecretsStoreChange(change) {
 			return false
 		}
 	}
+	storeChange, hasStoreChange := managedSecretsStoreChangeKind(
+		semantic.Configuration.Changes,
+	)
 	for _, transition := range preview.Configuration.Transitions() {
+		if !credentialTransitionAllowed(
+			adapter,
+			request,
+			transition,
+			storeChange,
+			hasStoreChange,
+		) {
+			return false
+		}
 		for _, mutation := range transition.Mutations {
 			if !credentialMutationRootAllowed(adapter, mutation.Target.Root) {
 				return false
@@ -125,6 +141,109 @@ func credentialMutationScope(
 	}
 	return len(preview.Plan.Operations) > 0 ||
 		len(preview.Configuration.Transitions()) > 0
+}
+
+func managedSecretsStoreChange(change configuration.Change) bool {
+	return change.ResourceID == "credential-tools.secrets-store" &&
+		change.ComponentID == "credential-tools"
+}
+
+func credentialTransitionAllowed(
+	adapter domain.ComponentID,
+	request Request,
+	transition configuration.Transition,
+	storeChange configuration.ChangeKind,
+	hasStoreChange bool,
+) bool {
+	if len(transition.ResourceIDs) == 1 &&
+		transition.ResourceIDs[0] == "credential-tools.secrets-store" {
+		return hasStoreChange &&
+			validManagedStoreTransition(storeChange, transition)
+	}
+	if len(transition.ResourceIDs) == 1 &&
+		transition.ResourceIDs[0] == "credentials.instances" {
+		if request.CredentialInstances == nil {
+			return false
+		}
+		plan, err := configuration.NewPreparedPlan(
+			[]configuration.Transition{transition},
+		)
+		if err != nil {
+			return false
+		}
+		return credentialcatalog.ValidateInstancesOnlyPlan(
+			plan,
+			*request.CredentialInstances,
+		) == nil
+	}
+	for _, resourceID := range transition.ResourceIDs {
+		if resourceID == "credential-tools.secrets-store" {
+			return false
+		}
+	}
+	for _, mutation := range transition.Mutations {
+		if mutation.Target.Root == domain.RootCredentialsConfig {
+			return false
+		}
+		if !credentialMutationRootAllowed(adapter, mutation.Target.Root) {
+			return false
+		}
+	}
+	return true
+}
+
+func managedSecretsStoreChangeKind(
+	changes []configuration.Change,
+) (configuration.ChangeKind, bool) {
+	var kind configuration.ChangeKind
+	found := false
+	for _, change := range changes {
+		if !managedSecretsStoreChange(change) {
+			continue
+		}
+		if found {
+			return "", false
+		}
+		kind, found = change.Kind, true
+	}
+	return kind, found
+}
+
+func validManagedStoreTransition(
+	kind configuration.ChangeKind,
+	transition configuration.Transition,
+) bool {
+	target := domain.Location{
+		Root: domain.RootCredentialsConfig,
+		Path: "secrets.env",
+	}
+	registry := domain.Location{
+		Root: domain.RootCredentialsConfig,
+		Path: "mainframe/file-ownership.json",
+	}
+	mutations := make(map[domain.Location]configuration.MutationDisposition)
+	for _, mutation := range transition.Mutations {
+		if mutation.Target != target && mutation.Target != registry {
+			return false
+		}
+		mutations[mutation.Target] = mutation.Disposition
+	}
+	registryPresent := mutations[registry] == configuration.MutationPresent
+	switch kind {
+	case configuration.ChangeAdd, configuration.ChangeUpdate:
+		return mutations[target] == configuration.MutationPresent &&
+			len(mutations) == len(transition.Mutations) &&
+			(len(mutations) == 1 || registryPresent)
+	case configuration.ChangeRemove:
+		return mutations[target] == configuration.MutationRemoveManagedSecret &&
+			registryPresent && len(mutations) == 2 &&
+			len(transition.Mutations) == 2
+	case configuration.ChangeRelinquish:
+		return registryPresent && len(mutations) == 1 &&
+			len(transition.Mutations) == 1
+	default:
+		return false
+	}
 }
 
 func credentialMutationRootAllowed(

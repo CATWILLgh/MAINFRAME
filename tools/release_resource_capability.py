@@ -11,6 +11,11 @@ from release_diagnostics import diagnostics_target
 
 
 def valid_apply_declaration(component: str, resource: dict[str, Any]) -> bool:
+    if resource["strategy"] == "seed-if-absent":
+        return (
+            resource["apply"] == "unimplemented"
+            and "file_ownership" not in resource
+        ) or _valid_managed_seed_apply(component, resource)
     if resource["strategy"] == EXACT_JSON_DOCUMENT_STRATEGY:
         return _valid_exact_json_document_apply(component, resource)
     if resource["apply"] == "unimplemented":
@@ -33,6 +38,35 @@ def valid_apply_declaration(component: str, resource: dict[str, Any]) -> bool:
         and registry.get("target", {}).get("root") == "opencode-config"
         and registry.get("schema_version") == 1
         and registry.get("entries_pointer") == "/actions"
+        and "external_state" not in resource
+    )
+
+
+def _valid_managed_seed_apply(
+    component: str,
+    resource: dict[str, Any],
+) -> bool:
+    ownership = resource.get("file_ownership")
+    return (
+        component == "credential-tools"
+        and resource["id"] == "credential-tools.secrets-store"
+        and resource["apply"] == "supported"
+        and resource["observation"] == "supported"
+        and resource["target"]
+        == {"root": "credentials-config", "path": "secrets.env"}
+        and isinstance(ownership, dict)
+        and ownership.get("kind") == "managed-file-registry-v1"
+        and ownership.get("registry")
+        == {
+            "target": {
+                "root": "credentials-config",
+                "path": "mainframe/file-ownership.json",
+            },
+            "schema_version": 1,
+        }
+        and "legacy_source_suffixes" not in resource
+        and "owned_json_pointers" not in resource
+        and "ownership" not in resource
         and "external_state" not in resource
     )
 
