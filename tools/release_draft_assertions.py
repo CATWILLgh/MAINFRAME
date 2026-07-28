@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-import plistlib
 import subprocess
 from pathlib import Path
 from typing import Callable
 
 from release_draft_fixture import (
     inode_snapshot,
-    install_exact_opencode_closure,
+    install_exact_antigravity_base,
+    install_exact_component_closure,
+    write_draft_credential,
 )
 
 
@@ -29,7 +31,7 @@ def assert_machine_draft_reviews(
 ) -> None:
     _assert_empty_draft(binary, home, sandbox, env, snapshot_tree)
     _assert_keyed_draft(binary, home, sandbox, env, snapshot_tree)
-    _assert_shared_keyed_draft(binary, home, sandbox, env, snapshot_tree)
+    _assert_antigravity_keyed_draft(binary, home, sandbox, env, snapshot_tree)
 
 
 def _assert_empty_draft(
@@ -62,9 +64,9 @@ def _assert_keyed_draft(
     env: dict[str, str],
     snapshot_tree: SnapshotTree,
 ) -> None:
-    _write_draft_credential(home)
+    write_draft_credential(home, SECRET_NAME)
     release = binary.parent.parent
-    managed = install_exact_opencode_closure(release, home)
+    managed = install_exact_component_closure(release, home, "opencode")
     keyed_env = dict(env)
     keyed_env[SECRET_NAME] = SECRET_SENTINEL
     before = snapshot_tree(home)
@@ -216,63 +218,174 @@ def _assert_open_code_projection(home: Path) -> None:
     assert all(path.stat().st_mode & 0o777 == 0o600 for path in paths)
 
 
-def _assert_shared_keyed_draft(
+def _assert_antigravity_keyed_draft(
     binary: Path,
     home: Path,
     sandbox: Path,
     env: dict[str, str],
     snapshot_tree: SnapshotTree,
 ) -> None:
-    _write_fake_antigravity(home)
+    release = binary.parent.parent
+    home = home.parent / "antigravity-home"
+    managed = install_exact_antigravity_base(
+        release, home, SECRET_NAME, SECRET_SENTINEL
+    )
+    isolated_env = dict(
+        env, HOME=str(home), CODEX_HOME=str(home / ".codex"),
+        XDG_CONFIG_HOME=str(home / ".config"),
+        XDG_STATE_HOME=str(home / ".local/state"),
+    )
     before = snapshot_tree(home)
     desired = {
-        "adapters": ["antigravity-2", "opencode"],
+        "adapters": ["antigravity-2"],
         "mcp": [{
             "server_id": "context7",
             "profile_id": "remote-api-key",
-            "adapters": ["antigravity-2", "opencode"],
+            "adapters": ["antigravity-2"],
             "credential_instance_id": "context7-home",
         }],
         "diagnostics_policy": "preserve-retained-adapters",
     }
-    response, stdout = _run_review(binary, sandbox, env, desired)
+    response, stdout = _run_review(binary, sandbox, isolated_env, desired)
     assert response["desired"] == desired
     assert len(response["onboarding"]["connections"]) == 1
+    assert response["apply"]["command_available"] is True
+    assert response["preview"]["configuration"] == {
+        "changes": [], "issues": [], "manual_actions": [],
+        "notices": [{
+            "resource_id": "antigravity-2.live-activation",
+            "component_id": "antigravity-2",
+            "reason": "manual_action_unverified",
+        }],
+    }
     _assert_secret_free(stdout)
     assert snapshot_tree(home) == before
-
-
-def _write_fake_antigravity(home: Path) -> None:
-    plist_path = (
-        home / "Applications/Antigravity.app/Contents/Info.plist"
+    assert _sentinel_paths(home) == {".config/credentials/secrets.env"}
+    request = _draft_request(desired)
+    confirmation = response["apply"]["confirmation"]
+    applied = _run_apply(
+        binary, sandbox, isolated_env, request, confirmation
     )
-    plist_path.parent.mkdir(parents=True, exist_ok=True)
-    plist_path.write_bytes(plistlib.dumps({
-        "CFBundleIdentifier": "com.google.antigravity",
-        "CFBundleShortVersionString": "2.2.1",
-    }))
-
-
-def _write_draft_credential(home: Path) -> None:
-    credential_path = (
-        home / ".config/credentials/mainframe/instances.json"
+    assert applied.returncode == 0, (applied.stdout, applied.stderr)
+    assert json.loads(applied.stdout)["applied"] is True
+    _assert_secret_free(applied.stdout + applied.stderr)
+    _assert_antigravity_delta(before, snapshot_tree(home))
+    _assert_antigravity_state(home, release, managed)
+    _assert_antigravity_repeat(
+        binary, home, sandbox, isolated_env, desired, confirmation, snapshot_tree
     )
-    credential_path.parent.mkdir(parents=True)
-    credential_path.write_text(json.dumps({
-        "schema_version": 1,
-        "kind": "mainframe-credential-instances",
-        "instances": [{
-            "id": "context7-home",
-            "service_id": "context7",
-            "name": "Home",
-            "purpose": "Personal research",
-            "credentials": [{
-                "role_id": "api-key",
-                "secret": {
-                    "backend": "secret-env",
-                    "name": SECRET_NAME,
-                },
-            }],
-        }],
-    }))
-    credential_path.chmod(0o600)
+
+
+def _assert_antigravity_repeat(
+    binary: Path,
+    home: Path,
+    sandbox: Path,
+    env: dict[str, str],
+    desired: dict,
+    previous_confirmation: str,
+    snapshot_tree: SnapshotTree,
+) -> None:
+    first_tree = snapshot_tree(home)
+    paths = {home, *home.rglob("*")}
+    first_inodes = inode_snapshot(paths)
+    repeated, repeat_stdout = _run_review(
+        binary, sandbox, env, desired
+    )
+    assert snapshot_tree(home) == first_tree
+    _assert_secret_free(repeat_stdout)
+    assert repeated["apply"]["command_available"] is True
+    assert repeated["apply"]["confirmation"] != previous_confirmation
+    second = _run_apply(
+        binary, sandbox, env, _draft_request(desired),
+        repeated["apply"]["confirmation"],
+    )
+    assert second.returncode == 0, (second.stdout, second.stderr)
+    _assert_secret_free(second.stdout + second.stderr)
+    assert snapshot_tree(home) == first_tree
+    assert inode_snapshot(paths) == first_inodes
+
+
+def _assert_antigravity_delta(before: TreeSnapshot, after: TreeSnapshot) -> None:
+    assert set(before) <= set(after)
+    assert set(after) - set(before) == {
+        ".gemini/antigravity/mainframe",
+        ".gemini/antigravity/mainframe/mcp-ownership.json",
+        ".gemini/config/mcp_config.json",
+        ".local/state/mainframe/transaction.lock",
+    }
+    assert all(after[path] == state for path, state in before.items())
+
+
+def _assert_antigravity_state(
+    home: Path, release: Path, managed: set[Path],
+) -> None:
+    config_path = home / ".gemini/config/mcp_config.json"
+    registry_path = home / ".gemini/antigravity/mainframe/mcp-ownership.json"
+    entry = {
+        "headers": {"CONTEXT7_API_KEY": SECRET_SENTINEL},
+        "serverUrl": "https://mcp.context7.com/mcp",
+    }
+    assert json.loads(config_path.read_text()) == {"mcpServers": {"context7": entry}}
+    entry_raw = json.dumps(entry, separators=(",", ":"))
+    assert json.loads(registry_path.read_text()) == {
+        "version": 1, "servers": {"context7": {
+            "format": "antigravity-literal-secret-v1",
+            "profile": "remote-api-key",
+            "secret_backend": "environment",
+            "secret_reference": SECRET_NAME,
+            "entry_sha256": hashlib.sha256(entry_raw.encode()).hexdigest(),
+        }},
+    }
+    assert _sentinel_paths(home) == {
+        ".config/credentials/secrets.env",
+        ".gemini/config/mcp_config.json",
+    }
+    _assert_antigravity_modes_and_ownership(home, release, managed)
+
+
+def _assert_antigravity_modes_and_ownership(
+    home: Path, release: Path, managed: set[Path],
+) -> None:
+    secure_dirs = {
+        home / ".local/state/mainframe",
+        home / ".gemini/antigravity/mainframe",
+    }
+    assert all(path.stat().st_mode & 0o777 == 0o700 for path in secure_dirs)
+    secure_files = [
+        path for path in home.rglob("*")
+        if path.is_file() and not path.is_symlink()
+        and "Applications/Antigravity.app" not in path.as_posix()
+    ]
+    assert all(path.stat().st_mode & 0o777 == 0o600 for path in secure_files)
+    registry = json.loads(
+        (home / ".local/state/mainframe/link-ownership.json").read_text()
+    )
+    release_payload = (release / "release.json").read_bytes()
+    assert registry["schema_version"] == 1
+    assert len(registry["claims"]) == len(managed)
+    assert {claim["release_id"] for claim in registry["claims"]} == {
+        json.loads(release_payload)["release_id"]
+    }
+    assert {claim["index_sha256"] for claim in registry["claims"]} == {
+        hashlib.sha256(release_payload).hexdigest()
+    }
+    assert all(set(claim) == {
+        "unit_id", "component_id", "target", "raw_target",
+        "release_id", "index_sha256",
+    } for claim in registry["claims"])
+    assert {claim["raw_target"] for claim in registry["claims"]} == {
+        str(path.resolve()) for path in managed
+    }
+    assert not any((home / root).exists() for root in (
+        ".claude", ".codex", ".config/opencode",
+    ))
+
+
+def _sentinel_paths(home: Path) -> set[str]:
+    sentinel = SECRET_SENTINEL.encode()
+    return {
+        path.relative_to(home).as_posix()
+        for path in home.rglob("*")
+        if path.is_file() and not path.is_symlink()
+        and sentinel in path.read_bytes()
+    }

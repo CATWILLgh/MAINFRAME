@@ -5,14 +5,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import plistlib
 from pathlib import Path
 
 
-def install_exact_opencode_closure(release: Path, home: Path) -> set[Path]:
+def install_exact_component_closure(
+    release: Path,
+    home: Path,
+    selected: str,
+) -> set[Path]:
     manifests = _release_manifests(release)
-    closure = _component_closure(manifests, "opencode")
+    closure = _component_closure(manifests, selected)
     roots = {
         "home": home,
+        "antigravity-config": home / ".gemini/config",
+        "antigravity-data": home / ".gemini/antigravity",
         "opencode-config": home / ".config/opencode",
         "credentials-config": home / ".config/credentials",
         "user-bin": home / ".local/bin",
@@ -42,8 +49,53 @@ def install_exact_opencode_closure(release: Path, home: Path) -> set[Path]:
                 "index_sha256": index_digest,
             })
     _write_ownership_registry(home, claims)
-    _satisfy_manual_resources(home, manifests, closure)
+    _preseed_unimplemented_resources(manifests, closure, roots)
     return targets
+
+
+def install_exact_antigravity_base(
+    release: Path,
+    home: Path,
+    secret_name: str,
+    secret_value: str,
+) -> set[Path]:
+    home.mkdir(mode=0o700)
+    write_draft_credential(home, secret_name)
+    _write_fake_antigravity(home)
+    managed = install_exact_component_closure(release, home, "antigravity-2")
+    path = home / ".config/credentials/secrets.env"
+    path.write_text(f"{secret_name}={secret_value}\n")
+    path.chmod(0o600)
+    return managed
+
+
+def write_draft_credential(home: Path, secret_name: str) -> None:
+    path = home / ".config/credentials/mainframe/instances.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "schema_version": 1,
+        "kind": "mainframe-credential-instances",
+        "instances": [{
+            "id": "context7-home",
+            "service_id": "context7",
+            "name": "Home",
+            "purpose": "Personal research",
+            "credentials": [{
+                "role_id": "api-key",
+                "secret": {"backend": "secret-env", "name": secret_name},
+            }],
+        }],
+    }))
+    path.chmod(0o600)
+
+
+def _write_fake_antigravity(home: Path) -> None:
+    path = home / "Applications/Antigravity.app/Contents/Info.plist"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(plistlib.dumps({
+        "CFBundleIdentifier": "com.google.antigravity",
+        "CFBundleShortVersionString": "2.2.1",
+    }))
 
 
 def inode_snapshot(paths: set[Path]) -> dict[Path, int]:
@@ -86,20 +138,15 @@ def _write_ownership_registry(home: Path, claims: list[dict]) -> None:
     target.chmod(0o600)
 
 
-def _satisfy_manual_resources(
-    home: Path,
+def _preseed_unimplemented_resources(
     manifests: dict[str, tuple[Path, dict]],
     closure: set[str],
+    roots: dict[str, Path],
 ) -> None:
-    roots = {
-        "home": home,
-        "opencode-config": home / ".config/opencode",
-        "credentials-config": home / ".config/credentials",
-    }
     for component in closure:
         manifest_path, manifest = manifests[component]
         for resource in manifest.get("resources", []):
-            if resource["apply"] != "unimplemented":
+            if resource["apply"] != "unimplemented" or "source" not in resource:
                 continue
             target_spec = resource["target"]
             target = roots[target_spec["root"]] / target_spec["path"]
