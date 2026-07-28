@@ -47,6 +47,13 @@ checksums, miss encoded copies, or rewrite unrelated high-entropy text.
   backups, locking rules, and official retention or deletion mechanisms.
 - Define which credential values are eligible without broadly reading the
   credential store or persisting a second plaintext copy.
+- Select cleanup scope by one exact catalog secret reference. Show every
+  credential-instance role that shares that reference before scanning, so one
+  deliberate cleanup can cover several servers or services without guessing
+  from a high-entropy value.
+- Resolve only the selected reference inside the bounded scan operation. Do not
+  enumerate or broadly load the secret store, and never include the resolved
+  value in preview, logs, reports, backups, or redaction markers.
 - Prefer a vendor-supported deletion or redaction interface where one exists.
 - Design a bounded scheduled maintenance job with preview, explicit scope,
   backup or rollback, concurrency protection, and a dry run.
@@ -80,7 +87,7 @@ checksums, miss encoded copies, or rewrite unrelated high-entropy text.
 ## Context needed
 
 - Which agent environments should be supported first.
-- Whether a credential is selected by catalog instance, explicit fingerprint,
-  or another non-disclosing identifier.
+- How the user confirms cleanup when one selected reference is shared by
+  several catalog instances.
 - Safe behavior for active sessions and stores without transactional rewrite.
 - Default retention window, schedule, and backup lifetime.
