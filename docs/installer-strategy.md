@@ -54,9 +54,10 @@ Cross-component access is allowed only through a separately owned, documented
 interface:
 
 - `mainframe-cli` owns the `mainframe` launcher in `user-bin`.
-- `credential-tools` owns the `secret` launcher, the credentials store, and
-  the shell integration required to load that store. It is also the only
-  component allowed to own user credential-instance metadata.
+- `credential-tools` owns the `secret` launcher and the credentials store. It
+  is also the only component allowed to own user credential-instance metadata.
+  Fresh releases do not add shell startup integration: stored values are
+  resolved by name only where needed.
 
 Plans, memory, telemetry, feedback, permissions, hooks, skills, agents, and
 runtime configuration are not neutral interfaces. Every adapter packages and
@@ -447,6 +448,14 @@ drift relinquishes ownership, and switching to keyless or deselecting Context7
 removes the managed file without touching unrelated OpenCode configuration.
 Keyed and keyless Context7 remain two profiles of one owned `mcp.context7`
 entry.
+
+Fresh immutable releases package the credential store and `secret` helper
+without `.zshenv`, `.bashrc`, or `.profile` resources. Packaged human and agent
+guidance uses `$(secret get NAME)` for named access and permits `$NAME` only
+when the calling environment supplied it independently. The compatibility
+`install.sh` path retains its existing startup line until it is fully replaced.
+Omitting that resource does not remove a line written by an older installation;
+exact ownership-safe cleanup is a separate migration.
 
 Source: OpenCode's
 [`ConfigVariable.substitute`](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/config/variable.ts)

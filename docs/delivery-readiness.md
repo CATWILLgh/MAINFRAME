@@ -19,7 +19,7 @@ Passing a later gate does not compensate for an earlier one.
 |---|---|---|
 | 1. Empty-home install | A packaged `mainframe` can plan and install into an actually empty temporary home | Blocked by unsupported generic resources |
 | 2. Reversible lifecycle | Install, no-op, change, remove, and reinstall preserve user-owned data | Partial; links and several adapter projections are reversible, generic resources are not |
-| 3. Safe credentials | Secrets are resolved by name only where needed and never exported wholesale | Blocked by the compatibility shell bootstrap |
+| 3. Safe credentials | Secrets are resolved by name only where needed and never exported wholesale | Fresh release path complete; legacy startup-line migration remains |
 | 4. Adapter isolation | Each adapter works without another adapter's runtime files or directories | Modeled and broadly tested; full lifecycle parity remains |
 | 5. CLI and TUI parity | A human or agent can inspect, prepare, preview, confirm, apply, and explain the same operation | Partial; narrow confirmed Context7 Apply exists |
 | 6. Fault safety | Conflicts, interruption, concurrency, malformed state, and rollback fail without data loss | Implemented for the executor core; incomplete for every resource lifecycle |
@@ -122,5 +122,6 @@ Until the relevant boundary is met:
 - Long-plan navigation: [#1d04acea](tickets/1d04acea-add-tui-plan-scrolling.md)
 - Strategy document split: [#3a79360e](tickets/3a79360e-split-installer-strategy-by-concern.md)
 
-The shell-wide secret export is a known local finding. It must be replaced as
-part of gate 3 before the new installer can own shell integration.
+Fresh releases do not install shell-wide secret export. Existing lines written
+by the compatibility installer require a later exact, ownership-safe migration;
+omitting the old resource alone does not remove user startup-file content.

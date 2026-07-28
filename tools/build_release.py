@@ -23,13 +23,7 @@ from release_contract import (
     write_release_index,
 )
 from release_contract_io import seal_release_files
-
-
-SHELL_SOURCE_LINE = (
-    '[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" ] '
-    '&& set -a && . "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" '
-    "&& set +a\n"
-)
+from release_secret_projection import project_release_secret_guidance
 
 
 def _load_builder(name: str, path: Path):
@@ -55,27 +49,6 @@ def _credential_resources() -> list[dict]:
             "target": {"root": "credentials-config", "path": "secrets.env"},
             **lifecycle,
         },
-        {
-            "id": "credential-tools.bashrc-source",
-            "strategy": "shell-line-if-present",
-            "source": "shell-source-line",
-            "target": {"root": "home", "path": ".bashrc"},
-            **lifecycle,
-        },
-        {
-            "id": "credential-tools.profile-source",
-            "strategy": "shell-line-if-present",
-            "source": "shell-source-line",
-            "target": {"root": "home", "path": ".profile"},
-            **lifecycle,
-        },
-        {
-            "id": "credential-tools.zshenv-source",
-            "strategy": "shell-line",
-            "source": "shell-source-line",
-            "target": {"root": "home", "path": ".zshenv"},
-            **lifecycle,
-        },
     ]
 
 
@@ -88,7 +61,6 @@ def _build_credential_tools(root: Path, output: Path) -> None:
     )
     write_text_file(output / "secrets.env", "")
     (output / "secrets.env").chmod(0o600)
-    write_text_file(output / "shell-source-line", SHELL_SOURCE_LINE)
     write_bundle_manifest(
         output,
         component="credential-tools",
@@ -168,7 +140,6 @@ def _build_staged(root: Path, staging: Path, release_id: str) -> None:
     for component, builder in builders.items():
         bundle = staging / "bundles" / component
         builder.materialize(root, bundle)
-        validate_bundle(bundle)
         manifests.append(bundle / "bundle.json")
     credentials = staging / "common/credential-tools"
     _build_credential_tools(root, credentials)
@@ -177,7 +148,11 @@ def _build_staged(root: Path, staging: Path, release_id: str) -> None:
     _build_cli(root, cli)
     manifests.append(cli / "bundle.json")
     for manifest in manifests:
+        validate_bundle(manifest.parent)
+    project_release_secret_guidance(staging)
+    for manifest in manifests:
         seal_bundle(manifest.parent)
+        validate_bundle(manifest.parent)
     mcp_catalog = staging / CATALOG_RELEASE_PATH
     copy_regular_file(root / "internal/mcpcatalog/catalog.json", mcp_catalog)
     write_release_index(

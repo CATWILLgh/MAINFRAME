@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -139,23 +140,12 @@ def _assert_component_contracts(output: Path, index: dict) -> Path:
         "path": "secret",
     }
     assert {resource["id"] for resource in credentials["resources"]} == {
-        "credential-tools.bashrc-source",
-        "credential-tools.profile-source",
         "credential-tools.secrets-store",
-        "credential-tools.zshenv-source",
     }
-    shell_resources = {
-        resource["target"]["path"]: resource
-        for resource in credentials["resources"]
-        if resource["target"]["root"] == "home"
-    }
-    assert shell_resources[".zshenv"]["strategy"] == "shell-line"
-    assert shell_resources[".bashrc"]["strategy"] == "shell-line-if-present"
-    assert shell_resources[".profile"]["strategy"] == "shell-line-if-present"
-    assert all(
-        resource["source"] == "shell-source-line"
-        for resource in shell_resources.values()
-    )
+    store = output / "common/credential-tools/secrets.env"
+    assert store.read_bytes() == b""
+    assert stat.S_IMODE(store.stat().st_mode) == 0o400
+    assert not (output / "common/credential-tools/shell-source-line").exists()
     assert all(
         resource["observation"] == "supported"
         for resource in credentials["resources"]
@@ -180,6 +170,9 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
     )
     _assert_embedded_cli_guidance(binary, sandbox, env)
     assert_machine_draft_reviews(binary, home, sandbox, env, snapshot_tree)
+    installed_store = home / ".config/credentials/secrets.env"
+    assert stat.S_IMODE(installed_store.stat().st_mode) == 0o600
+    _assert_no_shell_startup_files(home)
     _assert_tui_launch(binary, sandbox, env)
     assert_adapter_plans(binary, output, sandbox, env)
     assert_adapter_lifecycle_plans(binary, output, sandbox, env)
@@ -236,6 +229,34 @@ def _assert_secret_help(output: Path) -> None:
     assert "~/.claude" not in secret_help
     assert "~/.config/credentials" not in secret_help
     assert "install.sh" not in secret_help
+    assert "$(secret get NAME)" in secret_help
+
+
+def _assert_no_shell_startup_files(home: Path) -> None:
+    assert not any((home / name).exists() for name in (
+        ".zshenv", ".bashrc", ".profile",
+    ))
+
+
+def _assert_named_secret_guidance(output: Path) -> None:
+    targets = [
+        output / "common/credential-tools/secret",
+        *output.glob("bundles/*/**/skills/secrets-handling/SKILL.md"),
+        *output.glob("bundles/*/**/skills/curl-requests/SKILL.md"),
+    ]
+    assert len(targets) == 9
+    forbidden = (
+        "auto-sourced from",
+        "loaded into the shell environment by",
+        "The store is sourced by",
+        "source ~/.zshenv",
+        "set -a",
+        "The MAINFRAME configuration flow manages this line",
+    )
+    for target in targets:
+        text = target.read_text()
+        assert "$(secret get " in text
+        assert not any(phrase in text for phrase in forbidden), target
 
 
 def _assert_tui_launch(
@@ -274,6 +295,7 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
 
     index = _assert_release_layout(output)
     binary = _assert_component_contracts(output, index)
+    _assert_named_secret_guidance(output)
     _assert_release_cli(binary, output, sandbox)
 
 
@@ -293,6 +315,29 @@ def test_build_rejects_existing_destination_without_mutation():
 
     assert sentinel.read_text() == "keep"
     assert list(output.iterdir()) == [sentinel]
+
+
+def test_projection_failure_leaves_no_release_or_staging_residue():
+    sandbox = Path(tempfile.mkdtemp()).resolve(strict=True)
+    output = sandbox / "release"
+    original = build_release.project_release_secret_guidance
+
+    def reject(_):
+        raise ValueError("projection anchor drift")
+
+    build_release.project_release_secret_guidance = reject
+    try:
+        try:
+            build_release.build(REPO, output, release_id="test-release")
+        except ValueError as exc:
+            assert str(exc) == "projection anchor drift"
+        else:
+            raise AssertionError("projection failure was ignored")
+    finally:
+        build_release.project_release_secret_guidance = original
+
+    assert not output.exists()
+    assert list(sandbox.iterdir()) == []
 
 
 def _run_all():
