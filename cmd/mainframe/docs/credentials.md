@@ -18,6 +18,13 @@ preview text, logs, journals, diagnostics, or the credential catalog.
 `mainframe credentials uses <name>` lists instance roles that reference one
 secret name. It does not read that secret.
 
+`mainframe credentials legacy-indexes` explicitly inspects the four old
+adapter-local Markdown indexes. It returns only their release-defined
+locations and bounded states. It never returns file content, content hashes,
+absolute paths, symlink targets, or raw filesystem errors. This is an
+inventory only: it does not migrate or delete anything, and a template match
+does not mean migration is complete.
+
 Agents can create or edit instance metadata through:
 
 ```text

@@ -154,8 +154,12 @@ func buildInteractiveReviewRuntime() (
 		}, snapshot.release.MCPCatalog, tui.CredentialState{
 			Definitions: credentials.definitions,
 			Instances:   credentials.snapshot.Instances(),
-			Recovered:   recovery.Recovered,
-			Warnings:    append([]string(nil), recovery.Warnings...),
+			LegacyInspector: runtimeLegacyIndexInspector{
+				release: snapshot.release, source: snapshot.root,
+				environment: hostEnvironment(),
+			},
+			Recovered: recovery.Recovered,
+			Warnings:  append([]string(nil), recovery.Warnings...),
 			SecretCreator: newSecretHelperCreator(filepath.Join(
 				snapshot.root,
 				"bundles",

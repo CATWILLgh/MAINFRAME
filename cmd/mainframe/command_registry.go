@@ -29,6 +29,7 @@ const (
 	handlerDraftReview      commandHandlerKind = "draft-review"
 	handlerDraftApply       commandHandlerKind = "draft-apply"
 	handlerCredentialList   commandHandlerKind = "credential-list"
+	handlerCredentialLegacy commandHandlerKind = "credential-legacy"
 	handlerCredentialUses   commandHandlerKind = "credential-uses"
 	handlerCredentialReview commandHandlerKind = "credential-review"
 	handlerCredentialApply  commandHandlerKind = "credential-apply"
@@ -97,6 +98,8 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runDraftApplyFromRegistry
 	case handlerCredentialList:
 		return runCredentialCatalogCommand
+	case handlerCredentialLegacy:
+		return runCredentialLegacyFromRegistry
 	case handlerCredentialUses:
 		return runCredentialUsesFromRegistry
 	case handlerCredentialReview:
@@ -245,6 +248,20 @@ func runPlanCommand(context commandContext, _ map[string]string) int {
 func runCredentialCatalogCommand(context commandContext, _ map[string]string) int {
 	if err := runCredentials(context.output); err != nil {
 		fmt.Fprintf(context.errorOutput, "credentials: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func runCredentialLegacyFromRegistry(
+	context commandContext,
+	_ map[string]string,
+) int {
+	if err := runLegacyCredentialInventory(context.output); err != nil {
+		fmt.Fprintln(
+			context.errorOutput,
+			"credentials legacy-indexes: legacy credential indexes could not be inspected safely",
+		)
 		return 1
 	}
 	return 0

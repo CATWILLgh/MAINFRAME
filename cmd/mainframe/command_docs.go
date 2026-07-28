@@ -73,6 +73,7 @@ func documentationRegistry() []documentationTopic {
 			File:    "docs/credentials.md",
 			CommandIDs: []string{
 				"credentials.catalog",
+				"credentials.legacy-indexes",
 				"credentials.uses",
 				"credentials.instance.review",
 				"credentials.instance.apply",
@@ -99,6 +100,7 @@ func documentationRegistry() []documentationTopic {
 				"draft.review",
 				"draft.apply",
 				"credentials.catalog",
+				"credentials.legacy-indexes",
 				"credentials.uses",
 				"credentials.instance.review",
 				"credentials.instance.apply",

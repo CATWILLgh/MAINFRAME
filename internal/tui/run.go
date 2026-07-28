@@ -7,15 +7,21 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialmigration"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 )
 
 type CredentialState struct {
-	Definitions   credentialcatalog.Definitions
-	Instances     credentialcatalog.Instances
-	SecretCreator SecretCreator
-	Recovered     bool
-	Warnings      []string
+	Definitions     credentialcatalog.Definitions
+	Instances       credentialcatalog.Instances
+	LegacyInspector LegacyIndexInspector
+	SecretCreator   SecretCreator
+	Recovered       bool
+	Warnings        []string
+}
+
+type LegacyIndexInspector interface {
+	Inspect() ([]credentialmigration.LegacyIndex, error)
 }
 
 type SecretCreator interface {

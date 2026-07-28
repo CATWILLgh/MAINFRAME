@@ -31,6 +31,22 @@ def test_packaged_cli_imports_switches_and_rolls_back_exact_releases():
         environment = _environment(home)
         binary = first / "bin/mainframe"
 
+        legacy = _run_no_input_json(
+            binary,
+            ["credentials", "legacy-indexes"],
+            environment,
+        )
+        assert legacy["migration_performed"] is False
+        assert legacy["migration_readiness"] == "not_assessed"
+        assert [item["component_id"] for item in legacy["indexes"]] == [
+            "claude-code",
+            "codex",
+            "opencode",
+            "antigravity-2",
+        ]
+        assert all(item["state"] == "missing" for item in legacy["indexes"])
+        assert "content_sha256" not in json.dumps(legacy)
+
         first_review = _review_local(binary, first, environment)
         assert first_review["operations"][0]["kind"] == "install"
         _assert_review_read_only(home)
@@ -129,6 +145,22 @@ def _run_json(
     result = subprocess.run(
         [str(binary), *arguments],
         input=json.dumps(request),
+        text=True,
+        capture_output=True,
+        env=environment,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def _run_no_input_json(
+    binary: Path,
+    arguments: list[str],
+    environment: dict[str, str],
+) -> dict:
+    result = subprocess.run(
+        [str(binary), *arguments],
         text=True,
         capture_output=True,
         env=environment,

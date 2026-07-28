@@ -48,6 +48,8 @@ func (model *Model) handleEscape() (*Model, tea.Cmd) {
 		return model.continueFromDiagnostics()
 	case screenCredentials:
 		return model.openMain()
+	case screenCredentialLegacy:
+		return model.openCredentials()
 	case screenCredentialEdit:
 		return model.openCredentials()
 	case screenSecretCreate, screenSecretCreateConfirm:
@@ -74,6 +76,9 @@ func (model *Model) handleBack() (*Model, tea.Cmd, bool) {
 		return updated, command, true
 	case screenCredentials:
 		updated, command := model.openMain()
+		return updated, command, true
+	case screenCredentialLegacy:
+		updated, command := model.openCredentials()
 		return updated, command, true
 	case screenCredentialEdit:
 		updated, command := model.openCredentials()

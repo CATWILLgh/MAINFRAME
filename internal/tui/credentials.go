@@ -14,9 +14,10 @@ import (
 type credentialMenuChoice string
 
 const (
-	credentialBack         credentialMenuChoice = ":back"
-	credentialCreateSecret credentialMenuChoice = ":create-secret"
-	manualSecretReference                       = ":manual-secret-reference"
+	credentialBack          credentialMenuChoice = ":back"
+	credentialCreateSecret  credentialMenuChoice = ":create-secret"
+	credentialLegacyIndexes credentialMenuChoice = ":legacy-indexes"
+	manualSecretReference                        = ":manual-secret-reference"
 )
 
 type credentialBindingDraft struct {
@@ -73,6 +74,12 @@ func credentialCatalogForm(model *Model) *huh.Form {
 			"Create a new secret", credentialCreateSecret,
 		))
 	}
+	if model.legacyCredentialInspector != nil {
+		options = append(options, huh.NewOption(
+			"Inspect legacy credential indexes",
+			credentialLegacyIndexes,
+		))
+	}
 	for _, instance := range model.credentialInstances.All() {
 		options = append(options, huh.NewOption(
 			"Edit "+instance.Name+" ("+string(instance.ID)+")",
@@ -94,6 +101,9 @@ func (model *Model) continueFromCredentials() (*Model, tea.Cmd) {
 	}
 	if model.credentialMenuChoice == credentialCreateSecret {
 		return model.openSecretCreate()
+	}
+	if model.credentialMenuChoice == credentialLegacyIndexes {
+		return model.openLegacyCredentialIndexes()
 	}
 	if strings.HasPrefix(value, "create:") {
 		return model.openCredentialCreate(

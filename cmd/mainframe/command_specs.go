@@ -70,6 +70,18 @@ var registeredCommands = []commandSpec{
 		HandlerKind:   handlerCredentialUses,
 	},
 	{
+		ID:            "credentials.legacy-indexes",
+		Pattern:       []string{"credentials", "legacy-indexes"},
+		Usage:         "mainframe credentials legacy-indexes",
+		Summary:       "Inspect legacy adapter credential indexes without returning their content.",
+		Input:         inputNone,
+		Output:        outputJSON,
+		Effect:        effectReadOnly,
+		Confirmation:  confirmationNone,
+		Documentation: "credentials",
+		HandlerKind:   handlerCredentialLegacy,
+	},
+	{
 		ID:            "credentials.instance.review",
 		Pattern:       []string{"credentials", "instance", "review"},
 		Usage:         "mainframe credentials instance review",

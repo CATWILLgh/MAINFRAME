@@ -6,6 +6,15 @@ Start every automated interaction by running:
 mainframe capabilities --json
 ```
 
+Legacy credential metadata can be inventoried without returning its content:
+
+```text
+mainframe credentials legacy-indexes
+```
+
+This command is explicitly all-adapter and read-only. It reports migration as
+not assessed and does not authorize deletion or automatic conversion.
+
 Local release delivery uses the same review and exact-apply boundary:
 
 ```sh

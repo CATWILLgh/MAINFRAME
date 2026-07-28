@@ -9,6 +9,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialmigration"
 	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
@@ -34,6 +35,7 @@ const (
 	screenMCPCredential
 	screenDiagnostics
 	screenCredentials
+	screenCredentialLegacy
 	screenCredentialEdit
 	screenSecretCreate
 	screenSecretCreateConfirm
@@ -63,6 +65,8 @@ type Model struct {
 	repositoryStats            map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
 	credentialDefinitions      credentialcatalog.Definitions
 	credentialInstances        credentialcatalog.Instances
+	legacyCredentialIndexes    []credentialmigration.LegacyIndex
+	legacyCredentialInspector  LegacyIndexInspector
 	credentialDirty            bool
 	credentialMenuChoice       credentialMenuChoice
 	activeCredential           credentialcatalog.InstanceID
@@ -105,6 +109,7 @@ func NewModel(
 	if len(credentialStates) > 0 {
 		model.credentialDefinitions = credentialStates[0].Definitions
 		model.credentialInstances = credentialStates[0].Instances.Clone()
+		model.legacyCredentialInspector = credentialStates[0].LegacyInspector
 		model.secretCreator = credentialStates[0].SecretCreator
 		model.startupRecovered = credentialStates[0].Recovered
 		model.startupWarnings = append(
@@ -158,6 +163,8 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model.continueFromDiagnostics()
 		case screenCredentials:
 			return model.continueFromCredentials()
+		case screenCredentialLegacy:
+			return model.openCredentials()
 		case screenCredentialEdit:
 			return model.saveCredentialDraft()
 		case screenSecretCreate:
@@ -169,41 +176,6 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return model, command
-}
-
-func (model *Model) View() tea.View {
-	var content string
-	if model.screen == screenSelection {
-		content = model.selectionView()
-	} else if model.screen == screenMCP {
-		content = model.mcpView()
-	} else if model.screen == screenMCPDetail {
-		content = model.mcpDetailView()
-	} else if model.screen == screenMCPCredential {
-		content = model.mcpCredentialView()
-	} else if model.screen == screenDiagnostics {
-		content = model.diagnosticsView()
-	} else if model.screen == screenCredentials {
-		content = model.credentialsView()
-	} else if model.screen == screenCredentialEdit {
-		content = model.credentialEditView()
-	} else if model.screen == screenSecretCreate {
-		content = model.secretCreateView()
-	} else if model.screen == screenSecretCreateConfirm {
-		content = model.secretCreateConfirmView()
-	} else if model.screen == screenApplyConfirm {
-		content = model.applyConfirmView()
-	} else if model.screen == screenApplied {
-		content = model.appliedView()
-	} else if model.screen == screenPreview {
-		content = model.previewView()
-	} else {
-		content = model.mainView()
-	}
-	view := tea.NewView(content)
-	view.AltScreen = true
-	view.WindowTitle = "MAINFRAME"
-	return view
 }
 
 func (model *Model) openPreview() (*Model, tea.Cmd) {
