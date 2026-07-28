@@ -39,6 +39,12 @@ var componentDependencies = map[domain.ComponentID]map[domain.ComponentID]struct
 	"opencode":         {"credential-tools": {}, "mainframe-cli": {}},
 }
 
+// ValidReleaseIdentity checks the path-safe release ID and exact index digest.
+func ValidReleaseIdentity(releaseID, indexSHA256 string) bool {
+	return componentPattern.MatchString(releaseID) &&
+		digestPattern.MatchString(indexSHA256)
+}
+
 func validateIndex(index releaseIndex) error {
 	if index.SchemaVersion != releaseSchemaVersion || index.Kind != releaseKind {
 		return fmt.Errorf("unsupported release contract")

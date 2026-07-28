@@ -72,6 +72,34 @@ func (store Store) Import(source string) (Entry, error) {
 	return store.importNew(source, accepted, versionParent, entry)
 }
 
+func (store Store) Open(releaseID, indexSHA256 string) (Entry, error) {
+	if store.root == "" || store.copyTree == nil {
+		return Entry{}, fmt.Errorf("release store is not initialized")
+	}
+	if !releasecontract.ValidReleaseIdentity(releaseID, indexSHA256) {
+		return Entry{}, fmt.Errorf("release identity is invalid")
+	}
+	entry := Entry{
+		Path: filepath.Join(
+			store.root,
+			releasesDirectory,
+			releaseID,
+			indexSHA256,
+		),
+		ReleaseID:      releaseID,
+		IndexSHA256:    indexSHA256,
+		AlreadyPresent: true,
+	}
+	exists, err := validateExisting(entry)
+	if err != nil {
+		return Entry{}, err
+	}
+	if !exists {
+		return Entry{}, fmt.Errorf("release version was not found")
+	}
+	return entry, nil
+}
+
 func (store Store) importNew(
 	source string,
 	accepted releasecontract.Release,
@@ -143,6 +171,13 @@ func validateExisting(entry Entry) (bool, error) {
 	}
 	if info.Mode()&fs.ModeSymlink != 0 || !info.IsDir() {
 		return true, fmt.Errorf("existing release path is not a real directory")
+	}
+	resolved, err := filepath.EvalSymlinks(entry.Path)
+	if err != nil {
+		return true, fmt.Errorf("resolve existing release path: %w", err)
+	}
+	if resolved != entry.Path {
+		return true, fmt.Errorf("existing release path escapes the canonical store")
 	}
 	release, err := releasecontract.Load(entry.Path)
 	if err != nil {

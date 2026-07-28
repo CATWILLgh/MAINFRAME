@@ -71,6 +71,118 @@ func TestImportIsIdempotentAndRetainsDistinctVersions(t *testing.T) {
 	}
 }
 
+func TestOpenReturnsOnlyTheExactValidatedVersion(t *testing.T) {
+	store := newTestStore(t)
+	imported, err := store.Import(
+		writeReleaseFixture(t, "test-release", "payload\n", 0o640),
+	)
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+
+	opened, err := store.Open(imported.ReleaseID, imported.IndexSHA256)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	if opened.Path != imported.Path ||
+		opened.ReleaseID != imported.ReleaseID ||
+		opened.IndexSHA256 != imported.IndexSHA256 ||
+		!opened.AlreadyPresent {
+		t.Fatalf("Open() = %#v, imported = %#v", opened, imported)
+	}
+}
+
+func TestOpenMissingVersionIsReadOnly(t *testing.T) {
+	parent := canonicalTempDir(t)
+	root := filepath.Join(parent, "mainframe")
+	store, err := New(root)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = store.Open(
+		"missing-release",
+		strings.Repeat("a", sha256.Size*2),
+	)
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("Open() error = %v, want not found", err)
+	}
+	if _, statErr := os.Lstat(root); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("Open() created release store: %v", statErr)
+	}
+}
+
+func TestOpenRejectsMalformedIdentity(t *testing.T) {
+	store := newTestStore(t)
+	tests := []struct {
+		releaseID string
+		digest    string
+	}{
+		{"../escape", strings.Repeat("a", sha256.Size*2)},
+		{"test-release", "../escape"},
+		{"test-release", strings.Repeat("A", sha256.Size*2)},
+	}
+	for _, test := range tests {
+		if _, err := store.Open(test.releaseID, test.digest); err == nil {
+			t.Fatalf(
+				"Open(%q, %q) accepted malformed identity",
+				test.releaseID,
+				test.digest,
+			)
+		}
+	}
+}
+
+func TestOpenRejectsTamperedStoredVersion(t *testing.T) {
+	store := newTestStore(t)
+	imported, err := store.Import(
+		writeReleaseFixture(t, "test-release", "payload\n", 0o640),
+	)
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(imported.Path, "bundles", "codex", "payload.txt"),
+		[]byte("tampered\n"),
+		0o640,
+	); err != nil {
+		t.Fatalf("tamper stored payload: %v", err)
+	}
+
+	if _, err := store.Open(
+		imported.ReleaseID,
+		imported.IndexSHA256,
+	); err == nil {
+		t.Fatal("Open() accepted a tampered stored release")
+	}
+}
+
+func TestOpenRejectsStoreSymlinkInsertedAfterInitialization(t *testing.T) {
+	container := canonicalTempDir(t)
+	root := filepath.Join(container, "mainframe")
+	store, err := New(root)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	outside := newTestStore(t)
+	imported, err := outside.Import(
+		writeReleaseFixture(t, "test-release", "payload\n", 0o640),
+	)
+	if err != nil {
+		t.Fatalf("outside Import() error = %v", err)
+	}
+	if err := os.Symlink(outside.root, root); err != nil {
+		t.Fatalf("insert store symlink: %v", err)
+	}
+
+	if _, err := store.Open(
+		imported.ReleaseID,
+		imported.IndexSHA256,
+	); err == nil {
+		t.Fatal("Open() accepted a substituted store symlink")
+	}
+}
+
 func TestImportRejectsTamperedExistingVersion(t *testing.T) {
 	source := writeReleaseFixture(t, "test-release", "payload\n", 0o640)
 	store := newTestStore(t)
