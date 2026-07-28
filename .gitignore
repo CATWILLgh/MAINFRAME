@@ -13,6 +13,10 @@
 .claude/
 .claude/settings.local.json
 
+# Local agent and Codex project state
+/.agents/
+/.codex/
+
 # Python venv (local toolchain — tiktoken, pyyaml)
 .venv/
 __pycache__/
@@ -54,6 +58,7 @@ workspace/
 
 # Derived OpenCode agent projection; committed goldens remain tracked.
 dist/opencode/agents/
+/dist/opencode/bundle-v2/
 
 # Derived Codex projection; composed AGENTS.md and representative goldens are committed.
 dist/codex/*
