@@ -18,6 +18,33 @@ func (state *UnixState) Load() (*Journal, error) {
 	if err != nil {
 		return nil, err
 	}
+	return loadJournalFromDirectory(directory)
+}
+
+func ReadUnixJournal(root string) (*Journal, error) {
+	if err := validateStateRoot(root); err != nil {
+		return nil, err
+	}
+	if _, err := os.Lstat(root); errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("inspect state root: %w", err)
+	}
+	directory, err := openExistingStateDirectory(root)
+	if errors.Is(err, unix.ENOENT) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer unix.Close(directory)
+	if err := validateStateDirectory(directory); err != nil {
+		return nil, err
+	}
+	return loadJournalFromDirectory(directory)
+}
+
+func loadJournalFromDirectory(directory int) (*Journal, error) {
 	descriptor, err := unix.Openat(
 		directory,
 		journalFileName,
