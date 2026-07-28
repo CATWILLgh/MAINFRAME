@@ -158,6 +158,10 @@ func buildInteractiveReviewRuntime() (
 				release: snapshot.release, source: snapshot.root,
 				environment: hostEnvironment(),
 			},
+			LegacyPreviewer: runtimeLegacyIndexInspector{
+				release: snapshot.release, source: snapshot.root,
+				environment: hostEnvironment(),
+			},
 			Recovered: recovery.Recovered,
 			Warnings:  append([]string(nil), recovery.Warnings...),
 			SecretCreator: newSecretHelperCreator(filepath.Join(

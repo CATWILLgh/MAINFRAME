@@ -63,6 +63,17 @@ func (inspector runtimeLegacyIndexInspector) Inspect() (
 	), nil
 }
 
+func (inspector runtimeLegacyIndexInspector) Preview() (
+	credentialmigration.LegacyReferenceInventory,
+	error,
+) {
+	return inspectLegacyCredentialReferencePreview(
+		inspector.release,
+		inspector.source,
+		inspector.environment,
+	)
+}
+
 func runLegacyCredentialInventory(output io.Writer) error {
 	snapshot, err := loadReadOnlyReleaseSnapshot()
 	if err != nil {

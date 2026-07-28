@@ -36,6 +36,8 @@ const (
 	screenDiagnostics
 	screenCredentials
 	screenCredentialLegacy
+	screenCredentialLegacyPreview
+	screenCredentialLegacyGroup
 	screenCredentialEdit
 	screenSecretCreate
 	screenSecretCreateConfirm
@@ -45,42 +47,45 @@ const (
 )
 
 type Model struct {
-	reviewer                   PlanReviewer
-	catalog                    mcpcatalog.Catalog
-	stats                      mcpcatalog.StatsSource
-	targets                    []lifecycle.Target
-	selected                   []domain.ComponentID
-	form                       *huh.Form
-	screen                     screen
-	preview                    lifecycle.Preview
-	reviewedPlan               ReviewedPlan
-	mcpPreview                 mcpcatalog.OnboardingPreview
-	mcpChoices                 map[mcpcatalog.ServerID]*mcpChoice
-	mcpMenuChoice              mcpMenuChoice
-	mainMenuChoice             mainMenuChoice
-	diagnostics                diagnostics.Desired
-	diagnosticsDEVEnabled      bool
-	diagnosticsFeedbackEnabled bool
-	activeMCP                  mcpcatalog.ServerID
-	repositoryStats            map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
-	credentialDefinitions      credentialcatalog.Definitions
-	credentialInstances        credentialcatalog.Instances
-	legacyCredentialIndexes    []credentialmigration.LegacyIndex
-	legacyCredentialInspector  LegacyIndexInspector
-	credentialDirty            bool
-	credentialMenuChoice       credentialMenuChoice
-	activeCredential           credentialcatalog.InstanceID
-	credentialDraft            credentialInstanceDraft
-	secretCreator              SecretCreator
-	secretDraft                secretDraft
-	secretCreateConfirmed      bool
-	secretCreateNotice         string
-	applyConfirmed             bool
-	appliedWarnings            []string
-	startupRecovered           bool
-	startupWarnings            []string
-	statsGeneration            uint64
-	err                        error
+	reviewer                         PlanReviewer
+	catalog                          mcpcatalog.Catalog
+	stats                            mcpcatalog.StatsSource
+	targets                          []lifecycle.Target
+	selected                         []domain.ComponentID
+	form                             *huh.Form
+	screen                           screen
+	preview                          lifecycle.Preview
+	reviewedPlan                     ReviewedPlan
+	mcpPreview                       mcpcatalog.OnboardingPreview
+	mcpChoices                       map[mcpcatalog.ServerID]*mcpChoice
+	mcpMenuChoice                    mcpMenuChoice
+	mainMenuChoice                   mainMenuChoice
+	diagnostics                      diagnostics.Desired
+	diagnosticsDEVEnabled            bool
+	diagnosticsFeedbackEnabled       bool
+	activeMCP                        mcpcatalog.ServerID
+	repositoryStats                  map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats
+	credentialDefinitions            credentialcatalog.Definitions
+	credentialInstances              credentialcatalog.Instances
+	legacyCredentialIndexes          []credentialmigration.LegacyIndex
+	legacyCredentialInspector        LegacyIndexInspector
+	legacyCredentialPreviewer        LegacyReferencePreviewer
+	legacyCredentialReferencePreview credentialmigration.LegacyReferenceInventory
+	activeLegacyReferenceGroup       int
+	credentialDirty                  bool
+	credentialMenuChoice             credentialMenuChoice
+	activeCredential                 credentialcatalog.InstanceID
+	credentialDraft                  credentialInstanceDraft
+	secretCreator                    SecretCreator
+	secretDraft                      secretDraft
+	secretCreateConfirmed            bool
+	secretCreateNotice               string
+	applyConfirmed                   bool
+	appliedWarnings                  []string
+	startupRecovered                 bool
+	startupWarnings                  []string
+	statsGeneration                  uint64
+	err                              error
 }
 
 func NewModel(
@@ -110,6 +115,7 @@ func NewModel(
 		model.credentialDefinitions = credentialStates[0].Definitions
 		model.credentialInstances = credentialStates[0].Instances.Clone()
 		model.legacyCredentialInspector = credentialStates[0].LegacyInspector
+		model.legacyCredentialPreviewer = credentialStates[0].LegacyPreviewer
 		model.secretCreator = credentialStates[0].SecretCreator
 		model.startupRecovered = credentialStates[0].Recovered
 		model.startupWarnings = append(
@@ -164,7 +170,11 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case screenCredentials:
 			return model.continueFromCredentials()
 		case screenCredentialLegacy:
-			return model.openCredentials()
+			return model.continueFromLegacyCredentials()
+		case screenCredentialLegacyPreview:
+			return model.continueFromLegacyReferencePreview()
+		case screenCredentialLegacyGroup:
+			return model.openLegacyReferencePreviewMenu()
 		case screenCredentialEdit:
 			return model.saveCredentialDraft()
 		case screenSecretCreate:

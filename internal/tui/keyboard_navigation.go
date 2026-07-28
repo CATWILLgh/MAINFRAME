@@ -12,11 +12,13 @@ func (model *Model) handleGlobalKey(key tea.KeyPressMsg) (*Model, tea.Cmd, bool)
 		model.clearReviewedPlan()
 		model.discardSecretDraft()
 		model.clearCredentialDrafts()
+		model.clearLegacyReferencePreview()
 		return model, tea.Quit, true
 	case "ctrl+c":
 		model.clearReviewedPlan()
 		model.discardSecretDraft()
 		model.clearCredentialDrafts()
+		model.clearLegacyReferencePreview()
 		return model, tea.Quit, true
 	case "esc":
 		updated, command := model.handleEscape()
@@ -50,6 +52,11 @@ func (model *Model) handleEscape() (*Model, tea.Cmd) {
 		return model.openMain()
 	case screenCredentialLegacy:
 		return model.openCredentials()
+	case screenCredentialLegacyPreview:
+		model.clearLegacyReferencePreview()
+		return model.openLegacyCredentialIndexes()
+	case screenCredentialLegacyGroup:
+		return model.openLegacyReferencePreviewMenu()
 	case screenCredentialEdit:
 		return model.openCredentials()
 	case screenSecretCreate, screenSecretCreateConfirm:
@@ -79,6 +86,13 @@ func (model *Model) handleBack() (*Model, tea.Cmd, bool) {
 		return updated, command, true
 	case screenCredentialLegacy:
 		updated, command := model.openCredentials()
+		return updated, command, true
+	case screenCredentialLegacyPreview:
+		model.clearLegacyReferencePreview()
+		updated, command := model.openLegacyCredentialIndexes()
+		return updated, command, true
+	case screenCredentialLegacyGroup:
+		updated, command := model.openLegacyReferencePreviewMenu()
 		return updated, command, true
 	case screenCredentialEdit:
 		updated, command := model.openCredentials()

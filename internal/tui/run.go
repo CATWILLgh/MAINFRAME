@@ -15,6 +15,7 @@ type CredentialState struct {
 	Definitions     credentialcatalog.Definitions
 	Instances       credentialcatalog.Instances
 	LegacyInspector LegacyIndexInspector
+	LegacyPreviewer LegacyReferencePreviewer
 	SecretCreator   SecretCreator
 	Recovered       bool
 	Warnings        []string
@@ -22,6 +23,10 @@ type CredentialState struct {
 
 type LegacyIndexInspector interface {
 	Inspect() ([]credentialmigration.LegacyIndex, error)
+}
+
+type LegacyReferencePreviewer interface {
+	Preview() (credentialmigration.LegacyReferenceInventory, error)
 }
 
 type SecretCreator interface {

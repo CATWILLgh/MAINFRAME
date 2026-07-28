@@ -113,10 +113,145 @@ func TestLegacyCredentialInspectionDoesNotRenderRawErrors(t *testing.T) {
 	}
 }
 
+func TestLegacyReferenceDiscoveryRequiresExplicitNavigation(t *testing.T) {
+	state := testCredentialState(t)
+	indexInspector := &legacyIndexInspectorFixture{
+		indexes: legacyCredentialIndexesFixture(),
+	}
+	referencePreviewer := &legacyReferencePreviewerFixture{
+		inventory: legacyReferenceInventoryFixture(),
+	}
+	state.LegacyInspector = indexInspector
+	state.LegacyPreviewer = referencePreviewer
+	model := NewModel(
+		&fakePreviewer{targets: defaultTargets()},
+		testCatalog(t),
+		nil,
+		state,
+	)
+
+	model.openCredentials()
+	if referencePreviewer.calls != 0 {
+		t.Fatalf("credential menu preview calls = %d", referencePreviewer.calls)
+	}
+	model.credentialMenuChoice = credentialLegacyIndexes
+	model, _ = model.continueFromCredentials()
+	if referencePreviewer.calls != 0 {
+		t.Fatalf("legacy inventory preview calls = %d", referencePreviewer.calls)
+	}
+	model.credentialMenuChoice = credentialLegacyPreview
+	model, _ = model.continueFromLegacyCredentials()
+	if referencePreviewer.calls != 1 ||
+		model.screen != screenCredentialLegacyPreview {
+		t.Fatalf(
+			"reference preview calls/screen = %d/%v",
+			referencePreviewer.calls,
+			model.screen,
+		)
+	}
+	view := model.View().Content
+	for _, expected := range []string{
+		"Partial named-reference discovery",
+		"Catalog / Work",
+		"1 reference",
+		"adapter copies still need separate review",
+	} {
+		if !strings.Contains(view, expected) {
+			t.Fatalf("reference preview does not contain %q:\n%s", expected, view)
+		}
+	}
+	if strings.Contains(view, "SHARED_KEY") {
+		t.Fatalf("reference list exposed detail before selection:\n%s", view)
+	}
+}
+
+func TestLegacyReferenceDetailShowsNamesAndClearsOnExit(t *testing.T) {
+	state := testCredentialState(t)
+	state.LegacyInspector = &legacyIndexInspectorFixture{
+		indexes: legacyCredentialIndexesFixture(),
+	}
+	state.LegacyPreviewer = &legacyReferencePreviewerFixture{
+		inventory: legacyReferenceInventoryFixture(),
+	}
+	model := NewModel(
+		&fakePreviewer{targets: defaultTargets()},
+		testCatalog(t),
+		nil,
+		state,
+	)
+	model.openCredentials()
+	model.credentialMenuChoice = credentialLegacyIndexes
+	model, _ = model.continueFromCredentials()
+	model.credentialMenuChoice = credentialLegacyPreview
+	model, _ = model.continueFromLegacyCredentials()
+	model.credentialMenuChoice = credentialMenuChoice("legacy-group:0")
+	model, _ = model.continueFromLegacyReferencePreview()
+
+	view := model.View().Content
+	if model.screen != screenCredentialLegacyGroup ||
+		!strings.Contains(view, "SHARED_KEY") ||
+		!strings.Contains(view, "catalog compatible") {
+		t.Fatalf("legacy reference detail:\n%s", view)
+	}
+	model.openCredentials()
+	if len(model.legacyCredentialReferencePreview.References.Groups) != 0 {
+		t.Fatal("legacy reference preview was retained after exit")
+	}
+}
+
 type legacyIndexInspectorFixture struct {
 	indexes []credentialmigration.LegacyIndex
 	err     error
 	calls   int
+}
+
+type legacyReferencePreviewerFixture struct {
+	inventory credentialmigration.LegacyReferenceInventory
+	err       error
+	calls     int
+}
+
+func (fixture *legacyReferencePreviewerFixture) Preview() (
+	credentialmigration.LegacyReferenceInventory,
+	error,
+) {
+	fixture.calls++
+	return fixture.inventory, fixture.err
+}
+
+func legacyReferenceInventoryFixture() credentialmigration.LegacyReferenceInventory {
+	return credentialmigration.LegacyReferenceInventory{
+		MigrationReadiness: credentialmigration.ReadinessManualTransferRequired,
+		Indexes: []credentialmigration.LegacyIndex{{
+			ComponentID: domain.ComponentClaudeCode,
+			ResourceID:  "claude-code.credentials-index",
+			SourceRole:  credentialmigration.SourceRoleSharedOriginal,
+			State:       credentialmigration.IndexPresent,
+			MigrationReadiness: credentialmigration.
+				ReadinessManualTransferRequired,
+		}, {
+			ComponentID: domain.ComponentCodex,
+			ResourceID:  "codex.credentials-index",
+			SourceRole:  credentialmigration.SourceRoleAdapterCopy,
+			State:       credentialmigration.IndexPresent,
+			MigrationReadiness: credentialmigration.
+				ReadinessManualTransferRequired,
+		}},
+		References: credentialmigration.LegacyReferencePreview{
+			TotalReferenceMentions:     2,
+			ExtractedReferenceMentions: 1,
+			ExcludedReferenceMentions:  1,
+			UnmappedContentLines:       1,
+			Groups: []credentialmigration.LegacyReferenceGroup{{
+				SectionPath: []string{"Catalog", "Work"},
+				References: []credentialmigration.LegacyReference{{
+					Name:          "SHARED_KEY",
+					Occurrences:   1,
+					Compatibility: credentialmigration.ReferenceCatalogCompatible,
+				}},
+			}},
+		},
+	}
 }
 
 func (fixture *legacyIndexInspectorFixture) Inspect() (

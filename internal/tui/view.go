@@ -19,6 +19,10 @@ func (model *Model) View() tea.View {
 		content = model.credentialsView()
 	case screenCredentialLegacy:
 		content = model.legacyCredentialIndexesView()
+	case screenCredentialLegacyPreview:
+		content = model.legacyCredentialReferencePreviewView()
+	case screenCredentialLegacyGroup:
+		content = model.legacyCredentialReferenceGroupView()
 	case screenCredentialEdit:
 		content = model.credentialEditView()
 	case screenSecretCreate:
