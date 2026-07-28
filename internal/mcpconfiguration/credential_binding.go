@@ -55,7 +55,8 @@ func (inspection Inspection) WithCredentialBindings(
 			)
 		}
 		bound.projections[index] = projection
-		if projection.ComponentID == domain.ComponentAntigravity2 {
+		if projection.ComponentID == domain.ComponentAntigravity2 ||
+			projection.ComponentID == domain.ComponentOpenCode {
 			bound.credentials[projection.ID] = binding
 		}
 	}

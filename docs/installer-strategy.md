@@ -434,11 +434,24 @@ memory, and discarded when stale or unavailable.
 
 OpenCode is the first executable keyed MCP slice. The shared credential catalog
 resolves the selected Context7 instance to a validated environment-variable
-reference without reading that variable. The adapter-local projection writes
-only OpenCode's documented `CONTEXT7_API_KEY` header placeholder in the form
-`{env:NAME}`. Keyed and keyless Context7 remain two profiles of one owned
-`mcp.context7` entry, so switching either direction is an update that removes
-stale headers while preserving unrelated OpenCode configuration.
+reference without reading that variable during review. OpenCode supports
+`{file:path}` substitution relative to its configuration file, so the
+adapter-local projection references
+`mainframe/secrets/context7-api-key`. Only after final confirmation does the
+executor resolve the selected reference and atomically write that OpenCode-only
+file with mode `0600`; its parent directories use `0700`. The value does not
+enter `opencode.json`, the preview, diff, ownership registry, transaction
+journal, logs, or errors. The ownership registry records the selected reference
+and a digest of the private file, so key rotation is refreshed at Apply time,
+drift relinquishes ownership, and switching to keyless or deselecting Context7
+removes the managed file without touching unrelated OpenCode configuration.
+Keyed and keyless Context7 remain two profiles of one owned `mcp.context7`
+entry.
+
+Source: OpenCode's
+[`ConfigVariable.substitute`](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/config/variable.ts)
+implementation resolves relative `{file:...}` paths from the configuration
+file directory and trims the loaded text.
 
 Standalone Antigravity `2.2.1` does not expand a secret reference in remote MCP
 headers. Its MCP

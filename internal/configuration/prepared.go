@@ -35,6 +35,7 @@ type MutationDisposition string
 const (
 	MutationPresent             MutationDisposition = "present"
 	MutationRemoveExactDocument MutationDisposition = "remove_exact_document"
+	MutationRemoveManagedSecret MutationDisposition = "remove_managed_secret"
 )
 
 type FileMutation struct {

@@ -9,7 +9,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
-const keyedOpenCodeDesired = `{"headers":{"CONTEXT7_API_KEY":"{env:CUSTOM_CONTEXT7_KEY}"},"type":"remote","url":"https://mcp.context7.com/mcp"}`
+const keyedOpenCodeDesired = `{"headers":{"CONTEXT7_API_KEY":"{file:mainframe/secrets/context7-api-key}"},"type":"remote","url":"https://mcp.context7.com/mcp"}`
 const keyedAntigravityDesired = `{"headers":{"CONTEXT7_API_KEY":"$MAINFRAME_DEFERRED_SECRET_VALUE"},"serverUrl":"https://mcp.context7.com/mcp"}`
 
 func TestBindMCPProjectionProfileDerivesKeyedOpenCodeEntryWithoutReadingSecret(t *testing.T) {
@@ -24,6 +24,7 @@ func TestBindMCPProjectionProfileDerivesKeyedOpenCodeEntryWithoutReadingSecret(t
 	}
 	if bound.ID != projection.ID ||
 		bound.Target != projection.Target ||
+		bound.SecretTarget() != projection.SecretTarget() ||
 		bound.RegistryTarget != projection.RegistryTarget ||
 		bound.ProfileID != "remote-api-key" ||
 		bound.DesiredEntry != keyedOpenCodeDesired {

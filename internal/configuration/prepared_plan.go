@@ -249,6 +249,12 @@ func validatePreparedMutation(mutation FileMutation) error {
 			!IsExactDiagnosticsTarget(mutation.Target) {
 			return fmt.Errorf("invalid exact document removal")
 		}
+	case MutationRemoveManagedSecret:
+		if len(mutation.After.Content) != 0 || mutation.After.Mode != 0 ||
+			mutation.After.Exists || !mutation.Before.Exists ||
+			!IsOpenCodeContext7SecretTarget(mutation.Target) {
+			return fmt.Errorf("invalid managed secret removal")
+		}
 	default:
 		return fmt.Errorf("invalid configuration mutation disposition")
 	}
@@ -281,6 +287,11 @@ func validatePreparedMutation(mutation FileMutation) error {
 		}
 	}
 	return nil
+}
+
+func IsOpenCodeContext7SecretTarget(target domain.Location) bool {
+	return target.Root == domain.RootOpenCodeConfig &&
+		target.Path == "mainframe/secrets/context7-api-key"
 }
 
 func exactDiagnosticsModeUpgrade(mutation FileMutation) bool {

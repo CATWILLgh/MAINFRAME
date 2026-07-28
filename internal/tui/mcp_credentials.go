@@ -84,7 +84,7 @@ func (model *Model) mcpCredentialView() string {
 		header(),
 		headingStyle.Render(server.Name + " credential"),
 		bannerStyle.Render(
-			"Reference only — secret values stay outside MAINFRAME.",
+			"Reference only: the catalog stores no values; adapter delivery happens during final Apply.",
 		),
 		model.form.View(),
 	}

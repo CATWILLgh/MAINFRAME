@@ -28,7 +28,7 @@ func header() string {
 			"Configure your choices first.\nNothing changes until you review and confirm the complete plan.",
 		),
 		mutedStyle.Render(
-			"When safe apply is available, one confirmation applies the reviewed changes as one transaction.\nSecret values remain outside MAINFRAME.",
+			"When safe apply is available, one confirmation applies the reviewed changes as one transaction.\nSecret values are resolved only during final Apply and never shown in the interface.",
 		),
 	}, "\n")
 }

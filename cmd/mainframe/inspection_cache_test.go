@@ -32,6 +32,25 @@ func TestInspectionCacheReturnsOneImmutableSnapshotPerReadShape(t *testing.T) {
 	if host.reads != 2 {
 		t.Fatalf("read shapes were conflated: %d reads", host.reads)
 	}
+	if _, err := cache.InspectDigest(location); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cache.InspectDigest(location); err != nil {
+		t.Fatal(err)
+	}
+	if host.reads != 3 {
+		t.Fatalf("digest reads were not isolated and cached: %d", host.reads)
+	}
+}
+
+func (host *changingInspectionHost) InspectDigest(
+	domain.Location,
+) (hostfs.Entry, error) {
+	host.reads++
+	return hostfs.Entry{
+		Kind:   hostfs.EntryRegular,
+		SHA256: "digest",
+	}, nil
 }
 
 type changingInspectionHost struct {

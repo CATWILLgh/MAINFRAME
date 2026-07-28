@@ -23,6 +23,7 @@ func newMCPPreparation(
 		baseIndex:  make(map[domain.Location]baseMutationReference),
 		baseAfter:  make(map[domain.Location][]byte),
 		after:      make(map[domain.Location][]byte),
+		removed:    make(map[domain.Location]bool),
 		touched:    make(map[domain.Location]bool),
 		groups:     make(map[domain.Location]map[string]bool),
 		registryOf: make(map[domain.Location]domain.Location),

@@ -15,6 +15,7 @@ import (
 
 type Host interface {
 	Inspect(domain.Location, bool) (hostfs.Entry, error)
+	InspectDigest(domain.Location) (hostfs.Entry, error)
 }
 
 type Inspection struct {
@@ -27,15 +28,17 @@ type Inspection struct {
 }
 
 type projectionSnapshot struct {
-	existingPresent     bool
-	existingComparable  bool
-	existingRaw         string
-	ownedPresent        bool
-	ownedTombstone      bool
-	ownedMaterializable bool
-	ownedRaw            string
-	configProblem       string
-	registryProblem     string
+	existingPresent      bool
+	existingComparable   bool
+	existingRaw          string
+	ownedPresent         bool
+	ownedTombstone       bool
+	ownedMaterializable  bool
+	privateSecretOwned   bool
+	privateSecretProblem string
+	ownedRaw             string
+	configProblem        string
+	registryProblem      string
 }
 
 type mcpFileSnapshot struct {
@@ -44,6 +47,7 @@ type mcpFileSnapshot struct {
 	symlinkTargetPath string
 	present           bool
 	raw               []byte
+	sha256            string
 	mode              uint32
 	device            uint64
 	inode             uint64
@@ -75,10 +79,70 @@ func Inspect(
 	for _, projection := range cloned {
 		inspection.captureFile(projection.Target, host)
 		inspection.captureFile(projection.RegistryTarget, host)
+		if target := projection.SecretTarget(); target.Valid() {
+			inspection.capturePrivateCredentialFile(target, host)
+			inspection.capturePrivateCredentialParents(target, host)
+		}
 		inspection.snapshots[projection.ID] = inspection.inspectProjection(projection)
 	}
 	inspection.captureAntigravityMigration(cloned, host)
 	return inspection, nil
+}
+
+func (inspection *Inspection) capturePrivateCredentialParents(
+	target domain.Location,
+	host Host,
+) {
+	for _, path := range []domain.ArtifactPath{
+		"mainframe",
+		"mainframe/secrets",
+	} {
+		location := domain.Location{Root: target.Root, Path: path}
+		entry, err := host.Inspect(location, false)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil ||
+			entry.Kind != hostfs.EntryDirectory ||
+			entry.Mode != 0o700 {
+			snapshot := inspection.files[target]
+			snapshot.problem = "private credential directory is unsafe"
+			inspection.files[target] = snapshot
+			return
+		}
+	}
+}
+
+func (inspection *Inspection) capturePrivateCredentialFile(
+	location domain.Location,
+	host Host,
+) {
+	if _, exists := inspection.files[location]; exists {
+		return
+	}
+	entry, err := host.InspectDigest(location)
+	if errors.Is(err, fs.ErrNotExist) {
+		inspection.files[location] = mcpFileSnapshot{}
+		return
+	}
+	if err != nil {
+		inspection.files[location] = mcpFileSnapshot{
+			problem: "private credential file inspection failed",
+		}
+		return
+	}
+	snapshot := mcpFileSnapshot{
+		kind: entry.Kind, path: entry.Path, mode: entry.Mode,
+		device: entry.Device, inode: entry.Inode,
+		birthSeconds: entry.BirthSeconds, birthNanoseconds: entry.BirthNanoseconds,
+	}
+	if entry.Kind != hostfs.EntryRegular {
+		snapshot.problem = "private credential target is not a regular file"
+	} else {
+		snapshot.present = true
+		snapshot.sha256 = entry.SHA256
+	}
+	inspection.files[location] = snapshot
 }
 
 func (inspection *Inspection) captureFile(location domain.Location, host Host) {
@@ -120,19 +184,21 @@ func (inspection Inspection) inspectProjection(
 		inspection.files[projection.RegistryTarget],
 	)
 	snapshot := projectionSnapshot{
-		existingPresent:    existing.present,
-		existingComparable: existing.comparable,
-		existingRaw:        existing.raw,
-		configProblem:      existing.problem,
-		registryProblem:    registryProblem,
+		existingPresent:      existing.present,
+		existingComparable:   existing.comparable,
+		existingRaw:          existing.raw,
+		configProblem:        existing.problem,
+		registryProblem:      registryProblem,
+		privateSecretProblem: inspection.files[projection.SecretTarget()].problem,
 	}
 	if registryMissing || registryProblem != "" {
 		return snapshot
 	}
-	owned, tombstone, present, materializable, err := registryEntry(
+	owned, tombstone, present, materializable, privateSecretOwned, err := registryEntry(
 		registry,
 		projection,
 		existing,
+		inspection.files[projection.SecretTarget()],
 	)
 	if err != nil {
 		snapshot.registryProblem = err.Error()
@@ -142,6 +208,7 @@ func (inspection Inspection) inspectProjection(
 	snapshot.ownedTombstone = tombstone
 	snapshot.ownedPresent = present
 	snapshot.ownedMaterializable = materializable
+	snapshot.privateSecretOwned = privateSecretOwned
 	return snapshot
 }
 
@@ -191,51 +258,69 @@ func registryEntry(
 	document jsondocument.Document,
 	projection releasecontract.MCPProjection,
 	existing targetEntryObservation,
-) (string, bool, bool, bool, error) {
+	secretFile mcpFileSnapshot,
+) (string, bool, bool, bool, bool, error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(document.Canonical()), &root); err != nil ||
 		len(root) != 2 || string(root["version"]) != "1" || root["servers"] == nil {
-		return "", false, false, false, fmt.Errorf("MCP ownership registry is invalid")
+		return "", false, false, false, false, fmt.Errorf("MCP ownership registry is invalid")
 	}
 	pointer, err := jsondocument.ParsePointer(
 		projection.RegistryEntriesPointer + "/" + projection.EntryKey,
 	)
 	if err != nil {
-		return "", false, false, false, fmt.Errorf("MCP registry pointer is invalid")
+		return "", false, false, false, false, fmt.Errorf("MCP registry pointer is invalid")
 	}
 	raw, status := document.Lookup(pointer)
 	if status == jsondocument.Missing {
-		return "", false, false, false, nil
+		return "", false, false, false, false, nil
 	}
 	if status != jsondocument.Found {
-		return "", false, false, false, fmt.Errorf("MCP ownership registry entries are invalid")
+		return "", false, false, false, false, fmt.Errorf("MCP ownership registry entries are invalid")
 	}
 	if raw == "null" {
-		return "", true, true, true, nil
+		return "", true, true, true, false, nil
 	}
 	var object map[string]any
 	if err := json.Unmarshal([]byte(raw), &object); err != nil || object == nil {
-		return "", false, false, false, fmt.Errorf("MCP ownership registry entry is invalid")
+		return "", false, false, false, false, fmt.Errorf("MCP ownership registry entry is invalid")
 	}
-	if projection.ComponentID == domain.ComponentAntigravity2 {
-		owned, materializable, recognized, decodeErr :=
-			decodeAntigravitySecretRegistryEntry(raw, existing)
-		if decodeErr != nil {
-			return "", false, false, false, decodeErr
-		}
-		if recognized {
-			return owned, false, true, materializable, nil
-		}
+	owned, materializable, private, recognized, decodeErr :=
+		decodeSpecialRegistryEntry(projection, raw, existing, secretFile)
+	if decodeErr != nil {
+		return "", false, false, false, private, decodeErr
+	}
+	if recognized {
+		return owned, false, true, materializable, private, nil
 	}
 	if projection.TargetDocumentFormat() != releasecontract.MCPProjectionDocumentTOML {
-		return raw, false, true, true, nil
+		return raw, false, true, true, false, nil
 	}
 	entry, materializable, err := decodeCodexRegistryEntry([]byte(raw))
 	if err != nil {
-		return "", false, false, false, err
+		return "", false, false, false, false, err
 	}
 	if materializable {
-		return entry, false, true, true, nil
+		return entry, false, true, true, false, nil
 	}
-	return raw, false, true, false, nil
+	return raw, false, true, false, false, nil
+}
+
+func decodeSpecialRegistryEntry(
+	projection releasecontract.MCPProjection,
+	raw string,
+	existing targetEntryObservation,
+	secretFile mcpFileSnapshot,
+) (string, bool, bool, bool, error) {
+	if projection.ComponentID == domain.ComponentOpenCode {
+		owned, materializable, recognized, err :=
+			decodeOpenCodeSecretRegistryEntry(raw, secretFile)
+		return owned, materializable, recognized, recognized, err
+	}
+	if projection.ComponentID == domain.ComponentAntigravity2 {
+		owned, materializable, recognized, err :=
+			decodeAntigravitySecretRegistryEntry(raw, existing)
+		return owned, materializable, false, recognized, err
+	}
+	return "", false, false, false, nil
 }

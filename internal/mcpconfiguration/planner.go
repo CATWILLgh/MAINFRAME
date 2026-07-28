@@ -141,7 +141,33 @@ func (inspection Inspection) projectionIntent(
 			projection, IntentConflict, snapshot.configProblem,
 		), true, true
 	}
+	if snapshot.privateSecretProblem != "" &&
+		!snapshot.privateSecretOwned {
+		return newIntent(
+			projection,
+			IntentConflict,
+			snapshot.privateSecretProblem,
+		), true, true
+	}
 	intent, exists := reconcile(projection, snapshot, selected)
+	if snapshot.privateSecretOwned && !snapshot.ownedMaterializable {
+		return newIntent(
+			projection,
+			IntentRelinquish,
+			"managed private credential file changed or is unsafe",
+		), true, false
+	}
+	if intent.Kind == IntentReady &&
+		projection.ComponentID == domain.ComponentOpenCode {
+		if binding, bound := inspection.credentials[projection.ID]; bound &&
+			binding.ProfileID == "remote-api-key" {
+			intent = newIntent(
+				projection,
+				IntentUpdate,
+				"managed private credential file will be refreshed",
+			)
+		}
+	}
 	return intent, exists, intent.Kind == IntentConflict
 }
 

@@ -63,9 +63,7 @@ def install_exact_antigravity_base(
     write_draft_credential(home, secret_name)
     _write_fake_antigravity(home)
     managed = install_exact_component_closure(release, home, "antigravity-2")
-    path = home / ".config/credentials/secrets.env"
-    path.write_text(f"{secret_name}={secret_value}\n")
-    path.chmod(0o600)
+    write_draft_secret(home, secret_name, secret_value)
     return managed
 
 
@@ -89,6 +87,13 @@ def write_draft_credential(home: Path, secret_name: str) -> None:
     path.chmod(0o600)
 
 
+def write_draft_secret(home: Path, secret_name: str, secret_value: str) -> None:
+    path = home / ".config/credentials/secrets.env"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{secret_name}={secret_value}\n")
+    path.chmod(0o600)
+
+
 def _write_fake_antigravity(home: Path) -> None:
     path = home / "Applications/Antigravity.app/Contents/Info.plist"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +105,15 @@ def _write_fake_antigravity(home: Path) -> None:
 
 def inode_snapshot(paths: set[Path]) -> dict[Path, int]:
     return {path: path.lstat().st_ino for path in paths}
+
+
+def sentinel_paths(home: Path, sentinel: bytes) -> set[str]:
+    return {
+        path.relative_to(home).as_posix()
+        for path in home.rglob("*")
+        if path.is_file() and not path.is_symlink()
+        and sentinel in path.read_bytes()
+    }
 
 
 def _release_manifests(release: Path) -> dict[str, tuple[Path, dict]]:

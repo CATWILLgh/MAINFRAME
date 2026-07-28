@@ -54,7 +54,7 @@ func exactContext7Request(request Request) (domain.ComponentID, bool) {
 		return "", false
 	}
 	if len(request.MCPSelections) == 0 {
-		return exactAntigravityContext7Removal(request)
+		return exactContext7Removal(request)
 	}
 	if len(request.MCPSelections) != 1 {
 		return "", false
@@ -70,7 +70,8 @@ func exactContext7Request(request Request) (domain.ComponentID, bool) {
 		return "", false
 	}
 	if selection.ProfileID == "remote-keyless" {
-		return adapter, adapter == domain.ComponentAntigravity2 &&
+		return adapter, (adapter == domain.ComponentAntigravity2 ||
+			adapter == domain.ComponentOpenCode) &&
 			len(request.MCPCredentials) == 0
 	}
 	if selection.ProfileID != "remote-api-key" ||
@@ -82,15 +83,16 @@ func exactContext7Request(request Request) (domain.ComponentID, bool) {
 		credential.ProfileID == selection.ProfileID
 }
 
-func exactAntigravityContext7Removal(
+func exactContext7Removal(
 	request Request,
 ) (domain.ComponentID, bool) {
 	if len(request.MCPCredentials) != 0 ||
-		len(request.Components) != 1 ||
-		request.Components[0] != domain.ComponentAntigravity2 {
+		len(request.Components) != 1 {
 		return "", false
 	}
-	return domain.ComponentAntigravity2, true
+	adapter := request.Components[0]
+	return adapter, adapter == domain.ComponentAntigravity2 ||
+		adapter == domain.ComponentOpenCode
 }
 
 func credentialMutationScope(

@@ -5,18 +5,85 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
-func TestApplyConfirmedCreatesKeyedOpenCodeAndCredentialStateTogether(t *testing.T) {
+func TestApplyConfirmedManagesOpenCodePrivateCredentialFileLifecycle(t *testing.T) {
+	fixture := newOpenCodeCredentialFixture(t)
+	fixture.apply(fixture.keyed)
+	assertCredentialMCPApplyState(
+		t,
+		fixture.home,
+		fixture.config,
+		"raw-secret-must-not-appear",
+	)
+
+	fixture.rotate("rotated-test-secret")
+	fixture.apply(fixture.keyed)
+	assertCredentialMCPApplyState(
+		t,
+		fixture.home,
+		fixture.config,
+		"rotated-test-secret",
+	)
+
+	fixture.apply(fixture.keyless())
+	assertCredentialMCPKeylessState(t, fixture.config)
+
+	fixture.apply(fixture.keyed)
+	assertCredentialMCPApplyState(
+		t,
+		fixture.home,
+		fixture.config,
+		"rotated-test-secret",
+	)
+
+	fixture.apply(fixture.removed())
+	assertCredentialMCPRemovedState(t, fixture.config)
+}
+
+func TestOpenCodePrivateCredentialRejectsPermissiveParentDirectory(t *testing.T) {
+	fixture := newOpenCodeCredentialFixture(t)
+	directory := filepath.Join(
+		fixture.config,
+		"opencode",
+		"mainframe",
+		"secrets",
+	)
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	reviewed, err := fixture.service.Review(fixture.keyed)
+	if err == nil || reviewed.Applicable() {
+		t.Fatal("permissive private credential parent was accepted")
+	}
+	assertCredentialMCPSecretAbsent(t, fixture.config)
+}
+
+type openCodeCredentialFixture struct {
+	t               *testing.T
+	home            string
+	config          string
+	secretValuePath string
+	service         application.Service
+	keyed           application.Request
+}
+
+func newOpenCodeCredentialFixture(t *testing.T) openCodeCredentialFixture {
+	t.Helper()
 	home := canonicalTempDir(t)
 	config := canonicalTempDir(t)
 	state := canonicalTempDir(t)
@@ -24,27 +91,30 @@ func TestApplyConfirmedCreatesKeyedOpenCodeAndCredentialStateTogether(t *testing
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", config)
 	t.Setenv("XDG_STATE_HOME", state)
-	t.Setenv("CONTEXT7_HOME_KEY", "raw-secret-must-not-appear")
+	secretValuePath := filepath.Join(t.TempDir(), "context7-value")
+	if err := os.WriteFile(
+		secretValuePath,
+		[]byte("raw-secret-must-not-appear"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MAINFRAME_TEST_SECRET_VALUE", secretValuePath)
+	writeAntigravitySecretHelper(t, home)
 	environment := credentialMCPEnvironment(home, config, state)
 	namespace := credentialMCPNamespace(t, environment, releaseRoot)
 	catalog := credentialMCPApplyCatalog(t)
 	definitions := credentialLifecycleDefinitions(t)
-	lifecycleService, err := buildPreviewServiceFrom(
-		releaseRoot,
-		releasecontract.Release{
-			ID: "credential-mcp-test", Model: previewOwnershipModel(t),
-			MCPCatalog: catalog,
-			MCPProjections: []releasecontract.MCPProjection{
-				previewMCPProjection(),
-			},
+	release := releasecontract.Release{
+		ID: "credential-mcp-test", Model: previewOwnershipModel(t),
+		MCPCatalog: catalog,
+		MCPProjections: []releasecontract.MCPProjection{
+			previewMCPProjection(),
 		},
-	)
-	if err != nil {
-		t.Fatalf("build preview service: %v", err)
 	}
-	builder := credentialLifecycleSnapshotBuilder{
+	builder := refreshingCredentialMCPSnapshotBuilder{
 		namespace: namespace, definitions: definitions,
-		lifecycle: lifecycleService,
+		releaseRoot: releaseRoot, release: release,
 	}
 	service := credentialMCPApplyService(t, builder, environment, releaseRoot)
 	desired := credentialLifecycleInstances(
@@ -62,15 +132,87 @@ func TestApplyConfirmedCreatesKeyedOpenCodeAndCredentialStateTogether(t *testing
 		}},
 		CredentialInstances: &desired,
 	}
+	return openCodeCredentialFixture{
+		t: t, home: home, config: config,
+		secretValuePath: secretValuePath,
+		service:         service, keyed: request,
+	}
+}
 
-	reviewed, err := service.Review(request)
+func (fixture openCodeCredentialFixture) keyless() application.Request {
+	keyless := fixture.keyed
+	keyless.MCPSelections = []mcpcatalog.Selection{{
+		ServerID: "context7", ProfileID: "remote-keyless",
+		Adapters: []domain.ComponentID{domain.ComponentOpenCode},
+	}}
+	keyless.MCPCredentials = nil
+	return keyless
+}
+
+func (fixture openCodeCredentialFixture) removed() application.Request {
+	removed := fixture.keyed
+	removed.MCPSelections = nil
+	removed.MCPCredentials = nil
+	return removed
+}
+
+func (fixture openCodeCredentialFixture) rotate(value string) {
+	fixture.t.Helper()
+	if err := os.WriteFile(
+		fixture.secretValuePath,
+		[]byte(value),
+		0o600,
+	); err != nil {
+		fixture.t.Fatal(err)
+	}
+}
+
+func (fixture openCodeCredentialFixture) apply(request application.Request) {
+	fixture.t.Helper()
+	reviewed, err := fixture.service.Review(request)
 	if err != nil {
-		t.Fatalf("Review() error = %v", err)
+		fixture.t.Fatalf("Review() error = %v", err)
 	}
-	if _, err := service.ApplyConfirmed(reviewed); err != nil {
-		t.Fatalf("ApplyConfirmed() error = %v", err)
+	if _, err := fixture.service.ApplyConfirmed(reviewed); err != nil {
+		fixture.t.Fatalf("ApplyConfirmed() error = %v", err)
 	}
-	assertCredentialMCPApplyState(t, home, config)
+}
+
+type refreshingCredentialMCPSnapshotBuilder struct {
+	namespace   hostfs.Namespace
+	definitions credentialcatalog.Definitions
+	releaseRoot string
+	release     releasecontract.Release
+}
+
+func (builder refreshingCredentialMCPSnapshotBuilder) Build(
+	request application.Request,
+) (application.Snapshot, error) {
+	lifecycleService, err := buildPreviewServiceFrom(
+		builder.releaseRoot,
+		builder.release,
+	)
+	if err != nil {
+		return application.Snapshot{}, err
+	}
+	snapshot := application.Snapshot{
+		Release: executor.ReleaseIdentity{
+			ID:          builder.release.ID,
+			IndexSHA256: applyRuntimeDigest(7),
+		},
+		Lifecycle: lifecycleService,
+	}
+	if request.CredentialInstances != nil || len(request.MCPCredentials) > 0 {
+		credentials, observeErr := credentialcatalog.ObserveInstances(
+			builder.namespace,
+			builder.definitions,
+		)
+		if observeErr != nil {
+			return application.Snapshot{}, observeErr
+		}
+		snapshot.Credentials = &credentials
+	}
+	return snapshot, nil
 }
 
 func credentialMCPNamespace(
@@ -145,36 +287,4 @@ func credentialMCPApplyCatalog(t *testing.T) mcpcatalog.Catalog {
 		t.Fatalf("parse MCP catalog: %v", err)
 	}
 	return catalog
-}
-
-func assertCredentialMCPApplyState(t *testing.T, home string, config string) {
-	t.Helper()
-	instances := filepath.Join(
-		config,
-		"credentials",
-		"mainframe",
-		"instances.json",
-	)
-	info, err := os.Stat(instances)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("credential state = %#v, %v", info, err)
-	}
-	openCodePath := filepath.Join(config, "opencode", "opencode.json")
-	payload, err := os.ReadFile(openCodePath)
-	if err != nil {
-		t.Fatalf("read OpenCode config: %v", err)
-	}
-	content := string(payload)
-	if !strings.Contains(content, "{env:CONTEXT7_HOME_KEY}") ||
-		strings.Contains(content, "raw-secret-must-not-appear") {
-		t.Fatalf("OpenCode credential projection = %s", content)
-	}
-	for _, path := range []string{
-		filepath.Join(home, ".claude"),
-		filepath.Join(home, ".codex"),
-	} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("unselected config root exists: %s (%v)", path, err)
-		}
-	}
 }

@@ -14,6 +14,12 @@ The terminal interface supports masked, paste-capable secret entry. The value
 is sent directly to the secret helper and is not placed in command arguments,
 preview text, logs, journals, diagnostics, or the credential catalog.
 
+When keyed Context7 is applied to OpenCode, the selected reference is resolved
+only after final confirmation. MAINFRAME writes the value to a private
+OpenCode-only file and places a `{file:...}` reference in `opencode.json`.
+Switching to keyless mode or removing Context7 removes that managed private
+file. The catalog continues to own only metadata and references.
+
 `mainframe credentials` prints the value-free catalog as versioned JSON.
 `mainframe credentials uses <name>` lists instance roles that reference one
 secret name. It does not read that secret.

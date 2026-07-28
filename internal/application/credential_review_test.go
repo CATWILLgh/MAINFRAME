@@ -237,6 +237,12 @@ func (applicationCredentialHost) Inspect(
 	return hostfs.Entry{}, fs.ErrNotExist
 }
 
+func (applicationCredentialHost) InspectDigest(
+	domain.Location,
+) (hostfs.Entry, error) {
+	return hostfs.Entry{}, fs.ErrNotExist
+}
+
 func applicationCredentialDefinitions(
 	t *testing.T,
 ) credentialcatalog.Definitions {

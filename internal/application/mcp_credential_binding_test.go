@@ -67,7 +67,7 @@ func TestReviewResolvesNewMCPInstanceFromTheSameDesiredPlan(t *testing.T) {
 	content := string(openCodeAfter)
 	for _, value := range []string{
 		`"CONTEXT7_API_KEY"`,
-		`"{env:CONTEXT7_HOME_KEY}"`,
+		`"{file:mainframe/secrets/context7-api-key}"`,
 	} {
 		if !strings.Contains(content, value) {
 			t.Fatalf("OpenCode after-image omits %q: %s", value, content)

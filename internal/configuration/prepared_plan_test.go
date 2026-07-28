@@ -101,6 +101,36 @@ func TestNewPreparedPlanValidatesExactRemovalAfterImage(t *testing.T) {
 	}
 }
 
+func TestNewPreparedPlanRestrictsManagedSecretRemovalToOpenCodeContext7(t *testing.T) {
+	valid := preparedTransition(
+		"opencode.mcp.context7",
+		"mainframe/secrets/context7-api-key",
+		27,
+	)
+	valid.Mutations[0].Disposition = configuration.MutationRemoveManagedSecret
+	valid.Mutations[0].Target.Root = domain.RootOpenCodeConfig
+	valid.Mutations[0].After = configuration.AfterImage{}
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{valid},
+	); err != nil {
+		t.Fatalf("NewPreparedPlan() rejected exact managed secret removal: %v", err)
+	}
+
+	foreign := preparedTransition(
+		"opencode.mcp.context7",
+		"mainframe/secrets/other",
+		28,
+	)
+	foreign.Mutations[0].Disposition = configuration.MutationRemoveManagedSecret
+	foreign.Mutations[0].Target.Root = domain.RootOpenCodeConfig
+	foreign.Mutations[0].After = configuration.AfterImage{}
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{foreign},
+	); err == nil {
+		t.Fatal("NewPreparedPlan() accepted broad managed secret removal")
+	}
+}
+
 func TestCombinePreparedPlansRevalidatesTheCombinedBoundary(t *testing.T) {
 	first, err := configuration.NewPreparedPlan([]configuration.Transition{
 		preparedTransition("first", "first.json", 31),

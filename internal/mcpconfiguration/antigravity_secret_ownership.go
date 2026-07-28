@@ -107,6 +107,25 @@ func (builder *mcpPreparation) secretMaterializations(
 ) []configuration.SecretMaterializationRecipe {
 	var result []configuration.SecretMaterializationRecipe
 	for _, intent := range plan.Intents {
+		if intent.ComponentID == domain.ComponentOpenCode &&
+			intent.ProfileID == "remote-api-key" &&
+			(intent.Kind == IntentAdd || intent.Kind == IntentUpdate) {
+			projection, projectionExists := builder.inspection.projectionByID(
+				intent.ProjectionID,
+			)
+			binding, bindingExists := builder.inspection.credentials[intent.ProjectionID]
+			if projectionExists && bindingExists {
+				result = append(result, configuration.SecretMaterializationRecipe{
+					ResourceID:     projection.ID,
+					FileTarget:     projection.SecretTarget(),
+					RegistryTarget: projection.RegistryTarget,
+					RegistryDigestPointer: projection.RegistryEntriesPointer +
+						"/" + projection.EntryKey + "/secret_file_sha256",
+					SecretReference: binding.EnvironmentVariable,
+				})
+			}
+			continue
+		}
 		if intent.ComponentID != domain.ComponentAntigravity2 ||
 			intent.ProfileID != "remote-api-key" ||
 			(intent.Kind != IntentAdd && intent.Kind != IntentUpdate) {

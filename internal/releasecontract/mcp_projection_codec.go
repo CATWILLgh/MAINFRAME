@@ -8,6 +8,7 @@ import (
 
 type mcpProjectionCodecContract struct {
 	target                   domain.Location
+	secretTarget             domain.Location
 	mapPointer               string
 	registryTarget           domain.Location
 	registryPointer          string
@@ -66,6 +67,10 @@ var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContrac
 	{domain.ComponentOpenCode, MCPProjectionOpenCodeRemote}: {
 		target: domain.Location{
 			Root: domain.RootOpenCodeConfig, Path: "opencode.json",
+		},
+		secretTarget: domain.Location{
+			Root: domain.RootOpenCodeConfig,
+			Path: "mainframe/secrets/context7-api-key",
 		},
 		mapPointer: "/mcp",
 		registryTarget: domain.Location{

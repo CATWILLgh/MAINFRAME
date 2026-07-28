@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
@@ -76,6 +75,100 @@ func TestApplyJournalNeverContainsResolvedSecret(t *testing.T) {
 	}
 	if resolver.calls != 1 {
 		t.Fatalf("resolver calls = %d, want 1", resolver.calls)
+	}
+}
+
+func TestApplyPrivateSecretFileJournalNeverContainsResolvedSecret(t *testing.T) {
+	preview := secretFileExecutorPreview(t)
+	fixture := newFixture(preview)
+	configurations := newFakeConfigurationWorkspace(fixture.store)
+	distinctive := "FAKE_PRIVATE_FILE_SECRET_SENTINEL"
+	resolver := &countingSecretResolver{value: distinctive}
+
+	_, err := NewWithConfigurationAndSecrets(
+		fixture.locker,
+		fixture.store,
+		fixture.refresher,
+		fixture.workspace,
+		configurations,
+		resolver,
+	).Apply(preview)
+	if err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+	for _, journal := range fixture.store.saves {
+		encoded, encodeErr := encodeJournal(journal)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+		if strings.Contains(string(encoded), distinctive) {
+			t.Fatal("transaction journal contains private file secret")
+		}
+	}
+	if resolver.calls != 1 {
+		t.Fatalf("resolver calls = %d, want 1", resolver.calls)
+	}
+}
+
+func TestApplyRollsBackUncertainPrivateSecretFilePublication(t *testing.T) {
+	preview := secretFileExecutorPreview(t)
+	fixture := newFixture(preview)
+	configurations := newFakeConfigurationWorkspace(fixture.store)
+	configurations.failCall = "publish"
+	configurations.failAfterWrite = true
+	resolver := &countingSecretResolver{value: "FAKE_VALUE"}
+
+	_, err := NewWithConfigurationAndSecrets(
+		fixture.locker,
+		fixture.store,
+		fixture.refresher,
+		fixture.workspace,
+		configurations,
+		resolver,
+	).Apply(preview)
+
+	if err == nil || len(configurations.published) != 0 ||
+		len(configurations.public) != 0 ||
+		!containsConfigurationCall(
+			configurations.calls,
+			"rollback:mainframe/secrets/context7-api-key",
+		) {
+		t.Fatalf(
+			"uncertain private-file publication was not rolled back: error=%v calls=%#v",
+			err,
+			configurations.calls,
+		)
+	}
+}
+
+func TestApplyRejectsConcurrentPrivateSecretFileCreation(t *testing.T) {
+	preview := secretFileExecutorPreview(t)
+	fixture := newFixture(preview)
+	configurations := newFakeConfigurationWorkspace(fixture.store)
+	target := domain.Location{
+		Root: domain.RootOpenCodeConfig,
+		Path: "mainframe/secrets/context7-api-key",
+	}
+	configurations.public[target] = configurationState(
+		testDigest("concurrent"),
+		0o600,
+		testIdentity(1, 20),
+		testIdentity(1, 30),
+	)
+	resolver := &countingSecretResolver{value: "FAKE_VALUE"}
+
+	_, err := NewWithConfigurationAndSecrets(
+		fixture.locker,
+		fixture.store,
+		fixture.refresher,
+		fixture.workspace,
+		configurations,
+		resolver,
+	).Apply(preview)
+
+	if err == nil || !strings.Contains(err.Error(), "changed after preview") ||
+		len(configurations.published) != 0 {
+		t.Fatalf("concurrent private-file creation error = %v", err)
 	}
 }
 
@@ -215,108 +308,5 @@ func TestRecoverDoesNotResolveSecrets(t *testing.T) {
 	}
 	if resolver.calls != 0 {
 		t.Fatalf("resolver calls = %d, want 0", resolver.calls)
-	}
-}
-
-type countingSecretResolver struct {
-	value string
-	err   error
-	calls int
-}
-
-func (resolver *countingSecretResolver) ResolveSecret(string) (string, error) {
-	resolver.calls++
-	return resolver.value, resolver.err
-}
-
-func secretExecutorPreview(t *testing.T) Preview {
-	t.Helper()
-	configTarget := secretConfigTarget()
-	registryTarget := secretRegistryTarget()
-	resourceID := "antigravity2.mcp.context7"
-	transitions := []configuration.Transition{{
-		ResourceIDs: []string{resourceID},
-		Mutations: []configuration.FileMutation{
-			secretExecutorMutation(configTarget, []byte(
-				`{"mcp":{"context7":{"apiKey":`+
-					configuration.DeferredSecretJSONPlaceholder+`}}}`,
-			)),
-			secretExecutorMutation(registryTarget, []byte(
-				`{"servers":{"context7":{"digest":"`+
-					configuration.DeferredSecretDigestPlaceholder+`"}}}`,
-			)),
-		},
-	}}
-	plan, err := configuration.NewPreparedPlanWithMaterializations(
-		transitions,
-		nil,
-		[]configuration.SecretMaterializationRecipe{{
-			ResourceID:            resourceID,
-			ConfigTarget:          configTarget,
-			ConfigEntryPointer:    "/mcp/context7",
-			ConfigValuePointer:    "/mcp/context7/apiKey",
-			RegistryTarget:        registryTarget,
-			RegistryDigestPointer: "/servers/context7/digest",
-			SecretReference:       "CONTEXT7_FAKE_KEY",
-		}},
-	)
-	if err != nil {
-		t.Fatalf("NewPreparedPlanWithMaterializations() error = %v", err)
-	}
-	return Preview{
-		Release:       ReleaseIdentity{ID: "release", IndexSHA256: testDigest("release")},
-		Desired:       []domain.ComponentID{domain.ComponentAntigravity2},
-		Plan:          domain.Plan{},
-		Configuration: plan,
-	}
-}
-
-func secretExecutorMutation(
-	target domain.Location,
-	content []byte,
-) configuration.FileMutation {
-	return configuration.FileMutation{
-		Disposition: configuration.MutationPresent,
-		Target:      target,
-		After: configuration.AfterImage{
-			Exists:  true,
-			Content: content,
-			Mode:    0o600,
-		},
-	}
-}
-
-func secretConfigTarget() domain.Location {
-	return domain.Location{
-		Root: domain.RootAntigravityData,
-		Path: "mcp_config.json",
-	}
-}
-
-func secretRegistryTarget() domain.Location {
-	return domain.Location{
-		Root: domain.RootAntigravityData,
-		Path: "mainframe/mcp-ownership.json",
-	}
-}
-
-func setDesiredConfigurationStates(
-	t *testing.T,
-	workspace *fakeConfigurationWorkspace,
-	plan configuration.PreparedPlan,
-	resolver configuration.SecretResolver,
-) {
-	t.Helper()
-	materialized, err := plan.MaterializeSecrets(resolver)
-	if err != nil {
-		t.Fatalf("MaterializeSecrets() error = %v", err)
-	}
-	for index, mutation := range materialized.Transitions()[0].Mutations {
-		workspace.public[mutation.Target] = configurationState(
-			payloadDigest(mutation.After.Content),
-			mutation.After.Mode,
-			testIdentity(1, uint64(index+10)),
-			testIdentity(1, uint64(index+20)),
-		)
 	}
 }

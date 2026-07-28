@@ -12,6 +12,7 @@ type ConfigurationMutationDisposition string
 const (
 	ConfigurationPresent             ConfigurationMutationDisposition = "present"
 	ConfigurationRemoveExactDocument ConfigurationMutationDisposition = "remove_exact_document"
+	ConfigurationRemoveManagedSecret ConfigurationMutationDisposition = "remove_managed_secret"
 )
 
 type ConfigurationFileImage struct {

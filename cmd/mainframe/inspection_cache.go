@@ -7,11 +7,26 @@ import (
 
 type inspectionReader interface {
 	Inspect(domain.Location, bool) (hostfs.Entry, error)
+	InspectDigest(domain.Location) (hostfs.Entry, error)
 }
 
 type inspectionCacheKey struct {
 	location       domain.Location
 	includeContent bool
+	digestOnly     bool
+}
+
+func (cache *inspectionCache) InspectDigest(
+	location domain.Location,
+) (hostfs.Entry, error) {
+	key := inspectionCacheKey{location: location, digestOnly: true}
+	value, exists := cache.entries[key]
+	if !exists {
+		entry, err := cache.host.InspectDigest(location)
+		value = inspectionCacheValue{entry: cloneInspectionEntry(entry), err: err}
+		cache.entries[key] = value
+	}
+	return cloneInspectionEntry(value.entry), value.err
 }
 
 type inspectionCacheValue struct {

@@ -1,6 +1,8 @@
 package hostfs_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,6 +13,30 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 )
+
+func TestInspectDigestReturnsIdentityAndDigestWithoutContent(t *testing.T) {
+	base := t.TempDir()
+	home := filepath.Join(base, "home")
+	mustMkdirAll(t, home)
+	const value = "private-value"
+	writeHostFile(t, filepath.Join(home, "credential"), value)
+	namespace := openTestNamespace(t, home, filepath.Join(base, "release"))
+
+	entry, err := namespace.InspectDigest(
+		domain.Location{Root: domain.RootHome, Path: "credential"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(value))
+	if entry.Kind != hostfs.EntryRegular ||
+		entry.SHA256 != hex.EncodeToString(sum[:]) ||
+		entry.Content != nil ||
+		entry.Device == 0 ||
+		entry.Inode == 0 {
+		t.Fatalf("digest-only entry = %#v", entry)
+	}
+}
 
 func TestInspectReadsRegularFileWithoutFollowingFinalSymlink(t *testing.T) {
 	base := t.TempDir()

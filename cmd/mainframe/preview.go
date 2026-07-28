@@ -290,13 +290,18 @@ func buildPreviewServiceFromContextWithObservation(
 	return service, nil
 }
 
+type previewInspectionHost interface {
+	configuration.Host
+	mcpconfiguration.Host
+}
+
 func buildInspectedService(
 	releaseRoot string,
 	release releasecontract.Release,
 	cwd string,
 	client codexstate.Client,
 	layout hostlayout.Layout,
-	inspectionHost configuration.Host,
+	inspectionHost previewInspectionHost,
 	observed domain.ObservedState,
 	scope diagnosticsObservationScope,
 ) (lifecycle.Service, error) {

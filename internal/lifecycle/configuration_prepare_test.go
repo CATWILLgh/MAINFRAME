@@ -1,6 +1,8 @@
 package lifecycle
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"io/fs"
 	"os"
 	"strings"
@@ -299,6 +301,19 @@ func (host lifecyclePreparationHost) Inspect(
 	if !exists {
 		return hostfs.Entry{}, fs.ErrNotExist
 	}
+	return entry, nil
+}
+
+func (host lifecyclePreparationHost) InspectDigest(
+	location domain.Location,
+) (hostfs.Entry, error) {
+	entry, err := host.Inspect(location, true)
+	if err != nil {
+		return hostfs.Entry{}, err
+	}
+	digest := sha256.Sum256(entry.Content)
+	entry.SHA256 = fmt.Sprintf("%x", digest)
+	entry.Content = nil
 	return entry, nil
 }
 

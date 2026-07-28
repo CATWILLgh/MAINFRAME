@@ -19,6 +19,7 @@ type mcpPreparation struct {
 	baseIndex  map[domain.Location]baseMutationReference
 	baseAfter  map[domain.Location][]byte
 	after      map[domain.Location][]byte
+	removed    map[domain.Location]bool
 	touched    map[domain.Location]bool
 	groups     map[domain.Location]map[string]bool
 	registryOf map[domain.Location]domain.Location
@@ -59,6 +60,46 @@ func (builder *mcpPreparation) apply(
 		}
 	}
 	builder.addGroup(projection)
+	if err := builder.applyPrivateCredentialFile(projection, intent); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (builder *mcpPreparation) applyPrivateCredentialFile(
+	projection releasecontract.MCPProjection,
+	intent Intent,
+) error {
+	target := projection.SecretTarget()
+	if !target.Valid() {
+		return nil
+	}
+	binding, selected := builder.inspection.credentials[projection.ID]
+	if intent.Kind != IntentAdd &&
+		intent.Kind != IntentUpdate &&
+		intent.Kind != IntentRemove {
+		return nil
+	}
+	snapshot := builder.inspection.files[target]
+	projectionSnapshot := builder.inspection.snapshots[projection.ID]
+	if snapshot.problem != "" ||
+		(snapshot.present && !projectionSnapshot.privateSecretOwned) {
+		return fmt.Errorf("private credential file is not safely replaceable")
+	}
+	if !selected || binding.ProfileID != "remote-api-key" {
+		if !projectionSnapshot.privateSecretOwned {
+			return nil
+		}
+		builder.removed[target] = true
+		builder.touched[target] = true
+		builder.registryOf[target] = projection.Target
+		return nil
+	}
+	builder.setAfter(
+		target,
+		[]byte(configuration.DeferredSecretFilePlaceholder),
+	)
+	builder.registryOf[target] = projection.Target
 	return nil
 }
 
@@ -100,6 +141,9 @@ func (builder *mcpPreparation) mcpRegistryEntry(
 	}
 	if projection.ComponentID == domain.ComponentOpenCode &&
 		projection.TargetDocumentFormat() == releasecontract.MCPProjectionDocumentJSON {
+		if binding, exists := builder.inspection.credentials[projection.ID]; exists {
+			return encodeOpenCodeSecretRegistryEntry(projection, binding)
+		}
 		return projection.DesiredEntry, nil
 	}
 	if projection.ComponentID == domain.ComponentCodex &&
@@ -274,6 +318,13 @@ func (builder *mcpPreparation) mutation(
 	if !exists || snapshot.problem != "" {
 		return nil, fmt.Errorf("MCP target snapshot is unavailable")
 	}
+	if builder.removed[target] {
+		return &configuration.FileMutation{
+			Disposition: configuration.MutationRemoveManagedSecret,
+			Target:      target,
+			Before:      mcpBeforeImage(snapshot),
+		}, nil
+	}
 	after := builder.after[target]
 	if snapshot.present && bytes.Equal(snapshot.raw, after) {
 		return nil, nil
@@ -298,9 +349,13 @@ func mcpBeforeImage(snapshot mcpFileSnapshot) configuration.BeforeImage {
 	if !snapshot.present {
 		return configuration.BeforeImage{}
 	}
-	digest := sha256.Sum256(snapshot.raw)
+	digest := snapshot.sha256
+	if digest == "" {
+		sum := sha256.Sum256(snapshot.raw)
+		digest = hex.EncodeToString(sum[:])
+	}
 	return configuration.BeforeImage{
-		Exists: true, SHA256: hex.EncodeToString(digest[:]),
+		Exists: true, SHA256: digest,
 		Mode: snapshot.mode, Device: snapshot.device, Inode: snapshot.inode,
 		BirthSeconds:     snapshot.birthSeconds,
 		BirthNanoseconds: snapshot.birthNanoseconds,

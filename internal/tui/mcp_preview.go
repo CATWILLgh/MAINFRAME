@@ -117,6 +117,13 @@ func (model *Model) credentialPreviewStatus(connection mcpcatalog.Connection) st
 						instance.ID,
 					)
 				}
+				if isKeyedOpenCodeConnection(connection) {
+					return fmt.Sprintf(
+						"Credential instance: %s (%s); value is resolved only during final Apply and stored in a private OpenCode-only file.",
+						instance.Name,
+						instance.ID,
+					)
+				}
 				return fmt.Sprintf(
 					"Credential instance: %s (%s); secret value remains external.",
 					instance.Name,

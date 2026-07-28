@@ -155,6 +155,14 @@ func (projection MCPProjection) TargetDocumentFormat() MCPProjectionDocumentForm
 	return contract.documentFormat
 }
 
+func (projection MCPProjection) SecretTarget() domain.Location {
+	contract, exists := mcpProjectionContract(projection.ComponentID, projection.Codec)
+	if !exists {
+		return domain.Location{}
+	}
+	return contract.secretTarget
+}
+
 type releaseIndex struct {
 	SchemaVersion int             `json:"schema_version"`
 	Kind          string          `json:"kind"`

@@ -39,7 +39,7 @@ func TestSelectionViewSeparatesFilesystemAndConfigurationStatus(t *testing.T) {
 		"Configure your choices first",
 		"Nothing changes until you review and confirm the complete plan",
 		"When safe apply is available, one confirmation applies the reviewed changes as one transaction",
-		"Secret values remain outside MAINFRAME",
+		"Secret values are resolved only during final Apply and never shown in the interface",
 		"Return to the overview to configure MCP and additional DEV tools",
 		"Claude Code — installed · configuration 1 not assessed",
 		"Codex — needs attention",

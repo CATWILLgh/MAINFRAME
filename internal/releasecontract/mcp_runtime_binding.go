@@ -135,13 +135,18 @@ func encodeOpenCodeCredentialEntry(
 	profile mcpcatalog.Profile,
 	secretEnvironmentVariable string,
 ) (string, error) {
+	contract, _ := mcpProjectionContract(
+		domain.ComponentOpenCode,
+		MCPProjectionOpenCodeRemote,
+	)
 	entry := struct {
 		Headers map[string]string `json:"headers"`
 		Type    string            `json:"type"`
 		URL     string            `json:"url"`
 	}{
 		Headers: map[string]string{
-			context7APIKeyHeader: "{env:" + secretEnvironmentVariable + "}",
+			context7APIKeyHeader: "{file:" +
+				string(contract.secretTarget.Path) + "}",
 		},
 		Type: "remote",
 		URL:  profile.Endpoint,

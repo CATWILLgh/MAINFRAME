@@ -1,6 +1,8 @@
 package mcpconfiguration_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io/fs"
 	"os"
@@ -58,11 +60,11 @@ func TestPlanReconcilesExactAdapterOwnedEntry(t *testing.T) {
 			if len(plan.Intents) != 1 || plan.Intents[0].Kind != test.want || plan.Blocking != test.wantBlock {
 				t.Fatalf("plan = %#v, want kind %q blocking %t", plan, test.want, test.wantBlock)
 			}
-			if host.reads != 2 {
-				t.Fatalf("host reads = %d, want 2", host.reads)
+			if host.reads != 5 {
+				t.Fatalf("host reads = %d, want 5", host.reads)
 			}
 			_, _ = inspection.Plan([]domain.ComponentID{domain.ComponentOpenCode}, selections)
-			if host.reads != 2 {
+			if host.reads != 5 {
 				t.Fatalf("planning reread host: %d", host.reads)
 			}
 		})
@@ -360,5 +362,18 @@ func (host *fakeHost) Inspect(location domain.Location, includeContent bool) (ho
 	if entry.Device != 0 && entry.Inode != 0 && entry.BirthSeconds == 0 {
 		entry.BirthSeconds = int64(entry.Inode) + 1
 	}
+	return entry, nil
+}
+
+func (host *fakeHost) InspectDigest(
+	location domain.Location,
+) (hostfs.Entry, error) {
+	entry, err := host.Inspect(location, true)
+	if err != nil || entry.Kind != hostfs.EntryRegular {
+		return entry, err
+	}
+	sum := sha256.Sum256(entry.Content)
+	entry.SHA256 = hex.EncodeToString(sum[:])
+	entry.Content = nil
 	return entry, nil
 }

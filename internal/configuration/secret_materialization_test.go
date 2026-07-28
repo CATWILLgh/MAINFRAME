@@ -69,6 +69,61 @@ func TestPreparedPlanRejectsInvalidSecretMaterializationBindings(t *testing.T) {
 	}
 }
 
+func TestMaterializeSecretFileRejectsHeaderBreakingValues(t *testing.T) {
+	plan := secretFileMaterializationPlan(t)
+	for _, value := range []string{"line\nbreak", "line\rbreak", "nul\x00byte"} {
+		if _, err := plan.MaterializeSecrets(staticResolver(value)); err == nil {
+			t.Fatalf("MaterializeSecrets() accepted %q", value)
+		}
+	}
+}
+
+type staticResolver string
+
+func (resolver staticResolver) ResolveSecret(string) (string, error) {
+	return string(resolver), nil
+}
+
+func secretFileMaterializationPlan(t *testing.T) PreparedPlan {
+	t.Helper()
+	fileTarget := domain.Location{
+		Root: domain.RootOpenCodeConfig,
+		Path: "mainframe/secrets/context7-api-key",
+	}
+	registryTarget := domain.Location{
+		Root: domain.RootOpenCodeConfig,
+		Path: "opencode.json.mainframe-mcp.json",
+	}
+	plan, err := NewPreparedPlanWithMaterializations(
+		[]Transition{{
+			ResourceIDs: []string{"opencode.mcp.context7"},
+			Mutations: []FileMutation{
+				secretMutation(
+					fileTarget,
+					[]byte(DeferredSecretFilePlaceholder),
+				),
+				secretMutation(
+					registryTarget,
+					[]byte(`{"servers":{"context7":{"digest":"`+
+						DeferredSecretDigestPlaceholder+`"}}}`),
+				),
+			},
+		}},
+		nil,
+		[]SecretMaterializationRecipe{{
+			ResourceID:            "opencode.mcp.context7",
+			FileTarget:            fileTarget,
+			RegistryTarget:        registryTarget,
+			RegistryDigestPointer: "/servers/context7/digest",
+			SecretReference:       "CONTEXT7_KEY",
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
 func TestPreparedPlanRejectsDuplicateAndOverlappingSecretMaterializations(t *testing.T) {
 	transition, recipe := secretMaterializationFixture()
 	duplicate := recipe

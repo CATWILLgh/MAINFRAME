@@ -94,6 +94,11 @@ func validateJournalConfigurationMutation(
 			!configuration.IsExactDiagnosticsTarget(mutation.Target) {
 			return fmt.Errorf("invalid exact document removal")
 		}
+	case ConfigurationRemoveManagedSecret:
+		if mutation.After.Exists ||
+			!configuration.IsOpenCodeContext7SecretTarget(mutation.Target) {
+			return fmt.Errorf("invalid managed secret removal")
+		}
 	default:
 		return fmt.Errorf("invalid configuration mutation disposition")
 	}

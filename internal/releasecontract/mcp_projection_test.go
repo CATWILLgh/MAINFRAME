@@ -26,6 +26,10 @@ func TestLoadDerivesOpenCodeMCPProjectionFromCatalog(t *testing.T) {
 	}
 	if projection.ID != "opencode.mcp.context7" ||
 		projection.ComponentID != domain.ComponentOpenCode ||
+		projection.SecretTarget() != (domain.Location{
+			Root: domain.RootOpenCodeConfig,
+			Path: "mainframe/secrets/context7-api-key",
+		}) ||
 		projection.DesiredEntry != `{"type":"remote","url":"https://mcp.context7.com/mcp"}` {
 		t.Fatalf("MCP projection = %#v", projection)
 	}

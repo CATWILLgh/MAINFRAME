@@ -15,6 +15,7 @@ import (
 const (
 	DeferredSecretJSONPlaceholder   = `"$MAINFRAME_DEFERRED_SECRET_VALUE"`
 	DeferredSecretDigestPlaceholder = "$MAINFRAME_DEFERRED_SECRET_DIGEST"
+	DeferredSecretFilePlaceholder   = "$MAINFRAME_DEFERRED_SECRET_FILE"
 )
 
 var deferredSecretReferencePattern = regexp.MustCompile(
@@ -23,6 +24,7 @@ var deferredSecretReferencePattern = regexp.MustCompile(
 
 type SecretMaterializationRecipe struct {
 	ResourceID            string
+	FileTarget            domain.Location
 	ConfigTarget          domain.Location
 	ConfigEntryPointer    string
 	ConfigValuePointer    string
@@ -105,8 +107,15 @@ func parseSecretMaterialization(
 	recipe SecretMaterializationRecipe,
 ) (parsedSecretMaterialization, error) {
 	if !preparedResourceIDPattern.MatchString(recipe.ResourceID) ||
-		!deferredSecretReferencePattern.MatchString(recipe.SecretReference) ||
-		recipe.ConfigTarget == recipe.RegistryTarget {
+		!deferredSecretReferencePattern.MatchString(recipe.SecretReference) {
+		return parsedSecretMaterialization{}, errors.New(
+			"invalid deferred secret materialization",
+		)
+	}
+	if recipe.FileTarget.Valid() {
+		return parseSecretFileMaterialization(recipe)
+	}
+	if recipe.ConfigTarget == recipe.RegistryTarget {
 		return parsedSecretMaterialization{}, errors.New(
 			"invalid deferred secret materialization",
 		)
@@ -152,6 +161,12 @@ func validateMaterializationConnection(
 	for _, transition := range transitions {
 		if !containsString(transition.ResourceIDs, parsed.recipe.ResourceID) {
 			continue
+		}
+		if parsed.recipe.FileTarget.Valid() {
+			if validateSecretFileConnection(transition, parsed) {
+				return nil
+			}
+			break
 		}
 		config, configFound := transitionMutation(
 			transition,
@@ -213,6 +228,9 @@ func materializationsOverlap(
 	left parsedSecretMaterialization,
 	right parsedSecretMaterialization,
 ) bool {
+	if left.recipe.FileTarget.Valid() || right.recipe.FileTarget.Valid() {
+		return secretFileMaterializationsOverlap(left, right)
+	}
 	if left.recipe.ConfigTarget == right.recipe.ConfigTarget &&
 		(jsondocument.Overlaps(left.configEntry, right.configEntry) ||
 			jsondocument.Overlaps(left.configValue, right.configValue)) {
@@ -276,6 +294,9 @@ func materializeSecret(
 	}
 	if secret == "" {
 		return errors.New("resolved deferred secret is empty")
+	}
+	if recipe.FileTarget.Valid() {
+		return materializeSecretFile(transitions, recipe, secret)
 	}
 	parsed, _ := parseSecretMaterialization(recipe)
 	config, registry := materializationMutations(transitions, recipe)

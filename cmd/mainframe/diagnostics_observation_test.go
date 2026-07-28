@@ -131,6 +131,12 @@ func (host *diagnosticsObservationHost) Inspect(
 	return hostfs.Entry{}, fs.ErrNotExist
 }
 
+func (host *diagnosticsObservationHost) InspectDigest(
+	location domain.Location,
+) (hostfs.Entry, error) {
+	return host.Inspect(location, false)
+}
+
 func diagnosticsObservationGenericResource() releasecontract.Resource {
 	return releasecontract.Resource{
 		ID:          "claude-code.cache",
