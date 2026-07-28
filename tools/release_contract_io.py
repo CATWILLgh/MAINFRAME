@@ -10,6 +10,24 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 
+def seal_bundle_payload(root: Path) -> None:
+    """Remove write bits before payload modes become part of the manifest."""
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ValueError(f"bundle payload contains symbolic link {path}")
+        if path.is_file() and path.relative_to(root).as_posix() != "bundle.json":
+            path.chmod(stat.S_IMODE(path.stat().st_mode) & ~0o222)
+
+
+def seal_release_files(root: Path) -> None:
+    """Remove write bits from release metadata files outside bundle payloads."""
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ValueError(f"release contains symbolic link {path}")
+        if path.is_file():
+            path.chmod(stat.S_IMODE(path.stat().st_mode) & ~0o222)
+
+
 def payload_inventory(root: Path) -> list[dict[str, Any]]:
     rows = []
     for path in sorted(root.rglob("*")):

@@ -105,6 +105,11 @@ def _assert_release_layout(output: Path) -> dict:
     assert (output / "bundles/codex/bundle.json").is_file()
     assert (output / "bundles/opencode/bundle.json").is_file()
     assert (output / "metadata/mcp-catalog.json").is_file()
+    for item in output.rglob("*"):
+        if item.is_file():
+            assert item.lstat().st_mode & 0o222 == 0, (
+                f"release file is writable: {item}"
+            )
     return index
 
 

@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -15,11 +16,13 @@ from pathlib import Path
 from bundle_sync import copy_regular_file, write_text_file
 from mcp_catalog_contract import CATALOG_RELEASE_PATH
 from release_contract import (
+    seal_bundle,
     validate_bundle,
     validate_release,
     write_bundle_manifest,
     write_release_index,
 )
+from release_contract_io import seal_release_files
 
 
 SHELL_SOURCE_LINE = (
@@ -173,6 +176,8 @@ def _build_staged(root: Path, staging: Path, release_id: str) -> None:
     cli = staging / "bin"
     _build_cli(root, cli)
     manifests.append(cli / "bundle.json")
+    for manifest in manifests:
+        seal_bundle(manifest.parent)
     mcp_catalog = staging / CATALOG_RELEASE_PATH
     copy_regular_file(root / "internal/mcpcatalog/catalog.json", mcp_catalog)
     write_release_index(
@@ -182,6 +187,14 @@ def _build_staged(root: Path, staging: Path, release_id: str) -> None:
         manifests=manifests,
     )
     validate_release(staging)
+
+
+def _make_tree_removable(root: Path) -> None:
+    if not root.exists():
+        return
+    for path in [root, *root.rglob("*")]:
+        if path.is_dir():
+            path.chmod(stat.S_IMODE(path.stat().st_mode) | 0o700)
 
 
 def build(root: Path, output: Path, *, release_id: str) -> None:
@@ -196,9 +209,11 @@ def build(root: Path, output: Path, *, release_id: str) -> None:
     )
     try:
         _build_staged(root, staging, release_id)
+        seal_release_files(staging)
         os.replace(staging, output)
     finally:
         if staging.exists():
+            _make_tree_removable(staging)
             shutil.rmtree(staging)
 
 

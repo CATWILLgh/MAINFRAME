@@ -26,7 +26,7 @@ func copyTree(source, destination string) error {
 		_ = unix.Close(sourceFD)
 		return err
 	}
-	return copyDirectory(sourceFD, destinationFD)
+	return copyDirectory(sourceFD, destinationFD, false)
 }
 
 func openEmptyDestination(path string) (int, error) {
@@ -52,7 +52,7 @@ func openEmptyDestination(path string) (int, error) {
 	return descriptor, nil
 }
 
-func copyDirectory(sourceFD, destinationFD int) error {
+func copyDirectory(sourceFD, destinationFD int, preserveMode bool) error {
 	defer unix.Close(sourceFD)
 	defer unix.Close(destinationFD)
 	entries, err := readDirectory(sourceFD)
@@ -68,8 +68,10 @@ func copyDirectory(sourceFD, destinationFD int) error {
 	if err := unix.Fstat(sourceFD, &sourceMetadata); err != nil {
 		return fmt.Errorf("inspect source directory: %w", err)
 	}
-	if err := unix.Fchmod(destinationFD, uint32(sourceMetadata.Mode&0o777)); err != nil {
-		return fmt.Errorf("preserve destination directory mode: %w", err)
+	if preserveMode {
+		if err := unix.Fchmod(destinationFD, uint32(sourceMetadata.Mode&0o777)); err != nil {
+			return fmt.Errorf("preserve destination directory mode: %w", err)
+		}
 	}
 	if err := unix.Fsync(destinationFD); err != nil {
 		return fmt.Errorf("sync destination directory: %w", err)
@@ -132,7 +134,7 @@ func copyChildDirectory(sourceFD, destinationFD int, name string) error {
 		_ = unix.Close(sourceChild)
 		return fmt.Errorf("open destination directory %q: %w", name, err)
 	}
-	return copyDirectory(sourceChild, destinationChild)
+	return copyDirectory(sourceChild, destinationChild, true)
 }
 
 func copyRegularFile(sourceFD, destinationFD int, name string) error {

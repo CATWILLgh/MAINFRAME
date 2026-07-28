@@ -29,6 +29,8 @@ type Entry struct {
 type Store struct {
 	root     string
 	copyTree func(string, string) error
+	publish  func(string, string, string) (bool, error)
+	sealRoot func(string) error
 }
 
 func New(root string) (Store, error) {
@@ -43,16 +45,22 @@ func New(root string) (Store, error) {
 	if err != nil {
 		return Store{}, err
 	}
-	return Store{root: canonical, copyTree: copyTree}, nil
+	return Store{
+		root: canonical, copyTree: copyTree,
+		publish: publishNoReplace, sealRoot: sealReleaseRoot,
+	}, nil
 }
 
 func (store Store) Import(source string) (Entry, error) {
-	if store.root == "" || store.copyTree == nil {
+	if !store.initialized() {
 		return Entry{}, fmt.Errorf("release store is not initialized")
 	}
 	accepted, err := releasecontract.Load(source)
 	if err != nil {
 		return Entry{}, fmt.Errorf("validate source release: %w", err)
+	}
+	if err := validateSealedFiles(source); err != nil {
+		return Entry{}, err
 	}
 	versionParent, err := store.prepare(accepted.ID)
 	if err != nil {
@@ -65,7 +73,7 @@ func (store Store) Import(source string) (Entry, error) {
 	defer lock.release()
 
 	entry := store.entry(accepted, versionParent)
-	if exists, err := validateExisting(entry); exists || err != nil {
+	if exists, err := store.validateOrRepairExisting(entry); exists || err != nil {
 		entry.AlreadyPresent = exists && err == nil
 		return entry, err
 	}
@@ -73,12 +81,15 @@ func (store Store) Import(source string) (Entry, error) {
 }
 
 func (store Store) InspectImport(source string) (Entry, error) {
-	if store.root == "" || store.copyTree == nil {
+	if !store.initialized() {
 		return Entry{}, fmt.Errorf("release store is not initialized")
 	}
 	release, err := releasecontract.Load(source)
 	if err != nil {
 		return Entry{}, fmt.Errorf("validate source release: %w", err)
+	}
+	if err := validateSealedFiles(source); err != nil {
+		return Entry{}, err
 	}
 	entry := store.entry(
 		release,
@@ -93,7 +104,7 @@ func (store Store) InspectImport(source string) (Entry, error) {
 }
 
 func (store Store) Open(releaseID, indexSHA256 string) (Entry, error) {
-	if store.root == "" || store.copyTree == nil {
+	if !store.initialized() {
 		return Entry{}, fmt.Errorf("release store is not initialized")
 	}
 	if !releasecontract.ValidReleaseIdentity(releaseID, indexSHA256) {
@@ -137,7 +148,7 @@ func (store Store) importNew(
 	publishedPath := false
 	defer func() {
 		if !publishedPath {
-			_ = os.RemoveAll(staging)
+			_ = removeTree(staging)
 		}
 	}()
 	if err := store.copyTree(source, staging); err != nil {
@@ -150,17 +161,95 @@ func (store Store) importNew(
 	if copied.ID != accepted.ID || copied.IndexSHA256 != accepted.IndexSHA256 {
 		return Entry{}, fmt.Errorf("source changed while importing release")
 	}
-	published, err := publishNoReplace(versionParent, filepath.Base(staging), copied.IndexSHA256)
+	result, published, err := store.publishCopied(
+		staging,
+		copied.IndexSHA256,
+		versionParent,
+		entry,
+	)
+	publishedPath = published
+	return result, err
+}
+
+func (store Store) publishCopied(
+	staging, indexSHA256, versionParent string,
+	entry Entry,
+) (Entry, bool, error) {
+	if err := sealStagedDirectories(staging); err != nil {
+		return Entry{}, false, err
+	}
+	if err := validateSealedTree(staging, true); err != nil {
+		return Entry{}, false, err
+	}
+	published, err := store.publish(
+		versionParent,
+		filepath.Base(staging),
+		indexSHA256,
+	)
 	if err != nil {
-		return Entry{}, err
+		if published {
+			err = errors.Join(err, cleanupPublished(entry.Path))
+		}
+		return Entry{}, published, err
 	}
 	if published {
-		publishedPath = true
-		return entry, nil
+		if err := store.sealRoot(entry.Path); err != nil {
+			return Entry{}, true, errors.Join(
+				fmt.Errorf("seal published release root: %w", err),
+				cleanupPublished(entry.Path),
+			)
+		}
+		exists, err := validateExisting(entry)
+		if err != nil || !exists {
+			if err == nil {
+				err = errors.New("published release disappeared before validation")
+			}
+			return Entry{}, true, errors.Join(err, cleanupPublished(entry.Path))
+		}
+		return entry, true, nil
 	}
 	entry.AlreadyPresent = true
 	_, err = validateExisting(entry)
-	return entry, err
+	return entry, false, err
+}
+
+func (store Store) initialized() bool {
+	return store.root != "" && store.copyTree != nil &&
+		store.publish != nil && store.sealRoot != nil
+}
+
+func (store Store) validateOrRepairExisting(entry Entry) (bool, error) {
+	exists, err := validateExisting(entry)
+	if !exists || err == nil {
+		return exists, err
+	}
+	repaired, repairErr := store.repairIncompletePublication(entry)
+	if repairErr != nil {
+		return true, errors.Join(err, repairErr)
+	}
+	if repaired {
+		return true, nil
+	}
+	return true, err
+}
+
+func (store Store) repairIncompletePublication(entry Entry) (bool, error) {
+	info, err := os.Lstat(entry.Path)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0o222 == 0 {
+		return false, nil
+	}
+	release, err := releasecontract.Load(entry.Path)
+	if err != nil ||
+		release.ID != entry.ReleaseID ||
+		release.IndexSHA256 != entry.IndexSHA256 ||
+		validateSealedTree(entry.Path, true) != nil {
+		return false, nil
+	}
+	if err := store.sealRoot(entry.Path); err != nil {
+		return false, fmt.Errorf("repair incomplete release publication: %w", err)
+	}
+	exists, err := validateExisting(entry)
+	return exists && err == nil, err
 }
 
 func (store Store) prepare(releaseID string) (string, error) {
@@ -205,6 +294,9 @@ func validateExisting(entry Entry) (bool, error) {
 	}
 	if release.ID != entry.ReleaseID || release.IndexSHA256 != entry.IndexSHA256 {
 		return true, fmt.Errorf("existing release identity mismatch")
+	}
+	if err := validateSealedTree(entry.Path, false); err != nil {
+		return true, err
 	}
 	return true, nil
 }

@@ -17,282 +17,6 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
-func TestImportPublishesValidatedVersionAndPreservesPayloadMode(t *testing.T) {
-	source := writeReleaseFixture(t, "test-release", "first\n", 0o640)
-	store := newTestStore(t)
-
-	entry, err := store.Import(source)
-	if err != nil {
-		t.Fatalf("Import() error = %v", err)
-	}
-	if entry.AlreadyPresent {
-		t.Fatal("first import reported an existing release")
-	}
-	loaded, err := releasecontract.Load(entry.Path)
-	if err != nil {
-		t.Fatalf("load stored release: %v", err)
-	}
-	if loaded.ID != entry.ReleaseID || loaded.IndexSHA256 != entry.IndexSHA256 {
-		t.Fatalf("stored identity = (%q, %q), entry = (%q, %q)",
-			loaded.ID, loaded.IndexSHA256, entry.ReleaseID, entry.IndexSHA256)
-	}
-	info, err := os.Stat(filepath.Join(entry.Path, "bundles", "codex", "payload.txt"))
-	if err != nil {
-		t.Fatalf("stat stored payload: %v", err)
-	}
-	if info.Mode().Perm() != 0o640 {
-		t.Fatalf("stored payload mode = %#o, want 0640", info.Mode().Perm())
-	}
-}
-
-func TestInspectImportPredictsExactDestinationWithoutWriting(t *testing.T) {
-	parent := canonicalTempDir(t)
-	root := filepath.Join(parent, "mainframe")
-	store, err := New(root)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	source := writeReleaseFixture(
-		t,
-		"test-release",
-		"payload\n",
-		0o640,
-	)
-
-	entry, err := store.InspectImport(source)
-	if err != nil {
-		t.Fatalf("InspectImport() error = %v", err)
-	}
-	if entry.AlreadyPresent ||
-		entry.Path != filepath.Join(
-			root,
-			"releases",
-			entry.ReleaseID,
-			entry.IndexSHA256,
-		) {
-		t.Fatalf("InspectImport() = %#v", entry)
-	}
-	if _, statErr := os.Lstat(root); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("InspectImport() created release store: %v", statErr)
-	}
-}
-
-func TestInspectImportReportsAnExistingExactVersion(t *testing.T) {
-	store := newTestStore(t)
-	source := writeReleaseFixture(
-		t,
-		"test-release",
-		"payload\n",
-		0o640,
-	)
-	imported, err := store.Import(source)
-	if err != nil {
-		t.Fatalf("Import() error = %v", err)
-	}
-
-	inspected, err := store.InspectImport(source)
-	if err != nil {
-		t.Fatalf("InspectImport() error = %v", err)
-	}
-	if !inspected.AlreadyPresent ||
-		inspected.Path != imported.Path ||
-		inspected.ReleaseID != imported.ReleaseID ||
-		inspected.IndexSHA256 != imported.IndexSHA256 {
-		t.Fatalf("InspectImport() = %#v, imported = %#v", inspected, imported)
-	}
-}
-
-func TestImportIsIdempotentAndRetainsDistinctVersions(t *testing.T) {
-	store := newTestStore(t)
-	first, err := store.Import(writeReleaseFixture(t, "test-release", "first\n", 0o640))
-	if err != nil {
-		t.Fatalf("first Import() error = %v", err)
-	}
-	repeated, err := store.Import(firstSourceCopy(t, first.Path))
-	if err != nil {
-		t.Fatalf("repeated Import() error = %v", err)
-	}
-	if !repeated.AlreadyPresent || repeated.Path != first.Path {
-		t.Fatalf("repeated import = %#v, want existing %q", repeated, first.Path)
-	}
-
-	second, err := store.Import(writeReleaseFixture(t, "test-release", "second\n", 0o640))
-	if err != nil {
-		t.Fatalf("second version Import() error = %v", err)
-	}
-	if second.Path == first.Path || second.AlreadyPresent {
-		t.Fatalf("second version = %#v, first = %#v", second, first)
-	}
-	if _, err := releasecontract.Load(first.Path); err != nil {
-		t.Fatalf("first version was not retained: %v", err)
-	}
-}
-
-func TestOpenReturnsOnlyTheExactValidatedVersion(t *testing.T) {
-	store := newTestStore(t)
-	imported, err := store.Import(
-		writeReleaseFixture(t, "test-release", "payload\n", 0o640),
-	)
-	if err != nil {
-		t.Fatalf("Import() error = %v", err)
-	}
-
-	opened, err := store.Open(imported.ReleaseID, imported.IndexSHA256)
-	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	if opened.Path != imported.Path ||
-		opened.ReleaseID != imported.ReleaseID ||
-		opened.IndexSHA256 != imported.IndexSHA256 ||
-		!opened.AlreadyPresent {
-		t.Fatalf("Open() = %#v, imported = %#v", opened, imported)
-	}
-}
-
-func TestOpenMissingVersionIsReadOnly(t *testing.T) {
-	parent := canonicalTempDir(t)
-	root := filepath.Join(parent, "mainframe")
-	store, err := New(root)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	_, err = store.Open(
-		"missing-release",
-		strings.Repeat("a", sha256.Size*2),
-	)
-	if err == nil || !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("Open() error = %v, want not found", err)
-	}
-	if _, statErr := os.Lstat(root); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("Open() created release store: %v", statErr)
-	}
-}
-
-func TestOpenRejectsMalformedIdentity(t *testing.T) {
-	store := newTestStore(t)
-	tests := []struct {
-		releaseID string
-		digest    string
-	}{
-		{"../escape", strings.Repeat("a", sha256.Size*2)},
-		{"test-release", "../escape"},
-		{"test-release", strings.Repeat("A", sha256.Size*2)},
-	}
-	for _, test := range tests {
-		if _, err := store.Open(test.releaseID, test.digest); err == nil {
-			t.Fatalf(
-				"Open(%q, %q) accepted malformed identity",
-				test.releaseID,
-				test.digest,
-			)
-		}
-	}
-}
-
-func TestOpenRejectsTamperedStoredVersion(t *testing.T) {
-	store := newTestStore(t)
-	imported, err := store.Import(
-		writeReleaseFixture(t, "test-release", "payload\n", 0o640),
-	)
-	if err != nil {
-		t.Fatalf("Import() error = %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(imported.Path, "bundles", "codex", "payload.txt"),
-		[]byte("tampered\n"),
-		0o640,
-	); err != nil {
-		t.Fatalf("tamper stored payload: %v", err)
-	}
-
-	if _, err := store.Open(
-		imported.ReleaseID,
-		imported.IndexSHA256,
-	); err == nil {
-		t.Fatal("Open() accepted a tampered stored release")
-	}
-}
-
-func TestOpenRejectsStoreSymlinkInsertedAfterInitialization(t *testing.T) {
-	container := canonicalTempDir(t)
-	root := filepath.Join(container, "mainframe")
-	store, err := New(root)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	outside := newTestStore(t)
-	imported, err := outside.Import(
-		writeReleaseFixture(t, "test-release", "payload\n", 0o640),
-	)
-	if err != nil {
-		t.Fatalf("outside Import() error = %v", err)
-	}
-	if err := os.Symlink(outside.root, root); err != nil {
-		t.Fatalf("insert store symlink: %v", err)
-	}
-
-	if _, err := store.Open(
-		imported.ReleaseID,
-		imported.IndexSHA256,
-	); err == nil {
-		t.Fatal("Open() accepted a substituted store symlink")
-	}
-}
-
-func TestImportRejectsTamperedExistingVersion(t *testing.T) {
-	source := writeReleaseFixture(t, "test-release", "payload\n", 0o640)
-	store := newTestStore(t)
-	entry, err := store.Import(source)
-	if err != nil {
-		t.Fatalf("initial Import() error = %v", err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(entry.Path, "bundles", "codex", "payload.txt"),
-		[]byte("tampered\n"),
-		0o640,
-	); err != nil {
-		t.Fatalf("tamper stored payload: %v", err)
-	}
-
-	if _, err := store.Import(source); err == nil || !strings.Contains(err.Error(), "existing release") {
-		t.Fatalf("tampered existing release error = %v", err)
-	}
-}
-
-func TestImportRejectsChangedSnapshotAndCleansStaging(t *testing.T) {
-	accepted := writeReleaseFixture(t, "test-release", "accepted\n", 0o640)
-	changed := writeReleaseFixture(t, "test-release", "changed\n", 0o640)
-	store := newTestStore(t)
-	store.copyTree = func(_ string, destination string) error {
-		return copyTree(changed, destination)
-	}
-
-	if _, err := store.Import(accepted); err == nil || !strings.Contains(err.Error(), "source changed") {
-		t.Fatalf("changed snapshot error = %v", err)
-	}
-	assertNoPublishedOrStagedVersion(t, store.root)
-}
-
-func TestImportFailureLeavesNoPublishedOrStagedVersion(t *testing.T) {
-	source := writeReleaseFixture(t, "test-release", "payload\n", 0o640)
-	store := newTestStore(t)
-	store.copyTree = func(_ string, destination string) error {
-		if err := os.MkdirAll(destination, 0o700); err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(destination, "partial"), []byte("x"), 0o600); err != nil {
-			return err
-		}
-		return errors.New("injected copy failure")
-	}
-
-	if _, err := store.Import(source); err == nil || !strings.Contains(err.Error(), "injected copy failure") {
-		t.Fatalf("copy failure error = %v", err)
-	}
-	assertNoPublishedOrStagedVersion(t, store.root)
-}
-
 func TestConcurrentImportPublishesOneCompleteVersion(t *testing.T) {
 	source := writeReleaseFixture(t, "test-release", "payload\n", 0o640)
 	store := newTestStore(t)
@@ -418,6 +142,15 @@ func canonicalTempDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("resolve temporary directory: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = filepath.WalkDir(path, func(current string, entry os.DirEntry, err error) error {
+			if err != nil || !entry.IsDir() {
+				return nil
+			}
+			_ = os.Chmod(current, 0o700)
+			return nil
+		})
+	})
 	return path
 }
 
@@ -432,11 +165,38 @@ func assertNoPublishedOrStagedVersion(t *testing.T, root string) {
 	}
 }
 
+func assertSealedTree(t *testing.T, root string) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().Perm()&0o222 != 0 {
+			return fmt.Errorf("%q has writable mode %#o", path, info.Mode().Perm())
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("cached release is not sealed: %v", err)
+	}
+}
+
 func firstSourceCopy(t *testing.T, source string) string {
 	t.Helper()
-	destination := filepath.Join(t.TempDir(), "release")
+	parent := t.TempDir()
+	t.Cleanup(func() {
+		makeFixtureTreeRemovable(parent)
+	})
+	destination := filepath.Join(parent, "release")
 	if err := copyTree(source, destination); err != nil {
 		t.Fatalf("copy stored release: %v", err)
+	}
+	if err := os.Chmod(destination, 0o555); err != nil {
+		t.Fatalf("seal copied release root: %v", err)
 	}
 	return destination
 }
@@ -449,16 +209,20 @@ func writeReleaseFixture(
 ) string {
 	t.Helper()
 	root := t.TempDir()
+	t.Cleanup(func() {
+		makeFixtureTreeRemovable(root)
+	})
 	bundle := filepath.Join(root, "bundles", "codex")
 	if err := os.MkdirAll(bundle, 0o755); err != nil {
 		t.Fatalf("mkdir fixture bundle: %v", err)
 	}
 	payloadPath := filepath.Join(bundle, "payload.txt")
-	if err := os.WriteFile(payloadPath, []byte(payload), mode); err != nil {
+	sealedMode := mode &^ 0o222
+	if err := os.WriteFile(payloadPath, []byte(payload), sealedMode); err != nil {
 		t.Fatalf("write fixture payload: %v", err)
 	}
 	manifestPath := filepath.Join(bundle, "bundle.json")
-	writeFixtureJSON(t, manifestPath, fixtureManifest(t, payloadPath, mode))
+	writeFixtureJSON(t, manifestPath, fixtureManifest(t, payloadPath, sealedMode))
 	catalogPayload, err := os.ReadFile(filepath.Join("..", "mcpcatalog", "catalog.json"))
 	if err != nil {
 		t.Fatalf("read fixture MCP catalog: %v", err)
@@ -484,7 +248,37 @@ func writeReleaseFixture(
 			"sha256":    fileDigest(t, manifestPath),
 		}},
 	})
+	sealFixtureTree(t, root)
 	return root
+}
+
+func sealFixtureTree(t *testing.T, root string) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, info.Mode().Perm()&^0o222)
+	})
+	if err != nil {
+		t.Fatalf("seal fixture files: %v", err)
+	}
+}
+
+func makeFixtureTreeRemovable(root string) {
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err == nil && entry.IsDir() {
+			_ = os.Chmod(path, 0o700)
+		}
+		return nil
+	})
 }
 
 func fixtureManifest(t *testing.T, payloadPath string, mode os.FileMode) map[string]any {

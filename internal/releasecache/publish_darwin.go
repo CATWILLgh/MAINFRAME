@@ -27,7 +27,7 @@ func publishNoReplace(parentPath, stagingName, destinationName string) (bool, er
 		return false, fmt.Errorf("publish release without replacement: %w", err)
 	}
 	if err := unix.Fsync(parent); err != nil {
-		return false, fmt.Errorf("sync release publication directory: %w", err)
+		return true, fmt.Errorf("sync release publication directory: %w", err)
 	}
 	return true, nil
 }

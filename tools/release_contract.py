@@ -14,6 +14,7 @@ from release_contract_io import (
     reject_symlink_segments as _reject_symlink_segments,
     relative_inside as _relative_inside,
     require_regular_file as _require_regular_file,
+    seal_bundle_payload as _seal_bundle_payload,
     write_json as _write_json,
 )
 from release_global import validate_global_contract, validate_local_target_isolation
@@ -91,6 +92,19 @@ def write_bundle_manifest(
         raise ValueError("host requirements require bundle schema version 3 through 5")
     _validate_bundle_document(root, manifest)
     _write_json(root / "bundle.json", manifest)
+    return manifest
+
+
+def seal_bundle(bundle_root: Path) -> dict[str, Any]:
+    """Seal a complete bundle and update the modes in its integrity manifest."""
+    root = _real_directory(bundle_root, "bundle root")
+    manifest_path = root / "bundle.json"
+    _require_regular_file(manifest_path, "bundle manifest")
+    manifest = _read_json(manifest_path)
+    _seal_bundle_payload(root)
+    manifest["payload_files"] = _payload_inventory(root)
+    _validate_bundle_document(root, manifest)
+    _write_json(manifest_path, manifest)
     return manifest
 
 
