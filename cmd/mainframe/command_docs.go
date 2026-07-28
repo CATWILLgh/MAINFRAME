@@ -74,6 +74,7 @@ func documentationRegistry() []documentationTopic {
 			CommandIDs: []string{
 				"credentials.catalog",
 				"credentials.legacy-indexes",
+				"credentials.legacy-preview",
 				"credentials.uses",
 				"credentials.instance.review",
 				"credentials.instance.apply",
@@ -101,6 +102,7 @@ func documentationRegistry() []documentationTopic {
 				"draft.apply",
 				"credentials.catalog",
 				"credentials.legacy-indexes",
+				"credentials.legacy-preview",
 				"credentials.uses",
 				"credentials.instance.review",
 				"credentials.instance.apply",

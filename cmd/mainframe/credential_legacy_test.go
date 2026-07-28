@@ -130,6 +130,87 @@ func TestPublicLegacyCredentialInventoryHasValueFreeContract(t *testing.T) {
 	}
 }
 
+func TestPublicLegacyCredentialReferencePreviewIsValueFreeAndManual(
+	t *testing.T,
+) {
+	inventory := credentialmigration.LegacyReferenceInventory{
+		ReleaseID:          "release-a",
+		ReleaseIndexSHA256: strings.Repeat("a", 64),
+		MigrationReadiness: credentialmigration.ReadinessManualTransferRequired,
+		Indexes: []credentialmigration.LegacyIndex{{
+			ComponentID: domain.ComponentClaudeCode,
+			ResourceID:  "claude-code.credentials-index",
+			SourceRole:  credentialmigration.SourceRoleSharedOriginal,
+			State:       credentialmigration.IndexPresent,
+			MigrationReadiness: credentialmigration.
+				ReadinessManualTransferRequired,
+		}, {
+			ComponentID:        domain.ComponentCodex,
+			ResourceID:         "codex.credentials-index",
+			SourceRole:         credentialmigration.SourceRoleAdapterCopy,
+			State:              credentialmigration.IndexPresent,
+			MigrationReadiness: credentialmigration.ReadinessManualTransferRequired,
+		}},
+		References: credentialmigration.LegacyReferencePreview{
+			TotalReferenceMentions:     3,
+			ExtractedReferenceMentions: 2,
+			ExcludedReferenceMentions:  1,
+			Groups: []credentialmigration.LegacyReferenceGroup{{
+				SectionPath: []string{"Catalog", "Work"},
+				References: []credentialmigration.LegacyReference{{
+					Name: "SHARED_KEY", Occurrences: 2,
+					Compatibility: credentialmigration.
+						ReferenceCatalogCompatible,
+				}},
+			}},
+		},
+	}
+	var output bytes.Buffer
+	if err := writeLegacyCredentialReferencePreview(
+		&output,
+		inventory,
+	); err != nil {
+		t.Fatalf("writeLegacyCredentialReferencePreview() error = %v", err)
+	}
+	var response map[string]any
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode reference preview: %v", err)
+	}
+	for key, want := range map[string]any{
+		"schema_version":      float64(1),
+		"kind":                "mainframe-legacy-credential-reference-preview",
+		"scope":               "shared-original-reference-discovery",
+		"migration_performed": false,
+		"apply_available":     false,
+		"requires_review":     true,
+	} {
+		if response[key] != want {
+			t.Fatalf("response[%q] = %#v, want %#v", key, response[key], want)
+		}
+	}
+	pending, ok := response["pending_sources"].([]any)
+	if !ok || len(pending) != 1 {
+		t.Fatalf("pending sources = %#v", response["pending_sources"])
+	}
+	for _, forbidden := range []string{
+		"secret get",
+		"absolute_path",
+		"content_sha256",
+		"raw_error",
+	} {
+		if strings.Contains(output.String(), forbidden) {
+			t.Fatalf("reference preview exposed %q: %s", forbidden, output.String())
+		}
+	}
+	if !strings.Contains(output.String(), `"name": "SHARED_KEY"`) ||
+		!strings.Contains(
+			output.String(),
+			`"mapping_status": "manual_service_mapping_required"`,
+		) {
+		t.Fatalf("reference preview = %s", output.String())
+	}
+}
+
 func assertLegacyIndexResponseKeys(t *testing.T, raw any) {
 	t.Helper()
 	index, ok := raw.(map[string]any)
@@ -174,6 +255,35 @@ func TestLegacyCredentialCommandDoesNotExposeSetupErrors(t *testing.T) {
 		strings.Contains(stderr.String(), privatePath) {
 		t.Fatalf(
 			"legacy command exit/stdout/stderr = %d/%q/%q",
+			exitCode,
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+}
+
+func TestLegacyCredentialReferencePreviewDoesNotExposeSetupErrors(
+	t *testing.T,
+) {
+	privatePath := filepath.Join(t.TempDir(), "legacy-private-canary")
+	t.Setenv(releaseRootEnvironment, privatePath)
+	var stdout, stderr bytes.Buffer
+
+	exitCode := run(
+		[]string{"credentials", "legacy-preview"},
+		nil,
+		&stdout,
+		&stderr,
+	)
+	if exitCode == 0 ||
+		stdout.Len() != 0 ||
+		!strings.Contains(
+			stderr.String(),
+			"could not be previewed safely",
+		) ||
+		strings.Contains(stderr.String(), privatePath) {
+		t.Fatalf(
+			"legacy preview exit/stdout/stderr = %d/%q/%q",
 			exitCode,
 			stdout.String(),
 			stderr.String(),

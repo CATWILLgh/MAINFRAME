@@ -24,20 +24,21 @@ type commandEffect string
 type commandConfirmation string
 
 const (
-	handlerTUI              commandHandlerKind = "tui"
-	handlerPlan             commandHandlerKind = "plan"
-	handlerDraftReview      commandHandlerKind = "draft-review"
-	handlerDraftApply       commandHandlerKind = "draft-apply"
-	handlerCredentialList   commandHandlerKind = "credential-list"
-	handlerCredentialLegacy commandHandlerKind = "credential-legacy"
-	handlerCredentialUses   commandHandlerKind = "credential-uses"
-	handlerCredentialReview commandHandlerKind = "credential-review"
-	handlerCredentialApply  commandHandlerKind = "credential-apply"
-	handlerReleaseReview    commandHandlerKind = "release-review"
-	handlerReleaseApply     commandHandlerKind = "release-apply"
-	handlerDocsList         commandHandlerKind = "docs-list"
-	handlerDocsShow         commandHandlerKind = "docs-show"
-	handlerCapabilities     commandHandlerKind = "capabilities"
+	handlerTUI                     commandHandlerKind = "tui"
+	handlerPlan                    commandHandlerKind = "plan"
+	handlerDraftReview             commandHandlerKind = "draft-review"
+	handlerDraftApply              commandHandlerKind = "draft-apply"
+	handlerCredentialList          commandHandlerKind = "credential-list"
+	handlerCredentialLegacy        commandHandlerKind = "credential-legacy"
+	handlerCredentialLegacyPreview commandHandlerKind = "credential-legacy-preview"
+	handlerCredentialUses          commandHandlerKind = "credential-uses"
+	handlerCredentialReview        commandHandlerKind = "credential-review"
+	handlerCredentialApply         commandHandlerKind = "credential-apply"
+	handlerReleaseReview           commandHandlerKind = "release-review"
+	handlerReleaseApply            commandHandlerKind = "release-apply"
+	handlerDocsList                commandHandlerKind = "docs-list"
+	handlerDocsShow                commandHandlerKind = "docs-show"
+	handlerCapabilities            commandHandlerKind = "capabilities"
 )
 
 const (
@@ -100,6 +101,8 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runCredentialCatalogCommand
 	case handlerCredentialLegacy:
 		return runCredentialLegacyFromRegistry
+	case handlerCredentialLegacyPreview:
+		return runCredentialLegacyPreviewFromRegistry
 	case handlerCredentialUses:
 		return runCredentialUsesFromRegistry
 	case handlerCredentialReview:
@@ -261,6 +264,20 @@ func runCredentialLegacyFromRegistry(
 		fmt.Fprintln(
 			context.errorOutput,
 			"credentials legacy-indexes: legacy credential locations could not be inspected safely",
+		)
+		return 1
+	}
+	return 0
+}
+
+func runCredentialLegacyPreviewFromRegistry(
+	context commandContext,
+	_ map[string]string,
+) int {
+	if err := runLegacyCredentialReferencePreview(context.output); err != nil {
+		fmt.Fprintln(
+			context.errorOutput,
+			"credentials legacy-preview: named references could not be previewed safely",
 		)
 		return 1
 	}

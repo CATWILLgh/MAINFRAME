@@ -39,6 +39,7 @@ const (
 	ReasonSymbolicLink     UnsafeReason = "symbolic-link"
 	ReasonNotRegular       UnsafeReason = "not-regular"
 	ReasonUnsafeMode       UnsafeReason = "unsafe-mode"
+	ReasonMalformedContent UnsafeReason = "malformed-content"
 	ReasonInspectionFailed UnsafeReason = "inspection-failed"
 )
 
@@ -170,19 +171,9 @@ func inspectLegacyIndex(
 		result.UnsafeReason = ReasonInspectionFailed
 		return legacyIndexWithReadiness(result)
 	}
-	if entry.Kind == hostfs.EntrySymlink {
+	if reason := legacyEntryUnsafeReason(entry); reason != "" {
 		result.State = IndexUnsafe
-		result.UnsafeReason = ReasonSymbolicLink
-		return legacyIndexWithReadiness(result)
-	}
-	if entry.Kind != hostfs.EntryRegular {
-		result.State = IndexUnsafe
-		result.UnsafeReason = ReasonNotRegular
-		return legacyIndexWithReadiness(result)
-	}
-	if entry.Mode != 0o600 {
-		result.State = IndexUnsafe
-		result.UnsafeReason = ReasonUnsafeMode
+		result.UnsafeReason = reason
 		return legacyIndexWithReadiness(result)
 	}
 	result.State = IndexPresent

@@ -40,6 +40,21 @@ divergent files require manual transfer; unsafe files block readiness until
 they receive attention. The command does not write, delete, or adopt an old
 file, and always reports `migration_performed` as `false`.
 
+`mainframe credentials legacy-preview` is a separate, explicitly partial
+reference-discovery command. After direct invocation it reads the same bounded,
+no-follow snapshot used for eligibility checks and extracts only named
+`secret get NAME` uses from the historical shared original. It returns
+validated section paths, exact reference names, occurrence counts, and whether
+each name is compatible with the current catalog grammar. It does not return
+raw lines or values.
+
+Comments, quotations, fenced examples, malformed references, unscoped
+references, and descriptive lines are counted but not returned. Divergent or
+blocked adapter copies are listed as pending sources because they may contain
+unique material. Therefore this preview remains a review aid: `coverage` is
+`partial`, `migration_performed` and `apply_available` are `false`, and no old
+file can be retired from this result.
+
 Agents can create or edit instance metadata through:
 
 ```text

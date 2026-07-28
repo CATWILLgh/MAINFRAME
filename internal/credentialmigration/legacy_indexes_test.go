@@ -257,14 +257,16 @@ func readinessStrings(readiness []Readiness) []string {
 }
 
 type legacyInspectorFixture struct {
-	entries map[domain.Location]hostfs.Entry
-	errors  map[domain.Location]error
+	entries   map[domain.Location]hostfs.Entry
+	errors    map[domain.Location]error
+	inspected []domain.Location
 }
 
 func (fixture *legacyInspectorFixture) Inspect(
 	location domain.Location,
 	includeContent bool,
 ) (hostfs.Entry, error) {
+	fixture.inspected = append(fixture.inspected, location)
 	if !includeContent {
 		return hostfs.Entry{}, errors.New("content inspection was not requested")
 	}

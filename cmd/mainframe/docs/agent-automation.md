@@ -29,6 +29,19 @@ another file. Missing adapter copies are normal, while safe divergent copies
 still require manual transfer and unsafe copies still block readiness.
 The readiness and source-role fields are part of response schema version 3.
 
+Named references in the shared original can be discovered explicitly with:
+
+```text
+mainframe credentials legacy-preview
+```
+
+This is a partial, read-only discovery result rather than a complete migration
+plan. Exact secret-reference names are returned only after direct invocation;
+values and raw source lines are never returned. Excluded mentions and unmapped
+descriptions remain counted, while divergent or blocked adapter copies appear
+as pending sources. The command never authorizes application or retirement of
+an old file.
+
 Local release delivery uses the same review and exact-apply boundary:
 
 ```sh

@@ -285,6 +285,14 @@ claim to enumerate already published adapter configuration. Neither command
 inspects referenced values, invokes `secret`, reads `secrets.env`, migrates
 legacy indexes, writes user state, or resolves values.
 
+Legacy reference discovery is a separate explicit read-only operation. It
+parses only the safely inspected shared-original snapshot, returns validated
+section paths and exact `secret get NAME` references, and counts excluded or
+unmapped material without returning raw lines. Its coverage is deliberately
+partial: every divergent or blocked adapter copy remains a pending source.
+Discovery cannot apply changes, claim migration completion, or authorize
+retirement of a historical file.
+
 Human and agent interfaces must share the same application core instead of an
 agent scraping the terminal interface. The agent-facing interface supports
 read-only catalog and reference-impact discovery plus credential-instance

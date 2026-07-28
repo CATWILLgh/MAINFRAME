@@ -89,6 +89,15 @@ secret values.
   metadata, not a claim that any present file has verified ancestry. Missing
   copies are normal; divergent and unsafe copies retain the same strict
   readiness rules.
+- A separate partial reference-discovery preview now extracts exact named
+  `secret get NAME` uses from the shared original, using the same bounded
+  no-follow snapshot that established eligibility. It preserves repeated uses
+  across section paths, distinguishes current catalog-compatible names from
+  legacy names, and never returns raw lines or values.
+- Excluded examples, malformed or unscoped mentions, and descriptive lines are
+  counted. Divergent or blocked adapter copies remain explicit pending sources,
+  so discovery cannot be mistaken for migration completion and cannot
+  authorize old-file retirement.
 
 ## Sources
 
