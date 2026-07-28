@@ -72,6 +72,26 @@ func (store Store) Import(source string) (Entry, error) {
 	return store.importNew(source, accepted, versionParent, entry)
 }
 
+func (store Store) InspectImport(source string) (Entry, error) {
+	if store.root == "" || store.copyTree == nil {
+		return Entry{}, fmt.Errorf("release store is not initialized")
+	}
+	release, err := releasecontract.Load(source)
+	if err != nil {
+		return Entry{}, fmt.Errorf("validate source release: %w", err)
+	}
+	entry := store.entry(
+		release,
+		filepath.Join(store.root, releasesDirectory, release.ID),
+	)
+	exists, err := validateExisting(entry)
+	if err != nil {
+		return Entry{}, err
+	}
+	entry.AlreadyPresent = exists
+	return entry, nil
+}
+
 func (store Store) Open(releaseID, indexSHA256 string) (Entry, error) {
 	if store.root == "" || store.copyTree == nil {
 		return Entry{}, fmt.Errorf("release store is not initialized")

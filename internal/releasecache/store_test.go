@@ -45,6 +45,63 @@ func TestImportPublishesValidatedVersionAndPreservesPayloadMode(t *testing.T) {
 	}
 }
 
+func TestInspectImportPredictsExactDestinationWithoutWriting(t *testing.T) {
+	parent := canonicalTempDir(t)
+	root := filepath.Join(parent, "mainframe")
+	store, err := New(root)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	source := writeReleaseFixture(
+		t,
+		"test-release",
+		"payload\n",
+		0o640,
+	)
+
+	entry, err := store.InspectImport(source)
+	if err != nil {
+		t.Fatalf("InspectImport() error = %v", err)
+	}
+	if entry.AlreadyPresent ||
+		entry.Path != filepath.Join(
+			root,
+			"releases",
+			entry.ReleaseID,
+			entry.IndexSHA256,
+		) {
+		t.Fatalf("InspectImport() = %#v", entry)
+	}
+	if _, statErr := os.Lstat(root); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("InspectImport() created release store: %v", statErr)
+	}
+}
+
+func TestInspectImportReportsAnExistingExactVersion(t *testing.T) {
+	store := newTestStore(t)
+	source := writeReleaseFixture(
+		t,
+		"test-release",
+		"payload\n",
+		0o640,
+	)
+	imported, err := store.Import(source)
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+
+	inspected, err := store.InspectImport(source)
+	if err != nil {
+		t.Fatalf("InspectImport() error = %v", err)
+	}
+	if !inspected.AlreadyPresent ||
+		inspected.Path != imported.Path ||
+		inspected.ReleaseID != imported.ReleaseID ||
+		inspected.IndexSHA256 != imported.IndexSHA256 {
+		t.Fatalf("InspectImport() = %#v, imported = %#v", inspected, imported)
+	}
+}
+
 func TestImportIsIdempotentAndRetainsDistinctVersions(t *testing.T) {
 	store := newTestStore(t)
 	first, err := store.Import(writeReleaseFixture(t, "test-release", "first\n", 0o640))
