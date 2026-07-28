@@ -75,6 +75,14 @@ secret values.
   application transaction. The confirmation binds release, physical target,
   transaction state, exact file before-image, and normalized desired state.
   Secret input remains human-only.
+- `mainframe credentials legacy-indexes` and the TUI now assess read-only
+  transfer readiness for every old adapter-local index. Missing and
+  byte-identical current templates need no transfer, safe divergent files
+  require manual transfer, and unsafe files block readiness.
+- Readiness inspection never returns content or content hashes and never
+  writes, deletes, or adopts an old file. It always reports migration as not
+  performed. Actual transfer and retirement of divergent legacy descriptions
+  remain open work under this ticket.
 
 ## Sources
 

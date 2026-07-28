@@ -57,6 +57,28 @@ func TestInspectLegacyIndexesClassifiesWithoutReturningContent(t *testing.T) {
 		inventory.Indexes[1].MatchesCurrentTemplate {
 		t.Fatalf("template matches = %#v", inventory.Indexes)
 	}
+	readiness := []Readiness{
+		inventory.Indexes[0].MigrationReadiness,
+		inventory.Indexes[1].MigrationReadiness,
+		inventory.Indexes[2].MigrationReadiness,
+		inventory.Indexes[3].MigrationReadiness,
+	}
+	wantReadiness := []Readiness{
+		ReadinessNoTransferRequired,
+		ReadinessManualTransferRequired,
+		ReadinessBlocked,
+		ReadinessNoTransferRequired,
+	}
+	if !reflect.DeepEqual(readiness, wantReadiness) {
+		t.Fatalf("readiness = %v, want %v", readiness, wantReadiness)
+	}
+	if inventory.MigrationReadiness != ReadinessBlocked {
+		t.Fatalf(
+			"migration readiness = %q, want %q",
+			inventory.MigrationReadiness,
+			ReadinessBlocked,
+		)
+	}
 	payload, err := json.Marshal(inventory)
 	if err != nil {
 		t.Fatalf("marshal inventory: %v", err)
@@ -64,6 +86,41 @@ func TestInspectLegacyIndexesClassifiesWithoutReturningContent(t *testing.T) {
 	if strings.Contains(string(payload), canary) ||
 		strings.Contains(string(payload), "/private/target") {
 		t.Fatalf("inventory exposed inspected content: %s", payload)
+	}
+}
+
+func TestInspectLegacyIndexesReducesEveryMixedReadinessCombination(
+	t *testing.T,
+) {
+	states := []Readiness{
+		ReadinessNoTransferRequired,
+		ReadinessManualTransferRequired,
+		ReadinessBlocked,
+	}
+	for _, first := range states {
+		for _, second := range states {
+			for _, third := range states {
+				for _, fourth := range states {
+					readiness := []Readiness{first, second, third, fourth}
+					t.Run(strings.Join(readinessStrings(readiness), "-"), func(t *testing.T) {
+						release := legacyReleaseFixture()
+						inspector := legacyInspectorForReadiness(release, readiness)
+						inventory, err := InspectLegacyIndexes(release, inspector)
+						if err != nil {
+							t.Fatalf("InspectLegacyIndexes() error = %v", err)
+						}
+						want := expectedOverallReadiness(readiness)
+						if inventory.MigrationReadiness != want {
+							t.Fatalf(
+								"migration readiness = %q, want %q",
+								inventory.MigrationReadiness,
+								want,
+							)
+						}
+					})
+				}
+			}
+		}
 	}
 }
 
@@ -118,6 +175,55 @@ func TestInspectLegacyIndexesRequiresExactReleaseResources(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), "antigravity") {
 		t.Fatalf("missing resource error = %v", err)
 	}
+}
+
+func legacyInspectorForReadiness(
+	release releasecontract.Release,
+	readiness []Readiness,
+) *legacyInspectorFixture {
+	fixture := &legacyInspectorFixture{
+		entries: map[domain.Location]hostfs.Entry{},
+		errors:  map[domain.Location]error{},
+	}
+	for index, state := range readiness {
+		resource := release.Resources[index]
+		switch state {
+		case ReadinessNoTransferRequired:
+			fixture.errors[resource.Target] = fs.ErrNotExist
+		case ReadinessManualTransferRequired:
+			fixture.entries[resource.Target] = hostfs.Entry{
+				Kind: hostfs.EntryRegular,
+				Mode: 0o600, Content: []byte("divergent"),
+			}
+		case ReadinessBlocked:
+			fixture.entries[resource.Target] = hostfs.Entry{
+				Kind: hostfs.EntrySymlink,
+				Mode: 0o777,
+			}
+		}
+	}
+	return fixture
+}
+
+func expectedOverallReadiness(readiness []Readiness) Readiness {
+	result := ReadinessNoTransferRequired
+	for _, state := range readiness {
+		if state == ReadinessBlocked {
+			return ReadinessBlocked
+		}
+		if state == ReadinessManualTransferRequired {
+			result = ReadinessManualTransferRequired
+		}
+	}
+	return result
+}
+
+func readinessStrings(readiness []Readiness) []string {
+	result := make([]string, len(readiness))
+	for index, state := range readiness {
+		result[index] = string(state)
+	}
+	return result
 }
 
 type legacyInspectorFixture struct {

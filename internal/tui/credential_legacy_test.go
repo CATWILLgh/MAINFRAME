@@ -66,10 +66,12 @@ func TestLegacyCredentialIndexViewIsValueFreeAndReadOnly(t *testing.T) {
 	for _, expected := range []string{
 		"Legacy credential indexes",
 		"Claude Code",
-		"differs from the current release template",
+		"manual transfer is required",
 		"Codex",
-		"cannot be inspected safely",
-		"Inventory only",
+		"needs attention before transfer",
+		"Old files stay unchanged",
+		"OpenCode",
+		"no transfer is required",
 	} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("legacy view does not contain %q:\n%s", expected, view)
@@ -132,23 +134,31 @@ func legacyCredentialIndexesFixture() []credentialmigration.LegacyIndex {
 			ComponentID: domain.ComponentClaudeCode,
 			ResourceID:  "claude-code.credentials-index",
 			State:       credentialmigration.IndexPresent,
+			MigrationReadiness: credentialmigration.
+				ReadinessManualTransferRequired,
 		},
 		{
 			ComponentID:  domain.ComponentCodex,
 			ResourceID:   "codex.credentials-index",
 			State:        credentialmigration.IndexUnsafe,
 			UnsafeReason: credentialmigration.ReasonUnsafeMode,
+			MigrationReadiness: credentialmigration.
+				ReadinessBlocked,
 		},
 		{
 			ComponentID: domain.ComponentOpenCode,
 			ResourceID:  "opencode.credentials-index",
 			State:       credentialmigration.IndexMissing,
+			MigrationReadiness: credentialmigration.
+				ReadinessNoTransferRequired,
 		},
 		{
 			ComponentID:            domain.ComponentAntigravity2,
 			ResourceID:             "antigravity-2.credentials-index",
 			State:                  credentialmigration.IndexPresent,
 			MatchesCurrentTemplate: true,
+			MigrationReadiness: credentialmigration.
+				ReadinessNoTransferRequired,
 		},
 	}
 }

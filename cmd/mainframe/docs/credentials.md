@@ -26,10 +26,12 @@ secret name. It does not read that secret.
 
 `mainframe credentials legacy-indexes` explicitly inspects the four old
 adapter-local Markdown indexes. It returns only their release-defined
-locations and bounded states. It never returns file content, content hashes,
-absolute paths, symlink targets, or raw filesystem errors. This is an
-inventory only: it does not migrate or delete anything, and a template match
-does not mean migration is complete.
+locations, bounded states, and read-only transfer readiness. It never returns
+file content, content hashes, absolute paths, symlink targets, or raw
+filesystem errors. Missing files and byte-identical current templates need no
+transfer. Safe divergent files require manual transfer; unsafe files block
+readiness until they receive attention. The command does not write, delete, or
+adopt an old file, and always reports `migration_performed` as `false`.
 
 Agents can create or edit instance metadata through:
 

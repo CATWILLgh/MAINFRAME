@@ -14,7 +14,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
-const legacyCredentialInventorySchemaVersion = 1
+const legacyCredentialInventorySchemaVersion = 2
 
 type runtimeLegacyIndexInspector struct {
 	release     releasecontract.Release
@@ -29,7 +29,7 @@ type legacyCredentialInventoryResponse struct {
 	ReleaseID          string                          `json:"release_id"`
 	ReleaseIndexSHA256 string                          `json:"release_index_sha256"`
 	MigrationPerformed bool                            `json:"migration_performed"`
-	MigrationReadiness string                          `json:"migration_readiness"`
+	MigrationReadiness credentialmigration.Readiness   `json:"migration_readiness"`
 	Indexes            []legacyCredentialIndexResponse `json:"indexes"`
 }
 
@@ -41,6 +41,7 @@ type legacyCredentialIndexResponse struct {
 	SizeBytes              *int                             `json:"size_bytes,omitempty"`
 	MatchesCurrentTemplate *bool                            `json:"matches_current_release_template,omitempty"`
 	UnsafeReason           credentialmigration.UnsafeReason `json:"unsafe_reason,omitempty"`
+	MigrationReadiness     credentialmigration.Readiness    `json:"migration_readiness"`
 }
 
 func (inspector runtimeLegacyIndexInspector) Inspect() (
@@ -136,7 +137,7 @@ func publicLegacyCredentialInventory(
 		ReleaseID:          inventory.ReleaseID,
 		ReleaseIndexSHA256: inventory.ReleaseIndexSHA256,
 		MigrationPerformed: false,
-		MigrationReadiness: "not_assessed",
+		MigrationReadiness: inventory.MigrationReadiness,
 		Indexes:            indexes,
 	}
 }
@@ -145,11 +146,12 @@ func publicLegacyCredentialIndex(
 	index credentialmigration.LegacyIndex,
 ) legacyCredentialIndexResponse {
 	response := legacyCredentialIndexResponse{
-		ComponentID:  index.ComponentID,
-		ResourceID:   index.ResourceID,
-		Location:     index.Location,
-		State:        index.State,
-		UnsafeReason: index.UnsafeReason,
+		ComponentID:        index.ComponentID,
+		ResourceID:         index.ResourceID,
+		Location:           index.Location,
+		State:              index.State,
+		UnsafeReason:       index.UnsafeReason,
+		MigrationReadiness: index.MigrationReadiness,
 	}
 	if index.State == credentialmigration.IndexPresent {
 		size := index.SizeBytes

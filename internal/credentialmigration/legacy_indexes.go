@@ -18,6 +18,14 @@ const (
 	IndexUnsafe  IndexState = "unsafe"
 )
 
+type Readiness string
+
+const (
+	ReadinessNoTransferRequired     Readiness = "no_transfer_required"
+	ReadinessManualTransferRequired Readiness = "manual_transfer_required"
+	ReadinessBlocked                Readiness = "blocked"
+)
+
 type UnsafeReason string
 
 const (
@@ -30,6 +38,7 @@ const (
 type Inventory struct {
 	ReleaseID          string        `json:"release_id"`
 	ReleaseIndexSHA256 string        `json:"release_index_sha256"`
+	MigrationReadiness Readiness     `json:"migration_readiness"`
 	Indexes            []LegacyIndex `json:"indexes"`
 }
 
@@ -41,6 +50,7 @@ type LegacyIndex struct {
 	SizeBytes              int                `json:"size_bytes,omitempty"`
 	MatchesCurrentTemplate bool               `json:"matches_current_release_template,omitempty"`
 	UnsafeReason           UnsafeReason       `json:"unsafe_reason,omitempty"`
+	MigrationReadiness     Readiness          `json:"migration_readiness"`
 }
 
 type Inspector interface {
@@ -86,6 +96,7 @@ func InspectLegacyIndexes(
 	return Inventory{
 		ReleaseID:          release.ID,
 		ReleaseIndexSHA256: release.IndexSHA256,
+		MigrationReadiness: reduceReadiness(indexes),
 		Indexes:            indexes,
 	}, nil
 }
@@ -133,27 +144,27 @@ func inspectLegacyIndex(
 	entry, err := inspector.Inspect(resource.Target, true)
 	if errors.Is(err, fs.ErrNotExist) {
 		result.State = IndexMissing
-		return result
+		return legacyIndexWithReadiness(result)
 	}
 	if err != nil {
 		result.State = IndexUnsafe
 		result.UnsafeReason = ReasonInspectionFailed
-		return result
+		return legacyIndexWithReadiness(result)
 	}
 	if entry.Kind == hostfs.EntrySymlink {
 		result.State = IndexUnsafe
 		result.UnsafeReason = ReasonSymbolicLink
-		return result
+		return legacyIndexWithReadiness(result)
 	}
 	if entry.Kind != hostfs.EntryRegular {
 		result.State = IndexUnsafe
 		result.UnsafeReason = ReasonNotRegular
-		return result
+		return legacyIndexWithReadiness(result)
 	}
 	if entry.Mode != 0o600 {
 		result.State = IndexUnsafe
 		result.UnsafeReason = ReasonUnsafeMode
-		return result
+		return legacyIndexWithReadiness(result)
 	}
 	result.State = IndexPresent
 	result.SizeBytes = len(entry.Content)
@@ -161,5 +172,30 @@ func inspectLegacyIndex(
 		entry.Content,
 		resource.SourceContent,
 	)
-	return result
+	return legacyIndexWithReadiness(result)
+}
+
+func legacyIndexWithReadiness(index LegacyIndex) LegacyIndex {
+	switch {
+	case index.State == IndexUnsafe:
+		index.MigrationReadiness = ReadinessBlocked
+	case index.State == IndexPresent && !index.MatchesCurrentTemplate:
+		index.MigrationReadiness = ReadinessManualTransferRequired
+	default:
+		index.MigrationReadiness = ReadinessNoTransferRequired
+	}
+	return index
+}
+
+func reduceReadiness(indexes []LegacyIndex) Readiness {
+	readiness := ReadinessNoTransferRequired
+	for _, index := range indexes {
+		if index.MigrationReadiness == ReadinessBlocked {
+			return ReadinessBlocked
+		}
+		if index.MigrationReadiness == ReadinessManualTransferRequired {
+			readiness = ReadinessManualTransferRequired
+		}
+	}
+	return readiness
 }

@@ -49,9 +49,9 @@ func (model *Model) legacyCredentialIndexesView() string {
 		header(),
 		headingStyle.Render("Legacy credential indexes"),
 		bannerStyle.Render(
-			"Inventory only — no legacy file was changed.",
+			"Old files stay unchanged — readiness only.",
 		),
-		"These files remain user-owned until their descriptions are migrated.",
+		"MAINFRAME will not write, delete, or adopt these files.",
 		strings.Join(lines, "\n"),
 		model.form.View(),
 		mutedStyle.Render("enter or b back  •  q quit"),
@@ -62,17 +62,14 @@ func (model *Model) legacyCredentialIndexesView() string {
 func legacyCredentialStateText(
 	index credentialmigration.LegacyIndex,
 ) string {
-	switch index.State {
-	case credentialmigration.IndexMissing:
-		return "not found"
-	case credentialmigration.IndexUnsafe:
-		return "cannot be inspected safely"
-	case credentialmigration.IndexPresent:
-		if index.MatchesCurrentTemplate {
-			return "matches the current release template; migration is not assessed"
-		}
-		return "differs from the current release template; migration is not assessed"
+	switch index.MigrationReadiness {
+	case credentialmigration.ReadinessNoTransferRequired:
+		return "no transfer is required"
+	case credentialmigration.ReadinessManualTransferRequired:
+		return "manual transfer is required; the old file stays unchanged"
+	case credentialmigration.ReadinessBlocked:
+		return "needs attention before transfer; the old file stays unchanged"
 	default:
-		return "unknown state"
+		return "readiness is unavailable; the old file stays unchanged"
 	}
 }

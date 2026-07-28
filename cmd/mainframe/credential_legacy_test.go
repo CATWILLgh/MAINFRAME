@@ -84,7 +84,10 @@ func TestPublicLegacyCredentialInventoryHasValueFreeContract(t *testing.T) {
 			State:                  credentialmigration.IndexPresent,
 			SizeBytes:              len(canary),
 			MatchesCurrentTemplate: false,
+			MigrationReadiness: credentialmigration.
+				ReadinessManualTransferRequired,
 		}},
+		MigrationReadiness: credentialmigration.ReadinessManualTransferRequired,
 	}
 	var output bytes.Buffer
 	if err := writeLegacyCredentialInventory(&output, inventory); err != nil {
@@ -95,8 +98,9 @@ func TestPublicLegacyCredentialInventoryHasValueFreeContract(t *testing.T) {
 		t.Fatalf("decode inventory output: %v", err)
 	}
 	if response["kind"] != "mainframe-legacy-credential-index-inventory" ||
+		response["schema_version"] != float64(2) ||
 		response["migration_performed"] != false ||
-		response["migration_readiness"] != "not_assessed" {
+		response["migration_readiness"] != "manual_transfer_required" {
 		t.Fatalf("legacy inventory response = %s", output.String())
 	}
 	for _, forbidden := range []string{
@@ -115,6 +119,10 @@ func TestPublicLegacyCredentialInventoryHasValueFreeContract(t *testing.T) {
 		t.Fatalf("legacy inventory indexes = %#v", response["indexes"])
 	}
 	assertLegacyIndexResponseKeys(t, indexes[0])
+	index := indexes[0].(map[string]any)
+	if index["migration_readiness"] != "manual_transfer_required" {
+		t.Fatalf("legacy index readiness = %#v", index)
+	}
 }
 
 func assertLegacyIndexResponseKeys(t *testing.T, raw any) {
@@ -131,6 +139,7 @@ func assertLegacyIndexResponseKeys(t *testing.T, raw any) {
 		"size_bytes":                       true,
 		"matches_current_release_template": true,
 		"unsafe_reason":                    true,
+		"migration_readiness":              true,
 	}
 	for key := range index {
 		if !allowed[key] {

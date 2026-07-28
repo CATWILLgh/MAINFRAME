@@ -13,7 +13,13 @@ mainframe credentials legacy-indexes
 ```
 
 This command is explicitly all-adapter and read-only. It reports migration as
-not assessed and does not authorize deletion or automatic conversion.
+`no_transfer_required`, `manual_transfer_required`, or `blocked`, both for
+each adapter and overall. Overall readiness uses the strictest result:
+`blocked` takes precedence over `manual_transfer_required`, which takes
+precedence over `no_transfer_required`. The command always reports
+`migration_performed` as `false` and does not authorize writes, deletion,
+adoption, or automatic conversion of old files.
+The readiness fields are part of response schema version 2.
 
 Local release delivery uses the same review and exact-apply boundary:
 
