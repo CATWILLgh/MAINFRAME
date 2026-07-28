@@ -55,10 +55,17 @@ func InspectWithExternal(
 		resources:    cloned,
 		observations: make([]Observation, 0, len(cloned)),
 		ownedMaps:    make(map[string]ownedMapSnapshot),
+		files:        make(map[domain.Location]fileSnapshot),
 	}
 	snapshots := make(map[domain.Location]jsonSnapshot)
 	for _, resource := range cloned {
-		observation, err := observeResource(resource, host, snapshots, external)
+		observation, err := observeResource(
+			resource,
+			host,
+			snapshots,
+			inspection.files,
+			external,
+		)
 		if err != nil {
 			return Inspection{}, fmt.Errorf(
 				"observe configuration resource %q: %w",
@@ -82,7 +89,9 @@ func InspectWithExternal(
 	if err := Validate(cloned, inspection.observations); err != nil {
 		return Inspection{}, err
 	}
-	inspection.files = captureFileSnapshots(snapshots)
+	for location, snapshot := range captureFileSnapshots(snapshots) {
+		inspection.files[location] = snapshot
+	}
 	return inspection, nil
 }
 
@@ -137,6 +146,12 @@ func cloneResources(resources []releasecontract.Resource) []releasecontract.Reso
 			[]releasecontract.JSONField(nil),
 			resource.OwnedJSONFields...,
 		)
+		if resource.SourceContent != nil {
+			result[index].SourceContent = append(
+				[]byte{},
+				resource.SourceContent...,
+			)
+		}
 		if resource.JSONMapOwnership != nil {
 			ownership := *resource.JSONMapOwnership
 			result[index].JSONMapOwnership = &ownership

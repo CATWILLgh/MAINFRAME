@@ -117,6 +117,7 @@ func observeResource(
 	resource releasecontract.Resource,
 	host Host,
 	jsonSnapshots map[domain.Location]jsonSnapshot,
+	files map[domain.Location]fileSnapshot,
 	external ExternalObserver,
 ) (Observation, error) {
 	result := Observation{ResourceID: resource.ID, ComponentID: resource.ComponentID}
@@ -144,6 +145,7 @@ func observeResource(
 	}
 	entry, err := host.Inspect(resource.Target, readContent)
 	if errors.Is(err, fs.ErrNotExist) {
+		files[resource.Target] = fileSnapshot{}
 		result.Status, result.Reason = missingStatus(resource.Strategy)
 		return result, nil
 	}
@@ -154,6 +156,17 @@ func observeResource(
 	if entry.Kind == hostfs.EntrySymlink {
 		result.Status, result.Reason = Attention, SymbolicLink
 		return result, nil
+	}
+	if entry.Kind == hostfs.EntryRegular {
+		files[resource.Target] = fileSnapshot{
+			present:          true,
+			raw:              append([]byte(nil), entry.Content...),
+			mode:             entry.Mode,
+			device:           entry.Device,
+			inode:            entry.Inode,
+			birthSeconds:     entry.BirthSeconds,
+			birthNanoseconds: entry.BirthNanoseconds,
+		}
 	}
 	return classifyExisting(resource, entry, result), nil
 }

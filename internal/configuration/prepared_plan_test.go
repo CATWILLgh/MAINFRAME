@@ -13,6 +13,7 @@ import (
 func TestNewPreparedPlanNormalizesAndClonesTransitions(t *testing.T) {
 	first := preparedTransition("z-resource", "z.json", 21)
 	second := preparedTransition("a-resource", "a.json", 22)
+	second.PreparationOnly = true
 	input := []configuration.Transition{first, second}
 
 	plan, err := configuration.NewPreparedPlan(input)
@@ -24,7 +25,9 @@ func TestNewPreparedPlanNormalizesAndClonesTransitions(t *testing.T) {
 
 	got := plan.Transitions()
 	if len(got) != 2 || got[0].ResourceIDs[0] != "a-resource" ||
-		got[1].ResourceIDs[0] != "z-resource" {
+		!got[0].PreparationOnly ||
+		got[1].ResourceIDs[0] != "z-resource" ||
+		!plan.HasPreparationOnly() {
 		t.Fatalf("normalized transitions = %#v", got)
 	}
 	got[0].Mutations[0].After.Content[0] = 'x'

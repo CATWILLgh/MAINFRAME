@@ -11,11 +11,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const maxJSONDocumentSize = 1 << 20
+const maxVerifiedPayloadSize = 1 << 20
 
 func readVerifiedPayload(root, relative string, expected payloadFile) ([]byte, error) {
-	if expected.Size > maxJSONDocumentSize {
-		return nil, fmt.Errorf("payload %q exceeds the JSON document limit", relative)
+	if expected.Size > maxVerifiedPayloadSize {
+		return nil, fmt.Errorf("verified payload %q exceeds the size limit", relative)
 	}
 	parent, err := unix.Open(
 		root,
@@ -74,7 +74,7 @@ func readPayloadFile(parent int, name string, expected payloadFile) ([]byte, err
 	if !info.Mode().IsRegular() || info.Mode().Perm() != parsePayloadMode(expected.Mode) {
 		return nil, fmt.Errorf("payload %q metadata mismatch", expected.Path)
 	}
-	content, err := io.ReadAll(io.LimitReader(file, maxJSONDocumentSize+1))
+	content, err := io.ReadAll(io.LimitReader(file, maxVerifiedPayloadSize+1))
 	if err != nil {
 		return nil, err
 	}

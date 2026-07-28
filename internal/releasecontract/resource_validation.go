@@ -78,6 +78,17 @@ func validateResourceRecord(
 	if err != nil {
 		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
 	}
+	sourceContent, err := loadSeedContent(
+		releaseRoot,
+		sourceBase,
+		record.Source,
+		strategy,
+		observation,
+		payloadRows,
+	)
+	if err != nil {
+		return Resource{}, fmt.Errorf("resource %q: %w", record.ID, err)
+	}
 	mapOwnership, ownedFields, err := validateResourceOwnership(
 		releaseRoot, sourceBase, component, record, target, strategy, observation, payloadRows,
 	)
@@ -98,7 +109,8 @@ func validateResourceRecord(
 	resource := Resource{
 		ID: record.ID, ComponentID: component, Strategy: strategy,
 		SourcePath: source, Target: target, LegacySourceSuffixes: legacySources,
-		Observation: observation, Apply: SupportStatus(record.Apply), DesiredLine: desiredLine,
+		Observation: observation, Apply: SupportStatus(record.Apply),
+		SourceContent: sourceContent, DesiredLine: desiredLine,
 		OwnedJSONFields: ownedFields, JSONMapOwnership: mapOwnership,
 		ExternalState:     externalState,
 		ExactJSONExemplar: exemplar,

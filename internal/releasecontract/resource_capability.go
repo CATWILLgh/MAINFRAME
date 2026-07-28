@@ -10,6 +10,31 @@ func (resource Resource) SupportsApply() bool {
 	return resource.supportsOpenCodeMapApply()
 }
 
+// SupportsPreparation reports whether validated release data can produce an immutable after-image.
+func (resource Resource) SupportsPreparation() bool {
+	if resource.Strategy != StrategySeedIfAbsent {
+		return resource.SupportsApply()
+	}
+	expectedRoots := map[domain.ComponentID]domain.RootID{
+		"credential-tools":           domain.RootCredentialsConfig,
+		domain.ComponentClaudeCode:   domain.RootClaudeConfig,
+		domain.ComponentCodex:        domain.RootCodexConfig,
+		domain.ComponentOpenCode:     domain.RootOpenCodeConfig,
+		domain.ComponentAntigravity2: domain.RootAntigravityData,
+	}
+	root, supported := expectedRoots[resource.ComponentID]
+	return supported &&
+		resource.Observation == SupportSupported &&
+		resource.Apply == SupportUnimplemented &&
+		resource.SourcePath != "" &&
+		resource.SourceContent != nil &&
+		resource.Target.Root == root &&
+		len(resource.LegacySourceSuffixes) == 0 &&
+		len(resource.OwnedJSONFields) == 0 &&
+		resource.JSONMapOwnership == nil &&
+		resource.ExternalState == nil
+}
+
 func (resource Resource) supportsOpenCodeMapApply() bool {
 	ownership := resource.JSONMapOwnership
 	return resource.Apply == SupportSupported &&

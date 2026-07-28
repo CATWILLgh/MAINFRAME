@@ -45,8 +45,9 @@ type FileMutation struct {
 }
 
 type Transition struct {
-	ResourceIDs []string
-	Mutations   []FileMutation
+	ResourceIDs     []string
+	PreparationOnly bool
+	Mutations       []FileMutation
 }
 
 type ReadPreconditionKind string
@@ -94,6 +95,16 @@ func (inspection Inspection) PrepareWithPreservation(
 	builder := newPreparationBuilder(inspection.files)
 	selected := selectedComponents(included)
 	for _, resource := range resources {
+		if resource.Strategy == releasecontract.StrategySeedIfAbsent {
+			if err := builder.applySeed(resource, selected[resource.ComponentID]); err != nil {
+				return PreparedPlan{}, fmt.Errorf(
+					"prepare configuration resource %q: %w",
+					resource.ID,
+					err,
+				)
+			}
+			continue
+		}
 		if err := builder.applyOwnedMap(
 			resource,
 			inspection.ownedMaps[resource.ID],
@@ -130,13 +141,14 @@ func changedOwnedResources(
 		if !changed[resource.ID] {
 			continue
 		}
-		if !resource.SupportsApply() {
+		if !resource.SupportsPreparation() {
 			return nil, fmt.Errorf(
-				"configuration resource %q does not support apply",
+				"configuration resource %q does not support preparation",
 				resource.ID,
 			)
 		}
-		if resource.JSONMapOwnership == nil {
+		if resource.Strategy != releasecontract.StrategySeedIfAbsent &&
+			resource.JSONMapOwnership == nil {
 			return nil, fmt.Errorf(
 				"configuration resource %q cannot be materialized",
 				resource.ID,
@@ -176,11 +188,13 @@ func cloneFileMutations(source []FileMutation) []FileMutation {
 }
 
 type preparationBuilder struct {
-	files         map[domain.Location]fileSnapshot
-	docs          map[domain.Location]jsondocument.Document
-	groups        map[domain.Location]map[string]bool
-	groupByTarget map[domain.Location]domain.Location
-	touch         map[domain.Location]bool
+	files           map[domain.Location]fileSnapshot
+	docs            map[domain.Location]jsondocument.Document
+	groups          map[domain.Location]map[string]bool
+	groupByTarget   map[domain.Location]domain.Location
+	touch           map[domain.Location]bool
+	rawAfter        map[domain.Location][]byte
+	preparationOnly map[domain.Location]bool
 }
 
 func newPreparationBuilder(
@@ -188,10 +202,36 @@ func newPreparationBuilder(
 ) *preparationBuilder {
 	return &preparationBuilder{
 		files: files, docs: make(map[domain.Location]jsondocument.Document),
-		groups:        make(map[domain.Location]map[string]bool),
-		groupByTarget: make(map[domain.Location]domain.Location),
-		touch:         make(map[domain.Location]bool),
+		groups:          make(map[domain.Location]map[string]bool),
+		groupByTarget:   make(map[domain.Location]domain.Location),
+		touch:           make(map[domain.Location]bool),
+		rawAfter:        make(map[domain.Location][]byte),
+		preparationOnly: make(map[domain.Location]bool),
 	}
+}
+
+func (builder *preparationBuilder) applySeed(
+	resource releasecontract.Resource,
+	selected bool,
+) error {
+	if !selected {
+		return nil
+	}
+	snapshot, exists := builder.files[resource.Target]
+	if !exists {
+		return fmt.Errorf("target snapshot is unavailable")
+	}
+	if snapshot.present {
+		return fmt.Errorf("seed target unexpectedly exists")
+	}
+	builder.rawAfter[resource.Target] = append(
+		[]byte{},
+		resource.SourceContent...,
+	)
+	builder.groups[resource.Target] = map[string]bool{resource.ID: true}
+	builder.touch[resource.Target] = true
+	builder.preparationOnly[resource.Target] = true
+	return nil
 }
 
 func (builder *preparationBuilder) document(
@@ -282,7 +322,11 @@ func (builder *preparationBuilder) transition(
 			mutations = append(mutations, *mutation)
 		}
 	}
-	return Transition{ResourceIDs: resourceIDs, Mutations: mutations}, nil
+	return Transition{
+		ResourceIDs:     resourceIDs,
+		PreparationOnly: builder.preparationOnly[configTarget],
+		Mutations:       mutations,
+	}, nil
 }
 
 func (builder *preparationBuilder) mutation(
@@ -292,7 +336,10 @@ func (builder *preparationBuilder) mutation(
 	if !exists {
 		return nil, fmt.Errorf("target snapshot is unavailable")
 	}
-	after := builder.docs[target].Indented()
+	after, exists := builder.rawAfter[target]
+	if !exists {
+		after = builder.docs[target].Indented()
+	}
 	if snapshot.present && bytes.Equal(snapshot.raw, after) {
 		return nil, nil
 	}

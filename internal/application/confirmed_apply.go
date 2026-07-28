@@ -29,6 +29,7 @@ func context7Applicable(
 	if !exact ||
 		len(semantic.Diagnostics.Intents) != 0 ||
 		len(semantic.MCP.Intents) == 0 ||
+		preview.Configuration.HasPreparationOnly() ||
 		!credentialMutationScope(adapter, semantic, preview) {
 		return false
 	}

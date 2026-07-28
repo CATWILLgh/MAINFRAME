@@ -69,6 +69,7 @@ type Resource struct {
 	LegacySourceSuffixes []domain.ArtifactPath
 	Observation          SupportStatus
 	Apply                SupportStatus
+	SourceContent        []byte
 	DesiredLine          string
 	OwnedJSONFields      []JSONField
 	JSONMapOwnership     *JSONMapOwnership

@@ -209,12 +209,65 @@ func TestInspectionPrepareIsImmutableAndPerformsNoHostReads(t *testing.T) {
 	}
 }
 
+func TestInspectionPreparesVerifiedMissingSeedWithoutAdditionalHostRead(t *testing.T) {
+	target := domain.Location{
+		Root: domain.RootCredentialsConfig,
+		Path: "secrets.env",
+	}
+	source := []byte("# user-owned credentials\n")
+	seed := releasecontract.Resource{
+		ID:            "credential-tools.secrets-store",
+		ComponentID:   "credential-tools",
+		Strategy:      releasecontract.StrategySeedIfAbsent,
+		SourcePath:    "bundles/credential-tools/secrets.env",
+		SourceContent: source,
+		Target:        target,
+		Observation:   releasecontract.SupportSupported,
+		Apply:         releasecontract.SupportUnimplemented,
+	}
+	host := preparedHost(nil)
+	inspection, err := configuration.Inspect(
+		[]releasecontract.Resource{seed},
+		host,
+	)
+	if err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
+	source[0] = '!'
+
+	prepared, err := inspection.Prepare(
+		[]domain.ComponentID{"credential-tools"},
+	)
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	transitions := prepared.Transitions()
+	if len(transitions) != 1 || len(transitions[0].Mutations) != 1 {
+		t.Fatalf("transitions = %#v", transitions)
+	}
+	if !transitions[0].PreparationOnly || !prepared.HasPreparationOnly() {
+		t.Fatal("seed transition was not marked as preparation-only")
+	}
+	mutation := transitions[0].Mutations[0]
+	if mutation.Target != target ||
+		mutation.Before.Exists ||
+		!mutation.After.Exists ||
+		mutation.After.Mode != 0o600 ||
+		string(mutation.After.Content) != "# user-owned credentials\n" {
+		t.Fatalf("mutation = %#v", mutation)
+	}
+	if host.calls[target] != 1 {
+		t.Fatalf("host reads = %d, want 1", host.calls[target])
+	}
+}
+
 func TestInspectionPrepareFailsClosed(t *testing.T) {
 	unsupported := resource(
-		"seed",
-		releasecontract.StrategySeedIfAbsent,
+		"shell",
+		releasecontract.StrategyShellLine,
 		releasecontract.SupportSupported,
 	)
+	unsupported.DesiredLine = "source ~/.config/mainframe/env"
 	unsafe := supportedOwnedMapResource(
 		location("opencode.json"),
 		location("opencode.json.mainframe-permissions.json"),

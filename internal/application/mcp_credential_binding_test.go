@@ -100,6 +100,58 @@ func TestOpenCodeContext7ApplicabilityRejectsForeignAdapterMutation(
 	}
 }
 
+func TestOpenCodeContext7ApplicabilityRejectsPreparationOnlyResource(
+	t *testing.T,
+) {
+	request := testRequest()
+	request.Components = []domain.ComponentID{domain.ComponentOpenCode}
+	request.MCPSelections[0].Adapters = request.Components
+	request.MCPCredentials = []MCPCredentialBinding{context7MCPBinding()}
+	semantic := lifecycle.Preview{
+		Configuration: configuration.Plan{
+			Changes: []configuration.Change{{
+				ResourceID:  "opencode.credentials-index",
+				ComponentID: domain.ComponentOpenCode,
+				Kind:        configuration.ChangeAdd,
+			}},
+		},
+		MCP: mcpconfiguration.Plan{Intents: []mcpconfiguration.Intent{{
+			ComponentID: domain.ComponentOpenCode,
+			ServerID:    "context7",
+		}}},
+	}
+	prepared, err := configuration.NewPreparedPlan([]configuration.Transition{{
+		ResourceIDs:     []string{"opencode.credentials-index"},
+		PreparationOnly: true,
+		Mutations: []configuration.FileMutation{{
+			Disposition: configuration.MutationPresent,
+			Target: domain.Location{
+				Root: domain.RootOpenCodeConfig,
+				Path: "credentials-index.md",
+			},
+			After: configuration.AfterImage{
+				Exists:  true,
+				Content: []byte("# Credentials\n"),
+				Mode:    0o600,
+			},
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("NewPreparedPlan() error = %v", err)
+	}
+	executable := executor.Preview{
+		Plan: domain.Plan{Operations: []domain.Operation{{
+			ComponentID: domain.ComponentOpenCode,
+			Kind:        domain.OperationInstall,
+		}}},
+		Configuration: prepared,
+	}
+
+	if context7Applicable(request, semantic, executable) {
+		t.Fatal("preparation-only resource was considered applicable")
+	}
+}
+
 func TestAntigravityContext7ApplicabilityIncludesKeylessAndRemoval(t *testing.T) {
 	semantic := lifecycle.Preview{
 		MCP: mcpconfiguration.Plan{Intents: []mcpconfiguration.Intent{{

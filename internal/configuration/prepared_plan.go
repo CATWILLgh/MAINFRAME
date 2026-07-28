@@ -25,8 +25,9 @@ func (plan PreparedPlan) Transitions() []Transition {
 	result := make([]Transition, len(plan.transitions))
 	for index, transition := range plan.transitions {
 		result[index] = Transition{
-			ResourceIDs: append([]string(nil), transition.ResourceIDs...),
-			Mutations:   cloneFileMutations(transition.Mutations),
+			ResourceIDs:     append([]string(nil), transition.ResourceIDs...),
+			PreparationOnly: transition.PreparationOnly,
+			Mutations:       cloneFileMutations(transition.Mutations),
 		}
 	}
 	return result
@@ -41,6 +42,15 @@ func (plan PreparedPlan) Materializations() []SecretMaterializationRecipe {
 		[]SecretMaterializationRecipe(nil),
 		plan.materializations...,
 	)
+}
+
+func (plan PreparedPlan) HasPreparationOnly() bool {
+	for _, transition := range plan.transitions {
+		if transition.PreparationOnly {
+			return true
+		}
+	}
+	return false
 }
 
 func NewPreparedPlan(transitions []Transition) (PreparedPlan, error) {
@@ -123,8 +133,9 @@ func cloneTransitions(source []Transition) []Transition {
 	result := make([]Transition, len(source))
 	for index, transition := range source {
 		result[index] = Transition{
-			ResourceIDs: append([]string(nil), transition.ResourceIDs...),
-			Mutations:   cloneFileMutations(transition.Mutations),
+			ResourceIDs:     append([]string(nil), transition.ResourceIDs...),
+			PreparationOnly: transition.PreparationOnly,
+			Mutations:       cloneFileMutations(transition.Mutations),
 		}
 	}
 	return result

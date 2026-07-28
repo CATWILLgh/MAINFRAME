@@ -43,6 +43,40 @@ func TestLoadAcceptsSupportedShellObservationAndCapturesDesiredLine(t *testing.T
 	}
 }
 
+func TestLoadCapturesVerifiedSeedContent(t *testing.T) {
+	root := writeFixture(t)
+	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+	manifest := readObject(t, manifestPath)
+	resource := manifest["resources"].([]any)[0].(map[string]any)
+	resource["strategy"] = "seed-if-absent"
+	resource["observation"] = "supported"
+	seed := []byte("# MAINFRAME credential index\n")
+	writeFile(
+		t,
+		filepath.Join(root, "bundles/codex/config.json"),
+		string(seed),
+		0o644,
+	)
+	manifest["payload_files"] = []any{
+		payloadRow(t, filepath.Join(root, "bundles/codex/config.json"), "config.json"),
+		payloadRow(t, filepath.Join(root, "bundles/codex/payload.txt"), "payload.txt"),
+	}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	rewriteIndexDigest(t, root, manifestPath)
+
+	release, err := releasecontract.Load(root)
+	if err != nil {
+		t.Fatalf("load release: %v", err)
+	}
+	if !reflect.DeepEqual(release.Resources[0].SourceContent, seed) {
+		t.Fatalf(
+			"source content = %q, want %q",
+			release.Resources[0].SourceContent,
+			seed,
+		)
+	}
+}
+
 func TestLoadCapturesSupportedOwnedJSONFields(t *testing.T) {
 	root := writeFixture(t)
 	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
