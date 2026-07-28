@@ -64,7 +64,7 @@ func validateOperations(operations []domain.Operation) error {
 		if needsSource && !validRelative(string(operation.SourcePath)) {
 			return fmt.Errorf("plan contains invalid source %q", operation.SourcePath)
 		}
-		if operation.UnitID != "" && !identityPattern.MatchString(operation.UnitID) {
+		if operation.UnitID != "" && !domain.ValidUnitID(operation.UnitID) {
 			return fmt.Errorf("plan contains invalid unit ID %q", operation.UnitID)
 		}
 		if (operation.Kind == domain.OperationAdopt ||

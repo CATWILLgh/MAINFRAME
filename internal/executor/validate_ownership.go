@@ -3,6 +3,7 @@ package executor
 import (
 	"fmt"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/linkownership"
 )
 
@@ -13,7 +14,7 @@ func validateStepClaims(step JournalMutation) error {
 		}
 		return nil
 	}
-	if !identityPattern.MatchString(step.UnitID) ||
+	if !domain.ValidUnitID(step.UnitID) ||
 		!identityPattern.MatchString(string(step.ComponentID)) ||
 		(step.ClaimPhase != ClaimPrepared && step.ClaimPhase != ClaimPublished &&
 			step.ClaimPhase != ClaimRolledBack) {

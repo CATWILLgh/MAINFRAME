@@ -234,7 +234,7 @@ func validateUnits(
 	artifacts := make([]installmodel.ArtifactSpec, len(units))
 	for index, unit := range units {
 		identifiers[index] = unit.ID
-		if !itemPattern.MatchString(unit.ID) || (unit.Kind != "file" && unit.Kind != "tree") {
+		if !domain.ValidUnitID(unit.ID) || (unit.Kind != "file" && unit.Kind != "tree") {
 			return nil, fmt.Errorf("component %q has invalid install unit %q", component, unit.ID)
 		}
 		if err := validateSource(bundleRoot, unit.Source, unit.Kind); err != nil {

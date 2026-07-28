@@ -13,7 +13,7 @@ const releaseDigest = "0123456789abcdef0123456789abcdef0123456789abcdef012345678
 
 func TestRegistryRoundTripIsDeterministicAndOwned(t *testing.T) {
 	registry, err := linkownership.New([]linkownership.Claim{
-		claim("opencode", "opencode.instructions", domain.RootOpenCodeConfig, "AGENTS.md", "/releases/old/opencode/AGENTS.md"),
+		claim("opencode", "opencode.agents/decision-reviewer.md", domain.RootOpenCodeConfig, "AGENTS.md", "/releases/old/opencode/AGENTS.md"),
 		claim("claude-code", "claude-code.plugin", domain.RootClaudeConfig, "plugins/mainframe", "/releases/old/claude/plugin"),
 	})
 	if err != nil {

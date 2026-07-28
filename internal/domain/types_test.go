@@ -171,3 +171,31 @@ func TestOwnershipStatusValidity(t *testing.T) {
 		}
 	}
 }
+
+func TestUnitIDValidation(t *testing.T) {
+	valid := []string{
+		"codex.instructions",
+		"opencode.agents/decision-reviewer.md",
+		"opencode.gates/detectors/_diagnostics.py",
+		"opencode.skills/no_suppression_markers",
+	}
+	for _, value := range valid {
+		if !domain.ValidUnitID(value) {
+			t.Errorf("ValidUnitID(%q) = false", value)
+		}
+	}
+	invalid := []string{
+		"",
+		"/absolute",
+		"../escape",
+		"unit/../escape",
+		"unit//child",
+		"Bad ID",
+		"unit\nchild",
+	}
+	for _, value := range invalid {
+		if domain.ValidUnitID(value) {
+			t.Errorf("ValidUnitID(%q) = true", value)
+		}
+	}
+}

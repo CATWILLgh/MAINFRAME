@@ -82,6 +82,7 @@ func TestModelRejectsInvalidDefinitions(t *testing.T) {
 		{name: "empty component", components: []installmodel.ComponentSpec{{}}, message: "component ID"},
 		{name: "duplicate component", components: []installmodel.ComponentSpec{{ID: "a"}, {ID: "a"}}, message: "duplicate component"},
 		{name: "invalid desired target", components: desiredComponent(domain.Location{Root: "Invalid", Path: "file"}, "source/file"), message: "target"},
+		{name: "invalid unit ID", components: []installmodel.ComponentSpec{{ID: "a", Artifacts: []installmodel.ArtifactSpec{{UnitID: "../escape", Target: loc(domain.RootHome, "file"), SourcePath: "source/file"}}}}, message: "unit ID"},
 		{name: "non-portable desired target", components: desiredComponent(loc(domain.RootHome, "é/file"), "source/file"), message: "target"},
 		{name: "invalid source", components: desiredComponent(loc(domain.RootHome, "file"), "../source"), message: "source path"},
 		{name: "non-portable source", components: desiredComponent(loc(domain.RootHome, "file"), "source/é"), message: "source path"},

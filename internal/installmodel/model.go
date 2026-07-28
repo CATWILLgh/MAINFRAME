@@ -89,6 +89,9 @@ func validateAndFlatten(components []ComponentSpec) ([]Artifact, error) {
 }
 
 func validateDesired(id domain.ComponentID, spec ArtifactSpec) error {
+	if spec.UnitID != "" && !domain.ValidUnitID(spec.UnitID) {
+		return fmt.Errorf("component %q has invalid unit ID %q", id, spec.UnitID)
+	}
 	if !spec.Target.Valid() || !spec.Target.Path.Portable() {
 		return fmt.Errorf("component %q has invalid artifact target %#v", id, spec.Target)
 	}

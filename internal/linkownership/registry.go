@@ -165,7 +165,7 @@ func validateClaims(claims []Claim) error {
 }
 
 func validateClaim(claim Claim) error {
-	if !identifierPattern.MatchString(claim.UnitID) ||
+	if !domain.ValidUnitID(claim.UnitID) ||
 		!identifierPattern.MatchString(string(claim.ComponentID)) {
 		return fmt.Errorf("invalid ownership claim identity")
 	}
