@@ -151,6 +151,10 @@ func planGeneric(
 	observation Observation,
 	selected bool,
 ) {
+	if !selected && observation.Status == NotAssessed &&
+		observation.Reason == ObservationUnsupported {
+		return
+	}
 	if observation.Status == Attention || observation.Status == NotAssessed {
 		plan.Issues = append(plan.Issues, issueForObservation(resource, observation))
 		return

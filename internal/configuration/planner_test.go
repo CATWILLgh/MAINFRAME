@@ -192,7 +192,7 @@ func TestInspectionPreservesUnsafeGenericObservationsAsIssues(t *testing.T) {
 		t.Fatalf("Inspect() error = %v", err)
 	}
 
-	got, err := inspection.Plan(nil)
+	got, err := inspection.Plan([]domain.ComponentID{"credential-tools"})
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
@@ -209,6 +209,28 @@ func TestInspectionPreservesUnsafeGenericObservationsAsIssues(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Issues, want) {
 		t.Fatalf("issues = %#v, want %#v", got.Issues, want)
+	}
+}
+
+func TestInspectionIgnoresUnsupportedGenericResourceWhenUnselected(t *testing.T) {
+	input := resource(
+		"unassessed",
+		releasecontract.StrategyJSONKeyMerge,
+		releasecontract.SupportUnimplemented,
+	)
+	inspection, err := configuration.Inspect(
+		[]releasecontract.Resource{input},
+		&fakeHost{},
+	)
+	if err != nil {
+		t.Fatalf("Inspect() error = %v", err)
+	}
+	plan, err := inspection.Plan(nil)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(plan.Issues) != 0 {
+		t.Fatalf("issues = %#v", plan.Issues)
 	}
 }
 
