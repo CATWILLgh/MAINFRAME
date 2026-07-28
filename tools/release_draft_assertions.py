@@ -16,6 +16,8 @@ from release_draft_fixture import (
 
 TreeSnapshot = dict[str, tuple[int, bytes | str | None]]
 SnapshotTree = Callable[[Path], TreeSnapshot]
+SECRET_NAME = "CONTEXT7_HOME_KEY"
+SECRET_SENTINEL = "mainframe-packaged-secret-sentinel"
 
 
 def assert_machine_draft_reviews(
@@ -63,6 +65,8 @@ def _assert_keyed_draft(
     _write_draft_credential(home)
     release = binary.parent.parent
     managed = install_exact_opencode_closure(release, home)
+    keyed_env = dict(env)
+    keyed_env[SECRET_NAME] = SECRET_SENTINEL
     before = snapshot_tree(home)
     desired = {
         "adapters": ["opencode"],
@@ -74,31 +78,33 @@ def _assert_keyed_draft(
         }],
         "diagnostics_policy": "preserve-retained-adapters",
     }
-    response, stdout = _run_review(binary, sandbox, env, desired)
+    response, stdout = _run_review(binary, sandbox, keyed_env, desired)
     assert response["desired"] == desired
     assert response["apply"]["command_available"] is True
-    assert "CONTEXT7_HOME_KEY" not in stdout
+    _assert_secret_free(stdout)
     assert snapshot_tree(home) == before
     request = _draft_request(desired)
     confirmation = response["apply"]["confirmation"]
-    applied = _run_apply(binary, sandbox, env, request, confirmation)
+    applied = _run_apply(binary, sandbox, keyed_env, request, confirmation)
     assert applied.returncode == 0, (applied.stdout, applied.stderr)
     assert json.loads(applied.stdout)["applied"] is True
-    assert "CONTEXT7_HOME_KEY" not in applied.stdout + applied.stderr
+    _assert_secret_free(applied.stdout + applied.stderr)
     _assert_apply_tree_delta(before, snapshot_tree(home))
     _assert_open_code_projection(home)
     first_inodes = inode_snapshot(managed | _managed_configuration_paths(home))
-    repeated = _run_review(binary, sandbox, env, desired)[0]
+    repeated = _run_review(binary, sandbox, keyed_env, desired)[0]
     assert repeated["apply"] == {"command_available": False}
+    repeat_before = snapshot_tree(home)
     second = _run_apply(
         binary,
         sandbox,
-        env,
+        keyed_env,
         request,
         confirmation,
     )
     assert second.returncode == 1
-    assert "CONTEXT7_HOME_KEY" not in second.stdout + second.stderr
+    _assert_secret_free(second.stdout + second.stderr)
+    assert snapshot_tree(home) == repeat_before
     assert inode_snapshot(first_inodes.keys()) == first_inodes
 
 
@@ -157,6 +163,11 @@ def _managed_configuration_paths(home: Path) -> set[Path]:
     }
 
 
+def _assert_secret_free(output: str) -> None:
+    assert SECRET_NAME not in output
+    assert SECRET_SENTINEL not in output
+
+
 def _assert_apply_tree_delta(
     before: TreeSnapshot,
     after: TreeSnapshot,
@@ -188,7 +199,7 @@ def _assert_open_code_projection(home: Path) -> None:
         "type": "remote",
         "url": "https://mcp.context7.com/mcp",
         "headers": {
-            "CONTEXT7_API_KEY": "{env:CONTEXT7_HOME_KEY}",
+            "CONTEXT7_API_KEY": f"{{env:{SECRET_NAME}}}",
         },
     }
     assert config["mcp"] == {"context7": expected_context7}
@@ -227,7 +238,7 @@ def _assert_shared_keyed_draft(
     response, stdout = _run_review(binary, sandbox, env, desired)
     assert response["desired"] == desired
     assert len(response["onboarding"]["connections"]) == 1
-    assert "CONTEXT7_HOME_KEY" not in stdout
+    _assert_secret_free(stdout)
     assert snapshot_tree(home) == before
 
 
@@ -259,7 +270,7 @@ def _write_draft_credential(home: Path) -> None:
                 "role_id": "api-key",
                 "secret": {
                     "backend": "secret-env",
-                    "name": "CONTEXT7_HOME_KEY",
+                    "name": SECRET_NAME,
                 },
             }],
         }],
