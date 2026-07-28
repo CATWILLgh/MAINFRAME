@@ -71,6 +71,13 @@ func TestContextualHelpCoversMixedCommandNodes(t *testing.T) {
 				"mainframe docs show <topic>",
 			},
 		},
+		{
+			args: []string{"release", "--help"},
+			expected: []string{
+				"mainframe release review",
+				"mainframe release apply --confirm <digest>",
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -343,6 +350,8 @@ func expectedCommandCapabilities() []commandCapability {
 		{ID: "draft.apply", Usage: "mainframe draft apply --confirm <digest>", Summary: "Apply the exact applicable adapter and MCP draft returned by review.", Input: inputJSON, Output: outputJSON, Effect: effectReviewedWrite, Confirmation: confirmationDigest, Documentation: "agent-automation"},
 		{ID: "draft.review", Usage: "mainframe draft review", Summary: "Review a complete desired adapter and MCP draft without applying it.", Input: inputJSON, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "agent-automation"},
 		{ID: "plan", Usage: "mainframe plan", Summary: "Build a read-only installation plan from JSON on standard input.", Input: inputJSON, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "agent-automation"},
+		{ID: "release.apply", Usage: "mainframe release apply --confirm <digest>", Summary: "Apply the exact launcher activation returned by release review.", Input: inputJSON, Output: outputJSON, Effect: effectReviewedWrite, Confirmation: confirmationDigest, Documentation: "releases"},
+		{ID: "release.review", Usage: "mainframe release review", Summary: "Review a local release import or exact cached activation.", Input: inputJSON, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "releases"},
 		{ID: "tui.open", Usage: "mainframe", Summary: "Open the terminal interface.", Input: inputTerminal, Output: outputTerminal, Effect: effectReviewedWrite, Confirmation: confirmationTerminal, Documentation: "overview"},
 	}
 }
@@ -353,5 +362,6 @@ func expectedDocumentationCapabilities() []documentationCapability {
 		{ID: "agent-automation", Title: "Agent automation", Summary: "Machine-readable interfaces for discovery, review, and exact application.", Command: "mainframe docs show agent-automation"},
 		{ID: "credentials", Title: "Credentials", Summary: "Service instances, shared secret references, and safe value entry.", Command: "mainframe docs show credentials"},
 		{ID: "overview", Title: "Overview", Summary: "How MAINFRAME separates choices, preview, confirmation, and application.", Command: "mainframe docs show overview"},
+		{ID: "releases", Title: "Local releases", Summary: "Verified local import, exact activation, switching, and rollback.", Command: "mainframe docs show releases"},
 	}
 }

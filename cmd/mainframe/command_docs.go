@@ -79,6 +79,16 @@ func documentationRegistry() []documentationTopic {
 			},
 		},
 		{
+			ID:      "releases",
+			Title:   "Local releases",
+			Summary: "Verified local import, exact activation, switching, and rollback.",
+			File:    "docs/releases.md",
+			CommandIDs: []string{
+				"release.review",
+				"release.apply",
+			},
+		},
+		{
 			ID:      "agent-automation",
 			Title:   "Agent automation",
 			Summary: "Machine-readable interfaces for discovery, review, and exact application.",
@@ -92,6 +102,8 @@ func documentationRegistry() []documentationTopic {
 				"credentials.uses",
 				"credentials.instance.review",
 				"credentials.instance.apply",
+				"release.review",
+				"release.apply",
 			},
 		},
 	}

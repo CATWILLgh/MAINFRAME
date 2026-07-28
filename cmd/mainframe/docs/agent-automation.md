@@ -6,6 +6,18 @@ Start every automated interaction by running:
 mainframe capabilities --json
 ```
 
+Local release delivery uses the same review and exact-apply boundary:
+
+```sh
+mainframe release review
+mainframe release apply --confirm <digest>
+```
+
+The review input selects either an absolute local release directory or one
+exact cached identity. Apply accepts only the unchanged normalized request
+returned by review. Release hashes are integrity checks, not publisher
+authentication.
+
 The response is a versioned machine contract. It lists exact command syntax,
 input and output channels, whether a command can write, the required
 confirmation form, and the matching documentation topic. Do not scrape the

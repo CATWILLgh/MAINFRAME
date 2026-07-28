@@ -32,6 +32,8 @@ const (
 	handlerCredentialUses   commandHandlerKind = "credential-uses"
 	handlerCredentialReview commandHandlerKind = "credential-review"
 	handlerCredentialApply  commandHandlerKind = "credential-apply"
+	handlerReleaseReview    commandHandlerKind = "release-review"
+	handlerReleaseApply     commandHandlerKind = "release-apply"
 	handlerDocsList         commandHandlerKind = "docs-list"
 	handlerDocsShow         commandHandlerKind = "docs-show"
 	handlerCapabilities     commandHandlerKind = "capabilities"
@@ -101,6 +103,10 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runCredentialReviewFromRegistry
 	case handlerCredentialApply:
 		return runCredentialApplyFromRegistry
+	case handlerReleaseReview:
+		return runReleaseReviewFromRegistry
+	case handlerReleaseApply:
+		return runReleaseApplyFromRegistry
 	case handlerDocsList:
 		return runDocsListCommand
 	case handlerDocsShow:

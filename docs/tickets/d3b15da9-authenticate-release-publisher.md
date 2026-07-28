@@ -1,6 +1,6 @@
 ---
 id: d3b15da9
-title: Authenticate release publisher before enabling download or Apply
+title: Authenticate release publisher before enabling network updates
 status: open
 priority: medium
 component: release
@@ -9,7 +9,7 @@ discovered-from: ["#40f67f95"]
 tags: ["release", "signature", "supply-chain", "tui"]
 ---
 
-# d3b15da9: Authenticate release publisher before enabling download or Apply
+# d3b15da9: Authenticate release publisher before enabling network updates
 
 ## What was observed
 
@@ -17,7 +17,7 @@ The packaged release records SHA-256 digests for every bundle manifest and paylo
 
 ## Why it is a problem
 
-A future updater that downloads an attacker-controlled index and matching payload would accept internally consistent hashes. Impact is medium while the interface is local and read-only; it becomes high before network delivery or plan application is enabled.
+A future updater that downloads an attacker-controlled index and matching payload would accept internally consistent hashes. Impact is medium while release input is an explicit local path selected by the user; it becomes high before network delivery is enabled.
 
 ## Why it is not a duplicate
 
@@ -38,7 +38,8 @@ This ticket covers publisher authenticity at the delivery boundary.
 - A valid release from the trusted publisher passes without network-specific exceptions in the core loader.
 - Modified indexes, unknown signers, and invalid signatures fail before any payload is used or filesystem plan is produced.
 - Key rotation and revocation behavior are documented and covered by deterministic tests.
-- Download, update, and Apply remain unavailable until this gate passes an independent security review.
+- Network download and update remain unavailable until this gate passes an independent security review.
+- Local review and Apply state plainly that hashes verify integrity, not publisher identity.
 
 ## Sources
 
