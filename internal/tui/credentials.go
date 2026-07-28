@@ -76,7 +76,7 @@ func credentialCatalogForm(model *Model) *huh.Form {
 	}
 	if model.legacyCredentialInspector != nil {
 		options = append(options, huh.NewOption(
-			"Inspect legacy credential indexes",
+			"Inspect legacy credential locations",
 			credentialLegacyIndexes,
 		))
 	}

@@ -24,14 +24,21 @@ file. The catalog continues to own only metadata and references.
 `mainframe credentials uses <name>` lists instance roles that reference one
 secret name. It does not read that secret.
 
-`mainframe credentials legacy-indexes` explicitly inspects the four old
-adapter-local Markdown indexes. It returns only their release-defined
-locations, bounded states, and read-only transfer readiness. It never returns
-file content, content hashes, absolute paths, symlink targets, or raw
-filesystem errors. Missing files and byte-identical current templates need no
-transfer. Safe divergent files require manual transfer; unsafe files block
-readiness until they receive attention. The command does not write, delete, or
-adopt an old file, and always reports `migration_performed` as `false`.
+`mainframe credentials legacy-indexes` explicitly inspects the historical
+credential locations. The Claude Code location has the historical role
+`shared_original`: it was the original shared catalog location. The Codex,
+OpenCode, and Antigravity locations have the role `adapter_copy`: they are
+defensive checks for copies that may have been created later. These roles
+describe locations and do not claim verified ancestry for any file found
+there. A missing adapter copy is normal.
+
+The command returns only release-defined locations, source roles, bounded
+states, and read-only transfer readiness. It never returns file content,
+content hashes, absolute paths, symlink targets, or raw filesystem errors.
+Missing files and byte-identical current templates need no transfer. Safe
+divergent files require manual transfer; unsafe files block readiness until
+they receive attention. The command does not write, delete, or adopt an old
+file, and always reports `migration_performed` as `false`.
 
 Agents can create or edit instance metadata through:
 

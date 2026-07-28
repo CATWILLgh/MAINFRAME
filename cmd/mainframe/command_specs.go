@@ -73,7 +73,7 @@ var registeredCommands = []commandSpec{
 		ID:            "credentials.legacy-indexes",
 		Pattern:       []string{"credentials", "legacy-indexes"},
 		Usage:         "mainframe credentials legacy-indexes",
-		Summary:       "Inspect legacy adapter credential indexes without returning their content.",
+		Summary:       "Inspect legacy credential locations without returning their content.",
 		Input:         inputNone,
 		Output:        outputJSON,
 		Effect:        effectReadOnly,

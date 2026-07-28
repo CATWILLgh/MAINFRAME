@@ -16,7 +16,7 @@ func (model *Model) openLegacyCredentialIndexes() (*Model, tea.Cmd) {
 	if err != nil {
 		updated, command := model.openCredentials()
 		updated.err = errors.New(
-			"Legacy credential indexes could not be inspected safely",
+			"Legacy credential locations could not be inspected safely",
 		)
 		return updated, command
 	}
@@ -29,7 +29,7 @@ func (model *Model) openLegacyCredentialIndexes() (*Model, tea.Cmd) {
 	model.credentialMenuChoice = credentialBack
 	model.form = huh.NewForm(huh.NewGroup(
 		huh.NewSelect[credentialMenuChoice]().
-			Title("Legacy credential indexes").
+			Title("Legacy credential locations").
 			Options(huh.NewOption("Back to credentials", credentialBack)).
 			Value(&model.credentialMenuChoice),
 	)).WithShowHelp(false)
@@ -40,14 +40,15 @@ func (model *Model) legacyCredentialIndexesView() string {
 	lines := make([]string, 0, len(model.legacyCredentialIndexes))
 	for _, index := range model.legacyCredentialIndexes {
 		lines = append(lines, fmt.Sprintf(
-			"• %s — %s",
+			"• %s — %s; %s",
 			componentName(index.ComponentID),
+			legacyCredentialSourceRoleText(index),
 			legacyCredentialStateText(index),
 		))
 	}
 	sections := []string{
 		header(),
-		headingStyle.Render("Legacy credential indexes"),
+		headingStyle.Render("Legacy credential locations"),
 		bannerStyle.Render(
 			"Old files stay unchanged — readiness only.",
 		),
@@ -59,11 +60,28 @@ func (model *Model) legacyCredentialIndexesView() string {
 	return strings.Join(sections, "\n\n")
 }
 
+func legacyCredentialSourceRoleText(
+	index credentialmigration.LegacyIndex,
+) string {
+	switch index.SourceRole {
+	case credentialmigration.SourceRoleSharedOriginal:
+		return "original shared catalog location"
+	case credentialmigration.SourceRoleAdapterCopy:
+		return "defensive check for a later adapter copy"
+	default:
+		return "historical source role unavailable"
+	}
+}
+
 func legacyCredentialStateText(
 	index credentialmigration.LegacyIndex,
 ) string {
 	switch index.MigrationReadiness {
 	case credentialmigration.ReadinessNoTransferRequired:
+		if index.SourceRole == credentialmigration.SourceRoleAdapterCopy &&
+			index.State == credentialmigration.IndexMissing {
+			return "missing adapter copies are normal; no transfer is required"
+		}
 		return "no transfer is required"
 	case credentialmigration.ReadinessManualTransferRequired:
 		return "manual transfer is required; the old file stays unchanged"

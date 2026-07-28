@@ -36,7 +36,8 @@ def test_packaged_cli_imports_switches_and_rolls_back_exact_releases():
             ["credentials", "legacy-indexes"],
             environment,
         )
-        assert legacy["schema_version"] == 2
+        assert legacy["schema_version"] == 3
+        assert legacy["scope"] == "historical-credential-locations"
         assert legacy["migration_performed"] is False
         assert legacy["migration_readiness"] == "no_transfer_required"
         assert [item["component_id"] for item in legacy["indexes"]] == [
@@ -50,6 +51,12 @@ def test_packaged_cli_imports_switches_and_rolls_back_exact_releases():
             item["migration_readiness"] == "no_transfer_required"
             for item in legacy["indexes"]
         )
+        assert [item["source_role"] for item in legacy["indexes"]] == [
+            "shared_original",
+            "adapter_copy",
+            "adapter_copy",
+            "adapter_copy",
+        ]
         assert "content_sha256" not in json.dumps(legacy)
 
         first_review = _review_local(binary, first, environment)

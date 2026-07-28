@@ -31,9 +31,9 @@ func TestLegacyCredentialIndexesRemainVisibleWithoutSelectedAdapters(
 	view := model.credentialsView()
 	if !strings.Contains(
 		view,
-		"Inspect legacy credential indexes",
+		"Inspect legacy credential locations",
 	) {
-		t.Fatalf("credential view does not summarize legacy indexes:\n%s", view)
+		t.Fatalf("credential view does not summarize legacy locations:\n%s", view)
 	}
 	if inspector.calls != 0 {
 		t.Fatalf("opening credentials inspected all adapters %d times", inspector.calls)
@@ -64,14 +64,16 @@ func TestLegacyCredentialIndexViewIsValueFreeAndReadOnly(t *testing.T) {
 	}
 	view := updated.View().Content
 	for _, expected := range []string{
-		"Legacy credential indexes",
+		"Legacy credential locations",
 		"Claude Code",
+		"original shared catalog location",
 		"manual transfer is required",
 		"Codex",
+		"defensive check for a later adapter copy",
 		"needs attention before transfer",
 		"Old files stay unchanged",
 		"OpenCode",
-		"no transfer is required",
+		"missing adapter copies are normal",
 	} {
 		if !strings.Contains(view, expected) {
 			t.Fatalf("legacy view does not contain %q:\n%s", expected, view)
@@ -134,6 +136,7 @@ func legacyCredentialIndexesFixture() []credentialmigration.LegacyIndex {
 			ComponentID: domain.ComponentClaudeCode,
 			ResourceID:  "claude-code.credentials-index",
 			State:       credentialmigration.IndexPresent,
+			SourceRole:  credentialmigration.SourceRoleSharedOriginal,
 			MigrationReadiness: credentialmigration.
 				ReadinessManualTransferRequired,
 		},
@@ -141,6 +144,7 @@ func legacyCredentialIndexesFixture() []credentialmigration.LegacyIndex {
 			ComponentID:  domain.ComponentCodex,
 			ResourceID:   "codex.credentials-index",
 			State:        credentialmigration.IndexUnsafe,
+			SourceRole:   credentialmigration.SourceRoleAdapterCopy,
 			UnsafeReason: credentialmigration.ReasonUnsafeMode,
 			MigrationReadiness: credentialmigration.
 				ReadinessBlocked,
@@ -149,6 +153,7 @@ func legacyCredentialIndexesFixture() []credentialmigration.LegacyIndex {
 			ComponentID: domain.ComponentOpenCode,
 			ResourceID:  "opencode.credentials-index",
 			State:       credentialmigration.IndexMissing,
+			SourceRole:  credentialmigration.SourceRoleAdapterCopy,
 			MigrationReadiness: credentialmigration.
 				ReadinessNoTransferRequired,
 		},
@@ -156,6 +161,7 @@ func legacyCredentialIndexesFixture() []credentialmigration.LegacyIndex {
 			ComponentID:            domain.ComponentAntigravity2,
 			ResourceID:             "antigravity-2.credentials-index",
 			State:                  credentialmigration.IndexPresent,
+			SourceRole:             credentialmigration.SourceRoleAdapterCopy,
 			MatchesCurrentTemplate: true,
 			MigrationReadiness: credentialmigration.
 				ReadinessNoTransferRequired,

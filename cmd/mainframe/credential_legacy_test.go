@@ -81,6 +81,7 @@ func TestPublicLegacyCredentialInventoryHasValueFreeContract(t *testing.T) {
 				Root: domain.RootClaudeConfig,
 				Path: "credentials-index.md",
 			},
+			SourceRole:             credentialmigration.SourceRoleSharedOriginal,
 			State:                  credentialmigration.IndexPresent,
 			SizeBytes:              len(canary),
 			MatchesCurrentTemplate: false,
@@ -98,7 +99,8 @@ func TestPublicLegacyCredentialInventoryHasValueFreeContract(t *testing.T) {
 		t.Fatalf("decode inventory output: %v", err)
 	}
 	if response["kind"] != "mainframe-legacy-credential-index-inventory" ||
-		response["schema_version"] != float64(2) ||
+		response["scope"] != "historical-credential-locations" ||
+		response["schema_version"] != float64(3) ||
 		response["migration_performed"] != false ||
 		response["migration_readiness"] != "manual_transfer_required" {
 		t.Fatalf("legacy inventory response = %s", output.String())
@@ -123,6 +125,9 @@ func TestPublicLegacyCredentialInventoryHasValueFreeContract(t *testing.T) {
 	if index["migration_readiness"] != "manual_transfer_required" {
 		t.Fatalf("legacy index readiness = %#v", index)
 	}
+	if index["source_role"] != "shared_original" {
+		t.Fatalf("legacy index source role = %#v", index)
+	}
 }
 
 func assertLegacyIndexResponseKeys(t *testing.T, raw any) {
@@ -140,6 +145,7 @@ func assertLegacyIndexResponseKeys(t *testing.T, raw any) {
 		"matches_current_release_template": true,
 		"unsafe_reason":                    true,
 		"migration_readiness":              true,
+		"source_role":                      true,
 	}
 	for key := range index {
 		if !allowed[key] {

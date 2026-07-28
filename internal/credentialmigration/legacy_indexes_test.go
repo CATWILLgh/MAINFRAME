@@ -79,6 +79,21 @@ func TestInspectLegacyIndexesClassifiesWithoutReturningContent(t *testing.T) {
 			ReadinessBlocked,
 		)
 	}
+	roles := []SourceRole{
+		inventory.Indexes[0].SourceRole,
+		inventory.Indexes[1].SourceRole,
+		inventory.Indexes[2].SourceRole,
+		inventory.Indexes[3].SourceRole,
+	}
+	wantRoles := []SourceRole{
+		SourceRoleSharedOriginal,
+		SourceRoleAdapterCopy,
+		SourceRoleAdapterCopy,
+		SourceRoleAdapterCopy,
+	}
+	if !reflect.DeepEqual(roles, wantRoles) {
+		t.Fatalf("source roles = %v, want %v", roles, wantRoles)
+	}
 	payload, err := json.Marshal(inventory)
 	if err != nil {
 		t.Fatalf("marshal inventory: %v", err)
@@ -116,6 +131,21 @@ func TestInspectLegacyIndexesReducesEveryMixedReadinessCombination(
 								inventory.MigrationReadiness,
 								want,
 							)
+						}
+						if inventory.Indexes[0].SourceRole !=
+							SourceRoleSharedOriginal {
+							t.Fatalf(
+								"Claude source role = %q",
+								inventory.Indexes[0].SourceRole,
+							)
+						}
+						for _, item := range inventory.Indexes[1:] {
+							if item.SourceRole != SourceRoleAdapterCopy {
+								t.Fatalf(
+									"adapter source role = %q",
+									item.SourceRole,
+								)
+							}
 						}
 					})
 				}

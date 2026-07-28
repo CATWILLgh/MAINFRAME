@@ -15,9 +15,9 @@ tags: ["credentials", "tui", "migration", "security"]
 
 The central contract, TUI, and machine CLI now load, review, create, edit, and
 persist the neutral user-instance document without reading secret values. The
-current installer still seeds adapter-local Markdown indexes, and the
-remaining migration must preserve any divergent user content before those
-legacy indexes can be retired.
+current installer still seeds historical credential sources, and the remaining
+migration must preserve any divergent user content before those locations can
+be retired.
 
 ## Why it is a problem
 
@@ -34,7 +34,7 @@ secret values.
 
 ## What probably needs to be done
 
-- Inventory every legacy adapter-local index and design a previewed merge that
+- Inventory every historical credential source and design a previewed merge that
   preserves divergent user content without deleting the originals.
 - Teach shipped agent guidance to consume the merged catalog through that
   interface rather than reading an adapter-local file.
@@ -76,13 +76,19 @@ secret values.
   transaction state, exact file before-image, and normalized desired state.
   Secret input remains human-only.
 - `mainframe credentials legacy-indexes` and the TUI now assess read-only
-  transfer readiness for every old adapter-local index. Missing and
+  transfer readiness for every historical credential location. Missing and
   byte-identical current templates need no transfer, safe divergent files
   require manual transfer, and unsafe files block readiness.
 - Readiness inspection never returns content or content hashes and never
   writes, deletes, or adopts an old file. It always reports migration as not
   performed. Actual transfer and retirement of divergent legacy descriptions
   remain open work under this ticket.
+- Read-only inspection now distinguishes the Claude Code location as the
+  historical original shared catalog and the Codex, OpenCode, and Antigravity
+  locations as defensive checks for later adapter copies. This is location
+  metadata, not a claim that any present file has verified ancestry. Missing
+  copies are normal; divergent and unsafe copies retain the same strict
+  readiness rules.
 
 ## Sources
 

@@ -260,7 +260,7 @@ func runCredentialLegacyFromRegistry(
 	if err := runLegacyCredentialInventory(context.output); err != nil {
 		fmt.Fprintln(
 			context.errorOutput,
-			"credentials legacy-indexes: legacy credential indexes could not be inspected safely",
+			"credentials legacy-indexes: legacy credential locations could not be inspected safely",
 		)
 		return 1
 	}

@@ -26,6 +26,13 @@ const (
 	ReadinessBlocked                Readiness = "blocked"
 )
 
+type SourceRole string
+
+const (
+	SourceRoleSharedOriginal SourceRole = "shared_original"
+	SourceRoleAdapterCopy    SourceRole = "adapter_copy"
+)
+
 type UnsafeReason string
 
 const (
@@ -46,6 +53,7 @@ type LegacyIndex struct {
 	ComponentID            domain.ComponentID `json:"component_id"`
 	ResourceID             string             `json:"resource_id"`
 	Location               domain.Location    `json:"location"`
+	SourceRole             SourceRole         `json:"source_role"`
 	State                  IndexState         `json:"state"`
 	SizeBytes              int                `json:"size_bytes,omitempty"`
 	MatchesCurrentTemplate bool               `json:"matches_current_release_template,omitempty"`
@@ -60,24 +68,29 @@ type Inspector interface {
 type legacyResourceDescriptor struct {
 	componentID domain.ComponentID
 	resourceID  string
+	sourceRole  SourceRole
 }
 
 var legacyResourceDescriptors = []legacyResourceDescriptor{
 	{
 		componentID: domain.ComponentClaudeCode,
 		resourceID:  "claude-code.credentials-index",
+		sourceRole:  SourceRoleSharedOriginal,
 	},
 	{
 		componentID: domain.ComponentCodex,
 		resourceID:  "codex.credentials-index",
+		sourceRole:  SourceRoleAdapterCopy,
 	},
 	{
 		componentID: domain.ComponentOpenCode,
 		resourceID:  "opencode.credentials-index",
+		sourceRole:  SourceRoleAdapterCopy,
 	},
 	{
 		componentID: domain.ComponentAntigravity2,
 		resourceID:  "antigravity-2.credentials-index",
+		sourceRole:  SourceRoleAdapterCopy,
 	},
 }
 
@@ -91,7 +104,11 @@ func InspectLegacyIndexes(
 	}
 	indexes := make([]LegacyIndex, len(resources))
 	for index, resource := range resources {
-		indexes[index] = inspectLegacyIndex(resource, inspector)
+		indexes[index] = inspectLegacyIndex(
+			resource,
+			legacyResourceDescriptors[index].sourceRole,
+			inspector,
+		)
 	}
 	return Inventory{
 		ReleaseID:          release.ID,
@@ -134,12 +151,14 @@ func matchingLegacyResources(
 
 func inspectLegacyIndex(
 	resource releasecontract.Resource,
+	sourceRole SourceRole,
 	inspector Inspector,
 ) LegacyIndex {
 	result := LegacyIndex{
 		ComponentID: resource.ComponentID,
 		ResourceID:  resource.ID,
 		Location:    resource.Target,
+		SourceRole:  sourceRole,
 	}
 	entry, err := inspector.Inspect(resource.Target, true)
 	if errors.Is(err, fs.ErrNotExist) {

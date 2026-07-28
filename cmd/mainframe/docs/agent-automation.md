@@ -6,7 +6,7 @@ Start every automated interaction by running:
 mainframe capabilities --json
 ```
 
-Legacy credential metadata can be inventoried without returning its content:
+Historical credential locations can be inspected without returning content:
 
 ```text
 mainframe credentials legacy-indexes
@@ -19,7 +19,15 @@ each adapter and overall. Overall readiness uses the strictest result:
 precedence over `no_transfer_required`. The command always reports
 `migration_performed` as `false` and does not authorize writes, deletion,
 adoption, or automatic conversion of old files.
-The readiness fields are part of response schema version 2.
+
+Each location reports `source_role`. `shared_original` identifies the Claude
+Code location as the original shared catalog location. `adapter_copy`
+identifies the Codex, OpenCode, and Antigravity locations as defensive checks
+for copies that may have been created later. The role describes the historical
+purpose of a location; it does not prove that a present file descended from
+another file. Missing adapter copies are normal, while safe divergent copies
+still require manual transfer and unsafe copies still block readiness.
+The readiness and source-role fields are part of response schema version 3.
 
 Local release delivery uses the same review and exact-apply boundary:
 

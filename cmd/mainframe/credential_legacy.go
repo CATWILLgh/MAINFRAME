@@ -14,7 +14,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
-const legacyCredentialInventorySchemaVersion = 2
+const legacyCredentialInventorySchemaVersion = 3
 
 type runtimeLegacyIndexInspector struct {
 	release     releasecontract.Release
@@ -37,6 +37,7 @@ type legacyCredentialIndexResponse struct {
 	ComponentID            domain.ComponentID               `json:"component_id"`
 	ResourceID             string                           `json:"resource_id"`
 	Location               domain.Location                  `json:"location"`
+	SourceRole             credentialmigration.SourceRole   `json:"source_role"`
 	State                  credentialmigration.IndexState   `json:"state"`
 	SizeBytes              *int                             `json:"size_bytes,omitempty"`
 	MatchesCurrentTemplate *bool                            `json:"matches_current_release_template,omitempty"`
@@ -133,7 +134,7 @@ func publicLegacyCredentialInventory(
 	return legacyCredentialInventoryResponse{
 		SchemaVersion:      legacyCredentialInventorySchemaVersion,
 		Kind:               "mainframe-legacy-credential-index-inventory",
-		Scope:              "legacy-adapter-indexes",
+		Scope:              "historical-credential-locations",
 		ReleaseID:          inventory.ReleaseID,
 		ReleaseIndexSHA256: inventory.ReleaseIndexSHA256,
 		MigrationPerformed: false,
@@ -149,6 +150,7 @@ func publicLegacyCredentialIndex(
 		ComponentID:        index.ComponentID,
 		ResourceID:         index.ResourceID,
 		Location:           index.Location,
+		SourceRole:         index.SourceRole,
 		State:              index.State,
 		UnsafeReason:       index.UnsafeReason,
 		MigrationReadiness: index.MigrationReadiness,
