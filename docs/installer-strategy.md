@@ -5,6 +5,9 @@ and the eventual replacement of `install.sh`. The legacy installer may remain
 available during the transition, but new work must move toward this contract
 and must not introduce new cross-runtime dependencies.
 
+The ordered completion gates and current delivery status are maintained in
+[delivery-readiness.md](delivery-readiness.md).
+
 ## Source sharing is not runtime sharing
 
 `core/` is the neutral source of truth for behavior shared by Claude Code,
