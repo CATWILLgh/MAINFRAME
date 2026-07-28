@@ -155,6 +155,15 @@ func planGeneric(
 		observation.Reason == ObservationUnsupported {
 		return
 	}
+	if selected && resource.Strategy == releasecontract.StrategyManualAction &&
+		observation.Status == NotAssessed &&
+		observation.Reason == ObservationUnsupported {
+		plan.Notices = append(plan.Notices, Notice{
+			ResourceID: resource.ID, ComponentID: resource.ComponentID,
+			Reason: ManualActionUnverified,
+		})
+		return
+	}
 	if observation.Status == Attention || observation.Status == NotAssessed {
 		plan.Issues = append(plan.Issues, issueForObservation(resource, observation))
 		return

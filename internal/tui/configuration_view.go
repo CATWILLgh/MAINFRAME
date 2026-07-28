@@ -107,6 +107,11 @@ func renderConfigurationNotice(notice configuration.Notice) string {
 		return "  !  Codex is unavailable; hook trust was not inspected"
 	case configuration.ExternalInspectionFailed:
 		return "  !  Codex hook trust inspection failed"
+	case configuration.ManualActionUnverified:
+		return fmt.Sprintf(
+			"  !  %s activation remains manual and was not verified",
+			componentName(notice.ComponentID),
+		)
 	default:
 		return "  !  External configuration state was not inspected"
 	}

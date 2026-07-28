@@ -41,6 +41,7 @@ const (
 	JSONDocumentInvalid      Reason = "json_document_invalid"
 	ExternalStateSatisfied   Reason = "external_state_satisfied"
 	ManualActionRequired     Reason = "manual_action_required"
+	ManualActionUnverified   Reason = "manual_action_unverified"
 	ExternalStateUnavailable Reason = "external_state_unavailable"
 	ExternalInspectionFailed Reason = "external_inspection_failed"
 )

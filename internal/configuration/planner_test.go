@@ -176,6 +176,11 @@ func TestInspectionPreservesUnsafeGenericObservationsAsIssues(t *testing.T) {
 		releasecontract.StrategySeedIfAbsent,
 		releasecontract.SupportSupported,
 	)
+	manual := resource(
+		"manual",
+		releasecontract.StrategyManualAction,
+		releasecontract.SupportUnimplemented,
+	)
 	unassessed := resource(
 		"unassessed",
 		releasecontract.StrategyJSONKeyMerge,
@@ -185,7 +190,7 @@ func TestInspectionPreservesUnsafeGenericObservationsAsIssues(t *testing.T) {
 		attention.Target: {Kind: hostfs.EntrySymlink},
 	}}
 	inspection, err := configuration.Inspect(
-		[]releasecontract.Resource{unassessed, attention},
+		[]releasecontract.Resource{unassessed, manual, attention},
 		host,
 	)
 	if err != nil {
@@ -209,6 +214,13 @@ func TestInspectionPreservesUnsafeGenericObservationsAsIssues(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Issues, want) {
 		t.Fatalf("issues = %#v, want %#v", got.Issues, want)
+	}
+	wantNotices := []configuration.Notice{{
+		ResourceID: "manual", ComponentID: "credential-tools",
+		Reason: configuration.ManualActionUnverified,
+	}}
+	if !reflect.DeepEqual(got.Notices, wantNotices) {
+		t.Fatalf("notices = %#v, want %#v", got.Notices, wantNotices)
 	}
 }
 

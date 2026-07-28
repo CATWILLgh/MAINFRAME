@@ -49,6 +49,11 @@ var configurationPlanFixture = lifecycle.Preview{
 				ResourceID: "codex.hook-trust", ComponentID: domain.ComponentCodex,
 				Reason: configuration.ExternalStateUnavailable,
 			},
+			{
+				ResourceID:  "antigravity-2.live-activation",
+				ComponentID: domain.ComponentAntigravity2,
+				Reason:      configuration.ManualActionUnverified,
+			},
 		},
 	},
 }
@@ -75,8 +80,9 @@ func TestPreviewRendersConfigurationChangesAndIssues(t *testing.T) {
 		"planning unavailable · OpenCode · opencode.permissions · observation is not implemented",
 		"Manual actions · 1",
 		"Review MAINFRAME hooks in Codex with /hooks",
-		"Notices · 1",
+		"Notices · 2",
 		"Codex is unavailable; hook trust was not inspected",
+		"Antigravity 2.x activation remains manual and was not verified",
 	} {
 		if !strings.Contains(view, text) {
 			t.Fatalf("preview does not contain %q:\n%s", text, view)
