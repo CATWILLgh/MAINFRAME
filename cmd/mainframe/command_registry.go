@@ -31,6 +31,7 @@ const (
 	handlerCredentialList          commandHandlerKind = "credential-list"
 	handlerCredentialLegacy        commandHandlerKind = "credential-legacy"
 	handlerCredentialLegacyPreview commandHandlerKind = "credential-legacy-preview"
+	handlerCredentialLegacyPlan    commandHandlerKind = "credential-legacy-plan"
 	handlerCredentialUses          commandHandlerKind = "credential-uses"
 	handlerCredentialReview        commandHandlerKind = "credential-review"
 	handlerCredentialApply         commandHandlerKind = "credential-apply"
@@ -103,6 +104,8 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runCredentialLegacyFromRegistry
 	case handlerCredentialLegacyPreview:
 		return runCredentialLegacyPreviewFromRegistry
+	case handlerCredentialLegacyPlan:
+		return runCredentialLegacyPlanFromRegistry
 	case handlerCredentialUses:
 		return runCredentialUsesFromRegistry
 	case handlerCredentialReview:
@@ -278,6 +281,20 @@ func runCredentialLegacyPreviewFromRegistry(
 		fmt.Fprintln(
 			context.errorOutput,
 			"credentials legacy-preview: named references could not be previewed safely",
+		)
+		return 1
+	}
+	return 0
+}
+
+func runCredentialLegacyPlanFromRegistry(
+	context commandContext,
+	_ map[string]string,
+) int {
+	if err := runLegacyCredentialTransferPlan(context.output); err != nil {
+		fmt.Fprintln(
+			context.errorOutput,
+			"credentials legacy-plan: transfer plan could not be built safely",
 		)
 		return 1
 	}

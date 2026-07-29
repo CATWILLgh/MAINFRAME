@@ -27,7 +27,13 @@ func (model *Model) openLegacyCredentialIndexes() (*Model, tea.Cmd) {
 	model.screen = screenCredentialLegacy
 	model.err = nil
 	model.credentialMenuChoice = credentialBack
-	options := make([]huh.Option[credentialMenuChoice], 0, 2)
+	options := make([]huh.Option[credentialMenuChoice], 0, 3)
+	if model.legacyCredentialPlanner != nil {
+		options = append(options, huh.NewOption(
+			"Build a read-only transfer plan",
+			credentialLegacyPlan,
+		))
+	}
 	if model.legacyCredentialPreviewer != nil {
 		options = append(options, huh.NewOption(
 			"Discover named references in the shared catalog",
@@ -48,6 +54,9 @@ func (model *Model) openLegacyCredentialIndexes() (*Model, tea.Cmd) {
 }
 
 func (model *Model) continueFromLegacyCredentials() (*Model, tea.Cmd) {
+	if model.credentialMenuChoice == credentialLegacyPlan {
+		return model.openLegacyCredentialTransferPlan()
+	}
 	if model.credentialMenuChoice == credentialLegacyPreview {
 		return model.openLegacyCredentialReferencePreview()
 	}

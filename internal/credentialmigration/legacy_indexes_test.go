@@ -104,6 +104,47 @@ func TestInspectLegacyIndexesClassifiesWithoutReturningContent(t *testing.T) {
 	}
 }
 
+func TestInspectLegacyIndexesRejectsRetargetedOrUnclassifiedResources(
+	t *testing.T,
+) {
+	tests := map[string]func(*releasecontract.Release){
+		"wrong root": func(release *releasecontract.Release) {
+			release.Resources[0].Target.Root = domain.RootHome
+		},
+		"wrong path": func(release *releasecontract.Release) {
+			release.Resources[0].Target.Path = "private-notes.md"
+		},
+		"wrong source": func(release *releasecontract.Release) {
+			release.Resources[0].SourcePath = "private-notes.md"
+		},
+		"unclassified credential index": func(release *releasecontract.Release) {
+			release.Resources = append(release.Resources, releasecontract.Resource{
+				ID:          "future.credentials-index",
+				ComponentID: domain.ComponentCodex,
+				Strategy:    releasecontract.StrategySeedIfAbsent,
+				SourcePath:  "credentials-index.md",
+				Target: domain.Location{
+					Root: domain.RootCodexConfig,
+					Path: "credentials-index.md",
+				},
+			})
+		},
+	}
+
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			release := legacyReleaseFixture()
+			mutate(&release)
+			if _, err := InspectLegacyIndexes(
+				release,
+				&legacyInspectorFixture{},
+			); err == nil {
+				t.Fatal("InspectLegacyIndexes() error = nil")
+			}
+		})
+	}
+}
+
 func TestInspectLegacyIndexesReducesEveryMixedReadinessCombination(
 	t *testing.T,
 ) {
@@ -317,6 +358,9 @@ func legacyReleaseFixture() releasecontract.Release {
 			ID:          resource.id,
 			ComponentID: resource.component,
 			Strategy:    releasecontract.StrategySeedIfAbsent,
+			SourcePath: domain.ArtifactPath(
+				"bundles/" + string(resource.component) + "/credentials-index.md",
+			),
 			Target: domain.Location{
 				Root: resource.root,
 				Path: "credentials-index.md",

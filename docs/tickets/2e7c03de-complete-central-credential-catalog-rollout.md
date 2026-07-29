@@ -98,6 +98,18 @@ secret values.
   counted. Divergent or blocked adapter copies remain explicit pending sources,
   so discovery cannot be mistaken for migration completion and cannot
   authorize old-file retirement.
+- A separate `credentials legacy-plan` command and TUI view now parse every
+  safe divergent classified source independently. Proposals retain source and
+  section provenance, occurrence counts, unresolved target fields, per-section
+  unmapped counts, shared-reference relationships, and possible duplicate
+  groups without merging anything.
+- The planner pins historical resources to exact components, strategies,
+  source paths, target roots, and target paths, and rejects unclassified
+  seed-if-absent `.credentials-index` resources. Blocked inputs preserve safe
+  source results while blocking overall completion. Catalog enrichment is
+  value-free and nonfatal.
+- Transfer application, user-confirmed completion of unresolved fields, and
+  retirement of old files remain open work under this ticket.
 
 ## Sources
 

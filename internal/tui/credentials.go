@@ -18,6 +18,7 @@ const (
 	credentialCreateSecret  credentialMenuChoice = ":create-secret"
 	credentialLegacyIndexes credentialMenuChoice = ":legacy-indexes"
 	credentialLegacyPreview credentialMenuChoice = ":legacy-preview"
+	credentialLegacyPlan    credentialMenuChoice = ":legacy-plan"
 	manualSecretReference                        = ":manual-secret-reference"
 )
 
@@ -56,6 +57,7 @@ type ApplyResult struct {
 
 func (model *Model) openCredentials() (*Model, tea.Cmd) {
 	model.clearLegacyReferencePreview()
+	model.clearLegacyTransferPlan()
 	model.screen = screenCredentials
 	model.err = nil
 	model.credentialMenuChoice = credentialBack

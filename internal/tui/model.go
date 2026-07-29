@@ -38,6 +38,8 @@ const (
 	screenCredentialLegacy
 	screenCredentialLegacyPreview
 	screenCredentialLegacyGroup
+	screenCredentialLegacyPlan
+	screenCredentialLegacyPlanGroup
 	screenCredentialEdit
 	screenSecretCreate
 	screenSecretCreateConfirm
@@ -70,8 +72,11 @@ type Model struct {
 	legacyCredentialIndexes          []credentialmigration.LegacyIndex
 	legacyCredentialInspector        LegacyIndexInspector
 	legacyCredentialPreviewer        LegacyReferencePreviewer
+	legacyCredentialPlanner          LegacyTransferPlanner
 	legacyCredentialReferencePreview credentialmigration.LegacyReferenceInventory
 	activeLegacyReferenceGroup       int
+	legacyCredentialTransferPlan     credentialmigration.LegacyTransferPlan
+	activeLegacyTransferPlanGroup    int
 	credentialDirty                  bool
 	credentialMenuChoice             credentialMenuChoice
 	activeCredential                 credentialcatalog.InstanceID
@@ -116,6 +121,7 @@ func NewModel(
 		model.credentialInstances = credentialStates[0].Instances.Clone()
 		model.legacyCredentialInspector = credentialStates[0].LegacyInspector
 		model.legacyCredentialPreviewer = credentialStates[0].LegacyPreviewer
+		model.legacyCredentialPlanner = credentialStates[0].LegacyPlanner
 		model.secretCreator = credentialStates[0].SecretCreator
 		model.startupRecovered = credentialStates[0].Recovered
 		model.startupWarnings = append(
@@ -175,6 +181,10 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model.continueFromLegacyReferencePreview()
 		case screenCredentialLegacyGroup:
 			return model.openLegacyReferencePreviewMenu()
+		case screenCredentialLegacyPlan:
+			return model.continueFromLegacyTransferPlan()
+		case screenCredentialLegacyPlanGroup:
+			return model.openLegacyTransferPlanMenu()
 		case screenCredentialEdit:
 			return model.saveCredentialDraft()
 		case screenSecretCreate:

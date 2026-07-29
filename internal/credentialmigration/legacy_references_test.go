@@ -55,6 +55,7 @@ secret get FENCED_EXAMPLE
 				Name: "legacy-login", Occurrences: 1,
 				Compatibility: ReferenceLegacyName,
 			}},
+			UnmappedContentLines: 3,
 		},
 		{
 			SectionPath: []string{"Credentials index", "VPS", "Work"},
@@ -62,6 +63,7 @@ secret get FENCED_EXAMPLE
 				Name: "SHARED_KEY", Occurrences: 1,
 				Compatibility: ReferenceCatalogCompatible,
 			}},
+			UnmappedContentLines: 1,
 		},
 	}
 	if !reflect.DeepEqual(preview.Groups, want) {
@@ -117,7 +119,7 @@ func TestPreviewLegacyReferencesCountsUnmappedDescriptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewLegacyReferences() error = %v", err)
 	}
-	if preview.UnmappedContentLines != 1 {
+	if preview.UnmappedContentLines != 2 {
 		t.Fatalf("unmapped content lines = %d", preview.UnmappedContentLines)
 	}
 }

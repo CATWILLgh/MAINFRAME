@@ -55,6 +55,28 @@ unique material. Therefore this preview remains a review aid: `coverage` is
 `partial`, `migration_performed` and `apply_available` are `false`, and no old
 file can be retired from this result.
 
+`mainframe credentials legacy-plan` is the complete read-only planning surface
+for the four classified historical locations. Unlike `legacy-preview`, it
+parses every safe divergent source independently and keeps the component,
+resource, source role, section path, occurrence count, and per-section
+unmapped-line count attached to each proposal. Missing or current-template
+sources need no transfer. One blocked source does not hide safe results from
+the others, but it makes overall readiness and content accounting blocked.
+
+The plan can carry exact compatible secret references into proposals and
+report current value-free catalog uses. Instance ID, service, role, display
+name, and purpose remain unresolved until a person reviews them. Legacy names
+that do not fit the current grammar require an explicit rename. Shared
+references and equivalent groups are relationships for review only: they never
+merge or delete records automatically.
+
+The release contract pins each classified historical resource to its exact
+component, strategy, source path, target root, and target path. An additional
+unclassified seed-if-absent resource ending in `.credentials-index` makes
+planning fail closed. The response contains no raw lines, descriptions,
+values, content hashes, filesystem paths, raw errors, digest, after-image, or
+apply request. `migration_performed` and `apply_available` are always `false`.
+
 Agents can create or edit instance metadata through:
 
 ```text

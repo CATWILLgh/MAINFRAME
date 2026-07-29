@@ -59,6 +59,32 @@ def test_packaged_cli_imports_switches_and_rolls_back_exact_releases():
         ]
         assert "content_sha256" not in json.dumps(legacy)
 
+        legacy_plan = _run_no_input_json(
+            binary,
+            ["credentials", "legacy-plan"],
+            environment,
+        )
+        assert legacy_plan["schema_version"] == 1
+        assert legacy_plan["scope"] == "all-classified-legacy-sources"
+        assert legacy_plan["migration_performed"] is False
+        assert legacy_plan["apply_available"] is False
+        assert legacy_plan["migration_readiness"] == "no_transfer_required"
+        assert legacy_plan["source_accounting"] == "complete"
+        assert legacy_plan["content_accounting"] == "complete"
+        assert legacy_plan["catalog_enrichment"] == "available"
+        assert legacy_plan["groups"] == []
+        assert len(legacy_plan["sources"]) == 4
+        serialized_plan = json.dumps(legacy_plan)
+        for denied in (
+            "apply_request",
+            "expected_review",
+            "release_index_sha256",
+            "location",
+            "source_content",
+            "digest",
+        ):
+            assert denied not in serialized_plan
+
         first_review = _review_local(binary, first, environment)
         assert first_review["operations"][0]["kind"] == "install"
         _assert_review_read_only(home)

@@ -25,6 +25,7 @@ const (
 
 type LegacyReferencePreview struct {
 	Groups                     []LegacyReferenceGroup
+	Sections                   []LegacySectionAccounting
 	TotalReferenceMentions     int
 	ExtractedReferenceMentions int
 	ExcludedReferenceMentions  int
@@ -32,6 +33,13 @@ type LegacyReferencePreview struct {
 	MalformedReferenceMentions int
 	UnscopedReferenceMentions  int
 	UnmappedContentLines       int
+	InvalidHeadingLines        int
+	ExcludedContentLines       int
+}
+
+type LegacySectionAccounting struct {
+	SectionPath          []string
+	UnmappedContentLines int
 }
 
 type LegacyReferenceInventory struct {
@@ -43,8 +51,9 @@ type LegacyReferenceInventory struct {
 }
 
 type LegacyReferenceGroup struct {
-	SectionPath []string
-	References  []LegacyReference
+	SectionPath          []string
+	References           []LegacyReference
+	UnmappedContentLines int
 }
 
 type LegacyReference struct {
@@ -54,9 +63,13 @@ type LegacyReference struct {
 }
 
 var (
-	legacyHeadingPattern = regexp.MustCompile(`^(#{1,6})[ \t]+(.+?)[ \t]*$`)
-	legacyMentionPattern = regexp.MustCompile(`\bsecret[ \t]+get\b`)
-	legacyNamePattern    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+	legacyHeadingPattern            = regexp.MustCompile(`^(#{1,6})[ \t]+(.+?)[ \t]*$`)
+	legacyMentionPattern            = regexp.MustCompile(`\bsecret[ \t]+get\b`)
+	legacyNamePattern               = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+	legacyExactReferenceLinePattern = regexp.MustCompile(
+		"^[ \\t]*(?:[-*][ \\t]+)?`?secret[ \\t]+get[ \\t]+" +
+			"[A-Za-z_][A-Za-z0-9_-]*`?[.,;:!?]?[ \\t]*$",
+	)
 )
 
 const maxLegacyReferenceLineBytes = 1 << 20
@@ -157,6 +170,7 @@ func PreviewLegacyReferences(content []byte) (LegacyReferencePreview, error) {
 	builder := legacyPreviewBuilder{
 		groupIndexes:     make(map[string]int),
 		referenceIndexes: make(map[int]map[string]int),
+		unmappedByPath:   make(map[string]int),
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	scanner.Buffer(make([]byte, 4096), maxLegacyReferenceLineBytes)
@@ -169,6 +183,7 @@ func PreviewLegacyReferences(content []byte) (LegacyReferencePreview, error) {
 			err,
 		)
 	}
+	builder.finalizeSectionAccounting()
 	return builder.preview, nil
 }
 
@@ -180,11 +195,16 @@ type legacyPreviewBuilder struct {
 	fenceMarker      string
 	groupIndexes     map[string]int
 	referenceIndexes map[int]map[string]int
+	unmappedByPath   map[string]int
+	sectionOrder     []string
 }
 
 func (builder *legacyPreviewBuilder) consumeLine(line string) {
 	trimmed := strings.TrimSpace(line)
 	example := builder.lineIsExample(trimmed)
+	if example && meaningfulLegacyContent(trimmed) {
+		builder.preview.ExcludedContentLines++
+	}
 	heading := false
 	if !example {
 		heading = builder.consumeHeading(trimmed)
@@ -211,9 +231,11 @@ func (builder *legacyPreviewBuilder) consumeLine(line string) {
 		builder.addReference(name)
 		builder.preview.ExtractedReferenceMentions++
 	}
-	if !example && !heading && len(mentions) == 0 &&
-		meaningfulLegacyContent(trimmed) {
+	if !example && !heading && meaningfulLegacyContent(trimmed) &&
+		(len(mentions) == 0 ||
+			!legacyExactReferenceLinePattern.MatchString(line)) {
 		builder.preview.UnmappedContentLines++
+		builder.addUnmappedContent()
 	}
 	builder.updateHTMLCommentState(line)
 }
@@ -243,6 +265,7 @@ func (builder *legacyPreviewBuilder) consumeHeading(line string) bool {
 	level := len(match[1])
 	title := strings.TrimSpace(strings.TrimRight(match[2], "#"))
 	if !validLegacyHeading(title) {
+		builder.preview.InvalidHeadingLines++
 		builder.headings[level-1] = ""
 		for index := level; index < len(builder.headings); index++ {
 			builder.headings[index] = ""
@@ -254,6 +277,38 @@ func (builder *legacyPreviewBuilder) consumeHeading(line string) bool {
 		builder.headings[index] = ""
 	}
 	return true
+}
+
+func (builder *legacyPreviewBuilder) addUnmappedContent() {
+	path := builder.sectionPath()
+	if len(path) == 0 {
+		return
+	}
+	key := strings.Join(path, "\x00")
+	if _, exists := builder.unmappedByPath[key]; !exists {
+		builder.sectionOrder = append(builder.sectionOrder, key)
+	}
+	builder.unmappedByPath[key]++
+	if groupIndex, exists := builder.groupIndexes[key]; exists {
+		builder.preview.Groups[groupIndex].UnmappedContentLines++
+	}
+}
+
+func (builder *legacyPreviewBuilder) finalizeSectionAccounting() {
+	builder.preview.Sections = make(
+		[]LegacySectionAccounting,
+		0,
+		len(builder.sectionOrder),
+	)
+	for _, key := range builder.sectionOrder {
+		builder.preview.Sections = append(
+			builder.preview.Sections,
+			LegacySectionAccounting{
+				SectionPath:          strings.Split(key, "\x00"),
+				UnmappedContentLines: builder.unmappedByPath[key],
+			},
+		)
+	}
 }
 
 func validLegacyHeading(title string) bool {
@@ -309,7 +364,10 @@ func (builder *legacyPreviewBuilder) addReference(name string) {
 		builder.referenceIndexes[groupIndex] = make(map[string]int)
 		builder.preview.Groups = append(
 			builder.preview.Groups,
-			LegacyReferenceGroup{SectionPath: path},
+			LegacyReferenceGroup{
+				SectionPath:          path,
+				UnmappedContentLines: builder.unmappedByPath[key],
+			},
 		)
 	}
 	referenceIndexes := builder.referenceIndexes[groupIndex]

@@ -42,6 +42,21 @@ descriptions remain counted, while divergent or blocked adapter copies appear
 as pending sources. The command never authorizes application or retirement of
 an old file.
 
+A complete value-free transfer plan for every classified source is available
+through:
+
+```text
+mainframe credentials legacy-plan
+```
+
+The plan keeps each source independent, reports unresolved target fields,
+shared references, possible duplicate groups, and per-section unmapped-line
+counts. A blocked source does not hide safe results from other sources, but it
+blocks overall completion. Catalog-use enrichment is metadata-only and can be
+reported as `blocked` without suppressing the legacy plan. The response always
+sets `migration_performed` and `apply_available` to `false`; it has no apply
+request or confirmation digest.
+
 Local release delivery uses the same review and exact-apply boundary:
 
 ```sh

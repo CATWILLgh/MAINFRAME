@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io/fs"
+	"strings"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
@@ -70,6 +71,8 @@ type legacyResourceDescriptor struct {
 	componentID domain.ComponentID
 	resourceID  string
 	sourceRole  SourceRole
+	sourcePath  domain.ArtifactPath
+	target      domain.Location
 }
 
 var legacyResourceDescriptors = []legacyResourceDescriptor{
@@ -77,21 +80,37 @@ var legacyResourceDescriptors = []legacyResourceDescriptor{
 		componentID: domain.ComponentClaudeCode,
 		resourceID:  "claude-code.credentials-index",
 		sourceRole:  SourceRoleSharedOriginal,
+		sourcePath:  "bundles/claude-code/credentials-index.md",
+		target: domain.Location{
+			Root: domain.RootClaudeConfig, Path: "credentials-index.md",
+		},
 	},
 	{
 		componentID: domain.ComponentCodex,
 		resourceID:  "codex.credentials-index",
 		sourceRole:  SourceRoleAdapterCopy,
+		sourcePath:  "bundles/codex/credentials-index.md",
+		target: domain.Location{
+			Root: domain.RootCodexConfig, Path: "credentials-index.md",
+		},
 	},
 	{
 		componentID: domain.ComponentOpenCode,
 		resourceID:  "opencode.credentials-index",
 		sourceRole:  SourceRoleAdapterCopy,
+		sourcePath:  "bundles/opencode/credentials-index.md",
+		target: domain.Location{
+			Root: domain.RootOpenCodeConfig, Path: "credentials-index.md",
+		},
 	},
 	{
 		componentID: domain.ComponentAntigravity2,
 		resourceID:  "antigravity-2.credentials-index",
 		sourceRole:  SourceRoleAdapterCopy,
+		sourcePath:  "bundles/antigravity-2/credentials-index.md",
+		target: domain.Location{
+			Root: domain.RootAntigravityData, Path: "credentials-index.md",
+		},
 	},
 }
 
@@ -122,6 +141,11 @@ func InspectLegacyIndexes(
 func legacyResources(
 	resources []releasecontract.Resource,
 ) ([]releasecontract.Resource, error) {
+	if hasUnclassifiedLegacyResource(resources) {
+		return nil, errors.New(
+			"legacy credential index resources are incompatible with this release",
+		)
+	}
 	result := make([]releasecontract.Resource, len(legacyResourceDescriptors))
 	for index, descriptor := range legacyResourceDescriptors {
 		matches := matchingLegacyResources(resources, descriptor)
@@ -135,19 +159,50 @@ func legacyResources(
 	return result, nil
 }
 
+func hasUnclassifiedLegacyResource(
+	resources []releasecontract.Resource,
+) bool {
+	for _, resource := range resources {
+		if resource.Strategy != releasecontract.StrategySeedIfAbsent ||
+			!strings.HasSuffix(resource.ID, ".credentials-index") {
+			continue
+		}
+		classified := false
+		for _, descriptor := range legacyResourceDescriptors {
+			if legacyResourceMatches(resource, descriptor) {
+				classified = true
+				break
+			}
+		}
+		if !classified {
+			return true
+		}
+	}
+	return false
+}
+
 func matchingLegacyResources(
 	resources []releasecontract.Resource,
 	descriptor legacyResourceDescriptor,
 ) []releasecontract.Resource {
 	var matches []releasecontract.Resource
 	for _, resource := range resources {
-		if resource.ID == descriptor.resourceID &&
-			resource.ComponentID == descriptor.componentID &&
-			resource.Strategy == releasecontract.StrategySeedIfAbsent {
+		if legacyResourceMatches(resource, descriptor) {
 			matches = append(matches, resource)
 		}
 	}
 	return matches
+}
+
+func legacyResourceMatches(
+	resource releasecontract.Resource,
+	descriptor legacyResourceDescriptor,
+) bool {
+	return resource.ID == descriptor.resourceID &&
+		resource.ComponentID == descriptor.componentID &&
+		resource.Strategy == releasecontract.StrategySeedIfAbsent &&
+		resource.SourcePath == descriptor.sourcePath &&
+		resource.Target == descriptor.target
 }
 
 func inspectLegacyIndex(

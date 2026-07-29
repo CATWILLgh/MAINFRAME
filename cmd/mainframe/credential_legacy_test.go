@@ -291,6 +291,30 @@ func TestLegacyCredentialReferencePreviewDoesNotExposeSetupErrors(
 	}
 }
 
+func TestLegacyCredentialTransferPlanDoesNotExposeSetupErrors(t *testing.T) {
+	privatePath := filepath.Join(t.TempDir(), "legacy-private-canary")
+	t.Setenv(releaseRootEnvironment, privatePath)
+	var stdout, stderr bytes.Buffer
+
+	exitCode := run(
+		[]string{"credentials", "legacy-plan"},
+		nil,
+		&stdout,
+		&stderr,
+	)
+	if exitCode == 0 ||
+		stdout.Len() != 0 ||
+		!strings.Contains(stderr.String(), "could not be built safely") ||
+		strings.Contains(stderr.String(), privatePath) {
+		t.Fatalf(
+			"legacy plan exit/stdout/stderr = %d/%q/%q",
+			exitCode,
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+}
+
 func writeLegacyIndex(
 	t *testing.T,
 	home string,
@@ -356,6 +380,9 @@ func legacyCredentialReleaseFixture() releasecontract.Release {
 		release.Resources = append(release.Resources, releasecontract.Resource{
 			ID: fixture.resource, ComponentID: fixture.component,
 			Strategy: releasecontract.StrategySeedIfAbsent,
+			SourcePath: domain.ArtifactPath(
+				"bundles/" + string(fixture.component) + "/credentials-index.md",
+			),
 			Target: domain.Location{
 				Root: fixture.root, Path: "credentials-index.md",
 			},
