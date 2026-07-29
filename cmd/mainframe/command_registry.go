@@ -33,6 +33,7 @@ const (
 	handlerCredentialLegacyPreview commandHandlerKind = "credential-legacy-preview"
 	handlerCredentialLegacyPlan    commandHandlerKind = "credential-legacy-plan"
 	handlerCredentialLegacyReview  commandHandlerKind = "credential-legacy-review"
+	handlerCredentialLegacyApply   commandHandlerKind = "credential-legacy-apply"
 	handlerCredentialUses          commandHandlerKind = "credential-uses"
 	handlerCredentialReview        commandHandlerKind = "credential-review"
 	handlerCredentialApply         commandHandlerKind = "credential-apply"
@@ -109,6 +110,8 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runCredentialLegacyPlanFromRegistry
 	case handlerCredentialLegacyReview:
 		return runCredentialLegacyReviewFromRegistry
+	case handlerCredentialLegacyApply:
+		return runCredentialLegacyApplyFromRegistry
 	case handlerCredentialUses:
 		return runCredentialUsesFromRegistry
 	case handlerCredentialReview:
@@ -328,6 +331,18 @@ func runCredentialLegacyReviewFromRegistry(
 		return 1
 	}
 	return 0
+}
+
+func runCredentialLegacyApplyFromRegistry(
+	context commandContext,
+	captures map[string]string,
+) int {
+	return runLegacyCredentialTransferApply(
+		captures["digest"],
+		context.input,
+		context.output,
+		context.errorOutput,
+	)
 }
 
 func runCredentialUsesFromRegistry(

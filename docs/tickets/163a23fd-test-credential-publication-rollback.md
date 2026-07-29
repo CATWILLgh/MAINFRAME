@@ -17,6 +17,10 @@ The generic executor suite injects journal and publication failures and verifies
 rollback. Credential lifecycle integration tests verify private publication,
 stale-state rejection, and concurrent-edit preservation, but do not inject a
 failure after the credential target has entered its publication sequence.
+The reviewed bulk legacy-transfer command now reaches the same credential-only
+publication path and has stale-source, stale-catalog, private-mode, and
+legacy-source immutability coverage, but it does not close this
+failure-injection gap.
 
 ## Why it is a problem
 

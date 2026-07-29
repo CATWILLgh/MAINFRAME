@@ -54,6 +54,7 @@ func TestContextualHelpCoversMixedCommandNodes(t *testing.T) {
 			expected: []string{
 				"mainframe credentials",
 				"mainframe credentials legacy-indexes",
+				"mainframe credentials legacy-apply --confirm <digest>",
 				"mainframe credentials uses <name>",
 				"mainframe credentials instance review",
 			},
@@ -345,6 +346,7 @@ func expectedCommandCapabilities() []commandCapability {
 		{ID: "credentials.catalog", Usage: "mainframe credentials", Summary: "List credential definitions and user-owned instances without values.", Input: inputNone, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "credentials"},
 		{ID: "credentials.instance.apply", Usage: "mainframe credentials instance apply --confirm <digest>", Summary: "Apply the exact credential-instance change returned by review.", Input: inputJSON, Output: outputJSON, Effect: effectReviewedWrite, Confirmation: confirmationDigest, Documentation: "credentials"},
 		{ID: "credentials.instance.review", Usage: "mainframe credentials instance review", Summary: "Review a credential-instance create or edit request.", Input: inputJSON, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "credentials"},
+		{ID: "credentials.legacy-apply", Usage: "mainframe credentials legacy-apply --confirm <digest>", Summary: "Apply the exact complete legacy transfer returned by review.", Input: inputJSON, Output: outputJSON, Effect: effectReviewedWrite, Confirmation: confirmationDigest, Documentation: "credentials"},
 		{ID: "credentials.legacy-indexes", Usage: "mainframe credentials legacy-indexes", Summary: "Inspect legacy credential locations without returning their content.", Input: inputNone, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "credentials"},
 		{ID: "credentials.legacy-plan", Usage: "mainframe credentials legacy-plan", Summary: "Build a read-only transfer plan for all classified legacy catalogs.", Input: inputNone, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "credentials"},
 		{ID: "credentials.legacy-preview", Usage: "mainframe credentials legacy-preview", Summary: "Discover named references in the shared legacy catalog without writing.", Input: inputNone, Output: outputJSON, Effect: effectReadOnly, Confirmation: confirmationNone, Documentation: "credentials"},

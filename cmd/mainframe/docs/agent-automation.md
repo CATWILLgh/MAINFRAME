@@ -70,10 +70,23 @@ from a partial draft are returned as `pending`. The command rejects stale
 release IDs, stale proposal identities or occurrence counts, missing target
 roles, contradictory renames, and unused new instances.
 
-The response is a value-free after-image for review only. It never includes an
-apply request or confirmation digest, never writes the catalog, and never
-authorizes retirement of legacy files. Descriptive legacy lines that could not
-be mapped still require a person to review them.
+The response is always value-free and review itself never writes. When source
+accounting is complete, content accounting is not blocked, every choice is
+resolved, and the draft changes the catalog, the response includes
+`apply_request` and `expected_review`. Partial content accounting keeps manual
+review required and prevents retirement, but recognized structured references
+may still be applied. Apply the returned request unchanged with:
+
+```text
+mainframe credentials legacy-apply --confirm <digest>
+```
+
+Apply freshly checks the release, current catalog, complete transfer draft,
+and the bytes and physical identity of all classified legacy sources. Any
+change requires another review. The transaction publishes only the complete
+desired credential catalog; it never writes, deletes, or retires a historical
+source. Pending choices, blocked accounting, and zero-change or skip-only
+drafts remain review-only.
 
 Local release delivery uses the same review and exact-apply boundary:
 

@@ -114,7 +114,22 @@ secret values.
   transfer choices against a freshly inspected plan and current catalog. It
   rejects stale proposal identities, invalid targets, contradictory renames,
   and unused proposed instances, then returns a normalized value-free
-  after-image without a digest or apply request.
+  after-image.
+- A complete set of reference choices with at least one catalog change now
+  produces an exact `credentials legacy-apply --confirm` request. Apply
+  rechecks the release, catalog, normalized choices, accounting, and every
+  classified legacy source by content, mode, device, inode, and birth identity
+  before publishing the whole `0600` catalog through one existing application
+  transaction.
+- Partial descriptive content does not discard recognized references: the
+  structured catalog change may be applied while
+  `manual_content_review_required` remains true. Blocked sources and pending
+  choices still prevent apply. Historical files are never written, deleted, or
+  retired, and partial content can never make retirement ready.
+- The source recheck during the locked application refresh is the transfer
+  linearization point. External editors do not share the transaction lock, so
+  a later legacy-file edit remains a new pending migration rather than
+  retroactively changing the catalog publication.
 - The TUI now edits the same transfer draft in isolated in-memory state. Reuse,
   create, and explicit skip choices do not modify the live credential catalog
   or make its ordinary edit draft dirty. The review reports pending choices,
@@ -133,8 +148,8 @@ secret values.
   inspected machine `secret` is available but `mainframe` is not currently on
   `PATH`, so the documented fallback remains necessary until CLI delivery and
   the reviewed legacy transfer are complete.
-- Transfer application, user-confirmed completion of unresolved fields, and
-  retirement of old files remain open work under this ticket.
+- User-confirmed completion of unresolved descriptive content, delivery
+  activation, and retirement of old files remain open work under this ticket.
 
 ## Sources
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialmigration"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
@@ -63,6 +64,8 @@ type legacyTransferReviewResponse struct {
 	Choices                     []legacyTransferChoiceResponse `json:"choices"`
 	Changes                     []credentialChangeResponse     `json:"changes"`
 	After                       legacyTransferAfterResponse    `json:"after"`
+	ApplyRequest                *legacyTransferApplyRequest    `json:"apply_request,omitempty"`
+	ExpectedReview              string                         `json:"expected_review,omitempty"`
 }
 
 type legacyTransferReviewSummary struct {
@@ -84,17 +87,6 @@ type legacyTransferAfterResponse struct {
 	SchemaVersion int                  `json:"schema_version"`
 	Kind          string               `json:"kind"`
 	Instances     []credentialInstance `json:"instances"`
-}
-
-func runLegacyCredentialTransferReview(
-	input io.Reader,
-	output io.Writer,
-) error {
-	request, err := decodeLegacyTransferReview(input)
-	if err != nil {
-		return err
-	}
-	return writeLegacyCredentialTransferReview(request, output)
 }
 
 func writeLegacyCredentialTransferReview(
@@ -126,12 +118,122 @@ func writeLegacyCredentialTransferReview(
 	if err != nil {
 		return err
 	}
+	response, err = attachLegacyTransferApply(
+		plan,
+		request,
+		response,
+	)
+	if err != nil {
+		return err
+	}
 	encoder := json.NewEncoder(output)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(response); err != nil {
 		return fmt.Errorf("encode legacy transfer review: %w", err)
 	}
 	return nil
+}
+
+func attachLegacyTransferApply(
+	plan credentialmigration.LegacyTransferPlan,
+	request legacyTransferReviewRequest,
+	response legacyTransferReviewResponse,
+) (legacyTransferReviewResponse, error) {
+	if !legacyTransferReviewApplicable(plan, response) {
+		return response, nil
+	}
+	sourceCommitment, err := credentialmigration.LegacyTransferSourceCommitment(plan)
+	if err != nil {
+		return legacyTransferReviewResponse{}, err
+	}
+	session, err := buildLegacyCredentialMachineSession(sourceCommitment)
+	if err != nil {
+		return legacyTransferReviewResponse{}, err
+	}
+	desired, err := buildDesiredCredentialInstances(
+		response.After.Instances,
+		session.definitions,
+	)
+	if err != nil {
+		return legacyTransferReviewResponse{}, err
+	}
+	reviewed, err := session.service.Review(application.Request{
+		CredentialInstances: &desired,
+	})
+	if err != nil {
+		return legacyTransferReviewResponse{}, err
+	}
+	if !reviewed.CredentialOnlyApplicable() ||
+		!sameCredentialChanges(reviewed.CredentialChanges(), response.Changes) {
+		return legacyTransferReviewResponse{}, errors.New(
+			"legacy credential review changed while commitment was built",
+		)
+	}
+	credentialCommitment, err := credentialReviewCommitment(
+		reviewed.Executable(), desired, session.scope,
+	)
+	if err != nil {
+		return legacyTransferReviewResponse{}, err
+	}
+	applyRequest := normalizedLegacyTransferApplyRequest(
+		request, response, sourceCommitment,
+	)
+	commitment, err := legacyTransferApplyCommitment(
+		credentialCommitment,
+		applyRequest,
+		plan,
+		response.Summary,
+	)
+	if err != nil {
+		return legacyTransferReviewResponse{}, err
+	}
+	response.ApplyAvailable = true
+	response.ApplyRequest = &applyRequest
+	response.ExpectedReview = commitment
+	return response, nil
+}
+
+func normalizedLegacyTransferApplyRequest(
+	request legacyTransferReviewRequest,
+	response legacyTransferReviewResponse,
+	sourceCommitment string,
+) legacyTransferApplyRequest {
+	return legacyTransferApplyRequest{
+		SchemaVersion:    legacyTransferApplySchemaVersion,
+		Kind:             legacyTransferApplyRequestKind,
+		ReleaseID:        request.ReleaseID,
+		SourceCommitment: sourceCommitment,
+		Instances:        append([]credentialInstance(nil), response.After.Instances...),
+		Choices: normalizedLegacyChoiceRequests(
+			response.Choices,
+			response.After.Instances,
+		),
+	}
+}
+
+func normalizedLegacyChoiceRequests(
+	choices []legacyTransferChoiceResponse,
+	instances []credentialInstance,
+) []legacyTransferChoiceRequest {
+	result := make([]legacyTransferChoiceRequest, len(choices))
+	for index, choice := range choices {
+		result[index] = legacyTransferChoiceRequest{
+			Proposal:            choice.Proposal,
+			ExpectedOccurrences: choice.Occurrences,
+			Target:              choice.Target,
+			SkipReason:          choice.SkipReason,
+		}
+		if choice.Disposition == credentialmigration.ChoiceSkipped {
+			result[index].Action = credentialmigration.TransferChoiceSkip
+			continue
+		}
+		result[index].Action = credentialmigration.TransferChoiceTransfer
+		result[index].RenameConfirmed = legacyTargetReference(
+			instances,
+			choice.Target,
+		) != choice.Proposal.ReferenceName
+	}
+	return result
 }
 
 func decodeLegacyTransferReview(

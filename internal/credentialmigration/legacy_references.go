@@ -116,19 +116,31 @@ func inspectLegacyReferenceSource(
 	entry, err := inspector.Inspect(resource.Target, true)
 	if errors.Is(err, fs.ErrNotExist) {
 		source.State = IndexMissing
+		source.evidence = missingLegacySourceEvidence(resource.Target)
 		return legacyIndexWithReadiness(source), LegacyReferencePreview{}
 	}
 	if err != nil {
 		source.State = IndexUnsafe
 		source.UnsafeReason = ReasonInspectionFailed
+		source.evidence = unsafeLegacySourceEvidence(resource.Target)
 		return legacyIndexWithReadiness(source), LegacyReferencePreview{}
 	}
 	if reason := legacyEntryUnsafeReason(entry); reason != "" {
 		source.State = IndexUnsafe
 		source.UnsafeReason = reason
+		source.evidence = legacySourceEvidenceFromEntry(
+			resource.Target,
+			IndexUnsafe,
+			entry,
+		)
 		return legacyIndexWithReadiness(source), LegacyReferencePreview{}
 	}
 	source.State = IndexPresent
+	source.evidence = legacySourceEvidenceFromEntry(
+		resource.Target,
+		IndexPresent,
+		entry,
+	)
 	source.SizeBytes = len(entry.Content)
 	source.MatchesCurrentTemplate = bytes.Equal(
 		entry.Content,

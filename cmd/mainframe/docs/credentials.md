@@ -87,11 +87,30 @@ instance role or explicitly skips the proposal as `duplicate`, `obsolete`, or
 
 Partial drafts are valid: omitted proposals are returned as `pending`. The
 normalized response contains the complete value-free after-image and planned
-catalog changes, but no digest or apply request. It always reports
-`migration_performed: false` and `apply_available: false`. Even when
-`retirement_ready` is true, the command only states that draft accounting is
-complete; it does not authorize writing, deleting, or retiring a legacy file.
-Unmapped descriptive content keeps `manual_content_review_required` true.
+catalog changes. A complete review with complete source accounting,
+non-blocked content accounting, no pending choices, and at least one change
+also returns
+`apply_available: true`, an `apply_request`, and `expected_review`. Partial
+content accounting may still apply recognized structured references, but keeps
+`manual_content_review_required: true` and `retirement_ready: false`; the old
+source remains pending and unchanged. Blocked accounting, pending choices, and
+zero-change or skip-only reviews remain read-only. `migration_performed`
+remains `false`.
+
+Apply the returned request unchanged with:
+
+```text
+mainframe credentials legacy-apply --confirm <digest>
+```
+
+Apply rebuilds the plan and complete desired catalog from fresh state. The
+digest binds the catalog review, normalized choices and accounting, and the
+content and physical identity of every classified legacy source. A changed
+catalog, release, source byte, mode, device, inode, or birth identity makes the
+review stale. Source validation is the transaction's linearization point:
+after it succeeds, later edits to historical files remain pending for a new
+review and do not alter this catalog publication. Apply never writes, deletes,
+or retires a historical source.
 
 The terminal interface uses the same review model. Its transfer choices and
 new instances exist only in the in-memory transfer draft and do not enter the

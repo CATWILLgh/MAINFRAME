@@ -59,6 +59,7 @@ type LegacyPlanSource struct {
 	MigrationReadiness Readiness
 	ContentAccounting  AccountingState
 	Summary            LegacyReferencePreview
+	evidence           legacySourceEvidence
 }
 
 type LegacyPlanGroup struct {
@@ -155,6 +156,7 @@ func legacyPlanSource(
 		MigrationReadiness: source.MigrationReadiness,
 		ContentAccounting:  sourceContentAccounting(source, preview),
 		Summary:            preview,
+		evidence:           source.evidence,
 	}
 }
 

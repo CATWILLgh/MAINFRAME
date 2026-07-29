@@ -8,6 +8,7 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/application"
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
+	"github.com/CATWILLgh/MAINFRAME/internal/credentialmigration"
 	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
@@ -29,6 +30,13 @@ type credentialOnlySnapshotBuilder struct {
 	lifecycle lifecycle.Service
 	first     *credentialObservation
 	observe   credentialObserver
+}
+
+type legacyCredentialSnapshotBuilder struct {
+	mu       sync.Mutex
+	base     application.SnapshotBuilder
+	validate func() error
+	builds   int
 }
 
 type credentialMachineSession struct {
@@ -87,6 +95,24 @@ func (builder *credentialOnlySnapshotBuilder) nextObservation() (
 	return observation, nil
 }
 
+func (builder *legacyCredentialSnapshotBuilder) Build(
+	request application.Request,
+) (application.Snapshot, error) {
+	builder.mu.Lock()
+	builder.builds++
+	requiresValidation := builder.builds > 1
+	builder.mu.Unlock()
+	if requiresValidation {
+		if err := builder.validate(); err != nil {
+			return application.Snapshot{}, fmt.Errorf(
+				"validate legacy credential sources: %w",
+				err,
+			)
+		}
+	}
+	return builder.base.Build(request)
+}
+
 func validateCredentialOnlyRequest(request application.Request) error {
 	if request.CredentialInstances == nil ||
 		len(request.Components) != 0 ||
@@ -101,6 +127,25 @@ func validateCredentialOnlyRequest(request application.Request) error {
 }
 
 func buildCredentialMachineSession() (credentialMachineSession, error) {
+	return buildCredentialMachineSessionWithLegacyValidation("")
+}
+
+func buildLegacyCredentialMachineSession(
+	expectedSourceCommitment string,
+) (credentialMachineSession, error) {
+	if !credentialConfirmationPattern.MatchString(expectedSourceCommitment) {
+		return credentialMachineSession{}, errors.New(
+			"legacy source commitment is invalid",
+		)
+	}
+	return buildCredentialMachineSessionWithLegacyValidation(
+		expectedSourceCommitment,
+	)
+}
+
+func buildCredentialMachineSessionWithLegacyValidation(
+	expectedSourceCommitment string,
+) (credentialMachineSession, error) {
 	snapshot, err := loadReadOnlyReleaseSnapshot()
 	if err != nil {
 		return credentialMachineSession{}, err
@@ -133,7 +178,20 @@ func buildCredentialMachineSession() (credentialMachineSession, error) {
 		},
 	}
 	roots := &releaseRootSource{value: snapshot.root}
-	service, err := buildApplyServiceWithSnapshotBuilder(roots, builder)
+	var snapshotBuilder application.SnapshotBuilder = builder
+	if expectedSourceCommitment != "" {
+		snapshotBuilder = &legacyCredentialSnapshotBuilder{
+			base: builder,
+			validate: func() error {
+				return validateLegacyCredentialSourceCommitment(
+					snapshot.release,
+					snapshot.root,
+					expectedSourceCommitment,
+				)
+			},
+		}
+	}
+	service, err := buildApplyServiceWithSnapshotBuilder(roots, snapshotBuilder)
 	if err != nil {
 		return credentialMachineSession{}, err
 	}
@@ -150,6 +208,31 @@ func buildCredentialMachineSession() (credentialMachineSession, error) {
 			ReleaseRoot:      snapshot.root,
 		},
 	}, nil
+}
+
+func validateLegacyCredentialSourceCommitment(
+	release releasecontract.Release,
+	root string,
+	expected string,
+) error {
+	plan, err := inspectLegacyCredentialTransferPlan(
+		release,
+		root,
+		hostEnvironment(),
+	)
+	if err != nil {
+		return err
+	}
+	current, err := credentialmigration.LegacyTransferSourceCommitment(plan)
+	if err != nil {
+		return err
+	}
+	if !credentialCommitmentsEqual(current, expected) {
+		return errors.New(
+			"legacy credential sources changed after review",
+		)
+	}
+	return nil
 }
 
 func observeCredentialState(root string) (credentialObservation, error) {

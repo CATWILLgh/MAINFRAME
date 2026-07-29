@@ -61,6 +61,7 @@ type LegacyIndex struct {
 	MatchesCurrentTemplate bool               `json:"matches_current_release_template,omitempty"`
 	UnsafeReason           UnsafeReason       `json:"unsafe_reason,omitempty"`
 	MigrationReadiness     Readiness          `json:"migration_readiness"`
+	evidence               legacySourceEvidence
 }
 
 type Inspector interface {
@@ -219,19 +220,31 @@ func inspectLegacyIndex(
 	entry, err := inspector.Inspect(resource.Target, true)
 	if errors.Is(err, fs.ErrNotExist) {
 		result.State = IndexMissing
+		result.evidence = missingLegacySourceEvidence(resource.Target)
 		return legacyIndexWithReadiness(result)
 	}
 	if err != nil {
 		result.State = IndexUnsafe
 		result.UnsafeReason = ReasonInspectionFailed
+		result.evidence = unsafeLegacySourceEvidence(resource.Target)
 		return legacyIndexWithReadiness(result)
 	}
 	if reason := legacyEntryUnsafeReason(entry); reason != "" {
 		result.State = IndexUnsafe
 		result.UnsafeReason = reason
+		result.evidence = legacySourceEvidenceFromEntry(
+			resource.Target,
+			IndexUnsafe,
+			entry,
+		)
 		return legacyIndexWithReadiness(result)
 	}
 	result.State = IndexPresent
+	result.evidence = legacySourceEvidenceFromEntry(
+		resource.Target,
+		IndexPresent,
+		entry,
+	)
 	result.SizeBytes = len(entry.Content)
 	result.MatchesCurrentTemplate = bytes.Equal(
 		entry.Content,
