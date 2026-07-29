@@ -158,3 +158,17 @@ secret values.
 - `core/resources/credentials-index.md`
 - `core/resources/credential-tools/secret`
 - `docs/tickets/cd5f584d-complete-configuration-lifecycle-semantics.md`
+
+## Re-occurrence noted (2026-07-29)
+
+**Noticed during:** Verification that agents have full CRUD access after legacy
+catalog transfer.
+**Where:** `internal/credentialcatalog/editor.go:134-169` and
+`cmd/mainframe/credential_instance_protocol.go:15-16`.
+**Additional details:** The reviewed machine protocol supports read, create,
+and edit, but has no delete operation; planning explicitly rejects an omitted
+existing instance as unsupported deletion. Editing also preserves the existing
+`service_id`, so changing service requires a separately reviewed replacement
+workflow. Full agent CRUD therefore remains incomplete and must be designed
+without allowing stale confirmation, accidental shared-reference loss, or
+secret-value reads.
