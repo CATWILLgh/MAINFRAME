@@ -241,7 +241,8 @@ def _assert_secret_help(output: Path) -> None:
         check=True,
         timeout=10,
     ).stdout
-    assert "Each coding environment keeps its own credentials index" in secret_help
+    assert "For credential discovery, run `mainframe credentials` first." in secret_help
+    assert "Adapter-local credentials indexes are read-only migration fallbacks." in secret_help
     assert "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" in secret_help
     assert "~/.claude" not in secret_help
     assert "~/.config/credentials" not in secret_help

@@ -48,8 +48,10 @@ secret values.
 - Unknown schema versions fail without rewriting user data.
 - CLI, TUI, and agent guidance distinguish structural catalog validation from
   live secret availability.
-- Secret values remain absent from project files, process arguments, previews,
-  logs, errors, and executor journals.
+- Secret values remain absent from project files, catalog responses, previews,
+  logs, errors, and executor journals. Authenticated commands receive a value
+  only at execution time; agent guidance does not claim the runtime redacts
+  subprocess arguments or transcripts.
 - Installation, update, adapter deselection, uninstall, interruption, and
   recovery tests preserve user-owned credential metadata.
 
@@ -118,6 +120,19 @@ secret values.
   or make its ordinary edit draft dirty. The review reports pending choices,
   manual content review, and accounting readiness without offering apply or
   retirement.
+- Shipped guidance now discovers references through `mainframe credentials`
+  first on Claude Code, Codex, OpenCode, and Antigravity. It validates the
+  catalog schema, requires an exact instance match, and uses an adapter-local
+  legacy index only when the CLI is unavailable or a valid catalog has no
+  exact match. Catalog errors fail closed without consulting legacy metadata.
+- Value consumption remains separate: an independently supplied `$NAME` or
+  `$(secret get NAME)` is expanded by the local command environment. Guidance
+  now forbids echoing values, shell tracing, and verbose modes that may expose
+  credentials instead of promising runtime transcript redaction.
+- This is a staged compatibility step, not delivery completion. On the
+  inspected machine `secret` is available but `mainframe` is not currently on
+  `PATH`, so the documented fallback remains necessary until CLI delivery and
+  the reviewed legacy transfer are complete.
 - Transfer application, user-confirmed completion of unresolved fields, and
   retirement of old files remain open work under this ticket.
 

@@ -1,5 +1,5 @@
 # Generated from MAINFRAME hub (core/skills/secrets-handling/SKILL.md) — do not edit; regenerate via ./install.sh --codex.
 interface:
   display_name: "Secrets handling"
-  short_description: "A personal-machine credentials layout for the terminal: SSH host/auth and HTTP Basic via native…"
+  short_description: "A personal-machine credentials layout for local terminal use: native SSH, HTTP Basic, and git-…"
   default_prompt: "Use $secrets-handling to apply this skill's guidance to the current task."

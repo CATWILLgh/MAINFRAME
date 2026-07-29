@@ -1,6 +1,6 @@
 ---
 name: secrets-handling
-description: 'A personal-machine credentials layout for the terminal: SSH host/auth and HTTP Basic via native mechanisms (`~/.ssh/config`, `~/.netrc`, `gh auth login`); generic API tokens and passwords in `~/.config/credentials/secrets.env` (mode 0600) read only through the `secret` helper or as shell env-vars; descriptions and server short-names in `~/.codex/credentials-index.md` (no values inside). Direct reads of the credentials store are forbidden by policy; Codex `.rules` cannot express path-glob read denials. Credential values reach the subprocess through `$VAR` or `$(secret get NAME)` shell substitution, never through the response transcript. A pre-reply scan checks the draft against shape regexes for GitHub / AWS / OpenAI / Anthropic / Slack / Stripe / SSH key blocks / generic high-entropy strings.'
+description: 'A personal-machine credentials layout for local terminal use: native SSH, HTTP Basic, and git-provider authentication; generic tokens and passwords in `~/.config/credentials/secrets.env` accessed only through the `secret` helper or an independently supplied shell variable; value-free discovery through `mainframe credentials`, with the adapter-local `credentials-index.md` retained only as a migration fallback. Direct reads of credential stores are denied. Values are substituted into terminal commands with `$VAR` or `$(secret get NAME)` and must never be echoed or copied into responses.'
 ---
 
 <!-- Generated from MAINFRAME hub (core/skills/secrets-handling/SKILL.md) — do not edit; regenerate via ./install.sh --codex. -->
@@ -14,13 +14,22 @@ Personal-machine policy for credentials. **Not a vault, not a secret manager —
 | Tier | What | Where | Read mode |
 |---|---|---|---|
 | 1 | SSH host + key, HTTP Basic auth, git providers | `~/.ssh/config` + `~/.ssh/id_*` + `ssh-agent`; `~/.netrc` (0600); `gh auth login` | Native tools (`ssh`, `curl -n`, `gh`) handle access. Direct read of `~/.ssh/id_*` / `~/.netrc` is forbidden by policy. |
-| 2 | Generic API tokens, passwords, anything that maps to a shell env-var | `~/.config/credentials/secrets.env` (0600); auto-sourced from `~/.zshenv` | Direct read forbidden by policy. Access only through `secret get NAME` or as env-var (already in scope when called from a shell that sourced the file). |
-| 3 | Descriptions, server short-names, "what token belongs to what service" | `~/.codex/credentials-index.md` | **Read freely.** This is the map; no secret values live here. |
+| 2 | Generic API tokens, passwords, anything that maps to a shell env-var | `~/.config/credentials/secrets.env` (0600) | Direct read forbidden by policy. Access only through `secret get NAME` or an env-var already present in the command environment. |
+| 3 | Descriptions, server short-names, "what token belongs to what service" | `mainframe credentials`; legacy fallback: `~/.codex/credentials-index.md` | **Read freely.** Both contain references and metadata, never secret values. |
 
-## What to read, what to refuse
+## Discovering a credential reference
 
-**Always read when relevant:**
-- `~/.codex/credentials-index.md` — the directory of what exists. Read this when the user mentions a server short-name or service that might need credentials, and you don't yet know whether it is registered. The index tells you the short-name, the access pattern (env-var or `secret get`), and any side notes.
+1. Check `command -v mainframe` and `command -v secret` in the same local command environment that will run the authenticated command.
+2. Run `mainframe credentials` first. Accept only a successful JSON object with `schema_version` equal to `1`, `kind` equal to `mainframe-credential-catalog`, `secret_availability` equal to `unchecked`, and `services` and `instances` as non-null arrays. Require unique non-empty service and instance IDs, every instance's `service_id` to name one listed service, and every credential binding to use a role listed by that service plus a valid `secret-env` reference name. Any missing, mistyped, duplicate, or inconsistent field makes the response schema-invalid.
+3. Select one exact credential instance by its stable identity and requested context. Never choose an implicit default; if more than one instance is plausible, ask the user.
+4. `credentials-index.md` is a fallback only when `mainframe` is unavailable or a successful, schema-valid catalog has no exact instance match.
+5. Do not fall back after a non-zero exit, malformed JSON, an unsupported schema, or a permission failure; stop and report the error.
+
+The fallback path for this adapter is `~/.codex/credentials-index.md`. It is read-only migration compatibility, not another source of truth. This workflow applies only to local terminal sessions; do not assume Chat, Cowork, web, or remote runs can access local tools.
+
+Before consuming a tier-2 value, require `secret` to be available. A catalog entry proves only that a reference exists; it does not prove the value is present.
+
+## What to refuse
 
 **Never read directly:**
 - `~/.config/credentials/secrets.env` and `.bak` — the secret store itself.
@@ -31,17 +40,19 @@ These are policy requirements. Codex Phase 1 has no path-glob read-rule equivale
 
 ## How to use a secret in a command
 
-**Pattern A — secret is already in the shell environment** (because `~/.zshenv` sourced the store at session start):
+**Pattern A — secret is already present in the command environment:**
 ```bash
 curl -H "x-api-key: $DOKPLOY_PROD_API_KEY" https://...
 ```
-The variable expands inside the shell process; the value is never written into the message you send.
+The shell expands the variable at execution time. Use `$NAME` only when the calling environment supplied it independently.
 
-**Pattern B — secret is in the store but not in env** (rare — for example, a token you just `secret set` and want to use without restarting the shell):
+**Pattern B — secret is stored but not present in the command environment:**
 ```bash
 curl -H "x-api-key: $(secret get DOKPLOY_PROD_API_KEY)" https://...
 ```
-`secret get` runs in a subshell; its stdout is captured by `$()` and substituted into curl's argv inside the same shell process. The value reaches the curl process but not the model's transcript.
+`secret get` runs in a subshell and `$()` substitutes its output into the invoked command.
+
+The runtime does not guarantee transcript redaction. Never echo secret values, enable shell tracing, or use verbose modes that may expose credentials. Inspect command output before quoting or summarizing it in a response.
 
 **Anti-pattern (do not do):**
 ```bash
@@ -52,25 +63,17 @@ Never assign a secret to a regular variable that gets echoed, logged, or written
 
 ## How to refer to a service in conversation
 
-When the user says "go to vps-store, check the nginx logs":
+When the user says "go to vps-store, check the nginx logs", follow central discovery, select the exact `vps-store` instance, then use its reference through Pattern A or B.
 
-1. Read `~/.codex/credentials-index.md`, locate the `vps-store` section.
-2. Note the access pattern from the index (`ssh vps-store`, key path, any pre-set env-var names).
-3. Run the command using Pattern A or B.
-
-When the user mentions a service that is **not in the index**:
-- Ask the user whether it should be added, or proceed without persistent storage (one-shot value passed inline).
+When the service has no exact match in a valid central catalog or the permitted fallback:
+- Ask whether it should be registered, or proceed without persistent storage through the service's existing authentication mechanism.
 - Do not invent credentials; do not assume short-names.
 
-When the user points at a credential living **outside the store** — another project's notes or memory files, a chat paste, a config comment — migrate first, then consume: `secret set NAME` (value entered through the shell, never the transcript), one line into `~/.codex/credentials-index.md`, then Pattern A/B as usual. Do not wire the foreign location into commands directly, even with the user's blessing: direct reads would bypass the managed credential flow; every copy consumed outside the store re-creates the sprawl this layout exists to end.
+When a credential lives **outside the store** — another project's notes or memory files, a chat paste, or a config comment — migrate the value through `secret create-stdin NAME`, then register its value-free metadata through the MAINFRAME credential workflow. Do not add new entries to the legacy fallback index. Do not wire the foreign location into commands directly: every copy consumed outside the store re-creates the sprawl this layout exists to end.
 
-## Auto-mode caveat
+## Local command environment
 
-The store is sourced by `~/.zshenv` at shell start. A Codex shell may inherit variables loaded by `~/.zshenv`; verify the variable exists and do not assume every shell startup path sourced it.
-
-If a secret is missing from env (recently added via `secret set` but the current shell predates the change, or sourcing failed) — use Pattern B (`$(secret get NAME)`) explicitly. Do not try to `source ~/.zshenv` to reload — it may have side effects on the current shell state.
-
-If you must read a value into your own reasoning (rare — e.g. validating format), use `secret get NAME` and immediately discard; do not echo it back in the response.
+MAINFRAME does not require the credential store to be loaded through shell startup files. Use Pattern A only if the variable is already present; otherwise use Pattern B. Do not source shell startup files to recover a value because they may have unrelated side effects.
 
 ## Pre-reply self-scan for accidental leakage
 

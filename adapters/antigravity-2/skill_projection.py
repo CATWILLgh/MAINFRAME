@@ -138,8 +138,8 @@ def _replace_once(text: str, source: str, replacement: str, label: str) -> str:
 def _rewrite_secrets(text: str, label: str) -> str:
     replacements = (
         (
-            "Direct reads of the credentials store are denied by `settings.json` patterns.",
-            "Direct reads of the credentials store are forbidden by this policy. "
+            "Direct reads of credential stores are denied.",
+            "Direct reads of credential stores are forbidden by this policy. "
             "Antigravity permission settings are user-owned and are not installed by this plugin.",
         ),
         (
@@ -147,30 +147,10 @@ def _rewrite_secrets(text: str, label: str) -> str:
             "Direct read of `~/.ssh/id_*` / `~/.netrc` is forbidden by this policy.",
         ),
         (
-            "| 2 | Generic API tokens, passwords, anything that maps to a shell env-var | `~/.config/credentials/secrets.env` (0600); auto-sourced from `~/.zshenv` | Direct read denied. Access only through `secret get NAME` or as env-var (already in scope when called from a shell that sourced the file). |",
-            "| 2 | Generic API tokens, passwords, anything that maps to a shell env-var | `~/.config/credentials/secrets.env` (0600) | Direct read is forbidden by this policy. Access only through `secret get NAME`, or as an env-var already present in the command environment. |",
-        ),
-        (
             "These are enforced by `permissions.deny` in `settings.json` and by `path-validation.py` (PreToolUse hook). The skill is the policy; the hook is the safety net.",
             "This skill is the policy. The plugin does not install Antigravity permissions; configure user-owned global or project `Deny` rules when a mechanical boundary is required.",
         ),
-        (
-            "**Pattern A — secret is already in the shell environment** (because `~/.zshenv` sourced the store at session start):",
-            "**Pattern A — secret is already present in the command environment:**",
-        ),
-        (
-            "**Pattern B — secret is in the store but not in env** (rare — for example, a token you just `secret set` and want to use without restarting the shell):",
-            "**Pattern B — secret is in the store but not in the command environment:**",
-        ),
         ("# denied by hook", "# forbidden: exposes the credential store"),
-        (
-            "the auto-mode classifier evaluates each tool call in isolation, cannot see conversational authorization, and hard-denies cross-project credential reads (witnessed 2026-06-15); and ",
-            "direct reads bypass the managed credential flow; ",
-        ),
-        (
-            "## Auto-mode caveat\n\nThe store is sourced by `~/.zshenv` at shell start. Claude Code's Bash subprocess always reads `~/.zshenv` (not `.zshrc`), so the secrets are present in env for all commands you run, including unattended auto-runs.\n\nIf a secret is missing from env (recently added via `secret set` but the current shell predates the change, or sourcing failed) — use Pattern B (`$(secret get NAME)`) explicitly. Do not try to `source ~/.zshenv` to reload — it may have side effects on the current Bash subprocess state.",
-            "## Shell environment caveat\n\nAntigravity does not document which shell startup files commands read. Never assume a stored secret is present in the command environment.\n\nIf a secret is missing from the environment, use Pattern B (`$(secret get NAME)`) explicitly. Do not load shell startup files to recover it; they may have unrelated side effects.",
-        ),
         (
             "- `path-validation.py` (PreToolUse hook) — enforces denial of direct reads on `~/.config/credentials/`; this skill is the policy, hook is the safety net.",
             "- `path-validation.py` (PreToolUse hook) — guards destructive path operations; it does not enforce this credential policy.",

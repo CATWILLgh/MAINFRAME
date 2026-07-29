@@ -36,6 +36,15 @@ A Codex agent following its shipped instructions cannot read the promised servic
 - Claude Code and Codex consume one authoritative user-edited index rather than independent copies.
 - Install, repeat install, and uninstall tests preserve user edits and document ownership of the index.
 
+## Progress
+
+- Agent guidance now treats the central value-free catalog exposed by
+  `mainframe credentials` as authoritative and the missing Codex-local index
+  as a migration fallback, not as the primary directory.
+- The delivery defect remains open: `mainframe` is not yet available on
+  `PATH` in the inspected local environment, so Codex still needs the fallback
+  until central CLI delivery and legacy transfer are completed.
+
 ## Sources
 
 - `dist/codex/skills/secrets-handling/SKILL.md:18-23`
