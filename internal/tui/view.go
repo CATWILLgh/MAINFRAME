@@ -27,6 +27,12 @@ func (model *Model) View() tea.View {
 		content = model.legacyCredentialTransferPlanView()
 	case screenCredentialLegacyPlanGroup:
 		content = model.legacyCredentialTransferPlanGroupView()
+	case screenCredentialLegacyDraftAction:
+		content = model.legacyTransferDraftActionView()
+	case screenCredentialLegacyDraftCreate:
+		content = model.legacyTransferDraftCreateView()
+	case screenCredentialLegacyDraftReview:
+		content = model.legacyTransferDraftReviewView()
 	case screenCredentialEdit:
 		content = model.credentialEditView()
 	case screenSecretCreate:

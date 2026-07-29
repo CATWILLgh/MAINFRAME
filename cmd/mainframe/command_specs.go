@@ -106,6 +106,18 @@ var registeredCommands = []commandSpec{
 		HandlerKind:   handlerCredentialLegacyPlan,
 	},
 	{
+		ID:            "credentials.legacy-review",
+		Pattern:       []string{"credentials", "legacy-review"},
+		Usage:         "mainframe credentials legacy-review",
+		Summary:       "Review legacy transfer choices without writing.",
+		Input:         inputJSON,
+		Output:        outputJSON,
+		Effect:        effectReadOnly,
+		Confirmation:  confirmationNone,
+		Documentation: "credentials",
+		HandlerKind:   handlerCredentialLegacyReview,
+	},
+	{
 		ID:            "credentials.instance.review",
 		Pattern:       []string{"credentials", "instance", "review"},
 		Usage:         "mainframe credentials instance review",

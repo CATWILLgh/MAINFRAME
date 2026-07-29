@@ -57,6 +57,24 @@ reported as `blocked` without suppressing the legacy plan. The response always
 sets `migration_performed` and `apply_available` to `false`; it has no apply
 request or confirmation digest.
 
+A transfer draft can be checked against fresh plan and catalog state with:
+
+```text
+mainframe credentials legacy-review
+```
+
+Send a strict `mainframe-legacy-credential-transfer-draft` JSON document on
+standard input. A proposal choice is either `transfer` to one exact
+`instance_id` and `role_id`, or `skip` with a bounded reason. Choices omitted
+from a partial draft are returned as `pending`. The command rejects stale
+release IDs, stale proposal identities or occurrence counts, missing target
+roles, contradictory renames, and unused new instances.
+
+The response is a value-free after-image for review only. It never includes an
+apply request or confirmation digest, never writes the catalog, and never
+authorizes retirement of legacy files. Descriptive legacy lines that could not
+be mapped still require a person to review them.
+
 Local release delivery uses the same review and exact-apply boundary:
 
 ```sh

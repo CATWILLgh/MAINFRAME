@@ -25,29 +25,6 @@ type PlanReviewer interface {
 	Review(application.Request) (ReviewedPlan, error)
 }
 
-type screen uint8
-
-const (
-	screenMain screen = iota
-	screenSelection
-	screenMCP
-	screenMCPDetail
-	screenMCPCredential
-	screenDiagnostics
-	screenCredentials
-	screenCredentialLegacy
-	screenCredentialLegacyPreview
-	screenCredentialLegacyGroup
-	screenCredentialLegacyPlan
-	screenCredentialLegacyPlanGroup
-	screenCredentialEdit
-	screenSecretCreate
-	screenSecretCreateConfirm
-	screenApplyConfirm
-	screenApplied
-	screenPreview
-)
-
 type Model struct {
 	reviewer                         PlanReviewer
 	catalog                          mcpcatalog.Catalog
@@ -77,6 +54,13 @@ type Model struct {
 	activeLegacyReferenceGroup       int
 	legacyCredentialTransferPlan     credentialmigration.LegacyTransferPlan
 	activeLegacyTransferPlanGroup    int
+	legacyTransferDraftChoices       map[legacyDraftCoordinate]credentialmigration.LegacyTransferChoice
+	legacyTransferDraftInstances     map[credentialcatalog.InstanceID]credentialcatalog.Instance
+	activeLegacyDraftProposal        legacyDraftCoordinate
+	legacyDraftAction                string
+	legacyTransferInstanceDraft      credentialInstanceDraft
+	legacyTransferTargetRole         credentialcatalog.RoleID
+	legacyTransferDraftReview        credentialmigration.LegacyTransferDraftReview
 	credentialDirty                  bool
 	credentialMenuChoice             credentialMenuChoice
 	activeCredential                 credentialcatalog.InstanceID
@@ -184,6 +168,12 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case screenCredentialLegacyPlan:
 			return model.continueFromLegacyTransferPlan()
 		case screenCredentialLegacyPlanGroup:
+			return model.continueFromLegacyTransferPlanGroup()
+		case screenCredentialLegacyDraftAction:
+			return model.continueLegacyTransferDraftAction()
+		case screenCredentialLegacyDraftCreate:
+			return model.saveLegacyTransferInstanceDraft()
+		case screenCredentialLegacyDraftReview:
 			return model.openLegacyTransferPlanMenu()
 		case screenCredentialEdit:
 			return model.saveCredentialDraft()

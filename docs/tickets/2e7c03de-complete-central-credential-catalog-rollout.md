@@ -108,6 +108,16 @@ secret values.
   seed-if-absent `.credentials-index` resources. Blocked inputs preserve safe
   source results while blocking overall completion. Catalog enrichment is
   value-free and nonfatal.
+- A separate `credentials legacy-review` command now validates partial
+  transfer choices against a freshly inspected plan and current catalog. It
+  rejects stale proposal identities, invalid targets, contradictory renames,
+  and unused proposed instances, then returns a normalized value-free
+  after-image without a digest or apply request.
+- The TUI now edits the same transfer draft in isolated in-memory state. Reuse,
+  create, and explicit skip choices do not modify the live credential catalog
+  or make its ordinary edit draft dirty. The review reports pending choices,
+  manual content review, and accounting readiness without offering apply or
+  retirement.
 - Transfer application, user-confirmed completion of unresolved fields, and
   retirement of old files remain open work under this ticket.
 

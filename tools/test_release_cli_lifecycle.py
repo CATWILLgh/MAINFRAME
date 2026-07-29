@@ -85,6 +85,42 @@ def test_packaged_cli_imports_switches_and_rolls_back_exact_releases():
         ):
             assert denied not in serialized_plan
 
+        legacy_review = _run_json(
+            binary,
+            ["credentials", "legacy-review"],
+            {
+                "schema_version": 1,
+                "kind": "mainframe-legacy-credential-transfer-draft",
+                "release_id": legacy_plan["release_id"],
+                "new_instances": [],
+                "choices": [],
+            },
+            environment,
+        )
+        assert legacy_review["schema_version"] == 1
+        assert legacy_review["migration_performed"] is False
+        assert legacy_review["apply_available"] is False
+        assert legacy_review["summary"] == {
+            "total": 0,
+            "transferred": 0,
+            "skipped": 0,
+            "pending": 0,
+        }
+        assert legacy_review["choices"] == []
+        assert legacy_review["changes"] == []
+        assert legacy_review["after"]["instances"] == []
+        serialized_review = json.dumps(legacy_review)
+        for denied in (
+            "apply_request",
+            "expected_review",
+            "digest",
+            "source_content",
+            "raw_line",
+            "location",
+        ):
+            assert denied not in serialized_review
+        _assert_review_read_only(home)
+
         first_review = _review_local(binary, first, environment)
         assert first_review["operations"][0]["kind"] == "install"
         _assert_review_read_only(home)

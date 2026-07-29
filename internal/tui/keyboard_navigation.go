@@ -64,6 +64,16 @@ func (model *Model) handleEscape() (*Model, tea.Cmd) {
 		return model.openLegacyCredentialIndexes()
 	case screenCredentialLegacyPlanGroup:
 		return model.openLegacyTransferPlanMenu()
+	case screenCredentialLegacyDraftAction:
+		return model.openLegacyTransferPlanGroup(
+			model.activeLegacyDraftProposal.group,
+		)
+	case screenCredentialLegacyDraftCreate:
+		return model.openLegacyTransferDraftAction(
+			model.activeLegacyDraftProposal,
+		)
+	case screenCredentialLegacyDraftReview:
+		return model.openLegacyTransferPlanMenu()
 	case screenCredentialEdit:
 		return model.openCredentials()
 	case screenSecretCreate, screenSecretCreateConfirm:
@@ -106,6 +116,16 @@ func (model *Model) handleBack() (*Model, tea.Cmd, bool) {
 		updated, command := model.openLegacyCredentialIndexes()
 		return updated, command, true
 	case screenCredentialLegacyPlanGroup:
+		updated, command := model.openLegacyTransferPlanMenu()
+		return updated, command, true
+	case screenCredentialLegacyDraftAction:
+		updated, command := model.openLegacyTransferPlanGroup(
+			model.activeLegacyDraftProposal.group,
+		)
+		return updated, command, true
+	case screenCredentialLegacyDraftCreate:
+		return model, nil, false
+	case screenCredentialLegacyDraftReview:
 		updated, command := model.openLegacyTransferPlanMenu()
 		return updated, command, true
 	case screenCredentialEdit:

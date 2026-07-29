@@ -30,11 +30,12 @@ func (model *Model) openLegacyCredentialTransferPlan() (*Model, tea.Cmd) {
 }
 
 func (model *Model) openLegacyTransferPlanMenu() (*Model, tea.Cmd) {
+	model.ensureLegacyTransferDraft()
 	model.screen = screenCredentialLegacyPlan
 	model.err = nil
 	model.credentialMenuChoice = credentialBack
 	groups := model.legacyCredentialTransferPlan.Groups
-	options := make([]huh.Option[credentialMenuChoice], 0, len(groups)+1)
+	options := make([]huh.Option[credentialMenuChoice], 0, len(groups)+2)
 	for index, group := range groups {
 		label := fmt.Sprintf(
 			"%s · %s — %s",
@@ -47,6 +48,14 @@ func (model *Model) openLegacyTransferPlanMenu() (*Model, tea.Cmd) {
 			credentialMenuChoice(fmt.Sprintf("legacy-plan-group:%d", index)),
 		))
 	}
+	options = append(options, huh.NewOption(
+		fmt.Sprintf(
+			"Review transfer draft — %d/%d choices",
+			len(model.legacyTransferDraftChoices),
+			legacyTransferProposalCount(model.legacyCredentialTransferPlan),
+		),
+		credentialMenuChoice("legacy-draft-review"),
+	))
 	options = append(options, huh.NewOption(
 		"Back to legacy locations",
 		credentialBack,
@@ -64,6 +73,9 @@ func (model *Model) continueFromLegacyTransferPlan() (*Model, tea.Cmd) {
 	if model.credentialMenuChoice == credentialBack {
 		model.clearLegacyTransferPlan()
 		return model.openLegacyCredentialIndexes()
+	}
+	if model.credentialMenuChoice == "legacy-draft-review" {
+		return model.openLegacyTransferDraftReview()
 	}
 	var index int
 	if _, err := fmt.Sscanf(
@@ -88,13 +100,31 @@ func (model *Model) openLegacyTransferPlanGroup(
 	model.screen = screenCredentialLegacyPlanGroup
 	model.err = nil
 	model.credentialMenuChoice = credentialBack
+	group := model.legacyCredentialTransferPlan.Groups[index]
+	options := make([]huh.Option[credentialMenuChoice], 0, len(group.Proposals)+1)
+	for proposalIndex, proposal := range group.Proposals {
+		status := "pending"
+		if choice, exists := model.legacyTransferDraftChoices[legacyDraftCoordinate{
+			group: index, proposal: proposalIndex,
+		}]; exists {
+			status = string(choice.Action)
+		}
+		options = append(options, huh.NewOption(
+			fmt.Sprintf("%s — %s", proposal.ReferenceName, status),
+			credentialMenuChoice(fmt.Sprintf(
+				"legacy-proposal:%d",
+				proposalIndex,
+			)),
+		))
+	}
+	options = append(options, huh.NewOption(
+		"Back to transfer plan",
+		credentialBack,
+	))
 	model.form = huh.NewForm(huh.NewGroup(
 		huh.NewSelect[credentialMenuChoice]().
 			Title("Transfer proposal details").
-			Options(huh.NewOption(
-				"Back to transfer plan",
-				credentialBack,
-			)).
+			Options(options...).
 			Value(&model.credentialMenuChoice),
 	)).WithShowHelp(false)
 	return model, model.form.Init()
@@ -119,8 +149,14 @@ func (model *Model) legacyCredentialTransferPlanView() string {
 			plan.ContentAccounting,
 		),
 		model.form.View(),
-		mutedStyle.Render("enter inspect  •  b back  •  q quit"),
 	}
+	if model.err != nil {
+		sections = append(sections, errorStyle.Render(model.err.Error()))
+	}
+	sections = append(
+		sections,
+		mutedStyle.Render("enter inspect  •  b back  •  q quit"),
+	)
 	return strings.Join(sections, "\n\n")
 }
 
@@ -155,6 +191,7 @@ func (model *Model) clearLegacyTransferPlan() {
 	model.legacyCredentialTransferPlan =
 		credentialmigration.LegacyTransferPlan{}
 	model.activeLegacyTransferPlanGroup = 0
+	model.clearLegacyTransferDraft()
 }
 
 func proposalCountText(count int) string {
@@ -162,4 +199,14 @@ func proposalCountText(count int) string {
 		return "1 proposal"
 	}
 	return fmt.Sprintf("%d proposals", count)
+}
+
+func legacyTransferProposalCount(
+	plan credentialmigration.LegacyTransferPlan,
+) int {
+	count := 0
+	for _, group := range plan.Groups {
+		count += len(group.Proposals)
+	}
+	return count
 }

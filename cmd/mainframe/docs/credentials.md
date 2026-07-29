@@ -77,6 +77,59 @@ planning fail closed. The response contains no raw lines, descriptions,
 values, content hashes, filesystem paths, raw errors, digest, after-image, or
 apply request. `migration_performed` and `apply_available` are always `false`.
 
+`mainframe credentials legacy-review` checks a proposed transfer draft against
+a freshly inspected `legacy-plan` and the current value-free catalog. The
+strict JSON request carries the plan `release_id`, any proposed new instances,
+and zero or one choice for each proposal. A choice either targets one exact
+instance role or explicitly skips the proposal as `duplicate`, `obsolete`, or
+`not_transferable`. A changed reference name requires
+`rename_confirmed: true`.
+
+Partial drafts are valid: omitted proposals are returned as `pending`. The
+normalized response contains the complete value-free after-image and planned
+catalog changes, but no digest or apply request. It always reports
+`migration_performed: false` and `apply_available: false`. Even when
+`retirement_ready` is true, the command only states that draft accounting is
+complete; it does not authorize writing, deleting, or retiring a legacy file.
+Unmapped descriptive content keeps `manual_content_review_required` true.
+
+The terminal interface uses the same review model. Its transfer choices and
+new instances exist only in the in-memory transfer draft and do not enter the
+ordinary credential edit draft.
+
+For example, this partial draft reuses one current catalog role:
+
+```json
+{
+  "schema_version": 1,
+  "kind": "mainframe-legacy-credential-transfer-draft",
+  "release_id": "release-id-from-legacy-plan",
+  "new_instances": [],
+  "choices": [
+    {
+      "proposal": {
+        "component_id": "claude-code",
+        "resource_id": "claude-code.credentials-index",
+        "source_role": "shared_original",
+        "section_path": ["Catalog", "Home"],
+        "reference_name": "CONTEXT7_HOME_KEY"
+      },
+      "expected_occurrences": 1,
+      "action": "transfer",
+      "target": {
+        "instance_id": "context7-home",
+        "role_id": "api-key"
+      },
+      "rename_confirmed": false
+    }
+  ]
+}
+```
+
+Copy proposal identity fields and occurrence counts from the current
+`legacy-plan`; do not reconstruct them. A `skip` choice uses an empty `target`
+and one documented `skip_reason`.
+
 Agents can create or edit instance metadata through:
 
 ```text

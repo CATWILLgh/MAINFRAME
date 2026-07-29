@@ -32,6 +32,7 @@ const (
 	handlerCredentialLegacy        commandHandlerKind = "credential-legacy"
 	handlerCredentialLegacyPreview commandHandlerKind = "credential-legacy-preview"
 	handlerCredentialLegacyPlan    commandHandlerKind = "credential-legacy-plan"
+	handlerCredentialLegacyReview  commandHandlerKind = "credential-legacy-review"
 	handlerCredentialUses          commandHandlerKind = "credential-uses"
 	handlerCredentialReview        commandHandlerKind = "credential-review"
 	handlerCredentialApply         commandHandlerKind = "credential-apply"
@@ -106,6 +107,8 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runCredentialLegacyPreviewFromRegistry
 	case handlerCredentialLegacyPlan:
 		return runCredentialLegacyPlanFromRegistry
+	case handlerCredentialLegacyReview:
+		return runCredentialLegacyReviewFromRegistry
 	case handlerCredentialUses:
 		return runCredentialUsesFromRegistry
 	case handlerCredentialReview:
@@ -295,6 +298,32 @@ func runCredentialLegacyPlanFromRegistry(
 		fmt.Fprintln(
 			context.errorOutput,
 			"credentials legacy-plan: transfer plan could not be built safely",
+		)
+		return 1
+	}
+	return 0
+}
+
+func runCredentialLegacyReviewFromRegistry(
+	context commandContext,
+	_ map[string]string,
+) int {
+	request, err := decodeLegacyTransferReview(context.input)
+	if err != nil {
+		fmt.Fprintf(
+			context.errorOutput,
+			"credentials legacy-review: invalid request: %v\n",
+			err,
+		)
+		return 2
+	}
+	if err := writeLegacyCredentialTransferReview(
+		request,
+		context.output,
+	); err != nil {
+		fmt.Fprintln(
+			context.errorOutput,
+			"credentials legacy-review: draft could not be reviewed safely",
 		)
 		return 1
 	}
