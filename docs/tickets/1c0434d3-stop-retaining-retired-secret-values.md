@@ -1,7 +1,7 @@
 ---
 id: 1c0434d3
 title: Stop retaining retired secret values in the helper backup
-status: open
+status: closed
 priority: medium
 component: credentials
 discovered: 2026-07-29
@@ -67,3 +67,24 @@ value.
 - `core/resources/credential-tools/secret:288-316`
 - `dist/codex/skills/secrets-handling/SKILL.md`
 - `docs/tickets/2e7c03de-complete-central-credential-catalog-rollout.md`
+
+## Resolution
+
+Resolved on 2026-07-29.
+
+- Commit `d1a448f` publishes post-change content to both managed files after
+  every successful legacy-helper mutation, so replacement and deletion retain
+  neither the old name nor the old value.
+- Immutable releases route `secret` through the native MAINFRAME store. It
+  publishes a new opaque generation before the sanitized backup and primary,
+  synchronizes files and the containing directory, and rejects a prepared
+  deletion after any intervening mutation or publication failure.
+- Historical `0400` stores remain readable without creating lock, backup, or
+  generation sidecars. The first native mutation narrows a real legacy
+  credentials directory to `0700`.
+- Failure injection, maximum-size quoted values, historical assignment forms,
+  editor overflow, release assembly, and legacy-helper behavior have regression
+  coverage. Independent final review returned `proceed` with no grounded
+  blocker.
+- Provider-side revocation and values inherited by already running processes
+  remain external to local storage retirement.

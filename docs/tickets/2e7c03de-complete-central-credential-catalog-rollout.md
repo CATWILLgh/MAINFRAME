@@ -172,3 +172,24 @@ existing instance as unsupported deletion. Editing also preserves the existing
 workflow. Full agent CRUD therefore remains incomplete and must be designed
 without allowing stale confirmation, accidental shared-reference loss, or
 secret-value reads.
+
+## Progress (2026-07-29) — reviewed deletion and local retirement
+
+- The versioned instance protocol now supports explicit deletion. Review
+  returns a before-image and the complete desired catalog; apply repeats the
+  review against fresh state and never cascades into the value store.
+- Deletion is blocked when a removed record's secret name remains in a known
+  MAINFRAME-managed adapter ownership registry. The check runs during review
+  and again inside the common transaction lock before catalog publication.
+- Immutable releases install a thin `secret` wrapper over native Go
+  persistence. File and directory synchronization, advisory locking, opaque
+  generations, and sanitized post-change backups replace the racy Bash lock
+  and pre-change plaintext backup on that path. The autonomous `install.sh`
+  path retains its Bash helper until installer parity, but successful changes
+  now publish sanitized post-change content to both of its managed files.
+- Agents can prepare and apply deletion of an unreferenced local value through
+  a value-free digest-bound protocol. Catalog uses, all fixed managed
+  registries, store generation, release, and physical paths are rechecked.
+- Provider-side revocation, already inherited process environments, delivery
+  activation, and retirement of historical description files remain outside
+  this completed unit. The overall rollout ticket therefore remains open.
