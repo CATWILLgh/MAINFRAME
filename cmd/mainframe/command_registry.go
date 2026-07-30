@@ -35,6 +35,8 @@ const (
 	handlerCredentialLegacyReview  commandHandlerKind = "credential-legacy-review"
 	handlerCredentialLegacyApply   commandHandlerKind = "credential-legacy-apply"
 	handlerCredentialUses          commandHandlerKind = "credential-uses"
+	handlerSecretRetirementPrepare commandHandlerKind = "secret-retirement-prepare"
+	handlerSecretRetirementApply   commandHandlerKind = "secret-retirement-apply"
 	handlerCredentialReview        commandHandlerKind = "credential-review"
 	handlerCredentialApply         commandHandlerKind = "credential-apply"
 	handlerReleaseReview           commandHandlerKind = "release-review"
@@ -58,8 +60,9 @@ const (
 )
 
 const (
-	effectReadOnly      commandEffect = "read-only"
-	effectReviewedWrite commandEffect = "reviewed-write"
+	effectReadOnly         commandEffect = "read-only"
+	effectPreparationWrite commandEffect = "preparation-write"
+	effectReviewedWrite    commandEffect = "reviewed-write"
 )
 
 const (
@@ -114,6 +117,10 @@ func commandHandlerForKind(kind commandHandlerKind) commandHandler {
 		return runCredentialLegacyApplyFromRegistry
 	case handlerCredentialUses:
 		return runCredentialUsesFromRegistry
+	case handlerSecretRetirementPrepare:
+		return runSecretRetirementPrepareFromRegistry
+	case handlerSecretRetirementApply:
+		return runSecretRetirementApplyFromRegistry
 	case handlerCredentialReview:
 		return runCredentialReviewFromRegistry
 	case handlerCredentialApply:
@@ -351,6 +358,29 @@ func runCredentialUsesFromRegistry(
 ) int {
 	return runCredentialUsesCommand(
 		captures["name"],
+		context.output,
+		context.errorOutput,
+	)
+}
+
+func runSecretRetirementPrepareFromRegistry(
+	context commandContext,
+	captures map[string]string,
+) int {
+	return runSecretRetirementPrepareCommand(
+		captures["name"],
+		context.output,
+		context.errorOutput,
+	)
+}
+
+func runSecretRetirementApplyFromRegistry(
+	context commandContext,
+	captures map[string]string,
+) int {
+	return runSecretRetirementApplyCommand(
+		captures["digest"],
+		context.input,
 		context.output,
 		context.errorOutput,
 	)

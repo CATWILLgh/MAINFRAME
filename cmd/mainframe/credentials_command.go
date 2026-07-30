@@ -105,11 +105,9 @@ func reviewCredentialInstanceChange(
 	if err != nil {
 		return credentialInstanceReviewResponse{}, err
 	}
-	instance := internalCredentialInstance(request.Instance)
 	desired, expected, err := editCredentialInstances(
 		session,
 		request,
-		instance,
 	)
 	if err != nil {
 		return credentialInstanceReviewResponse{}, err
@@ -150,7 +148,7 @@ func reviewCredentialInstanceChange(
 			SchemaVersion: credentialInstanceProtocolVersion,
 			Kind:          credentialInstanceApplyKind,
 			Operation:     request.Operation,
-			InstanceID:    request.Instance.ID,
+			InstanceID:    request.instanceIDForChange(),
 			Instances:     publicCredentialInstances(desired.All()),
 		},
 		ExpectedReview: commitment,
@@ -160,7 +158,6 @@ func reviewCredentialInstanceChange(
 func editCredentialInstances(
 	session credentialMachineSession,
 	request credentialInstanceChangeRequest,
-	instance credentialcatalog.Instance,
 ) (
 	credentialcatalog.Instances,
 	credentialcatalog.InstanceChange,
@@ -169,16 +166,24 @@ func editCredentialInstances(
 	var desired credentialcatalog.Instances
 	var err error
 	if request.Operation == credentialOperationCreate {
+		instance := internalCredentialInstance(*request.Instance)
 		desired, _, err = credentialcatalog.CreateInstance(
 			session.current,
 			instance,
 			session.definitions,
 		)
-	} else {
+	} else if request.Operation == credentialOperationEdit {
+		instance := internalCredentialInstance(*request.Instance)
 		desired, _, err = credentialcatalog.EditInstance(
 			session.current,
 			credentialcatalog.InstanceID(request.InstanceID),
 			instance,
+			session.definitions,
+		)
+	} else {
+		desired, _, err = credentialcatalog.DeleteInstance(
+			session.current,
+			credentialcatalog.InstanceID(request.InstanceID),
 			session.definitions,
 		)
 	}
@@ -200,6 +205,13 @@ func editCredentialInstances(
 			err
 	}
 	return desired, changes[0], nil
+}
+
+func (request credentialInstanceChangeRequest) instanceIDForChange() string {
+	if request.InstanceID != "" {
+		return request.InstanceID
+	}
+	return request.Instance.ID
 }
 
 func applyCredentialInstanceChange(
@@ -228,13 +240,6 @@ func applyCredentialInstanceChange(
 			"reviewed credential change is no longer applicable",
 		)
 	}
-	if err := requireSingleCredentialChange(
-		reviewed.CredentialChanges(),
-		request.Operation,
-		credentialcatalog.InstanceID(request.InstanceID),
-	); err != nil {
-		return credentialApplyResponse{}, err
-	}
 	currentCommitment, err := credentialReviewCommitment(
 		reviewed.Executable(),
 		desired,
@@ -247,6 +252,13 @@ func applyCredentialInstanceChange(
 		return credentialApplyResponse{}, fmt.Errorf(
 			"review confirmation is stale; run review again",
 		)
+	}
+	if err := requireSingleCredentialChange(
+		reviewed.CredentialChanges(),
+		request.Operation,
+		credentialcatalog.InstanceID(request.InstanceID),
+	); err != nil {
+		return credentialApplyResponse{}, err
 	}
 	result, err := session.service.ApplyCredentials(reviewed)
 	if err != nil {

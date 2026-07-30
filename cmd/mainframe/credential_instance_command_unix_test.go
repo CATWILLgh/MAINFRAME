@@ -63,7 +63,7 @@ type credentialReviewContract struct {
 type credentialChangeContract struct {
 	Operation string                             `json:"operation"`
 	Before    *machineCredentialInstanceContract `json:"before,omitempty"`
-	After     machineCredentialInstanceContract  `json:"after"`
+	After     *machineCredentialInstanceContract `json:"after,omitempty"`
 }
 
 type credentialApplyContract struct {

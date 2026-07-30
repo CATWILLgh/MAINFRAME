@@ -45,33 +45,8 @@ CURL_REPLACEMENT = (
     "project's credential source is\" (vault CLI, project `.env`, etc.) — "
     "the curl patterns themselves are agnostic."
 )
-HELP_SOURCE = "\n".join((
-    "After `secret set/edit`, open a new shell (or `source ~/.zshenv`) to",
-    "re-load secrets into the environment.",
-    "",
-    "To load all secrets into the shell at startup, ensure ~/.zshenv contains:",
-    '  [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" ] '
-    '&& set -a && . "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" '
-    "&& set +a",
-    "",
-    "The MAINFRAME configuration flow manages this line idempotently.",
-))
-HELP_REPLACEMENT = """Use one stored value only where it is needed:
-  command --token "$(secret get NAME)"
-
-Use `$NAME` only when the calling environment supplied it independently.
-MAINFRAME does not load the complete store into shell startup files."""
-
-
 def project_release_secret_guidance(release_root: Path) -> None:
-    helper = release_root / "common/credential-tools/secret"
-    _write_projected(helper, _replace_once(
-        helper.read_text(encoding="utf-8"),
-        HELP_SOURCE,
-        HELP_REPLACEMENT,
-        "secret helper",
-    ))
-    targets = [helper]
+    targets = []
     for component, relative in SKILL_ROOTS.items():
         root = release_root / "bundles" / component / relative
         secret = root / "secrets-handling/SKILL.md"
@@ -107,7 +82,7 @@ def _write_projected(path: Path, text: str) -> None:
 
 
 def _validate_targets(targets: list[Path]) -> None:
-    if len(targets) != 9 or len(set(targets)) != 9:
+    if len(targets) != 8 or len(set(targets)) != 8:
         raise ValueError("release secret projection target set is incomplete")
     for target in targets:
         text = target.read_text(encoding="utf-8")

@@ -65,7 +65,7 @@ def _credential_resources() -> list[dict]:
 def _build_credential_tools(root: Path, output: Path) -> None:
     output.mkdir(parents=True)
     copy_regular_file(
-        root / "core/resources/credential-tools/secret",
+        root / "core/resources/credential-tools/secret-release",
         output / "secret",
         executable=True,
     )
@@ -74,7 +74,7 @@ def _build_credential_tools(root: Path, output: Path) -> None:
     write_bundle_manifest(
         output,
         component="credential-tools",
-        dependencies=[],
+        dependencies=["mainframe-cli"],
         install_units=[
             {
                 "id": "credential-tools.secret",
@@ -94,24 +94,7 @@ def _build_credential_tools(root: Path, output: Path) -> None:
 def _build_cli(root: Path, output: Path) -> None:
     output.mkdir(parents=True)
     binary = output / "mainframe"
-    result = subprocess.run(
-        [
-            "go",
-            "build",
-            "-trimpath",
-            "-buildvcs=false",
-            "-o",
-            str(binary),
-            "./cmd/mainframe",
-        ],
-        cwd=root,
-        text=True,
-        capture_output=True,
-        timeout=180,
-    )
-    if result.returncode != 0:
-        raise ValueError(f"build mainframe binary: {result.stderr.strip()}")
-    binary.chmod(0o755)
+    _build_go_binary(root, binary, "./cmd/mainframe")
     write_bundle_manifest(
         output,
         component="mainframe-cli",
@@ -126,6 +109,27 @@ def _build_cli(root: Path, output: Path) -> None:
         ],
         resources=[],
     )
+
+
+def _build_go_binary(root: Path, binary: Path, package: str) -> None:
+    result = subprocess.run(
+        [
+            "go",
+            "build",
+            "-trimpath",
+            "-buildvcs=false",
+            "-o",
+            str(binary),
+            package,
+        ],
+        cwd=root,
+        text=True,
+        capture_output=True,
+        timeout=180,
+    )
+    if result.returncode != 0:
+        raise ValueError(f"build {package} binary: {result.stderr.strip()}")
+    binary.chmod(0o755)
 
 
 def _build_staged(root: Path, staging: Path, release_id: str) -> None:

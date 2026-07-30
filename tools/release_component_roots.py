@@ -20,7 +20,7 @@ COMPONENT_DEPENDENCIES = {
     "antigravity-2": frozenset({"credential-tools", "mainframe-cli"}),
     "claude-code": frozenset({"credential-tools", "mainframe-cli"}),
     "codex": frozenset({"credential-tools", "mainframe-cli"}),
-    "credential-tools": frozenset(),
+    "credential-tools": frozenset({"mainframe-cli"}),
     "mainframe-cli": frozenset(),
     "opencode": frozenset({"credential-tools", "mainframe-cli"}),
 }

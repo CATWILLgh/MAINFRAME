@@ -44,6 +44,9 @@ func runWithPreview(
 	output, errorOutput io.Writer,
 	launchPreview previewLauncher,
 ) int {
+	if len(args) > 0 && args[0] == "_secret-store" {
+		return runSecretStoreCommand(args[1:], input, output, errorOutput)
+	}
 	if path, requested := helpPath(args); requested {
 		if err := renderCommandHelp(path, output); err != nil {
 			fmt.Fprintln(errorOutput, err)

@@ -14,6 +14,7 @@ const (
 	credentialInstanceChangeKind      = "mainframe-credential-instance-change"
 	credentialOperationCreate         = "create"
 	credentialOperationEdit           = "edit"
+	credentialOperationDelete         = "delete"
 	credentialCommitmentKind          = "mainframe-credential-review-commitment"
 	credentialInstanceReviewKind      = "mainframe-credential-instance-review"
 	credentialInstanceApplyKind       = "mainframe-credential-instances-apply"
@@ -21,11 +22,11 @@ const (
 )
 
 type credentialInstanceChangeRequest struct {
-	SchemaVersion int                `json:"schema_version"`
-	Kind          string             `json:"kind"`
-	Operation     string             `json:"operation"`
-	InstanceID    string             `json:"instance_id,omitempty"`
-	Instance      credentialInstance `json:"instance"`
+	SchemaVersion int                 `json:"schema_version"`
+	Kind          string              `json:"kind"`
+	Operation     string              `json:"operation"`
+	InstanceID    string              `json:"instance_id,omitempty"`
+	Instance      *credentialInstance `json:"instance,omitempty"`
 }
 
 type credentialApplyRequest struct {
@@ -48,7 +49,7 @@ type credentialInstanceReviewResponse struct {
 type credentialChangeResponse struct {
 	Operation string              `json:"operation"`
 	Before    *credentialInstance `json:"before,omitempty"`
-	After     credentialInstance  `json:"after"`
+	After     *credentialInstance `json:"after,omitempty"`
 }
 
 type credentialApplyResponse struct {
@@ -78,16 +79,23 @@ func decodeCredentialInstanceChange(
 	}
 	switch request.Operation {
 	case credentialOperationCreate:
-		if request.InstanceID != "" {
+		if request.InstanceID != "" || request.Instance == nil {
 			return credentialInstanceChangeRequest{}, errors.New(
-				"create request must not include instance_id",
+				"create request must include instance and not instance_id",
 			)
 		}
 	case credentialOperationEdit:
-		if request.InstanceID == "" ||
+		if request.Instance == nil ||
+			request.InstanceID == "" ||
 			request.InstanceID != request.Instance.ID {
 			return credentialInstanceChangeRequest{}, errors.New(
 				"edit request instance_id must match instance.id",
+			)
+		}
+	case credentialOperationDelete:
+		if request.InstanceID == "" || request.Instance != nil {
+			return credentialInstanceChangeRequest{}, errors.New(
+				"delete request must include instance_id and not instance",
 			)
 		}
 	default:
@@ -121,7 +129,8 @@ func decodeCredentialApplyRequest(input io.Reader) (credentialApplyRequest, erro
 	}
 	if request.InstanceID == "" ||
 		request.Operation != credentialOperationCreate &&
-			request.Operation != credentialOperationEdit {
+			request.Operation != credentialOperationEdit &&
+			request.Operation != credentialOperationDelete {
 		return credentialApplyRequest{}, errors.New(
 			"apply request operation or instance_id is invalid",
 		)
@@ -150,7 +159,8 @@ func requireSingleCredentialChange(
 	operation string,
 	instanceID credentialcatalog.InstanceID,
 ) error {
-	if len(reviewed) != 1 || reviewed[0].After.ID != instanceID {
+	if len(reviewed) != 1 ||
+		changeInstanceID(reviewed[0]) != instanceID {
 		return errors.New(
 			"apply request does not describe exactly one reviewed instance change",
 		)
@@ -158,6 +168,8 @@ func requireSingleCredentialChange(
 	expectedKind := credentialcatalog.ChangeCreate
 	if operation == credentialOperationEdit {
 		expectedKind = credentialcatalog.ChangeUpdate
+	} else if operation == credentialOperationDelete {
+		expectedKind = credentialcatalog.ChangeDelete
 	}
 	if reviewed[0].Kind != expectedKind {
 		return errors.New(
@@ -165,6 +177,15 @@ func requireSingleCredentialChange(
 		)
 	}
 	return nil
+}
+
+func changeInstanceID(
+	change credentialcatalog.InstanceChange,
+) credentialcatalog.InstanceID {
+	if change.Kind == credentialcatalog.ChangeDelete {
+		return change.Before.ID
+	}
+	return change.After.ID
 }
 
 func internalCredentialInstance(
@@ -214,12 +235,19 @@ func publicCredentialChange(
 	operation := credentialOperationCreate
 	if change.Kind == credentialcatalog.ChangeUpdate {
 		operation = credentialOperationEdit
+	} else if change.Kind == credentialcatalog.ChangeDelete {
+		operation = credentialOperationDelete
 	}
 	response := credentialChangeResponse{
 		Operation: operation,
-		After:     publicCredentialInstances([]credentialcatalog.Instance{change.After})[0],
 	}
-	if change.Kind == credentialcatalog.ChangeUpdate {
+	if change.Kind != credentialcatalog.ChangeDelete {
+		after := publicCredentialInstances(
+			[]credentialcatalog.Instance{change.After},
+		)[0]
+		response.After = &after
+	}
+	if change.Kind != credentialcatalog.ChangeCreate {
 		before := publicCredentialInstances(
 			[]credentialcatalog.Instance{change.Before},
 		)[0]

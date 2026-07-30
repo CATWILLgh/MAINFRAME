@@ -4,12 +4,14 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/credentialcatalog"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
 type credentialRuntimeState struct {
-	definitions credentialcatalog.Definitions
-	snapshot    credentialcatalog.InstanceSnapshot
+	definitions       credentialcatalog.Definitions
+	snapshot          credentialcatalog.InstanceSnapshot
+	managedReferences func() ([]mcpconfiguration.ManagedSecretReference, error)
 }
 
 func loadCredentialRuntime(
@@ -38,5 +40,11 @@ func loadCredentialRuntime(
 	return credentialRuntimeState{
 		definitions: definitions,
 		snapshot:    snapshot,
+		managedReferences: func() (
+			[]mcpconfiguration.ManagedSecretReference,
+			error,
+		) {
+			return mcpconfiguration.ScanManagedSecretReferences(namespace)
+		},
 	}, nil
 }

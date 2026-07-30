@@ -128,17 +128,72 @@ func TestInstanceLifecycleRejectsDuplicatesUnknownsAndInvalidReferences(t *testi
 	}
 }
 
-func TestPlanInstanceChangesRejectsImplicitDeletion(t *testing.T) {
+func TestDeleteInstanceReturnsFullDesiredCatalogAndDeleteChange(t *testing.T) {
 	definitions := testDefinitions(t)
 	current, err := ParseInstances(distinctInstancesPayload(), definitions)
 	if err != nil {
 		t.Fatalf("ParseInstances() error = %v", err)
 	}
-	desired, err := BuildInstances(current.All()[1:], definitions)
+	deleted := current.ForService("dokploy")[1]
+	desired, change, err := DeleteInstance(current, deleted.ID, definitions)
 	if err != nil {
-		t.Fatalf("BuildInstances() error = %v", err)
+		t.Fatalf("DeleteInstance() error = %v", err)
 	}
-	if _, err := PlanInstanceChanges(current, desired); err == nil {
-		t.Fatal("PlanInstanceChanges() accepted an implicit deletion")
+	if change.Kind != ChangeDelete ||
+		change.Before.ID != deleted.ID ||
+		change.After.ID != "" {
+		t.Fatalf("change = %#v", change)
+	}
+	for _, instance := range desired.All() {
+		if instance.ID == deleted.ID {
+			t.Fatalf("deleted instance remains in desired catalog: %#v", instance)
+		}
+	}
+	changes, err := PlanInstanceChanges(current, desired)
+	if err != nil {
+		t.Fatalf("PlanInstanceChanges() error = %v", err)
+	}
+	if len(changes) != 1 ||
+		changes[0].Kind != ChangeDelete ||
+		changes[0].Before.ID != deleted.ID {
+		t.Fatalf("planned changes = %#v", changes)
+	}
+}
+
+func TestDeleteInstanceRejectsMissingAndDependencyTarget(t *testing.T) {
+	definitions := testDefinitions(t)
+	current, err := ParseInstances(distinctInstancesPayload(), definitions)
+	if err != nil {
+		t.Fatalf("ParseInstances() error = %v", err)
+	}
+	if _, _, err := DeleteInstance(
+		current,
+		"missing",
+		definitions,
+	); err == nil {
+		t.Fatal("DeleteInstance() accepted a missing instance")
+	}
+	instances := current.ForService("dokploy")
+	target := instances[0]
+	dependent := instances[1]
+	dependent.Credentials[0].Requirements = []Requirement{{
+		Action: ActionUse, InstanceID: target.ID, RoleID: "api-key",
+		Summary: "Use the home API key",
+	}}
+	current, _, err = EditInstance(
+		current,
+		dependent.ID,
+		dependent,
+		definitions,
+	)
+	if err != nil {
+		t.Fatalf("EditInstance() error = %v", err)
+	}
+	if _, _, err := DeleteInstance(
+		current,
+		target.ID,
+		definitions,
+	); err == nil {
+		t.Fatal("DeleteInstance() accepted a requirement target")
 	}
 }

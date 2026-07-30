@@ -38,6 +38,22 @@ func TestDecodeCredentialInstanceChangeAcceptsCreate(t *testing.T) {
 	}
 }
 
+func TestDecodeCredentialInstanceChangeAcceptsDeleteWithoutInstance(t *testing.T) {
+	request, err := decodeCredentialInstanceChange(strings.NewReader(`{
+		"schema_version":1,
+		"kind":"mainframe-credential-instance-change",
+		"operation":"delete",
+		"instance_id":"context7-home"
+	}`))
+	if err != nil {
+		t.Fatalf("decode delete: %v", err)
+	}
+	if request.Operation != credentialOperationDelete ||
+		request.InstanceID != "context7-home" {
+		t.Fatalf("request = %#v", request)
+	}
+}
+
 func TestDecodeCredentialInstanceChangeRejectsAmbiguousInput(t *testing.T) {
 	tests := map[string]string{
 		"null":          `null`,
@@ -59,6 +75,18 @@ func TestDecodeCredentialInstanceChangeRejectsAmbiguousInput(t *testing.T) {
 			"operation":"create",
 			"instance_id":"context7-home",
 			"instance":{"id":"context7-home"}
+		}`,
+		"delete with instance": `{
+			"schema_version":1,
+			"kind":"mainframe-credential-instance-change",
+			"operation":"delete",
+			"instance_id":"context7-home",
+			"instance":{"id":"context7-home"}
+		}`,
+		"delete without id": `{
+			"schema_version":1,
+			"kind":"mainframe-credential-instance-change",
+			"operation":"delete"
 		}`,
 	}
 	for name, input := range tests {
@@ -162,6 +190,20 @@ func TestDecodeCredentialApplyRequestRequiresVersionedSingleChangeScope(
 	}
 }
 
+func TestDeleteCredentialChangeUsesBeforeImageOnly(t *testing.T) {
+	before := testProtocolInstance()
+	change := publicCredentialChange(credentialcatalog.InstanceChange{
+		Kind:   credentialcatalog.ChangeDelete,
+		Before: before,
+	})
+	if change.Operation != credentialOperationDelete ||
+		change.Before == nil ||
+		change.Before.ID != string(before.ID) ||
+		change.After != nil {
+		t.Fatalf("delete change = %#v", change)
+	}
+}
+
 func TestRequestedCredentialChangeMustMatchReviewedChangeExactly(t *testing.T) {
 	before := credentialcatalog.Instance{
 		ID: "context7-home", ServiceID: "context7",
@@ -234,6 +276,7 @@ func TestEditCredentialInstancesUsesNormalizedDesiredChange(t *testing.T) {
 	request := credentialInstanceChangeRequest{
 		Operation:  credentialOperationEdit,
 		InstanceID: string(replacement.ID),
+		Instance:   ptrCredentialInstance(publicCredentialInstances([]credentialcatalog.Instance{replacement})[0]),
 	}
 	desired, expected, err := editCredentialInstances(
 		credentialMachineSession{
@@ -241,7 +284,6 @@ func TestEditCredentialInstancesUsesNormalizedDesiredChange(t *testing.T) {
 			current:     current,
 		},
 		request,
-		replacement,
 	)
 	if err != nil {
 		t.Fatalf("edit instances: %v", err)
@@ -259,6 +301,10 @@ func TestEditCredentialInstancesUsesNormalizedDesiredChange(t *testing.T) {
 	if err := requireExactCredentialChange(reviewed, expected); err != nil {
 		t.Fatalf("normalized change mismatch: %v", err)
 	}
+}
+
+func ptrCredentialInstance(value credentialInstance) *credentialInstance {
+	return &value
 }
 
 func TestCredentialOnlySnapshotBuilderRejectsOtherSubsystemsBeforeObservation(

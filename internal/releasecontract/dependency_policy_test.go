@@ -19,7 +19,10 @@ func TestValidateGlobalRejectsCrossRuntimeDependency(t *testing.T) {
 
 func TestValidateGlobalAcceptsAdapterNeutralDependencies(t *testing.T) {
 	manifests := []bundleManifest{
-		{Component: "credential-tools", Dependencies: []string{}},
+		{
+			Component:    "credential-tools",
+			Dependencies: []string{"mainframe-cli"},
+		},
 		{Component: "mainframe-cli", Dependencies: []string{}},
 		{
 			Component:    "opencode",

@@ -136,6 +136,7 @@ def _assert_component_contracts(output: Path, index: dict) -> Path:
     ]
     credentials = by_component["credential-tools"]
     assert credentials["schema_version"] == 6
+    assert credentials["dependencies"] == ["mainframe-cli"]
     assert credentials["install_units"][0]["target"] == {
         "root": "user-bin",
         "path": "secret",
@@ -258,11 +259,10 @@ def _assert_no_shell_startup_files(home: Path) -> None:
 
 def _assert_named_secret_guidance(output: Path) -> None:
     targets = [
-        output / "common/credential-tools/secret",
         *output.glob("bundles/*/**/skills/secrets-handling/SKILL.md"),
         *output.glob("bundles/*/**/skills/curl-requests/SKILL.md"),
     ]
-    assert len(targets) == 9
+    assert len(targets) == 8
     forbidden = (
         "auto-sourced from",
         "loaded into the shell environment by",

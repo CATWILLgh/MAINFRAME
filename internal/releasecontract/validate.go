@@ -34,7 +34,7 @@ var componentDependencies = map[domain.ComponentID]map[domain.ComponentID]struct
 	"antigravity-2":    {"credential-tools": {}, "mainframe-cli": {}},
 	"claude-code":      {"credential-tools": {}, "mainframe-cli": {}},
 	"codex":            {"credential-tools": {}, "mainframe-cli": {}},
-	"credential-tools": {},
+	"credential-tools": {"mainframe-cli": {}},
 	"mainframe-cli":    {},
 	"opencode":         {"credential-tools": {}, "mainframe-cli": {}},
 }

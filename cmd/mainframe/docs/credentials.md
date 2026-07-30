@@ -149,7 +149,7 @@ Copy proposal identity fields and occurrence counts from the current
 `legacy-plan`; do not reconstruct them. A `skip` choice uses an empty `target`
 and one documented `skip_reason`.
 
-Agents can create or edit instance metadata through:
+Agents can create, edit, or delete instance metadata through:
 
 ```text
 mainframe credentials instance review
@@ -159,7 +159,8 @@ mainframe credentials instance apply --confirm <digest>
 Review reads a strict JSON request from standard input and returns a normalized
 request plus a digest. Apply accepts only that normalized request and exact
 digest, repeats the review against fresh state, and then uses the normal
-transaction boundary. Create and edit do not imply deletion.
+transaction boundary. Deletion is explicit and never cascades into the secret
+value store.
 
 A create request has this shape:
 
@@ -190,7 +191,41 @@ For an edit, set `operation` to `edit`, add `instance_id`, and keep it equal to
 `instance.id`. Obtain valid service and role IDs from `mainframe credentials`;
 do not invent them.
 
+For a delete, set `operation` to `delete`, include only the existing
+`instance_id`, and omit `instance`. Review returns the full desired catalog and
+a change with `before` but no `after`. Deletion is rejected while another
+instance requirement targets the record. It removes catalog metadata only; use
+the separately reviewed secret-store retirement flow when the underlying value
+is no longer shared or needed.
+
 The review response contains `apply_request` and `expected_review`. Send the
 returned `apply_request` unchanged on standard input to the apply command, and
 pass `expected_review` as its `--confirm` argument. If state changed after
 review, apply fails and the agent must review again.
+
+Retire an unreferenced secret value through the separate reviewed flow:
+
+```text
+mainframe credentials secret-retire prepare <name>
+mainframe credentials secret-retire apply --confirm <digest>
+```
+
+Preparation checks that the entry exists, that no credential-instance role
+uses its exact `secret-env` name, and that none of the fixed MAINFRAME-managed
+adapter ownership registries uses the exact name. Every registry is inspected;
+an unsafe or unrecognized secret-bearing registry blocks retirement. The
+secret value is never read into the response. Preparation may initialize the
+store's opaque generation sidecar, so its capability effect is
+`preparation-write`, not `read-only`.
+
+The preparation response contains a value-free `apply_request` and
+`expected_review`. Send that exact request on standard input. Apply acquires
+the shared MAINFRAME transaction lock, repeats the catalog and managed-registry
+checks from fresh state, verifies the digest and physical scope, and deletes
+only if the secret-store generation still matches preparation. A new catalog
+use, managed registry use, direct secret edit, changed path, or changed release
+requires preparation again.
+
+Retirement removes only the local store entry. It does not revoke the
+provider-side credential and cannot remove copies already inherited by running
+process environments. Perform those actions separately when they apply.

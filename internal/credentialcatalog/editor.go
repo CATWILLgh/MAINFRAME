@@ -12,6 +12,7 @@ type ChangeKind string
 const (
 	ChangeCreate ChangeKind = "create"
 	ChangeUpdate ChangeKind = "update"
+	ChangeDelete ChangeKind = "delete"
 )
 
 type InstanceChange struct {
@@ -116,6 +117,34 @@ func EditInstance(
 	)
 }
 
+func DeleteInstance(
+	current Instances,
+	id InstanceID,
+	definitions Definitions,
+) (Instances, InstanceChange, error) {
+	values := current.All()
+	for index, existing := range values {
+		if existing.ID != id {
+			continue
+		}
+		desired, err := BuildInstances(
+			append(values[:index:index], values[index+1:]...),
+			definitions,
+		)
+		if err != nil {
+			return Instances{}, InstanceChange{}, err
+		}
+		return desired, InstanceChange{
+			Kind:   ChangeDelete,
+			Before: cloneInstance(existing),
+		}, nil
+	}
+	return Instances{}, InstanceChange{}, fmt.Errorf(
+		"credential instance %q does not exist",
+		id,
+	)
+}
+
 func EncodeInstances(instances Instances) ([]byte, error) {
 	document := instancesDocument{
 		SchemaVersion: schemaVersion,
@@ -163,8 +192,14 @@ func PlanInstanceChanges(
 			})
 		}
 	}
-	if len(currentByID) > 0 {
-		return nil, fmt.Errorf("credential instance deletion is not supported")
+	for _, instance := range current.instances {
+		if _, exists := currentByID[instance.ID]; !exists {
+			continue
+		}
+		changes = append(changes, InstanceChange{
+			Kind:   ChangeDelete,
+			Before: cloneInstance(instance),
+		})
 	}
 	return changes, nil
 }

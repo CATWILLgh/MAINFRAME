@@ -14,12 +14,17 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/executor"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostlayout"
 	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
+	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
 type credentialObservation struct {
-	release     executor.ReleaseIdentity
-	credentials credentialcatalog.InstanceSnapshot
+	release           executor.ReleaseIdentity
+	credentials       credentialcatalog.InstanceSnapshot
+	managedReferences func() (
+		[]mcpconfiguration.ManagedSecretReference,
+		error,
+	)
 }
 
 type credentialObserver func() (credentialObservation, error)
@@ -61,12 +66,60 @@ func (builder *credentialOnlySnapshotBuilder) Build(
 			"release identity changed after credential review",
 		)
 	}
+	if err := validateManagedCredentialDeletion(
+		request,
+		observation.credentials,
+		observation.managedReferences,
+	); err != nil {
+		return application.Snapshot{}, err
+	}
 	credentials := observation.credentials
 	return application.Snapshot{
 		Release:     observation.release,
 		Lifecycle:   builder.lifecycle,
 		Credentials: &credentials,
 	}, nil
+}
+
+func validateManagedCredentialDeletion(
+	request application.Request,
+	current credentialcatalog.InstanceSnapshot,
+	observeManaged func() ([]mcpconfiguration.ManagedSecretReference, error),
+) error {
+	changes, err := credentialcatalog.PlanInstanceChanges(
+		current.Instances(),
+		*request.CredentialInstances,
+	)
+	if err != nil {
+		return err
+	}
+	deletedReferences := make(map[string]struct{})
+	for _, change := range changes {
+		if change.Kind != credentialcatalog.ChangeDelete {
+			continue
+		}
+		for _, binding := range change.Before.Credentials {
+			deletedReferences[binding.Secret.Name] = struct{}{}
+		}
+	}
+	if len(deletedReferences) == 0 {
+		return nil
+	}
+	managed, err := observeManaged()
+	if err != nil {
+		return err
+	}
+	for _, reference := range managed {
+		if _, blocked := deletedReferences[reference.Reference]; blocked {
+			return fmt.Errorf(
+				"credential secret %q remains in managed adapter registry %s/%s",
+				reference.Reference,
+				reference.ComponentID,
+				reference.ResourceID,
+			)
+		}
+	}
+	return nil
 }
 
 func (builder *credentialOnlySnapshotBuilder) nextObservation() (
@@ -168,6 +221,7 @@ func buildCredentialMachineSessionWithLegacyValidation(
 	}
 	first := credentialObservation{
 		release: identity, credentials: runtime.snapshot,
+		managedReferences: runtime.managedReferences,
 	}
 	builder := &credentialOnlySnapshotBuilder{
 		expected:  identity,
@@ -245,8 +299,9 @@ func observeCredentialState(root string) (credentialObservation, error) {
 		return credentialObservation{}, err
 	}
 	return credentialObservation{
-		release:     releaseIdentity(release),
-		credentials: runtime.snapshot,
+		release:           releaseIdentity(release),
+		credentials:       runtime.snapshot,
+		managedReferences: runtime.managedReferences,
 	}, nil
 }
 

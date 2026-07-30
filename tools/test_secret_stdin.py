@@ -180,6 +180,40 @@ def test_concurrent_create_allows_exactly_one_writer() -> None:
     )
 
 
+def test_replacement_and_deletion_sanitize_legacy_backup() -> None:
+    root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
+    env = {
+        "HOME": str(root / "home"),
+        "XDG_CONFIG_HOME": str(root / "config"),
+        "PATH": os.environ["PATH"],
+    }
+    for command in (
+        ("set", "API_TOKEN", "retired-value"),
+        ("set", "API_TOKEN", "current-value"),
+    ):
+        result = subprocess.run(
+            [str(SECRET), *command],
+            capture_output=True,
+            env=env,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr.decode()
+    store = root / "config/credentials/secrets.env"
+    backup = root / "config/credentials/secrets.env.bak"
+    assert b"retired-value" not in store.read_bytes()
+    assert b"retired-value" not in backup.read_bytes()
+
+    result = subprocess.run(
+        [str(SECRET), "del", "API_TOKEN"],
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert b"current-value" not in store.read_bytes()
+    assert b"current-value" not in backup.read_bytes()
+
+
 def test_create_stdin_rejects_symlinked_store_targets() -> None:
     for target_name in ("credentials", "secrets.env", "secrets.env.bak"):
         root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
@@ -228,5 +262,6 @@ if __name__ == "__main__":
     test_create_stdin_never_replaces_existing_value()
     test_create_stdin_preserves_unrelated_entries()
     test_concurrent_create_allows_exactly_one_writer()
+    test_replacement_and_deletion_sanitize_legacy_backup()
     test_create_stdin_rejects_symlinked_store_targets()
-    print("9/9 passed")
+    print("10/10 passed")

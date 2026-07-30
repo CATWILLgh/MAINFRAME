@@ -122,6 +122,21 @@ transcripts. MAINFRAME's agent-facing credential interfaces use instance
 metadata and secret references only. Secret value entry remains a direct human
 action through the masked terminal interface.
 
+Agents can retire a local secret only after removing every catalog and
+MAINFRAME-managed adapter reference:
+
+```text
+mainframe credentials secret-retire prepare <name>
+mainframe credentials secret-retire apply --confirm <digest>
+```
+
+Preparation can create an opaque generation sidecar and therefore reports the
+effect `preparation-write`. It returns a value-free `apply_request` and digest.
+Apply accepts that request unchanged, rechecks every fixed managed ownership
+registry and the credential catalog while holding MAINFRAME's transaction
+lock, and deletes only the reviewed store generation. Provider revocation and
+existing process environments remain external responsibilities.
+
 `mainframe draft review` safely observes the current installation and returns
 the same adapter, configuration, MCP, and diagnostics plan used by the terminal
 interface. When the exact plan is supported for machine application, the
