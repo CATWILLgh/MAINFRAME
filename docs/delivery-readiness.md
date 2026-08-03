@@ -127,3 +127,9 @@ export. The compatibility path removes its exact historical line from regular
 shell startup files before other mutations and fails closed when that line is
 inside a symbolic-link file. Regenerated live guidance and a new-session check
 remain part of the explicit Claude Code and Codex smoke-test window.
+
+The executable, value-free filesystem preflight and the required fresh,
+long-running, resumed, and compacted session matrix are defined in
+[`testing-local-agent-surfaces.md`](testing-local-agent-surfaces.md). Passing
+the preflight is necessary but does not replace real skill activation in each
+supported local host.

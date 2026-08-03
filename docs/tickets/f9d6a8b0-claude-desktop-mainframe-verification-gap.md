@@ -65,3 +65,15 @@ The current installer verifies links, not the behavior of fresh, resumed, and co
 **Noticed during:** Claude plugin manifest source and validation repair (`#09b19ada`)
 **Where:** `adapters/claude-code/plugin.json`, `core/README.md`, and Claude Code validation CI
 **Additional details:** The manifest now has a guarded authored source and strict official validation, but its explicit `0.1.0` version was deliberately left byte-identical. Version advancement and active/resumed-session cache behavior remain owned by this parity ticket; source ownership and schema validity alone do not prove live registry stability.
+
+## Progress (2026-08-04) — live-test procedure prepared
+
+`docs/testing-local-agent-surfaces.md` now defines one value-free marker prompt,
+the fresh/long/resumed/compacted matrix for CLI, official VS Code, and Desktop
+Code Local, required evidence, and fail/rollback rules. The read-only
+`tools/check_local_agent_surfaces.py` preflight separates filesystem delivery
+from actual runtime resolution and also checks Codex private-method isolation.
+
+No live host was restarted or reconfigured in this preparatory run. The ticket
+therefore remains open until all Claude Code matrix rows pass in the explicit
+live-test window.
