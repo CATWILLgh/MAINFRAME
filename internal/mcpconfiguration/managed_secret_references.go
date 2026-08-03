@@ -10,6 +10,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/hostfs"
 	"github.com/CATWILLgh/MAINFRAME/internal/jsondocument"
+	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
 type ManagedSecretReference struct {
@@ -19,45 +20,12 @@ type ManagedSecretReference struct {
 	RegistryTarget domain.Location
 }
 
-type managedRegistryContract struct {
-	component domain.ComponentID
-	target    domain.Location
-}
-
-var managedRegistryContracts = []managedRegistryContract{
-	{
-		component: domain.ComponentAntigravity2,
-		target: domain.Location{
-			Root: domain.RootAntigravityData, Path: "mainframe/mcp-ownership.json",
-		},
-	},
-	{
-		component: domain.ComponentClaudeCode,
-		target: domain.Location{
-			Root: domain.RootClaudeConfig, Path: "mainframe/mcp-ownership.json",
-		},
-	},
-	{
-		component: domain.ComponentCodex,
-		target: domain.Location{
-			Root: domain.RootCodexConfig, Path: "mainframe/mcp-ownership.json",
-		},
-	},
-	{
-		component: domain.ComponentOpenCode,
-		target: domain.Location{
-			Root: domain.RootOpenCodeConfig,
-			Path: "opencode.json.mainframe-mcp.json",
-		},
-	},
-}
-
 func ScanManagedSecretReferences(host Host) ([]ManagedSecretReference, error) {
 	if host == nil {
 		return nil, fmt.Errorf("host must not be nil")
 	}
 	var result []ManagedSecretReference
-	for _, contract := range managedRegistryContracts {
+	for _, contract := range releasecontract.ManagedMCPRegistryContracts() {
 		references, err := scanManagedRegistry(host, contract)
 		if err != nil {
 			return nil, err
@@ -78,30 +46,30 @@ func ScanManagedSecretReferences(host Host) ([]ManagedSecretReference, error) {
 
 func scanManagedRegistry(
 	host Host,
-	contract managedRegistryContract,
+	contract releasecontract.ManagedMCPRegistryContract,
 ) ([]ManagedSecretReference, error) {
-	entry, err := host.Inspect(contract.target, true)
+	entry, err := host.Inspect(contract.RegistryTarget, true)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf(
 			"inspect %s MCP ownership registry: %w",
-			contract.component,
+			contract.ComponentID,
 			err,
 		)
 	}
 	if entry.Kind != hostfs.EntryRegular {
 		return nil, fmt.Errorf(
 			"%s MCP ownership registry is not a regular file",
-			contract.component,
+			contract.ComponentID,
 		)
 	}
 	servers, err := decodeManagedRegistry(entry.Content)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%s MCP ownership registry is invalid: %w",
-			contract.component,
+			contract.ComponentID,
 			err,
 		)
 	}
@@ -129,13 +97,13 @@ func decodeManagedRegistry(raw []byte) (map[string]json.RawMessage, error) {
 }
 
 func managedRegistryReferences(
-	contract managedRegistryContract,
+	contract releasecontract.ManagedMCPRegistryContract,
 	servers map[string]json.RawMessage,
 ) ([]ManagedSecretReference, error) {
 	var result []ManagedSecretReference
 	for resourceID, raw := range servers {
 		reference, present, err := managedEntrySecretReference(
-			contract.component,
+			contract.ComponentID,
 			raw,
 		)
 		if err != nil {
@@ -144,9 +112,9 @@ func managedRegistryReferences(
 		if present {
 			result = append(result, ManagedSecretReference{
 				Reference:      reference,
-				ComponentID:    contract.component,
+				ComponentID:    contract.ComponentID,
 				ResourceID:     resourceID,
-				RegistryTarget: contract.target,
+				RegistryTarget: contract.RegistryTarget,
 			})
 		}
 	}

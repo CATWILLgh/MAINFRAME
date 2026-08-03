@@ -2,6 +2,7 @@ package releasecontract
 
 import (
 	"encoding/json"
+	"sort"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
@@ -21,6 +22,11 @@ type mcpProjectionCodecContract struct {
 type mcpProjectionCodecKey struct {
 	component domain.ComponentID
 	codec     MCPProjectionCodec
+}
+
+type ManagedMCPRegistryContract struct {
+	ComponentID    domain.ComponentID
+	RegistryTarget domain.Location
 }
 
 var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContract{
@@ -83,6 +89,30 @@ var mcpProjectionContracts = map[mcpProjectionCodecKey]mcpProjectionCodecContrac
 		entryType:                "remote",
 		materializationSupported: true,
 	},
+}
+
+func ManagedMCPRegistryContracts() []ManagedMCPRegistryContract {
+	unique := make(map[ManagedMCPRegistryContract]struct{})
+	for key, contract := range mcpProjectionContracts {
+		unique[ManagedMCPRegistryContract{
+			ComponentID:    key.component,
+			RegistryTarget: contract.registryTarget,
+		}] = struct{}{}
+	}
+	result := make([]ManagedMCPRegistryContract, 0, len(unique))
+	for contract := range unique {
+		result = append(result, contract)
+	}
+	sort.Slice(result, func(left, right int) bool {
+		if result[left].ComponentID != result[right].ComponentID {
+			return result[left].ComponentID < result[right].ComponentID
+		}
+		if result[left].RegistryTarget.Root != result[right].RegistryTarget.Root {
+			return result[left].RegistryTarget.Root < result[right].RegistryTarget.Root
+		}
+		return result[left].RegistryTarget.Path < result[right].RegistryTarget.Path
+	})
+	return result
 }
 
 // SupportsMaterialization covers emitted intents; adapter deselection remains planner policy.

@@ -1,7 +1,7 @@
 ---
 id: 457d6d66
 title: Centralize managed MCP ownership registry contracts
-status: open
+status: closed
 priority: low
 component: mcp
 discovered: 2026-07-29
@@ -55,3 +55,17 @@ maintenance hazard rather than a present bypass.
 - `internal/mcpconfiguration/inspection.go`
 - `internal/mcpconfiguration/antigravity_secret_ownership.go`
 - `cmd/mainframe/credential_machine_runtime.go`
+
+## Resolution
+
+The release contract now exposes a sorted, caller-isolated registry inventory
+derived directly from the same codec contracts that validate adapter
+publication. The retirement scanner consumes that inventory instead of
+maintaining a second list. Registry decoding remains in `mcpconfiguration`,
+where the supported secret-bearing formats are validated and unknown formats
+continue to fail closed.
+
+Tier 1 tests prove the four supported adapter registries are returned once in a
+stable order, callers cannot mutate the shared contract, absent active
+projections do not prevent stale-registry inspection, and the existing
+OpenCode, Antigravity, Claude Code, and Codex scan behavior remains green.
