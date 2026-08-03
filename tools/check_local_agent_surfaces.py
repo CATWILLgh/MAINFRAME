@@ -94,7 +94,8 @@ def check_layout(
             failures,
         )
     for name in sorted(restricted):
-        if (codex_home / "skills" / name).exists():
+        global_path = codex_home / "skills" / name
+        if global_path.exists() or global_path.is_symlink():
             failures.append(f"codex restricted skill is globally visible: {name}")
         _check_file(
             codex_home / PRIVATE_METHODS_DIR / name / "SKILL.md",
@@ -107,9 +108,13 @@ def check_layout(
         _check_file(target, f"codex agent {source.stem}", failures)
         if not target.is_file():
             continue
-        instructions = tomllib.loads(target.read_text()).get(
-            "developer_instructions", ""
-        )
+        try:
+            instructions = tomllib.loads(target.read_text()).get(
+                "developer_instructions", ""
+            )
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+            failures.append(f"codex agent {source.stem} has invalid TOML")
+            continue
         for method in set(_agent_methods(source)) & restricted:
             if f"Private method: {method}" not in instructions:
                 failures.append(

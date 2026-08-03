@@ -129,6 +129,16 @@ def test_restricted_skills_are_private_and_keep_support_files():
     assert Path("tool.py") in methods["sample-skill"]
 
 
+def test_private_method_links_respect_registry_partition():
+    methods = dict(bc.collect_private_methods(_TOOLS.parent))
+    frontend = methods["react-frontend-patterns"][Path("SKILL.md")].decode()
+    assert (
+        "~/.codex/mainframe-agent-methods/shadcn/SKILL.md" in frontend
+    )
+    assert "~/.codex/skills/surface-ticket/SKILL.md" in frontend
+    assert "](../" not in frontend
+
+
 def test_real_render_has_no_false_codex_tool_attributions():
     repo = _TOOLS.parent
     skills, dropped = bc.collect_skills(repo)

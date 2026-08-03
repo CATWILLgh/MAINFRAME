@@ -62,6 +62,13 @@ def test_global_private_skill_and_missing_agent_method_fail() -> None:
     assert any("lacks private method" in failure for failure in failures)
 
 
+def test_malformed_agent_definition_fails_cleanly() -> None:
+    root, claude, codex = _fixture()
+    _write(codex / "agents/worker.toml", "not = [valid\n")
+    failures = check_layout(root, claude, codex, check_binaries=False)
+    assert failures == ["codex agent worker has invalid TOML"]
+
+
 def main() -> int:
     tests = [
         value for key, value in sorted(globals().items())
