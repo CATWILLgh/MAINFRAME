@@ -19,7 +19,11 @@ DARWIN_STEPS = [
         "go test -count=1 ./internal/releasecache "
         "./internal/linkworkspace ./internal/hostfs",
     ),
-    ("run", "python3 tools/test_build_release.py"),
+    (
+        "run",
+        "python3 tools/test_build_release.py\n"
+        "python3 tools/test_release_cli_lifecycle.py\n",
+    ),
 ]
 
 

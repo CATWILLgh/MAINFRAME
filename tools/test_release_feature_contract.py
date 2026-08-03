@@ -7,7 +7,7 @@ from pathlib import Path
 import release_contract
 
 
-def test_install_unit_feature_is_v5_only_and_strict() -> None:
+def test_install_unit_feature_is_v5_onward_and_strict() -> None:
     bundle = Path(tempfile.mkdtemp())
     (bundle / "feedback").write_text("feedback\n")
     unit = {
@@ -25,13 +25,13 @@ def test_install_unit_feature_is_v5_only_and_strict() -> None:
         install_units=[unit],
         resources=[],
     )
-    assert manifest["schema_version"] == 5
+    assert manifest["schema_version"] == 6
     assert manifest["install_units"][0]["feature"] == "dev.harness-feedback"
 
     for schema_version, feature in (
         (4, "dev.harness-feedback"),
-        (5, "Invalid"),
-        (5, None),
+        (6, "Invalid"),
+        (6, None),
     ):
         candidate = dict(unit, feature=feature)
         try:
@@ -51,5 +51,5 @@ def test_install_unit_feature_is_v5_only_and_strict() -> None:
 
 
 if __name__ == "__main__":
-    test_install_unit_feature_is_v5_only_and_strict()
+    test_install_unit_feature_is_v5_onward_and_strict()
     print("1/1 passed")

@@ -110,7 +110,7 @@ def test_schema_two_forbids_host_requirements():
     try:
         _write_bundle(schema_version=2, requirements=[REQUIREMENT])
     except ValueError as exc:
-        assert "schema version 3 through 5" in str(exc)
+        assert "schema version 3 or newer" in str(exc)
     else:
         raise AssertionError("schema version 2 writer accepted host requirements")
 
