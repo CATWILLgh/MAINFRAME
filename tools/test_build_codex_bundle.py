@@ -221,6 +221,15 @@ def test_build_materializes_complete_self_contained_codex_bundle():
     assert "mainframe-agent-methods/nextjs-backend-patterns/recon.js" in (
         private_method.read_text()
     )
+    frontend_agent = (output / "agents/react-frontend-engineer.toml").read_text()
+    assert (
+        "${CODEX_HOME:-$HOME/.codex}/mainframe-agent-methods/"
+        "react-frontend-patterns/recon.js" in frontend_agent
+    )
+    assert (
+        "${CODEX_HOME:-$HOME/.codex}/skills/react-frontend-patterns"
+        not in frontend_agent
+    )
     credentials = (output / "credentials-index.md").read_text()
     assert "${CODEX_HOME:-$HOME/.codex}/credentials-index.md" in credentials
     assert "~/.claude/credentials-index.md" not in credentials

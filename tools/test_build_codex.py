@@ -529,7 +529,12 @@ def test_real_agents_embed_private_methods_but_reference_public_skills():
     for name in ("react-frontend-patterns", "shadcn", "frontend-design"):
         assert f"Private method: {name}" in frontend
         assert f"${name}" not in frontend
+        assert f"~/.codex/skills/{name}" not in frontend
     assert "$surface-ticket" in frontend
+    assert (
+        "~/.codex/mainframe-agent-methods/react-frontend-patterns/recon.js"
+        in frontend
+    )
     assert len(frontend.encode()) < bc.MAX_AGENT_INSTRUCTION_BYTES
 
 

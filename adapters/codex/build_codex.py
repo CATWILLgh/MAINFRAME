@@ -644,11 +644,18 @@ def _agent_developer_instructions(
     name: str,
     private_methods: dict[str, dict[Path, bytes]] | None = None,
     private_root: str = f"~/.codex/{PRIVATE_METHODS_DIR}",
+    profile=None,
 ) -> str:
-    text = _strip_repo_links(_rewrite_codex_prose(body, name)).strip()
+    private_methods = private_methods or {}
+    projected_body = _project_skill_text(body, name, profile)
+    projected_body = _relocate_restricted_paths(
+        projected_body,
+        frozenset(private_methods),
+        profile,
+    )
+    text = _strip_repo_links(projected_body).strip()
     lead = []
     skills = contract.get("method-skills") or []
-    private_methods = private_methods or {}
     public_skills = [skill for skill in skills if skill not in private_methods]
     if public_skills:
         refs = ", ".join(f"${skill}" for skill in public_skills)
@@ -706,7 +713,7 @@ def render_agent(
         lines.append('web_search = "disabled"')
     private_root = _runtime_roots(profile)[1]
     di = _agent_developer_instructions(
-        body, meta, name, private_methods, private_root
+        body, meta, name, private_methods, private_root, profile
     )
     lines.append(f"developer_instructions = {json.dumps(di, ensure_ascii=False)}")
     return "\n".join(lines) + "\n"
