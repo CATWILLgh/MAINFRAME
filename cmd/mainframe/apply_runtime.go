@@ -161,9 +161,22 @@ func (builder releaseSnapshotBuilder) validate() error {
 }
 
 type productionApplyExecutorFactory struct {
-	resolveRoot releaseRootResolver
-	environment hostlayout.Environment
+	resolveRoot            releaseRootResolver
+	environment            hostlayout.Environment
+	decorateConfigurations configurationWorkspaceDecorator
+	decorateState          applyStateDecorator
 }
+
+type configurationWorkspaceDecorator func(
+	executor.ConfigurationWorkspace,
+) executor.ConfigurationWorkspace
+
+type applyStateStore interface {
+	executor.JournalStore
+	executor.OwnershipStore
+}
+
+type applyStateDecorator func(applyStateStore) applyStateStore
 
 func (factory productionApplyExecutorFactory) Open(
 	refresher executor.Refresher,
@@ -187,16 +200,24 @@ func (factory productionApplyExecutorFactory) Open(
 	if err != nil {
 		return nil, fmt.Errorf("open transaction state: %w", err)
 	}
+	configurations := executor.ConfigurationWorkspace(workspace)
+	if factory.decorateConfigurations != nil {
+		configurations = factory.decorateConfigurations(configurations)
+	}
+	store := applyStateStore(state)
+	if factory.decorateState != nil {
+		store = factory.decorateState(store)
+	}
 	secretHelper := filepath.Join(
 		layout.Targets()[domain.RootUserBin],
 		"secret",
 	)
 	runner := executor.NewWithConfigurationAndSecrets(
 		state,
-		state,
+		store,
 		refresher,
 		workspace,
-		workspace,
+		configurations,
 		newSecretHelperResolver(secretHelper),
 	)
 	return &productionExecutorSession{executor: runner, state: state}, nil

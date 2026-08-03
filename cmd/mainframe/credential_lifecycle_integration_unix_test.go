@@ -108,10 +108,20 @@ type credentialLifecycleFixture struct {
 	service       application.Service
 	definitions   credentialcatalog.Definitions
 	instancesPath string
+	layout        hostlayout.Layout
+	stateRoot     string
 }
 
 func newCredentialLifecycleFixture(
 	t *testing.T,
+) credentialLifecycleFixture {
+	return newCredentialLifecycleFixtureWithDecorators(t, nil, nil)
+}
+
+func newCredentialLifecycleFixtureWithDecorators(
+	t *testing.T,
+	decorateConfigurations configurationWorkspaceDecorator,
+	decorateState applyStateDecorator,
 ) credentialLifecycleFixture {
 	t.Helper()
 	home := canonicalTempDir(t)
@@ -159,8 +169,10 @@ func newCredentialLifecycleFixture(
 	service, err := application.New(
 		builder,
 		productionApplyExecutorFactory{
-			resolveRoot: func() (string, error) { return releaseRoot, nil },
-			environment: environment,
+			resolveRoot:            func() (string, error) { return releaseRoot, nil },
+			environment:            environment,
+			decorateConfigurations: decorateConfigurations,
+			decorateState:          decorateState,
 		},
 		productionRecoveryExecutorFactory{layout: recoveryLayout},
 	)
@@ -168,7 +180,8 @@ func newCredentialLifecycleFixture(
 		t.Fatalf("application.New() error = %v", err)
 	}
 	return credentialLifecycleFixture{
-		service: service, definitions: definitions,
+		service: service, definitions: definitions, layout: layout,
+		stateRoot: recoveryLayout.State(),
 		instancesPath: filepath.Join(
 			config,
 			"credentials",
