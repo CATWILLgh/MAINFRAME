@@ -78,7 +78,7 @@ def test_skill_frontmatter_reduced_and_body_rewritten():
     assert bc.GENERATED_MARKER in body
     assert "Load explicitly with `$sample-skill`" in body
     assert "file-reading and search tools" in body
-    assert "~/.codex/skills/sample-skill/tool.py" in body
+    assert "~/.codex/mainframe-agent-methods/sample-skill/tool.py" in body
     assert "~/.codex/plans/audit" in body
     assert "${CODEX_HOME:-$HOME/.codex}/plans/audit" not in body
     assert "{{mainframe.plans_root}}" not in body
@@ -110,18 +110,30 @@ def test_projectability_filter_drops_harness_skills_only():
     for name in ("task-workflow", "update-config", "keybindings-help",
                  "claude-code-research", "codex-exec"):
         text = SKILL.replace("sample-skill", name)
+        if name == "task-workflow":
+            text = text.replace("disable-model-invocation: true", "disable-model-invocation: false")
         _write(root / f"core/skills/{name}/SKILL.md", text)
     skills, dropped = bc.collect_skills(root)
-    assert [name for name, _ in skills] == ["sample-skill", "task-workflow"]
+    assert [name for name, _ in skills] == ["task-workflow"]
     assert {name for name, _ in dropped} == set(bc.UNPROJECTABLE_SKILLS)
     assert "task-workflow" not in bc.UNPROJECTABLE_SKILLS
+
+
+def test_restricted_skills_are_private_and_keep_support_files():
+    root = _fixture_root()
+    methods = dict(bc.collect_private_methods(root))
+    assert set(methods) == {"sample-skill"}
+    text = methods["sample-skill"][Path("SKILL.md")].decode()
+    assert "~/.codex/mainframe-agent-methods/sample-skill/tool.py" in text
+    assert Path("more.md") in methods["sample-skill"]
+    assert Path("tool.py") in methods["sample-skill"]
 
 
 def test_real_render_has_no_false_codex_tool_attributions():
     repo = _TOOLS.parent
     skills, dropped = bc.collect_skills(repo)
     rendered = dict(skills)
-    assert len(skills) == 18
+    assert len(skills) == 10
     assert "task-workflow" in rendered
     assert "task-workflow" not in {name for name, _ in dropped}
 
@@ -330,13 +342,16 @@ def test_summary_reports_each_dropped_skill_and_omitted_rule():
 def test_main_writes_skill_pair_resources_and_rules():
     root = _fixture_root()
     skills_out = root / "out/skills"
+    private_methods_out = root / "out/private-methods"
     rules_out = root / "out/rules/mainframe.rules"
     rc = bc.main(["--root", str(root), "--skills-out", str(skills_out),
+                  "--private-methods-out", str(private_methods_out),
                   "--rules-out", str(rules_out)])
     assert rc == 0
-    assert (skills_out / "sample-skill/SKILL.md").is_file()
-    assert (skills_out / "sample-skill/agents/openai.yaml").is_file()
-    assert (skills_out / "sample-skill/more.md").is_file()
+    assert not (skills_out / "sample-skill").exists()
+    assert (private_methods_out / "sample-skill/SKILL.md").is_file()
+    assert (private_methods_out / "sample-skill/agents/openai.yaml").is_file()
+    assert (private_methods_out / "sample-skill/more.md").is_file()
     assert rules_out.is_file()
     assert rules_out.stat().st_mode & 0o777 == 0o644
 
@@ -487,7 +502,25 @@ def test_collect_agents_real_repo_all_valid_toml():
         data = tomllib.loads(toml_text)                    # must be well-formed TOML
         assert data["name"] == name
         assert data["description"] and data["developer_instructions"]
-        assert "../" not in data["developer_instructions"]
+        assert not re.search(r"\]\(\.\./", data["developer_instructions"])
+
+
+def test_real_agents_embed_private_methods_but_reference_public_skills():
+    agents = dict(bc.collect_agents(_TOOLS.parent))
+    reviewer = tomllib.loads(agents["decision-reviewer"])["developer_instructions"]
+    assert "Private method: decision-review" in reviewer
+    assert "$decision-review" not in reviewer
+    assert "$severity-calibration" in reviewer
+    assert "~/.codex/mainframe-agent-methods/" in reviewer
+
+    frontend = tomllib.loads(
+        agents["react-frontend-engineer"]
+    )["developer_instructions"]
+    for name in ("react-frontend-patterns", "shadcn", "frontend-design"):
+        assert f"Private method: {name}" in frontend
+        assert f"${name}" not in frontend
+    assert "$surface-ticket" in frontend
+    assert len(frontend.encode()) < bc.MAX_AGENT_INSTRUCTION_BYTES
 
 
 def test_agents_have_no_false_codex_tool_attributions():
@@ -499,6 +532,17 @@ def test_agents_have_no_false_codex_tool_attributions():
 
 def test_main_writes_agents():
     root = _fixture_root()
+    for name, restricted in (
+        ("decision-review", True),
+        ("severity-calibration", False),
+    ):
+        skill = SKILL.replace("sample-skill", name)
+        if not restricted:
+            skill = skill.replace(
+                "disable-model-invocation: true",
+                "disable-model-invocation: false",
+            )
+        _write(root / f"core/skills/{name}/SKILL.md", skill)
     _write(root / "core/agents/sample-reviewer.md", AGENT_RO)
     agents_out = root / "out/agents"
     rc = bc.main(["--root", str(root),

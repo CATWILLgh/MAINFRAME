@@ -41,6 +41,7 @@ CODEX_BUNDLE_ENTRIES = {
     "gates",
     "hooks.json",
     "mainframe-hook.sh",
+    "mainframe-agent-methods",
     "rules",
     "skills",
 }
@@ -77,7 +78,7 @@ def _gate_units(root: Path) -> list[dict]:
     return units
 
 
-def _install_units(root: Path, skills, agents) -> list[dict]:
+def _install_units(root: Path, skills, private_methods, agents) -> list[dict]:
     units = [
         _unit(
             "codex.dev.harness-feedback",
@@ -124,6 +125,15 @@ def _install_units(root: Path, skills, agents) -> list[dict]:
             [f"dist/codex/skills/{name}"],
         )
         for name, _ in skills
+    )
+    units.extend(
+        _unit(
+            f"codex.private-methods.{name}",
+            "tree",
+            f"mainframe-agent-methods/{name}",
+            f"mainframe-agent-methods/{name}",
+        )
+        for name, _ in private_methods
     )
     units.extend(
         _unit(
@@ -207,13 +217,14 @@ def _validate_sources(root: Path) -> None:
 
 def _render_inputs(root: Path, profile, validate_native: bool):
     skills, _ = build_codex.collect_skills(root, profile)
-    agents = build_codex.collect_agents(root)
+    private_methods = build_codex.collect_private_methods(root, profile)
+    agents = build_codex.collect_agents(root, profile)
     projected, _ = build_codex.project_permissions(build_codex._load_rules(root))
     rules_text = build_codex.render_rules(projected)
     build_codex._validate_gate_detectors(root)
     if validate_native:
         build_codex.validate_rules_native(rules_text)
-    return skills, agents, rules_text, build_codex.render_hooks_json()
+    return skills, private_methods, agents, rules_text, build_codex.render_hooks_json()
 
 
 def _project_gates(root: Path, output: Path, profile) -> None:
@@ -254,12 +265,17 @@ def _stage_bundle(
     staged: Path,
     profile,
     skills,
+    private_methods,
     agents,
     rules_text: str,
     hooks_text: str,
 ) -> None:
     _project_gates(root, staged / "gates", profile)
     build_codex.write_skills(staged / "skills", skills)
+    build_codex.write_skills(
+        staged / build_codex.PRIVATE_METHODS_DIR,
+        private_methods,
+    )
     project_adapter_feedback_skill(
         root / "dev/harness-feedback-plugin/skills/harness-feedback",
         staged / "skills/harness-feedback",
@@ -285,7 +301,7 @@ def _stage_bundle(
         staged,
         component="codex",
         dependencies=["credential-tools", "mainframe-cli"],
-        install_units=_install_units(root, skills, agents),
+        install_units=_install_units(root, skills, private_methods, agents),
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),

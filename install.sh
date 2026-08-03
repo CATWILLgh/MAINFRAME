@@ -1081,6 +1081,7 @@ uninstall_opencode() {
 # but all runtime artifacts come from Codex's self-contained projection.
 CODEX_BUNDLE_SRC="dist/codex/bundle-v2"
 CODEX_SKILLS_SRC="${CODEX_BUNDLE_SRC}/skills"
+CODEX_PRIVATE_METHODS_SRC="${CODEX_BUNDLE_SRC}/mainframe-agent-methods"
 CODEX_RULES_SRC="${CODEX_BUNDLE_SRC}/rules/mainframe.rules"
 CODEX_AGENTS_SRC="${CODEX_BUNDLE_SRC}/AGENTS.md"
 CODEX_HOOKS_SRC="${CODEX_BUNDLE_SRC}/hooks.json"
@@ -1227,6 +1228,7 @@ install_codex() {
     if [[ $DRY_RUN -eq 1 ]]; then
         log_action "would back up and link dist/codex/AGENTS.md to ${cfg_dir}/AGENTS.md"
         log_action "would link hub skills item-by-item into ${cfg_dir}/skills/"
+        log_action "would link private agent methods item-by-item into ${cfg_dir}/mainframe-agent-methods/"
         log_action "would link mainframe.rules to ${cfg_dir}/rules/mainframe.rules"
         log_action "would link hooks.json + mainframe-hook.sh into ${cfg_dir}/ (gate hooks; personal hooks.json backed up)"
         log_action "would link Codex-owned gate detectors into ${cfg_dir}/gates/"
@@ -1240,6 +1242,9 @@ install_codex() {
     install_codex_file "$CODEX_AGENTS_SRC" "${cfg_dir}/AGENTS.md"
     install_codex_dir "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
     cleanup_stale_codex_in_dir "$CODEX_SKILLS_SRC" "${cfg_dir}/skills"
+    install_codex_dir "$CODEX_PRIVATE_METHODS_SRC" "${cfg_dir}/mainframe-agent-methods"
+    cleanup_stale_codex_in_dir \
+        "$CODEX_PRIVATE_METHODS_SRC" "${cfg_dir}/mainframe-agent-methods"
     install_codex_file "$CODEX_RULES_SRC" "${cfg_dir}/rules/mainframe.rules"
     install_codex_file "$CODEX_HOOKS_SRC" "${cfg_dir}/hooks.json"
     install_codex_file "$CODEX_LAUNCHER_SRC" "${cfg_dir}/mainframe-hook.sh"
@@ -1258,6 +1263,8 @@ install_codex() {
 
 uninstall_codex() {
     uninstall_dir_contents "$CODEX_SKILLS_SRC" "$(codex_config_dir)/skills"
+    uninstall_dir_contents \
+        "$CODEX_PRIVATE_METHODS_SRC" "$(codex_config_dir)/mainframe-agent-methods"
     uninstall_one "$CODEX_AGENTS_SRC" "$(codex_config_dir)/AGENTS.md"
     uninstall_one "$CODEX_RULES_SRC" "$(codex_config_dir)/rules/mainframe.rules"
     uninstall_one "$CODEX_HOOKS_SRC" "$(codex_config_dir)/hooks.json"

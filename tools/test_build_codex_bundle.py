@@ -42,6 +42,7 @@ def _target(unit: dict) -> tuple[str, str]:
 def _expected_install_targets() -> set[tuple[str, str]]:
     profile = load_profiles(REPO)["codex"]
     skills, _ = build_codex.collect_skills(REPO, profile)
+    private_methods = build_codex.collect_private_methods(REPO, profile)
     agents = build_codex.collect_agents(REPO)
     gates = {
         Path(group) / relative
@@ -59,6 +60,10 @@ def _expected_install_targets() -> set[tuple[str, str]]:
         ("codex-config", f"skills/{name}") for name, _ in skills
     )
     targets.update(
+        ("codex-config", f"mainframe-agent-methods/{name}")
+        for name, _ in private_methods
+    )
+    targets.update(
         ("codex-config", f"agents/{name}.toml") for name, _ in agents
     )
     targets.update(
@@ -71,6 +76,7 @@ def _expected_install_targets() -> set[tuple[str, str]]:
 def _expected_payload_paths() -> set[str]:
     profile = load_profiles(REPO)["codex"]
     skills, _ = build_codex.collect_skills(REPO, profile)
+    private_methods = build_codex.collect_private_methods(REPO, profile)
     agents = build_codex.collect_agents(REPO)
     paths = {
         "AGENTS.md",
@@ -85,6 +91,11 @@ def _expected_payload_paths() -> set[str]:
     paths.update(
         f"skills/{name}/{relative.as_posix()}"
         for name, files in skills
+        for relative in files
+    )
+    paths.update(
+        f"mainframe-agent-methods/{name}/{relative.as_posix()}"
+        for name, files in private_methods
         for relative in files
     )
     paths.update(f"agents/{name}.toml" for name, _ in agents)
@@ -190,6 +201,7 @@ def test_build_materializes_complete_self_contained_codex_bundle():
         "rules/mainframe.rules",
         "skills/harness-feedback/SKILL.md",
         "skills/harness-feedback/feedback.py",
+        "mainframe-agent-methods/decision-review/SKILL.md",
     ):
         assert (output / relative).is_file()
     assert (output / "diagnostics.json").read_bytes() == DORMANT_DIAGNOSTICS
@@ -203,6 +215,12 @@ def test_build_materializes_complete_self_contained_codex_bundle():
     assert launcher.is_file() and os.access(launcher, os.X_OK)
     assert (detectors / "path-validation.py").is_file()
     assert (detectors / "_hooklib.py").is_file()
+    assert not (output / "skills/decision-review").exists()
+    private_method = output / "mainframe-agent-methods/nextjs-backend-patterns/SKILL.md"
+    assert private_method.is_file()
+    assert "mainframe-agent-methods/nextjs-backend-patterns/recon.js" in (
+        private_method.read_text()
+    )
     credentials = (output / "credentials-index.md").read_text()
     assert "${CODEX_HOME:-$HOME/.codex}/credentials-index.md" in credentials
     assert "~/.claude/credentials-index.md" not in credentials

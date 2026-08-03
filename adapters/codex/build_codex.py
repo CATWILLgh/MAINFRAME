@@ -74,6 +74,8 @@ _NATIVE_RULE_PROBES = (
 )
 _NATIVE_VALIDATION_TIMEOUT_SECONDS = 10
 _GENERATED_RULES_MODE = 0o644
+PRIVATE_METHODS_DIR = "mainframe-agent-methods"
+MAX_AGENT_INSTRUCTION_BYTES = 64 * 1024
 
 
 class _DuplicateKey(ValueError):
@@ -163,6 +165,17 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 def is_projectable(name: str) -> bool:
     return name not in UNPROJECTABLE_SKILLS
+
+
+def _restricted_skill_names(skills_dir: Path) -> frozenset[str]:
+    names = set()
+    if not skills_dir.is_dir():
+        return frozenset()
+    for source in skills_dir.glob("*/SKILL.md"):
+        meta, _ = parse_frontmatter(source.read_text())
+        if meta.get("disable-model-invocation") is True:
+            names.add(str(meta.get("name") or source.parent.name))
+    return frozenset(names)
 
 
 def _neutralize_claude_code_bindings(text: str) -> str:
@@ -442,6 +455,55 @@ def _openai_yaml(name: str, title: str, description: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _runtime_roots(profile=None) -> tuple[str, str]:
+    if profile is None:
+        return "~/.codex/skills", f"~/.codex/{PRIVATE_METHODS_DIR}"
+    return profile.skills_root, f"{profile.config_root}/{PRIVATE_METHODS_DIR}"
+
+
+def _relocate_restricted_paths(
+    text: str, restricted_names: frozenset[str], profile=None
+) -> str:
+    skills_root, private_root = _runtime_roots(profile)
+    for restricted_name in sorted(restricted_names, key=len, reverse=True):
+        text = text.replace(
+            f"{skills_root}/{restricted_name}",
+            f"{private_root}/{restricted_name}",
+        )
+    return text
+
+
+def _rewrite_relative_skill_links(
+    text: str,
+    source: Path,
+    skills_dir: Path,
+    restricted_names: frozenset[str],
+    profile=None,
+) -> str:
+    skills_root, private_root = _runtime_roots(profile)
+    resolved_skills = skills_dir.resolve()
+
+    def replace(match: "re.Match[str]") -> str:
+        label, target = match.groups()
+        if "://" in target or target.startswith(("/", "#")):
+            return match.group(0)
+        path_text, separator, fragment = target.partition("#")
+        candidate = (source.parent / path_text).resolve()
+        try:
+            relative = candidate.relative_to(resolved_skills)
+        except ValueError:
+            return label
+        if not relative.parts:
+            return label
+        root = private_root if relative.parts[0] in restricted_names else skills_root
+        runtime_path = f"{root}/{relative.as_posix()}"
+        if separator:
+            runtime_path += f"#{fragment}"
+        return f"[{label}]({runtime_path})"
+
+    return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", replace, text)
+
+
 def _project_skill_text(text: str, name: str, profile=None) -> str:
     rewritten = _rewrite_codex_prose(text, name)
     if profile is None:
@@ -449,6 +511,8 @@ def _project_skill_text(text: str, name: str, profile=None) -> str:
             CONFIG_ROOT_TOKEN,
             "~/.codex",
         )
+    rewritten = rewritten.replace("~/.codex/skills", profile.skills_root)
+    rewritten = rewritten.replace("~/.codex", profile.config_root)
     return project_text(rewritten, profile)
 
 
@@ -457,10 +521,18 @@ def render_skill_dir(skill_dir: Path, profile=None) -> dict[Path, bytes]:
     source = skill_dir / "SKILL.md"
     meta, body = parse_frontmatter(source.read_text())
     name = str(meta.get("name") or skill_dir.name)
+    restricted_names = _restricted_skill_names(skill_dir.parent)
+    is_private = name in restricted_names
     description = str(meta.get("description") or "").strip()
     if not description:
         raise ValueError(f"{source}: missing description")
-    body = _project_skill_text(body, name, profile)
+    if is_private:
+        body = _rewrite_relative_skill_links(
+            body, source, skill_dir.parent, restricted_names, profile
+        )
+    body = _relocate_restricted_paths(
+        _project_skill_text(body, name, profile), restricted_names, profile
+    )
     description = _project_skill_text(description, name, profile)
     front = yaml.safe_dump({"name": name, "description": description},
                            sort_keys=False, allow_unicode=True,
@@ -481,8 +553,15 @@ def render_skill_dir(skill_dir: Path, profile=None) -> dict[Path, bytes]:
             aux_note = _MD_NOTE.format(
                 marker=GENERATED_MARKER,
                 source=f"core/skills/{skill_dir.name}/{rel.as_posix()}")
-            rendered = aux_note + "\n\n" + _project_skill_text(
-                path.read_text(), name, profile
+            linked = path.read_text()
+            if is_private:
+                linked = _rewrite_relative_skill_links(
+                    linked, path, skill_dir.parent, restricted_names, profile
+                )
+            rendered = aux_note + "\n\n" + _relocate_restricted_paths(
+                _project_skill_text(linked, name, profile),
+                restricted_names,
+                profile,
             )
             files[rel] = rendered.encode()
         else:
@@ -508,8 +587,28 @@ def collect_skills(
         if not is_projectable(skill_dir.name):
             dropped.append((skill_dir.name, UNPROJECTABLE_SKILLS[skill_dir.name]))
             continue
+        meta, _ = parse_frontmatter((skill_dir / "SKILL.md").read_text())
+        if meta.get("disable-model-invocation") is True:
+            continue
         rendered.append((skill_dir.name, render_skill_dir(skill_dir, profile)))
     return rendered, dropped
+
+
+def collect_private_methods(
+    root: Path, profile=None
+) -> list[tuple[str, dict[Path, bytes]]]:
+    skills_dir = root / "core" / "skills"
+    rendered = []
+    if not skills_dir.is_dir():
+        return rendered
+    for skill_dir in sorted(path for path in skills_dir.iterdir() if path.is_dir()):
+        source = skill_dir / "SKILL.md"
+        if not source.is_file() or not is_projectable(skill_dir.name):
+            continue
+        meta, _ = parse_frontmatter(source.read_text())
+        if meta.get("disable-model-invocation") is True:
+            rendered.append((skill_dir.name, render_skill_dir(skill_dir, profile)))
+    return rendered
 
 
 def _strip_repo_links(text: str) -> str:
@@ -524,12 +623,35 @@ def _strip_repo_links(text: str) -> str:
     return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", repl, text)
 
 
-def _agent_developer_instructions(body: str, contract: dict, name: str) -> str:
+def _private_method_body(name: str, files: dict[Path, bytes]) -> str:
+    _, body = parse_frontmatter(files[Path("SKILL.md")].decode())
+    body = re.sub(
+        r"^<!-- Generated from MAINFRAME hub \([^)]+\) — do not edit; "
+        r"regenerate via \./install\.sh --codex\. -->\n+",
+        "",
+        body,
+    )
+    body = body.replace(
+        f"Load explicitly with `${name}` before applying this method.",
+        "Apply this method as part of the agent contract.",
+    )
+    return body.strip()
+
+
+def _agent_developer_instructions(
+    body: str,
+    contract: dict,
+    name: str,
+    private_methods: dict[str, dict[Path, bytes]] | None = None,
+    private_root: str = f"~/.codex/{PRIVATE_METHODS_DIR}",
+) -> str:
     text = _strip_repo_links(_rewrite_codex_prose(body, name)).strip()
     lead = []
     skills = contract.get("method-skills") or []
-    if skills:
-        refs = ", ".join(f"${s}" for s in skills)
+    private_methods = private_methods or {}
+    public_skills = [skill for skill in skills if skill not in private_methods]
+    if public_skills:
+        refs = ", ".join(f"${skill}" for skill in public_skills)
         lead.append(f"Load and apply these hub skills as your method: {refs}.")
     # Codex has no per-agent turn cap and its [agents] limits live in the
     # user-owned config.toml the hub does not touch, so a soft cap in the
@@ -537,12 +659,30 @@ def _agent_developer_instructions(body: str, contract: dict, name: str) -> str:
     budget = contract.get("turn-budget")
     if budget:
         lead.append(f"Work within roughly {int(budget)} steps; do not run open-endedly.")
+    embedded = [
+        f"## Private method: {skill}\n\n{_private_method_body(skill, private_methods[skill])}"
+        for skill in skills
+        if skill in private_methods
+    ]
+    if embedded:
+        lead.append(
+            "Apply the private methods below. Their support files live under "
+            f"`{private_root}/`; they are intentionally absent "
+            "from the global skill registry.\n\n" + "\n\n".join(embedded)
+        )
     if lead:
         text = "\n\n".join(lead) + "\n\n" + text
+    if len(text.encode()) >= MAX_AGENT_INSTRUCTION_BYTES:
+        raise ValueError(f"{name}: developer instructions exceed byte ceiling")
     return text
 
 
-def render_agent(meta: dict, body: str) -> str:
+def render_agent(
+    meta: dict,
+    body: str,
+    private_methods: dict[str, dict[Path, bytes]] | None = None,
+    profile=None,
+) -> str:
     """Render one hub agent contract as a Codex agent TOML.
 
     Only RESTRICTS, never elevates: a capability the contract withholds maps to a
@@ -564,23 +704,35 @@ def render_agent(meta: dict, body: str) -> str:
         lines.append('sandbox_mode = "read-only"')
     if not meta.get("needs-web"):
         lines.append('web_search = "disabled"')
-    di = _agent_developer_instructions(body, meta, name)
+    private_root = _runtime_roots(profile)[1]
+    di = _agent_developer_instructions(
+        body, meta, name, private_methods, private_root
+    )
     lines.append(f"developer_instructions = {json.dumps(di, ensure_ascii=False)}")
     return "\n".join(lines) + "\n"
 
 
-def collect_agents(root: Path) -> list[tuple[str, str]]:
+def collect_agents(root: Path, profile=None) -> list[tuple[str, str]]:
     agents_dir = root / "core" / "agents"
     rendered: list[tuple[str, str]] = []
     if not agents_dir.is_dir():
         return rendered
+    private_methods = dict(collect_private_methods(root, profile))
+    public_names = {name for name, _ in collect_skills(root, profile)[0]}
+    known_methods = public_names | set(private_methods)
     for path in sorted(agents_dir.glob("*.md")):
         meta, body = parse_frontmatter(path.read_text())
         name = meta.get("name")
         description = str(meta.get("description") or "").strip()
         if not name or not description:
             raise ValueError(f"{path}: agent missing name or description")
-        rendered.append((str(name), render_agent(meta, body)))
+        missing = set(meta.get("method-skills") or []) - known_methods
+        if missing:
+            raise ValueError(f"{path}: unknown method skills: {sorted(missing)}")
+        rendered.append((
+            str(name),
+            render_agent(meta, body, private_methods, profile),
+        ))
     return rendered
 
 
@@ -881,6 +1033,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=_default_root())
     parser.add_argument("--skills-out", type=Path, default=None)
+    parser.add_argument("--private-methods-out", type=Path, default=None)
     parser.add_argument("--rules-out", type=Path, default=None)
     parser.add_argument("--hooks-out", type=Path, default=None)
     parser.add_argument("--launcher-out", type=Path, default=None)
@@ -890,6 +1043,9 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     root = args.root.resolve()
     skills_out = args.skills_out or root / "dist" / "codex" / "skills"
+    private_methods_out = args.private_methods_out or (
+        root / "dist" / "codex" / PRIVATE_METHODS_DIR
+    )
     rules_out = args.rules_out or root / "dist" / "codex" / "rules" / "mainframe.rules"
     hooks_out = args.hooks_out or root / "dist" / "codex" / "hooks.json"
     launcher_src = root / "adapters" / "codex" / "gates" / "mainframe-hook.sh"
@@ -897,6 +1053,7 @@ def main(argv=None) -> int:
     agents_out = args.agents_out or root / "dist" / "codex" / "agents"
 
     skills, dropped = collect_skills(root)
+    private_methods = collect_private_methods(root)
     projected, omitted = project_permissions(_load_rules(root))
     rules_text = render_rules(projected)
     _validate_gate_detectors(root)
@@ -906,12 +1063,14 @@ def main(argv=None) -> int:
         validate_rules_native(rules_text)
     if args.dry_run:
         print(f"[dry-run] would write skills to {skills_out}")
+        print(f"[dry-run] would write private methods to {private_methods_out}")
         print(f"[dry-run] would write rules to {rules_out}")
         print(f"[dry-run] would write hooks to {hooks_out}")
         print(f"[dry-run] would copy launcher to {launcher_out}")
         print(f"[dry-run] would write {len(agents)} agents to {agents_out}")
     else:
         write_skills(skills_out, skills)
+        write_skills(private_methods_out, private_methods)
         _write_text_atomic(rules_out, rules_text)
         hooks_out.parent.mkdir(parents=True, exist_ok=True)
         hooks_out.write_text(hooks_json)
@@ -920,11 +1079,13 @@ def main(argv=None) -> int:
         _copy_launcher(launcher_src, launcher_out)
         _write_agents(agents_out, agents)
         print(f"wrote skills to {skills_out}")
+        print(f"wrote private methods to {private_methods_out}")
         print(f"wrote rules to {rules_out}")
         print(f"wrote hooks to {hooks_out}")
         print(f"copied launcher to {launcher_out}")
         print(f"wrote {len(agents)} agents to {agents_out}")
     _print_summary(skills, dropped, projected, omitted)
+    print(f"private methods rendered: {len(private_methods)}")
     print(f"hook events mapped: {len(GATE_HOOKS)} "
           f"({sum(len(v) for v in GATE_HOOKS.values())} detectors)")
     print(f"agents rendered: {len(agents)}")

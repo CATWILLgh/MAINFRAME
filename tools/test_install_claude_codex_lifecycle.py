@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import stat
 import subprocess
@@ -51,6 +50,7 @@ def _seed_repo(root: Path, generator_exit: int) -> Path:
         "dist/codex/bundle-v2/mainframe-hook.sh",
         "dist/codex/bundle-v2/rules/mainframe.rules",
         "dist/codex/bundle-v2/skills/surface-ticket/SKILL.md",
+        "dist/codex/bundle-v2/mainframe-agent-methods/decision-review/SKILL.md",
         "dist/codex/bundle-v2/agents/reviewer.toml",
         "dist/codex/bundle-v2/gates/detectors/path-validation.py",
         "dist/codex/bundle-v2/gates/rules/bash.json",
@@ -136,6 +136,10 @@ def _assert_installed(fixture: Fixture) -> None:
         fixture.repo / "dist/codex/bundle-v2/skills/surface-ticket",
     )
     _assert_link(
+        fixture.codex / "mainframe-agent-methods/decision-review",
+        fixture.repo / "dist/codex/bundle-v2/mainframe-agent-methods/decision-review",
+    )
+    _assert_link(
         fixture.codex / "rules/mainframe.rules",
         fixture.repo / "dist/codex/bundle-v2/rules/mainframe.rules",
     )
@@ -200,6 +204,7 @@ def test_install_repeat_uninstall_reinstall_preserves_user_state() -> None:
             fixture.home / ".local/bin/secret",
             fixture.codex / "AGENTS.md",
             fixture.codex / "skills/surface-ticket",
+            fixture.codex / "mainframe-agent-methods/decision-review",
             fixture.codex / "rules/mainframe.rules",
             fixture.codex / "hooks.json",
             fixture.codex / "mainframe-hook.sh",

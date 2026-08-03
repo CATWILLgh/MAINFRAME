@@ -60,3 +60,23 @@ Changing the source flags or exposing every skill intentionally would solve the 
 - `adapters/codex/build_codex.py:396-449,465-471,694-727` — Codex global skill projection and agent load instruction.
 - Live probe, 2026-07-15: OpenCode 1.17.15 registers all 18 MAINFRAME skills; the current Codex session exposes all 18 available skills to the main agent.
 - [Build skills — Codex documentation](https://developers.openai.com/codex/skills) — `policy.allow_implicit_invocation: false` disables implicit model invocation but preserves explicit `$skill` invocation.
+
+## Progress (2026-08-04) — Codex repository-side isolation
+
+The Codex projection now derives the restricted set from
+`disable-model-invocation: true`, excludes those eight methods from the global
+`skills/` registry, and packages their complete support trees under
+`mainframe-agent-methods/`. Generated specialized-agent instructions embed the
+required method body and keep public companion skills as normal `$skill`
+references. Relative links and executable paths are rewritten according to the
+private/public partition.
+
+The immutable bundle owns each private tree as an install unit, and the
+compatibility installer now covers install, repeat, stale cleanup, uninstall,
+and reinstall in a temporary `CODEX_HOME`. A read-only preflight rejects a
+globally visible restricted method and checks that each consuming agent contains
+its private method marker.
+
+The ticket stays open because OpenCode remains outside the current local-host
+scope and because Codex negative-main/positive-agent behavior still needs the
+explicit live window described in `docs/testing-local-agent-surfaces.md`.
