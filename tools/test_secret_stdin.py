@@ -15,18 +15,21 @@ EXISTING_SECRET = "secret: stdin secret cannot replace an existing entry\n"
 UNSAFE_STORE = "secret: credential store is unsafe\n"
 
 
-def _run(*args: str, input_value: bytes = b"") -> tuple[subprocess.CompletedProcess[bytes], Path]:
-    root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
-    env = {
+def _env(root: Path, config: Path | None = None) -> dict[str, str]:
+    return {
         "HOME": str(root / "home"),
-        "XDG_CONFIG_HOME": str(root / "config"),
+        "XDG_CONFIG_HOME": str(config or root / "config"),
         "PATH": os.environ["PATH"],
     }
+
+
+def _run(*args: str, input_value: bytes = b"") -> tuple[subprocess.CompletedProcess[bytes], Path]:
+    root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
     result = subprocess.run(
         [str(SECRET), *args],
         input=input_value,
         capture_output=True,
-        env=env,
+        env=_env(root),
         check=False,
     )
     return result, root / "config/credentials/secrets.env"
@@ -53,6 +56,7 @@ def test_help_describes_create_stdin() -> None:
 
     assert result.returncode == 0, result.stderr.decode()
     assert b"secret create-stdin NAME" in result.stdout
+    assert b"secret recover-lock --confirm" in result.stdout
 
 
 def test_create_stdin_accepts_value_at_byte_limit() -> None:
@@ -84,11 +88,7 @@ def test_create_stdin_rejects_invalid_values_without_output() -> None:
 
 def test_create_stdin_never_replaces_existing_value() -> None:
     root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
-    env = {
-        "HOME": str(root / "home"),
-        "XDG_CONFIG_HOME": str(root / "config"),
-        "PATH": os.environ["PATH"],
-    }
+    env = _env(root)
     initial = subprocess.run(
         [str(SECRET), "set", "API_TOKEN", "existing-value"],
         capture_output=True,
@@ -113,11 +113,7 @@ def test_create_stdin_never_replaces_existing_value() -> None:
 
 def test_create_stdin_preserves_unrelated_entries() -> None:
     root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
-    env = {
-        "HOME": str(root / "home"),
-        "XDG_CONFIG_HOME": str(root / "config"),
-        "PATH": os.environ["PATH"],
-    }
+    env = _env(root)
     initial = subprocess.run(
         [str(SECRET), "set", "OTHER_TOKEN", "existing-value"],
         capture_output=True,
@@ -143,11 +139,7 @@ def test_create_stdin_preserves_unrelated_entries() -> None:
 
 def test_concurrent_create_allows_exactly_one_writer() -> None:
     root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
-    env = {
-        "HOME": str(root / "home"),
-        "XDG_CONFIG_HOME": str(root / "config"),
-        "PATH": os.environ["PATH"],
-    }
+    env = _env(root)
     processes = [
         subprocess.Popen(
             [str(SECRET), "create-stdin", "API_TOKEN"],
@@ -182,11 +174,7 @@ def test_concurrent_create_allows_exactly_one_writer() -> None:
 
 def test_replacement_and_deletion_sanitize_legacy_backup() -> None:
     root = Path(tempfile.mkdtemp(prefix="secret-stdin-test-"))
-    env = {
-        "HOME": str(root / "home"),
-        "XDG_CONFIG_HOME": str(root / "config"),
-        "PATH": os.environ["PATH"],
-    }
+    env = _env(root)
     for command in (
         ("set", "API_TOKEN", "retired-value"),
         ("set", "API_TOKEN", "current-value"),
@@ -230,11 +218,7 @@ def test_create_stdin_rejects_symlinked_store_targets() -> None:
             protected = external / "protected"
             protected.write_text("unchanged")
             (store_dir / target_name).symlink_to(protected)
-        env = {
-            "HOME": str(root / "home"),
-            "XDG_CONFIG_HOME": str(config),
-            "PATH": os.environ["PATH"],
-        }
+        env = _env(root, config)
 
         result = subprocess.run(
             [str(SECRET), "create-stdin", "API_TOKEN"],
