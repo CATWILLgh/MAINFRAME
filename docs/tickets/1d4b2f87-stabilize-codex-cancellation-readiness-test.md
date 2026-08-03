@@ -52,3 +52,13 @@ readiness synchronization are separate concerns.
 - `internal/codexstate/app_server_process_unix_test.go:56`
 - Verification on 2026-07-22: isolated `-count=10` normal and `-count=3 -race`
   both passed after two contention failures.
+
+## Re-occurrence noted (2026-08-04)
+
+**Noticed during:** Full Go regression run for credential publication rollback
+failure-injection coverage.
+**Where:** `internal/codexstate/app_server_process_unix_test.go:16`
+**Additional details:** `go test ./...` ran concurrently with focused package
+tests and again failed because `codex.ready` was not published within the fixed
+two-second deadline. The affected credential, executor, and workspace packages
+were green, and the current change does not touch `internal/codexstate`.
