@@ -45,6 +45,22 @@ A Codex agent following its shipped instructions cannot read the promised servic
   `PATH` in the inspected local environment, so Codex still needs the fallback
   until central CLI delivery and legacy transfer are completed.
 
+## Re-occurrence noted (2026-08-03)
+
+**Noticed during:** A local Codex agent reported that working Dokploy
+credentials were unavailable even though the legacy `secret` helper still
+contained the registered reference.
+**Where:** The rendered Codex `secrets-handling` skill was active through the
+development symlink while neither `mainframe` nor
+`~/.codex/credentials-index.md` had been delivered.
+**Additional details:** The Codex projection now permits the existing
+`~/.claude/credentials-index.md` as a final read-only shared legacy fallback
+only when both `mainframe` and the Codex-local index are absent. It remains
+forbidden after any central command response, when the local index exists, or
+after a valid central catalog has no exact match. The ticket stays open because
+this compatibility bridge does not complete central CLI delivery or establish
+the final single-owner metadata path.
+
 ## Sources
 
 - `dist/codex/skills/secrets-handling/SKILL.md:18-23`

@@ -37,7 +37,7 @@ import yaml
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
-from adapter_profiles import PLAN_ROOT_TOKEN, project_text
+from adapter_profiles import CONFIG_ROOT_TOKEN, PLAN_ROOT_TOKEN, project_text
 
 
 GENERATED_MARKER = "Generated from MAINFRAME hub"
@@ -333,6 +333,20 @@ def _rewrite_codex_prose(text: str, name: str) -> str:
     """Remove Claude Code runtime assumptions while preserving the method."""
     text = text.replace("~/.claude/skills/mainframe/skills/", "~/.codex/skills/")
     text = text.replace("~/.claude/", "~/.codex/")
+    text = text.replace(
+        "The fallback path for this adapter is "
+        "`~/.codex/credentials-index.md`. It is read-only migration "
+        "compatibility, not another source of truth.",
+        "The fallback path for this adapter is "
+        f"`{CONFIG_ROOT_TOKEN}/credentials-index.md`. It is read-only "
+        "migration compatibility, not another source of truth. Codex-only "
+        "transition: if `mainframe` is unavailable and "
+        f"`{CONFIG_ROOT_TOKEN}/credentials-index.md` does not exist, read "
+        "`~/.claude/credentials-index.md` as the final read-only shared "
+        "legacy fallback. Do not use this shared fallback after any "
+        "`mainframe` response, when the Codex-local index exists, or when a "
+        "successful catalog has no exact instance match.",
+    )
     text = text.replace("CLAUDE.md", "AGENTS.md")
     text = text.replace("Direct reads of the credentials store are denied by `settings.json` patterns.",
                         "Direct reads of the credentials store are forbidden by policy; Codex `.rules` cannot express path-glob read denials.")
@@ -431,7 +445,10 @@ def _openai_yaml(name: str, title: str, description: str) -> str:
 def _project_skill_text(text: str, name: str, profile=None) -> str:
     rewritten = _rewrite_codex_prose(text, name)
     if profile is None:
-        return rewritten.replace(PLAN_ROOT_TOKEN, "~/.codex/plans")
+        return rewritten.replace(PLAN_ROOT_TOKEN, "~/.codex/plans").replace(
+            CONFIG_ROOT_TOKEN,
+            "~/.codex",
+        )
     return project_text(rewritten, profile)
 
 

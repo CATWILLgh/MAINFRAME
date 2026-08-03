@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -129,6 +130,27 @@ class SecretDiscoveryContractTest(unittest.TestCase):
             with self.subTest(adapter=name):
                 self.assertIn(expected, text)
 
+    def test_codex_shared_legacy_fallback_requires_both_missing_dependencies(
+        self,
+    ) -> None:
+        codex = self.skills["Codex"]
+        self.assertIn(
+            "if `mainframe` is unavailable and "
+            "`${CODEX_HOME:-$HOME/.codex}/credentials-index.md` does not "
+            "exist, read `~/.claude/credentials-index.md` as the final "
+            "read-only shared legacy fallback.",
+            codex,
+        )
+        self.assertIn(
+            "Do not use this shared fallback after any `mainframe` "
+            "response, when the Codex-local index exists, or when a "
+            "successful catalog has no exact instance match.",
+            codex,
+        )
+        for name in ("Antigravity", "Claude Code", "OpenCode"):
+            with self.subTest(adapter=name):
+                self.assertNotIn("shared legacy fallback", self.skills[name])
+
     def test_guidance_is_honest_about_transcript_and_command_leakage(self) -> None:
         expected = (
             "The runtime does not guarantee transcript redaction. Never echo "
@@ -159,9 +181,14 @@ class SecretDiscoveryContractTest(unittest.TestCase):
                 self.assertIn(expected, text)
 
     def test_secret_helper_points_to_central_discovery(self) -> None:
-        help_text = normalized(
-            self.release / "common/credential-tools/secret"
+        result = subprocess.run(
+            [str(self.release / "common/credential-tools/secret"), "--help"],
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=10,
         )
+        help_text = " ".join(result.stdout.split())
         self.assertIn(
             "For credential discovery, run `mainframe credentials` first.",
             help_text,

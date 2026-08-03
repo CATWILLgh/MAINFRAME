@@ -25,7 +25,7 @@ Personal-machine policy for credentials. **Not a vault, not a secret manager —
 4. `credentials-index.md` is a fallback only when `mainframe` is unavailable or a successful, schema-valid catalog has no exact instance match.
 5. Do not fall back after a non-zero exit, malformed JSON, an unsupported schema, or a permission failure; stop and report the error.
 
-The fallback path for this adapter is `~/.codex/credentials-index.md`. It is read-only migration compatibility, not another source of truth. This workflow applies only to local terminal sessions; do not assume Chat, Cowork, web, or remote runs can access local tools.
+The fallback path for this adapter is `~/.codex/credentials-index.md`. It is read-only migration compatibility, not another source of truth. Codex-only transition: if `mainframe` is unavailable and `~/.codex/credentials-index.md` does not exist, read `~/.claude/credentials-index.md` as the final read-only shared legacy fallback. Do not use this shared fallback after any `mainframe` response, when the Codex-local index exists, or when a successful catalog has no exact instance match. This workflow applies only to local terminal sessions; do not assume Chat, Cowork, web, or remote runs can access local tools.
 
 Before consuming a tier-2 value, require `secret` to be available. A catalog entry proves only that a reference exists; it does not prove the value is present.
 
