@@ -122,6 +122,8 @@ Until the relevant boundary is met:
 - Long-plan navigation: [#1d04acea](tickets/1d04acea-add-tui-plan-scrolling.md)
 - Strategy document split: [#3a79360e](tickets/3a79360e-split-installer-strategy-by-concern.md)
 
-Fresh releases do not install shell-wide secret export. Existing lines written
-by the compatibility installer require a later exact, ownership-safe migration;
-omitting the old resource alone does not remove user startup-file content.
+Fresh releases and the compatibility installer do not add shell-wide secret
+export. The compatibility path removes its exact historical line from regular
+shell startup files before other mutations and fails closed when that line is
+inside a symbolic-link file. Regenerated live guidance and a new-session check
+remain part of the explicit Claude Code and Codex smoke-test window.

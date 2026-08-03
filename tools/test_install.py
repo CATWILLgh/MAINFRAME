@@ -228,7 +228,7 @@ def test_requested_adapter_generator_failure_reaches_exit_status() -> None:
             [flag], programs=(executable,), venv_exit=42)
         _assert_failed(result, generator)
         output = result.stdout + result.stderr
-        assert "would append source-line" in output
+        assert "would append source-line" not in output
         assert "would install ruff" in output
 
     result = _run_install(
@@ -321,7 +321,7 @@ def test_optional_absences_preserve_success() -> None:
     assert "dev/skills/harness-feedback" not in output
 
 
-def test_secret_bootstrap_sources_the_xdg_credentials_store() -> None:
+def test_secret_bootstrap_does_not_modify_shell_startup_files() -> None:
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp).resolve()
         installer = _seed_repo(root)
@@ -346,14 +346,10 @@ def test_secret_bootstrap_sources_the_xdg_credentials_store() -> None:
             check=False,
         )
         assert result.returncode == 0, result.stdout + result.stderr
-        expected = (
-            '[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" ] '
-            '&& set -a && . "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" '
-            "&& set +a"
-        )
         assert (xdg / "credentials").is_dir()
-        for relative in (".zshenv", ".bashrc", ".profile"):
-            assert expected in (home / relative).read_text()
+        assert not (home / ".zshenv").exists()
+        assert (home / ".bashrc").read_text() == "bash\n"
+        assert (home / ".profile").read_text() == "profile\n"
 
 
 def test_uninstall_bypasses_required_source_preflight() -> None:

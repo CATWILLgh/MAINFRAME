@@ -53,3 +53,27 @@ Credentials intended for one tool become available to unrelated applications, bu
 `core/resources/credential-tools/secret`, and the rendered
 `dist/claude-code/scripts/secret`
 **Additional details:** Removing the startup export only from the installer would leave the shipped skills and helper guidance claiming that the complete store is loaded into every shell. A coherent fix therefore requires regenerating `dist/codex` and `dist/claude-code`. The active Codex skill path is currently a direct symlink to this repository's `dist/codex/skills/secrets-handling`, so regeneration would immediately alter live delivery even without running `install.sh`. Work is deferred while the user has explicitly limited this phase to checks and changes that do not affect delivery.
+
+## Progress (2026-08-04)
+
+- The compatibility installer no longer adds a shell startup source-line. Before
+  any other install or uninstall mutation it removes only the exact historical
+  marker and source-line from regular `.zshenv`, `.bashrc`, and `.profile`
+  files through an atomic same-directory replacement.
+- Migration preserves unrelated bytes and file mode, detects a concurrent
+  editor before publication, cleans temporary files on ordinary failure and
+  interruption, and is idempotent. A symbolic-link shell file containing the
+  legacy line blocks the operation without modifying its target; a symbolic
+  link without the line is preserved.
+- The central `curl-requests` source now requires an independently supplied
+  variable or `$(secret get NAME)`. Immutable release construction accepts
+  both the pre-render compatibility text and the corrected source, then
+  validates that no global-loading guidance remains.
+- Tier 1 tests prove a fresh child `zsh` does not inherit an unrelated stored
+  value, install/bootstrap and public uninstall remove the exact legacy line,
+  failures preserve the original file and mode, and release guidance remains
+  value-by-name only.
+- The ticket remains open only because regenerating the currently linked
+  `dist/codex` and `dist/claude-code` outputs would change live delivery. That
+  render, followed by a new-session check, belongs to the explicit live-test
+  window.

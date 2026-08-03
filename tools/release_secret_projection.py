@@ -11,7 +11,6 @@ SKILL_ROOTS = {
     "codex": "skills",
     "opencode": "skills",
 }
-PROJECTED_COMPONENTS = {"claude-code", "codex", "opencode"}
 FORBIDDEN_GUIDANCE = (
     "auto-sourced from",
     "loaded into the shell environment by",
@@ -20,7 +19,7 @@ FORBIDDEN_GUIDANCE = (
     "set -a",
     "The MAINFRAME configuration flow manages this line",
 )
-CURL_SOURCE = (
+LEGACY_CURL_GUIDANCE = (
     "**Where tokens come from.** If "
     "[`secrets-handling`](../secrets-handling/SKILL.md) is active on this "
     "machine, generic API tokens live in "
@@ -34,7 +33,7 @@ CURL_SOURCE = (
     "credential source is\" (vault CLI, project `.env`, etc.) — the curl "
     "patterns themselves are agnostic."
 )
-CURL_REPLACEMENT = (
+CURRENT_CURL_GUIDANCE = (
     "**Where tokens come from.** If "
     "[`secrets-handling`](../secrets-handling/SKILL.md) is active on this "
     "machine, generic API tokens live in "
@@ -45,6 +44,8 @@ CURL_REPLACEMENT = (
     "project's credential source is\" (vault CLI, project `.env`, etc.) — "
     "the curl patterns themselves are agnostic."
 )
+
+
 def project_release_secret_guidance(release_root: Path) -> None:
     targets = []
     for component, relative in SKILL_ROOTS.items():
@@ -52,33 +53,19 @@ def project_release_secret_guidance(release_root: Path) -> None:
         secret = root / "secrets-handling/SKILL.md"
         curl = root / "curl-requests/SKILL.md"
         targets.extend((secret, curl))
-        if component not in PROJECTED_COMPONENTS:
-            continue
-        _write_projected(
-            secret,
-            _project_secret_skill(secret.read_text(encoding="utf-8")),
+        curl.write_text(
+            _project_curl_guidance(curl.read_text(encoding="utf-8"), component),
+            encoding="utf-8",
         )
-        _write_projected(curl, _replace_once(
-            curl.read_text(encoding="utf-8"),
-            CURL_SOURCE,
-            CURL_REPLACEMENT,
-            f"{component} curl guidance",
-        ))
     _validate_targets(targets)
 
 
-def _project_secret_skill(text: str) -> str:
-    return text
-
-
-def _replace_once(text: str, source: str, replacement: str, label: str) -> str:
-    if text.count(source) != 1:
-        raise ValueError(f"release secret projection anchor drift: {label}")
-    return text.replace(source, replacement)
-
-
-def _write_projected(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8")
+def _project_curl_guidance(text: str, component: str) -> str:
+    if text.count(CURRENT_CURL_GUIDANCE) == 1:
+        return text
+    if text.count(LEGACY_CURL_GUIDANCE) == 1:
+        return text.replace(LEGACY_CURL_GUIDANCE, CURRENT_CURL_GUIDANCE)
+    raise ValueError(f"release secret projection anchor drift: {component}")
 
 
 def _validate_targets(targets: list[Path]) -> None:

@@ -590,26 +590,57 @@ install_dir_contents() {
     done
 }
 
-# Append the secrets-source line to a shell rc file, idempotently. The `secret`
-# env-vars must reach each shell the user actually opens: zsh reads ~/.zshenv on
-# every invocation; bash/sh read ~/.bashrc (interactive) and ~/.profile (login).
-# Non-interactive shells read no rc file and are out of scope.
-_append_secret_source_line() {
-    local rcfile="$1" source_line="$2"
-    if grep -Fqs "$source_line" "$rcfile" 2>/dev/null; then
-        log_ok "$(basename "$rcfile") already sources the secrets store"
+_migrate_legacy_secret_source_file() {
+    local rcfile="$1" source_line="$2" marker="$3"
+    if [[ ! -e "$rcfile" && ! -L "$rcfile" ]]; then
+        return 0
+    fi
+    if [[ -L "$rcfile" ]]; then
+        if grep -Fqs "$source_line" "$rcfile" 2>/dev/null; then
+            log_error "legacy secrets source-line is inside symbolic-link shell file: ${rcfile}"
+            return 1
+        fi
+        log_info "preserving symbolic-link shell file without legacy source-line: ${rcfile}"
+        return 0
+    fi
+    if [[ ! -f "$rcfile" ]]; then
+        log_warn "not migrating non-regular shell file: ${rcfile}"
+        return 0
+    fi
+    if ! grep -Fqs "$source_line" "$rcfile"; then
         return 0
     fi
     if [[ $DRY_RUN -eq 1 ]]; then
-        log_action "would append source-line to ${rcfile}"
+        log_action "would remove legacy secrets source-line from ${rcfile}"
         return 0
     fi
-    {
-        echo ""
-        echo "# MAINFRAME hub: auto-source personal secrets store."
-        echo "$source_line"
-    } >> "$rcfile"
-    log_ok "appended source-line to ${rcfile}"
+    if ! (
+        local snapshot="" replacement=""
+        trap 'rm -f "$snapshot" "$replacement"' EXIT INT TERM
+        snapshot="$(mktemp "$(dirname "$rcfile")/.mainframe-shell-migration.XXXXXX")" || exit 1
+        replacement="$(mktemp "$(dirname "$rcfile")/.mainframe-shell-migration.XXXXXX")" || exit 1
+        cp -p "$rcfile" "$snapshot" || exit 1
+        cp -p "$rcfile" "$replacement" || exit 1
+        awk -v marker="$marker" -v source_line="$source_line" \
+            '$0 != marker && $0 != source_line { print }' \
+            "$snapshot" > "$replacement" || exit 1
+        cmp -s "$rcfile" "$snapshot" || exit 1
+        mv -f "$replacement" "$rcfile" || exit 1
+        replacement=""
+    ); then
+        log_error "could not migrate legacy secrets source-line in ${rcfile}"
+        return 1
+    fi
+    log_ok "removed legacy secrets source-line from ${rcfile}"
+}
+
+migrate_legacy_secret_shell_exports() {
+    local source_line marker rcfile
+    source_line='[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" ] && set -a && . "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" && set +a'
+    marker="# MAINFRAME hub: auto-source personal secrets store."
+    for rcfile in "$HOME/.zshenv" "$HOME/.bashrc" "$HOME/.profile"; do
+        _migrate_legacy_secret_source_file "$rcfile" "$source_line" "$marker" || return 1
+    done
 }
 
 bootstrap_secrets() {
@@ -617,10 +648,7 @@ bootstrap_secrets() {
     local secret_src="${PROJECT_ROOT}/${SECRET_HELPER_SOURCE}"
     local secret_link="${bin_dir}/secret"
     local store_dir="${XDG_CONFIG_HOME:-$HOME/.config}/credentials"
-    local index_src="${PROJECT_ROOT}/${CREDENTIALS_INDEX_SOURCE}"
     local index_dst="${CLAUDE_DIR}/credentials-index.md"
-    local zshenv="$HOME/.zshenv"
-    local source_line='[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" ] && set -a && . "${XDG_CONFIG_HOME:-$HOME/.config}/credentials/secrets.env" && set +a'
 
     if [[ ! -f "$secret_src" ]]; then
         log_warn "skipping secret helper: source ${secret_src} missing"
@@ -670,26 +698,7 @@ bootstrap_secrets() {
         log_ok "credentials store dir already exists: ${store_dir}"
     fi
 
-    # Copy (not symlink): the index is user-editable and grows over time.
-    if [[ -e "$index_dst" ]]; then
-        log_ok "credentials index already present: ${index_dst}"
-    elif [[ ! -f "$index_src" ]]; then
-        log_warn "skipping index template: source ${index_src} missing"
-    else
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log_action "would copy ${index_src} → ${index_dst}"
-        else
-            cp "$index_src" "$index_dst"
-            log_ok "seeded ${index_dst} from template"
-        fi
-    fi
-
-    # zsh: always (it reads ~/.zshenv on every invocation; create if absent).
-    # bash/sh: only rc files that already exist — don't create init files for a
-    # shell the user may not use.
-    _append_secret_source_line "$zshenv" "$source_line"
-    if [[ -f "$HOME/.bashrc" ]]; then _append_secret_source_line "$HOME/.bashrc" "$source_line"; fi
-    if [[ -f "$HOME/.profile" ]]; then _append_secret_source_line "$HOME/.profile" "$source_line"; fi
+    seed_adapter_credentials_index "$CREDENTIALS_INDEX_SOURCE" "$index_dst" || return 1
 
     if [[ $DRY_RUN -eq 0 ]]; then
         log_warn "Recommendation: exclude ${store_dir} from cloud backups (Time Machine, iCloud, Backblaze)."
@@ -1472,6 +1481,7 @@ main() {
         if [[ $DRY_RUN -eq 0 ]] && ! acquire_transaction_lock; then
             return 1
         fi
+        migrate_legacy_secret_shell_exports || return 1
         check_prerequisites
         check_python
         log_info "Uninstalling MAINFRAME hub symlinks from ${CLAUDE_DIR}..."
@@ -1491,7 +1501,7 @@ main() {
         uninstall_codex
         uninstall_antigravity_2
         uninstall_one "$SECRET_HELPER_SOURCE" "$HOME/.local/bin/secret"
-        log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, ~/.zshenv source-line, workspace/runtime/ (telemetry + feedback)."
+        log_warn "User data left in place: ~/.config/credentials/, ~/.claude/credentials-index.md, workspace/runtime/ (telemetry + feedback)."
         log_warn "Remove them manually if you want a full reset."
         log_ok "Uninstall complete."
         list_backups
@@ -1509,6 +1519,7 @@ main() {
     if [[ $DRY_RUN -eq 0 ]] && ! acquire_transaction_lock; then
         return 1
     fi
+    migrate_legacy_secret_shell_exports || return 1
 
     check_prerequisites
     check_python

@@ -166,9 +166,10 @@ def _rewrite_secrets(text: str, label: str) -> str:
 
 
 def _rewrite_curl(text: str, label: str) -> str:
-    source = "**Where tokens come from.** If [`secrets-handling`](../secrets-handling/SKILL.md) is active on this machine, generic API tokens live in `~/.config/credentials/secrets.env` and are loaded into the shell environment by `~/.zshenv`. The patterns below assume this — `$API_TOKEN` resolves because the store was sourced at shell start. If the token is in the store but not in the current shell env (e.g. just added via `secret set`), substitute inline: `$(secret get API_TOKEN)`. If `secrets-handling` is not active, treat the env-var examples as \"replace with whatever your project's credential source is\" (vault CLI, project `.env`, etc.) — the curl patterns themselves are agnostic."
-    replacement = "**Where tokens come from.** If [`secrets-handling`](../secrets-handling/SKILL.md) is active on this machine, generic API tokens live in `~/.config/credentials/secrets.env`. Use `$API_TOKEN` only when it is already present in the command environment; otherwise substitute inline with `$(secret get API_TOKEN)`. If `secrets-handling` is not active, treat the env-var examples as \"replace with whatever your project's credential source is\" (vault CLI, project `.env`, etc.) — the curl patterns themselves are agnostic."
-    return _replace_once(text, source, replacement, label)
+    expected = "**Where tokens come from.** If [`secrets-handling`](../secrets-handling/SKILL.md) is active on this machine, generic API tokens live in `~/.config/credentials/secrets.env`. Use `$API_TOKEN` only when it is already present in the command environment; otherwise substitute it inline with `$(secret get API_TOKEN)`. If `secrets-handling` is not active, treat the env-var examples as \"replace with whatever your project's credential source is\" (vault CLI, project `.env`, etc.) — the curl patterns themselves are agnostic."
+    if text.count(expected) != 1:
+        raise ValueError(f"Antigravity skill projection anchor drift: {label}")
+    return text
 
 
 def _rewrite_workflow_skill(text: str, label: str) -> str:

@@ -194,6 +194,23 @@ class SecretDiscoveryContractTest(unittest.TestCase):
             help_text,
         )
 
+    def test_authentication_guidance_does_not_require_shell_startup_loading(
+        self,
+    ) -> None:
+        source = normalized(REPO / "core/skills/curl-requests/SKILL.md")
+        expected = (
+            "Use `$API_TOKEN` only when it is already present in the command "
+            "environment; otherwise substitute it inline with "
+            "`$(secret get API_TOKEN)`."
+        )
+        self.assertIn(expected, source)
+        for phrase in (
+            "loaded into the shell environment by",
+            "store was sourced at shell start",
+            "set -a",
+        ):
+            self.assertNotIn(phrase, source)
+
 
 if __name__ == "__main__":
     unittest.main()
