@@ -11,6 +11,12 @@ import tomllib
 from pathlib import Path
 
 
+ADAPTER = Path(__file__).resolve().parents[1] / "adapters/codex"
+sys.path.insert(0, str(ADAPTER))
+
+import build_codex
+
+
 PRIVATE_METHODS_DIR = "mainframe-agent-methods"
 VERSION_TIMEOUT_SECONDS = 10
 
@@ -78,7 +84,11 @@ def check_layout(
     failures: list[str] = []
     skill_sources = sorted((root / "core/skills").glob("*/SKILL.md"))
     restricted = _restricted_skills(root)
-    public = {source.parent.name for source in skill_sources} - restricted
+    public = (
+        {source.parent.name for source in skill_sources}
+        - restricted
+        - set(build_codex.UNPROJECTABLE_SKILLS)
+    )
 
     for source in skill_sources:
         name = source.parent.name

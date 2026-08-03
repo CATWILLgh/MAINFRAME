@@ -33,11 +33,12 @@ def _fixture() -> tuple[Path, Path, Path]:
     codex = root / "codex"
     _source_skill(root, "public-method", False)
     _source_skill(root, "private-method", True)
+    _source_skill(root, "codex-exec", False)
     _write(
         root / "core/agents/worker.md",
         "---\nname: worker\nmethod-skills:\n  - private-method\n---\n",
     )
-    for name in ("public-method", "private-method"):
+    for name in ("public-method", "private-method", "codex-exec"):
         _write(claude / f"skills/mainframe/skills/{name}/SKILL.md", "method\n")
     _write(codex / "skills/public-method/SKILL.md", "method\n")
     _write(codex / "mainframe-agent-methods/private-method/SKILL.md", "method\n")
