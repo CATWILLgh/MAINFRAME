@@ -1088,6 +1088,7 @@ CODEX_LAUNCHER_SRC="${CODEX_BUNDLE_SRC}/mainframe-hook.sh"
 CODEX_AGENT_DEFS_SRC="${CODEX_BUNDLE_SRC}/agents"
 CODEX_GATES_SRC="${CODEX_BUNDLE_SRC}/gates"
 CODEX_CREDENTIALS_INDEX_SRC="${CODEX_BUNDLE_SRC}/credentials-index.md"
+CODEX_BUNDLE_PREPARED=0
 codex_config_dir() { echo "${CODEX_HOME:-$HOME/.codex}"; }
 
 codex_backup_target() {
@@ -1195,10 +1196,8 @@ install_codex_file() {
     fi
 }
 
-install_codex() {
+prepare_codex_bundle() {
     local py="${PROJECT_ROOT}/.venv/bin/python3"
-    local cfg_dir
-    cfg_dir="$(codex_config_dir)"
     if ! command -v codex >/dev/null 2>&1; then
         log_error "codex not found on PATH — requested Codex layer cannot be installed."
         return 1
@@ -1215,6 +1214,15 @@ install_codex() {
             "${gen_args[@]}"; then
         log_error "Codex bundle projection failed; layer not installed."
         return 1
+    fi
+    CODEX_BUNDLE_PREPARED=1
+}
+
+install_codex() {
+    local cfg_dir
+    cfg_dir="$(codex_config_dir)"
+    if [[ $CODEX_BUNDLE_PREPARED -eq 0 ]]; then
+        prepare_codex_bundle || return 1
     fi
     if [[ $DRY_RUN -eq 1 ]]; then
         log_action "would back up and link dist/codex/AGENTS.md to ${cfg_dir}/AGENTS.md"
@@ -1472,7 +1480,7 @@ cleanup_stale_post_migration() {
 # ---- Main ----
 
 main() {
-    local required_failed=0
+    local required_failed=0 adapter_preflight_failed=0
     if [[ $DRY_RUN -eq 1 ]]; then
         log_info "${BOLD}DRY RUN${NC} — nothing will be changed."
     fi
@@ -1514,6 +1522,22 @@ main() {
     fi
     if [[ $DEV -eq 1 ]] && ! preflight_dev_runtime; then
         log_error "Install aborted before changes because DEV diagnostics state is unsafe."
+        return 1
+    fi
+    if [[ $OPENCODE -eq 1 ]] && ! command -v opencode >/dev/null 2>&1; then
+        log_error "opencode not found on PATH — requested OpenCode layer cannot be installed."
+        adapter_preflight_failed=1
+    fi
+    if [[ $CODEX -eq 1 ]] && ! command -v codex >/dev/null 2>&1; then
+        log_error "codex not found on PATH — requested Codex layer cannot be installed."
+        adapter_preflight_failed=1
+    fi
+    if [[ $adapter_preflight_failed -eq 1 ]]; then
+        log_error "Install aborted before changes because requested adapter prerequisites are unavailable."
+        return 1
+    fi
+    if [[ $CODEX -eq 1 ]] && ! prepare_codex_bundle; then
+        log_error "Install aborted before changes because Codex projection is unavailable."
         return 1
     fi
     if [[ $DRY_RUN -eq 0 ]] && ! acquire_transaction_lock; then

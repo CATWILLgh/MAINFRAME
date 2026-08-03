@@ -193,3 +193,19 @@ secret-value reads.
 - Provider-side revocation, already inherited process environments, delivery
   activation, and retirement of historical description files remain outside
   this completed unit. The overall rollout ticket therefore remains open.
+
+## Progress (2026-08-04) — pre-live delivery evidence
+
+- Managed MCP registry locations now derive from the same release contracts
+  that validate publication, so credential retirement cannot drift from a new
+  supported adapter path.
+- The compatibility installer no longer exports the complete secret store and
+  migrates its exact historical shell line before other mutations. Named
+  terminal substitution through `secret get` remains available.
+- Claude Code and Codex install, repeat, uninstall, reinstall, fallback-index
+  preservation, adapter isolation, generation failure, immutable release
+  activation, switching, and rollback now have temporary-root evidence.
+- The remaining work is intentionally live or human-confirmed: regenerate and
+  activate the linked outputs, verify real new and resumed agent sessions, and
+  decide when unresolved historical descriptive text is complete enough to
+  retire legacy files. No historical file is removed by this preparatory run.

@@ -55,3 +55,21 @@ The highest-blast-radius component is verified mainly by manual runs. Ownership,
 **Noticed during:** Ownership repair for post-migration symlink cleanup (`#b39e1c99`)
 **Where:** `tools/test_install_migration_cleanup.py`
 **Additional details:** A second Tier 1 suite now performs real install, repeat-install, dry-run, backup-failure, and uninstall checks in a copied repository and temporary home. This closes those contracts for the legacy-cleanup slice only; current targets, secret sourcing, adapter configuration, interruption, and full rollback remain open under this ticket.
+
+## Progress (2026-08-04) — Claude Code and Codex live-test boundary
+
+- A public temporary-home suite now exercises the complete current Claude Code
+  and Codex target sets through install, repeated install, uninstall, and
+  reinstall. It verifies exact links, private credential-index copies,
+  user-edited index preservation, foreign-file preservation, backups, and the
+  absence of OpenCode and Antigravity roots.
+- Codex prerequisite and bundle generation failures now stop before the first
+  home-directory mutation. Dry-run and direct adapter tests retain their
+  existing diagnostics and native-validation checks.
+- The separate credential migration suite proves exact shell-line removal,
+  idempotency, failure preservation, concurrent-edit detection, restrictive
+  index mode, and fail-closed symbolic-link behavior.
+- This closes the repository-side Claude Code and Codex slice needed before a
+  live smoke window. The broader ticket remains open for equivalent full
+  public lifecycle and fault coverage across OpenCode, Antigravity, every
+  generic resource strategy, and complete restoration semantics.

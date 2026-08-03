@@ -61,6 +61,20 @@ after a valid central catalog has no exact match. The ticket stays open because
 this compatibility bridge does not complete central CLI delivery or establish
 the final single-owner metadata path.
 
+## Progress (2026-08-04)
+
+- A Codex-only compatibility installation now has public temporary-home
+  coverage for creating the exact documented fallback at mode `0600`, repeat
+  installation, uninstall, and reinstall.
+- Existing user edits survive every lifecycle transition. Claude Code and
+  Codex fallback files remain migration inputs only; the neutral
+  `mainframe credentials` catalog is the single authoritative document.
+- Codex bundle generation failure is verified to stop before any user-home or
+  Codex-root mutation, and sibling adapter roots remain absent.
+- Repository-side delivery is ready. The ticket remains open until the
+  explicit live window activates `mainframe`, regenerates the currently linked
+  Codex output, and confirms discovery from a new real session.
+
 ## Sources
 
 - `dist/codex/skills/secrets-handling/SKILL.md:18-23`

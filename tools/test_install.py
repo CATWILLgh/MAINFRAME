@@ -229,7 +229,11 @@ def test_requested_adapter_generator_failure_reaches_exit_status() -> None:
         _assert_failed(result, generator)
         output = result.stdout + result.stderr
         assert "would append source-line" not in output
-        assert "would install ruff" in output
+        if flag == "--codex":
+            assert "Install aborted before changes" in output
+            assert "would install ruff" not in output
+        else:
+            assert "would install ruff" in output
 
     result = _run_install(
         ["--antigravity-2"], antigravity_app=True, venv_exit=42)

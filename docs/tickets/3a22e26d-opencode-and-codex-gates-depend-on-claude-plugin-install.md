@@ -41,3 +41,11 @@ The adapters are not independently installable even though they are presented as
 - `adapters/codex/gates/mainframe-hook.sh:7-20`
 - `adapters/opencode/plugins/mainframe-gates.js:209-223`
 - `install.sh:824-834`
+
+## Progress (2026-08-04)
+
+The Codex half of this ticket is complete for the upcoming live window. Its
+bundle carries Codex-owned detectors and rules, the launcher resolves only
+`${CODEX_HOME:-$HOME/.codex}`, and Codex-only temporary-home installation plus
+uninstall coverage proves the Claude plugin root is not required. The ticket
+remains open for the independent OpenCode acceptance criteria.
