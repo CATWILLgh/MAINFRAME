@@ -61,6 +61,18 @@ class ZCodeContractTests(unittest.TestCase):
                 "cli_path": "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs",
             },
         )
+
+    def test_managed_host_requirement_matches_the_pinned_desktop(self):
+        self.assertEqual(
+            self.module.managed_host_requirements(),
+            [
+                {
+                    "kind": "darwin-application-bundle-v1",
+                    "bundle_identifier": "dev.zcode.app",
+                    "exact_versions": ["3.6.5"],
+                }
+            ],
+        )
         self.assertEqual(
             set(self.capabilities["user_roots"]),
             {

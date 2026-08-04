@@ -172,3 +172,13 @@ def load_contract(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return value
+
+
+def managed_host_requirements() -> list[dict[str, Any]]:
+    return [
+        {
+            "kind": "darwin-application-bundle-v1",
+            "bundle_identifier": BUNDLE_IDENTIFIER,
+            "exact_versions": [APP_VERSION],
+        }
+    ]
