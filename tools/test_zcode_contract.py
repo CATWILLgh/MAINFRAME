@@ -120,7 +120,10 @@ class ZCodeContractTests(unittest.TestCase):
         )
         for entry in hook_entries:
             event = entry["json_pointer"].rsplit("/", 1)[1]
-            self.assertEqual(entry["selector"], f"mainframe:{event}")
+            self.assertEqual(
+                entry["selector"],
+                {"pointer": "/hooks/0/args/1", "value": event},
+            )
             self.assertEqual(entry["activation_class"], "core-required")
 
         claimed = {entry["json_pointer"] for entry in entries}

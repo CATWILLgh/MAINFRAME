@@ -18,7 +18,10 @@
       "file": "~/.zcode/cli/config.json",
       "claim_type": "matching-array-entry",
       "json_pointer": "/hooks/events/PostToolUse",
-      "selector": "mainframe:PostToolUse",
+      "selector": {
+        "pointer": "/hooks/0/args/1",
+        "value": "PostToolUse"
+      },
       "purpose": "Register the MAINFRAME PostToolUse bridge entry.",
       "lifecycle": "v1-core",
       "activation_class": "core-required",
@@ -30,7 +33,10 @@
       "file": "~/.zcode/cli/config.json",
       "claim_type": "matching-array-entry",
       "json_pointer": "/hooks/events/PreToolUse",
-      "selector": "mainframe:PreToolUse",
+      "selector": {
+        "pointer": "/hooks/0/args/1",
+        "value": "PreToolUse"
+      },
       "purpose": "Register the MAINFRAME PreToolUse bridge entry.",
       "lifecycle": "v1-core",
       "activation_class": "core-required",
@@ -42,7 +48,10 @@
       "file": "~/.zcode/cli/config.json",
       "claim_type": "matching-array-entry",
       "json_pointer": "/hooks/events/SessionStart",
-      "selector": "mainframe:SessionStart",
+      "selector": {
+        "pointer": "/hooks/0/args/1",
+        "value": "SessionStart"
+      },
       "purpose": "Register the MAINFRAME SessionStart bridge entry.",
       "lifecycle": "v1-core",
       "activation_class": "core-required",
@@ -54,7 +63,10 @@
       "file": "~/.zcode/cli/config.json",
       "claim_type": "matching-array-entry",
       "json_pointer": "/hooks/events/Stop",
-      "selector": "mainframe:Stop",
+      "selector": {
+        "pointer": "/hooks/0/args/1",
+        "value": "Stop"
+      },
       "purpose": "Register the aggregated MAINFRAME Stop bridge entry.",
       "lifecycle": "v1-core",
       "activation_class": "core-required",

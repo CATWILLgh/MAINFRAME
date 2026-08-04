@@ -159,7 +159,14 @@ def _validate_ownership_entry(
     if entry["claim_type"] not in {"scalar", "matching-array-entry", "map-entry"}:
         raise ValueError(f"ownership entry {identifier!r} has unsupported claim_type")
     selector = entry["selector"]
-    if selector is not None:
+    if entry["claim_type"] == "matching-array-entry":
+        if not isinstance(selector, dict) or set(selector) != {"pointer", "value"}:
+            raise ValueError(
+                f"ownership entry {identifier!r} selector must contain pointer and value"
+            )
+        _require_string(selector["pointer"], f"ownership entry {identifier!r} selector pointer")
+        _require_string(selector["value"], f"ownership entry {identifier!r} selector value")
+    elif selector is not None:
         _require_string(selector, f"ownership entry {identifier!r} selector")
     for field in ("purpose", "lifecycle", "preservation", "uninstall"):
         _require_string(entry[field], f"ownership entry {identifier!r} {field}")
