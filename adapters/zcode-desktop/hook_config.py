@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 
@@ -54,15 +55,29 @@ EVENT_MATCHERS = {
 HOOK_TIMEOUT_MS = 65_000
 
 
-def render_hook_events(bridge_path: Path) -> dict[str, list[dict]]:
+def _render_process_events(
+    command: str, args_for_event: Callable[[str], list[str]],
+) -> dict[str, list[dict]]:
     events: dict[str, list[dict]] = {}
     for event in CORE_EVENT_DETECTORS:
         process = {
             "type": "process",
-            "command": "python3",
-            "args": [str(bridge_path), event],
+            "command": command,
+            "args": args_for_event(event),
             "timeoutMs": HOOK_TIMEOUT_MS,
             "statusMessage": f"mainframe:{event}",
         }
         events[event] = [{"matcher": EVENT_MATCHERS[event], "hooks": [process]}]
     return events
+
+
+def render_hook_events(bridge_path: Path) -> dict[str, list[dict]]:
+    return _render_process_events(
+        "python3", lambda event: [str(bridge_path), event]
+    )
+
+
+def render_cli_hook_events() -> dict[str, list[dict]]:
+    return _render_process_events(
+        "mainframe", lambda event: ["_zcode-hook", event]
+    )

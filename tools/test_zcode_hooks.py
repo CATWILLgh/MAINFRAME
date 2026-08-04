@@ -75,6 +75,13 @@ class HookConfigTests(unittest.TestCase):
             self.assertEqual(process["statusMessage"], f"mainframe:{event}")
             self.assertGreater(process["timeoutMs"], 0)
 
+    def test_release_entries_use_the_hidden_mainframe_launcher(self):
+        events = hook_config.render_cli_hook_events()
+        for event, matchers in events.items():
+            process = matchers[0]["hooks"][0]
+            self.assertEqual(process["command"], "mainframe")
+            self.assertEqual(process["args"], ["_zcode-hook", event])
+
 
 class PayloadNormalizationTests(unittest.TestCase):
     def test_normalizes_every_supported_event(self):
