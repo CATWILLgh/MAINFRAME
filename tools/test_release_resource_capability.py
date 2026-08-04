@@ -82,6 +82,7 @@ def test_diagnostics_resource_mapping_is_exact_and_copy_safe():
         "claude-code": "claude-config",
         "codex": "codex-config",
         "opencode": "opencode-config",
+        "zcode-desktop": "zcode-config",
     }
     for component, root in roots.items():
         resource = diagnostics_resource(component)

@@ -16,6 +16,7 @@ _TARGET_ROOTS = {
     "claude-code": "claude-config",
     "codex": "codex-config",
     "opencode": "opencode-config",
+    "zcode-desktop": "zcode-config",
 }
 
 
