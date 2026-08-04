@@ -47,6 +47,9 @@ func runWithPreview(
 	if len(args) > 0 && args[0] == "_secret-store" {
 		return runSecretStoreCommand(args[1:], input, output, errorOutput)
 	}
+	if len(args) > 0 && args[0] == "_zcode-hook" {
+		return runZCodeHookCommand(args[1:], input, output, errorOutput)
+	}
 	if path, requested := helpPath(args); requested {
 		if err := renderCommandHelp(path, output); err != nil {
 			fmt.Fprintln(errorOutput, err)
