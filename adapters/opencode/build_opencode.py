@@ -37,6 +37,7 @@ TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 sys.path.insert(0, TOOLS)
 
 from adapter_profiles import project_text
+from agent_contract import AgentContract, parse_agent_source
 
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 
@@ -147,33 +148,34 @@ ENRICH_KEYS = ("model", "temperature", "mode", "color", "steps",
                "variant", "options")
 
 
-def project_agent(meta, body, enrich=None, profile=None):
-    """Render one hub agent as OpenCode agent markdown, or None to skip."""
-    description = meta.get("description")
-    if not description:
-        return None
+def project_agent(contract: AgentContract, body, enrich=None, profile=None):
+    """Render one validated hub agent as OpenCode agent markdown."""
     home = os.path.expanduser("~")
-    fm = {"description": _rewrite_runtime_prose(description, home, profile),
+    fm = {"description": _rewrite_runtime_prose(contract.description, home, profile),
           "mode": "subagent"}
-    if meta.get("turn-budget"):
-        fm["steps"] = int(meta["turn-budget"])
+    if contract.turn_budget is not None:
+        fm["steps"] = contract.turn_budget
     overrides = ((enrich or {}).get("agents") or {}).get(
-        meta.get("name", ""), {})
+        contract.name, {})
     for key in ENRICH_KEYS:
         if key in overrides:
             fm[key] = overrides[key]
-    perm = derive_agent_permission(meta)
+    contract_mapping = {
+        "needs-write": contract.needs_write,
+        "needs-web": contract.needs_web,
+    }
+    perm = derive_agent_permission(contract_mapping)
     if perm:
         fm["permission"] = perm
-    fm["tools"] = derive_agent_tools(meta)
+    fm["tools"] = derive_agent_tools(contract_mapping)
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True,
                            width=100000).rstrip("\n")
 
-    body = _rewrite_runtime_prose(body, home, profile)
+    body = _rewrite_runtime_prose(body.lstrip("\n"), home, profile)
 
     note = _GENERATED_NOTE.format(marker=GENERATED_MARKER,
-                                  name=meta.get("name", "unknown"))
-    skills = meta.get("method-skills") or []
+                                  name=contract.name)
+    skills = contract.method_skills
     if skills:
         safe = [re.sub(r"[^A-Za-z0-9_-]", "", str(s)) for s in skills]
         calls = ", ".join(f'skill({{ name: "{s}" }})' for s in safe)
@@ -271,16 +273,27 @@ def _load_json(path):
 
 def _collect_agents(root, enrich=None, profile=None):
     agents_dir = os.path.join(root, "core", "agents")
+    skills_dir = os.path.join(root, "core", "skills")
+    known_methods = {
+        name
+        for name in os.listdir(skills_dir) if os.path.isfile(
+            os.path.join(skills_dir, name, "SKILL.md")
+        )
+    } if os.path.isdir(skills_dir) else set()
     out = []
     for fname in sorted(os.listdir(agents_dir)) if os.path.isdir(agents_dir) else []:
         if not fname.endswith(".md"):
             continue
         with open(os.path.join(agents_dir, fname)) as f:
-            meta, body = parse_frontmatter(f.read())
-        rendered = project_agent(meta, body, enrich=enrich, profile=profile)
-        if rendered is None:
-            print(f"[skip] {fname}: no description in frontmatter")
-            continue
+            source = parse_agent_source(f.read(), source=f"core/agents/{fname}")
+        missing = set(source.contract.method_skills) - known_methods
+        if missing:
+            raise ValueError(
+                f"core/agents/{fname}: unknown method skills: {sorted(missing)}"
+            )
+        rendered = project_agent(
+            source.contract, source.body, enrich=enrich, profile=profile
+        )
         out.append((fname, rendered))
     return out
 

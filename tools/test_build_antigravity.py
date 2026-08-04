@@ -40,7 +40,8 @@ def fixture_root() -> Path:
         root / "core/agents/researcher.md",
         "---\nname: researcher\ndescription: Research facts. Picked via empirical tournament "
         "(model:sonnet, effort:low) — 3/3.\nneeds-write: false\n"
-        "needs-web: true\nneeds-mcp: true\nturn-budget: 7\nmethod-skills:\n"
+        "needs-repo-read: false\nneeds-web: true\nneeds-docs-lookup: true\n"
+        "reasoning-tier: light\nbackground: true\nturn-budget: 7\nmethod-skills:\n"
         "  - sample\n---\n\nResearch carefully.\n",
     )
     write(root / "core/gates/detectors/path-validation.py", "print()\n")
@@ -270,6 +271,20 @@ def test_delegate_skill_uses_only_documented_capability_booleans() -> None:
     assert "soft turn budget: 7" in body.lower()
     assert "model" not in body.lower()
     assert "effort" not in body.lower()
+
+
+def test_agent_projection_rejects_noncanonical_contract_fields() -> None:
+    root = fixture_root()
+    agent = root / "core/agents/researcher.md"
+    agent.write_text(agent.read_text().replace("needs-web: true", "needs-web: true\nneeds-mcp: true"))
+    assert_source_rejected(root, "core/agents/researcher.md")
+
+
+def test_agent_projection_rejects_unknown_method_at_adapter_boundary() -> None:
+    root = fixture_root()
+    agent = root / "core/agents/researcher.md"
+    agent.write_text(agent.read_text().replace("  - sample", "  - unknown-method"))
+    assert_source_rejected(root, "core/agents/researcher.md")
 
 
 def test_skill_projection_keeps_supported_frontmatter_and_rewrites_bindings() -> None:

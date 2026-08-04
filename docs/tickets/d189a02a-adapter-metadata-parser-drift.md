@@ -1,7 +1,7 @@
 ---
 id: d189a02a
 title: Adapter metadata parsers have no shared contract or parity tests
-status: open
+status: closed
 priority: low
 component: architecture
 discovered: 2026-07-15
@@ -42,3 +42,22 @@ Adding a contract field or changing malformed-input handling requires coordinate
 - `tools/render_core.py:335-359`
 - `adapters/opencode/build_opencode.py:70-78`
 - `adapters/codex/build_codex.py:119-126`
+
+## Resolution
+
+Phase 1 adds the agent-only parser in `tools/agent_contract.py`. It returns
+typed `AgentContract` and `AgentSource` values, rejects malformed delimiters,
+non-mapping YAML, missing or unknown fields, invalid field types and ranges,
+and preserves the source body. Skill parsers remain separate because their
+schemas are not the neutral agent contract.
+
+Claude Code, Codex, OpenCode, and Antigravity agent collection now enter
+through that parser before applying their native rendering rules. Method-skill
+existence remains adapter-specific; the shared parser validates only the name
+shape. Cross-adapter tests cover valid input and every intentional failure
+class, while committed agent outputs remain byte-equivalent.
+
+Verification: `python3 -m pytest -q tools/test_agent_contract.py
+tools/test_render_core.py tools/test_build_codex.py tools/test_build_opencode.py
+tools/test_build_antigravity.py`. The two unrelated `curl-requests` drift
+failures are tracked separately in ticket `fd61c474`.

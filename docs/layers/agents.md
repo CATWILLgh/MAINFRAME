@@ -266,6 +266,21 @@ Direct documented patterns from `code.claude.com/docs/en/sub-agents`:
 
 Convention for every `core/agents/<name>.md` capability contract:
 
+- **One strict source schema.** `tools/agent_contract.py` is the only parser for
+  neutral agent sources. The opening and closing delimiters must be exact
+  `---` lines, the frontmatter must be a YAML mapping, unknown or duplicate
+  fields fail, and the parser returns typed `AgentContract` / `AgentSource`
+  values while preserving the body exactly. Skill frontmatter deliberately
+  remains outside this agent-only API.
+- **Required fields.** Every contract declares non-empty kebab-case `name`,
+  non-empty string `description`, all four boolean capability fields
+  (`needs-repo-read`, `needs-write`, `needs-web`, `needs-docs-lookup`),
+  `reasoning-tier`, and boolean `background`. Omission is an error; adapters do
+  not infer a capability or execution mode from a missing value.
+- **Optional fields.** `turn-budget`, when present, is an integer greater than
+  zero. `method-skills`, when present, is a YAML list of non-empty kebab-case
+  names. Whether those names exist remains an adapter-specific projection
+  check because each runtime has a different projectable method inventory.
 - **Declare capabilities, not runtime tool syntax.** Use `needs-repo-read`, `needs-write`, `needs-web`, and `needs-docs-lookup`; adapters derive each runtime's tools, permissions, web access, and sandbox restrictions.
 - **Narrow capability grants are the mandatory hard knob.** A missing capability must restrict the projection; adapters never widen the parent session. `turn-budget` is reserved for genuinely open-ended workers and omitted on write-capable multi-step agents when a cap would terminate useful work mid-task.
 - **Soft patterns — supplement, not replacement.** Include the triad (ordinal cap + label + unconditional return) in the prompt as a fallback and for task specifics, not as primary enforcement.

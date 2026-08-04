@@ -38,6 +38,7 @@ TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from adapter_profiles import CONFIG_ROOT_TOKEN, PLAN_ROOT_TOKEN, project_text
+from agent_contract import AgentContract, parse_agent_source
 
 
 GENERATED_MARKER = "Generated from MAINFRAME hub"
@@ -640,7 +641,7 @@ def _private_method_body(name: str, files: dict[Path, bytes]) -> str:
 
 def _agent_developer_instructions(
     body: str,
-    contract: dict,
+    contract: AgentContract,
     name: str,
     private_methods: dict[str, dict[Path, bytes]] | None = None,
     private_root: str = f"~/.codex/{PRIVATE_METHODS_DIR}",
@@ -655,7 +656,7 @@ def _agent_developer_instructions(
     )
     text = _strip_repo_links(projected_body).strip()
     lead = []
-    skills = contract.get("method-skills") or []
+    skills = contract.method_skills
     public_skills = [skill for skill in skills if skill not in private_methods]
     if public_skills:
         refs = ", ".join(f"${skill}" for skill in public_skills)
@@ -663,9 +664,9 @@ def _agent_developer_instructions(
     # Codex has no per-agent turn cap and its [agents] limits live in the
     # user-owned config.toml the hub does not touch, so a soft cap in the
     # instructions is the only spawn/run bound expressible here.
-    budget = contract.get("turn-budget")
-    if budget:
-        lead.append(f"Work within roughly {int(budget)} steps; do not run open-endedly.")
+    budget = contract.turn_budget
+    if budget is not None:
+        lead.append(f"Work within roughly {budget} steps; do not run open-endedly.")
     embedded = [
         f"## Private method: {skill}\n\n{_private_method_body(skill, private_methods[skill])}"
         for skill in skills
@@ -685,7 +686,7 @@ def _agent_developer_instructions(
 
 
 def render_agent(
-    meta: dict,
+    contract: AgentContract,
     body: str,
     private_methods: dict[str, dict[Path, bytes]] | None = None,
     profile=None,
@@ -696,24 +697,23 @@ def render_agent(
     tighter Codex default (read-only sandbox, disabled web search); a granted one
     is omitted so the agent inherits the session default rather than widening it.
     """
-    name = str(meta["name"])
+    name = contract.name
     lines = [
         f"# {GENERATED_MARKER} (core/agents/{name}.md) — do not edit; "
         "regenerate via ./install.sh --codex.",
         f"name = {json.dumps(name, ensure_ascii=False)}",
         "description = "
-        f"{json.dumps(_rewrite_codex_prose(str(meta['description']), name), ensure_ascii=False)}",
+        f"{json.dumps(_rewrite_codex_prose(contract.description, name), ensure_ascii=False)}",
     ]
-    effort = _REASONING_EFFORT.get(str(meta.get("reasoning-tier") or "").lower())
-    if effort:
-        lines.append(f'model_reasoning_effort = "{effort}"')
-    if not meta.get("needs-write"):
+    effort = _REASONING_EFFORT[contract.reasoning_tier]
+    lines.append(f'model_reasoning_effort = "{effort}"')
+    if not contract.needs_write:
         lines.append('sandbox_mode = "read-only"')
-    if not meta.get("needs-web"):
+    if not contract.needs_web:
         lines.append('web_search = "disabled"')
     private_root = _runtime_roots(profile)[1]
     di = _agent_developer_instructions(
-        body, meta, name, private_methods, private_root, profile
+        body, contract, name, private_methods, private_root, profile
     )
     lines.append(f"developer_instructions = {json.dumps(di, ensure_ascii=False)}")
     return "\n".join(lines) + "\n"
@@ -728,17 +728,16 @@ def collect_agents(root: Path, profile=None) -> list[tuple[str, str]]:
     public_names = {name for name, _ in collect_skills(root, profile)[0]}
     known_methods = public_names | set(private_methods)
     for path in sorted(agents_dir.glob("*.md")):
-        meta, body = parse_frontmatter(path.read_text())
-        name = meta.get("name")
-        description = str(meta.get("description") or "").strip()
-        if not name or not description:
-            raise ValueError(f"{path}: agent missing name or description")
-        missing = set(meta.get("method-skills") or []) - known_methods
+        source = parse_agent_source(
+            path.read_text(), source=str(path.relative_to(root))
+        )
+        contract = source.contract
+        missing = set(contract.method_skills) - known_methods
         if missing:
             raise ValueError(f"{path}: unknown method skills: {sorted(missing)}")
         rendered.append((
-            str(name),
-            render_agent(meta, body, private_methods, profile),
+            contract.name,
+            render_agent(contract, source.body, private_methods, profile),
         ))
     return rendered
 

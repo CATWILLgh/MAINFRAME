@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 
 from adapter_profiles import load_profiles, project_text
+from agent_contract import AgentContract, parse_agent_source
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -363,11 +364,6 @@ AGENTS_CORE_DIR = "core/agents"
 AGENTS_OVERRIDES_DIR = "adapters/claude-code/agents"
 AGENTS_DST_DIR = "dist/claude-code/plugin/agents"
 
-CONTRACT_KEYS = {
-    "name", "description", "needs-repo-read", "needs-write", "needs-web",
-    "needs-docs-lookup", "reasoning-tier", "turn-budget", "background",
-    "method-skills",
-}
 TIER_TO_MODEL_EFFORT = {
     "deep": ("opus", "high"),
     "standard": ("sonnet", "medium"),
@@ -383,14 +379,7 @@ _DOCS_LOOKUP_TOOLS = [
 ]
 
 
-def _split_frontmatter(text: str) -> tuple[str, str]:
-    if not text.startswith("---\n"):
-        raise ValueError("missing frontmatter")
-    end = text.index("\n---\n", 4)
-    return text[4:end + 1], text[end + 5:]
-
-
-def derive_cc_meta(contract: dict, override: dict | None = None) -> dict:
+def derive_cc_meta(contract: AgentContract, override: dict | None = None) -> dict:
     """Capability contract → Claude Code frontmatter dict.
 
     `review-only` is deliberately folded into `!needs-write` (that is what
@@ -398,32 +387,32 @@ def derive_cc_meta(contract: dict, override: dict | None = None) -> dict:
     needs them split uses an adapter override instead of a new axis.
     """
     tools: list[str] = []
-    if contract.get("needs-repo-read"):
+    if contract.needs_repo_read:
         tools.append("Read")
-        if contract.get("needs-write"):
+        if contract.needs_write:
             tools += ["Write", "Edit", "Glob", "Grep", "Bash", "TodoWrite"]
         else:
             tools += ["Grep", "Glob"]
-    if contract.get("needs-web"):
+    if contract.needs_web:
         tools += ["WebSearch", "WebFetch"]
-    if contract.get("needs-docs-lookup"):
+    if contract.needs_docs_lookup:
         tools += _DOCS_LOOKUP_TOOLS
-    model, effort = TIER_TO_MODEL_EFFORT[contract["reasoning-tier"]]
+    model, effort = TIER_TO_MODEL_EFFORT[contract.reasoning_tier]
     meta = {
-        "name": contract["name"],
-        "description": contract["description"],
+        "name": contract.name,
+        "description": contract.description,
         "tools": tools,
         "model": model,
         "effort": effort,
     }
-    if contract.get("background"):
+    if contract.background:
         meta["background"] = True
-    if contract.get("turn-budget"):
-        meta["maxTurns"] = int(contract["turn-budget"])
-    if not contract.get("needs-write"):
+    if contract.turn_budget is not None:
+        meta["maxTurns"] = contract.turn_budget
+    if not contract.needs_write:
         meta["permissionMode"] = "plan"
-    if contract.get("method-skills"):
-        meta["skills"] = list(contract["method-skills"])
+    if contract.method_skills:
+        meta["skills"] = list(contract.method_skills)
     for key, value in (override or {}).items():
         meta[key] = value
     return meta
@@ -449,15 +438,26 @@ def _emit_cc_frontmatter(meta: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_agent_file(core_text: str, override: dict | None) -> str:
-    import yaml
-
-    fm_text, body = _split_frontmatter(core_text)
-    contract = yaml.safe_load(fm_text)
-    unknown = set(contract) - CONTRACT_KEYS
-    if unknown:
-        raise ValueError(f"unknown contract key(s): {', '.join(sorted(unknown))}")
-    return "---\n" + _emit_cc_frontmatter(derive_cc_meta(contract, override)) + "---\n" + body
+def render_agent_file(
+    core_text: str,
+    override: dict | None,
+    *,
+    source_name: str = "<agent>",
+    known_methods: frozenset[str] | None = None,
+) -> str:
+    source = parse_agent_source(core_text, source=source_name)
+    if known_methods is not None:
+        missing = set(source.contract.method_skills) - known_methods
+        if missing:
+            raise ValueError(
+                f"{source_name}: unknown method skills: {sorted(missing)}"
+            )
+    return (
+        "---\n"
+        + _emit_cc_frontmatter(derive_cc_meta(source.contract, override))
+        + "---\n"
+        + source.body
+    )
 
 
 def _agents_items(root: Path):
@@ -481,6 +481,15 @@ def _agents_items(root: Path):
     return items, strays
 
 
+def _agent_method_names(root: Path) -> frozenset[str]:
+    skills = root / "core/skills"
+    if not skills.is_dir():
+        return frozenset()
+    return frozenset(
+        path.parent.name for path in skills.glob("*/SKILL.md") if path.is_file()
+    )
+
+
 def check_agents(root: Path) -> list[str]:
     problems = []
     items, strays = _agents_items(root)
@@ -488,10 +497,16 @@ def check_agents(root: Path) -> list[str]:
         problems.append(
             f"override without a core agent: {stray.relative_to(root)}")
     expected = set()
+    known_methods = _agent_method_names(root)
     for core_path, override, dst in items:
         expected.add(dst)
         try:
-            rendered = render_agent_file(core_path.read_text(), override)
+            rendered = render_agent_file(
+                core_path.read_text(),
+                override,
+                source_name=str(core_path.relative_to(root)),
+                known_methods=known_methods,
+            )
         except ImportError:
             raise
         except Exception as exc:
@@ -512,8 +527,14 @@ def check_agents(root: Path) -> list[str]:
 def write_agents(root: Path) -> list[Path]:
     written = []
     items, _ = _agents_items(root)
+    known_methods = _agent_method_names(root)
     for core_path, override, dst in items:
-        rendered = render_agent_file(core_path.read_text(), override)
+        rendered = render_agent_file(
+            core_path.read_text(),
+            override,
+            source_name=str(core_path.relative_to(root)),
+            known_methods=known_methods,
+        )
         if dst.exists() and dst.read_text() == rendered:
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)

@@ -18,6 +18,7 @@ TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from detector_projection import project_hooklib_fallbacks
+from agent_contract import parse_agent_source
 from compatibility import BUNDLE_IDENTIFIER, LEGACY_SUPPORTED_MAJOR
 from gates.mainframe_runtime import HANDLER_TIMEOUT_SECONDS
 from skill_projection import (
@@ -195,17 +196,24 @@ def _copy_skill(
             files[destination] = f"{note}{body}".encode()
 
 
-def _delegate_skill(source: SourcePath) -> tuple[str, bytes] | None:
-    meta, body = parse_frontmatter(source.read_text())
-    name = str(meta.get("name") or source.path.stem)
-    description = meta.get("description")
-    if not description:
-        return None
-    allow_write = bool(meta.get("needs-write"))
-    allow_mcp = bool(meta.get("needs-mcp") or meta.get("needs-web"))
-    allow_delegate = bool(meta.get("needs-delegation", False))
-    turn_budget = int(meta.get("turn-budget") or 20)
-    method_skills = tuple(str(item) for item in meta.get("method-skills") or ())
+def _delegate_skill(
+    source: SourcePath, known_methods: frozenset[str]
+) -> tuple[str, bytes]:
+    parsed = parse_agent_source(
+        source.read_text(), source=f"core/agents/{source.path.name}"
+    )
+    contract = parsed.contract
+    missing = set(contract.method_skills) - known_methods
+    if missing:
+        raise ValueError(
+            f"core/agents/{source.path.name}: unknown method skills: {sorted(missing)}"
+        )
+    name = contract.name
+    allow_write = contract.needs_write
+    allow_mcp = contract.needs_web
+    allow_delegate = False
+    turn_budget = contract.turn_budget or 20
+    method_skills = contract.method_skills
     frontmatter = yaml.safe_dump(
         {
             "name": f"delegate-{name}",
@@ -220,8 +228,8 @@ def _delegate_skill(source: SourcePath) -> tuple[str, bytes] | None:
         f"enable_mcp_tools: {str(allow_mcp).lower()}\n"
         f"enable_subagent_tools: {str(allow_delegate).lower()}"
     )
-    body = _adapt_markdown(body)
-    description = _adapt_description(str(description))
+    body = _adapt_markdown(parsed.body.lstrip("\n"))
+    description = _adapt_description(contract.description)
     method_requirement = ""
     if method_skills:
         paths = "\n".join(
@@ -255,6 +263,7 @@ def _delegate_skill(source: SourcePath) -> tuple[str, bytes] | None:
 def _collect_skills_and_agents(root: Path, files: dict[Path, bytes]) -> None:
     skills = root / "core" / "skills"
     skill_directories = SourceBoundary(root, skills).directories()
+    known_methods = frozenset(skill.name for skill in skill_directories)
     skill_texts = {
         skill.name: {
             source.path.relative_to(skill).as_posix(): source.read_text()
@@ -268,10 +277,8 @@ def _collect_skills_and_agents(root: Path, files: dict[Path, bytes]) -> None:
         _copy_skill(root, skill, Path("skills") / skill.name, files)
     agents = root / "core" / "agents"
     for agent in SourceBoundary(root, agents).files("*.md"):
-        rendered = _delegate_skill(agent)
-        if rendered is not None:
-            name, content = rendered
-            files[Path("skills") / name / "SKILL.md"] = content
+        name, content = _delegate_skill(agent, known_methods)
+        files[Path("skills") / name / "SKILL.md"] = content
 
 
 def _collect_runtime(root: Path, files: dict[Path, bytes]) -> None:

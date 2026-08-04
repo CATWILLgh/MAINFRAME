@@ -349,6 +349,8 @@ def make_agent_tree() -> Path:
     root = Path(tempfile.mkdtemp(prefix="render-agents-test-"))
     (root / "core/agents").mkdir(parents=True)
     (root / "core/agents/sample-agent.md").write_text(CORE_AGENT)
+    (root / "core/skills/decision-review").mkdir(parents=True)
+    (root / "core/skills/decision-review/SKILL.md").write_text("method\n")
     (root / "dist/claude-code/plugin/agents").mkdir(parents=True)
     return root
 
@@ -381,6 +383,30 @@ def test_agents_check_flags_unknown_contract_key():
         CORE_AGENT.replace("background: true", "background: true\nfoo: 1"))
     problems = render_core.check_agents(root)
     assert any("sample-agent.md" in p and "foo" in p for p in problems), problems
+    shutil.rmtree(root)
+
+
+def test_agents_check_reports_strict_shared_contract_failure():
+    root = make_agent_tree()
+    (root / "core/agents/sample-agent.md").write_text(
+        CORE_AGENT.replace("needs-web: true", 'needs-web: "true"')
+    )
+    problems = render_core.check_agents(root)
+    assert len(problems) == 1
+    assert "core/agents/sample-agent.md" in problems[0]
+    assert "needs-web must be a boolean" in problems[0]
+    shutil.rmtree(root)
+
+
+def test_agents_check_rejects_unknown_method_at_claude_boundary():
+    root = make_agent_tree()
+    (root / "core/agents/sample-agent.md").write_text(
+        CORE_AGENT.replace("decision-review", "unknown-method")
+    )
+    problems = render_core.check_agents(root)
+    assert len(problems) == 1
+    assert "unknown method skills" in problems[0]
+    assert "unknown-method" in problems[0]
     shutil.rmtree(root)
 
 

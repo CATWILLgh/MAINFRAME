@@ -445,6 +445,7 @@ needs-web: true
 needs-docs-lookup: true
 reasoning-tier: deep
 turn-budget: 50
+background: true
 method-skills:
   - decision-review
   - severity-calibration
@@ -461,6 +462,7 @@ needs-write: true
 needs-web: false
 needs-docs-lookup: true
 reasoning-tier: standard
+background: true
 method-skills:
   - python-backend-patterns
 ---
@@ -470,8 +472,8 @@ Implement the endpoint. Recon first via [recon.md](../skills/python-backend-patt
 
 
 def test_agent_toml_read_only_restricts_and_maps_effort():
-    meta, body = bc.parse_frontmatter(AGENT_RO)
-    data = tomllib.loads(bc.render_agent(meta, body))
+    source = bc.parse_agent_source(AGENT_RO)
+    data = tomllib.loads(bc.render_agent(source.contract, source.body))
     assert data["name"] == "sample-reviewer"
     assert data["model_reasoning_effort"] == "high"        # deep -> high
     assert data["sandbox_mode"] == "read-only"             # needs-write:false -> restrict
@@ -482,8 +484,8 @@ def test_agent_toml_read_only_restricts_and_maps_effort():
 
 
 def test_agent_toml_write_agent_omits_sandbox_and_denies_web():
-    meta, body = bc.parse_frontmatter(AGENT_WRITE)
-    data = tomllib.loads(bc.render_agent(meta, body))
+    source = bc.parse_agent_source(AGENT_WRITE)
+    data = tomllib.loads(bc.render_agent(source.contract, source.body))
     assert "sandbox_mode" not in data                      # needs-write:true -> inherit, never elevate
     assert data["web_search"] == "disabled"                # needs-web:false -> restrict
     assert data["model_reasoning_effort"] == "medium"      # standard -> medium
@@ -492,8 +494,10 @@ def test_agent_toml_write_agent_omits_sandbox_and_denies_web():
 
 def test_agent_developer_instructions_have_no_repo_relative_paths():
     for src in (AGENT_RO, AGENT_WRITE):
-        meta, body = bc.parse_frontmatter(src)
-        di = tomllib.loads(bc.render_agent(meta, body))["developer_instructions"]
+        source = bc.parse_agent_source(src)
+        di = tomllib.loads(
+            bc.render_agent(source.contract, source.body)
+        )["developer_instructions"]
         assert "../" not in di, f"dead repo path leaked: {di}"
         assert "CLAUDE.md" not in di                        # rewritten to AGENTS.md
         assert "dist/claude-code" not in di
@@ -569,6 +573,21 @@ def test_main_writes_agents():
     assert rc == 0
     data = tomllib.loads((agents_out / "sample-reviewer.toml").read_text())
     assert data["name"] == "sample-reviewer"
+
+
+def test_collect_agents_rejects_unknown_method_at_adapter_boundary():
+    root = _fixture_root()
+    _write(
+        root / "core/agents/sample-reviewer.md",
+        AGENT_RO.replace("decision-review", "unknown-method"),
+    )
+    try:
+        bc.collect_agents(root)
+    except ValueError as error:
+        assert "unknown method skills" in str(error)
+        assert "unknown-method" in str(error)
+    else:
+        raise AssertionError("Codex accepted an unknown method skill")
 
 
 def _run_all() -> int:

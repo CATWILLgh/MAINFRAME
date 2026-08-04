@@ -105,6 +105,8 @@ def _fixture_root():
            READONLY_AGENT)
     _write(os.path.join(root, "core/agents/python-backend-engineer.md"),
            WRITE_AGENT)
+    for skill in ("decision-review", "severity-calibration"):
+        _write(os.path.join(root, f"core/skills/{skill}/SKILL.md"), "method\n")
     _write(os.path.join(root, "core/permissions/rules.json"),
            json.dumps(CC_PERMISSIONS))
     return root
@@ -138,8 +140,8 @@ def test_derive_tools_disable_mirrors_permission_denies():
 
 
 def test_project_agent_maps_frontmatter_and_drops_hub_keys():
-    meta, body = bo.parse_frontmatter(READONLY_AGENT)
-    out = bo.project_agent(meta, body)
+    source = bo.parse_agent_source(READONLY_AGENT)
+    out = bo.project_agent(source.contract, source.body)
     fm, out_body = bo.parse_frontmatter(out)
     assert set(fm) == {"description", "mode", "steps", "permission", "tools"}
     assert fm["tools"]["bash"] is False and fm["tools"]["task"] is False
@@ -150,16 +152,16 @@ def test_project_agent_maps_frontmatter_and_drops_hub_keys():
 
 
 def test_project_agent_preserves_body_and_marks_generated():
-    meta, body = bo.parse_frontmatter(READONLY_AGENT)
-    out = bo.project_agent(meta, body)
+    source = bo.parse_agent_source(READONLY_AGENT)
+    out = bo.project_agent(source.contract, source.body)
     assert "You are an independent reviewer." in out
     assert bo.GENERATED_MARKER in out
 
 
 def test_project_agent_rewrites_skill_links_and_preload_phrase():
     import os
-    meta, body = bo.parse_frontmatter(READONLY_AGENT)
-    out = bo.project_agent(meta, body)
+    source = bo.parse_agent_source(READONLY_AGENT)
+    out = bo.project_agent(source.contract, source.body)
     assert "](../skills/" not in out
     assert "](../../dist/claude-code/CLAUDE.md" not in out
     home = os.path.expanduser("~")
@@ -172,26 +174,26 @@ def test_project_agent_rewrites_skill_links_and_preload_phrase():
 
 
 def test_project_agent_adds_runtime_skill_note():
-    meta, body = bo.parse_frontmatter(READONLY_AGENT)
-    out = bo.project_agent(meta, body)
+    source = bo.parse_agent_source(READONLY_AGENT)
+    out = bo.project_agent(source.contract, source.body)
     assert 'skill({ name: "decision-review" })' in out
     assert 'skill({ name: "severity-calibration" })' in out
 
 
 def test_project_agent_without_skills_has_no_skill_note():
-    meta, body = bo.parse_frontmatter(WRITE_AGENT)
-    out = bo.project_agent(meta, body)
+    source = bo.parse_agent_source(WRITE_AGENT)
+    out = bo.project_agent(source.contract, source.body)
     assert "skill({" not in out
     fm, _ = bo.parse_frontmatter(out)
     assert "steps" not in fm  # no turn-budget in the source
 
 
 def test_enrichment_merges_model_color_and_mode():
-    meta, body = bo.parse_frontmatter(READONLY_AGENT)
+    source = bo.parse_agent_source(READONLY_AGENT)
     enrich = {"agents": {"decision-reviewer": {
         "model": "openai/gpt-5.5", "color": "#d94f4f", "mode": "all",
         "temperature": 0.2}}}
-    out = bo.project_agent(meta, body, enrich=enrich)
+    out = bo.project_agent(source.contract, source.body, enrich=enrich)
     fm, _ = bo.parse_frontmatter(out)
     assert fm["model"] == "openai/gpt-5.5"
     assert fm["color"] == "#d94f4f"
@@ -201,8 +203,8 @@ def test_enrichment_merges_model_color_and_mode():
 
 
 def test_enrichment_passes_variant_and_options():
-    meta, body = bo.parse_frontmatter(READONLY_AGENT)
-    out = bo.project_agent(meta, body, enrich={"agents": {
+    source = bo.parse_agent_source(READONLY_AGENT)
+    out = bo.project_agent(source.contract, source.body, enrich={"agents": {
         "decision-reviewer": {"variant": "xhigh",
                               "options": {"reasoningEffort": "xhigh"}}}})
     fm, _ = bo.parse_frontmatter(out)
@@ -211,10 +213,10 @@ def test_enrichment_passes_variant_and_options():
 
 
 def test_enrichment_absent_and_unknown_keys_are_safe():
-    meta, body = bo.parse_frontmatter(READONLY_AGENT)
-    plain = bo.project_agent(meta, body)
-    assert plain == bo.project_agent(meta, body, enrich=None)
-    out = bo.project_agent(meta, body, enrich={"agents": {
+    source = bo.parse_agent_source(READONLY_AGENT)
+    plain = bo.project_agent(source.contract, source.body)
+    assert plain == bo.project_agent(source.contract, source.body, enrich=None)
+    out = bo.project_agent(source.contract, source.body, enrich={"agents": {
         "decision-reviewer": {"model": "x/y", "typo_key": "boom"}}})
     fm, _ = bo.parse_frontmatter(out)
     assert fm["model"] == "x/y"
@@ -257,6 +259,31 @@ def test_main_generates_agents_and_merges_config():
     assert merged["provider"] == USER_CONFIG["provider"]
     assert merged["mcp"]["codex"]["type"] == "local"
     assert merged["permission"]["bash"]["rm -rf /"] == "deny"
+
+
+def test_collect_agents_rejects_malformed_agent_instead_of_skipping_it():
+    root = _fixture_root()
+    path = os.path.join(root, "core/agents/decision-reviewer.md")
+    _write(path, READONLY_AGENT.replace("background: true\n", ""))
+    try:
+        bo._collect_agents(root)
+    except ValueError as error:
+        assert "missing required field: background" in str(error)
+    else:
+        raise AssertionError("OpenCode skipped a malformed agent contract")
+
+
+def test_collect_agents_rejects_unknown_method_at_adapter_boundary():
+    root = _fixture_root()
+    path = os.path.join(root, "core/agents/decision-reviewer.md")
+    _write(path, READONLY_AGENT.replace("decision-review", "unknown-method"))
+    try:
+        bo._collect_agents(root)
+    except ValueError as error:
+        assert "unknown method skills" in str(error)
+        assert "unknown-method" in str(error)
+    else:
+        raise AssertionError("OpenCode accepted an unknown method skill")
 
 
 def test_real_repo_agents_match_committed_goldens():
