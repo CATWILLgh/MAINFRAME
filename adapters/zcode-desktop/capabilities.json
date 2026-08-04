@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "host": {
+    "app_name": "ZCode Desktop",
+    "app_version": "3.6.5",
+    "app_build": "3.6.5.4145",
+    "bundle_id": "dev.zcode.app",
+    "cli_version": "0.16.1",
+    "cli_path": "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs"
+  },
+  "user_roots": [
+    "~/.zcode/AGENTS.md",
+    "~/.zcode/agents",
+    "~/.zcode/cli/config.json",
+    "~/.zcode/commands",
+    "~/.zcode/skills"
+  ],
+  "capabilities": {
+    "agents": {
+      "status": "beta",
+      "scope": "user and workspace files",
+      "activation": "direct discovery",
+      "evidence": "Official custom-subagent documentation and installed runtime parsing; no safe native list command exists.",
+      "required_for_core": true
+    },
+    "automations": {
+      "status": "optional",
+      "scope": "desktop runtime state",
+      "activation": "exploratory only",
+      "evidence": "Official desktop documentation; lifecycle and provider dependence are not adapter contracts.",
+      "required_for_core": false
+    },
+    "browser": {
+      "status": "optional",
+      "scope": "desktop main agent",
+      "activation": "diagnose only",
+      "evidence": "Official Browser Use plugin documentation; no neutral MAINFRAME browser authority exists.",
+      "required_for_core": false
+    },
+    "commands": {
+      "status": "stable",
+      "scope": "user and workspace files",
+      "activation": "direct discovery",
+      "evidence": "Installed CLI commands list and inspect surfaces.",
+      "required_for_core": false
+    },
+    "goal_mode": {
+      "status": "stable",
+      "scope": "session",
+      "activation": "explicit user goal",
+      "evidence": "Official Goal Mode documentation and installed /goal command.",
+      "required_for_core": true
+    },
+    "headless": {
+      "status": "stable",
+      "scope": "bundled CLI",
+      "activation": "--prompt or --print",
+      "evidence": "Installed CLI help and version probes.",
+      "required_for_core": true
+    },
+    "hooks": {
+      "status": "stable",
+      "scope": [
+        "PermissionRequest",
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PreToolUse",
+        "SessionStart",
+        "Stop",
+        "UserPromptSubmit"
+      ],
+      "activation": "managed config entries",
+      "evidence": "Official hooks protocol and installed guide agree on the seven events.",
+      "required_for_core": true
+    },
+    "instructions": {
+      "status": "stable",
+      "scope": "global user plus current workspace",
+      "activation": "session start",
+      "evidence": "Official ZCode Agent documentation names ~/.zcode/AGENTS.md and workspace AGENTS.md.",
+      "required_for_core": true
+    },
+    "mcp_servers": {
+      "status": "optional",
+      "scope": "user and workspace config",
+      "activation": "deferred-v1.1",
+      "evidence": "Official MCP documentation; configured servers auto-connect and therefore require separate approval.",
+      "required_for_core": false
+    },
+    "memory": {
+      "status": "optional",
+      "scope": "main conversation project memory",
+      "activation": "user opt-in",
+      "evidence": "Official memory documentation; MAINFRAME does not enable or own native memory state.",
+      "required_for_core": false
+    },
+    "permissions": {
+      "status": "beta",
+      "scope": "session mode, agent tools, and managed gates",
+      "activation": "safe-subset projection",
+      "evidence": "Installed CLI exposes four modes and tool allow/deny controls; exact rule equivalence requires probes.",
+      "required_for_core": true
+    },
+    "plugins": {
+      "status": "beta",
+      "scope": "desktop and CLI plugin state",
+      "activation": "deferred",
+      "evidence": "Installed guide and runtime disagree about plugin-packaged agent execution.",
+      "required_for_core": false
+    },
+    "resume": {
+      "status": "stable",
+      "scope": "persisted sessions",
+      "activation": "--resume or --continue",
+      "evidence": "Installed CLI help exposes persisted session continuation.",
+      "required_for_core": true
+    },
+    "skills": {
+      "status": "stable",
+      "scope": "user, workspace, shared-agent, and plugin roots",
+      "activation": "semantic or explicit $ invocation",
+      "evidence": "Official skill documentation and installed skills list and inspect surfaces.",
+      "required_for_core": true
+    }
+  }
+}

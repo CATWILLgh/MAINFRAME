@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "hooks_enabled",
+      "file": "~/.zcode/cli/config.json",
+      "claim_type": "scalar",
+      "json_pointer": "/hooks/enabled",
+      "selector": null,
+      "purpose": "Enable explicitly managed user-config hooks.",
+      "lifecycle": "v1-core",
+      "activation_class": "core-required",
+      "preservation": "Preserve the existing scalar when MAINFRAME has not previously owned it; require explicit adoption before replacement.",
+      "uninstall": "Remove only an unchanged MAINFRAME-owned value and restore the captured predecessor when available."
+    },
+    {
+      "id": "hook_post_tool_use",
+      "file": "~/.zcode/cli/config.json",
+      "claim_type": "matching-array-entry",
+      "json_pointer": "/hooks/events/PostToolUse",
+      "selector": "mainframe:PostToolUse",
+      "purpose": "Register the MAINFRAME PostToolUse bridge entry.",
+      "lifecycle": "v1-core",
+      "activation_class": "core-required",
+      "preservation": "Preserve all nonmatching user entries and their order.",
+      "uninstall": "Remove only the unchanged entry selected by mainframe:PostToolUse."
+    },
+    {
+      "id": "hook_pre_tool_use",
+      "file": "~/.zcode/cli/config.json",
+      "claim_type": "matching-array-entry",
+      "json_pointer": "/hooks/events/PreToolUse",
+      "selector": "mainframe:PreToolUse",
+      "purpose": "Register the MAINFRAME PreToolUse bridge entry.",
+      "lifecycle": "v1-core",
+      "activation_class": "core-required",
+      "preservation": "Preserve all nonmatching user entries and their order.",
+      "uninstall": "Remove only the unchanged entry selected by mainframe:PreToolUse."
+    },
+    {
+      "id": "hook_session_start",
+      "file": "~/.zcode/cli/config.json",
+      "claim_type": "matching-array-entry",
+      "json_pointer": "/hooks/events/SessionStart",
+      "selector": "mainframe:SessionStart",
+      "purpose": "Register the MAINFRAME SessionStart bridge entry.",
+      "lifecycle": "v1-core",
+      "activation_class": "core-required",
+      "preservation": "Preserve all nonmatching user entries and their order.",
+      "uninstall": "Remove only the unchanged entry selected by mainframe:SessionStart."
+    },
+    {
+      "id": "hook_stop",
+      "file": "~/.zcode/cli/config.json",
+      "claim_type": "matching-array-entry",
+      "json_pointer": "/hooks/events/Stop",
+      "selector": "mainframe:Stop",
+      "purpose": "Register the aggregated MAINFRAME Stop bridge entry.",
+      "lifecycle": "v1-core",
+      "activation_class": "core-required",
+      "preservation": "Preserve all nonmatching user entries and their order.",
+      "uninstall": "Remove only the unchanged entry selected by mainframe:Stop."
+    },
+    {
+      "id": "mcp_server",
+      "file": "~/.zcode/cli/config.json",
+      "claim_type": "map-entry",
+      "json_pointer": "/mcp/servers/mainframe-context7",
+      "selector": "mainframe-context7",
+      "purpose": "Configure only the catalogued MAINFRAME Context7 server.",
+      "lifecycle": "deferred-v1.1",
+      "activation_class": "selected-v1.1",
+      "preservation": "Preserve every other MCP server and reject a conflicting user-owned entry of the same name.",
+      "uninstall": "Remove only an unchanged MAINFRAME-owned mainframe-context7 map entry."
+    }
+  ]
+}
