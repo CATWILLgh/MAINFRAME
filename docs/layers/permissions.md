@@ -1,6 +1,6 @@
 # Layer: Permissions
 
-> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and native builders populate `dist/<tool>/`. Do not hand-edit generated outputs.
 
 
 > Shared allow/deny/ask policy authored in `core/permissions/rules.json`, then rendered or conservatively projected into the controls Claude Code, OpenCode, and Codex can express. Antigravity permissions remain user-owned.
@@ -16,6 +16,7 @@
 - OpenCode target: `adapters/opencode/build_opencode.py` projects representable entries into `~/.config/opencode/opencode.json`. It tracks generated top-level actions in a `0600` ownership sidecar, updates only unchanged actions it previously generated, and preserves scalar, wildcard, modified, deleted, and otherwise user-owned policy. The projection fails before writing when the neutral source is missing, malformed, empty, or contains no representable `ask`/`deny` rule. This remains best-effort and is not a safety boundary.
 - Codex target: `adapters/codex/build_codex.py` emits only exact safe shell-prefix projections to `dist/codex/rules/mainframe.rules`, installed at `${CODEX_HOME:-~/.codex}/rules/mainframe.rules`; unrepresentable rules are omitted and reported.
 - Antigravity 2.x target: no permission projection. The adapter installs shared tool gates but does not mutate the desktop application's user-owned permission settings.
+- ZCode Desktop target: no default permission-mode projection. The adapter owns only its exact hook registrations in `cli/config.json`; the user's execution mode remains user-owned.
 - Claude Code runtime: `~/.claude/settings.json` (symlink to the hub file).
 - In any project: `<repo>/.claude/settings.json` (project-scope) and `<repo>/.claude/settings.local.json` (gitignored, local).
 - Run `python3 tools/render_core.py --write` for the Claude projection; the OpenCode and Codex builders run during `install.sh --opencode` and `install.sh --codex`. `install.sh --antigravity-2` leaves this layer untouched.

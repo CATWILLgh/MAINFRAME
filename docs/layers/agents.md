@@ -1,9 +1,9 @@
 # Layer: Agents (sub-agents)
 
-> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and native builders populate `dist/<tool>/`. Do not hand-edit generated outputs.
 
 
-> Isolated subagents with their own context. Neutral capability contracts in `core/agents/` project into native Claude/OpenCode/Codex agents and Antigravity delegation skills.
+> Isolated subagents with their own context. Neutral capability contracts in `core/agents/` project into native Claude/OpenCode/Codex/ZCode agents and Antigravity delegation skills.
 
 > Last updated: 2026-07-15 (Antigravity dynamic-subagent projection). Prior: 2026-05-29 (research + launch discipline).
 
@@ -16,7 +16,8 @@
 - OpenCode target: `dist/opencode/agents/<name>.md`, projected from the contracts by `adapters/opencode/build_opencode.py`.
 - Codex target: `dist/codex/agents/<name>.toml`, projected by `adapters/codex/build_codex.py`.
 - Antigravity target: generated skills describe a `define_subagent` contract followed by `invoke_subagent`; the public desktop API has no persistent file-agent format.
-- Runtime delivery: Claude agents ship inside the plugin; OpenCode and Codex agents are linked item-by-item; Antigravity delegation skills ship inside its global plugin.
+- ZCode target: generated native Markdown agents use only verified fields and tool names; restricted method bodies are embedded because ZCode has no private skill discovery root.
+- Runtime delivery: Claude agents ship inside the plugin; OpenCode, Codex, and ZCode agents are installed item-by-item; Antigravity delegation skills ship inside its global plugin.
 - §1 documents Claude Code's invocation and frontmatter semantics. Other runtimes use explicit projections rather than pretending unsupported model or effort controls are equivalent.
 
 ---

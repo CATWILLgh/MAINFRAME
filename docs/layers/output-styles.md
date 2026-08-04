@@ -1,6 +1,6 @@
 # Layer: Output styles
 
-> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and native builders populate `dist/<tool>/`. Do not hand-edit generated outputs.
 
 
 > Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `adapters/claude-code/files/output-styles/<name>.md`, rendered to `dist/claude-code/output-styles/<name>.md`.
@@ -15,7 +15,7 @@
 - Rendered target: `dist/claude-code/output-styles/<name>.md`.
 - On the machine: `~/.claude/output-styles/<name>.md` (symlinked via `install.sh`).
 - Activation: via `/config` (selecting the active style) or `outputStyle: "<name>"` in `settings.json`.
-- Scope: Claude Code only. No OpenCode, Codex, or Antigravity output-style source, render mapping, or installer target exists.
+- Scope: Claude Code only. No OpenCode, Codex, ZCode, or Antigravity output-style source, render mapping, or installer target exists.
 
 ---
 

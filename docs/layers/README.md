@@ -1,6 +1,6 @@
 # MAINFRAME Hub Layers
 
-> **Architecture note (four-tool hub, 2026-07-16):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and each builder produces a closed runtime bundle. Runtime ownership and delivery independence are defined in [`docs/installer-strategy.md`](../installer-strategy.md). Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and each builder produces a closed runtime bundle. Runtime ownership and delivery independence are defined in [`docs/installer-strategy.md`](../installer-strategy.md). Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
 
 
 > Canonical list of hub layers and a navigator to their specifications.
@@ -22,13 +22,13 @@ A layer = a type of artifact the hub delivers to a target runtime, applied acros
 
 | # | Layer | Authored source | Delivery outputs | Spec |
 |---|---|---|---|---|
-| 1 | **Umbrella instructions** | `core/instructions/` + `adapters/<tool>/instructions/` | Claude `CLAUDE.md`, OpenCode/Codex `AGENTS.md`, Antigravity plugin rules | [claude-md.md](claude-md.md) |
+| 1 | **Umbrella instructions** | `core/instructions/` + `adapters/<tool>/instructions/` | Claude `CLAUDE.md`, OpenCode/Codex/ZCode `AGENTS.md`, Antigravity plugin rules | [claude-md.md](claude-md.md) |
 | 2 | **Rules** (path-scoped) *(planned, empty)* | Direct exception: `dist/claude-code/rules/<name>.md` | Claude Code only: `~/.claude/rules/<name>.md` | [rules.md](rules.md) |
-| 3 | **Skills** | `core/skills/<name>/` | Runtime-owned Claude/OpenCode/Antigravity copies; native Codex projection | [skills.md](skills.md) |
-| 4 | **Hooks / gates** | `core/gates/` + tool wiring under `adapters/<tool>/` | Claude/Antigravity plugin hooks; OpenCode plugins; Codex `hooks.json` + launcher | [hooks.md](hooks.md) |
-| 5 | **Permissions** | `core/permissions/rules.json` | Claude `settings.json`; OpenCode `opencode.json` merge; Codex `mainframe.rules` | [permissions.md](permissions.md) |
+| 3 | **Skills** | `core/skills/<name>/` | Runtime-owned Claude/OpenCode/Antigravity copies; native Codex/ZCode projections | [skills.md](skills.md) |
+| 4 | **Hooks / gates** | `core/gates/` + tool wiring under `adapters/<tool>/` | Claude/Antigravity plugin hooks; OpenCode plugins; Codex hooks; ZCode process bridge | [hooks.md](hooks.md) |
+| 5 | **Permissions** | `core/permissions/rules.json` | Claude `settings.json`; OpenCode `opencode.json` merge; Codex `mainframe.rules`; ZCode permission mode remains user-owned | [permissions.md](permissions.md) |
 | 6 | **Settings** (other fields) | User-owned fields in `dist/claude-code/settings.json` | Claude Code only: `~/.claude/settings.json` | [settings.md](settings.md) |
-| 7 | **Agents** | `core/agents/<name>.md` | Claude/OpenCode native agents, Codex TOML, Antigravity delegation skills | [agents.md](agents.md) |
+| 7 | **Agents** | `core/agents/<name>.md` | Claude/OpenCode/ZCode native agents, Codex TOML, Antigravity delegation skills | [agents.md](agents.md) |
 | 8 | **Commands** *(reserved, empty)* | No source mapping yet | No current output or runtime delivery | [commands.md](commands.md) |
 | 9 | **Output styles** | `adapters/claude-code/files/output-styles/<name>.md` | Claude Code only: `dist/claude-code/output-styles/<name>.md` | [output-styles.md](output-styles.md) |
 | 10 | **Portable memory** | `core/memory/` + runtime wiring | Claude native backend; separate Antigravity/OpenCode emulated stores | [memory.md](memory.md) |

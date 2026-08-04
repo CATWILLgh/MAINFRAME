@@ -1,6 +1,6 @@
 # Layer: Skills
 
-> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and native builders populate `dist/<tool>/`. Do not hand-edit generated outputs.
 
 
 > Optionally activated instruction sets authored once in `core/skills/` and delivered through each runtime's skill mechanism.
@@ -16,6 +16,7 @@
 - OpenCode: `install.sh --opencode` links the Claude-rendered skill directories item-by-item into `~/.config/opencode/skills/`; there is no separate OpenCode skill render.
 - Codex: `adapters/codex/build_codex.py` transforms each projectable skill into `dist/codex/skills/<name>/`, including Codex-native metadata, then `install.sh --codex` links it into `${CODEX_HOME:-~/.codex}/skills/`.
 - Antigravity 2.x: `adapters/antigravity-2/build_antigravity.py` projects supported skill metadata and copies referenced resources into the global desktop plugin.
+- ZCode Desktop: `adapters/zcode-desktop/build_zcode.py` projects only supported metadata, excludes restricted methods from discovery, embeds their bodies in intended agents, and copies only auxiliary resources outside `skills/`.
 - Runtime activation semantics differ; §1 below documents Claude Code's canonical behavior.
 
 ---

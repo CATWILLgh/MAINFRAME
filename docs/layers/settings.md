@@ -1,6 +1,6 @@
 # Layer: Settings (other fields)
 
-> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and native builders populate `dist/<tool>/`. Do not hand-edit generated outputs.
 
 
 > User-owned Claude Code configuration outside the rendered permission lists. Hook registration has moved to the `mainframe` plugin and is not stored in this file.
@@ -14,7 +14,7 @@
 - In the hub: `dist/claude-code/settings.json` — a hybrid file containing rendered permission lists and directly maintained user settings.
 - On the machine: `~/.claude/settings.json` (symlink of the whole file).
 - Ownership: `core/permissions/rules.json` owns only `permissions.allow`, `permissions.deny`, and `permissions.ask`. Edit every other field directly in `dist/claude-code/settings.json`; `render_core.py` preserves it.
-- Scope: this general-settings layer is Claude Code only. OpenCode and Codex receive separate permission projections, not copies of these user settings; Antigravity settings remain user-owned.
+- Scope: this general-settings layer is Claude Code only. OpenCode and Codex receive separate permission projections, not copies of these user settings; ZCode and Antigravity settings remain user-owned except for narrowly claimed adapter entries.
 - Activation: a single symlink; Claude Code picks up most edits through its file watcher without a restart.
 
 ---

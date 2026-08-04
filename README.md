@@ -18,7 +18,7 @@
 
 <img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
 
-A machine-wide baseline of operating rules, focused sub-agents, and small automatic checks for Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application.
+A machine-wide baseline of operating rules, focused sub-agents, and small automatic checks for Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application.
 
 It's shaped for long **auto-mode** runs: Claude and I plan a larger feature up front, then it executes unattended for hours or sometimes days. Every rule, hook, and permission tier is built to hold quality when no one is watching each step and a missed check can become a bug nobody catches until later.
 
@@ -71,12 +71,12 @@ It looks like a folder of Markdown files — some skills, a few agents — but s
 
 In plain words — what each piece is for:
 
-- **Umbrella instructions** — one shared set of working rules, rendered as `CLAUDE.md` for Claude Code, `AGENTS.md` for OpenCode and Codex, and individual plugin rules for Antigravity 2.x. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, and no leftover suppression markers. The tool-specific wrappers stay thin so the shared rules remain the owner.
+- **Umbrella instructions** — one shared set of working rules, rendered as `CLAUDE.md` for Claude Code, `AGENTS.md` for OpenCode, Codex, and ZCode Desktop, and individual plugin rules for Antigravity 2.x. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, and no leftover suppression markers. The tool-specific wrappers stay thin so the shared rules remain the owner.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like "audit this code carefully", "format this commit message in Conventional Commits style", "scan this diff for forgotten secrets" — instead of one giant document trying to cover everything.
 - **Agents (sub-agents)** — neutral specialist contracts with capability and reasoning tiers that each adapter translates into its runtime's agent controls. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking.
 - **Hooks** — shared automatic checks with runtime-specific wiring. They catch leftover suppression markers, warn on risky shell patterns, scan diffs for security issues, and gate unresolved problems where the runtime supports it. Every adapter packages the neutral detectors it needs; no runtime executes another runtime's installed copy.
 - **Rules** — a reserved Claude Code layer for small path-scoped guidance files that load on demand when Claude reads a matching path. It is currently empty.
-- **Permissions** — one neutral policy source projected where the runtime exposes a compatible control surface. Claude Code receives the full deny / ask / allow lists; OpenCode and Codex receive conservative, explicitly limited projections. Antigravity keeps user-owned permissions and receives only the shared tool gates described below.
+- **Permissions** — one neutral policy source projected where the runtime exposes a compatible control surface. Claude Code receives the full deny / ask / allow lists; OpenCode and Codex receive conservative, explicitly limited projections. ZCode and Antigravity keep user-owned permission modes and receive only the shared tool gates their native events can enforce.
 - **Project memory** — Claude Code keeps its native auto-memory. Antigravity 2.x and OpenCode receive separate emulated stores with the same bounded `MEMORY.md` index, topic files, worktree sharing, and selective write reminder. Memory is injected as untrusted reference data and cannot override instructions.
 
 <p align="center">
@@ -85,7 +85,7 @@ In plain words — what each piece is for:
 
 ## Inventory — what's actually inside
 
-Below are the shared **agents**, **hooks**, and **skills** in the Claude Code target. OpenCode, Codex, and Antigravity 2.x receive the projections summarized in [Architecture](#architecture).
+Below are the shared **agents**, **hooks**, and **skills** in the Claude Code target. OpenCode, Codex, ZCode Desktop, and Antigravity 2.x receive the projections summarized in [Architecture](#architecture).
 
 ### Agents — 7 specialist sub-agents
 
@@ -204,7 +204,7 @@ graph LR
     G -->|./install.sh --antigravity-2| ag[~/.gemini/config/plugins/mainframe]
 ```
 
-The hub is tool-agnostic at its core: shared artifacts live in `core/`, and thin tool refinements live in `adapters/{claude-code,opencode,codex,antigravity-2}/`. `python3 tools/render_core.py --write` renders the Claude Code artifacts and composes the umbrella instructions. The installer runs the OpenCode, Codex, and Antigravity builders for their native projections.
+The hub is tool-agnostic at its core: shared artifacts live in `core/`, and thin tool refinements live in `adapters/{claude-code,opencode,codex,zcode-desktop,antigravity-2}/`. `python3 tools/render_core.py --write` renders the Claude Code artifacts and composes the umbrella instructions. Native builders produce the remaining projections and closed release bundles.
 
 Neutral source does not mean shared runtime state. Each adapter must produce a
 closed bundle that runs without another runtime being installed, and each
@@ -221,7 +221,7 @@ The Claude Code target ships in two channels:
 - **A plugin** (`dist/claude-code/plugin/`) carries skills, agents, and hooks. After install, Claude Code auto-loads it as the `mainframe` plugin via the skills-dir mechanism, and everything inside becomes available with the `mainframe:` namespace prefix (e.g. `/mainframe:code-audit`, `subagent_type: "mainframe:python-backend-engineer"`). That namespace is the visible mark that something is coming from this hub, not from your local project setup or another plugin.
 - **Single-file and per-item symlinks** (`dist/claude-code/`) carry the umbrella `CLAUDE.md`, the hybrid `settings.json`, output styles, and a small credentials helper. The installer is also prepared to link direct-authored path-scoped rules if that currently empty layer gains files.
 
-OpenCode, Codex, and Antigravity each receive an adapter-owned closed bundle
+OpenCode, Codex, ZCode Desktop, and Antigravity each receive an adapter-owned closed bundle
 built from neutral `core/` sources plus their runtime-specific wiring. Generated
 projections are gitignored build output; committed goldens test representative
 transformations.
@@ -236,11 +236,11 @@ See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
 **Required:**
 
-- **The target runtime** — Claude Code v2.1+, OpenCode, Codex, or the standalone Antigravity 2.x desktop application. The new release architecture treats each runtime as independently installable; the compatibility `install.sh` path still adds alternate targets to its Claude Code baseline.
+- **The target runtime** — Claude Code v2.1+, OpenCode, Codex, ZCode Desktop 3.6.5 with bundled CLI 0.16.1, or the standalone Antigravity 2.x desktop application. The release architecture treats each runtime as independently installable; the compatibility `install.sh` path still adds its supported alternate targets to the Claude Code baseline.
 - **git** — to clone the repo, and for the hooks that diff your working tree.
 - **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
 - **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the linters below, but need no Python packages of their own). Without Python 3 they silently no-op (the installer warns; it does not fail).
-- **The repository `.venv` for alternate targets** — OpenCode, Codex, and Antigravity projections require PyYAML. Bootstrap once with `python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml`.
+- **The repository `.venv` for alternate targets** — OpenCode, Codex, ZCode, and Antigravity projections require PyYAML. Bootstrap once with `python3 -m venv .venv && .venv/bin/pip install tiktoken pyyaml`.
 
 **Recommended — each unlocks a group of checks; anything missing just stays silent, and `install.sh` prints an OS-specific install hint:**
 
@@ -351,6 +351,7 @@ What I have actually verified this hub on:
 - **Claude Code IDE extension** — also in active use.
 - **OpenCode** — supported through the `--opencode` projection and installer path.
 - **OpenAI Codex** — supported through the `--codex` projection and installer path.
+- **ZCode Desktop** — local adapter contract checked against Desktop 3.6.5.4145 and bundled CLI 0.16.1; repository implementation uses the MAINFRAME release lifecycle, while live `~/.zcode` activation remains a separate acceptance gate.
 - **Antigravity 2.x desktop** — adapter contract checked against the installed 2.2.1 application shape and official hooks/plugins documentation; global activation still requires `--antigravity-2` plus an app restart.
 - **Main thread model**: Claude **Opus 4.7+** at `high` or `xhigh` effort (currently **Opus 4.8** day to day). This is what I run every day and what all the discipline is tuned against.
 - **Sub-agents** — each one calibrated separately via a small empirical tournament so the right model + effort sits inside the agent file itself. You don't have to think about it at call time.

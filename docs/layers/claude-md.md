@@ -1,9 +1,9 @@
 # Layer: Umbrella operating instructions (`CLAUDE.md` / `AGENTS.md`)
 
-> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and native builders populate `dist/<tool>/`. Do not hand-edit generated outputs.
 
 
-> Shared global instructions delivered to every session across all projects, with thin runtime-specific wrappers for Claude Code, OpenCode, Codex, and Antigravity 2.x.
+> Shared global instructions delivered to every session across all projects, with thin runtime-specific wrappers for Claude Code, OpenCode, Codex, ZCode Desktop, and Antigravity 2.x.
 
 > Last updated: 2026-07-15 (Antigravity plugin-rule projection).
 
@@ -14,7 +14,7 @@
 - Shared source: ordered fragments in `core/instructions/`.
 - Tool-specific source: instruction fragments under each `adapters/<tool>/instructions/` directory.
 - Rendered targets: `dist/claude-code/CLAUDE.md` (159 lines), `dist/opencode/AGENTS.md` (149 lines), and `dist/codex/AGENTS.md` (149 lines), verified 2026-07-14 with `wc -l`.
-- Runtime delivery: `~/.claude/CLAUDE.md`, `~/.config/opencode/AGENTS.md`, `${CODEX_HOME:-~/.codex}/AGENTS.md`, and separate always-on rule files inside the Antigravity global plugin.
+- Runtime delivery: `~/.claude/CLAUDE.md`, `~/.config/opencode/AGENTS.md`, `${CODEX_HOME:-~/.codex}/AGENTS.md`, `~/.zcode/AGENTS.md`, and separate always-on rule files inside the Antigravity global plugin.
 - `python3 tools/render_core.py --write` composes the three umbrella files. The Antigravity builder projects each shared fragment as an individual rule so one oversized file cannot exceed that runtime's rule budget.
 
 ---

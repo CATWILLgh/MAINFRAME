@@ -11,7 +11,7 @@ The ordered completion gates and current delivery status are maintained in
 ## Source sharing is not runtime sharing
 
 `core/` is the neutral source of truth for behavior shared by Claude Code,
-OpenCode, Codex, and Antigravity 2.x. Each adapter may transform that source
+OpenCode, Codex, ZCode Desktop, and Antigravity 2.x. Each adapter may transform that source
 for its runtime, but the resulting runtime bundle is closed: it contains every
 MAINFRAME artifact that runtime needs to operate.
 
@@ -37,6 +37,7 @@ The release manifest enforces the first boundary for every `install_unit`,
 | `claude-code` | `claude-config` |
 | `codex` | `codex-config` |
 | `opencode` | `opencode-config` |
+| `zcode-desktop` | `zcode-config` |
 | `antigravity-2` | `antigravity-config`, `antigravity-data` |
 | `credential-tools` | `user-bin`, `credentials-config`, `home` |
 | `mainframe-cli` | `user-bin` |
@@ -79,6 +80,16 @@ state never adopts matching user entries, changed or deleted managed entries
 become permanent tombstones, and unrelated entries remain user-owned. The
 observer also preserves permission-action and nested pattern order because
 OpenCode applies the last matching rule.
+
+ZCode's `cli/config.json` uses bundle schema version 7 JSON claims. An exact
+scalar claim captures whether a predecessor existed and its value. An array
+claim owns only the single entry selected by its adapter-defined identity.
+Unknown fields and foreign entry order are preserved. User drift relinquishes
+the claim without overwrite. Deselection restores or removes only unchanged
+owned values and removes the adapter-local registry when its final claim is
+gone. Retired claim identifiers are reconciled from strict stored metadata so
+an adapter update cannot strand an old hook entry or overwrite drift. Root
+pointers and mutation paths through arrays are rejected before apply.
 
 Configuration planning uses the same immutable inspection as observation and
 does not read the host again. Configuration and MCP observers share one
@@ -186,7 +197,7 @@ TUI retains the reviewed plan opaquely but still exposes no Apply capability.
 The configuration boundary expresses removal through both a named `absent`
 intent and a non-zero `remove_exact_document` mutation disposition. That
 destructive disposition is valid only for `mainframe/diagnostics.json` under
-the four adapter-owned roots. Removal moves only the exact observed activation
+the five adapter-owned roots. Removal moves only the exact observed activation
 file into the private transaction workspace, supports rollback after an
 interrupted rename, and never touches adapter-local databases, reports, or
 other diagnostic history. Adapter deselection and complete uninstall derive
@@ -510,13 +521,19 @@ scan has shared entry, byte, and retained-result limits across both application
 directories. Unsafe or oversized metadata is never rendered. Multiple detected
 copies are accepted only when every copy uses a supported exact version; a
 supported and unsupported pair is reported as incompatible rather than guessing
-which copy the operating system will launch.
+which copy the operating system will launch. ZCode Desktop is the second
+host-qualified adapter: its bundle requires `dev.zcode.app` version `3.6.5`.
+Build `3.6.5.4145` is recorded as qualification evidence, and the separate local
+preflight checks the bundled CLI path and version `0.16.1`; the typed apply-time
+requirement does not yet enforce the build or CLI fields (`d0063933`).
+Compatibility is evaluated per selected component, so an unsupported desktop
+application does not block an unrelated adapter.
 
-The TUI enforces the requirement only for Antigravity. A compatible application
-makes the adapter selectable. A missing, unsupported, or safely unverifiable
-application removes only Antigravity from the choices and explains the fixed
-reason without exposing paths or parser errors. If an incompatible Antigravity
-adapter is already installed, filesystem and configuration planners preserve
+The TUI enforces declared host requirements for Antigravity and ZCode. A
+compatible application makes its adapter selectable. A missing, unsupported,
+or safely unverifiable application removes only that adapter from the choices
+and explains the fixed reason without exposing paths or parser errors. If an
+incompatible managed adapter is already installed, filesystem and configuration planners preserve
 its complete dependency closure without repair or removal. Explicit selection
 is rejected again by the lifecycle boundary. Claude Code, Codex, and OpenCode
 remain usable. The legacy `install.sh` path continues to accept Antigravity 2.x

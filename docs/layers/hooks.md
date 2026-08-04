@@ -1,9 +1,9 @@
 # Layer: Hooks
 
-> **Architecture note (four-tool hub, 2026-07-15):** MAINFRAME targets Claude Code, OpenCode, Codex, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and `render_core.py` plus the OpenCode/Codex/Antigravity builders populate `dist/<tool>/`. Do not hand-edit generated outputs. The path-scoped Rules layer is authored directly in `dist/claude-code/rules/`; non-permission fields in `dist/claude-code/settings.json` are also user-owned there.
+> **Architecture note (five-tool hub, 2026-08-05):** MAINFRAME targets Claude Code, OpenCode, Codex, ZCode Desktop, and the standalone Antigravity 2.x desktop application. Shared sources live in `core/`, tool-specific sources in `adapters/<tool>/`, and native builders populate `dist/<tool>/`. Do not hand-edit generated outputs.
 
 
-> Shared gate detectors with runtime-specific event wiring. Claude Code receives the reference plugin hook set; OpenCode, Codex, and Antigravity 2.x receive explicit projections.
+> Shared gate detectors with runtime-specific event wiring. Claude Code receives the reference plugin hook set; OpenCode, Codex, ZCode Desktop, and Antigravity 2.x receive explicit projections.
 
 > Last updated: 2026-07-15 (Antigravity five-event bridge and portable memory lifecycle).
 
@@ -16,6 +16,7 @@
 - OpenCode wiring source: `adapters/opencode/plugins/mainframe-gates.js`, linked directly into `~/.config/opencode/plugins/`. It ports blocking pre-tool gates plus advisory post-tool checks; the runtime cannot reproduce every Claude Code stop-gate guarantee.
 - Codex projection: `adapters/codex/build_codex.py` maps 16 selected detectors over `PreToolUse`, `PostToolUse`, and `Stop`, renders `dist/codex/hooks.json`, and copies `adapters/codex/gates/mainframe-hook.sh` to `dist/codex/mainframe-hook.sh`.
 - Antigravity projection: `adapters/antigravity-2/` translates the desktop `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, and `Stop` schemas to the neutral detector contract. It caches pre-tool arguments because the native post-tool payload omits them, and rejects CLI transcript paths.
+- ZCode projection: `adapters/zcode-desktop/` normalizes all seven native event names and registers the four events with current neutral detector mappings through a bounded process bridge. Exit code `2` preserves an intentional block; bridge failures fail open with visible diagnostics.
 - After source changes, render Claude Code and run the relevant target builder. Codex pins trust to each global user-hook definition and exposes its effective state through `hooks/list`; review new or changed definitions through `/hooks`. Antigravity hooks are self-contained in its plugin.
 
 ---
