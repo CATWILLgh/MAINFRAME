@@ -49,6 +49,7 @@ ADAPTER_INSTRUCTION_FILES = ("00-preamble.md", "90-runtime-zcode-desktop.md")
 READ_TOOLS = frozenset({"Glob", "Grep", "Read"})
 WRITE_TOOLS = frozenset({"Bash", "Edit", "Write"})
 WEB_TOOLS = frozenset({"WebFetch", "WebSearch"})
+DEFAULT_PROJECTION_PATH = Path("dist/zcode-desktop/projection")
 
 
 def _instruction_sources(root: Path) -> list[Path]:
@@ -241,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
-    out = args.out or root / "dist/zcode-desktop"
+    out = args.out or root / DEFAULT_PROJECTION_PATH
     out = out if out.is_absolute() else root / out
     try:
         files = render_projection(root)

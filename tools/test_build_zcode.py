@@ -18,6 +18,11 @@ sys.path.insert(0, str(REPO / "tools"))
 build = import_module("build_zcode")
 
 
+def test_default_projection_path_cannot_overlap_the_closed_bundle() -> None:
+    assert build.DEFAULT_PROJECTION_PATH == Path("dist/zcode-desktop/projection")
+    assert build.DEFAULT_PROJECTION_PATH != Path("dist/zcode-desktop")
+
+
 def write(path: Path, content: str | bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if isinstance(content, bytes):
