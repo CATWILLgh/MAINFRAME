@@ -2,22 +2,33 @@
 from __future__ import annotations
 
 import json
-import importlib
+import importlib.util
 import os
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import BinaryIO, TextIO
 
 
 ADAPTER_DIR = Path(__file__).resolve().parents[1]
-if str(ADAPTER_DIR) not in sys.path:
-    sys.path.insert(0, str(ADAPTER_DIR))
 GATES_DIR = Path(__file__).resolve().parent
-if str(GATES_DIR) not in sys.path:
-    sys.path.insert(0, str(GATES_DIR))
 
-hook_config = importlib.import_module("hook_config")
-runtime = importlib.import_module("mainframe_runtime")
+def _load_local_module(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load local module {path.name}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+hook_config = _load_local_module(
+    "zcode_mainframe_hook_config", ADAPTER_DIR / "hook_config.py"
+)
+runtime = _load_local_module(
+    "zcode_mainframe_hook_runtime", GATES_DIR / "mainframe_runtime.py"
+)
 CORE_EVENT_DETECTORS = hook_config.CORE_EVENT_DETECTORS
 SUPPORTED_EVENTS = hook_config.SUPPORTED_EVENTS
 BridgeInputError = runtime.BridgeInputError

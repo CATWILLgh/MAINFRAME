@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import plistlib
 import re
 import shutil
 import sys
@@ -19,15 +18,18 @@ sys.path.insert(0, str(TOOLS))
 
 from detector_projection import project_hooklib_fallbacks
 from agent_contract import parse_agent_source
-from compatibility import BUNDLE_IDENTIFIER, LEGACY_SUPPORTED_MAJOR
-from gates.mainframe_runtime import HANDLER_TIMEOUT_SECONDS
-from skill_projection import (
-    adapt_runtime_markdown,
-    adapt_skill_markdown,
-    validate_skill_projection_inventory,
-    validate_projected_skill_markdown,
-)
+from antigravity_modules import compatibility, runtime, skill_projection
+from antigravity_modules import validate_native_app
 from source_boundary import SourceBoundary, SourcePath
+
+
+HANDLER_TIMEOUT_SECONDS = runtime.HANDLER_TIMEOUT_SECONDS
+BUNDLE_IDENTIFIER = compatibility.BUNDLE_IDENTIFIER
+LEGACY_SUPPORTED_MAJOR = compatibility.LEGACY_SUPPORTED_MAJOR
+adapt_runtime_markdown = skill_projection.adapt_runtime_markdown
+adapt_skill_markdown = skill_projection.adapt_skill_markdown
+validate_skill_projection_inventory = skill_projection.validate_skill_projection_inventory
+validate_projected_skill_markdown = skill_projection.validate_projected_skill_markdown
 
 
 ADAPTER_VERSION = "0.1.0"
@@ -71,7 +73,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def _adapt_markdown(text: str) -> str:
-    return adapt_runtime_markdown(text)
+    return skill_projection.adapt_runtime_markdown(text)
 
 
 def _adapt_description(text: str) -> str:
@@ -103,7 +105,7 @@ def _hooks_manifest() -> bytes:
         handler = {
             "type": "command",
             "command": f"{PLUGIN_COMMAND} {event}",
-            "timeout": HANDLER_TIMEOUT_SECONDS[event],
+            "timeout": runtime.HANDLER_TIMEOUT_SECONDS[event],
         }
         if event in {"PreToolUse", "PostToolUse"}:
             namespace[event] = [{"matcher": "*", "hooks": [handler]}]
@@ -176,7 +178,9 @@ def _copy_skill(
             files[destination] = item.read_bytes()
             continue
         meta, body = parse_frontmatter(
-            adapt_skill_markdown(source.name, relative, item.read_text())
+            skill_projection.adapt_skill_markdown(
+                source.name, relative, item.read_text()
+            )
         )
         note = f"<!-- {GENERATED_MARKER} ({path.relative_to(source.parent.parent.parent)}). -->\n\n"
         if relative == Path("SKILL.md"):
@@ -256,7 +260,9 @@ def _delegate_skill(
         "subagent definition.\n\n"
         f"Description: {description}\n\n{method_requirement}{body.rstrip()}\n"
     )
-    validate_projected_skill_markdown(f"core/agents/{source.path.name}", rendered)
+    skill_projection.validate_projected_skill_markdown(
+        f"core/agents/{source.path.name}", rendered
+    )
     return f"delegate-{name}", rendered.encode()
 
 
@@ -272,7 +278,7 @@ def _collect_skills_and_agents(root: Path, files: dict[Path, bytes]) -> None:
         }
         for skill in skill_directories
     }
-    validate_skill_projection_inventory(skill_texts)
+    skill_projection.validate_skill_projection_inventory(skill_texts)
     for skill in skill_directories:
         _copy_skill(root, skill, Path("skills") / skill.name, files)
     agents = root / "core" / "agents"
@@ -343,28 +349,6 @@ def _is_current(files: dict[Path, bytes], out: Path) -> bool:
         if path.is_file()
     }
     return existing == files
-
-
-def validate_native_app(app: Path) -> str:
-    plist_path = app / "Contents" / "Info.plist"
-    try:
-        with plist_path.open("rb") as handle:
-            metadata = plistlib.load(handle)
-            version = str(metadata["CFBundleShortVersionString"])
-            identifier = str(metadata["CFBundleIdentifier"])
-    except (OSError, KeyError, plistlib.InvalidFileException) as error:
-        raise ValueError(f"cannot read Antigravity app metadata: {plist_path}") from error
-    if identifier != BUNDLE_IDENTIFIER:
-        raise ValueError(
-            f"Antigravity bundle identifier {BUNDLE_IDENTIFIER} is required; "
-            f"found {identifier!r} at {app}"
-        )
-    if version.split(".", 1)[0] != LEGACY_SUPPORTED_MAJOR:
-        raise ValueError(
-            f"Antigravity major version {LEGACY_SUPPORTED_MAJOR} is required; "
-            f"found {version} at {app}"
-        )
-    return version
 
 
 def main(argv: list[str] | None = None) -> int:

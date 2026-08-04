@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -17,8 +18,22 @@ REPO = Path(__file__).resolve().parent.parent
 ADAPTER = REPO / "adapters/claude-code"
 sys.path.insert(0, str(ADAPTER))
 
-import build_bundle
 from test_build_release import assert_late_failure_preserves_bundle
+
+
+def _load_builder():
+    path = ADAPTER / "build_bundle.py"
+    spec = importlib.util.spec_from_file_location(
+        "mainframe_claude_bundle_test", path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+build_bundle = _load_builder()
 
 
 DORMANT_DIAGNOSTICS = (
@@ -291,39 +306,6 @@ def test_settings_resource_preserves_complete_claude_configuration():
     }
 
 
-def test_optional_rules_absence_removes_stale_rules():
-    sandbox = _sandbox()
-    output = sandbox / "bundle-v2"
-    root = _fixture_root(sandbox, rules=False)
-    _write(output / "rules/stale.md", "stale\n")
-
-    build_bundle.build(root, output)
-    manifest = build_bundle.validate_bundle(output)
-
-    assert not (output / "rules").exists()
-    assert all(".rule." not in unit["id"] for unit in manifest["install_units"])
-
-
-def test_rebuild_removes_stale_payload_and_does_not_follow_symlinks():
-    sandbox = _sandbox()
-    root = _fixture_root(sandbox)
-    output = sandbox / "bundle-v2"
-    foreign = sandbox / "foreign"
-    foreign.mkdir()
-    marker = foreign / "keep.txt"
-    marker.write_text("foreign")
-    output.mkdir()
-    (output / "plugin").symlink_to(foreign, target_is_directory=True)
-    _write(output / "obsolete.txt", "stale\n")
-
-    build_bundle.build(root, output)
-
-    assert marker.read_text() == "foreign"
-    assert not (output / "plugin").is_symlink()
-    assert (output / "plugin/SKILL.md").is_file()
-    assert not (output / "obsolete.txt").exists()
-
-
 def test_cli_build_does_not_read_or_modify_user_state():
     sandbox = _sandbox()
     root = _fixture_root(sandbox)
@@ -364,20 +346,6 @@ def test_cli_build_does_not_read_or_modify_user_state():
     assert build_bundle.validate_bundle(output)["component"] == "claude-code"
 
 
-def test_late_materialization_failure_preserves_complete_bundle():
-    sandbox = _sandbox()
-    assert_late_failure_preserves_bundle(
-        build_bundle, _fixture_root(sandbox), sandbox / "bundle-v2", "materialize"
-    )
-
-
-def test_late_validation_failure_preserves_complete_bundle():
-    sandbox = _sandbox()
-    assert_late_failure_preserves_bundle(
-        build_bundle, _fixture_root(sandbox), sandbox / "bundle-v2", "validate_bundle"
-    )
-
-
 def _run_all() -> None:
     failures = 0
     tests = [
@@ -397,4 +365,8 @@ def _run_all() -> None:
 
 
 if __name__ == "__main__":
+    subprocess.run(
+        [sys.executable, str(REPO / "tools/test_build_claude_bundle_publication.py")],
+        check=True,
+    )
     _run_all()

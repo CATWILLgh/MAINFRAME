@@ -18,8 +18,12 @@ from release_contract import validate_bundle, write_bundle_manifest
 from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 
-import build_antigravity
-import compatibility
+from antigravity_modules import compatibility, load_adapter_module
+
+
+build_antigravity = load_adapter_module(
+    "mainframe_antigravity_projection", "build_antigravity.py"
+)
 
 
 CONFIG_ROOT_TOKEN = "{{mainframe.config_root}}"
