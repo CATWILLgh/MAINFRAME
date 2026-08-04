@@ -230,6 +230,16 @@ func ownershipRegistryTargets(
 					target:     target,
 				})
 			}
+			if resource.JSONClaimOwnership.Present {
+				target, err := location(resource.JSONClaimOwnership.Value.Registry.Target)
+				if err != nil {
+					return nil, err
+				}
+				targets = append(targets, ownershipRegistryTarget{
+					resourceID: resource.ID,
+					target:     target,
+				})
+			}
 		}
 		for _, projection := range manifest.MCPProjections {
 			target, err := location(projection.Registry.Target)

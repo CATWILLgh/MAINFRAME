@@ -119,6 +119,8 @@ func (inspection Inspection) PlanWithPreservation(
 			)
 		} else if resource.JSONMapOwnership != nil {
 			planOwnedMap(&plan, resource, observation, inspection.ownedMaps, selected)
+		} else if resource.JSONClaimOwnership != nil {
+			planJSONClaims(&plan, resource, observation, inspection.jsonClaims, selected)
 		} else {
 			planGeneric(&plan, resource, observation, selected[resource.ComponentID])
 		}

@@ -109,6 +109,7 @@ func resolveRecoveryLayout(environment Environment) (RecoveryLayout, error) {
 			domain.RootOpenCodeConfig:    joinUnvalidated(config, "opencode"),
 			domain.RootAntigravityConfig: filepath.Join(home, ".gemini", "config"),
 			domain.RootAntigravityData:   filepath.Join(home, ".gemini", "antigravity"),
+			domain.RootZCodeConfig:       filepath.Join(home, ".zcode"),
 			domain.RootCredentialsConfig: joinUnvalidated(config, "credentials"),
 			domain.RootUserBin:           filepath.Join(home, ".local", "bin"),
 		},

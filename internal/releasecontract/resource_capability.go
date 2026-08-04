@@ -10,7 +10,24 @@ func (resource Resource) SupportsApply() bool {
 	if resource.Strategy == StrategyExactJSONDocument {
 		return resource.supportsExactJSONDocumentApply()
 	}
+	if resource.JSONClaimOwnership != nil {
+		return resource.supportsJSONClaimApply()
+	}
 	return resource.supportsOpenCodeMapApply()
+}
+
+func (resource Resource) supportsJSONClaimApply() bool {
+	ownership := resource.JSONClaimOwnership
+	return resource.Apply == SupportSupported &&
+		resource.ComponentID == domain.ComponentZCodeDesktop &&
+		resource.Strategy == StrategyJSONKeyMerge &&
+		resource.Observation == SupportSupported &&
+		resource.Target.Root == domain.RootZCodeConfig &&
+		len(resource.OwnedJSONFields) == 0 &&
+		resource.JSONMapOwnership == nil && ownership != nil &&
+		ownership.RegistryTarget.Root == domain.RootZCodeConfig &&
+		ownership.RegistrySchemaVersion == 1 &&
+		len(ownership.Claims) > 0 && resource.ExternalState == nil
 }
 
 func (resource Resource) supportsManagedSeedApply() bool {
@@ -33,6 +50,7 @@ func (resource Resource) supportsManagedSeedApply() bool {
 		len(resource.LegacySourceSuffixes) == 0 &&
 		len(resource.OwnedJSONFields) == 0 &&
 		resource.JSONMapOwnership == nil &&
+		resource.JSONClaimOwnership == nil &&
 		resource.ExternalState == nil
 }
 
@@ -50,6 +68,7 @@ func (resource Resource) SupportsPreparation() bool {
 		domain.ComponentCodex:        domain.RootCodexConfig,
 		domain.ComponentOpenCode:     domain.RootOpenCodeConfig,
 		domain.ComponentAntigravity2: domain.RootAntigravityData,
+		domain.ComponentZCodeDesktop: domain.RootZCodeConfig,
 	}
 	root, supported := expectedRoots[resource.ComponentID]
 	return supported &&
@@ -61,6 +80,7 @@ func (resource Resource) SupportsPreparation() bool {
 		len(resource.LegacySourceSuffixes) == 0 &&
 		len(resource.OwnedJSONFields) == 0 &&
 		resource.JSONMapOwnership == nil &&
+		resource.JSONClaimOwnership == nil &&
 		resource.ExternalState == nil
 }
 
@@ -86,6 +106,7 @@ func (resource Resource) supportsExactJSONDocumentApply() bool {
 		domain.ComponentCodex:        domain.RootCodexConfig,
 		domain.ComponentOpenCode:     domain.RootOpenCodeConfig,
 		domain.ComponentAntigravity2: domain.RootAntigravityData,
+		domain.ComponentZCodeDesktop: domain.RootZCodeConfig,
 	}
 	root, supported := expectedRoots[resource.ComponentID]
 	canonical, exemplarErr := canonicalDiagnosticsDocument(

@@ -19,6 +19,7 @@ from release_contract_io import (
     require_regular_file,
 )
 from release_json import (
+    validate_json_claim_ownership,
     validate_exact_json_document_source,
     validate_owned_json_source,
     validate_shell_source,
@@ -65,6 +66,7 @@ def _validate_resource(
     strategy = resource["strategy"]
     _validate_strategy(schema_version, resource, identifier)
     _validate_file_ownership(schema_version, resource, identifier)
+    _validate_json_ownership(schema_version, resource, identifier)
     has_external_state = "external_state" in resource
     has_source = "source" in resource
     if ((strategy in fields.SOURCE_STRATEGIES) or has_external_state) != has_source:
@@ -135,6 +137,28 @@ def _locations_overlap(left: tuple[str, str], right: tuple[str, str]) -> bool:
         left[1] == right[1]
         or left[1].startswith(right[1] + "/")
         or right[1].startswith(left[1] + "/")
+    )
+
+
+def _validate_json_ownership(
+    schema_version: int,
+    resource: dict[str, Any],
+    identifier: str,
+) -> None:
+    ownership = resource.get("json_ownership")
+    if ownership is None:
+        return
+    if schema_version < fields.JSON_CLAIM_OWNERSHIP_SCHEMA_VERSION:
+        raise ValueError(f"resource {identifier!r} JSON ownership requires schema version 7")
+    if resource["strategy"] != "json-key-merge" or resource["observation"] != "supported":
+        raise ValueError(f"resource {identifier!r} has invalid JSON ownership")
+    if "ownership" in resource or "owned_json_pointers" in resource:
+        raise ValueError(f"resource {identifier!r} has conflicting JSON ownership")
+    validate_json_claim_ownership(
+        ownership,
+        resource["target"],
+        identifier,
+        parse_location=location,
     )
 
 

@@ -266,7 +266,8 @@ func buildReviewedPlan(
 		executable:  cloneExecutable(executable),
 		credentials: cloneCredentialChanges(credentialChanges),
 		applicable: credentialOnlyApplicable ||
-			context7Applicable(request, semantic, executable),
+			context7Applicable(request, semantic, executable) ||
+			zcodeLifecycleApplicable(request, semantic, executable),
 		credentialOnlyApplicable: credentialOnlyApplicable,
 		reviewed:                 true,
 	}, nil

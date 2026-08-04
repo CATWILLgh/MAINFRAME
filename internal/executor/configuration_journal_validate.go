@@ -99,6 +99,11 @@ func validateJournalConfigurationMutation(
 			!configuration.IsManagedSecretTarget(mutation.Target) {
 			return fmt.Errorf("invalid managed secret removal")
 		}
+	case ConfigurationRemoveJSONClaimFile:
+		if mutation.After.Exists ||
+			!configuration.IsJSONClaimRemovalTarget(mutation.Target) {
+			return fmt.Errorf("invalid JSON claim file removal")
+		}
 	default:
 		return fmt.Errorf("invalid configuration mutation disposition")
 	}

@@ -149,6 +149,10 @@ def _build_staged(root: Path, staging: Path, release_id: str) -> None:
             "mainframe_opencode_bundle",
             root / "adapters/opencode/build_bundle.py",
         ),
+        "zcode-desktop": _load_builder(
+            "mainframe_zcode_bundle",
+            root / "adapters/zcode-desktop/build_bundle.py",
+        ),
     }
     manifests = []
     for component, builder in builders.items():

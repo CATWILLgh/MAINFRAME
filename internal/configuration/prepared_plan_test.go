@@ -131,6 +131,27 @@ func TestNewPreparedPlanRestrictsManagedSecretRemovalToOpenCodeContext7(t *testi
 	}
 }
 
+func TestNewPreparedPlanRestrictsJSONClaimRemovalToZCodeOwnedFiles(t *testing.T) {
+	valid := preparedTransition("zcode.hooks", "cli/config.json", 29)
+	valid.Mutations[0].Disposition = configuration.MutationRemoveJSONClaimFile
+	valid.Mutations[0].Target.Root = domain.RootZCodeConfig
+	valid.Mutations[0].After = configuration.AfterImage{}
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{valid},
+	); err != nil {
+		t.Fatalf("NewPreparedPlan() rejected JSON claim removal: %v", err)
+	}
+	foreign := preparedTransition("zcode.hooks", "user.json", 30)
+	foreign.Mutations[0].Disposition = configuration.MutationRemoveJSONClaimFile
+	foreign.Mutations[0].Target.Root = domain.RootZCodeConfig
+	foreign.Mutations[0].After = configuration.AfterImage{}
+	if _, err := configuration.NewPreparedPlan(
+		[]configuration.Transition{foreign},
+	); err == nil {
+		t.Fatal("NewPreparedPlan() accepted broad JSON claim removal")
+	}
+}
+
 func TestCombinePreparedPlansRevalidatesTheCombinedBoundary(t *testing.T) {
 	first, err := configuration.NewPreparedPlan([]configuration.Transition{
 		preparedTransition("first", "first.json", 31),

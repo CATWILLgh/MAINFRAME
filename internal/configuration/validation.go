@@ -30,7 +30,7 @@ func validateResource(resource releasecontract.Resource) error {
 	}
 	if resource.Observation == releasecontract.SupportUnimplemented {
 		if len(resource.OwnedJSONFields) != 0 || resource.JSONMapOwnership != nil ||
-			resource.FileOwnership != nil || resource.ExternalState != nil {
+			resource.JSONClaimOwnership != nil || resource.FileOwnership != nil || resource.ExternalState != nil {
 			return fmt.Errorf("unimplemented observation has lifecycle metadata")
 		}
 		return nil
@@ -80,6 +80,9 @@ func validateResource(resource releasecontract.Resource) error {
 }
 
 func validateJSONResource(resource releasecontract.Resource) error {
+	if resource.JSONClaimOwnership != nil {
+		return validateJSONClaimResource(resource)
+	}
 	ownership := resource.JSONMapOwnership
 	if ownership == nil {
 		return validateJSONFields(resource.OwnedJSONFields)
@@ -139,6 +142,11 @@ func validateResourceSet(resources []releasecontract.Resource) error {
 				Pointer: resource.JSONMapOwnership.MapPointer,
 			})
 		}
+		if resource.JSONClaimOwnership != nil {
+			for _, claim := range resource.JSONClaimOwnership.Claims {
+				resourceClaims = append(resourceClaims, releasecontract.JSONField{Pointer: claim.Pointer})
+			}
+		}
 		for _, field := range resourceClaims {
 			pointer, _ := jsondocument.ParsePointer(field.Pointer)
 			if len(claims[resource.Target]) >= releasecontract.MaxOwnedJSONPointers {
@@ -165,6 +173,16 @@ func validateOwnershipCompatibility(
 			left.JSONMapOwnership.RegistryTarget,
 			right,
 		); err != nil {
+			return err
+		}
+	}
+	if left.JSONClaimOwnership != nil {
+		if err := validateRegistryAgainstResource(left.JSONClaimOwnership.RegistryTarget, right); err != nil {
+			return err
+		}
+	}
+	if right.JSONClaimOwnership != nil {
+		if err := validateRegistryAgainstResource(right.JSONClaimOwnership.RegistryTarget, left); err != nil {
 			return err
 		}
 	}
@@ -212,6 +230,9 @@ func ownershipRegistries(resource releasecontract.Resource) []domain.Location {
 	}
 	if resource.FileOwnership != nil {
 		result = append(result, resource.FileOwnership.RegistryTarget)
+	}
+	if resource.JSONClaimOwnership != nil {
+		result = append(result, resource.JSONClaimOwnership.RegistryTarget)
 	}
 	return result
 }

@@ -46,6 +46,39 @@ func TestParseAcceptsCompleteContext7Profiles(t *testing.T) {
 	}
 }
 
+func TestParseAcceptsLegacyCatalogBeforeZCodeAdapter(t *testing.T) {
+	payload := strings.ReplaceAll(
+		string(validCatalogJSON()),
+		`{"adapter": "opencode", "status": "supported", "reason": ""},
+        {"adapter": "zcode-desktop", "status": "unsupported", "reason": "local-only adapter"}`,
+		`{"adapter": "opencode", "status": "supported", "reason": ""}`,
+	)
+	if strings.Contains(payload, `"adapter": "zcode-desktop"`) {
+		t.Fatal("test fixture still contains ZCode compatibility")
+	}
+	catalog, err := Parse([]byte(payload))
+	if err != nil {
+		t.Fatalf("parse legacy catalog: %v", err)
+	}
+	server, _ := catalog.Server("context7")
+	profile, _ := server.Profile("remote-keyless")
+	if support, _ := profile.Support(domain.ComponentZCodeDesktop); support != Unsupported {
+		t.Fatalf("absent ZCode compatibility = %q", support)
+	}
+}
+
+func TestParseRejectsIncompleteCurrentCompatibility(t *testing.T) {
+	payload := strings.ReplaceAll(
+		string(validCatalogJSON()),
+		`        {"adapter": "codex", "status": "supported", "reason": ""},
+`,
+		"",
+	)
+	if _, err := Parse([]byte(payload)); err == nil {
+		t.Fatal("catalog missing a current adapter was accepted")
+	}
+}
+
 func TestCatalogAccessorsDoNotExposeMutableSlices(t *testing.T) {
 	catalog, err := Parse(validCatalogJSON())
 	if err != nil {
@@ -116,7 +149,8 @@ func validCatalogJSON() []byte {
         {"adapter": "antigravity-2", "status": "supported", "reason": ""},
         {"adapter": "claude-code", "status": "supported", "reason": ""},
         {"adapter": "codex", "status": "supported", "reason": ""},
-        {"adapter": "opencode", "status": "supported", "reason": ""}
+        {"adapter": "opencode", "status": "supported", "reason": ""},
+        {"adapter": "zcode-desktop", "status": "unsupported", "reason": "local-only adapter"}
       ],
       "evidence": {"url": "https://github.com/upstash/context7#installation", "verified_on": "2026-07-17"}
     }, {
@@ -129,7 +163,8 @@ func validCatalogJSON() []byte {
         {"adapter": "antigravity-2", "status": "supported", "reason": ""},
         {"adapter": "claude-code", "status": "supported", "reason": ""},
         {"adapter": "codex", "status": "supported", "reason": ""},
-        {"adapter": "opencode", "status": "supported", "reason": ""}
+        {"adapter": "opencode", "status": "supported", "reason": ""},
+        {"adapter": "zcode-desktop", "status": "unsupported", "reason": "local-only adapter"}
       ],
       "evidence": {"url": "https://github.com/upstash/context7#installation", "verified_on": "2026-07-17"}
     }]

@@ -225,6 +225,8 @@ func diagnosticsRoot(component domain.ComponentID) domain.RootID {
 		return domain.RootCodexConfig
 	case domain.ComponentOpenCode:
 		return domain.RootOpenCodeConfig
+	case domain.ComponentZCodeDesktop:
+		return domain.RootZCodeConfig
 	default:
 		return domain.RootAntigravityData
 	}

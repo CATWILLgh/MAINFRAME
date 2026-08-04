@@ -190,6 +190,22 @@ func validateGlobalStructuredOwnership(manifests []bundleManifest) error {
 				}
 				claims[target] = append(claims[target], documentClaim{raw: raw, pointer: pointer})
 			}
+			if resource.JSONClaimOwnership.Present {
+				for _, claim := range resource.JSONClaimOwnership.Value.Claims {
+					if len(claims[target]) >= MaxOwnedJSONPointers {
+						return fmt.Errorf("resource %q: too many owned JSON pointers for target", resource.ID)
+					}
+					raw := claim.Pointer
+					pointer, err := jsondocument.ParsePointer(raw)
+					if err != nil {
+						return err
+					}
+					if err := rejectClaimOverlap(raw, pointer, claims[target]); err != nil {
+						return fmt.Errorf("resource %q: %w", resource.ID, err)
+					}
+					claims[target] = append(claims[target], documentClaim{raw: raw, pointer: pointer})
+				}
+			}
 		}
 		for _, projection := range manifest.MCPProjections {
 			target, err := location(projection.Target)

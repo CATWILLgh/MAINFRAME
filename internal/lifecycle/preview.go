@@ -27,6 +27,7 @@ var visibleTargets = []domain.ComponentID{
 	domain.ComponentClaudeCode,
 	domain.ComponentCodex,
 	domain.ComponentOpenCode,
+	domain.ComponentZCodeDesktop,
 	domain.ComponentAntigravity2,
 }
 
@@ -180,6 +181,9 @@ func (service Service) Targets() []Target {
 	}
 	targets := make([]Target, 0, len(visibleTargets))
 	for _, id := range visibleTargets {
+		if _, available := service.dependencies[id]; !available {
+			continue
+		}
 		compatibility := service.hostCompatibilityFor(id)
 		targets = append(targets, Target{
 			ID:                id,
@@ -232,6 +236,9 @@ func configurationInventory(
 func visibleDependencyClosures(model installmodel.Model) (map[domain.ComponentID][]domain.ComponentID, error) {
 	result := make(map[domain.ComponentID][]domain.ComponentID, len(visibleTargets))
 	for _, id := range visibleTargets {
+		if !model.Catalog().Knows(id) {
+			continue
+		}
 		closure, err := model.Catalog().DependencyClosure([]domain.ComponentID{id})
 		if err != nil {
 			return nil, fmt.Errorf("resolve dependencies for %q: %w", id, err)
@@ -301,6 +308,9 @@ func (service Service) preservationRoots(selected []domain.ComponentID) []domain
 	}
 	var result []domain.ComponentID
 	for _, target := range visibleTargets {
+		if _, available := service.dependencies[target]; !available {
+			continue
+		}
 		if !selectedSet[target] && observedSet[target] &&
 			!hostSelectable(service.hostCompatibilityFor(target)) {
 			result = append(result, target)

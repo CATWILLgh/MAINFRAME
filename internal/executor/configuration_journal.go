@@ -13,6 +13,7 @@ const (
 	ConfigurationPresent             ConfigurationMutationDisposition = "present"
 	ConfigurationRemoveExactDocument ConfigurationMutationDisposition = "remove_exact_document"
 	ConfigurationRemoveManagedSecret ConfigurationMutationDisposition = "remove_managed_secret"
+	ConfigurationRemoveJSONClaimFile ConfigurationMutationDisposition = "remove_json_claim_file"
 )
 
 type ConfigurationFileImage struct {

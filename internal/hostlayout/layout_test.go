@@ -36,6 +36,7 @@ func TestResolveUsesOverridesAndReturnsIndependentTargetCopies(t *testing.T) {
 		domain.RootOpenCodeConfig:    filepath.Join(config, "opencode"),
 		domain.RootAntigravityConfig: filepath.Join(home, ".gemini", "config"),
 		domain.RootAntigravityData:   filepath.Join(home, ".gemini", "antigravity"),
+		domain.RootZCodeConfig:       filepath.Join(home, ".zcode"),
 		domain.RootCredentialsConfig: filepath.Join(config, "credentials"),
 		domain.RootUserBin:           filepath.Join(home, ".local", "bin"),
 	}
@@ -89,6 +90,9 @@ func TestResolveFallsBackForMissingOrEmptyEnvironmentValues(t *testing.T) {
 	}
 	if targets[domain.RootAntigravityData] != filepath.Join(home, ".gemini", "antigravity") {
 		t.Fatalf("antigravity data = %q", targets[domain.RootAntigravityData])
+	}
+	if targets[domain.RootZCodeConfig] != filepath.Join(home, ".zcode") {
+		t.Fatalf("zcode config = %q", targets[domain.RootZCodeConfig])
 	}
 	if layout.State() != filepath.Join(home, ".local", "state", "mainframe") {
 		t.Fatalf("state = %q", layout.State())

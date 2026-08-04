@@ -18,11 +18,18 @@ sys.path.insert(0, str(REPO / "tools"))
 
 import build_release
 import release_contract
-from release_draft_assertions import assert_machine_draft_reviews
+from release_draft_assertions import (
+    _draft_request,
+    _run_apply,
+    _run_review,
+    assert_machine_draft_reviews,
+)
 from release_lifecycle_assertions import (
     assert_adapter_lifecycle_plans,
     assert_adapter_plans,
 )
+from release_layout_assertions import assert_release_layout
+from release_zcode_assertions import assert_zcode_lifecycle
 
 
 def snapshot_tree(path: Path) -> dict[str, tuple[int, bytes | str | None]]:
@@ -85,42 +92,15 @@ def assert_late_failure_preserves_bundle(
     release_contract.validate_bundle(output)
 
 
-def _assert_release_layout(output: Path) -> dict:
-    index = release_contract.validate_release(output)
-    assert index["schema_version"] == 2
-    assert index["mcp_catalog"]["path"] == "metadata/mcp-catalog.json"
-    assert [entry["component"] for entry in index["manifests"]] == [
-        "antigravity-2",
-        "claude-code",
-        "codex",
-        "credential-tools",
-        "mainframe-cli",
-        "opencode",
-    ]
-    binary = output / "bin/mainframe"
-    assert binary.is_file() and os.access(binary, os.X_OK)
-    assert (output / "bin/bundle.json").is_file()
-    assert (output / "common/credential-tools/bundle.json").is_file()
-    assert (output / "bundles/antigravity-2/bundle.json").is_file()
-    assert (output / "bundles/claude-code/bundle.json").is_file()
-    assert (output / "bundles/codex/bundle.json").is_file()
-    assert (output / "bundles/opencode/bundle.json").is_file()
-    assert (output / "metadata/mcp-catalog.json").is_file()
-    for item in output.rglob("*"):
-        if item.is_file():
-            assert item.lstat().st_mode & 0o222 == 0, (
-                f"release file is writable: {item}"
-            )
-    return index
-
-
 def _assert_component_contracts(output: Path, index: dict) -> Path:
     manifests = [
         release_contract.validate_bundle((output / entry["path"]).parent)
         for entry in index["manifests"]
     ]
     by_component = {manifest["component"]: manifest for manifest in manifests}
-    for adapter in ("antigravity-2", "claude-code", "codex", "opencode"):
+    for adapter in (
+        "antigravity-2", "claude-code", "codex", "opencode", "zcode-desktop"
+    ):
         assert by_component[adapter]["dependencies"] == [
             "credential-tools",
             "mainframe-cli",
@@ -187,6 +167,10 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
         XDG_STATE_HOME=str(home / ".local/state"),
     )
     _assert_embedded_cli_guidance(binary, sandbox, env)
+    assert_zcode_lifecycle(
+        binary, home, sandbox, env, snapshot_tree,
+        _run_review, _run_apply, _draft_request,
+    )
     assert_machine_draft_reviews(binary, home, sandbox, env, snapshot_tree)
     installed_store = home / ".config/credentials/secrets.env"
     assert stat.S_IMODE(installed_store.stat().st_mode) == 0o600
@@ -262,7 +246,19 @@ def _assert_named_secret_guidance(output: Path) -> None:
         *output.glob("bundles/*/**/skills/secrets-handling/SKILL.md"),
         *output.glob("bundles/*/**/skills/curl-requests/SKILL.md"),
     ]
-    assert len(targets) == 8
+    expected_components = {
+        "antigravity-2", "claude-code", "codex", "opencode", "zcode-desktop",
+    }
+    expected = {
+        (component, skill)
+        for component in expected_components
+        for skill in ("curl-requests", "secrets-handling")
+    }
+    actual = {
+        (target.relative_to(output).parts[1], target.parent.name)
+        for target in targets
+    }
+    assert actual == expected
     forbidden = (
         "auto-sourced from",
         "loaded into the shell environment by",
@@ -311,7 +307,7 @@ def test_build_creates_complete_indexed_release_and_executable_layout():
 
     build_release.build(REPO, output, release_id="test-release")
 
-    index = _assert_release_layout(output)
+    index = assert_release_layout(output)
     binary = _assert_component_contracts(output, index)
     _assert_named_secret_guidance(output)
     _assert_release_cli(binary, output, sandbox)

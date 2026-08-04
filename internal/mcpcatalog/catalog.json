@@ -46,6 +46,11 @@
               "adapter": "opencode",
               "status": "supported",
               "reason": ""
+            },
+            {
+              "adapter": "zcode-desktop",
+              "status": "unsupported",
+              "reason": "The local-only ZCode adapter does not configure network MCP servers."
             }
           ],
           "evidence": {
@@ -83,6 +88,11 @@
               "adapter": "opencode",
               "status": "supported",
               "reason": ""
+            },
+            {
+              "adapter": "zcode-desktop",
+              "status": "unsupported",
+              "reason": "The local-only ZCode adapter does not configure network MCP servers."
             }
           ],
           "evidence": {

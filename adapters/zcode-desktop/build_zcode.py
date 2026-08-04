@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import shutil
 import sys
@@ -16,16 +17,30 @@ TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
 from agent_contract import AgentContract, parse_agent_source
-from skill_projection import (
-    PRIVATE_METHODS_DIR,
-    UNPROJECTABLE_SKILLS,
-    adapt_runtime_text,
-    private_method_body,
-    project_private_support,
-    project_public_skill,
-    restricted_skill_names,
-    skill_contract,
-)
+
+
+def _load_local_skill_projection():
+    path = Path(__file__).with_name("skill_projection.py")
+    spec = importlib.util.spec_from_file_location(
+        "mainframe_zcode_skill_projection",
+        path,
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError(f"cannot load ZCode skill projection: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_skill_projection = _load_local_skill_projection()
+PRIVATE_METHODS_DIR = _skill_projection.PRIVATE_METHODS_DIR
+UNPROJECTABLE_SKILLS = _skill_projection.UNPROJECTABLE_SKILLS
+adapt_runtime_text = _skill_projection.adapt_runtime_text
+private_method_body = _skill_projection.private_method_body
+project_private_support = _skill_projection.project_private_support
+project_public_skill = _skill_projection.project_public_skill
+restricted_skill_names = _skill_projection.restricted_skill_names
+skill_contract = _skill_projection.skill_contract
 
 
 GENERATED_MARKER = "Generated from MAINFRAME hub"

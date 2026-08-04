@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
 func TestRecoverConfigurationLifecycleStatesIsIdempotent(t *testing.T) {
@@ -192,6 +194,37 @@ func TestRecoverRemovalDistinguishesPreRenameAndUnrecordedPublication(t *testing
 				t.Fatalf("rollback called = %v, calls = %#v", gotRollback, configurations.calls)
 			}
 		})
+	}
+}
+
+func TestRecoverJSONClaimRemovalUsesRemovalRecoveryPath(t *testing.T) {
+	fixture := newFixture(Preview{})
+	configurations := newFakeConfigurationWorkspace(fixture.store)
+	journal := configurationRemovalJournalFixture(
+		StepPrivateCreated,
+		TransactionInProgress,
+	)
+	mutation := &journal.Configurations[0].Mutations[0]
+	mutation.Disposition = ConfigurationRemoveJSONClaimFile
+	mutation.Target = domain.Location{
+		Root: domain.RootZCodeConfig, Path: "cli/config.json",
+	}
+	journal.Roots[0].Root = domain.RootZCodeConfig
+	journal.Roots[0].RootPath = fakeRootPath(domain.RootZCodeConfig)
+	before := configurationState(
+		mutation.Before.SHA256,
+		mutation.Before.Mode,
+		mutation.Parent,
+		mutation.Before.Entry,
+	)
+	configurations.private[mutation.Target] = mutation.Private.Identity
+	configurations.public[mutation.Target] = before
+	fixture.store.journal = &journal
+	if _, err := fixture.configurationExecutor(configurations).Recover(); err != nil {
+		t.Fatalf("Recover() error = %v", err)
+	}
+	if configurations.public[mutation.Target] != before {
+		t.Fatal("recovery changed pre-publication JSON claim target")
 	}
 }
 

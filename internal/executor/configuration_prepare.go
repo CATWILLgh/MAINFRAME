@@ -141,6 +141,9 @@ func journalConfigurationDisposition(
 	if disposition == configuration.MutationRemoveManagedSecret {
 		return ConfigurationRemoveManagedSecret
 	}
+	if disposition == configuration.MutationRemoveJSONClaimFile {
+		return ConfigurationRemoveJSONClaimFile
+	}
 	if disposition == configuration.MutationPresent {
 		return ConfigurationPresent
 	}

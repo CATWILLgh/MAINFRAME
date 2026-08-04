@@ -255,6 +255,12 @@ func validatePreparedMutation(mutation FileMutation) error {
 			!IsManagedSecretTarget(mutation.Target) {
 			return fmt.Errorf("invalid managed secret removal")
 		}
+	case MutationRemoveJSONClaimFile:
+		if len(mutation.After.Content) != 0 || mutation.After.Mode != 0 ||
+			mutation.After.Exists || !mutation.Before.Exists ||
+			!IsJSONClaimRemovalTarget(mutation.Target) {
+			return fmt.Errorf("invalid JSON claim file removal")
+		}
 	default:
 		return fmt.Errorf("invalid configuration mutation disposition")
 	}
@@ -289,6 +295,12 @@ func validatePreparedMutation(mutation FileMutation) error {
 	return nil
 }
 
+func IsJSONClaimRemovalTarget(target domain.Location) bool {
+	return target.Root == domain.RootZCodeConfig &&
+		(target.Path == "cli/config.json" ||
+			target.Path == "mainframe/config-ownership.json")
+}
+
 func IsOpenCodeContext7SecretTarget(target domain.Location) bool {
 	return target.Root == domain.RootOpenCodeConfig &&
 		target.Path == "mainframe/secrets/context7-api-key"
@@ -311,6 +323,7 @@ func IsExactDiagnosticsTarget(target domain.Location) bool {
 		domain.RootCodexConfig:     true,
 		domain.RootOpenCodeConfig:  true,
 		domain.RootAntigravityData: true,
+		domain.RootZCodeConfig:     true,
 	}
 	return expectedRoots[target.Root] &&
 		target.Path == "mainframe/diagnostics.json"

@@ -170,6 +170,15 @@ def _validate_file_ownership_targets(
         for manifest in manifests
         for projection in manifest["mcp_projections"]
     )
+    reserved_registries.extend(
+        parse_location(
+            resource["json_ownership"]["registry"]["target"],
+            "JSON claim ownership registry target",
+        )
+        for manifest in manifests
+        for resource in manifest["resources"]
+        if "json_ownership" in resource
+    )
     for manifest in manifests:
         for resource in manifest["resources"]:
             if "file_ownership" not in resource:
@@ -226,6 +235,10 @@ def _claim_json_pointers(
     pointers = list(resource.get("owned_json_pointers", []))
     if "ownership" in resource:
         pointers.append(resource["ownership"]["map_pointer"])
+    if "json_ownership" in resource:
+        pointers.extend(
+            claim["pointer"] for claim in resource["json_ownership"]["claims"]
+        )
     for pointer in pointers:
         if len(previous_paths) >= MAX_OWNED_JSON_POINTERS:
             raise ValueError(
@@ -253,10 +266,11 @@ def _validate_ownership_registry_targets(
     registries = []
     for manifest in manifests:
         for resource in manifest["resources"]:
-            if "ownership" not in resource:
+            if "ownership" not in resource and "json_ownership" not in resource:
                 continue
+            descriptor = resource.get("ownership", resource.get("json_ownership"))
             target = parse_location(
-                resource["ownership"]["registry"]["target"],
+                descriptor["registry"]["target"],
                 "ownership registry target",
             )
             primary = parse_location(resource["target"], "ownership resource target")

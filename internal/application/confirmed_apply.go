@@ -145,7 +145,7 @@ func credentialMutationScope(
 
 func managedSecretsStoreChange(change configuration.Change) bool {
 	return change.ResourceID == "credential-tools.secrets-store" &&
-		change.ComponentID == "credential-tools"
+		change.ComponentID == domain.ComponentCredentialTools
 }
 
 func credentialTransitionAllowed(

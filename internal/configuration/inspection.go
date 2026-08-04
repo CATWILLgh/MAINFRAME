@@ -16,6 +16,7 @@ type Inspection struct {
 	ownedMaps    map[string]ownedMapSnapshot
 	files        map[domain.Location]fileSnapshot
 	managedFiles map[string]managedFileSnapshot
+	jsonClaims   map[string]jsonClaimSnapshot
 }
 
 type ownedMapSnapshot struct {
@@ -59,10 +60,19 @@ func InspectWithExternal(
 		ownedMaps:    make(map[string]ownedMapSnapshot),
 		files:        make(map[domain.Location]fileSnapshot),
 		managedFiles: make(map[string]managedFileSnapshot),
+		jsonClaims:   make(map[string]jsonClaimSnapshot),
 	}
 	snapshots := make(map[domain.Location]jsonSnapshot)
 	managedRegistries := make(map[domain.Location]fileSnapshot)
 	for _, resource := range cloned {
+		if resource.JSONClaimOwnership != nil {
+			observation, state := observeJSONClaimResource(resource, host, snapshots)
+			inspection.observations = append(inspection.observations, observation)
+			if observation.Status != Attention {
+				inspection.jsonClaims[resource.ID] = state
+			}
+			continue
+		}
 		if resource.FileOwnership != nil {
 			observation, state := inspectManagedFile(
 				resource,
@@ -176,6 +186,11 @@ func cloneResources(resources []releasecontract.Resource) []releasecontract.Reso
 		if resource.JSONMapOwnership != nil {
 			ownership := *resource.JSONMapOwnership
 			result[index].JSONMapOwnership = &ownership
+		}
+		if resource.JSONClaimOwnership != nil {
+			ownership := *resource.JSONClaimOwnership
+			ownership.Claims = append([]releasecontract.JSONClaim(nil), ownership.Claims...)
+			result[index].JSONClaimOwnership = &ownership
 		}
 		if resource.FileOwnership != nil {
 			ownership := *resource.FileOwnership

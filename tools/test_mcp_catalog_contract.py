@@ -31,6 +31,13 @@ def test_source_catalog_is_valid_and_supports_antigravity_standard_storage():
         "status": "supported",
         "reason": "",
     }
+    for profile in catalog["servers"][0]["profiles"]:
+        zcode = next(
+            item for item in profile["compatibility"]
+            if item["adapter"] == "zcode-desktop"
+        )
+        assert zcode["status"] == "unsupported"
+        assert "local-only" in zcode["reason"]
 
 
 def test_catalog_rejects_unknown_and_incoherent_fields():

@@ -36,6 +36,7 @@ const (
 	MutationPresent             MutationDisposition = "present"
 	MutationRemoveExactDocument MutationDisposition = "remove_exact_document"
 	MutationRemoveManagedSecret MutationDisposition = "remove_managed_secret"
+	MutationRemoveJSONClaimFile MutationDisposition = "remove_json_claim_file"
 )
 
 type FileMutation struct {
@@ -133,7 +134,7 @@ func changedOwnedResources(
 			)
 		}
 		if resource.Strategy != releasecontract.StrategySeedIfAbsent &&
-			resource.JSONMapOwnership == nil {
+			resource.JSONMapOwnership == nil && resource.JSONClaimOwnership == nil {
 			return nil, fmt.Errorf(
 				"configuration resource %q cannot be materialized",
 				resource.ID,
@@ -180,6 +181,7 @@ type preparationBuilder struct {
 	touch           map[domain.Location]bool
 	rawAfter        map[domain.Location][]byte
 	removeAfter     map[domain.Location]bool
+	removeKinds     map[domain.Location]MutationDisposition
 	preparationOnly map[domain.Location]bool
 }
 
@@ -193,6 +195,7 @@ func newPreparationBuilder(
 		touch:           make(map[domain.Location]bool),
 		rawAfter:        make(map[domain.Location][]byte),
 		removeAfter:     make(map[domain.Location]bool),
+		removeKinds:     make(map[domain.Location]MutationDisposition),
 		preparationOnly: make(map[domain.Location]bool),
 	}
 }
@@ -260,7 +263,7 @@ func (builder *preparationBuilder) mutation(
 			return nil, nil
 		}
 		return &FileMutation{
-			Disposition: MutationRemoveManagedSecret,
+			Disposition: builder.removalKind(target),
 			Target:      target,
 			Before:      beforeImage(snapshot),
 			After:       AfterImage{},
@@ -287,6 +290,15 @@ func (builder *preparationBuilder) mutation(
 			Mode:    mode,
 		},
 	}, nil
+}
+
+func (builder *preparationBuilder) removalKind(
+	target domain.Location,
+) MutationDisposition {
+	if disposition := builder.removeKinds[target]; disposition != "" {
+		return disposition
+	}
+	return MutationRemoveManagedSecret
 }
 
 func beforeImage(snapshot fileSnapshot) BeforeImage {

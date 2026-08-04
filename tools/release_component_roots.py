@@ -12,6 +12,7 @@ COMPONENT_ROOTS = {
     "credential-tools": frozenset({"credentials-config", "home", "user-bin"}),
     "mainframe-cli": frozenset({"user-bin"}),
     "opencode": frozenset({"opencode-config"}),
+    "zcode-desktop": frozenset({"zcode-config"}),
 }
 COMPONENT_ROOT_PATHS = {
     ("credential-tools", "home"): frozenset({".bashrc", ".profile", ".zshenv"}),
@@ -23,6 +24,7 @@ COMPONENT_DEPENDENCIES = {
     "credential-tools": frozenset({"mainframe-cli"}),
     "mainframe-cli": frozenset(),
     "opencode": frozenset({"credential-tools", "mainframe-cli"}),
+    "zcode-desktop": frozenset({"credential-tools", "mainframe-cli"}),
 }
 
 

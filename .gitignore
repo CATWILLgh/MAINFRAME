@@ -69,6 +69,9 @@ dist/codex/*
 # Derived standalone Antigravity 2.x desktop plugin projection.
 dist/antigravity-2/
 
+# Derived standalone ZCode Desktop projection and closed bundle.
+dist/zcode-desktop/bundle-v2/
+
 # Direct bundle publication state; never part of a release payload.
 dist/**/.*.publication.lock
 dist/**/.*.publication.json

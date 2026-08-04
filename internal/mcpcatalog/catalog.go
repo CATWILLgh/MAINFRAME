@@ -304,42 +304,6 @@ func validateServiceCredential(credential ServiceCredential) error {
 	return nil
 }
 
-func validateCompatibility(entries []AdapterCompatibility) error {
-	if len(entries) != 4 {
-		return fmt.Errorf("profile compatibility must classify every adapter")
-	}
-	ids := make([]string, len(entries))
-	for index, entry := range entries {
-		ids[index] = string(entry.Adapter)
-		if !knownAdapter(entry.Adapter) {
-			return fmt.Errorf("unknown adapter %q", entry.Adapter)
-		}
-		if (entry.Status == Supported && entry.Reason != "") ||
-			(entry.Status == Unsupported && entry.Reason == "") {
-			return fmt.Errorf("adapter %q has inconsistent support reason", entry.Adapter)
-		}
-		if entry.Status != Supported && entry.Status != Unsupported {
-			return fmt.Errorf("adapter %q has invalid support status", entry.Adapter)
-		}
-	}
-	if !sortedUnique(ids) {
-		return fmt.Errorf("compatibility must be sorted with unique adapters")
-	}
-	return nil
-}
-
-func knownAdapter(id domain.ComponentID) bool {
-	switch id {
-	case domain.ComponentClaudeCode,
-		domain.ComponentCodex,
-		domain.ComponentOpenCode,
-		domain.ComponentAntigravity2:
-		return true
-	default:
-		return false
-	}
-}
-
 func validateHTTPSURL(raw string) error {
 	parsed, err := url.ParseRequestURI(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {

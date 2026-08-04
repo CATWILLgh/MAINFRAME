@@ -38,8 +38,14 @@ func TestPythonReleaseBuilderAndGoLoaderAgreeOnAntigravityMCP(t *testing.T) {
 		BundleIdentifier: "com.google.antigravity",
 		ExactVersions:    []string{"2.2.1"},
 	}
-	if len(release.HostRequirements) != 1 ||
-		!reflect.DeepEqual(release.HostRequirements[0], wantRequirement) {
+	foundRequirement := false
+	for _, requirement := range release.HostRequirements {
+		if reflect.DeepEqual(requirement, wantRequirement) {
+			foundRequirement = true
+			break
+		}
+	}
+	if !foundRequirement {
 		t.Fatalf("cross-runtime host requirements = %#v", release.HostRequirements)
 	}
 	for _, projection := range release.MCPProjections {

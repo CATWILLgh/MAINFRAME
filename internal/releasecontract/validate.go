@@ -24,19 +24,21 @@ var componentRoots = map[domain.ComponentID]map[domain.RootID]struct{}{
 	"credential-tools": {
 		domain.RootCredentialsConfig: {}, domain.RootHome: {}, domain.RootUserBin: {},
 	},
-	"mainframe-cli": {domain.RootUserBin: {}},
-	"opencode":      {domain.RootOpenCodeConfig: {}},
+	"mainframe-cli":              {domain.RootUserBin: {}},
+	"opencode":                   {domain.RootOpenCodeConfig: {}},
+	domain.ComponentZCodeDesktop: {domain.RootZCodeConfig: {}},
 }
 var credentialToolsHomePaths = map[domain.ArtifactPath]struct{}{
 	".bashrc": {}, ".profile": {}, ".zshenv": {},
 }
 var componentDependencies = map[domain.ComponentID]map[domain.ComponentID]struct{}{
-	"antigravity-2":    {"credential-tools": {}, "mainframe-cli": {}},
-	"claude-code":      {"credential-tools": {}, "mainframe-cli": {}},
-	"codex":            {"credential-tools": {}, "mainframe-cli": {}},
-	"credential-tools": {"mainframe-cli": {}},
-	"mainframe-cli":    {},
-	"opencode":         {"credential-tools": {}, "mainframe-cli": {}},
+	"antigravity-2":              {"credential-tools": {}, "mainframe-cli": {}},
+	"claude-code":                {"credential-tools": {}, "mainframe-cli": {}},
+	"codex":                      {"credential-tools": {}, "mainframe-cli": {}},
+	"credential-tools":           {"mainframe-cli": {}},
+	"mainframe-cli":              {},
+	"opencode":                   {"credential-tools": {}, "mainframe-cli": {}},
+	domain.ComponentZCodeDesktop: {"credential-tools": {}, "mainframe-cli": {}},
 }
 
 // ValidReleaseIdentity checks the path-safe release ID and exact index digest.
@@ -181,7 +183,7 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 		return manifest.HostRequirements.Present
 	case bundleSchemaVersionV4:
 		return true
-	case bundleSchemaVersionV5, bundleSchemaVersionV6:
+	case bundleSchemaVersionV5, bundleSchemaVersionV6, bundleSchemaVersionV7:
 		return true
 	default:
 		return false
@@ -190,7 +192,7 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 
 func supportedBundleSchemaVersion(version int) bool {
 	return version >= bundleSchemaVersionV2 &&
-		version <= bundleSchemaVersionV6
+		version <= bundleSchemaVersionV7
 }
 
 func validateHostRequirements(component domain.ComponentID, manifest bundleManifest) error {

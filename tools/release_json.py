@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import unicodedata
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,12 @@ OWNERSHIP_KIND = "json-map-entry-registry-v1"
 OWNERSHIP_ENTRY_SCHEMA = "decision-rule-v1"
 DECISIONS = frozenset({"allow", "ask", "deny"})
 EXACT_JSON_DOCUMENT_FIELDS = {"schema_version", "events", "feedback"}
+JSON_CLAIM_OWNERSHIP_FIELDS = {"kind", "registry", "claims"}
+JSON_CLAIM_REGISTRY_FIELDS = {"target", "schema_version"}
+JSON_CLAIM_COMMON_FIELDS = {"id", "kind", "pointer"}
+JSON_ARRAY_CLAIM_FIELDS = JSON_CLAIM_COMMON_FIELDS | {"selector"}
+JSON_SELECTOR_FIELDS = {"pointer", "value"}
+JSON_CLAIM_ID = re.compile(r"^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$")
 
 
 def validate_shell_source(source: Path, identifier: str) -> None:
@@ -84,11 +91,14 @@ def validate_owned_json_source(
 ) -> None:
     has_ownership = "ownership" in resource
     has_owned_pointers = "owned_json_pointers" in resource
+    has_claim_ownership = "json_ownership" in resource
+    if has_claim_ownership and (has_ownership or has_owned_pointers):
+        raise ValueError(f"resource {identifier!r} has conflicting JSON ownership")
     if has_ownership and has_owned_pointers:
         raise ValueError(
             f"resource {identifier!r} ownership conflicts with owned_json_pointers"
         )
-    if not has_ownership and not has_owned_pointers:
+    if not has_ownership and not has_owned_pointers and not has_claim_ownership:
         raise ValueError(
             f"resource {identifier!r} owned_json_pointers or ownership are required"
         )
@@ -99,6 +109,9 @@ def validate_owned_json_source(
         max_bytes=MAX_OBSERVED_JSON_SIZE,
     )
     document = decode_json(payload, f"resource {identifier!r} JSON source")
+    if has_claim_ownership:
+        _validate_json_claim_source(document, resource["json_ownership"], identifier)
+        return
     if has_ownership:
         _validate_json_map_ownership(
             document,
@@ -128,6 +141,104 @@ def validate_owned_json_source(
                 f"resource {identifier!r} owned_json_pointers overlap"
             )
         resolve_object_pointer(document, tokens, identifier)
+
+
+def validate_json_claim_ownership(
+    ownership: Any,
+    resource_target: Any,
+    identifier: str,
+    *,
+    parse_location: Callable[[Any, str], tuple[str, str]],
+) -> None:
+    label = f"resource {identifier!r} JSON ownership"
+    _require_exact_object(ownership, JSON_CLAIM_OWNERSHIP_FIELDS, label)
+    if ownership["kind"] != "json-claim-registry-v1":
+        raise ValueError(f"{label} has unsupported kind")
+    registry = ownership["registry"]
+    _require_exact_object(registry, JSON_CLAIM_REGISTRY_FIELDS, f"{label} registry")
+    if type(registry["schema_version"]) is not int or registry["schema_version"] != 1:
+        raise ValueError(f"{label} registry has unsupported schema_version")
+    target = parse_location(resource_target, f"{label} resource target")
+    registry_target = parse_location(registry["target"], f"{label} registry target")
+    if registry_target[0] != target[0] or _locations_overlap(target, registry_target):
+        raise ValueError(f"{label} registry must be adapter-local and non-overlapping")
+    claims = ownership["claims"]
+    if (
+        not isinstance(claims, list)
+        or not claims
+        or len(claims) > MAX_OWNED_JSON_POINTERS
+    ):
+        raise ValueError(f"{label} claims must be non-empty")
+    identifiers = []
+    pointers: list[tuple[str, ...]] = []
+    for claim in claims:
+        _validate_json_claim(claim, identifier)
+        identifiers.append(claim["id"])
+        tokens = json_pointer_tokens(claim["pointer"], identifier)
+        if any(token_paths_overlap(tokens, previous) for previous in pointers):
+            raise ValueError(f"{label} claims overlap")
+        pointers.append(tokens)
+    if identifiers != sorted(set(identifiers)):
+        raise ValueError(f"{label} claims must be sorted and unique")
+
+
+def _validate_json_claim(claim: Any, identifier: str) -> None:
+    if not isinstance(claim, dict):
+        raise ValueError(f"resource {identifier!r} JSON ownership claim must be an object")
+    kind = claim.get("kind")
+    fields = JSON_CLAIM_COMMON_FIELDS if kind == "exact-scalar" else JSON_ARRAY_CLAIM_FIELDS
+    _require_exact_object(claim, fields, f"resource {identifier!r} JSON ownership claim")
+    if not isinstance(claim["id"], str) or not JSON_CLAIM_ID.fullmatch(claim["id"]):
+        raise ValueError(f"resource {identifier!r} JSON ownership claim has invalid id")
+    _ownership_pointer_tokens(claim["pointer"], identifier, "claim pointer")
+    if kind == "array-entry":
+        selector = claim["selector"]
+        _require_exact_object(selector, JSON_SELECTOR_FIELDS, f"resource {identifier!r} selector")
+        _ownership_pointer_tokens(selector["pointer"], identifier, "selector pointer")
+    elif kind != "exact-scalar":
+        raise ValueError(f"resource {identifier!r} JSON ownership claim has unsupported kind")
+
+
+def _validate_json_claim_source(document: Any, ownership: dict[str, Any], identifier: str) -> None:
+    for claim in ownership["claims"]:
+        tokens = json_pointer_tokens(claim["pointer"], identifier)
+        value = resolve_object_pointer(document, tokens, identifier)
+        if claim["kind"] == "exact-scalar":
+            if isinstance(value, (dict, list)):
+                raise ValueError(f"resource {identifier!r} exact scalar claim selects a container")
+            continue
+        if not isinstance(value, list):
+            raise ValueError(f"resource {identifier!r} array claim does not select an array")
+        matches = [entry for entry in value if _selector_matches(entry, claim["selector"], identifier)]
+        if len(matches) != 1:
+            raise ValueError(f"resource {identifier!r} array claim must select exactly one source entry")
+
+
+def _resolve_pointer(document: Any, raw: str, identifier: str) -> Any:
+    current = document
+    for token in json_pointer_tokens(raw, identifier):
+        if isinstance(current, dict) and token in current:
+            current = current[token]
+        elif isinstance(current, list) and token.isdigit() and int(token) < len(current):
+            current = current[int(token)]
+        else:
+            raise ValueError(f"resource {identifier!r} JSON ownership pointer is unresolved")
+    return current
+
+
+def _selector_matches(entry: Any, selector: dict[str, Any], identifier: str) -> bool:
+    try:
+        return _resolve_pointer(entry, selector["pointer"], identifier) == selector["value"]
+    except ValueError:
+        return False
+
+
+def _locations_overlap(left: tuple[str, str], right: tuple[str, str]) -> bool:
+    return left[0] == right[0] and (
+        left[1] == right[1]
+        or left[1].startswith(right[1] + "/")
+        or right[1].startswith(left[1] + "/")
+    )
 
 
 def _validate_json_map_ownership(

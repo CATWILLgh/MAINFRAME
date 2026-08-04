@@ -1,6 +1,7 @@
 package releasecontract
 
 import (
+	"encoding/json"
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpcatalog"
@@ -12,6 +13,7 @@ const (
 	bundleSchemaVersionV4 = 4
 	bundleSchemaVersionV5 = 5
 	bundleSchemaVersionV6 = 6
+	bundleSchemaVersionV7 = 7
 	releaseSchemaVersion  = 2
 	mcpCatalogPath        = "metadata/mcp-catalog.json"
 )
@@ -74,6 +76,7 @@ type Resource struct {
 	DesiredLine          string
 	OwnedJSONFields      []JSONField
 	JSONMapOwnership     *JSONMapOwnership
+	JSONClaimOwnership   *JSONClaimOwnership
 	FileOwnership        *FileOwnership
 	ExternalState        *ExternalStateDescriptor
 	ExactJSONExemplar    string
@@ -91,6 +94,28 @@ type JSONMapOwnership struct {
 	RegistryTarget        domain.Location
 	RegistrySchemaVersion int
 	EntriesPointer        string
+}
+
+type JSONClaimKind string
+
+const (
+	JSONClaimExactScalar JSONClaimKind = "exact-scalar"
+	JSONClaimArrayEntry  JSONClaimKind = "array-entry"
+)
+
+type JSONClaim struct {
+	ID              string
+	Kind            JSONClaimKind
+	Pointer         string
+	SelectorPointer string
+	SelectorValue   string
+	Desired         string
+}
+
+type JSONClaimOwnership struct {
+	RegistryTarget        domain.Location
+	RegistrySchemaVersion int
+	Claims                []JSONClaim
 }
 
 type FileOwnership struct {
@@ -245,17 +270,18 @@ type legacyArtifact struct {
 }
 
 type resourceRecord struct {
-	ID                   string                   `json:"id"`
-	Strategy             string                   `json:"strategy"`
-	Source               string                   `json:"source,omitempty"`
-	Target               locationRecord           `json:"target"`
-	LegacySourceSuffixes optionalStringList       `json:"legacy_source_suffixes,omitempty"`
-	Observation          string                   `json:"observation"`
-	Apply                string                   `json:"apply"`
-	OwnedJSONPointers    optionalStringList       `json:"owned_json_pointers,omitempty"`
-	Ownership            optionalJSONMapOwnership `json:"ownership,omitempty"`
-	FileOwnership        optionalFileOwnership    `json:"file_ownership,omitempty"`
-	ExternalState        optionalExternalState    `json:"external_state,omitempty"`
+	ID                   string                     `json:"id"`
+	Strategy             string                     `json:"strategy"`
+	Source               string                     `json:"source,omitempty"`
+	Target               locationRecord             `json:"target"`
+	LegacySourceSuffixes optionalStringList         `json:"legacy_source_suffixes,omitempty"`
+	Observation          string                     `json:"observation"`
+	Apply                string                     `json:"apply"`
+	OwnedJSONPointers    optionalStringList         `json:"owned_json_pointers,omitempty"`
+	Ownership            optionalJSONMapOwnership   `json:"ownership,omitempty"`
+	FileOwnership        optionalFileOwnership      `json:"file_ownership,omitempty"`
+	JSONClaimOwnership   optionalJSONClaimOwnership `json:"json_ownership,omitempty"`
+	ExternalState        optionalExternalState      `json:"external_state,omitempty"`
 }
 
 type optionalStringList struct {
@@ -294,6 +320,29 @@ type fileOwnershipRecord struct {
 type fileOwnershipRegistryRecord struct {
 	Target        locationRecord `json:"target"`
 	SchemaVersion int            `json:"schema_version"`
+}
+
+type optionalJSONClaimOwnership struct {
+	Present bool
+	Value   jsonClaimOwnershipRecord
+}
+
+type jsonClaimOwnershipRecord struct {
+	Kind     string                      `json:"kind"`
+	Registry fileOwnershipRegistryRecord `json:"registry"`
+	Claims   []jsonClaimRecord           `json:"claims"`
+}
+
+type jsonClaimRecord struct {
+	ID       string                   `json:"id"`
+	Kind     string                   `json:"kind"`
+	Pointer  string                   `json:"pointer"`
+	Selector *jsonClaimSelectorRecord `json:"selector,omitempty"`
+}
+
+type jsonClaimSelectorRecord struct {
+	Pointer string          `json:"pointer"`
+	Value   json.RawMessage `json:"value"`
 }
 
 type externalStateRecord struct {

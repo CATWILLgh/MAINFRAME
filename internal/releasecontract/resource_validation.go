@@ -102,16 +102,20 @@ func validateResourceSchema(
 			record.ID,
 		)
 	}
+	if record.JSONClaimOwnership.Present && schemaVersion < bundleSchemaVersionV7 {
+		return fmt.Errorf("resource %q JSON claim ownership requires bundle schema version 7", record.ID)
+	}
 	return nil
 }
 
 type resourceDesiredState struct {
-	line          string
-	content       []byte
-	mapOwnership  *JSONMapOwnership
-	ownedFields   []JSONField
-	fileOwnership *FileOwnership
-	exemplar      string
+	line           string
+	content        []byte
+	mapOwnership   *JSONMapOwnership
+	ownedFields    []JSONField
+	fileOwnership  *FileOwnership
+	claimOwnership *JSONClaimOwnership
+	exemplar       string
 }
 
 func loadResourceDesiredState(
@@ -150,6 +154,12 @@ func loadResourceDesiredState(
 	if err != nil {
 		return resourceDesiredState{}, err
 	}
+	claimOwnership, err := loadJSONClaimOwnership(
+		releaseRoot, sourceBase, component, record, target, strategy, observation, payloadRows,
+	)
+	if err != nil {
+		return resourceDesiredState{}, err
+	}
 	exemplar, err := loadExactJSONExemplar(
 		releaseRoot,
 		sourceBase,
@@ -165,6 +175,7 @@ func loadResourceDesiredState(
 		line: desiredLine, content: sourceContent,
 		mapOwnership: mapOwnership, ownedFields: ownedFields,
 		fileOwnership: fileOwnership, exemplar: exemplar,
+		claimOwnership: claimOwnership,
 	}, nil
 }
 
@@ -184,9 +195,10 @@ func (desired resourceDesiredState) resource(
 		Apply:         SupportStatus(record.Apply),
 		SourceContent: desired.content, DesiredLine: desired.line,
 		OwnedJSONFields: desired.ownedFields, JSONMapOwnership: desired.mapOwnership,
-		FileOwnership:     desired.fileOwnership,
-		ExternalState:     externalState,
-		ExactJSONExemplar: desired.exemplar,
+		FileOwnership:      desired.fileOwnership,
+		JSONClaimOwnership: desired.claimOwnership,
+		ExternalState:      externalState,
+		ExactJSONExemplar:  desired.exemplar,
 	}
 }
 
@@ -230,6 +242,10 @@ func validateResourceOwnership(
 	observation SupportStatus,
 	payloadRows []payloadFile,
 ) (*JSONMapOwnership, []JSONField, error) {
+	if record.JSONClaimOwnership.Present &&
+		(record.Ownership.Present || record.OwnedJSONPointers.Present) {
+		return nil, nil, fmt.Errorf("conflicting JSON ownership")
+	}
 	mapOwnership, err := loadJSONMapOwnership(
 		releaseRoot, sourceBase, record.Source, component, target, strategy,
 		record.OwnedJSONPointers, record.Ownership, payloadRows,
@@ -242,7 +258,7 @@ func validateResourceOwnership(
 	}
 	ownedFields, err := loadOwnedJSONFields(
 		releaseRoot, sourceBase, record.Source, strategy, observation,
-		record.OwnedJSONPointers, mapOwnership != nil, payloadRows,
+		record.OwnedJSONPointers, mapOwnership != nil || record.JSONClaimOwnership.Present, payloadRows,
 	)
 	if err != nil {
 		return nil, nil, err

@@ -13,6 +13,16 @@ func (inspection Inspection) applyPreparedResources(
 	selected map[domain.ComponentID]bool,
 ) error {
 	for _, resource := range resources {
+		if resource.JSONClaimOwnership != nil {
+			if err := builder.applyJSONClaims(
+				resource,
+				inspection.jsonClaims[resource.ID],
+				selected[resource.ComponentID],
+			); err != nil {
+				return fmt.Errorf("prepare configuration resource %q: %w", resource.ID, err)
+			}
+			continue
+		}
 		if resource.FileOwnership != nil {
 			if err := builder.applyManagedFile(
 				resource,

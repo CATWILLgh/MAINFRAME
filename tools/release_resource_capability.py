@@ -22,6 +22,21 @@ def valid_apply_declaration(component: str, resource: dict[str, Any]) -> bool:
         return True
     if resource["apply"] != "supported":
         return False
+    json_ownership = resource.get("json_ownership")
+    if isinstance(json_ownership, dict):
+        registry = json_ownership.get("registry")
+        return (
+            component == "zcode-desktop"
+            and resource["strategy"] == "json-key-merge"
+            and resource["observation"] == "supported"
+            and resource["target"]["root"] == "zcode-config"
+            and isinstance(registry, dict)
+            and registry.get("target", {}).get("root") == "zcode-config"
+            and registry.get("schema_version") == 1
+            and "owned_json_pointers" not in resource
+            and "ownership" not in resource
+            and "external_state" not in resource
+        )
     ownership = resource.get("ownership")
     if not isinstance(ownership, dict):
         return False

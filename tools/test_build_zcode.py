@@ -190,3 +190,11 @@ def test_real_repository_projects_all_neutral_agents_without_private_discovery()
     assert "{{mainframe.plans_root}}" not in str(workflow_meta)
     for stale_binding in ("`EnterPlanMode`", "`ExitPlanMode`", "`advisor()`"):
         assert stale_binding not in workflow
+
+
+def test_runtime_overlay_bounds_native_goal_mode_to_explicit_long_goals() -> None:
+    instructions = build.render_projection(REPO)[Path("AGENTS.md")].decode()
+    assert "`/goal`" in instructions
+    assert "explicitly asks for a long-running goal" in instructions
+    assert "Do not create a goal for routine work" in instructions
+    assert "MAINFRAME verification" in instructions
