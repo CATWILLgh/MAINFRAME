@@ -12,10 +12,11 @@ tags: ["zcode", "subagents", "symlink", "delivery", "live-acceptance"]
 # aeb5d9b0: Make ZCode discover delivered MAINFRAME subagents
 
 ## What was observed
-The live ZCode Desktop 3.6.5 installation contains all seven expected
-`~/.zcode/agents/*.md` entries. Each entry is a readable symbolic link to a
-regular file in the durable MAINFRAME release cache. The adapter's release
-assertions explicitly require this linked layout.
+Before the differential probe, the live ZCode Desktop 3.6.5 installation
+contained all seven expected `~/.zcode/agents/*.md` entries. Each entry was a
+readable symbolic link to a regular file in the durable MAINFRAME release
+cache. The then-current adapter release assertions explicitly required this
+linked layout.
 
 After a complete ZCode restart and a manual refresh of Settings -> Subagents,
 the application displayed only the built-in `general-purpose` and `Explore`
@@ -52,8 +53,9 @@ acceptance cannot pass.
 Introduce an adapter-specific writable-file materialization policy for agent
 files without changing link behavior for other adapter artifacts. Treat the
 agent as a managed configuration file: update and remove it automatically only
-while unchanged, preserve a locally edited file as a whole, and report the
-conflict instead of overwriting it.
+while unchanged, preserve a locally edited file as a whole, and report that
+preservation without blocking unrelated managed updates. A foreign file must
+remain a blocking conflict instead of being adopted or overwritten.
 
 The lifecycle change must retain claim-scoped ownership, user-edit detection,
 atomic replacement, update, rollback, uninstall, and recovery behavior.
@@ -65,7 +67,11 @@ files cannot satisfy the lifecycle contract.
 The implemented contract uses bundle schema v8, ownership registry v2, and
 transaction journal v5. It retains strict readers for legacy v1 link claims
 and recoverable v4 link transactions. The initial v7 managed link can migrate
-directly to a regular file; foreign or changed links remain untouched.
+directly to a regular file; foreign or changed links remain untouched. A
+selected, claim-backed writable file that was edited or removed locally is
+shown as preserved and omitted from the executable plan, so it cannot block
+updates to neighboring managed artifacts. Deselecting the component stops
+managing that local file without deleting it.
 
 ## Acceptance criteria
 - A failing test or bounded native probe reproduces the rejected delivery shape
@@ -74,15 +80,17 @@ directly to a regular file; foreign or changed links remain untouched.
   restart and the orchestrator can execute a designated MAINFRAME subagent.
 - A fresh install, update, repeated apply, rollback, recovery, and uninstall
   preserve foreign files and user edits while managing the projected agents.
+- A selected customized agent remains associated with MAINFRAME but does not
+  block unrelated updates; deselection relinquishes it without deletion.
 - ZCode skills, commands, instructions, hooks, and user-owned configuration
   retain their current behavior.
 - Diagnostics distinguish "file delivered" from "subagent discovered" and do
   not report live acceptance from filesystem links alone.
 
 ## Sources
-- `adapters/zcode-desktop/build_bundle.py:76-82`
+- `adapters/zcode-desktop/build_bundle.py:86-92`
 - `adapters/zcode-desktop/capabilities.json:18-24`
-- `tools/release_zcode_assertions.py:139-141`
+- `tools/release_zcode_assertions.py:150-156`
 - Live ZCode Desktop 3.6.5 Settings -> Subagents observation on 2026-08-05
 - https://zcode.z.ai/en/docs/subagents
 - https://zcode.z.ai/en/docs/skill

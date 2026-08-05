@@ -72,16 +72,20 @@ as symbolic links, while it discovers and executes the byte-identical regular fi
 Agent files therefore use explicit writable-file materialization; other adapter
 artifacts retain their existing link delivery. An unchanged managed agent may be
 updated or removed automatically. A locally edited agent is preserved as a whole
-configuration file rather than overwritten. Field-aware merging of local model,
-color, and tool selections is deferred to ticket `ac703f8b` because safe merging
-requires previous-document provenance and an explicit conflict contract.
+configuration file rather than overwritten. While its component remains selected,
+that preservation is a visible, non-blocking preview result: other managed files
+can still update and the ownership claim remains associated with the local file.
+Component deselection relinquishes that claim without deleting the customized
+file. Field-aware merging of local model, color, and tool selections is deferred
+to ticket `ac703f8b` because safe merging requires previous-document provenance
+and an explicit conflict contract.
 
 Writable-file materialization is introduced only by bundle schema v8. The
 filesystem ownership registry reads strict legacy v1 link claims and writes v2;
 the crash journal recovers valid legacy v4 link transactions and writes v5. An
 exact claim-backed v7 agent link can migrate atomically to the v8 regular file.
-Foreign, changed, mismatched, and reverse materialization transitions remain
-conflicts and are preserved.
+Foreign files, changed links, mismatched unit identities, and reverse
+materialization transitions remain blocking conflicts and are preserved.
 
 The native custom-agent surface is documented as Beta. The release host requirement
 pins the bundle identifier and short application version. The observed build is
