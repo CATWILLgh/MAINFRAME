@@ -18,6 +18,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 import build_release
 import release_contract
+from release_test_environment import isolated_environment
 from release_draft_assertions import (
     _draft_request,
     _run_apply,
@@ -57,7 +58,7 @@ def run_dry_run(builder: Path, root: Path) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         timeout=30,
-        env=dict(os.environ, TMPDIR=str(temporary)),
+        env=isolated_environment(TMPDIR=str(temporary)),
     )
     assert list(temporary.iterdir()) == [], "dry-run publication metadata survived"
     return result
@@ -159,8 +160,7 @@ def _assert_release_cli(binary: Path, output: Path, sandbox: Path) -> None:
     _assert_secret_help(output)
     home = sandbox / "home"
     home.mkdir()
-    env = dict(
-        os.environ,
+    env = isolated_environment(
         HOME=str(home),
         CODEX_HOME=str(home / ".codex"),
         XDG_CONFIG_HOME=str(home / ".config"),
@@ -224,6 +224,7 @@ def _assert_secret_help(output: Path) -> None:
         [str(output / "common/credential-tools/secret"), "help"],
         text=True,
         capture_output=True,
+        env=isolated_environment(),
         check=True,
         timeout=10,
     ).stdout

@@ -17,6 +17,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
 import build_release
+from release_test_environment import isolated_environment
 
 
 def test_packaged_cli_imports_switches_and_rolls_back_exact_releases():
@@ -148,16 +149,13 @@ def test_packaged_cli_imports_switches_and_rolls_back_exact_releases():
 
 
 def _environment(home: Path) -> dict[str, str]:
-    environment = dict(os.environ)
-    environment.pop("MAINFRAME_RELEASE_ROOT", None)
-    environment.update(
+    return isolated_environment(
         HOME=str(home),
         CODEX_HOME=str(home / ".codex"),
         XDG_CONFIG_HOME=str(home / ".config"),
         XDG_DATA_HOME=str(home / ".local/share"),
         XDG_STATE_HOME=str(home / ".local/state"),
     )
-    return environment
 
 
 def _review_local(
