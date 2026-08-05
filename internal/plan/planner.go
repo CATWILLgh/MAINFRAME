@@ -85,8 +85,18 @@ func (planner Planner) operationsForDesired(
 							observed.artifact.Materialization != domain.MaterializationWritableFile {
 							artifact.Materialization = domain.MaterializationWritableFile
 						}
-					case domain.OwnershipManagedMissing:
-						kind = domain.OperationInstall
+					case domain.OwnershipManagedDrifted,
+						domain.OwnershipManagedMissing:
+						if expected.Materialization == domain.MaterializationWritableFile &&
+							observed.artifact.Materialization == domain.MaterializationWritableFile {
+							kind = domain.OperationPreserve
+							sourcePath = ""
+						} else if observed.artifact.Ownership == domain.OwnershipManagedMissing {
+							kind = domain.OperationInstall
+						} else {
+							kind = domain.OperationConflict
+							sourcePath = ""
+						}
 					case domain.OwnershipExactAdoptable:
 						kind = domain.OperationAdopt
 						sourcePath = ""
@@ -99,13 +109,17 @@ func (planner Planner) operationsForDesired(
 					sourcePath = ""
 				}
 			}
+			sourceSHA256 := expected.SourceSHA256
+			if kind == domain.OperationPreserve {
+				sourceSHA256 = ""
+			}
 			operations = append(operations, domain.Operation{
 				ComponentID:  id,
 				UnitID:       expected.UnitID,
 				Kind:         kind,
 				Artifact:     artifact,
 				SourcePath:   sourcePath,
-				SourceSHA256: expected.SourceSHA256,
+				SourceSHA256: sourceSHA256,
 			})
 		}
 	}

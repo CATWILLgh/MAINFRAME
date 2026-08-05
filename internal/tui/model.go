@@ -269,6 +269,7 @@ func (model *Model) reviewedPlanSections() []string {
 		{title: "Update", kind: domain.OperationReplace},
 		{title: "Remove", kind: domain.OperationRemove},
 		{title: "Stop managing", kind: domain.OperationRelinquish},
+		{title: "Keep local", kind: domain.OperationPreserve},
 		{title: "Conflicts", kind: domain.OperationConflict},
 	}
 	groupCount := 0
@@ -341,6 +342,8 @@ func operationGlyph(kind domain.OperationKind) string {
 		return "−"
 	case domain.OperationRelinquish:
 		return "◇"
+	case domain.OperationPreserve:
+		return "="
 	default:
 		return "!"
 	}

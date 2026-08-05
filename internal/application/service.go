@@ -255,7 +255,7 @@ func buildReviewedPlan(
 	executable := executor.Preview{
 		Release:       snapshot.Release,
 		Desired:       append([]domain.ComponentID(nil), request.Components...),
-		Plan:          cloneDomainPlan(semantic.Filesystem),
+		Plan:          executableFilesystemPlan(semantic.Filesystem),
 		Configuration: prepared,
 	}
 	credentialOnlyApplicable := len(credentialChanges) > 0 &&
@@ -271,6 +271,16 @@ func buildReviewedPlan(
 		credentialOnlyApplicable: credentialOnlyApplicable,
 		reviewed:                 true,
 	}, nil
+}
+
+func executableFilesystemPlan(semantic domain.Plan) domain.Plan {
+	operations := make([]domain.Operation, 0, len(semantic.Operations))
+	for _, operation := range semantic.Operations {
+		if operation.Kind != domain.OperationPreserve {
+			operations = append(operations, operation)
+		}
+	}
+	return cloneDomainPlan(domain.Plan{Operations: operations})
 }
 
 func prepareCredentials(

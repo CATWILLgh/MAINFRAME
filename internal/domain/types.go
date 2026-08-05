@@ -239,6 +239,7 @@ const (
 	OperationReplace    OperationKind = "replace"
 	OperationRemove     OperationKind = "remove"
 	OperationRelinquish OperationKind = "relinquish"
+	OperationPreserve   OperationKind = "preserve"
 	OperationConflict   OperationKind = "conflict"
 )
 

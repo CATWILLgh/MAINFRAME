@@ -80,6 +80,7 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 		},
 		preview: lifecycle.Preview{
 			Filesystem: domain.Plan{Operations: []domain.Operation{
+				operation(domain.ComponentCodex, domain.OperationPreserve, domain.RootCodexConfig, "agents/local.md"),
 				operation(domain.ComponentClaudeCode, domain.OperationInstall, domain.RootClaudeConfig, "CLAUDE.md"),
 				operation(domain.ComponentCodex, domain.OperationAdopt, domain.RootCodexConfig, "rules/mainframe.rules"),
 				operation(domain.ComponentCodex, domain.OperationReplace, domain.RootCodexConfig, "skills"),
@@ -104,6 +105,7 @@ func TestPreviewViewGroupsObservableOperations(t *testing.T) {
 		"Update · 1",
 		"Remove · 1",
 		"Stop managing · 1",
+		"Keep local · 1",
 		"Conflicts · 1",
 		"Claude Code",
 		"Codex",
