@@ -119,29 +119,18 @@ func (planner Planner) operationsForObserved(
 			if _, expected := expectedOwners[artifact.Location]; expected {
 				continue
 			}
-			kind := domain.OperationConflict
-			declaredArtifact, declared := planner.declaredArtifact(component.ID, artifact.Location)
-			var sourcePath domain.ArtifactPath
-			var unitID string
-			if artifact.UnitID != "" && artifact.Ownership.Removable() {
+			if artifact.UnitID == "" || !artifact.Ownership.Managed() {
+				continue
+			}
+			kind := domain.OperationRelinquish
+			if artifact.Ownership.Removable() {
 				kind = domain.OperationRemove
-				unitID = artifact.UnitID
-			} else if artifact.UnitID != "" &&
-				(artifact.Ownership == domain.OwnershipManagedDrifted ||
-					artifact.Ownership == domain.OwnershipManagedMissing) {
-				kind = domain.OperationRelinquish
-				unitID = artifact.UnitID
-			} else if declared && artifact.Ownership.Removable() {
-				kind = domain.OperationRemove
-				unitID = declaredArtifact.UnitID
-				sourcePath = declaredArtifact.SourcePath
 			}
 			operations = append(operations, domain.Operation{
 				ComponentID: component.ID,
-				UnitID:      unitID,
+				UnitID:      artifact.UnitID,
 				Kind:        kind,
 				Artifact:    artifact,
-				SourcePath:  sourcePath,
 			})
 		}
 	}
@@ -163,19 +152,6 @@ func componentDifference(
 		}
 	}
 	return result
-}
-
-func (planner Planner) declaredArtifact(id domain.ComponentID, location domain.Location) (catalog.Artifact, bool) {
-	component, exists := planner.catalog.Component(id)
-	if !exists {
-		return catalog.Artifact{}, false
-	}
-	for _, artifact := range component.Artifacts {
-		if artifact.Target == location {
-			return artifact, true
-		}
-	}
-	return catalog.Artifact{}, false
 }
 
 func (planner Planner) expectedOwners(

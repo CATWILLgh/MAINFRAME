@@ -126,6 +126,7 @@ func TestPlanFilesystemOperationsMatchLifecyclePreview(t *testing.T) {
 			ID: domain.ComponentOpenCode,
 			Artifacts: []domain.Artifact{{
 				Location:  domain.Location{Root: domain.RootOpenCodeConfig, Path: "AGENTS.md"},
+				UnitID:    "opencode.artifact",
 				Ownership: domain.OwnershipManagedExact,
 			}},
 		}}},

@@ -43,7 +43,11 @@ func TestPreviewBuildsPlanForVisibleTargets(t *testing.T) {
 		{
 			ID: domain.ComponentCodex,
 			Artifacts: []domain.Artifact{
-				artifact(domain.RootCodexConfig, "AGENTS.md", domain.OwnershipManagedExact),
+				{
+					Location:  domain.Location{Root: domain.RootCodexConfig, Path: "AGENTS.md"},
+					UnitID:    "codex.AGENTS.md",
+					Ownership: domain.OwnershipManagedExact,
+				},
 			},
 		},
 	}})

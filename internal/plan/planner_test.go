@@ -9,15 +9,27 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/plan"
 )
 
-func TestPlannerRemovesOnlyExactArtifactsOfKnownUndesiredComponents(t *testing.T) {
+func TestPlannerChangesOnlyClaimedArtifactsOfUndesiredComponents(t *testing.T) {
 	planner := newPlanner(t)
+	managedExact := claimed(
+		domain.RootCodexConfig,
+		"AGENTS.md",
+		"codex.AGENTS.md",
+		domain.OwnershipManagedExact,
+	)
+	managedDrifted := claimed(
+		domain.RootCodexConfig,
+		"config.toml",
+		"codex.config.toml",
+		domain.OwnershipManagedDrifted,
+	)
 	request := domain.PlanRequest{
 		Desired: domain.DesiredState{Components: []domain.ComponentID{"claude-code"}},
 		Observed: domain.ObservedState{Components: []domain.ObservedComponent{
 			{ID: "claude-code", Artifacts: []domain.Artifact{observed(domain.RootClaudeConfig, "CLAUDE.md", domain.OwnershipManagedExact)}},
 			{ID: "codex", Artifacts: []domain.Artifact{
-				observed(domain.RootCodexConfig, "AGENTS.md", domain.OwnershipManagedExact),
-				observed(domain.RootCodexConfig, "config.toml", domain.OwnershipManagedDrifted),
+				managedExact,
+				managedDrifted,
 				observed(domain.RootCodexConfig, "legacy.md", domain.OwnershipLegacyAdoptable),
 				observed(domain.RootCodexConfig, "foreign.md", domain.OwnershipForeign),
 				observed(domain.RootCodexConfig, "conflict.md", domain.OwnershipConflict),
@@ -30,17 +42,18 @@ func TestPlannerRemovesOnlyExactArtifactsOfKnownUndesiredComponents(t *testing.T
 		t.Fatalf("plan: %v", err)
 	}
 	want := []domain.Operation{
-		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "config.toml", domain.OwnershipManagedDrifted)),
-		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "conflict.md", domain.OwnershipConflict)),
-		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "foreign.md", domain.OwnershipForeign)),
-		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "legacy.md", domain.OwnershipLegacyAdoptable)),
 		{
 			ComponentID: "codex",
-			Kind:        domain.OperationRemove,
-			Artifact:    observed(domain.RootCodexConfig, "AGENTS.md", domain.OwnershipManagedExact),
-			SourcePath:  "dist/codex/AGENTS.md",
+			UnitID:      managedDrifted.UnitID,
+			Kind:        domain.OperationRelinquish,
+			Artifact:    managedDrifted,
 		},
-		operation("retired", domain.OperationConflict, observed(domain.RootHome, "legacy/exact", domain.OwnershipManagedExact)),
+		{
+			ComponentID: "codex",
+			UnitID:      managedExact.UnitID,
+			Kind:        domain.OperationRemove,
+			Artifact:    managedExact,
+		},
 	}
 	assertOperations(t, got.Operations, want)
 }
@@ -55,8 +68,8 @@ func TestPlannerSortsByComponentKindAndLocation(t *testing.T) {
 	}
 	request := domain.PlanRequest{Observed: domain.ObservedState{Components: []domain.ObservedComponent{{
 		ID: "codex", Artifacts: []domain.Artifact{
-			observed(domain.RootHome, "z", domain.OwnershipManagedExact),
-			observed(domain.RootCodexConfig, "b", domain.OwnershipManagedExact),
+			claimed(domain.RootHome, "z", "codex.z", domain.OwnershipManagedExact),
+			claimed(domain.RootCodexConfig, "b", "codex.b", domain.OwnershipManagedExact),
 			observed(domain.RootCodexConfig, "a", domain.OwnershipForeign),
 		},
 	}}}}
@@ -65,14 +78,13 @@ func TestPlannerSortsByComponentKindAndLocation(t *testing.T) {
 		t.Fatalf("plan: %v", err)
 	}
 	want := []domain.Operation{
-		operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "a", domain.OwnershipForeign)),
-		{ComponentID: "codex", Kind: domain.OperationRemove, Artifact: observed(domain.RootCodexConfig, "b", domain.OwnershipManagedExact), SourcePath: "dist/b"},
-		{ComponentID: "codex", Kind: domain.OperationRemove, Artifact: observed(domain.RootHome, "z", domain.OwnershipManagedExact), SourcePath: "dist/z"},
+		{ComponentID: "codex", UnitID: "codex.b", Kind: domain.OperationRemove, Artifact: claimed(domain.RootCodexConfig, "b", "codex.b", domain.OwnershipManagedExact)},
+		{ComponentID: "codex", UnitID: "codex.z", Kind: domain.OperationRemove, Artifact: claimed(domain.RootHome, "z", "codex.z", domain.OwnershipManagedExact)},
 	}
 	assertOperations(t, got.Operations, want)
 }
 
-func TestPlannerRejectsForgedManagedExactArtifactForKnownComponent(t *testing.T) {
+func TestPlannerIgnoresUnclaimedManagedStatusForKnownComponent(t *testing.T) {
 	request := domain.PlanRequest{Observed: domain.ObservedState{Components: []domain.ObservedComponent{{
 		ID: "codex", Artifacts: []domain.Artifact{
 			observed(domain.RootCodexConfig, "not-in-release", domain.OwnershipManagedExact),
@@ -82,12 +94,7 @@ func TestPlannerRejectsForgedManagedExactArtifactForKnownComponent(t *testing.T)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	want := operation(
-		"codex",
-		domain.OperationConflict,
-		observed(domain.RootCodexConfig, "not-in-release", domain.OwnershipManagedExact),
-	)
-	assertOperations(t, got.Operations, []domain.Operation{want})
+	assertOperations(t, got.Operations, nil)
 }
 
 func TestPlannerInstallsDesiredDependencyArtifactsWithSources(t *testing.T) {
@@ -208,7 +215,7 @@ func TestPlannerClassifiesDesiredArtifactByOwnership(t *testing.T) {
 	}
 }
 
-func TestPlannerLegacyOnlyObservationIsValidAndNeverRemoved(t *testing.T) {
+func TestPlannerPreservesLegacyOnlyObservation(t *testing.T) {
 	request := domain.PlanRequest{Observed: domain.ObservedState{Components: []domain.ObservedComponent{{
 		ID: "codex", Artifacts: []domain.Artifact{observed(domain.RootCodexConfig, "legacy", domain.OwnershipLegacyAdoptable)},
 	}}}}
@@ -216,8 +223,7 @@ func TestPlannerLegacyOnlyObservationIsValidAndNeverRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	want := operation("codex", domain.OperationConflict, observed(domain.RootCodexConfig, "legacy", domain.OwnershipLegacyAdoptable))
-	assertOperations(t, got.Operations, []domain.Operation{want})
+	assertOperations(t, got.Operations, nil)
 }
 
 func TestPlannerRejectsDuplicateObservedState(t *testing.T) {
@@ -250,8 +256,8 @@ func TestPlannerAllowsSameObservedPathUnderDifferentRoots(t *testing.T) {
 		t.Fatalf("new catalog: %v", err)
 	}
 	request := domain.PlanRequest{Observed: domain.ObservedState{Components: []domain.ObservedComponent{{ID: "codex", Artifacts: []domain.Artifact{
-		observed(domain.RootCodexConfig, "same", domain.OwnershipManagedExact),
-		observed(domain.RootHome, "same", domain.OwnershipManagedExact),
+		claimed(domain.RootCodexConfig, "same", "codex.config", domain.OwnershipManagedExact),
+		claimed(domain.RootHome, "same", "codex.home", domain.OwnershipManagedExact),
 	}}}}}
 	got, err := plan.New(registry).Plan(request)
 	if err != nil || len(got.Operations) != 2 {
@@ -320,6 +326,17 @@ func expected(root domain.RootID, target, source domain.ArtifactPath) catalog.Ar
 
 func observed(root domain.RootID, path domain.ArtifactPath, status domain.OwnershipStatus) domain.Artifact {
 	return domain.Artifact{Location: location(root, path), Ownership: status}
+}
+
+func claimed(
+	root domain.RootID,
+	path domain.ArtifactPath,
+	unitID string,
+	status domain.OwnershipStatus,
+) domain.Artifact {
+	artifact := observed(root, path, status)
+	artifact.UnitID = unitID
+	return artifact
 }
 
 func location(root domain.RootID, path domain.ArtifactPath) domain.Location {

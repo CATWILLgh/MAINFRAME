@@ -24,6 +24,7 @@ def assert_zcode_lifecycle(
     apply: Apply,
     draft: Draft,
 ) -> None:
+    _assert_unmanaged_adapters_coexist(binary, home, sandbox, env, review)
     zcode_home = home.parent / "zcode-home"
     zcode_home.mkdir()
     isolated_env = dict(
@@ -64,6 +65,43 @@ def assert_zcode_lifecycle(
     response, _ = review(binary, sandbox, isolated_env, desired)
     assert response["apply"] == {"command_available": False}
     assert snapshot_tree(zcode_home) == before_repeat
+
+
+def _assert_unmanaged_adapters_coexist(
+    binary: Path,
+    home: Path,
+    sandbox: Path,
+    env: dict[str, str],
+    review: Review,
+) -> None:
+    coexist_home = home.parent / "zcode-coexist-home"
+    legacy = coexist_home / "legacy"
+    legacy.mkdir(parents=True)
+    targets = {
+        coexist_home / ".claude/CLAUDE.md": legacy / "CLAUDE.md",
+        coexist_home / ".codex/AGENTS.md": legacy / "codex-AGENTS.md",
+        coexist_home / ".config/opencode/AGENTS.md": legacy / "opencode-AGENTS.md",
+    }
+    for target, source in targets.items():
+        source.write_text("legacy user-owned configuration\n")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(source)
+    coexist_env = dict(
+        env,
+        HOME=str(coexist_home),
+        CODEX_HOME=str(coexist_home / ".codex"),
+        XDG_CONFIG_HOME=str(coexist_home / ".config"),
+        XDG_STATE_HOME=str(coexist_home / ".local/state"),
+    )
+
+    response, _ = review(binary, sandbox, coexist_env, _desired(["zcode-desktop"]))
+
+    assert response["apply"]["command_available"] is True
+    component_ids = {
+        operation["component_id"]
+        for operation in response["preview"]["filesystem"]["operations"]
+    }
+    assert component_ids == {"credential-tools", "mainframe-cli", "zcode-desktop"}
 
 
 def _desired(adapters: list[str]) -> dict:
