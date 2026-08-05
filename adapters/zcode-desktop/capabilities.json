@@ -18,9 +18,9 @@
   "capabilities": {
     "agents": {
       "status": "beta",
-      "scope": "user and workspace files",
+      "scope": "user files",
       "activation": "direct discovery",
-      "evidence": "Official custom-subagent documentation and installed runtime parsing; no safe native list command exists.",
+      "evidence": "Official custom-subagent documentation plus live Desktop 3.6.5 discovery and orchestrator execution of a writable regular file; symlinked agent files were ignored and no safe native list command exists.",
       "required_for_core": true
     },
     "automations": {

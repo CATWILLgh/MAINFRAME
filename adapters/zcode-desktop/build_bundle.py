@@ -43,6 +43,7 @@ hook_config = _load_local_module("mainframe_zcode_hook_config", "hook_config.py"
 
 
 DEFAULT_BUNDLE_PATH = Path("dist/zcode-desktop/bundle-v2")
+BUNDLE_SCHEMA_VERSION = 8
 BUNDLE_ENTRIES = {
     "AGENTS.md",
     "agents",
@@ -64,13 +65,22 @@ DETECTOR_SUPPORT = frozenset({
 })
 
 
-def _unit(identifier: str, kind: str, source: str, target: str) -> dict:
-    return {
+def _unit(
+    identifier: str,
+    kind: str,
+    source: str,
+    target: str,
+    materialization: str | None = None,
+) -> dict:
+    unit = {
         "id": identifier,
         "kind": kind,
         "source": source,
         "target": {"root": "zcode-config", "path": target},
     }
+    if materialization is not None:
+        unit["materialization"] = materialization
+    return unit
 
 
 def _install_units(files: dict[Path, bytes]) -> list[dict]:
@@ -78,7 +88,7 @@ def _install_units(files: dict[Path, bytes]) -> list[dict]:
     for name in sorted(path.name for path in files if path.parent == Path("agents")):
         units.append(_unit(
             f"zcode-desktop.agents.{Path(name).stem}",
-            "file", f"agents/{name}", f"agents/{name}",
+            "file", f"agents/{name}", f"agents/{name}", "writable-file",
         ))
     public = sorted({path.parts[1] for path in files if path.parts[0] == "skills"})
     private = sorted({
@@ -238,7 +248,7 @@ def materialize(root: Path, output: Path) -> None:
         install_units=_install_units(files),
         resources=_resources(),
         runtime_profile={"config_root": "~/.zcode"},
-        schema_version=JSON_CLAIM_OWNERSHIP_SCHEMA_VERSION,
+        schema_version=BUNDLE_SCHEMA_VERSION,
         host_requirements=compatibility.managed_host_requirements(),
     )
 

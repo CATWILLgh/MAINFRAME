@@ -44,6 +44,11 @@ def assert_zcode_lifecycle(
     _apply_review(binary, sandbox, isolated_env, desired, response, apply, draft)
     _assert_installed(zcode_home)
 
+    agent_path = zcode_home / ".zcode/agents/decision-reviewer.md"
+    managed_agent = agent_path.read_bytes()
+    customized_agent = managed_agent + b"\nLocal ZCode preferences preserved.\n"
+    agent_path.write_bytes(customized_agent)
+
     config_path = zcode_home / ".zcode/cli/config.json"
     config = json.loads(config_path.read_text())
     config["foreign_object"] = {}
@@ -55,12 +60,20 @@ def assert_zcode_lifecycle(
     response, _ = review(binary, sandbox, isolated_env, empty)
     assert response["apply"]["command_available"] is True
     _apply_review(binary, sandbox, isolated_env, empty, response, apply, draft)
-    _assert_removed_with_foreign_state(zcode_home, before_removal)
+    _assert_removed_with_foreign_state(
+        zcode_home, before_removal, customized_agent
+    )
+
+    response, _ = review(binary, sandbox, isolated_env, desired)
+    assert response["apply"] == {"command_available": False}
+    assert agent_path.read_bytes() == customized_agent
+    agent_path.unlink()
 
     response, _ = review(binary, sandbox, isolated_env, desired)
     assert response["apply"]["command_available"] is True
     _apply_review(binary, sandbox, isolated_env, desired, response, apply, draft)
     _assert_installed(zcode_home)
+    assert agent_path.read_bytes() == managed_agent
     before_repeat = snapshot_tree(zcode_home)
     response, _ = review(binary, sandbox, isolated_env, desired)
     assert response["apply"] == {"command_available": False}
@@ -137,7 +150,10 @@ def _apply_review(
 def _assert_installed(home: Path) -> None:
     root = home / ".zcode"
     assert (root / "AGENTS.md").is_symlink()
-    assert (root / "agents/decision-reviewer.md").is_symlink()
+    agent = root / "agents/decision-reviewer.md"
+    assert agent.is_file()
+    assert not agent.is_symlink()
+    assert agent.stat().st_mode & 0o200
     assert (root / "skills/task-workflow").is_symlink()
     assert not (root / "skills/decision-review").exists()
     config = json.loads((root / "cli/config.json").read_text())
@@ -155,10 +171,11 @@ def _assert_installed(home: Path) -> None:
 def _assert_removed_with_foreign_state(
     home: Path,
     before: TreeSnapshot,
+    customized_agent: bytes,
 ) -> None:
     root = home / ".zcode"
     assert not (root / "AGENTS.md").exists()
-    assert not (root / "agents/decision-reviewer.md").exists()
+    assert (root / "agents/decision-reviewer.md").read_bytes() == customized_agent
     assert not (root / "skills/task-workflow").exists()
     assert not (root / "mainframe/config-ownership.json").exists()
     config = json.loads((root / "cli/config.json").read_text())

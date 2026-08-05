@@ -41,7 +41,7 @@ def _materialized() -> tuple[Path, dict]:
 
 def test_bundle_is_closed_and_declares_every_core_surface() -> None:
     output, manifest = _materialized()
-    assert manifest["schema_version"] == 7
+    assert manifest["schema_version"] == 8
     assert manifest["component"] == "zcode-desktop"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert (output / "AGENTS.md").is_file()
@@ -52,6 +52,17 @@ def test_bundle_is_closed_and_declares_every_core_surface() -> None:
     assert (output / "gates/mainframe_runtime.py").is_file()
     assert (output / "gates/detectors/_hooklib.py").is_file()
     assert (output / "gates/rules/frontend-token-storage.yml").is_file()
+    agent_units = [
+        unit for unit in manifest["install_units"]
+        if unit["id"].startswith("zcode-desktop.agents.")
+    ]
+    assert len(agent_units) == 7
+    assert {unit["materialization"] for unit in agent_units} == {"writable-file"}
+    assert all(
+        "materialization" not in unit
+        for unit in manifest["install_units"]
+        if not unit["id"].startswith("zcode-desktop.agents.")
+    )
 
 
 def test_hook_config_uses_hidden_cli_launcher_and_claim_scoped_ownership() -> None:
