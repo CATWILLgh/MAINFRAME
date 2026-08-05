@@ -1,7 +1,7 @@
 ---
 id: aeb5d9b0
 title: Make ZCode discover delivered MAINFRAME subagents
-status: open
+status: in-progress
 priority: high
 component: zcode-desktop
 discovered: 2026-08-05
@@ -26,9 +26,11 @@ Official ZCode documentation says that saved user subagents are Markdown files
 under `~/.zcode/agents/<name>.md`, are loaded on the next run, appear in the
 Subagents settings panel, and can be referenced with `@`. ZCode separately
 documents symbolic-link import for skills, but does not document symbolic-link
-support for user subagent files. The current evidence therefore proves
-filesystem delivery but not native discovery; symbolic-link handling is the
-leading hypothesis, not yet the confirmed root cause.
+support for user subagent files. A controlled live differential probe then
+replaced only `decision-reviewer.md` with a byte-identical regular file. ZCode
+immediately displayed it, saved local model and tool selections after the file
+was made user-writable, and the orchestrator successfully executed it. The
+symbolic-link delivery is therefore the confirmed cause on Desktop 3.6.5.
 
 ## Why it is a problem
 Specialized agents are a required ZCode core capability in
@@ -47,24 +49,29 @@ acceptance cannot pass.
   concerns whether ZCode accepts links at its user-agent discovery boundary.
 
 ## What probably needs to be done
-First run a reversible differential probe with one minimal agent: compare the
-current linked file with a byte-identical regular file in `~/.zcode/agents/`,
-including a full restart and both Settings and `@` discovery checks. If the
-regular file is discovered, introduce an adapter-specific regular-file
-materialization policy rather than changing link behavior for every adapter.
+Introduce an adapter-specific writable-file materialization policy for agent
+files without changing link behavior for other adapter artifacts. Treat the
+agent as a managed configuration file: update and remove it automatically only
+while unchanged, preserve a locally edited file as a whole, and report the
+conflict instead of overwriting it.
 
 The lifecycle change must retain claim-scoped ownership, user-edit detection,
-atomic replacement, update, rollback, uninstall, and recovery behavior. If a
-regular file is also rejected, capture a profile created by ZCode itself and
-compare its supported frontmatter with the generated projection. Re-evaluate
-plugin-packaged agents under #0e9af5a9 only after the direct-file format is
-understood.
+atomic replacement, update, rollback, uninstall, and recovery behavior.
+Field-aware merging of local preferences with later managed prompt updates is
+tracked separately in [#ac703f8b](ac703f8b-merge-zcode-agent-user-overrides.md).
+Re-evaluate plugin-packaged agents under #0e9af5a9 only if direct writable
+files cannot satisfy the lifecycle contract.
+
+The implemented contract uses bundle schema v8, ownership registry v2, and
+transaction journal v5. It retains strict readers for legacy v1 link claims
+and recoverable v4 link transactions. The initial v7 managed link can migrate
+directly to a regular file; foreign or changed links remain untouched.
 
 ## Acceptance criteria
 - A failing test or bounded native probe reproduces the rejected delivery shape
   before the lifecycle or projection fix is applied.
 - All seven MAINFRAME subagents appear in Settings -> Subagents after a full
-  restart and can be selected through the chat `@` picker.
+  restart and the orchestrator can execute a designated MAINFRAME subagent.
 - A fresh install, update, repeated apply, rollback, recovery, and uninstall
   preserve foreign files and user edits while managing the projected agents.
 - ZCode skills, commands, instructions, hooks, and user-owned configuration
@@ -79,3 +86,12 @@ understood.
 - Live ZCode Desktop 3.6.5 Settings -> Subagents observation on 2026-08-05
 - https://zcode.z.ai/en/docs/subagents
 - https://zcode.z.ai/en/docs/skill
+
+## Re-occurrence noted (2026-08-05)
+
+**Noticed during:** Live ZCode Desktop adapter acceptance
+**Where:** ZCode Desktop 3.6.5 Settings -> Subagents and orchestrator execution
+**Additional details:** A regular writable `decision-reviewer.md` appeared and
+executed successfully; the six remaining symbolic links stayed undiscovered.
+The chat `@` picker did not expose the agent, so it is not used as the native
+execution acceptance contract for this host version.

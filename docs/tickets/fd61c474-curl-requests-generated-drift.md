@@ -47,3 +47,11 @@ No ticket mentioning the `curl-requests` generated or golden drift was found. Ex
 - `dist/claude-code/plugin/skills/curl-requests/SKILL.md`
 - `dist/codex/skills-golden/curl-requests/SKILL.md`
 - Baseline test run on 2026-08-04: 96 passed, 2 failed.
+
+## Re-occurrence noted (2026-08-05)
+
+**Noticed during:** ZCode writable-subagent lifecycle verification
+**Where:** `python3 tools/render_core.py --check`
+**Additional details:** The check still reports only
+`dist/claude-code/plugin/skills/curl-requests/SKILL.md` as different from its
+source. The ZCode adapter does not modify this generated skill.

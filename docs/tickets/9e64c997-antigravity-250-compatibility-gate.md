@@ -36,3 +36,12 @@ Run the Antigravity installed-contract probes against `2.5.0`, compare hook, plu
 - `internal/hostcompatibility/evaluate.go`
 - `tools/release_draft_fixture.py`
 - `tools/release_draft_assertions.py`
+
+## Re-occurrence noted (2026-08-05)
+
+**Noticed during:** ZCode writable-subagent lifecycle verification
+**Where:** `python3 -m pytest -q tools/test_build_release.py`
+**Additional details:** The ZCode install, customized-file preservation,
+conflict, cleanup, and reinstall stages completed before the packaged suite
+reached the already tracked Antigravity host rejection. The full Go suite and
+focused ZCode/release-contract tests remained green.

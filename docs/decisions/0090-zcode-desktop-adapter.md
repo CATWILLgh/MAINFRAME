@@ -1,6 +1,6 @@
 # ADR 0090: ZCode Desktop as a local first-class adapter
 
-> Date: 2026-08-05 · Status: accepted for implementation; live activation pending
+> Date: 2026-08-05 · Status: accepted for implementation; live activation in progress
 
 ## Decision
 
@@ -28,8 +28,9 @@ another adapter's files.
 Official ZCode documentation describes plugins that can bundle skills, commands,
 subagents, MCP servers, and hooks. The installed guide and observed local plugin
 runtime did not provide the same confidence for custom plugin-agent execution and
-programmatic lifecycle ownership. Direct user roots are documented independently
-and passed isolated discovery probes.
+programmatic lifecycle ownership. Direct user roots are documented independently.
+Skills and commands passed isolated discovery probes; native agent discovery
+required a live Desktop test because the CLI has no safe list command.
 
 MAINFRAME therefore does not write ZCode plugin caches, marketplace state, desktop
 databases, Electron IPC state, or `app.asar` internals. Plugin-led delivery remains
@@ -66,6 +67,22 @@ only installed-runtime tool names and verified native fields. Unsupported model,
 reasoning-effort, turn-budget, and background metadata are not invented; bounded
 turn intent is expressed in the agent instructions where useful.
 
+Live Desktop 3.6.5 testing established that ZCode ignores user-agent files delivered
+as symbolic links, while it discovers and executes the byte-identical regular file.
+Agent files therefore use explicit writable-file materialization; other adapter
+artifacts retain their existing link delivery. An unchanged managed agent may be
+updated or removed automatically. A locally edited agent is preserved as a whole
+configuration file rather than overwritten. Field-aware merging of local model,
+color, and tool selections is deferred to ticket `ac703f8b` because safe merging
+requires previous-document provenance and an explicit conflict contract.
+
+Writable-file materialization is introduced only by bundle schema v8. The
+filesystem ownership registry reads strict legacy v1 link claims and writes v2;
+the crash journal recovers valid legacy v4 link transactions and writes v5. An
+exact claim-backed v7 agent link can migrate atomically to the v8 regular file.
+Foreign, changed, mismatched, and reverse materialization transitions remain
+conflicts and are preserved.
+
 The native custom-agent surface is documented as Beta. The release host requirement
 pins the bundle identifier and short application version. The observed build is
 recorded as qualification evidence, while the local preflight checks the bundled CLI
@@ -88,7 +105,8 @@ failures are not presented as successful enforcement.
 ### Shared JSON configuration
 
 `~/.zcode/cli/config.json` is user-owned shared state. MAINFRAME owns neither the
-whole file nor the `hooks` object. Bundle schema v7 declares two claim types:
+whole file nor the `hooks` object. Bundle schema v7 introduced two claim types,
+which remain part of the schema v8 component:
 
 - an exact scalar with captured predecessor state;
 - one array entry identified by a selector relative to each entry.
@@ -126,7 +144,9 @@ and cross-adapter regressions. It does not authorize changes to live `~/.zcode`.
 
 Live activation is a separate gate: show the exact preview and rollback path, obtain
 explicit user approval, apply only MAINFRAME-owned surfaces, restart ZCode, and run
-the desktop/CLI acceptance matrix. Until that succeeds, implementation status is
+the desktop/CLI acceptance matrix. Instructions, skills, hooks, and one regular-file
+agent have passed live checks. Full seven-agent writable delivery and lifecycle
+regression verification remain pending, so implementation status is still
 `waiting`, not complete.
 
 ## Rejected alternatives

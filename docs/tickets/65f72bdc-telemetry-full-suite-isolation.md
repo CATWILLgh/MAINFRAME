@@ -45,3 +45,12 @@ Existing telemetry tickets concern runtime activation and storage. None records 
 - `tools/test_build_codex_bundle_runtime.py`
 - `tools/test_build_opencode_bundle.py`
 - Full and focused pytest runs on 2026-08-05.
+
+## Re-occurrence noted (2026-08-05)
+
+**Noticed during:** ZCode writable-subagent lifecycle verification
+**Where:** Sanitized full `python3 -m pytest -q --tb=short` run
+**Additional details:** The same Codex and OpenCode telemetry tests failed in
+the complete 808-test process while 803 tests, all ZCode-focused checks, and
+the complete Go suite passed. No user credential variables were forwarded to
+the test process.
