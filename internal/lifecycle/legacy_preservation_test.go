@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
+	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
 func TestPlanPreservesOmittedUnmanagedComponents(t *testing.T) {
@@ -111,6 +113,60 @@ func TestPlanStillRemovesOmittedManagedInternalComponent(t *testing.T) {
 	}
 	assertNoComponentOperations(t, plan.Operations, domain.ComponentClaudeCode)
 	assertComponentOperation(t, plan.Operations, domain.ComponentCodexGates, domain.OperationRemove)
+}
+
+func TestPreviewPreservesOnlyUnmanagedAdapterConfiguration(t *testing.T) {
+	model, err := installmodel.New([]installmodel.ComponentSpec{
+		{
+			ID:           domain.ComponentClaudeCode,
+			Dependencies: []domain.ComponentID{"credential-tools"},
+			Artifacts: []installmodel.ArtifactSpec{
+				desired(domain.RootClaudeConfig, "CLAUDE.md", "claude/CLAUDE.md"),
+			},
+		},
+		{ID: "credential-tools"},
+	})
+	if err != nil {
+		t.Fatalf("model: %v", err)
+	}
+	resources := []releasecontract.Resource{
+		{
+			ID: "claude-code.settings", ComponentID: domain.ComponentClaudeCode,
+			Strategy:    releasecontract.StrategySeedIfAbsent,
+			Target:      domain.Location{Root: domain.RootClaudeConfig, Path: "settings.json"},
+			Observation: releasecontract.SupportUnimplemented,
+			Apply:       releasecontract.SupportUnimplemented,
+		},
+		{
+			ID: "credential-tools.store", ComponentID: "credential-tools",
+			Strategy:    releasecontract.StrategySeedIfAbsent,
+			Target:      domain.Location{Root: domain.RootCredentialsConfig, Path: "secrets.env"},
+			Observation: releasecontract.SupportUnimplemented,
+			Apply:       releasecontract.SupportUnimplemented,
+		},
+	}
+	service, err := NewWithResources(
+		model,
+		domain.ObservedState{Components: []domain.ObservedComponent{{
+			ID: domain.ComponentClaudeCode,
+			Artifacts: []domain.Artifact{
+				artifact(domain.RootClaudeConfig, "CLAUDE.md", domain.OwnershipForeign),
+			},
+		}}},
+		resources,
+	)
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+
+	preview, err := service.Preview(PreviewRequest{})
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+	if len(preview.Configuration.Issues) != 1 ||
+		preview.Configuration.Issues[0].ComponentID != "credential-tools" {
+		t.Fatalf("configuration issues = %#v", preview.Configuration.Issues)
+	}
 }
 
 func assertNoComponentOperations(

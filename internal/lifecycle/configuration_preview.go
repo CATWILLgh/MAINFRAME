@@ -81,12 +81,13 @@ func externalObservationsForInventory(
 }
 
 func (service Service) Preview(request PreviewRequest) (Preview, error) {
-	preservationRoots := service.preservationRoots(request.Components)
+	hostPreservationRoots := service.preservationRoots(request.Components)
+	retainedAdapters := service.retainedAdapters(request.Components)
 	diagnosticsPlan, err := diagnostics.BuildLifecycle(
 		request.Components,
 		service.diagnosticsRemovalComponents(
 			request.Components,
-			preservationRoots,
+			hostPreservationRoots,
 		),
 		request.Diagnostics,
 	)
@@ -101,13 +102,13 @@ func (service Service) Preview(request PreviewRequest) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	mcpPlan, err := service.planMCP(request, preservationRoots)
+	mcpPlan, err := service.planMCP(request, retainedAdapters)
 	if err != nil {
 		return Preview{}, err
 	}
 	configurationPlan, err := service.planManagedConfiguration(
 		request.Components,
-		preservationRoots,
+		service.configurationPreservationComponents(request.Components),
 	)
 	if err != nil {
 		return Preview{}, err
@@ -165,9 +166,8 @@ func (service Service) planMCP(
 
 func (service Service) planManagedConfiguration(
 	components []domain.ComponentID,
-	preservationRoots []domain.ComponentID,
+	preserved []domain.ComponentID,
 ) (configuration.Plan, error) {
-	preserved := service.configurationComponents(preservationRoots)
 	if service.configurationInspection == nil {
 		return filterConfigurationPlan(
 			service.configurationFallback,

@@ -5,13 +5,11 @@ import (
 
 	"github.com/CATWILLgh/MAINFRAME/internal/configuration"
 	"github.com/CATWILLgh/MAINFRAME/internal/diagnostics"
-	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
 func (service Service) PrepareConfiguration(
 	request PreviewRequest,
 ) (configuration.PreparedPlan, error) {
-	preservationRoots := service.preservationRoots(request.Components)
 	preview, err := service.Preview(request)
 	if err != nil {
 		return configuration.PreparedPlan{}, err
@@ -19,7 +17,7 @@ func (service Service) PrepareConfiguration(
 	if err := validateConfigurationPreview(preview); err != nil {
 		return configuration.PreparedPlan{}, err
 	}
-	base, err := service.prepareBaseConfiguration(request, preservationRoots)
+	base, err := service.prepareBaseConfiguration(request)
 	if err != nil {
 		return configuration.PreparedPlan{}, err
 	}
@@ -55,14 +53,13 @@ func validateConfigurationPreview(preview Preview) error {
 
 func (service Service) prepareBaseConfiguration(
 	request PreviewRequest,
-	preservationRoots []domain.ComponentID,
 ) (configuration.PreparedPlan, error) {
 	prepared := configuration.PreparedPlan{}
 	var err error
 	if service.configurationInspection != nil {
 		prepared, err = service.configurationInspection.PrepareWithPreservation(
 			service.configurationComponents(request.Components),
-			service.configurationComponents(preservationRoots),
+			service.configurationPreservationComponents(request.Components),
 		)
 		if err != nil {
 			return configuration.PreparedPlan{}, fmt.Errorf(
@@ -86,7 +83,7 @@ func (service Service) prepareBaseConfiguration(
 	prepared, err = inspection.PrepareOntoWithPreservation(
 		prepared,
 		request.Components,
-		preservationRoots,
+		service.retainedAdapters(request.Components),
 		request.MCPSelections,
 	)
 	if err != nil {

@@ -79,6 +79,8 @@ def _assert_unmanaged_adapters_coexist(
     legacy.mkdir(parents=True)
     targets = {
         coexist_home / ".claude/CLAUDE.md": legacy / "CLAUDE.md",
+        coexist_home / ".claude/credentials-index.md": legacy / "credentials-index.md",
+        coexist_home / ".claude/settings.json": legacy / "settings.json",
         coexist_home / ".codex/AGENTS.md": legacy / "codex-AGENTS.md",
         coexist_home / ".config/opencode/AGENTS.md": legacy / "opencode-AGENTS.md",
     }
