@@ -239,6 +239,8 @@ def _validate_units(root: Path, units: Any, schema_version: int) -> None:
         allowed_fields = fields.UNIT_REQUIRED_FIELDS | fields.UNIT_OPTIONAL_FIELDS
         if schema_version >= fields.FEATURE_INSTALL_UNIT_SCHEMA_VERSION:
             allowed_fields = fields.UNIT_FEATURE_FIELDS
+        if schema_version >= fields.INSTALL_UNIT_MATERIALIZATION_SCHEMA_VERSION:
+            allowed_fields = fields.UNIT_MATERIALIZATION_FIELDS
         _require_fields(
             unit,
             fields.UNIT_REQUIRED_FIELDS,
@@ -249,6 +251,15 @@ def _validate_units(root: Path, units: Any, schema_version: int) -> None:
         kind = unit["kind"]
         if kind not in {"file", "tree"}:
             raise ValueError(f"install unit {identifier!r} has invalid kind")
+        materialization = unit.get("materialization", "symlink")
+        if materialization not in {"symlink", "writable-file"}:
+            raise ValueError(
+                f"install unit {identifier!r} has invalid materialization"
+            )
+        if kind != "file" and materialization == "writable-file":
+            raise ValueError(
+                f"install unit {identifier!r} writable-file materialization requires kind file"
+            )
         source = _portable_path(unit["source"], f"install unit {identifier!r} source")
         source_path = root / Path(source)
         _reject_symlink_segments(root, source)

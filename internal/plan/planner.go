@@ -70,7 +70,9 @@ func (planner Planner) operationsForDesired(
 				continue
 			}
 			kind := domain.OperationInstall
-			artifact := domain.Artifact{Location: expected.Target}
+			artifact := domain.Artifact{
+				Location: expected.Target, Materialization: expected.Materialization,
+			}
 			sourcePath := expected.SourcePath
 			if exists {
 				artifact = observed.artifact
@@ -79,6 +81,10 @@ func (planner Planner) operationsForDesired(
 					switch observed.artifact.Ownership {
 					case domain.OwnershipManagedPrevious:
 						kind = domain.OperationReplace
+						if expected.Materialization == domain.MaterializationWritableFile &&
+							observed.artifact.Materialization != domain.MaterializationWritableFile {
+							artifact.Materialization = domain.MaterializationWritableFile
+						}
 					case domain.OwnershipManagedMissing:
 						kind = domain.OperationInstall
 					case domain.OwnershipExactAdoptable:
@@ -94,11 +100,12 @@ func (planner Planner) operationsForDesired(
 				}
 			}
 			operations = append(operations, domain.Operation{
-				ComponentID: id,
-				UnitID:      expected.UnitID,
-				Kind:        kind,
-				Artifact:    artifact,
-				SourcePath:  sourcePath,
+				ComponentID:  id,
+				UnitID:       expected.UnitID,
+				Kind:         kind,
+				Artifact:     artifact,
+				SourcePath:   sourcePath,
+				SourceSHA256: expected.SourceSHA256,
 			})
 		}
 	}

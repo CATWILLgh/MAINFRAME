@@ -50,6 +50,10 @@ func decodeJournal(payload []byte) (Journal, error) {
 	if err != nil {
 		return Journal{}, err
 	}
+	payload, err = upgradeV4Journal(payload)
+	if err != nil {
+		return Journal{}, err
+	}
 	if err := requireJournalShape(payload, CurrentJournalSchemaVersion); err != nil {
 		return Journal{}, err
 	}
@@ -239,7 +243,7 @@ func requireOperationsShape(payload []byte) error {
 	for index, rawOperation := range operations {
 		operation, err := requiredObject(
 			rawOperation,
-			"component_id", "kind", "artifact", "source_path",
+			"component_id", "kind", "artifact",
 		)
 		if err != nil {
 			return fmt.Errorf("plan operation %d: %w", index, err)

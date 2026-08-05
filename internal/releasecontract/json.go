@@ -81,3 +81,11 @@ func (feature *optionalFeature) UnmarshalJSON(payload []byte) error {
 	}
 	return json.Unmarshal(payload, &feature.Value)
 }
+
+func (materialization *optionalMaterialization) UnmarshalJSON(payload []byte) error {
+	materialization.Present = true
+	if bytes.Equal(bytes.TrimSpace(payload), []byte("null")) {
+		return fmt.Errorf("materialization must not be null")
+	}
+	return json.Unmarshal(payload, &materialization.Value)
+}

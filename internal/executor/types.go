@@ -152,23 +152,27 @@ const (
 )
 
 type JournalMutation struct {
-	ComponentID    domain.ComponentID   `json:"component_id,omitempty"`
-	UnitID         string               `json:"unit_id,omitempty"`
-	Kind           MutationKind         `json:"kind"`
-	Location       domain.Location      `json:"location"`
-	SourcePath     domain.ArtifactPath  `json:"source_path,omitempty"`
-	Before         LinkImage            `json:"before"`
-	After          LinkImage            `json:"after"`
-	Parent         FileIdentity         `json:"parent"`
-	Private        PrivateDirectory     `json:"private"`
-	StagedName     string               `json:"staged_name"`
-	StagedIdentity FileIdentity         `json:"staged_identity"`
-	RetainedName   string               `json:"retained_name"`
-	Phase          StepPhase            `json:"phase"`
-	Finalized      bool                 `json:"finalized"`
-	ClaimBefore    *linkownership.Claim `json:"claim_before,omitempty"`
-	ClaimAfter     *linkownership.Claim `json:"claim_after,omitempty"`
-	ClaimPhase     ClaimPhase           `json:"claim_phase,omitempty"`
+	ComponentID     domain.ComponentID     `json:"component_id,omitempty"`
+	UnitID          string                 `json:"unit_id,omitempty"`
+	Kind            MutationKind           `json:"kind"`
+	Location        domain.Location        `json:"location"`
+	SourcePath      domain.ArtifactPath    `json:"source_path"`
+	SourceSHA256    string                 `json:"source_sha256,omitempty"`
+	Materialization domain.Materialization `json:"materialization,omitempty"`
+	Before          LinkImage              `json:"before"`
+	After           LinkImage              `json:"after"`
+	FileBefore      ConfigurationFileImage `json:"file_before,omitempty"`
+	FileAfter       ConfigurationFileImage `json:"file_after,omitempty"`
+	Parent          FileIdentity           `json:"parent"`
+	Private         PrivateDirectory       `json:"private"`
+	StagedName      string                 `json:"staged_name"`
+	StagedIdentity  FileIdentity           `json:"staged_identity"`
+	RetainedName    string                 `json:"retained_name"`
+	Phase           StepPhase              `json:"phase"`
+	Finalized       bool                   `json:"finalized"`
+	ClaimBefore     *linkownership.Claim   `json:"claim_before,omitempty"`
+	ClaimAfter      *linkownership.Claim   `json:"claim_after,omitempty"`
+	ClaimPhase      ClaimPhase             `json:"claim_phase,omitempty"`
 }
 
 type ClaimPhase string

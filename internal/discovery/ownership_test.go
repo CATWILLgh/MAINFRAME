@@ -1,6 +1,9 @@
 package discovery_test
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"io/fs"
 	"reflect"
 	"testing"
 	"testing/fstest"
@@ -10,6 +13,66 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/installmodel"
 	"github.com/CATWILLgh/MAINFRAME/internal/linkownership"
 )
+
+func TestDiscoverWithOwnershipClassifiesWritableFileContent(t *testing.T) {
+	target := loc(domain.RootCodexConfig, "AGENTS.md")
+	installed := []byte("installed\n")
+	current := []byte("current\n")
+	model := modelWithArtifacts(t, []installmodel.ArtifactSpec{{
+		UnitID: "component.instructions", Target: target,
+		SourcePath: "dist/AGENTS.md", Materialization: domain.MaterializationWritableFile,
+		SourceSHA256: fmt.Sprintf("%x", sha256.Sum256(current)),
+	}})
+	claim := ownershipClaim("component", "component.instructions", target, "")
+	claim.Materialization = domain.MaterializationWritableFile
+	claim.ContentSHA256 = fmt.Sprintf("%x", sha256.Sum256(installed))
+	claim.Mode = 0o600
+	registry, err := linkownership.New([]linkownership.Claim{claim})
+	if err != nil {
+		t.Fatalf("new registry: %v", err)
+	}
+	tests := []struct {
+		name    string
+		content []byte
+		mode    uint32
+		status  domain.OwnershipStatus
+	}{
+		{name: "previous", content: installed, mode: 0o600, status: domain.OwnershipManagedPrevious},
+		{name: "drifted content", content: []byte("local\n"), mode: 0o600, status: domain.OwnershipManagedDrifted},
+		{name: "drifted mode", content: installed, mode: 0o400, status: domain.OwnershipManagedDrifted},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			filesystem := fstest.MapFS{
+				"source/dist/AGENTS.md":   {Data: current, Mode: 0o644},
+				"targets/codex/AGENTS.md": {Data: test.content, Mode: fs.FileMode(test.mode)},
+			}
+			got, err := discovery.DiscoverWithOwnership(model, filesystem, validRoots(), registry)
+			if err != nil {
+				t.Fatalf("discover: %v", err)
+			}
+			artifact := got.Components[0].Artifacts[0]
+			if artifact.Ownership != test.status || artifact.Materialization != domain.MaterializationWritableFile ||
+				(test.mode == 0o600 && artifact.ContentSHA256 == "") || artifact.Mode != test.mode {
+				t.Fatalf("artifact = %#v", artifact)
+			}
+		})
+	}
+
+	claim.ContentSHA256 = fmt.Sprintf("%x", sha256.Sum256(current))
+	registry, err = linkownership.New([]linkownership.Claim{claim})
+	if err != nil {
+		t.Fatalf("new current registry: %v", err)
+	}
+	filesystem := fstest.MapFS{
+		"source/dist/AGENTS.md":   {Data: current, Mode: 0o644},
+		"targets/codex/AGENTS.md": {Data: current, Mode: 0o600},
+	}
+	got, err := discovery.DiscoverWithOwnership(model, filesystem, validRoots(), registry)
+	if err != nil || got.Components[0].Artifacts[0].Ownership != domain.OwnershipManagedExact {
+		t.Fatalf("exact observation = %#v, error = %v", got, err)
+	}
+}
 
 const ownershipDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 

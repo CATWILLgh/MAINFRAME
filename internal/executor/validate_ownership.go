@@ -63,7 +63,8 @@ func validateClaimShape(step JournalMutation) error {
 
 func validateClaimOnlyStep(step JournalMutation) error {
 	if step.Private != (PrivateDirectory{}) ||
-		step.StagedName != "" || step.RetainedName != "" {
+		step.StagedName != "" || step.RetainedName != "" ||
+		!step.FileBefore.IsZero() || !step.FileAfter.IsZero() || step.SourceSHA256 != "" {
 		return fmt.Errorf("invalid claim-only mutation")
 	}
 	if step.Kind == MutationAdopt {

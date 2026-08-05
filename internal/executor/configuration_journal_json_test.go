@@ -105,7 +105,7 @@ func TestCurrentInMemoryLinkOnlyJournalEncodesCurrentShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encode current fixture: %v", err)
 	}
-	if !strings.Contains(string(payload), `"schema_version":4`) ||
+	if !strings.Contains(string(payload), `"schema_version":5`) ||
 		!strings.Contains(string(payload), `"configurations":[]`) {
 		t.Fatalf("current fixture encoded incorrectly: %s", payload)
 	}
@@ -152,7 +152,7 @@ func TestJournalJSONRejectsExplicitLegacySchemaVersion(t *testing.T) {
 	}
 	explicitVersionZero := strings.Replace(
 		string(payload),
-		`"schema_version":4`,
+		`"schema_version":5`,
 		`"schema_version":0`,
 		1,
 	)
@@ -201,7 +201,7 @@ func removeBirthFields(value any) {
 	}
 }
 
-func TestJournalJSONUpgradesEmptyV3JournalToV4(t *testing.T) {
+func TestJournalJSONUpgradesEmptyV3JournalToCurrent(t *testing.T) {
 	payload := []byte(fmt.Sprintf(
 		`{"schema_version":3,"release":{"id":"release","index_sha256":"%s"},`+
 			`"desired":[],"status":"committed","plan":{"operations":[]},`+
@@ -213,8 +213,8 @@ func TestJournalJSONUpgradesEmptyV3JournalToV4(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeJournal() error = %v", err)
 	}
-	if journal.SchemaVersion != 4 {
-		t.Fatalf("schema version = %d, want 4", journal.SchemaVersion)
+	if journal.SchemaVersion != CurrentJournalSchemaVersion {
+		t.Fatalf("schema version = %d, want %d", journal.SchemaVersion, CurrentJournalSchemaVersion)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestJournalJSONEncodesCurrentShapeWithoutPreparedBytes(t *testing.T) {
 	}
 	sortStrings(gotFields)
 	if !reflect.DeepEqual(gotFields, wantFields) ||
-		string(root["schema_version"]) != "4" ||
+		string(root["schema_version"]) != "5" ||
 		string(root["configurations"]) == "null" {
 		t.Fatalf("current journal shape = %s", payload)
 	}

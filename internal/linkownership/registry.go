@@ -11,24 +11,29 @@ import (
 	"unicode/utf8"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
+	"github.com/CATWILLgh/MAINFRAME/internal/jsondocument"
 )
 
 const (
-	SchemaVersion     = 1
-	MaxRegistryBytes  = 1 << 20
-	maxRawTargetBytes = 16 << 10
+	SchemaVersion       = 2
+	legacySchemaVersion = 1
+	MaxRegistryBytes    = 1 << 20
+	maxRawTargetBytes   = 16 << 10
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type Claim struct {
-	UnitID      string             `json:"unit_id"`
-	ComponentID domain.ComponentID `json:"component_id"`
-	Target      domain.Location    `json:"target"`
-	RawTarget   string             `json:"raw_target"`
-	ReleaseID   string             `json:"release_id"`
-	IndexSHA256 string             `json:"index_sha256"`
+	UnitID          string                 `json:"unit_id"`
+	ComponentID     domain.ComponentID     `json:"component_id"`
+	Target          domain.Location        `json:"target"`
+	RawTarget       string                 `json:"raw_target"`
+	Materialization domain.Materialization `json:"materialization,omitempty"`
+	ContentSHA256   string                 `json:"content_sha256,omitempty"`
+	Mode            uint32                 `json:"mode,omitempty"`
+	ReleaseID       string                 `json:"release_id"`
+	IndexSHA256     string                 `json:"index_sha256"`
 }
 
 type Registry struct {
@@ -38,6 +43,20 @@ type Registry struct {
 type document struct {
 	SchemaVersion int     `json:"schema_version"`
 	Claims        []Claim `json:"claims"`
+}
+
+type legacyClaim struct {
+	UnitID      string             `json:"unit_id"`
+	ComponentID domain.ComponentID `json:"component_id"`
+	Target      domain.Location    `json:"target"`
+	RawTarget   string             `json:"raw_target"`
+	ReleaseID   string             `json:"release_id"`
+	IndexSHA256 string             `json:"index_sha256"`
+}
+
+type legacyDocument struct {
+	SchemaVersion int           `json:"schema_version"`
+	Claims        []legacyClaim `json:"claims"`
 }
 
 func New(claims []Claim) (Registry, error) {
@@ -119,19 +138,62 @@ func Decode(payload []byte) (Registry, error) {
 	if len(payload) > MaxRegistryBytes {
 		return Registry{}, fmt.Errorf("ownership registry exceeds %d bytes", MaxRegistryBytes)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	var decoded document
-	if err := decoder.Decode(&decoded); err != nil {
+	if _, err := jsondocument.Parse(payload); err != nil {
 		return Registry{}, fmt.Errorf("decode ownership registry: %w", err)
 	}
-	if err := requireEOF(decoder); err != nil {
+	var header struct {
+		SchemaVersion int `json:"schema_version"`
+	}
+	if err := json.Unmarshal(payload, &header); err != nil {
+		return Registry{}, fmt.Errorf("decode ownership registry: %w", err)
+	}
+	switch header.SchemaVersion {
+	case legacySchemaVersion:
+		return decodeLegacyRegistry(payload)
+	case SchemaVersion:
+		return decodeCurrentRegistry(payload)
+	default:
+		return Registry{}, fmt.Errorf("invalid ownership registry schema version %d", header.SchemaVersion)
+	}
+}
+
+func decodeCurrentRegistry(payload []byte) (Registry, error) {
+	var decoded document
+	if err := decodeDocument(payload, &decoded); err != nil {
 		return Registry{}, err
 	}
-	if decoded.SchemaVersion != SchemaVersion || decoded.Claims == nil {
+	if decoded.Claims == nil {
 		return Registry{}, fmt.Errorf("invalid ownership registry schema")
 	}
 	return New(decoded.Claims)
+}
+
+func decodeLegacyRegistry(payload []byte) (Registry, error) {
+	var decoded legacyDocument
+	if err := decodeDocument(payload, &decoded); err != nil {
+		return Registry{}, err
+	}
+	if decoded.Claims == nil {
+		return Registry{}, fmt.Errorf("invalid ownership registry schema")
+	}
+	claims := make([]Claim, len(decoded.Claims))
+	for index, claim := range decoded.Claims {
+		claims[index] = Claim{
+			UnitID: claim.UnitID, ComponentID: claim.ComponentID,
+			Target: claim.Target, RawTarget: claim.RawTarget,
+			ReleaseID: claim.ReleaseID, IndexSHA256: claim.IndexSHA256,
+		}
+	}
+	return New(claims)
+}
+
+func decodeDocument(payload []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("decode ownership registry: %w", err)
+	}
+	return requireEOF(decoder)
 }
 
 func requireEOF(decoder *json.Decoder) error {
@@ -172,8 +234,20 @@ func validateClaim(claim Claim) error {
 	if !claim.Target.Valid() || !claim.Target.Path.Portable() {
 		return fmt.Errorf("invalid ownership claim target")
 	}
-	if !validText(claim.RawTarget) || len(claim.RawTarget) > maxRawTargetBytes {
-		return fmt.Errorf("invalid ownership claim link target")
+	if claim.Materialization == domain.MaterializationWritableFile {
+		if claim.RawTarget != "" || !digestPattern.MatchString(claim.ContentSHA256) ||
+			claim.Mode != 0o600 {
+			return fmt.Errorf("invalid writable-file ownership claim")
+		}
+	} else {
+		if claim.Materialization != "" &&
+			claim.Materialization != domain.MaterializationSymlink {
+			return fmt.Errorf("invalid ownership claim materialization")
+		}
+		if !validText(claim.RawTarget) || len(claim.RawTarget) > maxRawTargetBytes ||
+			claim.ContentSHA256 != "" || claim.Mode != 0 {
+			return fmt.Errorf("invalid ownership claim link target")
+		}
 	}
 	if !identifierPattern.MatchString(claim.ReleaseID) ||
 		!digestPattern.MatchString(claim.IndexSHA256) {

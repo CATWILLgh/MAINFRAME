@@ -35,6 +35,8 @@ func (executor Executor) prepareClaim(
 		mutation.ClaimAfter = &linkownership.Claim{
 			UnitID: operation.UnitID, ComponentID: operation.ComponentID,
 			Target: operation.Artifact.Location, RawTarget: mutation.After.RawTarget,
+			Materialization: mutation.Materialization,
+			ContentSHA256:   mutation.FileAfter.SHA256, Mode: mutation.FileAfter.Mode,
 			ReleaseID: release.ID, IndexSHA256: release.IndexSHA256,
 		}
 	}
@@ -63,6 +65,16 @@ func validateClaimBefore(
 		return errors.New("ownership claim changed after preview")
 	}
 	if operation.Kind == domain.OperationRelinquish {
+		if before.Materialization == domain.MaterializationWritableFile {
+			if operation.Artifact.Ownership == domain.OwnershipManagedMissing {
+				return nil
+			}
+			if before.ContentSHA256 == operation.Artifact.ContentSHA256 &&
+				before.Mode == operation.Artifact.Mode {
+				return errors.New("relinquish requires changed writable-file content or mode")
+			}
+			return nil
+		}
 		if operation.Artifact.Ownership == domain.OwnershipManagedMissing {
 			if before.RawTarget != operation.Artifact.RawTarget {
 				return errors.New("missing ownership claim changed after preview")
@@ -71,6 +83,19 @@ func validateClaimBefore(
 		}
 		if before.RawTarget == operation.Artifact.RawTarget {
 			return errors.New("relinquish requires a changed link target")
+		}
+		return nil
+	}
+	if operation.Artifact.Materialization == domain.MaterializationWritableFile {
+		if operation.Kind == domain.OperationReplace && operation.Artifact.RawTarget != "" &&
+			before.Materialization != domain.MaterializationWritableFile &&
+			before.RawTarget == operation.Artifact.RawTarget {
+			return nil
+		}
+		if before.Materialization != domain.MaterializationWritableFile ||
+			before.ContentSHA256 != operation.Artifact.ContentSHA256 ||
+			before.Mode != operation.Artifact.Mode {
+			return errors.New("ownership claim file identity changed after preview")
 		}
 		return nil
 	}

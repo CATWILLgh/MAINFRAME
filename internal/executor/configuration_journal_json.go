@@ -69,8 +69,69 @@ func upgradeV3Journal(payload []byte) ([]byte, error) {
 	if journalHasPersistedIdentity(journal) {
 		return nil, legacyIdentityError(3)
 	}
+	journal.SchemaVersion = 4
+	return json.Marshal(journal)
+}
+
+func upgradeV4Journal(payload []byte) ([]byte, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &root); err != nil {
+		return nil, err
+	}
+	if string(root["schema_version"]) != "4" {
+		return payload, nil
+	}
+	if err := rejectV5FieldsInV4(root); err != nil {
+		return nil, err
+	}
+	if err := requireJournalShape(payload, 4); err != nil {
+		return nil, err
+	}
+	journal, err := decodeJournalPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateJournalVersion(journal, 4); err != nil {
+		return nil, err
+	}
 	journal.SchemaVersion = CurrentJournalSchemaVersion
 	return json.Marshal(journal)
+}
+
+func rejectV5FieldsInV4(root map[string]json.RawMessage) error {
+	var steps []map[string]json.RawMessage
+	if err := json.Unmarshal(root["steps"], &steps); err != nil {
+		return fmt.Errorf("steps: %w", err)
+	}
+	for index, step := range steps {
+		for _, field := range []string{"source_sha256", "materialization", "file_before", "file_after"} {
+			if _, exists := step[field]; exists {
+				return fmt.Errorf("schema 4 step %d contains schema 5 field %q", index, field)
+			}
+		}
+		for _, name := range []string{"claim_before", "claim_after"} {
+			if err := rejectV2ClaimFields(step[name], index, name); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func rejectV2ClaimFields(payload json.RawMessage, step int, name string) error {
+	if len(payload) == 0 || isNull(payload) {
+		return nil
+	}
+	var claim map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &claim); err != nil {
+		return fmt.Errorf("schema 4 step %d %s: %w", step, name, err)
+	}
+	for _, field := range []string{"materialization", "content_sha256", "mode"} {
+		if _, exists := claim[field]; exists {
+			return fmt.Errorf("schema 4 step %d %s contains schema 5 field %q", step, name, field)
+		}
+	}
+	return nil
 }
 
 func journalHasPersistedIdentity(journal Journal) bool {

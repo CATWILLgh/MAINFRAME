@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/hex"
 	"path"
 	"strings"
 	"unicode"
@@ -138,12 +139,35 @@ func (location Location) Valid() bool {
 type Artifact struct {
 	Location             Location        `json:"location"`
 	UnitID               string          `json:"unit_id,omitempty"`
+	Materialization      Materialization `json:"materialization,omitempty"`
+	ContentSHA256        string          `json:"content_sha256,omitempty"`
+	Mode                 uint32          `json:"mode,omitempty"`
 	Ownership            OwnershipStatus `json:"ownership,omitempty"`
 	RawTarget            string          `json:"raw_target,omitempty"`
 	LinkDevice           uint64          `json:"link_device,omitempty"`
 	LinkInode            uint64          `json:"link_inode,omitempty"`
 	LinkBirthSeconds     int64           `json:"link_birth_seconds,omitempty"`
 	LinkBirthNanoseconds int64           `json:"link_birth_nanoseconds,omitempty"`
+}
+
+type Materialization string
+
+const (
+	MaterializationSymlink      Materialization = "symlink"
+	MaterializationWritableFile Materialization = "writable-file"
+)
+
+func (materialization Materialization) Valid() bool {
+	return materialization == MaterializationSymlink ||
+		materialization == MaterializationWritableFile
+}
+
+func ValidSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 type LinkIdentity struct {
@@ -219,11 +243,12 @@ const (
 )
 
 type Operation struct {
-	ComponentID ComponentID   `json:"component_id"`
-	UnitID      string        `json:"unit_id,omitempty"`
-	Kind        OperationKind `json:"kind"`
-	Artifact    Artifact      `json:"artifact"`
-	SourcePath  ArtifactPath  `json:"source_path,omitempty"`
+	ComponentID  ComponentID   `json:"component_id"`
+	UnitID       string        `json:"unit_id,omitempty"`
+	Kind         OperationKind `json:"kind"`
+	Artifact     Artifact      `json:"artifact"`
+	SourcePath   ArtifactPath  `json:"source_path,omitempty"`
+	SourceSHA256 string        `json:"source_sha256,omitempty"`
 }
 
 type Plan struct {

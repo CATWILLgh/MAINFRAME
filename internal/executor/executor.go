@@ -250,6 +250,9 @@ func (executor Executor) executeStep(journal *Journal, index int) error {
 	if claimOnlyMutation(journal.Steps[index].Kind) {
 		return executor.publishClaim(journal, index)
 	}
+	if journal.Steps[index].Materialization == domain.MaterializationWritableFile {
+		return executor.executeWritableFileStep(journal, index)
+	}
 	if err := executor.preparePrivate(journal, index); err != nil {
 		return fmt.Errorf("prepare private workspace: %w", err)
 	}

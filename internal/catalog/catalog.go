@@ -14,10 +14,12 @@ type Component struct {
 }
 
 type Artifact struct {
-	UnitID     string
-	Target     domain.Location
-	SourcePath domain.ArtifactPath
-	Feature    domain.FeatureID
+	UnitID          string
+	Target          domain.Location
+	SourcePath      domain.ArtifactPath
+	SourceSHA256    string
+	Feature         domain.FeatureID
+	Materialization domain.Materialization
 }
 
 type Catalog struct {
@@ -43,6 +45,12 @@ func New(components []Component) (Catalog, error) {
 			}
 			if artifact.Feature != "" && !artifact.Feature.Valid() {
 				return Catalog{}, fmt.Errorf("invalid feature %q for component %q", artifact.Feature, component.ID)
+			}
+			if artifact.Materialization != "" && !artifact.Materialization.Valid() {
+				return Catalog{}, fmt.Errorf("invalid materialization %q for component %q", artifact.Materialization, component.ID)
+			}
+			if artifact.Materialization == domain.MaterializationWritableFile && !domain.ValidSHA256(artifact.SourceSHA256) {
+				return Catalog{}, fmt.Errorf("invalid writable-file source digest for component %q", component.ID)
 			}
 			if owner, exists := artifactOwners[artifact.Target]; exists {
 				return Catalog{}, fmt.Errorf(

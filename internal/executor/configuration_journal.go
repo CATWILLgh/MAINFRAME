@@ -5,7 +5,7 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
-const CurrentJournalSchemaVersion = 4
+const CurrentJournalSchemaVersion = 5
 
 type ConfigurationMutationDisposition string
 
@@ -21,6 +21,10 @@ type ConfigurationFileImage struct {
 	SHA256 string       `json:"sha256"`
 	Mode   uint32       `json:"mode"`
 	Entry  FileIdentity `json:"entry"`
+}
+
+func (image ConfigurationFileImage) IsZero() bool {
+	return image == (ConfigurationFileImage{})
 }
 
 type ConfigurationState struct {
@@ -42,6 +46,12 @@ type ConfigurationWorkspace interface {
 	RollbackConfiguration(JournalConfigurationMutation) error
 	FinalizeConfiguration(JournalConfigurationMutation) error
 	FinalizeConfigurationPrivate(JournalConfigurationMutation) error
+}
+
+type WritableFileMigrationWorkspace interface {
+	PublishWritableFileMigration(JournalMutation) (ConfigurationState, error)
+	RollbackWritableFileMigration(JournalMutation) error
+	FinalizeWritableFileMigration(JournalMutation) error
 }
 
 type JournalConfigurationMutation struct {

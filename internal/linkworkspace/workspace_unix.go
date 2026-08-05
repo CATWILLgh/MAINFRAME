@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -143,6 +145,38 @@ func (workspace Workspace) ResolveSource(source domain.ArtifactPath) (string, er
 		return "", errors.New("source entry is a symbolic link")
 	}
 	return path.Join(workspace.source.path, string(source)), nil
+}
+
+func (workspace Workspace) ReadSourceFile(source domain.ArtifactPath) ([]byte, error) {
+	if !source.Portable() {
+		return nil, errors.New("source path is not portable")
+	}
+	segments := strings.Split(string(source), "/")
+	rootFD, err := workspace.source.open()
+	if err != nil {
+		return nil, err
+	}
+	defer unix.Close(rootFD)
+	parentFD, err := openRelativeDirectory(rootFD, segments[:len(segments)-1])
+	if err != nil {
+		return nil, err
+	}
+	defer unix.Close(parentFD)
+	fd, err := unix.Openat(parentFD, segments[len(segments)-1], unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), segments[len(segments)-1])
+	if file == nil {
+		unix.Close(fd)
+		return nil, errors.New("open writable-file source descriptor")
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, errors.Join(err, errors.New("writable-file source is not regular"))
+	}
+	return io.ReadAll(file)
 }
 
 func (workspace Workspace) AllocatePrivateName() (string, error) {

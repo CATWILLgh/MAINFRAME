@@ -2,9 +2,6 @@ package releasecontract
 
 import (
 	"fmt"
-	"io/fs"
-	"os"
-	"path"
 	"reflect"
 	"regexp"
 	"sort"
@@ -183,7 +180,8 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 		return manifest.HostRequirements.Present
 	case bundleSchemaVersionV4:
 		return true
-	case bundleSchemaVersionV5, bundleSchemaVersionV6, bundleSchemaVersionV7:
+	case bundleSchemaVersionV5, bundleSchemaVersionV6, bundleSchemaVersionV7,
+		bundleSchemaVersionV8:
 		return true
 	default:
 		return false
@@ -192,7 +190,7 @@ func manifestCollectionsPresent(manifest bundleManifest) bool {
 
 func supportedBundleSchemaVersion(version int) bool {
 	return version >= bundleSchemaVersionV2 &&
-		version <= bundleSchemaVersionV7
+		version <= bundleSchemaVersionV8
 }
 
 func validateHostRequirements(component domain.ComponentID, manifest bundleManifest) error {
@@ -230,51 +228,6 @@ func validateHostRequirements(component domain.ComponentID, manifest bundleManif
 	return nil
 }
 
-func validateUnits(
-	bundleRoot, sourceBase string,
-	component domain.ComponentID,
-	schemaVersion int,
-	units []installUnit,
-) ([]installmodel.ArtifactSpec, error) {
-	identifiers := make([]string, len(units))
-	artifacts := make([]installmodel.ArtifactSpec, len(units))
-	for index, unit := range units {
-		identifiers[index] = unit.ID
-		if !domain.ValidUnitID(unit.ID) || (unit.Kind != "file" && unit.Kind != "tree") {
-			return nil, fmt.Errorf("component %q has invalid install unit %q", component, unit.ID)
-		}
-		if err := validateSource(bundleRoot, unit.Source, unit.Kind); err != nil {
-			return nil, fmt.Errorf("install unit %q: %w", unit.ID, err)
-		}
-		target, err := location(unit.Target)
-		if err != nil {
-			return nil, fmt.Errorf("install unit %q: %w", unit.ID, err)
-		}
-		if err := validateComponentTarget(component, target, "install unit"); err != nil {
-			return nil, err
-		}
-		suffixes, err := portablePaths(unit.LegacySourceSuffixes, true)
-		if err != nil {
-			return nil, fmt.Errorf("install unit %q: %w", unit.ID, err)
-		}
-		feature, err := installUnitFeature(schemaVersion, unit)
-		if err != nil {
-			return nil, err
-		}
-		artifacts[index] = installmodel.ArtifactSpec{
-			UnitID:               unit.ID,
-			Target:               target,
-			SourcePath:           domain.ArtifactPath(path.Join(sourceBase, unit.Source)),
-			LegacyTargetSuffixes: suffixes,
-			Feature:              feature,
-		}
-	}
-	if !sortedUnique(identifiers) {
-		return nil, fmt.Errorf("component %q install units must be sorted and unique", component)
-	}
-	return artifacts, nil
-}
-
 func validateLegacy(
 	component domain.ComponentID,
 	records []legacyArtifact,
@@ -305,26 +258,6 @@ func validateLegacy(
 		return nil, fmt.Errorf("component %q legacy targets must be sorted", component)
 	}
 	return artifacts, nil
-}
-
-func validateSource(bundleRoot, source, kind string) error {
-	if !domain.ArtifactPath(source).Portable() {
-		return fmt.Errorf("invalid source path %q", source)
-	}
-	resolved, err := safePath(bundleRoot, source)
-	if err != nil {
-		return err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return err
-	}
-	if (kind == "file" && !info.Mode().IsRegular()) ||
-		(kind == "tree" && !info.IsDir()) ||
-		info.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf("source %q does not match kind %q", source, kind)
-	}
-	return nil
 }
 
 func location(record locationRecord) (domain.Location, error) {

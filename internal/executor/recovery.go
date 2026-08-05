@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+
+	"github.com/CATWILLgh/MAINFRAME/internal/domain"
 )
 
 func (executor Executor) recoverLocked() (Result, error) {
@@ -16,6 +18,9 @@ func (executor Executor) recoverLocked() (Result, error) {
 	}
 	if len(journal.Configurations) > 0 && executor.configurations == nil {
 		return Result{}, errors.New("configuration workspace is required for recovery")
+	}
+	if journalHasWritableFiles(*journal) && executor.configurations == nil {
+		return Result{}, errors.New("configuration workspace is required for writable-file recovery")
 	}
 	if err := validateJournal(*journal); err != nil {
 		return Result{}, fmt.Errorf("validate transaction journal: %w", err)
@@ -143,6 +148,21 @@ func (executor Executor) rollback(journal *Journal) error {
 			}
 			continue
 		}
+		if step.Materialization == domain.MaterializationWritableFile {
+			if step.Phase != StepRolledBack {
+				if err := executor.rollbackWritableFile(*step); err != nil {
+					return fmt.Errorf("rollback writable file %v: %w", step.Location, err)
+				}
+				step.Phase = StepRolledBack
+				if err := executor.store.Save(*journal); err != nil {
+					return fmt.Errorf("save rolled back writable file: %w", err)
+				}
+			}
+			if err := executor.finalizeStep(journal, index); err != nil {
+				return fmt.Errorf("rollback writable file %v: %w", step.Location, err)
+			}
+			continue
+		}
 		if step.Phase != StepRolledBack {
 			if err := executor.workspace.Rollback(workspaceMutation(*step)); err != nil {
 				return fmt.Errorf("rollback %v: %w", step.Location, err)
@@ -181,6 +201,17 @@ func (executor Executor) rollback(journal *Journal) error {
 		}
 	}
 	return nil
+}
+
+func (executor Executor) rollbackWritableFile(step JournalMutation) error {
+	if !writableFileMigration(step) {
+		return executor.configurations.RollbackConfiguration(writableConfigurationMutation(step))
+	}
+	workspace, err := executor.writableFileMigrationWorkspace()
+	if err != nil {
+		return err
+	}
+	return workspace.RollbackWritableFileMigration(step)
 }
 
 func (executor Executor) ensureDirectoryRollbackReady(
@@ -229,6 +260,14 @@ func (executor Executor) ensureRollbackReady(journal *Journal, index int) error 
 	step := &journal.Steps[index]
 	if claimOnlyMutation(step.Kind) {
 		return nil
+	}
+	if step.Materialization == domain.MaterializationWritableFile {
+		if !validFileIdentity(step.Private.Identity) {
+			if err := executor.prepareWritablePrivate(journal, index); err != nil {
+				return err
+			}
+		}
+		return executor.adoptWritableFileStage(journal, index)
 	}
 	if !validFileIdentity(step.Private.Identity) {
 		if err := executor.preparePrivate(journal, index); err != nil {
@@ -286,6 +325,9 @@ func (executor Executor) finalizeStep(journal *Journal, index int) error {
 			return executor.store.Save(*journal)
 		}
 		return nil
+	}
+	if step.Materialization == domain.MaterializationWritableFile {
+		return executor.finalizeWritableFileStep(journal, index)
 	}
 	if !step.Finalized {
 		if err := executor.workspace.Finalize(workspaceMutation(*step)); err != nil {

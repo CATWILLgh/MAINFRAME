@@ -11,11 +11,16 @@ func (executor Executor) prepare(
 	operation domain.Operation,
 	release ReleaseIdentity,
 ) (JournalMutation, error) {
+	if operation.Artifact.Materialization == domain.MaterializationWritableFile &&
+		operation.Kind != domain.OperationRelinquish {
+		return executor.prepareWritableFile(operation, release)
+	}
 	if operation.Kind == domain.OperationRelinquish {
 		mutation := JournalMutation{
 			ComponentID: operation.ComponentID, UnitID: operation.UnitID,
 			Kind: MutationRelinquish, Location: operation.Artifact.Location,
-			Phase: StepPrepared,
+			Materialization: operation.Artifact.Materialization,
+			Phase:           StepPrepared,
 		}
 		if err := executor.prepareClaim(&mutation, operation, release); err != nil {
 			return JournalMutation{}, err

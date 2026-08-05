@@ -11,8 +11,10 @@ import (
 
 type ArtifactSpec struct {
 	UnitID               string
+	Materialization      domain.Materialization
 	Target               domain.Location
 	SourcePath           domain.ArtifactPath
+	SourceSHA256         string
 	LegacyTargetSuffixes []domain.ArtifactPath
 	Feature              domain.FeatureID
 }
@@ -31,9 +33,11 @@ type ComponentSpec struct {
 
 type Artifact struct {
 	UnitID               string
+	Materialization      domain.Materialization
 	ComponentID          domain.ComponentID
 	Target               domain.Location
 	SourcePath           domain.ArtifactPath
+	SourceSHA256         string
 	LegacyTargetSuffixes []domain.ArtifactPath
 	LegacyOnly           bool
 	Feature              domain.FeatureID
@@ -92,11 +96,17 @@ func validateDesired(id domain.ComponentID, spec ArtifactSpec) error {
 	if spec.UnitID != "" && !domain.ValidUnitID(spec.UnitID) {
 		return fmt.Errorf("component %q has invalid unit ID %q", id, spec.UnitID)
 	}
+	if spec.Materialization != "" && !spec.Materialization.Valid() {
+		return fmt.Errorf("component %q has invalid materialization %q", id, spec.Materialization)
+	}
 	if !spec.Target.Valid() || !spec.Target.Path.Portable() {
 		return fmt.Errorf("component %q has invalid artifact target %#v", id, spec.Target)
 	}
 	if !spec.SourcePath.Portable() {
 		return fmt.Errorf("component %q has invalid source path %q", id, spec.SourcePath)
+	}
+	if spec.Materialization == domain.MaterializationWritableFile && !domain.ValidSHA256(spec.SourceSHA256) {
+		return fmt.Errorf("component %q has invalid writable-file source digest", id)
 	}
 	if spec.Feature != "" && !spec.Feature.Valid() {
 		return fmt.Errorf("component %q has invalid feature %q", id, spec.Feature)
@@ -149,6 +159,8 @@ func deriveCatalog(components []ComponentSpec) (catalog.Catalog, error) {
 			artifacts = append(artifacts, catalog.Artifact{
 				UnitID: spec.UnitID, Target: spec.Target,
 				SourcePath: spec.SourcePath, Feature: spec.Feature,
+				SourceSHA256:    spec.SourceSHA256,
+				Materialization: normalizedMaterialization(spec.Materialization),
 			})
 		}
 		definitions = append(definitions, catalog.Component{ID: component.ID, Dependencies: component.Dependencies, Artifacts: artifacts})
@@ -157,7 +169,14 @@ func deriveCatalog(components []ComponentSpec) (catalog.Catalog, error) {
 }
 
 func desiredArtifact(id domain.ComponentID, spec ArtifactSpec) Artifact {
-	return Artifact{UnitID: spec.UnitID, ComponentID: id, Target: spec.Target, SourcePath: spec.SourcePath, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...), Feature: spec.Feature}
+	return Artifact{UnitID: spec.UnitID, ComponentID: id, Target: spec.Target, SourcePath: spec.SourcePath, SourceSHA256: spec.SourceSHA256, LegacyTargetSuffixes: append([]domain.ArtifactPath(nil), spec.LegacyTargetSuffixes...), Feature: spec.Feature, Materialization: normalizedMaterialization(spec.Materialization)}
+}
+
+func normalizedMaterialization(value domain.Materialization) domain.Materialization {
+	if value == domain.MaterializationSymlink {
+		return ""
+	}
+	return value
 }
 
 func legacyArtifact(id domain.ComponentID, spec LegacyArtifactSpec) Artifact {

@@ -64,6 +64,11 @@ func validateOperations(operations []domain.Operation) error {
 		if needsSource && !validRelative(string(operation.SourcePath)) {
 			return fmt.Errorf("plan contains invalid source %q", operation.SourcePath)
 		}
+		if operation.Artifact.Materialization == domain.MaterializationWritableFile &&
+			(operation.Kind == domain.OperationInstall || operation.Kind == domain.OperationReplace) &&
+			!digestPattern.MatchString(operation.SourceSHA256) {
+			return fmt.Errorf("plan contains invalid writable-file source digest")
+		}
 		if operation.UnitID != "" && !domain.ValidUnitID(operation.UnitID) {
 			return fmt.Errorf("plan contains invalid unit ID %q", operation.UnitID)
 		}
@@ -174,6 +179,9 @@ func validateJournalHeader(journal Journal, schemaVersion int) error {
 func stepMatchesOperation(step JournalMutation, operation domain.Operation) bool {
 	if step.Location != operation.Artifact.Location ||
 		step.SourcePath != operation.SourcePath ||
+		step.SourceSHA256 != operation.SourceSHA256 ||
+		(step.Materialization == domain.MaterializationWritableFile) !=
+			(operation.Artifact.Materialization == domain.MaterializationWritableFile) ||
 		step.UnitID != operation.UnitID ||
 		(step.ComponentID != "" && step.ComponentID != operation.ComponentID) {
 		return false
@@ -197,14 +205,17 @@ func validateJournalStep(step JournalMutation) error {
 	if !validLinkStepPhase(step.Phase) {
 		return fmt.Errorf("invalid step phase %q", step.Phase)
 	}
-	if !validImage(step.Before) || !validImage(step.After) {
-		return fmt.Errorf("invalid link image")
-	}
 	if err := validateStepClaims(step); err != nil {
 		return err
 	}
 	if claimOnlyMutation(step.Kind) {
 		return validateClaimOnlyStep(step)
+	}
+	if step.Materialization == domain.MaterializationWritableFile {
+		return validateWritableFileStep(step)
+	}
+	if !validImage(step.Before) || !validImage(step.After) {
+		return fmt.Errorf("invalid link image")
 	}
 	if !validFileIdentity(step.Parent) {
 		return fmt.Errorf("invalid parent identity")

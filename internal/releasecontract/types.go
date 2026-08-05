@@ -14,6 +14,7 @@ const (
 	bundleSchemaVersionV5 = 5
 	bundleSchemaVersionV6 = 6
 	bundleSchemaVersionV7 = 7
+	bundleSchemaVersionV8 = 8
 	releaseSchemaVersion  = 2
 	mcpCatalogPath        = "metadata/mcp-catalog.json"
 )
@@ -251,15 +252,21 @@ type mcpProjectionRecord struct {
 }
 
 type installUnit struct {
-	ID                   string          `json:"id"`
-	Kind                 string          `json:"kind"`
-	Source               string          `json:"source"`
-	Target               locationRecord  `json:"target"`
-	LegacySourceSuffixes []string        `json:"legacy_source_suffixes,omitempty"`
-	Feature              optionalFeature `json:"feature,omitempty"`
+	ID                   string                  `json:"id"`
+	Kind                 string                  `json:"kind"`
+	Materialization      optionalMaterialization `json:"materialization,omitempty"`
+	Source               string                  `json:"source"`
+	Target               locationRecord          `json:"target"`
+	LegacySourceSuffixes []string                `json:"legacy_source_suffixes,omitempty"`
+	Feature              optionalFeature         `json:"feature,omitempty"`
 }
 
 type optionalFeature struct {
+	Present bool
+	Value   string
+}
+
+type optionalMaterialization struct {
 	Present bool
 	Value   string
 }

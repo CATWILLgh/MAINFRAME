@@ -72,11 +72,34 @@ func TestRegistryReplacesAndRemovesClaimsByExactTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Encode(empty) error = %v", err)
 	}
-	if string(encoded) != `{"schema_version":1,"claims":[]}`+"\n" {
+	if string(encoded) != `{"schema_version":2,"claims":[]}`+"\n" {
 		t.Fatalf("Encode(empty) = %s", encoded)
 	}
 	if _, err := linkownership.Decode(encoded); err != nil {
 		t.Fatalf("Decode(empty) error = %v", err)
+	}
+}
+
+func TestRegistryRoundTripsWritableFileIdentity(t *testing.T) {
+	writable := claim("codex", "codex.instructions", domain.RootCodexConfig, "AGENTS.md", "")
+	writable.Materialization = domain.MaterializationWritableFile
+	writable.ContentSHA256 = releaseDigest
+	writable.Mode = 0o600
+
+	registry, err := linkownership.New([]linkownership.Claim{writable})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	payload, err := linkownership.Encode(registry)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	decoded, err := linkownership.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+	if got, exists := decoded.ClaimAt(writable.Target); !exists || got != writable {
+		t.Fatalf("ClaimAt() = %#v, %t", got, exists)
 	}
 }
 
@@ -108,12 +131,51 @@ func TestDecodeRejectsUnknownFieldsTrailingDataAndOversize(t *testing.T) {
 	valid := `{"schema_version":1,"claims":[]}`
 	for _, input := range []string{
 		`{"schema_version":1,"claims":[],"unknown":true}`,
+		`{"schema_version":1,"schema_version":2,"claims":[]}`,
 		valid + `{}`,
-		`{"schema_version":2,"claims":[]}`,
+		`{"schema_version":3,"claims":[]}`,
 		strings.Repeat(" ", linkownership.MaxRegistryBytes+1),
 	} {
 		if _, err := linkownership.Decode([]byte(input)); err == nil {
 			t.Fatalf("Decode() accepted %d-byte invalid registry", len(input))
+		}
+	}
+}
+
+func TestDecodeMigratesLegacyV1SymlinkClaimAndWritesV2(t *testing.T) {
+	payload := `{"schema_version":1,"claims":[{` +
+		`"unit_id":"codex.instructions","component_id":"codex",` +
+		`"target":{"root":"codex-config","path":"AGENTS.md"},` +
+		`"raw_target":"/releases/old/AGENTS.md",` +
+		`"release_id":"old-release","index_sha256":"` + releaseDigest + `"}]}`
+	registry, err := linkownership.Decode([]byte(payload))
+	if err != nil {
+		t.Fatalf("Decode(v1) error = %v", err)
+	}
+	claims := registry.Claims()
+	if len(claims) != 1 || claims[0].Materialization != "" ||
+		claims[0].ContentSHA256 != "" || claims[0].Mode != 0 {
+		t.Fatalf("migrated claims = %#v", claims)
+	}
+	encoded, err := linkownership.Encode(registry)
+	if err != nil || !strings.Contains(string(encoded), `"schema_version":2`) {
+		t.Fatalf("Encode(migrated) = %s, %v", encoded, err)
+	}
+}
+
+func TestDecodeRejectsV2FieldsAdvertisedAsV1(t *testing.T) {
+	base := `{"schema_version":1,"claims":[{` +
+		`"unit_id":"codex.instructions","component_id":"codex",` +
+		`"target":{"root":"codex-config","path":"AGENTS.md"},` +
+		`"raw_target":"/releases/old/AGENTS.md",` +
+		`"release_id":"old-release","index_sha256":"` + releaseDigest + `"`
+	for _, field := range []string{
+		`,"materialization":"symlink"`,
+		`,"content_sha256":"` + releaseDigest + `"`,
+		`,"mode":384`,
+	} {
+		if _, err := linkownership.Decode([]byte(base + field + `}]}`)); err == nil {
+			t.Fatalf("Decode(v1 with %s) succeeded", field)
 		}
 	}
 }
