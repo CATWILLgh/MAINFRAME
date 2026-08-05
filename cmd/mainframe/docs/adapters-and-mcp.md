@@ -1,9 +1,10 @@
 # Adapters and MCP
 
 An adapter is MAINFRAME's integration with one coding environment. Claude
-Code, Codex, OpenCode, and standalone Antigravity 2.x remain separate
-installation targets. Each adapter owns its own files and runtime-specific
-projection; one adapter does not use another adapter's configuration directory.
+Code, Codex, OpenCode, ZCode Desktop, and standalone Antigravity 2.x remain
+separate installation targets. Each adapter owns its own files and
+runtime-specific projection; one adapter does not use another adapter's
+configuration directory.
 
 The terminal interface can select adapters independently. Removing one adapter
 from the desired state does not imply removing the others.
@@ -15,6 +16,7 @@ antigravity-2
 claude-code
 codex
 opencode
+zcode-desktop
 ```
 
 MAINFRAME adds their internal delivery dependencies automatically. Do not place
@@ -43,3 +45,7 @@ while reviewing.
 Standalone Antigravity 2.x and Antigravity IDE are different products.
 MAINFRAME's Antigravity adapter targets only the known standalone 2.x
 configuration.
+
+ZCode Desktop is a local-only delivery target. MAINFRAME projects instructions,
+skills, agents, private sub-agent methods, and supported local hooks into its
+native configuration. ZCode MCP projection is not currently supported.

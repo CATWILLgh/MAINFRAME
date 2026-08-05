@@ -193,6 +193,7 @@ def _assert_embedded_cli_guidance(
         (["--help"], "written only after a final preview and confirmation"),
         (["docs", "list"], "agent-automation"),
         (["docs", "show", "overview"], "# MAINFRAME overview"),
+        (["docs", "show", "adapters-and-mcp"], "zcode-desktop"),
     ]
     for args, expected in checks:
         result = subprocess.run(
