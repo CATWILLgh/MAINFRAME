@@ -272,6 +272,135 @@ func TestManagedSeedTreatsWrappedNotExistAsMissing(t *testing.T) {
 	}
 }
 
+// The lifecycle matrix above is pinned to credential-tools. This repeats it for
+// a resource owned by an ordinary adapter in its own root, which is what the
+// widened capability predicate now admits.
+func TestAdapterOwnedSeedLifecycleMatchesTheCredentialStore(t *testing.T) {
+	desired := []byte("index\n")
+	desiredDigest := fmt.Sprintf("%x", sha256.Sum256(desired))
+	tests := map[string]struct {
+		target   *hostfs.Entry
+		registry any
+		selected bool
+		want     []configuration.ChangeKind
+	}{
+		"missing selected creates claim": {
+			selected: true,
+			want:     []configuration.ChangeKind{configuration.ChangeAdd},
+		},
+		"unowned existing is preserved": {
+			target:   &hostfs.Entry{Kind: hostfs.EntryRegular, Content: desired, Mode: 0o600},
+			selected: true,
+		},
+		"matching managed selected is fixed point": {
+			target:   &hostfs.Entry{Kind: hostfs.EntryRegular, Content: desired, Mode: 0o600},
+			registry: managedClaims(adapterClaim(desiredDigest)),
+			selected: true,
+		},
+		"drifted managed relinquishes": {
+			target:   &hostfs.Entry{Kind: hostfs.EntryRegular, Content: []byte("user\n"), Mode: 0o600},
+			registry: managedClaims(adapterClaim(desiredDigest)),
+			selected: true,
+			want:     []configuration.ChangeKind{configuration.ChangeRelinquish},
+		},
+		"claimed missing deselected relinquishes": {
+			registry: managedClaims(adapterClaim(desiredDigest)),
+			want:     []configuration.ChangeKind{configuration.ChangeRelinquish},
+		},
+		"matching managed deselected removes": {
+			target:   &hostfs.Entry{Kind: hostfs.EntryRegular, Content: desired, Mode: 0o600},
+			registry: managedClaims(adapterClaim(desiredDigest)),
+			want:     []configuration.ChangeKind{configuration.ChangeRemove},
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			host := newAdapterFileHost(test.target, test.registry)
+			inspection, err := configuration.Inspect(
+				[]releasecontract.Resource{adapterSeedResource(desired)},
+				host,
+			)
+			if err != nil {
+				t.Fatalf("Inspect(): %v", err)
+			}
+			var selected []domain.ComponentID
+			if test.selected {
+				selected = []domain.ComponentID{domain.ComponentCodex}
+			}
+			plan, err := inspection.Plan(selected)
+			if err != nil {
+				t.Fatalf("Plan(): %v", err)
+			}
+			var got []configuration.ChangeKind
+			for _, change := range plan.Changes {
+				got = append(got, change.Kind)
+			}
+			if !reflect.DeepEqual(got, test.want) || len(plan.Issues) != 0 {
+				t.Fatalf("plan = %#v, want changes %v", plan, test.want)
+			}
+		})
+	}
+}
+
+func adapterSeedResource(content []byte) releasecontract.Resource {
+	return releasecontract.Resource{
+		ID: "codex.credentials-index", ComponentID: domain.ComponentCodex,
+		Strategy:      releasecontract.StrategySeedIfAbsent,
+		SourcePath:    "credentials-index.md",
+		SourceContent: append([]byte(nil), content...),
+		Target:        adapterTarget(), Observation: releasecontract.SupportSupported,
+		Apply: releasecontract.SupportSupported,
+		FileOwnership: &releasecontract.FileOwnership{
+			RegistryTarget: adapterRegistry(), RegistrySchemaVersion: 1,
+		},
+	}
+}
+
+func adapterTarget() domain.Location {
+	return domain.Location{
+		Root: domain.RootCodexConfig, Path: "credentials-index.md",
+	}
+}
+
+func adapterRegistry() domain.Location {
+	return domain.Location{
+		Root: domain.RootCodexConfig, Path: "mainframe/file-ownership.json",
+	}
+}
+
+func adapterClaim(digest string) map[string]any {
+	return map[string]any{
+		"resource_id":  "codex.credentials-index",
+		"component_id": string(domain.ComponentCodex),
+		"target": map[string]any{
+			"root": string(domain.RootCodexConfig),
+			"path": "credentials-index.md",
+		},
+		"sha256": digest,
+		"mode":   float64(384),
+	}
+}
+
+func newAdapterFileHost(target *hostfs.Entry, registry any) *managedFileHost {
+	host := &managedFileHost{
+		entries:      make(map[domain.Location]hostfs.Entry),
+		contentCalls: make(map[domain.Location]int),
+	}
+	if target != nil {
+		entry := *target
+		entry.Device, entry.Inode, entry.BirthSeconds = 7, 11, 12
+		host.entries[adapterTarget()] = entry
+	}
+	if registry != nil {
+		raw, _ := json.Marshal(registry)
+		host.entries[adapterRegistry()] = hostfs.Entry{
+			Kind: hostfs.EntryRegular, Content: raw, Mode: 0o600,
+			Device: 7, Inode: 21, BirthSeconds: 22,
+		}
+	}
+	return host
+}
+
 func managedSeedResource(content []byte) releasecontract.Resource {
 	return releasecontract.Resource{
 		ID: "credential-tools.secrets-store", ComponentID: "credential-tools",
