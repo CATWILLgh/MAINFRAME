@@ -192,8 +192,18 @@ def _expected_resources() -> list[dict]:
             "strategy": "seed-if-absent",
             "source": "credentials-index.md",
             "target": {"root": "claude-config", "path": "credentials-index.md"},
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "claude-config",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
             "observation": "supported",
-            "apply": "unimplemented",
+            "apply": "supported",
         },
         {
             "id": "claude-code.diagnostics",
@@ -253,7 +263,7 @@ def test_manifest_records_exact_units_resources_and_integrity():
     build_bundle.build(root, output)
     manifest = build_bundle.validate_bundle(output)
 
-    assert manifest["schema_version"] == 5
+    assert manifest["schema_version"] == 6
     assert manifest["component"] == "claude-code"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"] == {
