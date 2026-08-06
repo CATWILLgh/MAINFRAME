@@ -25,7 +25,7 @@ from detector_projection import project_hooklib_fallbacks
 from feedback_projection import project_adapter_feedback_skill
 import build_codex
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
+from release_contract_fields import MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 
@@ -160,7 +160,18 @@ def _resources() -> list[dict]:
                 "root": "codex-config",
                 "path": "credentials-index.md",
             },
-            **supported,
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "codex-config",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
+            "observation": "supported",
+            "apply": "supported",
         },
         diagnostics_resource("codex"),
         {
@@ -305,7 +316,7 @@ def _stage_bundle(
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
-        schema_version=FEATURE_INSTALL_UNIT_SCHEMA_VERSION,
+        schema_version=MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION,
     )
 
 

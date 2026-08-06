@@ -131,8 +131,18 @@ def _expected_resources() -> dict[str, dict]:
                 "root": "codex-config",
                 "path": "credentials-index.md",
             },
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "codex-config",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
             "observation": "supported",
-            "apply": "unimplemented",
+            "apply": "supported",
         },
         "codex.diagnostics": {
             "id": "codex.diagnostics",
@@ -159,7 +169,7 @@ def _expected_resources() -> dict[str, dict]:
 
 def _assert_manifest_contract(output: Path) -> None:
     manifest = release_contract.validate_bundle(output)
-    assert manifest["schema_version"] == 5
+    assert manifest["schema_version"] == 6
     assert manifest["component"] == "codex"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"] == {
