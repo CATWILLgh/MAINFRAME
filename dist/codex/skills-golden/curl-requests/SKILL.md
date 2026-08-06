@@ -72,7 +72,7 @@ curl -sS --fail -o /dev/null \
 
 ## Safe authentication
 
-**Where tokens come from.** If [`secrets-handling`](../secrets-handling/SKILL.md) is active on this machine, generic API tokens live in `~/.config/credentials/secrets.env` and are loaded into the shell environment by `~/.zshenv`. The patterns below assume this — `$API_TOKEN` resolves because the store was sourced at shell start. If the token is in the store but not in the current shell env (e.g. just added via `secret set`), substitute inline: `$(secret get API_TOKEN)`. If `secrets-handling` is not active, treat the env-var examples as "replace with whatever your project's credential source is" (vault CLI, project `.env`, etc.) — the curl patterns themselves are agnostic.
+**Where tokens come from.** If [`secrets-handling`](../secrets-handling/SKILL.md) is active on this machine, generic API tokens live in `~/.config/credentials/secrets.env`. Use `$API_TOKEN` only when it is already present in the command environment; otherwise substitute it inline with `$(secret get API_TOKEN)`. If `secrets-handling` is not active, treat the env-var examples as "replace with whatever your project's credential source is" (vault CLI, project `.env`, etc.) — the curl patterns themselves are agnostic.
 
 - **Bearer:** token only from env (`API_TOKEN` or similar). Never echo the variable; never include in the displayed command if the user could see logs.
 - **Basic:** prefer `.netrc` + `-n` so the password is not in the command line:
