@@ -41,3 +41,30 @@ The file has two owners and two incompatible lifecycle rules. A local applicatio
 - `install.sh:140-151`
 - `tools/render_core.py:228-265`
 - `docs/layers/settings.md:14-16`, `docs/layers/settings.md:77-103`
+
+## Re-occurrence noted (2026-08-06) — the release bundle carries the whole file
+
+**Noticed during:** modelling per-rule ownership of the three permission lists
+**Where:** `adapters/claude-code/build_bundle.py:252,277` — `copy_regular_file(dist/claude-code/settings.json, output/settings.json)`
+
+The dual-ownership problem has a sharper consequence than this ticket records:
+because the same file is both the render target and the live user configuration,
+**every Claude Code release bundle embeds the maintainer's personal settings**. A
+bundle built here contains `model`, `effortLevel`, `advisorModel`, `language`,
+`editorMode`, `verbose`, `teammateMode`, `remoteControlAtStartup`,
+`enabledPlugins`, `autoMemoryEnabled`, `autoCompactEnabled`,
+`preferredNotifChannel`, `cleanupPeriodDays`, `skipWorkflowUsageWarning` and the
+`env` map — verified by building the bundle and listing the payload's keys.
+
+Today the blast radius is local: releases are built and installed on the same
+machine. It becomes a disclosure the moment a bundle is shared, and `env` is
+exactly the shape that holds a token in some setups. Priority left unchanged
+because nothing is published yet; raise it before any release leaves this
+machine.
+
+**Fix direction, and it converges with the per-rule ownership work:** the bundle
+does not need the whole file. Once the resource declares claims over
+`/permissions/allow`, `/permissions/ask` and `/permissions/deny`, the only source
+content a release needs is those three lists. Ship a policy-only document as the
+resource source instead of copying the live file, and the leak closes as a side
+effect of the ownership change rather than as separate work.
