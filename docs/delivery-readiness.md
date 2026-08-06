@@ -17,8 +17,8 @@ Passing a later gate does not compensate for an earlier one.
 
 | Gate | Required outcome | Current state |
 |---|---|---|
-| 1. Empty-home install | A packaged `mainframe` can plan and install into an actually empty temporary home | Blocked by unsupported generic resources |
-| 2. Reversible lifecycle | Install, no-op, change, remove, and reinstall preserve user-owned data | Partial; links and several adapter projections are reversible, generic resources are not |
+| 1. Empty-home install | A packaged `mainframe` can plan and install into an actually empty temporary home | Blocked by the applicability gate, not by resource capability — measured 2026-08-06, see below |
+| 2. Reversible lifecycle | Install, no-op, change, remove, and reinstall preserve user-owned data | Partial; links, adapter projections and seeded owned files are reversible, merged and manual-action resources are not |
 | 3. Safe credentials | Secrets are resolved by name only where needed and never exported wholesale | Fresh release path complete; legacy startup-line migration remains |
 | 4. Adapter isolation | Each adapter works without another adapter's runtime files or directories | Modeled and broadly tested; full lifecycle parity remains |
 | 5. CLI and TUI parity | A human or agent can inspect, prepare, preview, confirm, apply, and explain the same operation | Partial; narrow confirmed Context7 Apply exists |
@@ -27,6 +27,32 @@ Passing a later gate does not compensate for an earlier one.
 | 8. Standalone bootstrap | A new machine can install without cloning the repository or already having MAINFRAME | Missing |
 | 9. Platform artifacts | Supported Darwin/Linux and architecture artifacts are built and exercised | Partial CI coverage; no published artifact matrix |
 | 10. Trusted network update | Update metadata authenticates the publisher and downloads only the selected closure | Deferred until local lifecycle is complete |
+
+### Where gate 1 actually stands (measured 2026-08-06)
+
+Driving a packaged binary in an isolated empty home, one adapter at a time, gives:
+`zcode-desktop` applicable; `claude-code`, `codex` and `opencode` not applicable, each
+with a clean plan and zero issues. Every `*.credentials-index` resource is now a managed
+owned file that plans add, relinquish and remove, so the earlier reading — "blocked by
+unsupported generic resources" — no longer holds.
+
+What blocks the three is `internal/application/service.go`: applicability is the union of
+three hand-modelled request shapes (credential-only, exact single-adapter Context7 MCP,
+exact ZCode-desktop), and an ordinary adapter install matches none of them. Widening
+resource capability further cannot move this; only a general rule — applicable when every
+planned write has proven ownership and removal — will, and that is
+[#7a1c1d1d](tickets/7a1c1d1d-add-safe-plan-application.md), whose own criteria keep it shut
+until release authenticity, immutable publication and cross-platform executor checks pass
+independent review.
+
+Still preparation-only, and therefore the remaining capability work: `claude-code.settings`
+(a key merge into a file the user co-owns), `codex.hook-trust` and
+`antigravity-2.live-activation` (manual actions on the host).
+
+Adding a plan-level explanation channel is safe with respect to confirmation: the draft
+digest is computed over an explicit envelope — desired state, release identity, scope,
+operations, transitions, preconditions, materializations — not over the plan structure, so
+a new field does not invalidate existing digests unless it is deliberately added there.
 
 ## Required order
 
