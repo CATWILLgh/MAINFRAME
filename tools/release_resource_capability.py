@@ -24,14 +24,15 @@ def valid_apply_declaration(component: str, resource: dict[str, Any]) -> bool:
         return False
     json_ownership = resource.get("json_ownership")
     if isinstance(json_ownership, dict):
+        root = COMPONENT_OWNED_ROOTS.get(component)
         registry = json_ownership.get("registry")
         return (
-            component == "zcode-desktop"
+            root is not None
             and resource["strategy"] == "json-key-merge"
             and resource["observation"] == "supported"
-            and resource["target"]["root"] == "zcode-config"
+            and resource["target"]["root"] == root
             and isinstance(registry, dict)
-            and registry.get("target", {}).get("root") == "zcode-config"
+            and registry.get("target", {}).get("root") == root
             and registry.get("schema_version") == 1
             and "owned_json_pointers" not in resource
             and "ownership" not in resource
@@ -59,11 +60,12 @@ def valid_apply_declaration(component: str, resource: dict[str, Any]) -> bool:
 
 MANAGED_FILE_REGISTRY_PATH = "mainframe/file-ownership.json"
 
-# The single root each component may seed managed files into. Narrower on
-# purpose than COMPONENT_ROOTS in release_component_roots, which lists every
-# root a component may target: pinning the ownership registry to the same root
-# it seeds keeps one component's records from claiming another's files.
-MANAGED_SEED_ROOTS = {
+# The single root each component may own state in, for both seeded files and
+# JSON claims. Narrower on purpose than COMPONENT_ROOTS in
+# release_component_roots, which lists every root a component may target:
+# pinning the ownership registry to the same root it writes into keeps one
+# component's records from claiming another's state.
+COMPONENT_OWNED_ROOTS = {
     "credential-tools": "credentials-config",
     "claude-code": "claude-config",
     "codex": "codex-config",
@@ -77,7 +79,7 @@ def _valid_managed_seed_apply(
     component: str,
     resource: dict[str, Any],
 ) -> bool:
-    root = MANAGED_SEED_ROOTS.get(component)
+    root = COMPONENT_OWNED_ROOTS.get(component)
     ownership = resource.get("file_ownership")
     target = resource["target"]
     return (

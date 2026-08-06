@@ -17,15 +17,16 @@ func (resource Resource) SupportsApply() bool {
 }
 
 func (resource Resource) supportsJSONClaimApply() bool {
+	root, known := componentOwnedRoots[resource.ComponentID]
 	ownership := resource.JSONClaimOwnership
-	return resource.Apply == SupportSupported &&
-		resource.ComponentID == domain.ComponentZCodeDesktop &&
+	return known &&
+		resource.Apply == SupportSupported &&
 		resource.Strategy == StrategyJSONKeyMerge &&
 		resource.Observation == SupportSupported &&
-		resource.Target.Root == domain.RootZCodeConfig &&
+		resource.Target.Root == root &&
 		len(resource.OwnedJSONFields) == 0 &&
 		resource.JSONMapOwnership == nil && ownership != nil &&
-		ownership.RegistryTarget.Root == domain.RootZCodeConfig &&
+		ownership.RegistryTarget.Root == root &&
 		ownership.RegistrySchemaVersion == 1 &&
 		len(ownership.Claims) > 0 && resource.ExternalState == nil
 }

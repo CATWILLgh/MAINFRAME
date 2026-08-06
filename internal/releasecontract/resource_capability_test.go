@@ -46,6 +46,64 @@ func TestAdapterSeededFileWithManagedRegistrySupportsApply(t *testing.T) {
 	}
 }
 
+func TestAdapterJSONClaimsSupportApplyInItsOwnRoot(t *testing.T) {
+	resource := releasecontract.Resource{
+		ID:          "claude-code.settings",
+		ComponentID: domain.ComponentClaudeCode,
+		Strategy:    releasecontract.StrategyJSONKeyMerge,
+		Apply:       releasecontract.SupportSupported,
+		Observation: releasecontract.SupportSupported,
+		Target: domain.Location{
+			Root: domain.RootClaudeConfig, Path: "settings.json",
+		},
+		JSONClaimOwnership: &releasecontract.JSONClaimOwnership{
+			RegistryTarget: domain.Location{
+				Root: domain.RootClaudeConfig,
+				Path: "mainframe/config-ownership.json",
+			},
+			RegistrySchemaVersion: 1,
+			Claims: []releasecontract.JSONClaim{{
+				ID:            "permission-allow-0",
+				Kind:          releasecontract.JSONClaimArrayEntry,
+				Pointer:       "/permissions/allow",
+				SelectorValue: `"Bash(ls:*)"`,
+			}},
+		},
+	}
+
+	if !resource.SupportsApply() {
+		t.Fatal("SupportsApply() = false, want true")
+	}
+}
+
+func TestAdapterJSONClaimsRejectARegistryOutsideItsOwnRoot(t *testing.T) {
+	resource := releasecontract.Resource{
+		ID:          "claude-code.settings",
+		ComponentID: domain.ComponentClaudeCode,
+		Strategy:    releasecontract.StrategyJSONKeyMerge,
+		Apply:       releasecontract.SupportSupported,
+		Observation: releasecontract.SupportSupported,
+		Target: domain.Location{
+			Root: domain.RootClaudeConfig, Path: "settings.json",
+		},
+		JSONClaimOwnership: &releasecontract.JSONClaimOwnership{
+			RegistryTarget: domain.Location{
+				Root: domain.RootCodexConfig,
+				Path: "mainframe/config-ownership.json",
+			},
+			RegistrySchemaVersion: 1,
+			Claims: []releasecontract.JSONClaim{{
+				ID: "permission-allow-0", Kind: releasecontract.JSONClaimArrayEntry,
+				Pointer: "/permissions/allow", SelectorValue: `"Bash(ls:*)"`,
+			}},
+		},
+	}
+
+	if resource.SupportsApply() {
+		t.Fatal("SupportsApply() = true for a registry in a foreign root")
+	}
+}
+
 func TestAdapterSeededFileRejectsARegistryOutsideItsOwnRoot(t *testing.T) {
 	resource := releasecontract.Resource{
 		ID:            "codex.credentials-index",
