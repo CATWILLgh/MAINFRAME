@@ -26,7 +26,7 @@ from bundle_publication import publish_bundle
 from detector_projection import project_hooklib_fallbacks
 from feedback_projection import project_adapter_feedback_skill
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
+from release_contract_fields import MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 import build_opencode
 from opencode_bundle_sources import require_sources
@@ -115,7 +115,6 @@ def _install_units(output: Path) -> list[dict]:
 
 
 def _resources() -> list[dict]:
-    observed = {"observation": "supported", "apply": "unimplemented"}
     apply_supported = {"observation": "supported", "apply": "supported"}
     return [
         {
@@ -126,7 +125,17 @@ def _resources() -> list[dict]:
                 "root": "opencode-config",
                 "path": "credentials-index.md",
             },
-            **observed,
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "opencode-config",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
+            **apply_supported,
         },
         diagnostics_resource("opencode"),
         {
@@ -344,7 +353,7 @@ def materialize(root: Path, output: Path) -> None:
         resources=_resources(),
         runtime_profile=asdict(profile),
         mcp_projections=_mcp_projections(),
-        schema_version=FEATURE_INSTALL_UNIT_SCHEMA_VERSION,
+        schema_version=MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION,
     )
 
 

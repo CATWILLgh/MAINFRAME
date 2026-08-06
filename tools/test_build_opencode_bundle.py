@@ -147,7 +147,7 @@ def _assert_bundle_layout(output: Path) -> None:
 
 
 def _assert_manifest_header(manifest: dict) -> None:
-    assert manifest["schema_version"] == 5
+    assert manifest["schema_version"] == 6
     assert manifest["component"] == "opencode"
     assert manifest["dependencies"] == ["credential-tools", "mainframe-cli"]
     assert manifest["runtime_profile"]["config_root"] == (
@@ -204,7 +204,17 @@ def _assert_manifest_resources(manifest: dict, output: Path) -> None:
         "path": "credentials-index.md",
     }
     assert resources["opencode.credentials-index"]["observation"] == "supported"
-    assert resources["opencode.credentials-index"]["apply"] == "unimplemented"
+    assert resources["opencode.credentials-index"]["apply"] == "supported"
+    assert resources["opencode.credentials-index"]["file_ownership"] == {
+        "kind": "managed-file-registry-v1",
+        "registry": {
+            "target": {
+                "root": "opencode-config",
+                "path": "mainframe/file-ownership.json",
+            },
+            "schema_version": 1,
+        },
+    }
     assert resources["opencode.diagnostics"] == {
         "id": "opencode.diagnostics",
         "strategy": "exact-json-document",
