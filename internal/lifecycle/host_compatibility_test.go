@@ -1,6 +1,7 @@
 package lifecycle
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +13,29 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/mcpconfiguration"
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
+
+func TestSelectingAnIncompatibleComponentReturnsATypedHostRequirementError(t *testing.T) {
+	service := newTestService(t, domain.ObservedState{})
+	service, err := service.WithHostCompatibility([]hostcompatibility.Assessment{{
+		ComponentID:      domain.ComponentAntigravity2,
+		Status:           hostcompatibility.StatusIncompatible,
+		DetectedVersions: []string{"2.5.0"},
+		ExpectedVersions: []string{"2.2.1"},
+	}})
+	if err != nil {
+		t.Fatalf("WithHostCompatibility() error = %v", err)
+	}
+
+	_, err = service.Plan([]domain.ComponentID{domain.ComponentAntigravity2})
+
+	var hostRequirement ComponentHostRequirementError
+	if !errors.As(err, &hostRequirement) {
+		t.Fatalf("Plan() error = %v, want a ComponentHostRequirementError", err)
+	}
+	if hostRequirement.Component != domain.ComponentAntigravity2 {
+		t.Fatalf("component = %q", hostRequirement.Component)
+	}
+}
 
 func TestIncompatibleInstalledTargetIsVisibleUnselectedAndPreserved(t *testing.T) {
 	observed := domain.ObservedState{Components: []domain.ObservedComponent{{

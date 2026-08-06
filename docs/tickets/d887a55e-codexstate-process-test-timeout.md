@@ -42,3 +42,16 @@ No existing ticket records this `codex.ready` publication timeout or the differe
 - `internal/codexstate/app_server_process_unix_test.go:14`
 - Full-suite runs on 2026-08-05: two failures waiting for `codex.ready` after two seconds.
 - Focused run on 2026-08-05: `go test ./internal/codexstate -count=3` passed.
+
+## Re-occurrence noted (2026-08-06)
+
+**Noticed during:** Full-suite verification of the host-requirement classification change
+**Where:** `TestAppServerClientKillsDescendantsOnInspectionCancellation`, same two-second
+`codex.ready` window
+**Additional details:** Third sighting, and the pattern is now consistent rather than
+suspected: `go test -count=1 ./...` failed, `go test -count=1 ./internal/codexstate` alone
+passed immediately afterwards on the same tree. The failure therefore depends on parallel
+package load, not on any change under test — but it does mean an unrelated change cannot get
+a clean whole-suite run on this machine without a second targeted run to explain the red.
+Priority unchanged; the practical cost is that it teaches contributors to skim past a red
+full-suite result, which is exactly how the `curl-requests` drift survived two days.
