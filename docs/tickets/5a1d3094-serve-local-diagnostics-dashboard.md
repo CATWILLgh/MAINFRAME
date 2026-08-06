@@ -61,3 +61,23 @@ read model and adapter-local storage contract are complete.
 - `tools/build_hub_page.py`
 - `docs/installer-strategy.md`
 - [#fb0f169b](fb0f169b-apply-adapter-local-diagnostics.md)
+
+## Re-occurrence noted (2026-08-06)
+
+**Noticed during:** Post-ZCode planning conversation with the maintainer
+**Where:** Ticket queue triage, not a code site
+**Additional details:** The maintainer independently proposed this same idea —
+a small local server doing what the telemetry layer already does, but almost
+live and strictly local — without knowing the ticket existed. That is a second,
+independent demand for the same capability and raises its practical priority,
+though not its severity, so `priority` is unchanged.
+
+Two things have moved since this ticket was written. Its stated precondition,
+[#fb0f169b](fb0f169b-apply-adapter-local-diagnostics.md) (adapter-local
+diagnostic activation and storage), is now `closed`, so the blocker cited in
+"What probably needs to be done" may already be gone — confirm before starting.
+And the maintainer sequenced this after the installer TUI work reaches its own
+boundary, alongside
+[#7958efc8](7958efc8-scrub-secrets-from-local-agent-sessions.md), which has the
+same "small local service" shape; if both are built, decide once whether they
+are one process or two.

@@ -1,7 +1,7 @@
 ---
 id: aeb5d9b0
 title: Make ZCode discover delivered MAINFRAME subagents
-status: in-progress
+status: closed
 priority: high
 component: zcode-desktop
 discovered: 2026-08-05
@@ -103,3 +103,40 @@ managing that local file without deleting it.
 executed successfully; the six remaining symbolic links stayed undiscovered.
 The chat `@` picker did not expose the agent, so it is not used as the native
 execution acceptance contract for this host version.
+
+## Resolution (2026-08-06)
+
+**Implementer:** Codex CLI session `019f64b1` (lifecycle + projection), live
+acceptance confirmed by the maintainer
+**Commits:** `cb49a7d`, `f3f50a1`, `c712df4`, `3a75f7b`, `11446fc`, `958a2c6`
+**Summary:** Projected agents are delivered as managed writable regular files
+instead of symbolic links, because ZCode's subagent scanner ignores links while
+its skill scanner honours them. A managed writable file is updated and removed
+automatically only while it is byte-identical to what was written; a locally
+edited file is preserved whole, reported as preserved, and omitted from the
+executable plan so it cannot block neighbouring managed updates. An existing
+v7 managed link migrates directly to a regular file, while foreign or changed
+links stay untouched. The maintainer has since used ZCode with these agents in
+real work, which is the live acceptance this ticket was waiting for.
+
+**Not satisfied — for the auditor to weigh:** acceptance criterion 6
+("diagnostics distinguish file delivered from subagent discovered") is **not
+implemented**. `internal/diagnostics/` contains only `plan.go` and has no
+discovery, acceptance, or ZCode concept at all. Live discovery is therefore
+still established by human observation, consistent with
+`adapters/zcode-desktop/capabilities.json:23` recording that no safe native
+list command exists. If the auditor treats criterion 6 as blocking, this ticket
+should return to `open` for that item alone rather than for the delivery fix.
+
+**Claims to verify on audit:**
+- `~/.zcode/agents/` holds seven regular files with mode `0600` and no symbolic
+  links; `decision-reviewer.md` matches the maintainer's customized content
+  byte for byte.
+- A locally edited managed agent is reported as preserved and does not appear in
+  the executable plan.
+- `go test -count=1 ./...` and `go test -race -count=1 ./...` pass.
+- The packaged install → update → rollback → uninstall lifecycle test passes
+  except the separately tracked Antigravity 2.5.0 host gate
+  ([#9e64c997](9e64c997-antigravity-250-compatibility-gate.md)).
+- ZCode skills, instructions, hooks and user-owned configuration are unchanged
+  by the agent materialization switch.

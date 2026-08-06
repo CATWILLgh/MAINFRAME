@@ -91,3 +91,28 @@ checksums, miss encoded copies, or rewrite unrelated high-entropy text.
   several catalog instances.
 - Safe behavior for active sessions and stores without transactional rewrite.
 - Default retention window, schedule, and backup lifetime.
+
+## Direction confirmed (2026-08-06)
+
+The maintainer chose this work over rotating individual leaked credentials. Two
+values had reached local logs during the ZCode adapter work — an
+`OTEL_EXPORTER_OTLP_HEADERS` header resembling a telemetry licence key, and
+several credential environment variables printed by a failing test. Rotation was
+declined deliberately: the durable answer is that leaked values stop surviving in
+local session material at all, rather than that one known value is replaced.
+
+Two constraints follow from that decision:
+
+- **Delivery shape:** a small local service that finds secrets in agent sessions
+  and replaces them with a placeholder, rather than the bounded scheduled job
+  currently described above. That narrows the open question about scheduling —
+  the service owns the cadence — but does not change the fail-closed, preview,
+  and never-print-the-value rules, which still hold verbatim.
+- **Sequencing:** starts only after the installer TUI work reaches its own
+  boundary. Until then this ticket stays `needs-refinement` and the four context
+  questions above stay open.
+
+The sibling idea of a local near-live diagnostics server
+([#5a1d3094](5a1d3094-serve-local-diagnostics-dashboard.md)) was raised in the
+same conversation and shares the "small local service" shape; if both are built,
+decide once whether they are one process or two.
