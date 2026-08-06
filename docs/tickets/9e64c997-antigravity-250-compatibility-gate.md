@@ -45,3 +45,15 @@ Run the Antigravity installed-contract probes against `2.5.0`, compare hook, plu
 conflict, cleanup, and reinstall stages completed before the packaged suite
 reached the already tracked Antigravity host rejection. The full Go suite and
 focused ZCode/release-contract tests remained green.
+
+## Re-occurrence noted (2026-08-06)
+
+**Noticed during:** Widening managed-file apply capability beyond the credential store
+**Where:** `tools/test_build_release.py::test_build_creates_complete_indexed_release_and_executable_layout`
+**Additional details:** Second sighting, same shape: the packaged `draft review` invocation
+exits 1 and the suite reports 2/3. Confirmed **not** caused by the change under test — the
+failure reproduces with the change stashed. Practical cost recorded here because it repeated
+the pattern from `d887a55e`: an unrelated change cannot get a clean run of this suite on a
+machine without a qualifying Antigravity install, so every contributor has to re-derive that
+the red is pre-existing. Worth considering whether this test should skip with a stated reason
+when the host application is absent, rather than fail.

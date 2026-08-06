@@ -79,9 +79,35 @@ func TestManagedFileOwnershipFailsClosed(t *testing.T) {
 	}
 }
 
-func TestBundleSchemaV6RejectsManagedFileApplyOutsideCredentialStore(
+func TestBundleSchemaV6RejectsSeededApplyWithoutManagedOwnership(
 	t *testing.T,
 ) {
+	root := seededApplyFixture(t, nil)
+
+	if _, err := releasecontract.Load(root); err == nil ||
+		!strings.Contains(err.Error(), "overstates lifecycle support") {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
+
+func TestBundleSchemaV6RejectsManagedFileRegistryInAForeignRoot(
+	t *testing.T,
+) {
+	root := seededApplyFixture(t, managedFileOwnershipRecord(
+		"claude-config",
+		"mainframe/file-ownership.json",
+	))
+
+	if _, err := releasecontract.Load(root); err == nil ||
+		!strings.Contains(err.Error(), "invalid file ownership") {
+		t.Fatalf("Load() error = %v", err)
+	}
+}
+
+// ownership nil declares apply support with no ownership record at all, which
+// is the shape a release must not be allowed to advertise.
+func seededApplyFixture(t *testing.T, ownership any) string {
+	t.Helper()
 	root := writeFixture(t)
 	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
 	manifest := readObject(t, manifestPath)
@@ -91,17 +117,12 @@ func TestBundleSchemaV6RejectsManagedFileApplyOutsideCredentialStore(
 	resource["observation"] = "supported"
 	resource["apply"] = "supported"
 	delete(resource, "legacy_source_suffixes")
-	resource["file_ownership"] = managedFileOwnershipRecord(
-		"codex-config",
-		"mainframe/file-ownership.json",
-	)
+	if ownership != nil {
+		resource["file_ownership"] = ownership
+	}
 	writeJSON(t, manifestPath, manifest, 0o644)
 	rewriteIndexDigest(t, root, manifestPath)
-
-	if _, err := releasecontract.Load(root); err == nil ||
-		!strings.Contains(err.Error(), "overstates lifecycle support") {
-		t.Fatalf("Load() error = %v", err)
-	}
+	return root
 }
 
 func TestBundleSchemaV6RejectsManagedFileRegistryCollision(t *testing.T) {

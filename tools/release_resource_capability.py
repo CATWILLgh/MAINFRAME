@@ -57,26 +57,40 @@ def valid_apply_declaration(component: str, resource: dict[str, Any]) -> bool:
     )
 
 
+MANAGED_FILE_REGISTRY_PATH = "mainframe/file-ownership.json"
+
+# The single root each component may seed managed files into. Narrower on
+# purpose than COMPONENT_ROOTS in release_component_roots, which lists every
+# root a component may target: pinning the ownership registry to the same root
+# it seeds keeps one component's records from claiming another's files.
+MANAGED_SEED_ROOTS = {
+    "credential-tools": "credentials-config",
+    "claude-code": "claude-config",
+    "codex": "codex-config",
+    "opencode": "opencode-config",
+    "antigravity-2": "antigravity-data",
+    "zcode-desktop": "zcode-config",
+}
+
+
 def _valid_managed_seed_apply(
     component: str,
     resource: dict[str, Any],
 ) -> bool:
+    root = MANAGED_SEED_ROOTS.get(component)
     ownership = resource.get("file_ownership")
+    target = resource["target"]
     return (
-        component == "credential-tools"
-        and resource["id"] == "credential-tools.secrets-store"
+        root is not None
         and resource["apply"] == "supported"
         and resource["observation"] == "supported"
-        and resource["target"]
-        == {"root": "credentials-config", "path": "secrets.env"}
+        and target.get("root") == root
+        and bool(target.get("path"))
         and isinstance(ownership, dict)
         and ownership.get("kind") == "managed-file-registry-v1"
         and ownership.get("registry")
         == {
-            "target": {
-                "root": "credentials-config",
-                "path": "mainframe/file-ownership.json",
-            },
+            "target": {"root": root, "path": MANAGED_FILE_REGISTRY_PATH},
             "schema_version": 1,
         }
         and "legacy_source_suffixes" not in resource

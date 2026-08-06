@@ -8,6 +8,70 @@ import (
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
 )
 
+func TestAdapterSeededFileWithManagedRegistrySupportsApply(t *testing.T) {
+	components := map[domain.ComponentID]domain.RootID{
+		domain.ComponentClaudeCode:   domain.RootClaudeConfig,
+		domain.ComponentCodex:        domain.RootCodexConfig,
+		domain.ComponentOpenCode:     domain.RootOpenCodeConfig,
+		domain.ComponentAntigravity2: domain.RootAntigravityData,
+	}
+	for component, root := range components {
+		t.Run(string(component), func(t *testing.T) {
+			resource := releasecontract.Resource{
+				ID:            string(component) + ".credentials-index",
+				ComponentID:   component,
+				Strategy:      releasecontract.StrategySeedIfAbsent,
+				Apply:         releasecontract.SupportSupported,
+				Observation:   releasecontract.SupportSupported,
+				SourcePath:    "credentials-index.md",
+				SourceContent: []byte("index"),
+				Target: domain.Location{
+					Root: root, Path: "credentials-index.md",
+				},
+				FileOwnership: &releasecontract.FileOwnership{
+					RegistryTarget: domain.Location{
+						Root: root, Path: "mainframe/file-ownership.json",
+					},
+					RegistrySchemaVersion: 1,
+				},
+			}
+
+			if !resource.SupportsApply() {
+				t.Fatal("SupportsApply() = false, want true")
+			}
+			if !resource.SupportsPreparation() {
+				t.Fatal("SupportsPreparation() = false, want true")
+			}
+		})
+	}
+}
+
+func TestAdapterSeededFileRejectsARegistryOutsideItsOwnRoot(t *testing.T) {
+	resource := releasecontract.Resource{
+		ID:            "codex.credentials-index",
+		ComponentID:   domain.ComponentCodex,
+		Strategy:      releasecontract.StrategySeedIfAbsent,
+		Apply:         releasecontract.SupportSupported,
+		Observation:   releasecontract.SupportSupported,
+		SourcePath:    "credentials-index.md",
+		SourceContent: []byte("index"),
+		Target: domain.Location{
+			Root: domain.RootCodexConfig, Path: "credentials-index.md",
+		},
+		FileOwnership: &releasecontract.FileOwnership{
+			RegistryTarget: domain.Location{
+				Root: domain.RootClaudeConfig,
+				Path: "mainframe/file-ownership.json",
+			},
+			RegistrySchemaVersion: 1,
+		},
+	}
+
+	if resource.SupportsApply() {
+		t.Fatal("SupportsApply() = true for a registry in a foreign root")
+	}
+}
+
 func TestResourceApplyCapabilityPredicateMatrix(t *testing.T) {
 	tests := map[string]struct {
 		mutate func(*releasecontract.Resource)

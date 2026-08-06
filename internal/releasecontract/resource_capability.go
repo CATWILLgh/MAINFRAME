@@ -30,23 +30,37 @@ func (resource Resource) supportsJSONClaimApply() bool {
 		len(ownership.Claims) > 0 && resource.ExternalState == nil
 }
 
+const (
+	managedFileRegistryPath    = "mainframe/file-ownership.json"
+	managedFileRegistryVersion = 1
+)
+
+// Pinning a component's ownership registry to the same root it seeds into keeps
+// one component's records from claiming another component's files.
+var componentOwnedRoots = map[domain.ComponentID]domain.RootID{
+	"credential-tools":           domain.RootCredentialsConfig,
+	domain.ComponentClaudeCode:   domain.RootClaudeConfig,
+	domain.ComponentCodex:        domain.RootCodexConfig,
+	domain.ComponentOpenCode:     domain.RootOpenCodeConfig,
+	domain.ComponentAntigravity2: domain.RootAntigravityData,
+	domain.ComponentZCodeDesktop: domain.RootZCodeConfig,
+}
+
 func (resource Resource) supportsManagedSeedApply() bool {
+	root, known := componentOwnedRoots[resource.ComponentID]
 	ownership := resource.FileOwnership
-	return resource.ID == "credential-tools.secrets-store" &&
-		resource.ComponentID == "credential-tools" &&
+	return known &&
 		resource.Apply == SupportSupported &&
 		resource.Observation == SupportSupported &&
 		resource.SourcePath != "" &&
 		resource.SourceContent != nil &&
-		resource.Target == (domain.Location{
-			Root: domain.RootCredentialsConfig, Path: "secrets.env",
-		}) &&
+		resource.Target.Root == root &&
+		resource.Target.Path != "" &&
 		ownership != nil &&
 		ownership.RegistryTarget == (domain.Location{
-			Root: domain.RootCredentialsConfig,
-			Path: "mainframe/file-ownership.json",
+			Root: root, Path: managedFileRegistryPath,
 		}) &&
-		ownership.RegistrySchemaVersion == 1 &&
+		ownership.RegistrySchemaVersion == managedFileRegistryVersion &&
 		len(resource.LegacySourceSuffixes) == 0 &&
 		len(resource.OwnedJSONFields) == 0 &&
 		resource.JSONMapOwnership == nil &&
@@ -62,15 +76,7 @@ func (resource Resource) SupportsPreparation() bool {
 	if resource.FileOwnership != nil {
 		return resource.SupportsApply()
 	}
-	expectedRoots := map[domain.ComponentID]domain.RootID{
-		"credential-tools":           domain.RootCredentialsConfig,
-		domain.ComponentClaudeCode:   domain.RootClaudeConfig,
-		domain.ComponentCodex:        domain.RootCodexConfig,
-		domain.ComponentOpenCode:     domain.RootOpenCodeConfig,
-		domain.ComponentAntigravity2: domain.RootAntigravityData,
-		domain.ComponentZCodeDesktop: domain.RootZCodeConfig,
-	}
-	root, supported := expectedRoots[resource.ComponentID]
+	root, supported := componentOwnedRoots[resource.ComponentID]
 	return supported &&
 		resource.Observation == SupportSupported &&
 		resource.Apply == SupportUnimplemented &&
