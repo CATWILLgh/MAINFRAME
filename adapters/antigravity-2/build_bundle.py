@@ -15,7 +15,7 @@ from bundle_publication import publish_bundle
 from bundle_sync import prepare_output_root, remove_path, write_text_file
 from feedback_projection import project_adapter_feedback_skill
 from release_contract import validate_bundle, write_bundle_manifest
-from release_contract_fields import FEATURE_INSTALL_UNIT_SCHEMA_VERSION
+from release_contract_fields import MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION
 from release_diagnostics import copy_diagnostics, diagnostics_resource
 
 from antigravity_modules import compatibility, load_adapter_module
@@ -68,8 +68,18 @@ def _resources() -> list[dict]:
                 "root": "antigravity-data",
                 "path": "credentials-index.md",
             },
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "antigravity-data",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
             "observation": "supported",
-            "apply": "unimplemented",
+            "apply": "supported",
         },
         diagnostics_resource("antigravity-2"),
         {
@@ -157,7 +167,7 @@ def materialize(root: Path, output: Path) -> None:
         ],
         resources=_resources(),
         mcp_projections=_mcp_projections(),
-        schema_version=FEATURE_INSTALL_UNIT_SCHEMA_VERSION,
+        schema_version=MANAGED_FILE_OWNERSHIP_SCHEMA_VERSION,
         host_requirements=compatibility.managed_host_requirements(),
     )
 

@@ -66,8 +66,18 @@ def _assert_resources(manifest: dict) -> None:
                 "root": "antigravity-data",
                 "path": "credentials-index.md",
             },
+            "file_ownership": {
+                "kind": "managed-file-registry-v1",
+                "registry": {
+                    "target": {
+                        "root": "antigravity-data",
+                        "path": "mainframe/file-ownership.json",
+                    },
+                    "schema_version": 1,
+                },
+            },
             "observation": "supported",
-            "apply": "unimplemented",
+            "apply": "supported",
         },
         "antigravity-2.diagnostics": {
             "id": "antigravity-2.diagnostics",
@@ -98,7 +108,7 @@ def test_bundle_is_self_contained_and_models_external_validation():
     _load_builder().build(REPO, output)
 
     manifest = release_contract.validate_bundle(output)
-    assert manifest["schema_version"] == 5
+    assert manifest["schema_version"] == 6
     assert manifest["component"] == "antigravity-2"
     assert manifest["host_requirements"] == [{
         "kind": "darwin-application-bundle-v1",
