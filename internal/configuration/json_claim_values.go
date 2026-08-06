@@ -39,7 +39,16 @@ func claimArray(document jsondocument.Document, raw string) ([]json.RawMessage, 
 }
 
 func matchingEntries(entries []json.RawMessage, claim releasecontract.JSONClaim) []int {
-	pointer, _ := jsondocument.ParsePointer(claim.SelectorPointer)
+	// An empty selector pointer addresses the array entry itself, which is the
+	// only way to claim one entry of a scalar array.
+	var tokens []string
+	if claim.SelectorPointer != "" {
+		pointer, err := jsondocument.ParsePointer(claim.SelectorPointer)
+		if err != nil {
+			return nil
+		}
+		tokens = pointer.Tokens()
+	}
 	var result []int
 	for index, entry := range entries {
 		var value any
@@ -48,7 +57,7 @@ func matchingEntries(entries []json.RawMessage, claim releasecontract.JSONClaim)
 		if decoder.Decode(&value) != nil {
 			continue
 		}
-		selected, found := lookupClaimSelector(value, pointer.Tokens())
+		selected, found := lookupClaimSelector(value, tokens)
 		selectedRaw, _ := json.Marshal(selected)
 		if found && sameJSON(selectedRaw, json.RawMessage(claim.SelectorValue)) {
 			result = append(result, index)

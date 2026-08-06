@@ -70,6 +70,38 @@ def test_accepts_strict_scalar_and_selector_array_claims():
     assert manifest["resources"][0]["json_ownership"] == ownership
 
 
+def test_accepts_a_root_selector_for_an_array_of_scalars():
+    ownership = _ownership()
+    ownership["claims"] = [{
+        "id": "permission-allow-one",
+        "kind": "array-entry",
+        "pointer": "/permissions/allow",
+        "selector": {"pointer": "", "value": "Bash(ls:*)"},
+    }]
+    payload = '{"permissions":{"allow":["Bash(ls:*)","Read"]}}\n'
+
+    manifest = _write(_resource(ownership), payload=payload)
+
+    assert manifest["resources"][0]["json_ownership"] == ownership
+
+
+def test_rejects_a_root_selector_that_matches_more_than_one_entry():
+    ownership = _ownership()
+    ownership["claims"] = [{
+        "id": "permission-allow-one",
+        "kind": "array-entry",
+        "pointer": "/permissions/allow",
+        "selector": {"pointer": "", "value": "Bash(ls:*)"},
+    }]
+    payload = '{"permissions":{"allow":["Bash(ls:*)","Bash(ls:*)"]}}\n'
+
+    try:
+        _write(_resource(ownership), payload=payload)
+    except ValueError:
+        return
+    raise AssertionError("duplicate source entries accepted for one claim")
+
+
 def test_requires_schema_v7_and_adapter_local_nonoverlapping_registry():
     for schema in (5, 6):
         try:

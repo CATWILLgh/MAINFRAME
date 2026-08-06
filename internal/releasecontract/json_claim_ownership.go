@@ -118,9 +118,15 @@ func loadJSONClaim(record jsonClaimRecord, document any) (JSONClaim, error) {
 		if record.Selector == nil {
 			return JSONClaim{}, fmt.Errorf("array claim has no selector")
 		}
-		selector, err := jsondocument.ParsePointer(record.Selector.Pointer)
-		if err != nil {
-			return JSONClaim{}, fmt.Errorf("invalid selector: %w", err)
+		// A scalar array entry has nothing inside it to address, so the root
+		// pointer selects the entry itself.
+		var selectorTokens []string
+		if record.Selector.Pointer != "" {
+			selector, err := jsondocument.ParsePointer(record.Selector.Pointer)
+			if err != nil {
+				return JSONClaim{}, fmt.Errorf("invalid selector: %w", err)
+			}
+			selectorTokens = selector.Tokens()
 		}
 		selectorValue, err := canonicalRaw(record.Selector.Value)
 		if err != nil {
@@ -132,7 +138,7 @@ func loadJSONClaim(record jsonClaimRecord, document any) (JSONClaim, error) {
 		}
 		matches := make([]any, 0, 1)
 		for _, entry := range entries {
-			actual, found := lookupJSONValue(entry, selector.Tokens())
+			actual, found := lookupJSONValue(entry, selectorTokens)
 			if found && canonicalValue(actual) == selectorValue {
 				matches = append(matches, entry)
 			}

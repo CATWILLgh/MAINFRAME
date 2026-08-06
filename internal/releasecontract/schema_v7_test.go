@@ -81,6 +81,60 @@ func TestBundleSchemaV7LoadsGenericJSONClaimOwnership(t *testing.T) {
 	}
 }
 
+// A string array has nothing inside its entries to select, so owning one entry
+// requires addressing the entry itself with the root pointer.
+func TestBundleSchemaV7ClaimsAScalarArrayEntryByItself(t *testing.T) {
+	root := writeFixture(t)
+	rewriteFixtureTargets(t, root, "zcode-desktop", "zcode-config")
+	manifestPath := filepath.Join(root, "bundles/codex/bundle.json")
+	manifest := readObject(t, manifestPath)
+	manifest["schema_version"] = 7
+	manifest["dependencies"] = []any{}
+	resource := manifest["resources"].([]any)[0].(map[string]any)
+	resource["id"] = "zcode.settings"
+	resource["target"] = map[string]any{
+		"root": "zcode-config", "path": "settings.json",
+	}
+	resource["observation"] = "supported"
+	resource["apply"] = "supported"
+	resource["json_ownership"] = map[string]any{
+		"kind": "json-claim-registry-v1",
+		"registry": map[string]any{
+			"target": map[string]any{
+				"root": "zcode-config",
+				"path": "mainframe/config-ownership.json",
+			},
+			"schema_version": 1,
+		},
+		"claims": []any{map[string]any{
+			"id":      "permission-allow-one",
+			"kind":    "array-entry",
+			"pointer": "/permissions/allow",
+			"selector": map[string]any{
+				"pointer": "", "value": "Bash(ls:*)",
+			},
+		}},
+	}
+	payload := `{"permissions":{"allow":["Bash(ls:*)","Read"]}}` + "\n"
+	writeFile(t, filepath.Join(root, "bundles/codex/config.json"), payload, 0o644)
+	manifest["payload_files"] = []any{
+		payloadRow(t, filepath.Join(root, "bundles/codex/config.json"), "config.json"),
+		payloadRow(t, filepath.Join(root, "bundles/codex/payload.txt"), "payload.txt"),
+	}
+	writeJSON(t, manifestPath, manifest, 0o644)
+	rewriteIndexDigest(t, root, manifestPath)
+
+	release, err := releasecontract.Load(root)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	claims := release.Resources[0].JSONClaimOwnership.Claims
+	if len(claims) != 1 || claims[0].SelectorPointer != "" ||
+		claims[0].Desired != `"Bash(ls:*)"` {
+		t.Fatalf("claims = %#v", claims)
+	}
+}
+
 func TestBundleSchemaV7RejectsInvalidJSONClaimOwnership(t *testing.T) {
 	tests := map[string]func(map[string]any){
 		"schema v6": func(manifest map[string]any) { manifest["schema_version"] = 6 },

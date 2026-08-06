@@ -194,7 +194,10 @@ def _validate_json_claim(claim: Any, identifier: str) -> None:
     if kind == "array-entry":
         selector = claim["selector"]
         _require_exact_object(selector, JSON_SELECTOR_FIELDS, f"resource {identifier!r} selector")
-        _ownership_pointer_tokens(selector["pointer"], identifier, "selector pointer")
+        # The root pointer addresses the entry itself, which is the only way to
+        # claim one entry of an array of scalars.
+        if selector["pointer"] != "":
+            _ownership_pointer_tokens(selector["pointer"], identifier, "selector pointer")
     elif kind != "exact-scalar":
         raise ValueError(f"resource {identifier!r} JSON ownership claim has unsupported kind")
 
@@ -227,6 +230,8 @@ def _resolve_pointer(document: Any, raw: str, identifier: str) -> Any:
 
 
 def _selector_matches(entry: Any, selector: dict[str, Any], identifier: str) -> bool:
+    if selector["pointer"] == "":
+        return entry == selector["value"]
     try:
         return _resolve_pointer(entry, selector["pointer"], identifier) == selector["value"]
     except ValueError:
