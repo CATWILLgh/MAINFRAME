@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/CATWILLgh/MAINFRAME/internal/lifecycle"
 )
 
 type draftReviewRunner func(draftReviewRequest) (draftReviewResponse, error)
@@ -23,6 +26,16 @@ func runDraftReviewFromRegistry(
 	}
 	response, err := context.reviewDraft(request)
 	if err != nil {
+		var hostRequirement lifecycle.ComponentHostRequirementError
+		if errors.As(err, &hostRequirement) {
+			fmt.Fprintf(
+				context.errorOutput,
+				"draft review: %s cannot be selected on this machine "+
+					"because its host application is not installed\n",
+				hostRequirement.Component,
+			)
+			return 1
+		}
 		fmt.Fprintln(
 			context.errorOutput,
 			"draft review: desired state could not be reviewed",

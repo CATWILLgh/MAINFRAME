@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -45,6 +46,43 @@ func TestDraftReviewCommandWritesOnlyTheReviewedResponse(t *testing.T) {
 		!response.Apply.CommandAvailable ||
 		response.Apply.Confirmation == "" {
 		t.Fatalf("response = %#v", response)
+	}
+}
+
+func TestDraftReviewCommandExplainsUnmetHostRequirement(t *testing.T) {
+	const marker = "raw-secret-must-not-appear"
+	var stdout, stderr bytes.Buffer
+	context := validDraftCommandContext(&stdout, &stderr)
+	context.reviewDraft = func(draftReviewRequest) (draftReviewResponse, error) {
+		return draftReviewResponse{}, fmt.Errorf(
+			"build semantic preview %s: %w",
+			marker,
+			lifecycle.ComponentHostRequirementError{
+				Component: domain.ComponentID("antigravity-2"),
+			},
+		)
+	}
+
+	exitCode := runDraftReviewFromRegistry(context, nil)
+
+	if exitCode != 1 {
+		t.Fatalf("exit code = %d, want 1", exitCode)
+	}
+	message := stderr.String()
+	if strings.Contains(message, marker) {
+		t.Fatalf("stderr reflected the wrapped error text: %q", message)
+	}
+	if !strings.Contains(message, "antigravity-2") {
+		t.Fatalf("stderr does not name the component: %q", message)
+	}
+	if strings.Contains(message, "desired state could not be reviewed") {
+		t.Fatalf("stderr fell back to the unclassified refusal: %q", message)
+	}
+	if !strings.Contains(message, "not installed") {
+		t.Fatalf("stderr does not state the cause: %q", message)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
 	}
 }
 

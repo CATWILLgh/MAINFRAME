@@ -262,7 +262,7 @@ func (service Service) planFilesystem(
 			return domain.Plan{}, fmt.Errorf("component %q is not selectable", id)
 		}
 		if !hostSelectable(service.hostCompatibilityFor(id)) {
-			return domain.Plan{}, fmt.Errorf("component %q does not satisfy its host requirement", id)
+			return domain.Plan{}, ComponentHostRequirementError{Component: id}
 		}
 		if seen[id] {
 			return domain.Plan{}, fmt.Errorf("duplicate selected component %q", id)
