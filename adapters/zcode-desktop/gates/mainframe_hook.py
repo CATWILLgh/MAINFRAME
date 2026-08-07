@@ -23,8 +23,22 @@ def _load_local_module(name: str, path: Path) -> ModuleType:
     return module
 
 
+def _resolve_hook_config_path() -> Path:
+    # Installed runtime ships hook_config.py alongside this module under gates/
+    # (the zcode-desktop.gates install unit symlinks the whole tree). Source
+    # layout keeps it at the adapter root for build_bundle.py to import; tests
+    # load this module from source, so ADAPTER_DIR is the fallback there.
+    candidates = (GATES_DIR / "hook_config.py", ADAPTER_DIR / "hook_config.py")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(
+        f"hook_config.py not found in any of: {[str(p) for p in candidates]}"
+    )
+
+
 hook_config = _load_local_module(
-    "zcode_mainframe_hook_config", ADAPTER_DIR / "hook_config.py"
+    "zcode_mainframe_hook_config", _resolve_hook_config_path()
 )
 runtime = _load_local_module(
     "zcode_mainframe_hook_runtime", GATES_DIR / "mainframe_runtime.py"

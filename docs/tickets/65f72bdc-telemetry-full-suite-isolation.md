@@ -54,3 +54,20 @@ Existing telemetry tickets concern runtime activation and storage. None records 
 the complete 808-test process while 803 tests, all ZCode-focused checks, and
 the complete Go suite passed. No user credential variables were forwarded to
 the test process.
+
+## Re-occurrence noted (2026-08-07)
+
+**Noticed during:** Verifying the `hook_config.py` bundle fix (separate change,
+zcode-desktop adapter only — does not touch telemetry or release build).
+**Where:** Full `python3 -m pytest tools/` run; confirmed pre-existing via
+`git stash` on a clean tree (failures reproduce without the fix).
+**Additional details:** Both telemetry tests above still fail in the full
+suite. A third test now also fails alongside them with the same
+`subprocess.CalledProcessError` signature, but on a different step —
+`tools/test_build_release.py::test_build_creates_complete_indexed_release_and_executable_layout`
+fails at `mainframe draft review` (exit 1), not at telemetry assertions. That
+release-build failure may share a root cause with the telemetry isolation issue
+(process-state or build-pipeline state leaking across tests in the full suite)
+or may be a distinct problem; bundled here pending triage because all three
+failures surface together only in the full-suite process and pass when run
+focused on a clean tree.

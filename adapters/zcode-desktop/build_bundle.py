@@ -204,6 +204,10 @@ def _project_gates(root: Path, output: Path) -> None:
             root / "adapters/zcode-desktop/gates" / name,
             output / name,
         )
+    copy_regular_file(
+        root / "adapters/zcode-desktop/hook_config.py",
+        output / "hook_config.py",
+    )
     feedback = f'os.path.join({ZCODE_ROOT_EXPRESSION}, "skills", "harness-feedback")'
     telemetry = (
         f'os.path.join({ZCODE_ROOT_EXPRESSION}, "mainframe", "telemetry", "telemetry.db")'

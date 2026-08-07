@@ -92,6 +92,17 @@ def test_hook_config_uses_hidden_cli_launcher_and_claim_scoped_ownership() -> No
     }
 
 
+def test_hook_config_module_ships_inside_gates_for_runtime_import() -> None:
+    output, _ = _materialized()
+    shipped = output / "gates" / "hook_config.py"
+    assert shipped.is_file(), "hook_config.py must ship inside gates/ for mainframe_hook.py to import at runtime"
+    bridge = output / "gates" / "mainframe_hook.py"
+    bridge_text = bridge.read_text()
+    assert "GATES_DIR" in bridge_text and "hook_config.py" in bridge_text, (
+        "mainframe_hook.py must resolve hook_config.py via GATES_DIR so the runtime install (~/.zcode/mainframe/gates/) can find it"
+    )
+
+
 def test_projected_runtime_has_no_claude_paths_or_unsealed_links() -> None:
     output, _ = _materialized()
     for path in output.rglob("*"):
