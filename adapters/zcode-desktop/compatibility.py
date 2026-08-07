@@ -10,8 +10,8 @@ from typing import Any
 
 APP_NAME = "ZCode Desktop"
 BUNDLE_IDENTIFIER = "dev.zcode.app"
-APP_VERSION = "3.6.5"
-APP_BUILD = "3.6.5.4145"
+APP_VERSION = "3.7.3"
+APP_BUILD = "3.7.3.4573"
 CLI_VERSION = "0.16.1"
 CLI_PATH = Path("/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs")
 

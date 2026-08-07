@@ -54,8 +54,8 @@ class ZCodeContractTests(unittest.TestCase):
             self.capabilities["host"],
             {
                 "app_name": "ZCode Desktop",
-                "app_version": "3.6.5",
-                "app_build": "3.6.5.4145",
+                "app_version": "3.7.3",
+                "app_build": "3.7.3.4573",
                 "bundle_id": "dev.zcode.app",
                 "cli_version": "0.16.1",
                 "cli_path": "/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs",
@@ -69,7 +69,7 @@ class ZCodeContractTests(unittest.TestCase):
                 {
                     "kind": "darwin-application-bundle-v1",
                     "bundle_identifier": "dev.zcode.app",
-                    "exact_versions": ["3.6.5"],
+                    "exact_versions": ["3.7.3"],
                 }
             ],
         )
