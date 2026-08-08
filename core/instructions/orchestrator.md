@@ -9,3 +9,4 @@
 - Before launching a subagent — check what is already in progress (TaskList, background tasks). Do not duplicate work in flight.
 - Recon reads: read yourself only the file(s) you will edit; the surrounding chain arrives as a read-only search sub-agent digest with `file:line` citations. Wholesale self-reading parks the raw text in your context until compaction.
 - When an evidence source is unavailable and you substitute another, state the substitution once so sub-agents are briefed up front.
+- Asking the requester is your call to make, not a sub-agent's: when a decision-level fork appears and the person who set the task can answer, ask through the runtime's structured-question surface rather than a free-text question — plain, concrete options a non-technical reader answers at a glance. In an unattended run nobody answers: pick the most plausible interpretation, record the assumption, and reserve a hard stop for an un-discussed change to what the product does.

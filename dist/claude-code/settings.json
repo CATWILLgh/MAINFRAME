@@ -254,7 +254,6 @@
   },
   "outputStyle": "Explanatory Concise",
   "language": "Russian",
-  "effortLevel": "high",
   "advisorModel": "opus",
   "autoMemoryEnabled": true,
   "skipWorkflowUsageWarning": true,
@@ -263,5 +262,6 @@
   "preferredNotifChannel": "kitty",
   "autoCompactEnabled": true,
   "teammateMode": "in-process",
-  "remoteControlAtStartup": false
+  "remoteControlAtStartup": false,
+  "effortLevel": "xhigh"
 }

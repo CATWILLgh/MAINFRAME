@@ -93,7 +93,8 @@ COMPOSE_MAPPINGS = [
     ("dist/claude-code/CLAUDE.md",
      ["adapters/claude-code/instructions/00-preamble.md"]
      + _AGNOSTIC
-     + ["adapters/claude-code/instructions/70-memory.md",
+     + ["adapters/claude-code/instructions/50-bindings.md",
+        "adapters/claude-code/instructions/70-memory.md",
         "adapters/claude-code/instructions/75-advisor.md",
         "adapters/claude-code/instructions/62-orchestration-claude-code.md"]
      + _ORCHESTRATOR),
