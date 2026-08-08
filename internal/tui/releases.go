@@ -157,6 +157,13 @@ func (model *Model) continueFromReleaseConfirm() (*Model, tea.Cmd) {
 		model.form = releaseMenuForm(model, model.releaseList)
 		return model, model.form.Init()
 	}
+	if model.activeReleaseReview.RecoveryRequired ||
+		!model.activeReleaseReview.HasApplyTarget() {
+		model.err = fmt.Errorf("This review is not applicable; resolve the notice first")
+		model.screen = screenReleases
+		model.form = releaseMenuForm(model, model.releaseList)
+		return model, model.form.Init()
+	}
 	if model.releases.Applier == nil {
 		model.err = fmt.Errorf("Release apply is unavailable")
 		model.screen = screenReleases
