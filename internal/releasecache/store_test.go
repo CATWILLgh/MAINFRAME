@@ -332,3 +332,87 @@ func fileDigest(t *testing.T, path string) string {
 func formatMode(mode os.FileMode) string {
 	return fmt.Sprintf("%04o", mode.Perm())
 }
+
+func TestListReturnsEmptyForUninitializedCache(t *testing.T) {
+	store := newTestStore(t)
+	entries, err := store.List()
+	if err != nil {
+		t.Fatalf("List() on empty store error = %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("List() empty store = %v entries, want 0", len(entries))
+	}
+}
+
+func TestListReturnsImportedReleasesWithIdentity(t *testing.T) {
+	store := newTestStore(t)
+	first := writeReleaseFixture(t, "alpha-release", "first\n", 0o640)
+	second := writeReleaseFixture(t, "beta-release", "second\n", 0o640)
+	if _, err := store.Import(first); err != nil {
+		t.Fatalf("Import first: %v", err)
+	}
+	if _, err := store.Import(second); err != nil {
+		t.Fatalf("Import second: %v", err)
+	}
+
+	entries, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("List() = %v entries, want 2", len(entries))
+	}
+	byID := map[string]Entry{}
+	for _, entry := range entries {
+		byID[entry.ReleaseID] = entry
+		if entry.AlreadyPresent {
+			t.Fatalf("List() entry %+v reports AlreadyPresent, must be false for listing", entry)
+		}
+	}
+	for _, want := range []string{"alpha-release", "beta-release"} {
+		entry, ok := byID[want]
+		if !ok {
+			t.Fatalf("List() missing release %q in %v", want, entries)
+		}
+		if entry.IndexSHA256 == "" {
+			t.Fatalf("List() entry for %q has empty IndexSHA256", want)
+		}
+		if !releasecontract.ValidReleaseIdentity(entry.ReleaseID, entry.IndexSHA256) {
+			t.Fatalf("List() entry for %q has invalid identity", want)
+		}
+		if _, err := releasecontract.Load(entry.Path); err != nil {
+			t.Fatalf("List() entry for %q not loadable: %v", want, err)
+		}
+	}
+}
+
+func TestListSkipsIncompletePublication(t *testing.T) {
+	store := newTestStore(t)
+	source := writeReleaseFixture(t, "good-release", "payload\n", 0o640)
+	if _, err := store.Import(source); err != nil {
+		t.Fatalf("Import good release: %v", err)
+	}
+	releasesRoot := filepath.Join(store.root, releasesDirectory)
+	brokenID := "broken-release"
+	brokenVersion := strings.Repeat("a", sha256.Size*2)
+	brokenPath := filepath.Join(releasesRoot, brokenID, brokenVersion)
+	if err := os.MkdirAll(brokenPath, 0o700); err != nil {
+		t.Fatalf("mkdir broken release dir: %v", err)
+	}
+
+	entries, err := store.List()
+	if err != nil {
+		t.Fatalf("List() with broken sibling error = %v", err)
+	}
+	for _, entry := range entries {
+		if entry.ReleaseID == brokenID {
+			t.Fatalf("List() surfaced incomplete publication %+v", entry)
+		}
+	}
+	if len(entries) != 1 {
+		t.Fatalf("List() = %v entries, want 1 (good only); entries=%+v", len(entries), entries)
+	}
+	if entries[0].ReleaseID != "good-release" {
+		t.Fatalf("List()[0].ReleaseID = %q, want good-release", entries[0].ReleaseID)
+	}
+}

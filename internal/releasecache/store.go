@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/CATWILLgh/MAINFRAME/internal/releasecontract"
@@ -129,6 +130,41 @@ func (store Store) Open(releaseID, indexSHA256 string) (Entry, error) {
 		return Entry{}, fmt.Errorf("release version was not found")
 	}
 	return entry, nil
+}
+
+// List enumerates complete, loadable releases in the cache, sorted by
+// (ReleaseID, IndexSHA256). Half-published or damaged directories are
+// skipped: a listing is a display inventory, and they are not actionable.
+func (store Store) List() ([]Entry, error) {
+	if !store.initialized() {
+		return nil, fmt.Errorf("release store is not initialized")
+	}
+	versionDirs, err := filepath.Glob(
+		filepath.Join(store.root, releasesDirectory, "*", "*"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("enumerate release cache: %w", err)
+	}
+	entries := make([]Entry, 0, len(versionDirs))
+	for _, dir := range versionDirs {
+		releaseID := filepath.Base(filepath.Dir(dir))
+		indexSHA256 := filepath.Base(dir)
+		if !releasecontract.ValidReleaseIdentity(releaseID, indexSHA256) {
+			continue
+		}
+		entry := Entry{
+			Path:        dir,
+			ReleaseID:   releaseID,
+			IndexSHA256: indexSHA256,
+		}
+		exists, err := validateExisting(entry)
+		if err != nil || !exists {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	sortEntries(entries)
+	return entries, nil
 }
 
 func (store Store) importNew(
@@ -321,4 +357,13 @@ func ensurePrivateDirectory(path string) error {
 		return fmt.Errorf("sync release store directory %q: %w", path, err)
 	}
 	return nil
+}
+
+func sortEntries(entries []Entry) {
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].ReleaseID != entries[j].ReleaseID {
+			return entries[i].ReleaseID < entries[j].ReleaseID
+		}
+		return entries[i].IndexSHA256 < entries[j].IndexSHA256
+	})
 }
