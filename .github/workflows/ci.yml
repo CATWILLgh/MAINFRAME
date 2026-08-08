@@ -21,9 +21,11 @@ jobs:
           git config --global user.email "ci@mainframe.local"
           git config --global user.name "mainframe-ci"
 
-      # The hook tests are stdlib Python only — they drive each hook's logic with
-      # fixtures/stubs and never shell out to the real linters, so no ruff/oxlint/
-      # fallow/etc. are needed here.
+      # Most hook tests use stdlib fixtures and stubs. The Python security delta
+      # tests exercise the real local ruff binary, so pin its verified version.
+      - name: Install ruff (Python security scanner)
+        run: pip install ruff==0.15.15
+
       - name: Hook test suite
         run: |
           fail=0
