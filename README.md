@@ -20,6 +20,10 @@
 
 A baseline of operating rules, focused sub-agents, and small automatic checks I want to apply in **every** Claude Code session on my machine. Set up once — every project, every session, inherits the same discipline.
 
+> **Architecture review in progress.** The current hub is being reconsidered
+> through a user interview. Confirmed principles and the separation of context
+> by recipient are recorded in [`docs/principles.md`](docs/principles.md).
+
 It's shaped for one workflow in particular: long **auto-mode** runs — hours, sometimes days, where Claude and I plan a larger feature up front, then it executes on its own with no one watching each step. Every rule, hook, and permission tier here is built to hold quality through exactly that: an unattended run where a missed check turns into a bug nobody catches until later.
 
 ## Engineering at a glance
