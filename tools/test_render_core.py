@@ -462,12 +462,13 @@ def test_compose_skips_tree_without_instructions():
     shutil.rmtree(root)
 
 
-def test_opencode_memory_instructions_precede_git_and_runtime_notes():
+def test_opencode_adapter_fragments_follow_the_neutral_bricks():
     parts = dict(render_core.COMPOSE_MAPPINGS)["dist/opencode/AGENTS.md"]
+    agnostic = parts.index("core/instructions/agnostic.md")
     memory = parts.index("adapters/opencode/instructions/70-memory.md")
-    git = parts.index("core/instructions/80-git-commits.md")
     runtime = parts.index("adapters/opencode/instructions/90-runtime-opencode.md")
-    assert memory < git < runtime
+    orchestrator = parts.index("core/instructions/orchestrator.md")
+    assert agnostic < memory < runtime < orchestrator
 
 
 def test_real_repo_instructions_drift_free():

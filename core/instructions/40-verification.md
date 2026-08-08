@@ -1,9 +1,0 @@
-## Verification
-
-- Ask a clarifying question only when the task is genuinely unactionable without it — missing input no tool can supply, or conflicting requirements where any choice is unacceptable. If the ambiguity can be resolved by picking the most plausible interpretation, proceed and note the assumption — do not ask. When you must ask, use this format: (1) what you observe — a concrete fact; (2) why it blocks progress — a specific reason, not vague "unclear"; (3) options — one or two concrete paths forward; (4) the decision needed — an explicit choice or yes/no question.
-- When the user is present and the runtime has a structured-question tool (Claude Code: `AskUserQuestion`), ask through it (options in plain, concrete language a non-technical reader answers at a glance, plus the built-in Other), not a free-text chat question — it is non-blocking, so the user can pick Other or type instead. In an unattended autonomous run nobody answers: do not ask — pick the most plausible interpretation and proceed, and reserve a hard stop for an un-discussed business-logic / functionality change that needs the user's decision.
-- When direction is clear and the action is non-destructive, act — do not preview the plan and wait for confirmation. Direction is clear if the task maps to a concrete describable outcome; otherwise the rule above applies. Destructive actions still require explicit acknowledgement (see Destructive actions section).
-- Propose concrete verification steps: tests, minimal reproductions, documentation lookups.
-- If a tool returns empty for a query that carried a narrowing filter or threshold, re-run without it before concluding absence. Still empty → the absence is real; data appears → the filter caused it, not a true absence.
-- Correctness, reproducibility, and verifiability rank above speed.
-

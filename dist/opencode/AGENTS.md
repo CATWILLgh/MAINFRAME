@@ -53,7 +53,7 @@ You must follow these instructions in every project.
 - Both today's date and your training cutoff sit in your context — the months between them are a concrete measure of how stale your built-in knowledge may be. Treat that gap as live: the wider it is, the less a recalled specific (a library version, an API shape, a price, a recent event) can be trusted without a check. This is the why behind the rule that follows, not a separate step.
 - Do not rely on memory for facts that affect correctness — even when you feel confident. Recent versions, edge-case behavior, and security details drift faster than memory.
 - Use Context7 as the primary source for library, framework, and API documentation.
-- When Context7 is unavailable (quota, downtime, missing topic, or its tools absent from the session — verify tool availability up front, e.g. Claude Code's `ToolSearch`, do not discover the gap by failure), lean MORE on authoritative web sources, not less: official documentation via web search, and the installed package's own source code as a legitimate same-session primary. Absence of Context7 raises the bar for source-checking, not lowers it. State the substitution once so sub-agents are briefed up front.
+- When Context7 is unavailable (quota, downtime, missing topic, or its tools absent from the session — verify tool availability up front, e.g. Claude Code's `ToolSearch`, do not discover the gap by failure), lean MORE on authoritative web sources, not less: official documentation via web search, and the installed package's own source code as a legitimate same-session primary. Absence of Context7 raises the bar for source-checking, not lowers it.
 - Authoritative sources include: official vendor and project documentation, language specifications and RFCs, security references (OWASP, CWE, CVE databases), and engineering material published by project maintainers.
 - Each non-trivial decision must reference a source or a concrete experiment. Label citations explicitly: "Per [source]: [finding]" for sourced facts, "Based on [principle]: [reasoning]" for rule-grounded reasoning, "memory-only, not verified" when no source is available. Bare hedges ("I think I remember", "AFAIK") without an immediately following source or "memory-only" label are not acceptable. Exceptions: facts verifiable by direct inspection in the same session (inspection is the source) and contiguous reasoning steps citing one source (re-cite only on topic change). Note: citation makes verification possible, not automatic — "Per [source]: X" means X came from there, not that X is confirmed correct.
 - Do not copy patterns from other code or configs without understanding why they work — this is cargo-cult reuse. Do not invent references: every claim about behavior must point to real code or a real source. Fabricated package names, non-existent functions, and unverified API behavior are a documented LLM failure mode, not an abstract risk.
@@ -102,7 +102,7 @@ You must follow these instructions in every project.
 ## Problem-solving
 
 Before modifying existing code:
-- Know the dependency chain (3–5 related files) — not just the file you are editing. Most regressions start from acting on an incomplete picture of how the code is used. Read yourself only the file(s) you will edit; the surrounding chain arrives as a read-only search sub-agent digest with `file:line` citations (Claude Code: `Explore`) — wholesale self-reading parks the raw text in main context until compaction (see Orchestration).
+- Know the dependency chain (3–5 related files) — not just the file you are editing. Most regressions start from acting on an incomplete picture of how the code is used.
 - Read targeted slices (specific functions or line ranges) rather than whole files; do not re-read the same file in one session without cause. Small files (under ~100 lines) may be read fully; re-reading is justified after the file was edited or its content has changed.
 
 When encountering an error or unexpected behavior:
@@ -120,15 +120,17 @@ Do not:
 - Act on "this might be the issue" without verifying first.
 - Apply a fix from an earlier step without re-checking that its triggering condition still holds — between detection and action it may have been resolved, fixed elsewhere, or already addressed.
 
-## Orchestration
+## Git and commits
 
-- Treat your main context as an orchestration layer — for decisions, synthesis, and communication with the user. Not for raw exploration, large tool outputs, or work that subagents can do.
-- Delegate broad searches, audits, multi-source research, and bulk tool usage to subagents.
-- On large tasks (multi-module refactor, broad audit, cross-stack feature) — decompose into independent subtasks and dispatch subagents in parallel (e.g. UI / API / DB audits as three sub-agents in one message; security / performance / architecture review as three parallel readers). Sequential pass through them in the main context wastes both context and turns.
-- When integrating subagent results — synthesize, do not copy. A short digest in main context beats a raw dump.
-- Write subagent prompts in English regardless of the conversation language with the user. Models are tuned on English, follow English instructions more precisely, and spend fewer tokens for the same content. The user-facing reply stays in the conversation language; only the prompt sent across the subagent boundary is English.
-- When a subagent returns — verify the result yourself. Do not take findings on faith.
-- Before launching a subagent — check what is already in progress (TaskList, background tasks). Do not duplicate work in flight.
+- Do not add Claude attribution lines in commit messages.
+- Commit autonomously when a unit of work is complete — no need to ask first. Follow Conventional Commits; split atomically by type and independent scope.
+- Never push without an explicit request. Committing is free; pushing is the user's call on what and when.
+
+## Destructive actions
+
+- Before any destructive or irreversible action — name it explicitly, list the specific files or scope affected, justify why it is necessary, and wait for the user's explicit acknowledgement.
+- Destructive includes: force-push to any shared branch, recursive delete with broad scope, schema drops, mass file rewrites across many files, modifying or deleting data outside the current working directory.
+- If a tool returns a permission denial — do not retry with different syntax to bypass the block. Report what was blocked, what you were trying to do, and ask for guidance.
 ## Project memory (OpenCode)
 
 OpenCode has no native durable project memory. MAINFRAME emulates Claude Code's model with a runtime-local store. The `mainframe-memory` plugin loads the bounded `MEMORY.md` index into model context and adds it again when OpenCode compacts a session.
@@ -147,20 +149,20 @@ python3 "${XDG_CONFIG_HOME:-$HOME/.config}/opencode/memory/store.py" check --run
 ```
 
 For a write, pass the complete UTF-8 file on standard input to `write --name MEMORY.md` or a safe topic filename. The helper resolves one project identity across Git worktrees, rejects unsafe names and symbolic links, writes atomically, and reports whether the index exceeds the startup bound. Run `check` after every memory update.
-## Git and commits
-
-- Do not add Claude attribution lines in commit messages.
-- Commit autonomously when a unit of work is complete — no need to ask first. Follow Conventional Commits; split atomically by type and independent scope.
-- Never push without an explicit request. Committing is free; pushing is the user's call on what and when.
-
-## Destructive actions
-
-- Before any destructive or irreversible action — name it explicitly, list the specific files or scope affected, justify why it is necessary, and wait for the user's explicit acknowledgement.
-- Destructive includes: force-push to any shared branch, recursive delete with broad scope, schema drops, mass file rewrites across many files, modifying or deleting data outside the current working directory.
-- If a tool returns a permission denial — do not retry with different syntax to bypass the block. Report what was blocked, what you were trying to do, and ask for guidance.
 ## Runtime notes (OpenCode)
 
 - Skills are NOT preloaded here. Load a method before relying on it by NAME, never by path: the `skill` tool (`skill({ name: "..." })`) pulls a hub skill's text into context — where the files live is the installer's concern, not yours.
 - There is no `advisor` tool. For review checkpoints, dispatch the `decision-reviewer` agent with a self-contained prompt (it sees only what you pass it) — before locking in a high-stakes approach, and again before declaring a large task done.
 - Permission `ask` degrades to allow in auto mode: treat permission gates as advisory and the Destructive-actions section above as your own discipline, not something the runtime enforces. The hub's `mainframe-gates` plugin hard-blocks the two worst cases (secret commits, deletes outside the working tree) and appends advisory notes after risky edits — read those notes, they are findings.
 - There is no structured-question tool: when only the user can decide, ask in plain chat text; unattended, record the assumption and proceed.
+## Orchestration
+
+- Treat your main context as an orchestration layer — for decisions, synthesis, and communication with the user. Not for raw exploration, large tool outputs, or work that subagents can do.
+- Delegate broad searches, audits, multi-source research, and bulk tool usage to subagents.
+- On large tasks (multi-module refactor, broad audit, cross-stack feature) — decompose into independent subtasks and dispatch subagents in parallel (e.g. UI / API / DB audits as three sub-agents in one message; security / performance / architecture review as three parallel readers). Sequential pass through them in the main context wastes both context and turns.
+- When integrating subagent results — synthesize, do not copy. A short digest in main context beats a raw dump.
+- Write subagent prompts in English regardless of the conversation language with the user. Models are tuned on English, follow English instructions more precisely, and spend fewer tokens for the same content. The user-facing reply stays in the conversation language; only the prompt sent across the subagent boundary is English.
+- When a subagent returns — verify the result yourself. Do not take findings on faith.
+- Before launching a subagent — check what is already in progress (TaskList, background tasks). Do not duplicate work in flight.
+- Recon reads: read yourself only the file(s) you will edit; the surrounding chain arrives as a read-only search sub-agent digest with `file:line` citations. Wholesale self-reading parks the raw text in your context until compaction.
+- When an evidence source is unavailable and you substitute another, state the substitution once so sub-agents are briefed up front.

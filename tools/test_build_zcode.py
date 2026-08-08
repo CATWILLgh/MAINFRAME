@@ -149,8 +149,13 @@ def test_missing_or_invalid_method_contract_fails_closed() -> None:
 
 def test_missing_instruction_part_and_invalid_skill_fail_closed() -> None:
     root = fixture_root()
-    (root / "core/instructions/15-communication.md").unlink()
+    (root / "core/instructions" / build.CORE_INSTRUCTION_FILES[0]).unlink()
     with pytest.raises(ValueError, match="missing ZCode instruction part"):
+        build.render_projection(root)
+
+    root = fixture_root()
+    write(root / "core/instructions/99-unwired.md", "\n## Unwired\n")
+    with pytest.raises(ValueError, match="unmapped neutral instruction parts"):
         build.render_projection(root)
 
     root = fixture_root()

@@ -82,43 +82,32 @@ EXECUTABLE_MAPPINGS = {
 # Instructions render by ordered concatenation: core sections + per-tool
 # wrapper/mechanics fragments, one shared ordering namespace (the numeric
 # prefixes). Both targets are committed renders guarded by --check.
-_CORE_SECTIONS = [
-    "core/instructions/05-title.md",
-    "core/instructions/10-partnership.md",
-    "core/instructions/15-communication.md",
-    "core/instructions/20-honesty.md",
-    "core/instructions/25-no-flattery.md",
-    "core/instructions/30-thinking-decisions.md",
-    "core/instructions/35-evidence-sources.md",
-    "core/instructions/40-verification.md",
-    "core/instructions/45-output-format.md",
-    "core/instructions/50-engineering-practices.md",
-    "core/instructions/55-problem-solving.md",
-    "core/instructions/60-orchestration.md",
-]
-_CORE_TAIL = [
-    "core/instructions/80-git-commits.md",
-    "core/instructions/85-destructive-actions.md",
-]
+# Two neutral bricks. `agnostic` holds what is true for any agent in any
+# runtime, so it is delivered to every target. `orchestrator` addresses the main
+# agent only and is concatenated last, on its way out: it moves to the
+# `mainframe-init` command so sub-agents stop inheriting instructions they
+# cannot act on.
+_AGNOSTIC = ["core/instructions/agnostic.md"]
+_ORCHESTRATOR = ["core/instructions/orchestrator.md"]
 COMPOSE_MAPPINGS = [
     ("dist/claude-code/CLAUDE.md",
      ["adapters/claude-code/instructions/00-preamble.md"]
-     + _CORE_SECTIONS
-     + ["adapters/claude-code/instructions/62-orchestration-claude-code.md",
-        "adapters/claude-code/instructions/70-memory.md",
-        "adapters/claude-code/instructions/75-advisor.md"]
-     + _CORE_TAIL),
+     + _AGNOSTIC
+     + ["adapters/claude-code/instructions/70-memory.md",
+        "adapters/claude-code/instructions/75-advisor.md",
+        "adapters/claude-code/instructions/62-orchestration-claude-code.md"]
+     + _ORCHESTRATOR),
     ("dist/opencode/AGENTS.md",
      ["adapters/opencode/instructions/00-preamble.md"]
-     + _CORE_SECTIONS
-     + ["adapters/opencode/instructions/70-memory.md"]
-     + _CORE_TAIL
-     + ["adapters/opencode/instructions/90-runtime-opencode.md"]),
+     + _AGNOSTIC
+     + ["adapters/opencode/instructions/70-memory.md",
+        "adapters/opencode/instructions/90-runtime-opencode.md"]
+     + _ORCHESTRATOR),
     ("dist/codex/AGENTS.md",
      ["adapters/codex/instructions/00-preamble.md"]
-     + _CORE_SECTIONS
-     + _CORE_TAIL
-     + ["adapters/codex/instructions/90-runtime-codex.md"]),
+     + _AGNOSTIC
+     + ["adapters/codex/instructions/90-runtime-codex.md"]
+     + _ORCHESTRATOR),
 ]
 
 EXCLUDED_NAMES = {"__pycache__", ".DS_Store"}

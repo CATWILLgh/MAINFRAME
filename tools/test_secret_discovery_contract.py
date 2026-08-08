@@ -23,10 +23,11 @@ SKILLS = {
     "Codex": "codex/skills/secrets-handling/SKILL.md",
     "OpenCode": "opencode/skills/secrets-handling/SKILL.md",
 }
+# Antigravity caps a single rule file, so the neutral brick arrives split across
+# however many parts the cap requires; read the whole rules directory rather
+# than pinning a part number that moves whenever the brick grows.
 INSTRUCTIONS = {
-    "Antigravity": (
-        "antigravity-2/plugin/rules/core-50-engineering-practices.md"
-    ),
+    "Antigravity": "antigravity-2/plugin/rules",
     "Claude Code": "claude-code/CLAUDE.md",
     "Codex": "codex/AGENTS.md",
     "OpenCode": "opencode/AGENTS.md",
@@ -34,6 +35,11 @@ INSTRUCTIONS = {
 
 
 def normalized(path: Path) -> str:
+    if path.is_dir():
+        return " ".join(
+            " ".join(item.read_text(encoding="utf-8").split())
+            for item in sorted(path.glob("*.md"))
+        )
     return " ".join(path.read_text(encoding="utf-8").split())
 
 

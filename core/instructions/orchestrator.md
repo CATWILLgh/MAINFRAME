@@ -7,3 +7,5 @@
 - Write subagent prompts in English regardless of the conversation language with the user. Models are tuned on English, follow English instructions more precisely, and spend fewer tokens for the same content. The user-facing reply stays in the conversation language; only the prompt sent across the subagent boundary is English.
 - When a subagent returns — verify the result yourself. Do not take findings on faith.
 - Before launching a subagent — check what is already in progress (TaskList, background tasks). Do not duplicate work in flight.
+- Recon reads: read yourself only the file(s) you will edit; the surrounding chain arrives as a read-only search sub-agent digest with `file:line` citations. Wholesale self-reading parks the raw text in your context until compaction.
+- When an evidence source is unavailable and you substitute another, state the substitution once so sub-agents are briefed up front.

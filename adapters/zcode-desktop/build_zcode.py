@@ -45,20 +45,8 @@ skill_contract = _skill_projection.skill_contract
 
 GENERATED_MARKER = "Generated from MAINFRAME hub"
 CORE_INSTRUCTION_FILES = (
-    "05-title.md",
-    "10-partnership.md",
-    "15-communication.md",
-    "20-honesty.md",
-    "25-no-flattery.md",
-    "30-thinking-decisions.md",
-    "35-evidence-sources.md",
-    "40-verification.md",
-    "45-output-format.md",
-    "50-engineering-practices.md",
-    "55-problem-solving.md",
-    "60-orchestration.md",
-    "80-git-commits.md",
-    "85-destructive-actions.md",
+    "agnostic.md",
+    "orchestrator.md",
 )
 ADAPTER_INSTRUCTION_FILES = ("00-preamble.md", "90-runtime-zcode-desktop.md")
 READ_TOOLS = frozenset({"Glob", "Grep", "Read"})
