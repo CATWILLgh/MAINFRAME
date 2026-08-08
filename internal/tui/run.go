@@ -68,10 +68,18 @@ type ReleaseOperation struct {
 
 type releaseMenuChoice string
 
-func (review ReleaseReview) ApplyRequest() []byte    { return review.applyRequest }
-func (review ReleaseReview) Confirmation() string    { return review.confirmation }
+func (review ReleaseReview) ApplyRequest() []byte { return review.applyRequest }
+func (review ReleaseReview) Confirmation() string { return review.confirmation }
 func (review ReleaseReview) HasApplyTarget() bool {
 	return review.Applicable && review.applyRequest != nil && review.confirmation != ""
+}
+
+func (review ReleaseReview) WithApplyRequest(
+	applyRequest []byte, confirmation string,
+) ReleaseReview {
+	review.applyRequest = applyRequest
+	review.confirmation = confirmation
+	return review
 }
 
 type ReleaseLister interface {

@@ -89,7 +89,13 @@ func runInteractivePreview(input io.Reader, output io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("prepare repository metadata: %w", err)
 	}
-	return tui.Run(input, output, reviewer, catalog, stats, credentials, tui.ReleaseState{})
+	adapter := newReleaseAdapter()
+	releaseState := tui.ReleaseState{
+		Lister:   adapter,
+		Reviewer: adapter,
+		Applier:  adapter,
+	}
+	return tui.Run(input, output, reviewer, catalog, stats, credentials, releaseState)
 }
 
 func buildPreviewService() (lifecycle.Service, error) {
