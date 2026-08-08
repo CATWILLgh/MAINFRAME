@@ -15,6 +15,7 @@ const (
 	mainMenuMCP          mainMenuChoice = "mcp"
 	mainMenuDiagnostics  mainMenuChoice = "diagnostics"
 	mainMenuCredentials  mainMenuChoice = "credentials"
+	mainMenuReleases     mainMenuChoice = "releases"
 	mainMenuReview       mainMenuChoice = "review"
 	mainMenuExit         mainMenuChoice = "exit"
 )
@@ -43,6 +44,8 @@ func (model *Model) continueFromMain() (*Model, tea.Cmd) {
 		return model.openDiagnostics()
 	case mainMenuCredentials:
 		return model.openCredentials()
+	case mainMenuReleases:
+		return model.openReleases()
 	case mainMenuReview:
 		return model.openPreview()
 	case mainMenuExit:
@@ -111,6 +114,7 @@ func mainMenuForm(model *Model) *huh.Form {
 			),
 			mainMenuCredentials,
 		),
+		huh.NewOption("Releases — manage cached and import new", mainMenuReleases),
 		huh.NewOption("Review complete plan", mainMenuReview),
 		huh.NewOption("Exit", mainMenuExit),
 	}

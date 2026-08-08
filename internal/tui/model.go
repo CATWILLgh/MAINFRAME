@@ -201,6 +201,12 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return model.confirmSecretCreate()
 		case screenApplyConfirm:
 			return model.confirmPlanApply()
+		case screenReleases:
+			return model.continueFromReleases()
+		case screenReleaseImport:
+			return model.continueFromReleaseImport()
+		case screenReleaseConfirm:
+			return model.continueFromReleaseConfirm()
 		}
 	}
 	return model, command

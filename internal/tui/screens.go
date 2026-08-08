@@ -23,5 +23,8 @@ const (
 	screenSecretCreateConfirm
 	screenApplyConfirm
 	screenApplied
+	screenReleases
+	screenReleaseImport
+	screenReleaseConfirm
 	screenPreview
 )

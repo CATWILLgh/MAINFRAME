@@ -43,6 +43,12 @@ func (model *Model) View() tea.View {
 		content = model.applyConfirmView()
 	case screenApplied:
 		content = model.appliedView()
+	case screenReleases:
+		content = model.releasesView()
+	case screenReleaseImport:
+		content = model.releaseImportView()
+	case screenReleaseConfirm:
+		content = model.releaseConfirmView()
 	case screenPreview:
 		content = model.previewView()
 	default:
