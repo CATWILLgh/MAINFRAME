@@ -1,7 +1,7 @@
 ---
 name: secrets-handling
 user-invocable: false
-description: "A personal-machine credentials layout for the terminal: SSH host/auth and HTTP Basic via native mechanisms (`~/.ssh/config`, `~/.netrc`, `gh auth login`); generic API tokens and passwords in `~/.config/credentials/secrets.env` (mode 0600) read only through the `secret` helper or as shell env-vars; descriptions and server short-names in `~/.claude/credentials-index.md` (no values inside). Direct reads of the credentials store are denied by `settings.json` patterns. Credential values reach the subprocess through `$VAR` or `$(secret get NAME)` shell substitution, never through the response transcript. A pre-reply scan checks the draft against shape regexes for GitHub / AWS / OpenAI / Anthropic / Slack / Stripe / SSH key blocks / generic high-entropy strings."
+description: "A personal-machine credentials layout for the terminal: SSH host/auth and HTTP Basic via native mechanisms (`~/.ssh/config`, `~/.netrc`, `gh auth login`); generic API tokens and passwords in `~/.config/credentials/secrets.env` (mode 0600) read only through the `secret` helper or as shell env-vars; descriptions and server short-names in `~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md` (no values inside). Direct reads of the credentials store are denied by `settings.json` patterns. Credential values reach the subprocess through `$VAR` or `$(secret get NAME)` shell substitution, never through the response transcript. A pre-reply scan checks the draft against shape regexes for GitHub / AWS / OpenAI / Anthropic / Slack / Stripe / SSH key blocks / generic high-entropy strings."
 when_to_use: "A task involves credentials in the terminal — invoking an HTTP API with a token, SSH'ing to a known host, running a CLI against a remote service, mentioning a server by short-name from the credentials index. Also applies when the response will include something resembling a token (command output, error message, copy-pasted snippet) — the pre-reply shape scan triggers here. Not relevant for pure local file edits or read-only analysis without external calls."
 ---
 
@@ -15,12 +15,12 @@ Personal-machine policy for credentials. **Not a vault, not a secret manager —
 |---|---|---|---|
 | 1 | SSH host + key, HTTP Basic auth, git providers | `~/.ssh/config` + `~/.ssh/id_*` + `ssh-agent`; `~/.netrc` (0600); `gh auth login` | Native tools (`ssh`, `curl -n`, `gh`) handle access. Direct read of `~/.ssh/id_*` / `~/.netrc` is denied. |
 | 2 | Generic API tokens, passwords, anything that maps to a shell env-var | `~/.config/credentials/secrets.env` (0600); auto-sourced from `~/.zshenv` | Direct read denied. Access only through `secret get NAME` or as env-var (already in scope when called from a shell that sourced the file). |
-| 3 | Descriptions, server short-names, "what token belongs to what service" | `~/.claude/credentials-index.md` | **Read freely.** This is the map; no secret values live here. |
+| 3 | Descriptions, server short-names, "what token belongs to what service" | `~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md` | **Read freely.** This is the map; no secret values live here. |
 
 ## What to read, what to refuse
 
 **Always read when relevant:**
-- `~/.claude/credentials-index.md` — the directory of what exists. Read this when the user mentions a server short-name or service that might need credentials, and you don't yet know whether it is registered. The index tells you the short-name, the access pattern (env-var or `secret get`), and any side notes.
+- `~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md` — the directory of what exists. Read this when the user mentions a server short-name or service that might need credentials, and you don't yet know whether it is registered. The index tells you the short-name, the access pattern (env-var or `secret get`), and any side notes.
 
 **Never read directly:**
 - `~/.config/credentials/secrets.env` and `.bak` — the secret store itself.
@@ -54,7 +54,7 @@ Never assign a secret to a regular variable that gets echoed, logged, or written
 
 When the user says "go to vps-store, check the nginx logs":
 
-1. Read `~/.claude/credentials-index.md`, locate the `vps-store` section.
+1. Read `~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md`, locate the `vps-store` section.
 2. Note the access pattern from the index (`ssh vps-store`, key path, any pre-set env-var names).
 3. Run the command using Pattern A or B.
 
@@ -62,7 +62,7 @@ When the user mentions a service that is **not in the index**:
 - Ask the user whether it should be added, or proceed without persistent storage (one-shot value passed inline).
 - Do not invent credentials; do not assume short-names.
 
-When the user points at a credential living **outside the store** — another project's notes or memory files, a chat paste, a config comment — migrate first, then consume: `secret set NAME` (value entered through the shell, never the transcript), one line into `~/.claude/credentials-index.md`, then Pattern A/B as usual. Do not wire the foreign location into commands directly, even with the user's blessing: the auto-mode classifier evaluates each tool call in isolation, cannot see conversational authorization, and hard-denies cross-project credential reads (witnessed 2026-06-15); and every copy consumed outside the store re-creates the sprawl this layout exists to end.
+When the user points at a credential living **outside the store** — another project's notes or memory files, a chat paste, a config comment — migrate first, then consume: `secret set NAME` (value entered through the shell, never the transcript), one line into `~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md`, then Pattern A/B as usual. Do not wire the foreign location into commands directly, even with the user's blessing: the auto-mode classifier evaluates each tool call in isolation, cannot see conversational authorization, and hard-denies cross-project credential reads (witnessed 2026-06-15); and every copy consumed outside the store re-creates the sprawl this layout exists to end.
 
 ## Auto-mode caveat
 

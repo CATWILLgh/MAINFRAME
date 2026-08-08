@@ -51,4 +51,4 @@ jobs:
 
       # Root CLAUDE.md is gitignored (not in the checkout); validate the shipped one.
       - name: Validate umbrella CLAUDE.md
-        run: python3 tools/validate-claude-md.py export/CLAUDE.md
+        run: python3 tools/validate-claude-md.py adapters/claude-code/export/CLAUDE.md

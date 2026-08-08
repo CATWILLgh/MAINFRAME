@@ -288,7 +288,7 @@
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
         "No telemetry recorded yet — either dev mode is not installed, or no "
-        + "sessions have run since it was. Enable with ./install.sh --dev; "
+        + "sessions have run since it was. Enable with ./install.sh --claude --dev; "
         + "data appears here after a few sessions."));
       return;
     }
@@ -586,7 +586,7 @@
     root.appendChild(el("h2", { class: "layer-h config" }, "Permissions"));
     root.appendChild(el("p", { class: "muted" },
       "What the hub lets an agent do silently, ask about, or refuse — default mode: "
-      + (cfg.mode || "?") + ". Source: export/settings.json."));
+      + (cfg.mode || "?") + ". Source: adapters/claude-code/export/settings.json."));
     [["deny", "perm-deny"], ["ask", "perm-ask"], ["allow", "perm-allow"]].forEach(([key, cls]) => {
       const items = perms[key] || [];
       if (!items.length) return;

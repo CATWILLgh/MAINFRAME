@@ -17,8 +17,8 @@ import subprocess
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LAUNCHER = os.path.join(HERE, "..", "plugin-dist", "hooks", "scripts", "run-hook.sh")
-GOOD = os.path.join(HERE, "..", "plugin-dist", "hooks", "scripts", "telemetry.py")
+LAUNCHER = os.path.join(HERE, "..", "adapters/claude-code/plugin", "hooks", "scripts", "run-hook.sh")
+GOOD = os.path.join(HERE, "..", "adapters/claude-code/plugin", "hooks", "scripts", "telemetry.py")
 
 
 def _run(event, script, tmpdir, stdin="{}"):

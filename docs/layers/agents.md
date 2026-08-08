@@ -1,6 +1,6 @@
 # Layer: Agents (sub-agents)
 
-> Isolated subagents with their own context. In the hub: `plugin-dist/agents/<name>.md` (7 agents), shipped via the `mainframe` plugin.
+> Isolated subagents with their own context. In the hub: `adapters/claude-code/plugin/agents/<name>.md` (7 agents), shipped via the `mainframe` plugin.
 
 > Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-29 (research + launch discipline).
 
@@ -8,8 +8,8 @@
 
 ## Where it lives
 
-- In the hub: `plugin-dist/agents/<name>.md` — one markdown file per agent.
-- On the machine: delivered via the `mainframe` plugin (`plugin-dist/` symlinked as one plugin), not an individual per-agent symlink.
+- In the hub: `adapters/claude-code/plugin/agents/<name>.md` — one markdown file per agent.
+- On the machine: delivered via the `mainframe` plugin (`adapters/claude-code/plugin/` symlinked as one plugin), not an individual per-agent symlink.
 - Activation: once the plugin is loaded, a sub-agent is invoked via `Agent(subagent_type: "<name>")`.
 
 ---
@@ -79,7 +79,7 @@ Previously it was assumed that the semantics of additional fields (`hooks`, `mcp
 | `hooks` | lifecycle hooks in the agent scope (all events; `Stop` → `SubagentStop`) | ⚠️ **Ignored for plugin subagents** |
 | `memory` | `user`/`project`/`local` | cross-session memory |
 
-> ⚠️ **Critical for the hub:** our agents live in `plugin-dist/` → they are **plugin subagents**. The fields `permissionMode`, `mcpServers`, `hooks` in their frontmatter **are ignored** (`code.claude.com/docs/en/sub-agents`, supported-frontmatter-fields). Consequence: setting a hook / permission mode / MCP for a specific hub agent via frontmatter **is not possible** — only global mechanisms work (`plugin-dist/hooks/hooks.json`, `export/settings.json`). For a cross-agent hook (needed by both the main agent and subagents) this is the only path — see [hooks.md §1.6](hooks.md).
+> ⚠️ **Critical for the hub:** our agents live in `adapters/claude-code/plugin/` → they are **plugin subagents**. The fields `permissionMode`, `mcpServers`, `hooks` in their frontmatter **are ignored** (`code.claude.com/docs/en/sub-agents`, supported-frontmatter-fields). Consequence: setting a hook / permission mode / MCP for a specific hub agent via frontmatter **is not possible** — only global mechanisms work (`adapters/claude-code/plugin/hooks/hooks.json`, `adapters/claude-code/export/settings.json`). For a cross-agent hook (needed by both the main agent and subagents) this is the only path — see [hooks.md §1.6](hooks.md).
 
 ### 1.3. Agent tool — invocation schema
 
@@ -89,7 +89,7 @@ Attributes live in the schema of the Agent tool itself (visible to the main Clau
 |---|---|
 | `description` | Short (3-5 words) task description — appears in UI and telemetry |
 | `prompt` | Full prompt to the subagent. In English (see §2.2.1) |
-| `subagent_type` | Name of a custom agent (from `plugin-dist/agents/`) or built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
+| `subagent_type` | Name of a custom agent (from `adapters/claude-code/plugin/agents/`) or built-in (Explore / Plan / general-purpose / claude-code-guide / statusline-setup) |
 | `model` | Model override per-call: `opus` / `sonnet` / `haiku`. Without the field — inherit |
 | `isolation` | `"worktree"` — fresh git worktree (≈200–500 ms overhead + disk). Use only when parallel agents mutate files |
 | `mode` | Permission mode override: `plan` / `acceptEdits` / `auto` / `default` / `dontAsk` / `bypassPermissions` |
@@ -104,7 +104,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 **Sees:**
 - Its own system prompt (frontmatter file body) or delegation prompt.
 - The `prompt` parameter from the parent — **the only channel** for passing context (for modes A/C/E/F).
-- The **full** CLAUDE.md memory hierarchy the main session loads — managed-policy + **user-global `~/.claude/CLAUDE.md`** + project `./CLAUDE.md` + `CLAUDE.local.md`. Named custom/plugin subagents are NOT scoped to project-only; the user-global file (the hub's `export/CLAUDE.md`) IS loaded into them. Explore and Plan are the only two that skip CLAUDE.md (and git status), with no frontmatter knob to change that. So an agent body may rely on the umbrella CLAUDE.md being present — but the markdown link to it is human navigation only; the content arrives as loaded memory, not via the link. Source: the `sub-agents` doc ("Explore and Plan are the only subagents that omit CLAUDE.md and git status") + the `memory` doc, corroborated by claude-code-guide (which reports an in-CLI check — relayed, not witnessed here). Checked 2026-06-15.
+- The **full** CLAUDE.md memory hierarchy the main session loads — managed-policy + **user-global `~/.claude/CLAUDE.md`** + project `./CLAUDE.md` + `CLAUDE.local.md`. Named custom/plugin subagents are NOT scoped to project-only; the user-global file (the hub's `adapters/claude-code/export/CLAUDE.md`) IS loaded into them. Explore and Plan are the only two that skip CLAUDE.md (and git status), with no frontmatter knob to change that. So an agent body may rely on the umbrella CLAUDE.md being present — but the markdown link to it is human navigation only; the content arrives as loaded memory, not via the link. Source: the `sub-agents` doc ("Explore and Plan are the only subagents that omit CLAUDE.md and git status") + the `memory` doc, corroborated by claude-code-guide (which reports an in-CLI check — relayed, not witnessed here). Checked 2026-06-15.
 - Preloaded skills from `skills:` frontmatter.
 - Git status snapshot (except Explore and Plan).
 
@@ -135,7 +135,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 
 ## 2. Hub usage
 
-### 2.1. Current agents in `plugin-dist/agents/`
+### 2.1. Current agents in `adapters/claude-code/plugin/agents/`
 
 7 agents as of 2026-06-14, shipped via the `mainframe` plugin.
 
@@ -153,11 +153,11 @@ Methodology for selecting model + effort for new agents — internal skill `agen
 
 ### 2.2. Subagent discipline (research 2026-05-29)
 
-Subagent launch discipline was developed through research. Basic rules are in [export/CLAUDE.md](../../export/CLAUDE.md) Orchestration; details here.
+Subagent launch discipline was developed through research. Basic rules are in [adapters/claude-code/export/CLAUDE.md](../../adapters/claude-code/export/CLAUDE.md) Orchestration; details here.
 
 #### 2.2.1. English prompts
 
-All subagent prompts are in English, regardless of the language of the conversation with the user. Hub principle #3 + Anthropic prompt-engineering guidance (models are tuned on English, follow instructions more precisely, fewer tokens for the same content). Applies to the `prompt:` parameter of the Agent tool, the body of `plugin-dist/agents/<name>.md`, and prompts inside Workflow. User-facing replies remain in the user's language.
+All subagent prompts are in English, regardless of the language of the conversation with the user. Hub principle #3 + Anthropic prompt-engineering guidance (models are tuned on English, follow instructions more precisely, fewer tokens for the same content). Applies to the `prompt:` parameter of the Agent tool, the body of `adapters/claude-code/plugin/agents/<name>.md`, and prompts inside Workflow. User-facing replies remain in the user's language.
 
 #### 2.2.2. Anti-runaway
 
@@ -257,17 +257,17 @@ Direct documented patterns from `code.claude.com/docs/en/sub-agents`:
 
 ### 2.3. Hub principles for agents
 
-Convention for every `plugin-dist/agents/<name>.md`:
+Convention for every `adapters/claude-code/plugin/agents/<name>.md`:
 
 - **Narrow `tools:` allowlist** — the agent does only what it was created for. Structural cap > prompt cap.
-- **The `tools:` allowlist is the mandatory hard knob.** Default convention for every `plugin-dist/agents/<name>.md`: `tools:` allowlist (only needed tools), plus `permissionMode: plan` / `dontAsk` if needed. It is the baseline minimum and the primary scope guard. `maxTurns` is NOT a default — it is a runaway backstop for genuinely open-ended workers, set generously above the expected turn count; **omit it on write-capable multi-step agents** (a low cap terminates them mid-task — see §3.1). Precedent: the engineer agents had `maxTurns` removed after it killed them mid-task.
+- **The `tools:` allowlist is the mandatory hard knob.** Default convention for every `adapters/claude-code/plugin/agents/<name>.md`: `tools:` allowlist (only needed tools), plus `permissionMode: plan` / `dontAsk` if needed. It is the baseline minimum and the primary scope guard. `maxTurns` is NOT a default — it is a runaway backstop for genuinely open-ended workers, set generously above the expected turn count; **omit it on write-capable multi-step agents** (a low cap terminates them mid-task — see §3.1). Precedent: the engineer agents had `maxTurns` removed after it killed them mid-task.
 - **Soft patterns — supplement, not replacement.** Include the triad (ordinal cap + label + unconditional return) in the prompt as a fallback and for task specifics, not as primary enforcement.
 - **`model:` per task type** — sonnet/haiku by default; opus only if the task genuinely requires its capabilities.
 - **`skills:` preload** for specialized domains — better than pulling domain knowledge into the main CLAUDE.md.
 - **`disable-model-invocation: true`** for domain skills — keeps the main context free of unnecessary load. Pattern: skill `disable-model-invocation: true` + sub-agent `skills: [name]`.
 - **English body** (principle #3).
 - **Project-agnostic** (principle #1) — the agent does not know project names or frameworks as mandatory.
-- **"Use proactively" in `description`** for auto-dispatch agents. Anthropic CLI sub-agents docs explicitly recommend the phrase as a mechanism to strengthen automatic delegation: "To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field" (`code.claude.com/docs/en/sub-agents`). Applies to any `plugin-dist/agents/<name>.md` whose intended mode is automatic activation on description match, not explicit user invocation.
+- **"Use proactively" in `description`** for auto-dispatch agents. Anthropic CLI sub-agents docs explicitly recommend the phrase as a mechanism to strengthen automatic delegation: "To encourage proactive delegation, include phrases like 'use proactively' in your subagent's description field" (`code.claude.com/docs/en/sub-agents`). Applies to any `adapters/claude-code/plugin/agents/<name>.md` whose intended mode is automatic activation on description match, not explicit user invocation.
 
 ---
 

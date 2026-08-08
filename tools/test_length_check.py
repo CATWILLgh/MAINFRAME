@@ -14,7 +14,7 @@ import importlib.util
 import os
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                       "plugin-dist", "hooks", "scripts", "_length_check.py")
+                       "adapters/claude-code/plugin", "hooks", "scripts", "_length_check.py")
 spec = importlib.util.spec_from_file_location("length_check", _SCRIPT)
 lc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(lc)

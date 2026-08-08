@@ -49,8 +49,8 @@ list to the project's languages.
 
 ## Notes
 
-- A non-blocking `PostToolUse` hook (`plugin-dist/hooks/scripts/scan-suppression-markers.py`)
+- A non-blocking `PostToolUse` hook (`adapters/claude-code/plugin/hooks/scripts/scan-suppression-markers.py`)
   surfaces newly introduced markers per edit as an immediate reminder. This skill is the
   deliberate before-done gate — run it when finalizing, not just per edit.
-- The hub's engineer agents in `plugin-dist/agents/` reference this gate in their pre-done
+- The hub's engineer agents in `adapters/claude-code/plugin/agents/` reference this gate in their pre-done
   verification; any agent that finalizes or reviews code should run it before declaring done.

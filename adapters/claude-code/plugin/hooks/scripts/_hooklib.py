@@ -1,7 +1,7 @@
 """Shared scaffolding for MAINFRAME hub hook scripts.
 
 Stdlib only; importable and unit-tested. Hooks run as bare `python3` scripts
-invoked by path; the whole plugin-dist is one symlink, so a sibling import
+invoked by path; the whole adapters/claude-code/plugin is one symlink, so a sibling import
 resolves (precedent: comment-discipline-reminder.py importing comment_extract).
 
 SPOF note: a broken edit here would disable every hook that imports it. Hooks

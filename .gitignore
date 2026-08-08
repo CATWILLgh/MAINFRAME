@@ -35,6 +35,9 @@ todo
 # Template lives at tools/agnostic-blacklist.txt.example.
 tools/agnostic-blacklist.txt
 
+# User-maintained credential descriptions. The adjacent template is tracked.
+shared/credentials/credentials-index.md
+
 # Private documents (only the layer reference and active principles are published)
 docs/*
 !docs/layers/

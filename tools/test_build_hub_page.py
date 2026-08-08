@@ -26,22 +26,22 @@ def _write(path, text):
 def _fixture_repo():
     """A minimal repo tree with two skills, one agent, one hooks.json."""
     root = tempfile.mkdtemp()
-    _write(os.path.join(root, "plugin-dist/skills/surface-ticket/SKILL.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/surface-ticket/SKILL.md"),
            "---\nname: surface-ticket\nuser-invocable: false\n"
            "description: Capture a problem as a ticket.\n"
            "when_to_use: When a problem will not be fixed now.\n---\n\nbody\n")
-    _write(os.path.join(root, "plugin-dist/skills/task-workflow/SKILL.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/task-workflow/SKILL.md"),
            "---\nname: task-workflow\nuser-invocable: false\n"
            "description: The universal cycle.\nwhen_to_use: Any modifying task.\n---\n\n"
            "See [`surface-ticket`](../surface-ticket/SKILL.md) and "
            "[`web-search`](../../agents/web-search.md).\n")
-    _write(os.path.join(root, "plugin-dist/agents/decision-reviewer.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/agents/decision-reviewer.md"),
            "---\nname: decision-reviewer\ndescription: Adversarial review.\n"
            "model: opus\nskills:\n  - surface-ticket\n  - task-workflow\n"
            "tools: Read, Grep, Glob\n---\n\nbody\n")
     # Mirror the real hooks.json shape: command is "python3", the script path
     # is in args[] — a parser that only reads command would miss every script.
-    _write(os.path.join(root, "plugin-dist/hooks/hooks.json"), json.dumps({
+    _write(os.path.join(root, "adapters/claude-code/plugin/hooks/hooks.json"), json.dumps({
         "hooks": {
             "Stop": [{"matcher": "*", "hooks": [
                 {"type": "command", "command": "python3",
@@ -51,7 +51,7 @@ def _fixture_repo():
                  "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-scan.py"]}]}],
         }
     }))
-    _write(os.path.join(root, "plugin-dist/hooks/scripts/memory-reminder.py"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/hooks/scripts/memory-reminder.py"),
            '#!/usr/bin/env python3\n"""Nudge the model to save a durable memory.\n\n'
            'More detail on the second paragraph.\n"""\nx = 1\n')
     return root
@@ -189,8 +189,8 @@ def test_render_inlines_data_and_is_self_contained():
 
 
 def _fixture_export(root):
-    """Settings + misc-layer artifacts under export/ for the config collectors."""
-    _write(os.path.join(root, "export/settings.json"), json.dumps({
+    """Settings + misc-layer artifacts under adapters/claude-code/export/ for the config collectors."""
+    _write(os.path.join(root, "adapters/claude-code/export/settings.json"), json.dumps({
         "env": {"FOO": "1"},
         "permissions": {
             "allow": ["Bash(ls *)", "WebSearch"],
@@ -205,13 +205,13 @@ def _fixture_export(root):
         "outputStyle": "Explanatory Concise",
         "language": "Russian",
     }))
-    _write(os.path.join(root, "export/output-styles/explanatory-concise.md"),
+    _write(os.path.join(root, "adapters/claude-code/export/output-styles/explanatory-concise.md"),
            "---\nname: Explanatory Concise\n---\n\n# Explanatory Concise\n\n"
            "Concise with teaching insights.\n")
-    _write(os.path.join(root, "export/templates/credentials-index.md"),
+    _write(os.path.join(root, "shared/credentials/credentials-index.template.md"),
            "# Credentials index\n\nTemplate for a per-project secrets map.\n")
-    os.makedirs(os.path.join(root, "export/rules"), exist_ok=True)
-    os.makedirs(os.path.join(root, "plugin-dist/commands"), exist_ok=True)
+    os.makedirs(os.path.join(root, "adapters/claude-code/export/rules"), exist_ok=True)
+    os.makedirs(os.path.join(root, "adapters/claude-code/plugin/commands"), exist_ok=True)
 
 
 def test_collect_settings_reads_permissions_env_and_flags():
@@ -300,21 +300,21 @@ def test_payload_breakdown_groups_by_key_and_degrades_visibly():
 
 def _fixture_health(root):
     """A tree seeded with one broken cross-ref, one orphan, one missing script."""
-    _write(os.path.join(root, "plugin-dist/skills/alpha/SKILL.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/alpha/SKILL.md"),
            "---\nname: alpha\n---\n\nSee [`ghost`](../ghost/SKILL.md).\n")
-    _write(os.path.join(root, "plugin-dist/skills/anchor/SKILL.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/anchor/SKILL.md"),
            "---\nname: anchor\n---\n\nSee [`alpha`](../alpha/SKILL.md).\n")
-    _write(os.path.join(root, "plugin-dist/skills/beta/SKILL.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/beta/SKILL.md"),
            "---\nname: beta\n---\n\nno refs here\n")
-    _write(os.path.join(root, "plugin-dist/agents/gamma.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/agents/gamma.md"),
            "---\nname: gamma\nskills:\n  - delta\n---\n\nbody\n")
-    _write(os.path.join(root, "plugin-dist/hooks/hooks.json"), json.dumps({"hooks": {
+    _write(os.path.join(root, "adapters/claude-code/plugin/hooks/hooks.json"), json.dumps({"hooks": {
         "Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "python3",
                   "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/present.py"]}]}],
         "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "python3",
                   "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/scripts/absent.py"]}]}],
     }}))
-    _write(os.path.join(root, "plugin-dist/hooks/scripts/present.py"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/hooks/scripts/present.py"),
            '"""Present hook."""\nx = 1\n')
     return root
 
@@ -334,9 +334,9 @@ def test_compute_health_flags_dangling_orphans_and_missing_scripts():
 
 def test_compute_health_all_resolved_is_empty():
     root = tempfile.mkdtemp()
-    _write(os.path.join(root, "plugin-dist/skills/solo/SKILL.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/solo/SKILL.md"),
            "---\nname: solo\n---\n\nSee [`peer`](../peer/SKILL.md).\n")
-    _write(os.path.join(root, "plugin-dist/skills/peer/SKILL.md"),
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/peer/SKILL.md"),
            "---\nname: peer\n---\n\nSee [`solo`](../solo/SKILL.md).\n")
     health = bhp.compute_health(bhp.collect_skills(root), [], [], root)
     assert health == {"dangling": [], "orphans": [], "missing_scripts": []}

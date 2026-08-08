@@ -1,6 +1,6 @@
 # Layer: Settings (other fields)
 
-> Configuration of Claude Code outside `permissions` and `hooks` (which have their own separate specs). In the hub: `export/settings.json` — the remaining fields.
+> Configuration of Claude Code outside `permissions` and `hooks` (which have their own separate specs). In the hub: `adapters/claude-code/export/settings.json` — the remaining fields.
 
 > Last updated: 2026-05-28 (3-section rewrite).
 
@@ -8,9 +8,9 @@
 
 ## Where it lives / How to install
 
-- In the hub: `export/settings.json` — a single file where `permissions`, `hooks`, and other fields coexist.
+- In the hub: `adapters/claude-code/export/settings.json` — a single file where `permissions`, `hooks`, and other fields coexist.
 - On the machine: `~/.claude/settings.json` (symlink of the whole file).
-- Activation: a single symlink; edits to `export/settings.json` are picked up by the file watcher without a restart.
+- Activation: a single symlink; edits to `adapters/claude-code/export/settings.json` are picked up by the file watcher without a restart.
 
 ---
 
@@ -69,7 +69,7 @@ From docs (`code.claude.com/docs/en/settings`):
 
 ## 2. Hub usage & ADRs
 
-### 2.1. Current fields in `export/settings.json` (besides permissions/hooks)
+### 2.1. Current fields in `adapters/claude-code/export/settings.json` (besides permissions/hooks)
 
 | Field | Value | Purpose |
 |---|---|---|
@@ -87,7 +87,7 @@ From docs (`code.claude.com/docs/en/settings`):
 
 ### 2.2. Backups in the repo
 
-On every non-trivial edit to `export/settings.json`, a `export/settings.json.backup-<timestamp>` is created (see the two existing backups from 2026-05-27 and 2026-05-28).
+On every non-trivial edit to `adapters/claude-code/export/settings.json`, a `adapters/claude-code/export/settings.json.backup-<timestamp>` is created (see the two existing backups from 2026-05-27 and 2026-05-28).
 
 ---
 

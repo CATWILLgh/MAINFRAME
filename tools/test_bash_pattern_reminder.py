@@ -18,7 +18,7 @@ os.environ["MAINFRAME_TELEMETRY_DB"] = os.path.join(
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(
-    HERE, "..", "plugin-dist", "hooks", "scripts", "bash-pattern-reminder.py")
+    HERE, "..", "adapters/claude-code/plugin", "hooks", "scripts", "bash-pattern-reminder.py")
 spec = importlib.util.spec_from_file_location("bash_pattern_reminder", SCRIPT)
 bpr = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bpr)

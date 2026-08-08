@@ -1,15 +1,15 @@
 # Layer: Commands
 
-> Custom slash commands (`/<name>`), explicitly invoked by the user. In the hub: `plugin-dist/commands/<name>.md` (currently **empty**), shipped via the `mainframe` plugin.
+> Legacy custom command files. The hub currently uses user-invocable skills for manual workflows; `/mainframe:init` lives at `adapters/claude-code/plugin/skills/init/SKILL.md`.
 
-> Last updated: 2026-06-14 (plugin-migration actualization). Prior: 2026-05-28 (3-section rewrite). Layer is reserved; no artifacts yet.
+> Last updated: 2026-08-09. The layer is reserved; no command files exist.
 
 ---
 
 ## Where it lives / How to install
 
-- In the hub: `plugin-dist/commands/<name>.md` — one file per command.
-- On the machine: delivered via the `mainframe` plugin (`plugin-dist/` symlinked as one plugin).
+- In the hub: `adapters/claude-code/plugin/commands/<name>.md` — one file per command.
+- On the machine: delivered via the `mainframe` plugin (`adapters/claude-code/plugin/` symlinked as one plugin).
 - Activation: once the plugin is loaded, the command is available in chat — as a plugin command it carries the plugin prefix `/mainframe:<name>` (see §1.4).
 
 ---
@@ -59,7 +59,7 @@ Commands inside plugins carry the plugin prefix (e.g. `/plugin:context7:query`).
 
 ## 2. Hub usage & ADRs
 
-**No artifacts.** Layer is reserved. Candidates — see backlog (e.g. `/release`, `/ticket`).
+**No command-file artifacts.** Manual, user-only context loading is implemented as the `init` skill because skills are the current Claude Code mechanism and support `disable-model-invocation: true`.
 
 Hub principles (when the first command is added):
 - **Command = side-effect action** — if not, it belongs in a skill.

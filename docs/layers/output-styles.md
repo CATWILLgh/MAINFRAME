@@ -1,6 +1,6 @@
 # Layer: Output styles
 
-> Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `export/output-styles/<name>.md`.
+> Custom output styles for Claude (e.g. "diagram-first", "code-reviewer", "brevity"). In the hub: `adapters/claude-code/export/output-styles/<name>.md`.
 
 > Last updated: 2026-06-11. First artifact shipped: `explanatory-concise` (verified against CLI bundle 2.1.165).
 
@@ -8,7 +8,7 @@
 
 ## Where it lives / How to install
 
-- In the hub: `export/output-styles/<name>.md` — one file per style.
+- In the hub: `adapters/claude-code/export/output-styles/<name>.md` — one file per style.
 - On the machine: `~/.claude/output-styles/<name>.md` (symlinked via `install.sh`).
 - Activation: via `/config` (selecting the active style) or `outputStyle: "<name>"` in `settings.json`.
 

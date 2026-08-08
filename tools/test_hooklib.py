@@ -15,7 +15,7 @@ import tempfile
 from contextlib import redirect_stdout
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "plugin-dist", "hooks", "scripts"))
+                                "..", "adapters/claude-code/plugin", "hooks", "scripts"))
 import _hooklib  # noqa: E402
 
 

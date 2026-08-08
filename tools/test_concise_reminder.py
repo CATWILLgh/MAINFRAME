@@ -16,7 +16,7 @@ import tempfile
 sys.dont_write_bytecode = True
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "..", "plugin-dist", "hooks", "scripts",
+                       "..", "adapters/claude-code/plugin", "hooks", "scripts",
                        "concise-reminder.py")
 spec = importlib.util.spec_from_file_location("concise_reminder", _SCRIPT)
 concise_reminder = importlib.util.module_from_spec(spec)

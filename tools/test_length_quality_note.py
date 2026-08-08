@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 _SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
-                        "plugin-dist", "hooks", "scripts")
+                        "adapters/claude-code/plugin", "hooks", "scripts")
 
 
 def _git(cwd, *args):

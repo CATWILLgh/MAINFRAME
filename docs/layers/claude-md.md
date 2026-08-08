@@ -1,6 +1,6 @@
 # Layer: CLAUDE.md (Operating instructions)
 
-> Global Claude instruction delivered to every session across all projects. In the hub: `export/CLAUDE.md` → symlink `~/.claude/CLAUDE.md`.
+> Global Claude instruction delivered to every session across all projects. In the hub: `adapters/claude-code/export/CLAUDE.md` → symlink `~/.claude/CLAUDE.md`.
 
 > Last updated: 2026-05-28 (3-section rewrite).
 
@@ -8,7 +8,7 @@
 
 ## Where it lives / How to install
 
-- In the hub: `export/CLAUDE.md` (132 lines as of 2026-05-28).
+- In the hub: `adapters/claude-code/export/CLAUDE.md` (132 lines as of 2026-05-28).
 - On the machine: `~/.claude/CLAUDE.md` (symlink via `install.sh`).
 - Active in all projects via user-scope.
 - Claude Code's file watcher picks up edits without restarting the session.
@@ -56,7 +56,7 @@ There is no hard limit; the practical target is to keep total volume (user + pro
 
 ## 2. Hub usage
 
-### 2.1. Current `export/CLAUDE.md`
+### 2.1. Current `adapters/claude-code/export/CLAUDE.md`
 
 Structure (as of 2026-05-28, 132 lines):
 

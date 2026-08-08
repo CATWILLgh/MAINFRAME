@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Passive telemetry hook — silently records Bucket-1 behaviour facts.
 
-Registered on several events (see `plugin-dist/hooks/hooks.json`); branches on
+Registered on several events (see `adapters/claude-code/plugin/hooks/hooks.json`); branches on
 `hook_event_name`, writes one metadata row via `_hooklib.log_event`, and emits
 NOTHING to stdout, so it is invisible to the agent. Best-effort and fail-safe:
 any error is swallowed by `run()` / `log_event`. Privacy: only low-risk metadata

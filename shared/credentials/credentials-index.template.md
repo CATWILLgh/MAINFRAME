@@ -1,6 +1,7 @@
 # Credentials index
 
-> Personal directory of servers / services / credentials. Lives at `~/.claude/credentials-index.md`.
+> Personal directory of servers / services / credentials. The working copy is
+> `shared/credentials/credentials-index.md` in the MAINFRAME repository.
 >
 > **This file does NOT contain secret values.** Only descriptions and pointers ("get the password via `secret get foo`").
 > The actual secret values live in `~/.config/credentials/secrets.env` and are accessed through the `secret` helper.

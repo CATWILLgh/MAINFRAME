@@ -29,7 +29,7 @@ def main():
         "MAINFRAME hub: shared hook library failed to import — "
         f"{'; '.join(broken)}. The suppression-marker and debug-residue gates "
         "(and any hook sharing _hooklib) are SILENTLY DISABLED until this is "
-        "fixed in plugin-dist/hooks/scripts/. Fix the module, then start a new "
+        "fixed in adapters/claude-code/plugin/hooks/scripts/. Fix the module, then start a new "
         "session to re-enable the gates."
     )
     print(json.dumps({

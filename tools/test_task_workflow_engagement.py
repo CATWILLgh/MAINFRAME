@@ -15,7 +15,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(
-    HERE, "..", "plugin-dist", "hooks", "scripts", "task-workflow-engagement.py")
+    HERE, "..", "adapters/claude-code/plugin", "hooks", "scripts", "task-workflow-engagement.py")
 
 
 def _load():

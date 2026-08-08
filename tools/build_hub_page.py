@@ -41,7 +41,7 @@ _SETTINGS_FLAG_KEYS = ["model", "effortLevel", "advisorModel", "outputStyle",
                        "language", "autoCompactEnabled", "autoMemoryEnabled",
                        "teammateMode"]
 # (name, repo-relative path) layers that exist as reserved-but-empty directories.
-_EMPTY_LAYER_PROBES = (("rules", "export/rules"), ("commands", "plugin-dist/commands"))
+_EMPTY_LAYER_PROBES = (("rules", "adapters/claude-code/export/rules"), ("commands", "adapters/claude-code/plugin/commands"))
 # (event, payload-key) miss/usage breakdowns. The page READS payload defensively
 # but does not OWN its schema (telemetry.py does) — a renamed key degrades to the
 # visible "unrecognized" bucket rather than silently vanishing.
@@ -77,9 +77,9 @@ def _read(path):
 
 
 def collect_skills(root):
-    """Skills from plugin-dist/skills/ (and dev/skills/, flagged dev=True)."""
+    """Skills from adapters/claude-code/plugin/skills/ (and dev/skills/, flagged dev=True)."""
     out = []
-    for base, dev in (("plugin-dist/skills", False), ("dev/skills", True)):
+    for base, dev in (("adapters/claude-code/plugin/skills", False), ("dev/skills", True)):
         sdir = os.path.join(root, base)
         if not os.path.isdir(sdir):
             continue
@@ -100,7 +100,7 @@ def collect_skills(root):
 
 
 def collect_agents(root):
-    adir = os.path.join(root, "plugin-dist/agents")
+    adir = os.path.join(root, "adapters/claude-code/plugin/agents")
     out = []
     if not os.path.isdir(adir):
         return out
@@ -138,11 +138,11 @@ def _script_purpose(scripts_dir, script, cache):
 
 
 def collect_hooks(root):
-    path = os.path.join(root, "plugin-dist/hooks/hooks.json")
+    path = os.path.join(root, "adapters/claude-code/plugin/hooks/hooks.json")
     if not os.path.isfile(path):
         return []
     data = json.loads(_read(path))
-    scripts_dir = os.path.join(root, "plugin-dist/hooks/scripts")
+    scripts_dir = os.path.join(root, "adapters/claude-code/plugin/hooks/scripts")
     cache = {}
     out = []
     for event, groups in data.get("hooks", {}).items():
@@ -451,10 +451,10 @@ def collect_usage(projects_dir=_DEFAULT_PROJECTS, cache_path=_DEFAULT_USAGE_CACH
 
 
 def collect_settings(root):
-    """Read-only snapshot of export/settings.json: permissions, env, key flags."""
+    """Read-only snapshot of adapters/claude-code/export/settings.json: permissions, env, key flags."""
     empty = {"permissions": {"allow": [], "deny": [], "ask": []},
              "mode": "", "env": {}, "plugins": {}, "flags": {}}
-    path = os.path.join(root, "export/settings.json")
+    path = os.path.join(root, "adapters/claude-code/export/settings.json")
     if not os.path.isfile(path):
         return empty
     try:
@@ -505,14 +505,23 @@ def _is_empty_layer(directory):
         f.endswith(".md") for f in os.listdir(directory))
 
 
+def _collect_secret_templates(directory):
+    templates = _collect_docs(directory, False)
+    return [
+        {**item, "name": item["name"].removesuffix(".template")}
+        for item in templates
+        if item["name"].endswith(".template")
+    ]
+
+
 def collect_misc(root):
     """Output styles, templates, and explicit markers for reserved-empty layers."""
     empty = [{"name": name, "path": rel}
              for name, rel in _EMPTY_LAYER_PROBES
              if _is_empty_layer(os.path.join(root, rel))]
     return {
-        "output_styles": _collect_docs(os.path.join(root, "export/output-styles"), True),
-        "templates": _collect_docs(os.path.join(root, "export/templates"), False),
+        "output_styles": _collect_docs(os.path.join(root, "adapters/claude-code/export/output-styles"), True),
+        "templates": _collect_secret_templates(os.path.join(root, "shared/credentials")),
         "empty_layers": empty,
     }
 
@@ -550,7 +559,7 @@ def compute_health(skills, agents, hooks, root):
                 connected.add(sk)
     orphans = sorted(s["name"] for s in skills if s["name"] not in connected)
 
-    scripts_dir = os.path.join(root, "plugin-dist/hooks/scripts")
+    scripts_dir = os.path.join(root, "adapters/claude-code/plugin/hooks/scripts")
     missing, seen = [], set()
     for h in hooks:
         if h["script"] in seen:

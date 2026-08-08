@@ -1,6 +1,6 @@
 # Layer: Rules (`~/.claude/rules/`)
 
-> Modular instruction files that load **on demand** when Claude reads a matching file, scoped by `paths:` glob. In the hub: `export/rules/<name>.md` → symlink `~/.claude/rules/<name>.md`. Path-scoped guidance without burdening main context in unrelated projects.
+> Modular instruction files that load **on demand** when Claude reads a matching file, scoped by `paths:` glob. In the hub: `adapters/claude-code/export/rules/<name>.md` → symlink `~/.claude/rules/<name>.md`. Path-scoped guidance without burdening main context in unrelated projects.
 
 > Last updated: 2026-05-29 (layer introduced).
 
@@ -8,7 +8,7 @@
 
 ## Where it lives / How install
 
-- In the hub: `export/rules/<name>.md`.
+- In the hub: `adapters/claude-code/export/rules/<name>.md`.
 - On the machine: `~/.claude/rules/<name>.md` (symlink via `install.sh`).
 - Active across all projects (user-scope).
 - File watcher picks up edits without session restart (paths-rules behaviour: edit takes effect on next Read of a matching file).
@@ -142,7 +142,7 @@ If a rule outgrows these targets, see Recipe M2 in the decision-tree (split by t
 
 ### 2.4. Validator
 
-No validator exists yet for `export/rules/`. When the first rule is added to the hub, evaluate whether `tools/validate-rules.py` is justified by frequency of rule edits. Until then — manual review against §2.2 + §2.3.
+No validator exists yet for `adapters/claude-code/export/rules/`. When the first rule is added to the hub, evaluate whether `tools/validate-rules.py` is justified by frequency of rule edits. Until then — manual review against §2.2 + §2.3.
 
 ---
 

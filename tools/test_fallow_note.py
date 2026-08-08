@@ -15,7 +15,7 @@ import time
 sys.dont_write_bytecode = True
 
 _SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "..", "plugin-dist", "hooks", "scripts",
+                       "..", "adapters/claude-code/plugin", "hooks", "scripts",
                        "fallow-quality-note.py")
 spec = importlib.util.spec_from_file_location("fallow_note", _SCRIPT)
 fallow_note = importlib.util.module_from_spec(spec)

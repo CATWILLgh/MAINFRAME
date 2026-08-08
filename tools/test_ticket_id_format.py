@@ -13,7 +13,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(
-    HERE, "..", "plugin-dist", "hooks", "scripts", "ticket-id-format-reminder.py")
+    HERE, "..", "adapters/claude-code/plugin", "hooks", "scripts", "ticket-id-format-reminder.py")
 
 
 def _load():
