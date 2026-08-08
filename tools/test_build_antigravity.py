@@ -381,6 +381,35 @@ def test_check_detects_drift_and_dry_run_does_not_write() -> None:
     assert build.main(["--root", str(root), "--out", str(out), "--check"]) == 1
 
 
+def test_split_rule_text_is_lossless_and_respects_the_cap():
+    sections = [f"## Section {index}\n\n{'x' * 400}\n\n" for index in range(20)]
+    text = "".join(sections)
+
+    parts = build.split_rule_text(text, limit=2000)
+
+    assert len(parts) > 1
+    assert all(len(part) <= 2000 for part in parts)
+    assert "".join(parts) == text
+    assert all(part.startswith("## ") for part in parts)
+
+
+def test_split_rule_text_keeps_a_short_document_whole():
+    text = "## Only\n\nbody\n"
+
+    assert build.split_rule_text(text, limit=2000) == [text]
+
+
+def test_split_rule_text_rejects_a_section_larger_than_the_cap():
+    text = "## Huge\n\n" + "x" * 3000
+
+    try:
+        build.split_rule_text(text, limit=2000)
+    except ValueError as error:
+        assert "exceeds" in str(error)
+    else:
+        raise AssertionError("oversized section was accepted")
+
+
 if __name__ == "__main__":
     tests = sorted(name for name in globals() if name.startswith("test_"))
     for name in tests:

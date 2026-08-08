@@ -114,13 +114,39 @@ def _hooks_manifest() -> bytes:
     return _json_bytes({"mainframe": namespace})
 
 
-def _read_rule(source: SourcePath) -> bytes:
-    text = source.read_text()
-    if len(text) > RULE_MAX_CHARS:
-        raise ValueError(
-            f"Antigravity rule exceeds {RULE_MAX_CHARS} characters: {source.label}"
-        )
-    return text.encode()
+def split_rule_text(text: str, limit: int = RULE_MAX_CHARS) -> list[str]:
+    """Split on `## ` headings so each part stays inside the host's rule cap.
+
+    The neutral bricks are single files by design; Antigravity is the only host
+    that caps an individual rule, so the split belongs to this adapter rather
+    than to the shared source layout.
+    """
+    if len(text) <= limit:
+        return [text]
+    parts: list[str] = []
+    current = ""
+    for section in re.split(r"(?m)^(?=## )", text):
+        if not section:
+            continue
+        if len(section) > limit:
+            raise ValueError(
+                f"Antigravity rule section exceeds {limit} characters"
+            )
+        if current and len(current) + len(section) > limit:
+            parts.append(current)
+            current = section
+        else:
+            current += section
+    if current:
+        parts.append(current)
+    return parts
+
+
+def _rule_parts(source: SourcePath) -> list[str]:
+    try:
+        return split_rule_text(source.read_text())
+    except ValueError as error:
+        raise ValueError(f"{error}: {source.label}") from error
 
 
 def _collect_rules(root: Path, files: dict[Path, bytes]) -> None:
@@ -130,7 +156,11 @@ def _collect_rules(root: Path, files: dict[Path, bytes]) -> None:
     )
     for prefix, directory in sources:
         for source in SourceBoundary(root, directory).files("*.md"):
-            files[Path("rules") / f"{prefix}-{source.path.name}"] = _read_rule(source)
+            parts = _rule_parts(source)
+            stem, suffix = source.path.stem, source.path.suffix
+            for index, part in enumerate(parts, start=1):
+                name = stem if len(parts) == 1 else f"{stem}-{index}"
+                files[Path("rules") / f"{prefix}-{name}{suffix}"] = part.encode()
 
 
 def _copy_tree(
