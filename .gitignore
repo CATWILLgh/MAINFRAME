@@ -35,13 +35,10 @@ todo
 # Template lives at tools/agnostic-blacklist.txt.example.
 tools/agnostic-blacklist.txt
 
-# Project-internal CLAUDE.md (development context for the hub maintainer)
-# The shipped CLAUDE.md is export/CLAUDE.md and IS published.
-/CLAUDE.md
-
-# Private documents (only docs/layers/ is published)
+# Private documents (only the layer reference and active principles are published)
 docs/*
 !docs/layers/
+!docs/principles.md
 
 # Hub-development workspace — queue (inbox), used-for-hub sources (reference),
 # rejected/kept project artifacts (archive). All local, never published.
