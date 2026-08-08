@@ -69,6 +69,13 @@ type Model struct {
 	secretDraft                      secretDraft
 	secretCreateConfirmed            bool
 	secretCreateNotice               string
+	releases                         ReleaseState
+	releaseList                      []ReleaseSummary
+	releaseMenuChoice                releaseMenuChoice
+	activeReleaseReview              *ReleaseReview
+	releaseImportPath                string
+	releaseApplied                   bool
+	releaseAppliedNotice             string
 	applyConfirmed                   bool
 	appliedWarnings                  []string
 	startupRecovered                 bool
@@ -82,6 +89,16 @@ func NewModel(
 	catalog mcpcatalog.Catalog,
 	stats mcpcatalog.StatsSource,
 	credentialStates ...CredentialState,
+) *Model {
+	return NewModelWithReleases(reviewer, catalog, stats, credentialStates, ReleaseState{})
+}
+
+func NewModelWithReleases(
+	reviewer PlanReviewer,
+	catalog mcpcatalog.Catalog,
+	stats mcpcatalog.StatsSource,
+	credentialStates []CredentialState,
+	releases ReleaseState,
 ) *Model {
 	targets := reviewer.Targets()
 	selected := make([]domain.ComponentID, 0, len(targets))
@@ -99,6 +116,7 @@ func NewModel(
 		mcpChoices:      make(map[mcpcatalog.ServerID]*mcpChoice),
 		repositoryStats: make(map[mcpcatalog.ServerID]mcpcatalog.RepositoryStats),
 		mainMenuChoice:  mainMenuEnvironments,
+		releases:        releases,
 	}
 	if len(credentialStates) > 0 {
 		model.credentialDefinitions = credentialStates[0].Definitions
