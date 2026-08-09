@@ -73,7 +73,6 @@ These hub disciplines apply to your work. Only the skills in your `skills:` fron
 - `testing-strategy` — for the unit / integration / e2e level decision and anti-pattern check.
 - `secrets-handling` — when the work touches API keys / credentials / DB URLs.
 - `ops-app-server-safety` — before starting a local dev server (port collisions, single-instance check).
-- `git-conventional-commits` — when committing your work.
 - `curl-requests` — when verifying a freshly-edited HTTP handler via terminal.
 
 ## Discipline

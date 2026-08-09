@@ -37,6 +37,13 @@ observable behavior when that evidence can prove the original gap. Use
 `testing-strategy` for the testing decision; do not create a test as ceremony
 for documentation, path moves, or other purely structural work.
 
+When a task needs a formal definition of done or is known to be complex, read
+[workflow.md](workflow.md) in full before preparing the proposal. It contains
+the conditional preparation, review, red-evidence, `/goal`, execution, and
+acceptance path. Do not load it for a small, unambiguous task.
+When that workflow reaches its independent Codex checkpoint, read
+[codex-exec.md](codex-exec.md) for the Claude Code adapter's invocation method.
+
 ## Execution route
 
 Choose the execution route before loading specialist context. Work directly on
@@ -61,3 +68,9 @@ not switch, create, or delete branches, or run `pull`, `merge`, `rebase`,
 `reset`, `cherry-pick`, `revert`, `stash`, or `clean` without an explicit user
 request. Permission to edit code does not grant permission to change the branch,
 its history, or a remote repository.
+
+During long work, create local recovery commits after coherent, verified units.
+Stage only the current task's changes and split independent changes. Use
+`type(optional-scope): description`; follow an explicit repository language,
+then its recent commit history, otherwise English. Do not add AI attribution.
+Inspect the resulting commit. A local commit is a recovery point, not delivery.

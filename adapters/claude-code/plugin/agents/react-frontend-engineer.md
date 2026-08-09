@@ -97,7 +97,6 @@ These hub disciplines apply to your work. Only the skills in your `skills:` fron
 - `testing-strategy` — for the unit / integration / e2e level decision and anti-pattern check.
 - `secrets-handling` — when the work touches API keys, `VITE_*` env vars, or auth tokens.
 - `ops-app-server-safety` — before starting `vite dev` (port collisions, single-instance check).
-- `git-conventional-commits` — when committing your work.
 - `curl-requests` — when verifying a fresh API integration end-to-end via terminal.
 
 ## Discipline

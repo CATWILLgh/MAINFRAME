@@ -30,14 +30,14 @@ def _fixture_repo():
            "---\nname: surface-ticket\nuser-invocable: false\n"
            "description: Capture a problem as a ticket.\n"
            "when_to_use: When a problem will not be fixed now.\n---\n\nbody\n")
-    _write(os.path.join(root, "adapters/claude-code/plugin/skills/task-workflow/SKILL.md"),
-           "---\nname: task-workflow\nuser-invocable: false\n"
+    _write(os.path.join(root, "adapters/claude-code/plugin/skills/review-flow/SKILL.md"),
+           "---\nname: review-flow\nuser-invocable: false\n"
            "description: The universal cycle.\nwhen_to_use: Any modifying task.\n---\n\n"
            "See [`surface-ticket`](../surface-ticket/SKILL.md) and "
            "[`web-search`](../../agents/web-search.md).\n")
     _write(os.path.join(root, "adapters/claude-code/plugin/agents/decision-reviewer.md"),
            "---\nname: decision-reviewer\ndescription: Adversarial review.\n"
-           "model: opus\nskills:\n  - surface-ticket\n  - task-workflow\n"
+           "model: opus\nskills:\n  - surface-ticket\n  - review-flow\n"
            "tools: Read, Grep, Glob\n---\n\nbody\n")
     # Mirror the real hooks.json shape: command is "python3", the script path
     # is in args[] — a parser that only reads command would miss every script.
@@ -74,11 +74,11 @@ def test_parse_frontmatter_no_frontmatter_returns_empty_meta():
 def test_collect_skills_reads_fields_and_crossrefs():
     root = _fixture_repo()
     skills = {s["name"]: s for s in bhp.collect_skills(root)}
-    assert set(skills) == {"surface-ticket", "task-workflow"}
+    assert set(skills) == {"surface-ticket", "review-flow"}
     assert skills["surface-ticket"]["user_invocable"] is False
     assert skills["surface-ticket"]["description"].startswith("Capture")
-    assert "surface-ticket" in skills["task-workflow"]["crossrefs"]
-    assert "web-search" in skills["task-workflow"]["crossrefs"]
+    assert "surface-ticket" in skills["review-flow"]["crossrefs"]
+    assert "web-search" in skills["review-flow"]["crossrefs"]
     assert skills["surface-ticket"]["crossrefs"] == []
 
 
@@ -87,7 +87,7 @@ def test_collect_agents_reads_skills_list():
     agents = {a["name"]: a for a in bhp.collect_agents(root)}
     assert "decision-reviewer" in agents
     assert agents["decision-reviewer"]["model"] == "opus"
-    assert agents["decision-reviewer"]["skills"] == ["surface-ticket", "task-workflow"]
+    assert agents["decision-reviewer"]["skills"] == ["surface-ticket", "review-flow"]
 
 
 def test_collect_hooks_maps_event_matcher_script():
@@ -112,9 +112,9 @@ def test_build_edges_covers_all_three_kinds():
     hooks = bhp.collect_hooks(root)
     edges = bhp.build_edges(skills, agents, hooks)
     triples = {(e["source"], e["target"], e["kind"]) for e in edges}
-    assert ("task-workflow", "surface-ticket", "skill-ref") in triples
+    assert ("review-flow", "surface-ticket", "skill-ref") in triples
     assert ("decision-reviewer", "surface-ticket", "agent-skill") in triples
-    assert ("decision-reviewer", "task-workflow", "agent-skill") in triples
+    assert ("decision-reviewer", "review-flow", "agent-skill") in triples
     assert ("memory-reminder.py", "Stop", "hook-event") in triples
 
 
@@ -123,7 +123,7 @@ def test_build_edges_skips_crossref_to_unknown_node():
     skills = bhp.collect_skills(root)
     agents = bhp.collect_agents(root)
     edges = bhp.build_edges(skills, agents, [])
-    # web-search is referenced from task-workflow but has no agent file in the
+    # web-search is referenced from review-flow but has no agent file in the
     # fixture; dropping the edge keeps the graph free of dangling targets.
     targets = {e["target"] for e in edges}
     assert "web-search" not in targets
@@ -181,7 +181,7 @@ def test_render_inlines_data_and_is_self_contained():
     # self-contained: no remote script/style, so it opens offline over file://
     assert "src=\"http" not in html
     assert "href=\"http" not in html
-    assert "task-workflow" in html
+    assert "review-flow" in html
     # the data must reach app.js as a window property: a top-level `const` is NOT
     # exposed on window, which silently blanked the page until this was caught.
     assert "window.HUB_DATA =" in html
@@ -279,8 +279,8 @@ def test_dev_state_breaks_down_by_agent_and_day():
 
 def test_payload_breakdown_groups_by_key_and_degrades_visibly():
     db = _telemetry_db([
-        ("skill_load", '{"skill":"task-workflow"}'),
-        ("skill_load", '{"skill":"task-workflow"}'),
+        ("skill_load", '{"skill":"review-flow"}'),
+        ("skill_load", '{"skill":"review-flow"}'),
         ("skill_load", '{"skill":"surface-ticket"}'),
         ("skill_load", '{"other":"x"}'),
         ("skill_load", "not json"),
@@ -292,7 +292,7 @@ def test_payload_breakdown_groups_by_key_and_degrades_visibly():
         con.close()
     assert b["total"] == 5
     items = dict(b["items"])
-    assert items["task-workflow"] == 2
+    assert items["review-flow"] == 2
     assert items["surface-ticket"] == 1
     # absent key and unparseable payload both degrade to the visible bucket
     assert b["unrecognized"] == 2

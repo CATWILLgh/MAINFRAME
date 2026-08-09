@@ -82,8 +82,9 @@ And here's the part that's easy to miss. It looks like just a folder of Markdown
 
 In plain words — what each piece is for:
 
-- **Umbrella `CLAUDE.md`** — a tight set of working rules Claude follows in every project on your machine. Partnership-mode, honest pushback when I'm wrong, no flattery, source-checking before non-trivial decisions, atomic commits, no leftover `TODO`/`FIXME` markers, and so on. Around 160 lines, intentionally short to stay in focus.
-- **Skills** — small focused playbooks Claude pulls when they're relevant. Things like "audit this code carefully", "format this commit message in Conventional Commits style", "scan this diff for forgotten secrets" — instead of one giant document trying to cover everything.
+- **Umbrella `CLAUDE.md`** — a minimal role-agnostic contract shared by the primary agent and sub-agents: stay inside the caller's scope, ground important claims, protect secrets, and respect authority boundaries. It contains no user orchestration or stack-specific engineering process.
+- **Manual `/mainframe:init`** — the primary-session context for partnership, user decisions, definitions of done, execution routing, Git authority, and final delivery. Its heavier complex-task workflow and external Codex review instructions load only when needed.
+- **Skills** — small focused playbooks Claude pulls when they're relevant. Things like code review, test selection, secret handling, or stack-specific implementation guidance — instead of one giant document trying to cover everything.
 - **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
 - **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan diffs for security issues with `ruff`/`semgrep`/`osv-scanner`. Block a finished turn when a real problem is still unresolved. Things that fire without you having to remember to fire them — the full list with what each one does is in [Inventory](#inventory--whats-actually-inside) below.
 - **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
@@ -119,8 +120,6 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 
 #### At session start — `SessionStart` (fresh start, resume, `/clear`, and after every compaction)
 
-- **`session-posture.py`** — Injects the hub working posture as context: engage the process instead of reasoning past it, work in two phases (plan with the user, then execute autonomously), surface out-of-scope findings as tickets, and delegate broad work to sub-agents. A salient reminder at the moment context is fresh, since a steady `CLAUDE.md` line fades into the background.
-- **`task-workflow-engagement.py`** (reset half) — Resets a per-segment marker tracking whether the `task-workflow` process skill was actively invoked. Its enforcement half fires before your first edit — see below. This reset on every session start (including after a compaction) is what makes it re-fire post-compaction.
 - **`hooklib-smoke-check.py`** — Self-test that the shared hook library imports cleanly. Every other hook silently no-ops if that library is broken, so this one announces the failure loudly at session start instead of letting the whole hook layer go dark unnoticed.
 
 #### Before a Bash command — `PreToolUse` on Bash
@@ -128,12 +127,6 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 - **`secret-commit-gate.py`** — *Gate (blocks).* When the command is a `git commit`, scans the staged diff for high-confidence secret shapes (vendor API tokens, private keys) and blocks the commit if one is staged. Skips repos that use SOPS or git-crypt; defers on any error rather than risk a false block.
 - **`path-validation.py`** — *Gate (asks).* Parses a recursive `rm -rf`, resolves every target path, and allows it silently when all targets are inside the project — but asks for confirmation if any path is outside the project, unresolved, or built from a subshell. Anything that isn't a recursive `rm` passes straight through.
 - **`bash-pattern-reminder.py`** — *Advisory.* Catches commands that historically trigger auto-mode permission prompts or stall a hands-off run (literal `rm -rf`, heredoc/redirect into `/tmp`, ad-hoc global installs) and suggests the friction-free alternative (the Write tool, the installer's helper). Non-blocking on purpose — a block would become a freeze in auto-mode.
-- **`commit-conventional-reminder.py`** — *Advisory.* On a `git commit`, reminds about Conventional Commits grammar (type / scope / subject).
-
-#### Before you load a skill, or edit a file — `PreToolUse` on Skill / Edit / Write
-
-- **`task-workflow-engagement.py`** (enforcement half) — *Advisory.* When the `task-workflow` skill is invoked it marks the segment active; on your first file-modifying call (Edit / Write / MultiEdit) of a segment where it wasn't, it nudges the main agent to invoke `task-workflow` first. A skill survives a compaction (its first 5K tokens get re-attached) but the runtime frames the copy "context only" and the model deprioritises it — so the process can be present yet not actually followed. Fires once per segment, main agent only (sub-agents can't invoke skills).
-
 #### Right after you edit a file — `PostToolUse` on Edit / Write / MultiEdit (all advisory — the "warn early" half)
 
 - **`scan-suppression-markers.py`** — Flags suppression markers (`TODO` / `FIXME` / `HACK`, skipped or focused tests, `@ts-ignore` / `eslint-disable` / `# noqa`) and debug residue (`debugger`, `breakpoint()`, `console.debug`, `var_dump` / `dd`) that the edit just introduced. Diff-aware: it flags only what the change added, not what was already there.
@@ -160,13 +153,14 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 - **`telemetry.py`** — *(dev-only.)* Fires across many events — session start/end, skill loads, file edits, todo-list updates, permission denials, sub-agent starts — and logs local-only event metadata (counts and coarse buckets, never prompts, code, todo text, or file paths) into a local SQLite DB. Present only when the `--dev` instrumentation is installed; on a plain install it isn't wired and writes nothing.
 - **Shared libraries** (not hooks themselves): `_hooklib.py` — common scaffolding (payload parsing, the emit / gate helpers, git diffing); `_markers.py` — the suppression-marker and debug-residue detector sets; `comment_extract.py` — false-positive-free comment / docstring extraction.
 
-### Skills — 18 focused playbooks
+### Skills — 17 focused playbooks
 
-Pulled automatically when the situation matches, or invoked as `/mainframe:<name>`.
+Most are pulled automatically when the situation matches. The primary-session
+`init` skill is invoked manually as `/mainframe:init`.
 
 | Group | Skills |
 |---|---|
-| **Process & quality** | `task-workflow` (the universal task cycle), `surface-ticket` (file deferred problems as tickets), `no-suppression-markers` (completion gate), `testing-strategy` (which test tier + level), `severity-calibration` (rank findings honestly), `code-audit` (parallel multi-aspect review), `decision-review` (validate an approach), `git-conventional-commits` (commit message grammar) |
+| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `surface-ticket` (record deferred problems), `no-suppression-markers` (completion gate), `testing-strategy` (choose test evidence), `severity-calibration` (rank findings honestly), `code-audit` (parallel multi-aspect review), `decision-review` (validate an approach) |
 | **Backend** | `python-backend-patterns`, `nestjs-backend-patterns`, `nextjs-backend-patterns` — stack recon + ORM / validation / auth / observability patterns |
 | **Frontend** | `react-frontend-patterns` (FSD, state, data fetching), `frontend-design` (colour, type, a11y, motion, layout), `shadcn` (shadcn/ui composition) |
 | **Ops & misc** | `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (Dokploy PaaS HTTP API), `curl-requests` (HTTP request templates), `secrets-handling` (credentials layout + pre-reply secret scan) |

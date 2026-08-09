@@ -10,15 +10,6 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "SessionStart",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-posture.py"
-            ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "SessionStart",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/hooklib-smoke-check.py"
             ]
           },
@@ -29,15 +20,6 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "SessionStart",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
-            ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "SessionStart",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"
             ]
           },
           {
@@ -82,15 +64,6 @@
               "PreToolUse",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/bash-pattern-reminder.py"
             ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "PreToolUse",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/commit-conventional-reminder.py"
-            ]
           }
         ]
       },
@@ -104,29 +77,6 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "PreToolUse",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
-            ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "PreToolUse",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"
-            ]
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "PreToolUse",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/task-workflow-engagement.py"
             ]
           }
         ]

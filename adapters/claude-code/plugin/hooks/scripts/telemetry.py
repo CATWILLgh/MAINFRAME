@@ -56,7 +56,7 @@ def _ticket_uid(file_path):
 
 
 def _norm_skill(raw):
-    # Strip the plugin namespace (`mainframe:task-workflow` -> `task-workflow`) so the
+    # Strip the plugin namespace (`mainframe:init` -> `init`) so the
     # same skill aggregates into one bucket regardless of how it was invoked.
     name = str(raw).split()[0] if raw else ""
     return name.split(":")[-1]

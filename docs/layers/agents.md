@@ -141,7 +141,7 @@ Full picture — [subagent-modes-spec.md §4](../subagent-modes-spec.md). Short 
 
 | Agent | Purpose | Activation |
 |---|---|---|
-| `decision-reviewer` | Independent, evidence-grounded review of a proposed decision / design / approach before it is locked in (architecture, high cost-of-wrong). Read-only. | `Agent(subagent_type: "decision-reviewer")`; also `task-workflow` step 6a |
+| `decision-reviewer` | Independent, evidence-grounded review of a proposed decision / design / approach before it is locked in (architecture, high cost-of-wrong). Read-only. | `Agent(subagent_type: "decision-reviewer")`; required by `init/workflow.md` for complex-task preparation |
 | `devops-engineer` | Deployment / infra / ops — Docker Compose, CI/CD, Dockerfiles, managed DBs, domains/TLS, secrets, observability; drives Dokploy via the `dokploy-api` skill. Write-capable, background. | auto-dispatch on a deploy / infra task |
 | `python-backend-engineer` | Python backend (FastAPI / Django / Flask + ORM) via the `python-backend-patterns` skill. Write-capable. | auto-dispatch on a Python backend task |
 | `nestjs-backend-engineer` | Node / TS backend (NestJS / Express / Fastify) via `nestjs-backend-patterns`. Write-capable. | auto-dispatch |

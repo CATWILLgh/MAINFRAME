@@ -6,6 +6,7 @@ Definition of done:
 - ``--claude`` routes through shared secrets and then the Claude Code adapter;
 - Claude artifacts have one adapter-owned tree and no legacy root copies;
 - ``/mainframe:init`` is user-only and absent from automatic model context;
+- the old automatic task workflow and its reminder hooks are not shipped;
 - the credentials index has one gitignored repository location, seeded from a
   tracked adjacent template, while actual secret values stay unreadable.
 """
@@ -13,6 +14,7 @@ Definition of done:
 import json
 import os
 import pathlib
+import re
 import stat
 import subprocess
 import tempfile
@@ -87,12 +89,49 @@ def test_umbrella_has_no_delivery_metadata_comment():
     assert "This file is symlinked" not in umbrella
 
 
+def test_umbrella_is_role_agnostic():
+    umbrella = (ADAPTER / "export" / "CLAUDE.md").read_text(encoding="utf-8")
+    forbidden_sections = (
+        "Partnership",
+        "Communication",
+        "Engineering practices",
+        "Problem-solving",
+        "Orchestration",
+        "Memory",
+        "Advisor",
+        "Git and commits",
+    )
+    for section in forbidden_sections:
+        assert not re.search(rf"^#+ {re.escape(section)}$", umbrella, re.MULTILINE)
+    assert "regardless of role" not in umbrella
+    assert "immediate caller" in umbrella
+    assert "Do not take ownership" not in umbrella
+    assert "user communication" not in umbrella
+    assert "authoritative sources" in umbrella
+    assert "secret" in umbrella
+
+
 def test_init_skill_is_manual_only():
     skill = PLUGIN / "skills" / "init" / "SKILL.md"
     body = skill.read_text(encoding="utf-8")
     assert "name: init" in body
     assert "disable-model-invocation: true" in body
     assert "context: fork" not in body
+
+
+def test_init_replaces_automatic_task_workflow():
+    init_dir = PLUGIN / "skills" / "init"
+    body = (init_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert "[workflow.md](workflow.md)" in body
+    assert "[codex-exec.md](codex-exec.md)" in body
+    assert (init_dir / "workflow.md").is_file()
+    assert (init_dir / "codex-exec.md").is_file()
+    assert not (PLUGIN / "skills" / "task-workflow").exists()
+    assert not (PLUGIN / "hooks" / "scripts" / "session-posture.py").exists()
+    assert not (PLUGIN / "hooks" / "scripts" / "task-workflow-engagement.py").exists()
+    hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
+    assert "task-workflow" not in hooks
+    assert "session-posture" not in hooks
 
 
 def test_shared_secrets_have_one_runtime_index():

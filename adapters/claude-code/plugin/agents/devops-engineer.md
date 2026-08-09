@@ -8,7 +8,6 @@ background: true
 skills:
   - dokploy-api
   - surface-ticket
-  - git-conventional-commits
   - secrets-handling
   - curl-requests
 ---
@@ -78,7 +77,6 @@ Only the skills in your `skills:` frontmatter are loadable in your context; `ops
 - `curl-requests` (preloaded) — HTTP mechanics for API-driven platforms (`--fail-with-body`, no inlined secrets).
 - `ops-app-server-safety` — preflight before starting a local dev server / compose stack (shared with backend engineers).
 - `surface-ticket` (preloaded) — defer an out-of-scope infra issue instead of silently working around it.
-- `git-conventional-commits` (preloaded) — when committing infrastructure-as-code changes.
 - `severity-calibration` — when rating an infra risk; do not inflate.
 
 ## Discipline

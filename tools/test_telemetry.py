@@ -184,8 +184,8 @@ def test_ticket_uid_is_hash_not_slug():
 
 
 def test_skill_name_normalized():
-    assert telemetry._norm_skill("mainframe:task-workflow") == "task-workflow"
-    assert telemetry._norm_skill("task-workflow") == "task-workflow"
+    assert telemetry._norm_skill("mainframe:init") == "init"
+    assert telemetry._norm_skill("init") == "init"
     assert telemetry._norm_skill("") == ""
 
 

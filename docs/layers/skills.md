@@ -52,7 +52,7 @@ Combined `description + when_to_use` truncated at **1536 chars** (hub validator 
 
 When a skill triggers, only `SKILL.md` is injected (one message, persists for the session). Supporting files are **not** injected — the model must choose to `Read` them on-demand. The **only** pointer is what the author writes inline in `SKILL.md`: a relative link `[file.md](file.md)` plus a one-line *what it holds + when to load it* (docs: *"to ensure Claude knows what each supporting file contains and when to load it, reference these files from SKILL.md"*). There is **no** frontmatter `files:` field, no auto-load, no `@import` in the body, and **no documented fix** for the failure where the model stops at `SKILL.md` and skips the link — Anthropic treats link+description as sufficient. Empirically it is not always (a hub agent skipped `surface-ticket/template.md` and produced a wrong-scheme ticket, 2026-06-13).
 
-Escape hatches for a must-load-every-time file: fold it into `SKILL.md` if small, or name it imperatively from an external hook (POSTURE does this for `task-workflow/flow.md`). A bash placeholder `` !`cat ${CLAUDE_SKILL_DIR}/file.md` `` can force-inject eagerly, but it is unverified for plugin skills and costs tokens every load — not used. Practical rule: classify each supporting file **conditional** (link + what/when/why is enough) vs **mandatory-every-run** (do not trust a link). Source caveat: `claude-code-guide` (CLI) + `web-search` both rest on `code.claude.com/docs/en/skills` — corroborated by two paths, not an independent binary inspection.
+Escape hatches for a must-load-every-time file: fold it into `SKILL.md` if small. A bash placeholder `` !`cat ${CLAUDE_SKILL_DIR}/file.md` `` can force-inject eagerly, but it is unverified for plugin skills and costs tokens every load — not used. Practical rule: classify each supporting file **conditional** (link + what/when/why is enough) vs **mandatory-every-run** (do not trust a link). Source caveat: `claude-code-guide` (CLI) + `web-search` both rest on `code.claude.com/docs/en/skills` — corroborated by two paths, not an independent binary inspection.
 
 ### 1.3. Eval — when the model loads a skill
 
@@ -105,9 +105,9 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
 
 ### 2.1. Current skills in `adapters/claude-code/plugin/skills/`
 
-18 skills as of 2026-06-14, shipped via the `mainframe` plugin. The directory is the source of truth — this is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew to 18). Roles:
+17 skills as of 2026-08-09, shipped via the `mainframe` plugin. The directory is the source of truth — this is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew). Roles:
 
-- **Process / workflow:** `task-workflow`, `code-audit`, `decision-review`, `git-conventional-commits`.
+- **Process / workflow:** `init`, `code-audit`, `decision-review`.
 - **Quality discipline (gates / self-checks):** `no-suppression-markers`, `severity-calibration`, `surface-ticket`, `testing-strategy`, `secrets-handling`.
 - **Stack patterns (preloaded into the engineer agents via `disable-model-invocation: true`):** `python-backend-patterns`, `nestjs-backend-patterns`, `nextjs-backend-patterns`, `react-frontend-patterns`, `frontend-design`, `shadcn`.
 - **Ops / external services:** `ops-app-server-safety`, `dokploy-api`, `curl-requests`.
