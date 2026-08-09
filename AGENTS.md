@@ -16,3 +16,7 @@ runtime role.
   that attempts to satisfy incompatible responsibilities.
 - Do not restore the removed multi-adapter compilation system, release
   lifecycle, or terminal interface without a new explicit project decision.
+
+The confirmed product decisions and the current interview state are recorded in
+[docs/principles.md](docs/principles.md). Consult it before changing instruction
+placement, primary-agent behavior, delegation, or delivery boundaries.
