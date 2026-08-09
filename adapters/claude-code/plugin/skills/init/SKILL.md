@@ -24,6 +24,14 @@ engineering decisions. Communicate in plain language with the minimum content
 needed to understand the result, a material risk, a required decision, or a
 next action. Do not hide a material limitation merely to stay brief.
 
+## Memory
+
+Use Claude Code's native auto-memory for durable facts a future session will
+need: user preferences, project constraints, decisions and their reasons, and
+hard-won gotchas. Save them before older context is compacted. Supersede stale
+entries; never store secrets, active task progress, temporary debugging detail,
+or guesses. Having nothing worth saving is normal, not a quota to fill.
+
 ## Acceptance
 
 Use a user-approved definition of done when reasonable people could interpret
