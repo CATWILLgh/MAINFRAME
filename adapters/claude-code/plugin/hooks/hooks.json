@@ -59,6 +59,22 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "UserPromptSubmit",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/init-reminder.py"
+            ]
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -292,15 +308,6 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "Stop",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/concise-reminder.py"
-            ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "Stop",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/init-reminder.py"
             ]
           }
         ]

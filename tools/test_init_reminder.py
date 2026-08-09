@@ -45,17 +45,18 @@ def _activate(state_dir, session_id="main"):
     }, state_dir)
 
 
-def _stop(state_dir, session_id="main", **extra):
+def _submit(state_dir, session_id="main", **extra):
     return _drive({
-        "hook_event_name": "Stop",
+        "hook_event_name": "UserPromptSubmit",
         "session_id": session_id,
+        "prompt": "continue",
         **extra,
     }, state_dir)
 
 
 def test_inactive_session_is_silent():
     with tempfile.TemporaryDirectory() as state_dir:
-        out, logged = _stop(state_dir)
+        out, logged = _submit(state_dir)
         assert out == ""
         assert logged == []
 
@@ -81,15 +82,15 @@ def test_other_expansion_does_not_activate():
         assert hook._load(hook._state_path("main", state_dir)) == (False, 0)
 
 
-def test_fires_on_64th_main_turn_only():
+def test_fires_on_64th_main_prompt_only():
     with tempfile.TemporaryDirectory() as state_dir:
         _activate(state_dir)
         for turn in range(1, 64):
-            out, _ = _stop(state_dir)
+            out, _ = _submit(state_dir)
             assert out == "", f"unexpected reminder on turn {turn}"
-        out, logged = _stop(state_dir)
+        out, logged = _submit(state_dir)
         result = json.loads(out)
-        assert result["hookSpecificOutput"]["hookEventName"] == "Stop"
+        assert result["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
         assert result["hookSpecificOutput"]["additionalContext"] == hook.INIT_NOTE
         assert logged[-1][0][1]["turn"] == 64
         assert logged[-1][0][1]["reminded"] is True
@@ -116,7 +117,8 @@ def test_subagent_neither_advances_nor_receives_reminder():
         _activate(state_dir)
         path = hook._state_path("main", state_dir)
         hook._save(path, True, 63)
-        out, logged = _stop(state_dir, agent_id="agent-123", agent_type="researcher")
+        out, logged = _submit(
+            state_dir, agent_id="agent-123", agent_type="researcher")
         assert out == ""
         assert logged == []
         assert hook._load(path) == (True, 63)
@@ -127,17 +129,21 @@ def test_main_agent_type_is_not_mistaken_for_subagent():
         _activate(state_dir)
         path = hook._state_path("main", state_dir)
         hook._save(path, True, 63)
-        out, _ = _stop(state_dir, agent_type="primary-profile")
+        out, _ = _submit(state_dir, agent_type="primary-profile")
         assert out.strip()
         assert hook._load(path) == (True, 64)
 
 
-def test_stop_hook_reentry_does_not_advance():
+def test_unrelated_event_does_not_advance():
     with tempfile.TemporaryDirectory() as state_dir:
         _activate(state_dir)
         path = hook._state_path("main", state_dir)
         hook._save(path, True, 63)
-        out, logged = _stop(state_dir, stop_hook_active=True)
+        out, logged = _drive({
+            "hook_event_name": "Stop",
+            "session_id": "main",
+            "stop_hook_active": False,
+        }, state_dir)
         assert out == ""
         assert logged == []
         assert hook._load(path) == (True, 63)
@@ -147,7 +153,7 @@ def test_session_lifecycle_preserves_only_the_intended_state():
     with tempfile.TemporaryDirectory() as state_dir:
         _activate(state_dir)
         for _ in range(10):
-            _stop(state_dir)
+            _submit(state_dir)
         path = hook._state_path("main", state_dir)
 
         _drive({"hook_event_name": "SessionStart", "session_id": "main",
@@ -166,7 +172,7 @@ def test_session_lifecycle_preserves_only_the_intended_state():
 def test_state_is_per_session():
     with tempfile.TemporaryDirectory() as state_dir:
         _activate(state_dir, "one")
-        _stop(state_dir, "one")
+        _submit(state_dir, "one")
         assert hook._load(hook._state_path("one", state_dir)) == (True, 1)
         assert hook._load(hook._state_path("two", state_dir)) == (False, 0)
 

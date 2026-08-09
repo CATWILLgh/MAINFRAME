@@ -2,8 +2,9 @@
 """Re-anchor the manually activated primary-session contract on long runs.
 
 `/mainframe:init` is user-only. UserPromptExpansion records that direct manual
-invocation for the current session; Stop then counts primary-session turns and
-emits a short, non-blocking reminder every N turns (default 64).
+invocation for the current session; UserPromptSubmit then counts subsequent
+primary-session prompts and injects a short reminder every N prompts (default
+64) alongside the prompt that triggered it.
 
 Claude Code reattaches invoked skills after compaction, so compact only resets
 the counter. `/clear` and a fresh startup deactivate the reminder. Resume keeps
@@ -132,7 +133,7 @@ def main():
                 _save(path, True, 0)
         return
 
-    if event != "Stop" or payload.get("stop_hook_active"):
+    if event != "UserPromptSubmit":
         return
 
     active, turns = _load(path)
@@ -143,7 +144,7 @@ def main():
     reminded = should_remind(active, turns, _every())
     _save(path, True, turns)
     if reminded:
-        emit_note("Stop", INIT_NOTE)
+        emit_note("UserPromptSubmit", INIT_NOTE)
     log_event(
         "init_reminder",
         {"turn": turns, "reminded": reminded, "every": _every()},
