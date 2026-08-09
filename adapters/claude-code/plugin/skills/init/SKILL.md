@@ -51,9 +51,6 @@ the conditional preparation, review, red-evidence, `/goal`, execution, and
 acceptance path. Do not load it for a small, unambiguous task.
 When that workflow reaches its independent Codex checkpoint, read
 [codex-exec.md](codex-exec.md) for the Claude Code adapter's invocation method.
-If its verified result materially changes the decision package and satisfies
-the continuation gate, read [codex-resume.md](codex-resume.md); otherwise do not
-load it.
 
 ## Execution route
 
