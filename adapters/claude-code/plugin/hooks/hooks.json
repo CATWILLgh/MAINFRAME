@@ -30,6 +30,31 @@
               "SessionStart",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/concise-reminder.py"
             ]
+          },
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "SessionStart",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/init-reminder.py"
+            ]
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "matcher": "mainframe:init",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "UserPromptExpansion",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/init-reminder.py"
+            ]
           }
         ]
       }
@@ -267,6 +292,15 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "Stop",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/concise-reminder.py"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "Stop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/init-reminder.py"
             ]
           }
         ]
