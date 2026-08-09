@@ -19,9 +19,12 @@ saying “continue” while facts available to the agent remain unchecked.
    [codex-exec.md](codex-exec.md) for the adapter-specific invocation. Repeat
    only while a new grounded blind spot appears, with no more than three review
    passes.
-5. Run the available advisor checkpoint last. Present the user with the checked
-   recommendation, remaining product or infrastructure choices, and the draft
-   definition of done.
+5. Invoke the built-in zero-argument `advisor` tool last. The environment forwards
+   the current conversation; do not prepare a brief or pass arguments. Reconcile
+   its findings, then present the checked recommendation, choices, and draft DoD.
+
+The checkpoint is required. If unavailable, report the missing environment
+capability before agreement; do not silently substitute another reviewer.
 
 ## Agree and launch
 
@@ -54,9 +57,9 @@ change branches without the user's explicit instruction.
 
 ## Accept the result
 
-Run the tests and checks that prove the definition of done, then run the final
-advisor checkpoint against the actual changes and evidence. If its finding
-changes the result, repeat the affected verification and advisor review.
+Make the task-owned result and evidence durable, then prove the DoD. Invoke the
+built-in zero-argument `advisor` against that final state. If its finding changes
+the result, repeat verification and review. Never declare done if it is unavailable.
 
 A goal ends only when either:
 
@@ -69,6 +72,5 @@ preparation did not reveal it, and whether preparation itself failed. A first
 failed attempt or unresolved technical uncertainty is not a blocker. Do not
 repeat an unchanged attempt without a new hypothesis or new evidence.
 
-An additional Codex review after the final advisor is reserved for exceptional
-cost of error: irreversible data, money, security, broad production impact, or
-architecture that is difficult to reverse.
+An additional Codex review after the final advisor is reserved for irreversible
+data, money, security, broad production impact, or hard-to-reverse architecture.
