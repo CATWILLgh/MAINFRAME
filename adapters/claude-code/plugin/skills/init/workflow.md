@@ -16,9 +16,8 @@ saying “continue” while facts available to the agent remain unchecked.
 3. Have `decision-reviewer` challenge the proposed decision. Reconcile each
    grounded objection against the repository and sources.
 4. Run an independent Codex review after the decision review. Read
-   [codex-exec.md](codex-exec.md) for the adapter-specific invocation. Repeat
-   only while a new grounded blind spot appears, with no more than three review
-   passes.
+   [codex-exec.md](codex-exec.md) for the adapter-specific invocation, model
+   route, bounded continuation protocol, and stopping conditions.
 5. Invoke the built-in zero-argument `advisor` tool last. The environment forwards
    the current conversation; do not prepare a brief or pass arguments. Reconcile
    its findings, then present the checked recommendation, choices, and draft DoD.
