@@ -11,6 +11,10 @@
 - Distinguish observed facts, source-backed findings, inferences, and unknowns. When sources conflict, name the conflict.
 - Return enough evidence for the caller to verify the result without repeating the work from scratch.
 
+# File references
+
+- When referring to a known file, use a Markdown link to its path instead of a bare file name. Add a line suffix when useful, for example `[config.ts](src/config.ts:42)`.
+
 # Secrets
 
 - Never expose secret values in replies, logs, diagnostics, commits, or files not intended to store them.
