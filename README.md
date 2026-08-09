@@ -146,7 +146,7 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 - **`frontend-fsd-gate.py`** — *Gate (blocks).* Blocks finishing on Feature-Sliced-Design import-direction violations (a lower layer importing an upper one), via dependency-cruiser.
 - **`frontend-dead-code.py`** — *Advisory.* Notes dead / unused files via Knip. Opt-in per project.
 - **`fallow-quality-note.py`** — *Advisory.* Notes quality smells in changed TS / JS — import cycles, layer-boundary breaks, dead files, over-complexity, copy-paste — via the `fallow` analyzer. Throttled, conservative categories only.
-- **`memory-reminder.py`** — *Advisory.* A gentle nudge to save a durable cross-session fact to Claude's native auto-memory after a substantive session. Throttled (~30 min), skips trivial sessions, and is framed so "nothing worth saving" is a fine answer.
+- **`memory-reminder.py`** — *Advisory.* A main-session-only nudge to save a durable cross-session fact to Claude's native auto-memory after a substantive session. Throttled (~30 min), skips trivial sessions and subagents, and is framed so "nothing worth saving" is a fine answer.
 
 #### Always-on, and the plumbing
 

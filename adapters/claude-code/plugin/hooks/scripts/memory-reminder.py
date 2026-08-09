@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Stop hook: advisory reminder to persist durable facts to Claude Code's
-native auto-memory.
+"""Main-session Stop hook: advisory reminder to persist durable facts to
+Claude Code's native auto-memory.
 
 Recall is automatic (the harness injects relevant memories into context);
 WRITING is model-discretion, and that is the reliability gap this nudges. The
@@ -89,6 +89,8 @@ def _substantive(payload):
 
 def main():
     payload = load_payload()
+    if payload.get("agent_id"):
+        return
     cwd = stop_guard_cwd(payload)
     if cwd is None:
         return

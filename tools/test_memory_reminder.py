@@ -120,6 +120,27 @@ def test_silent_when_stop_hook_active():
     assert logged == []
 
 
+def test_silent_inside_subagent():
+    out, logged = _drive({
+        "cwd": "/p",
+        "transcript_path": "/t",
+        "agent_id": "agent-123",
+        "agent_type": "researcher",
+    })
+    assert out == ""
+    assert logged == []
+
+
+def test_main_session_with_agent_type_still_fires():
+    out, logged = _drive({
+        "cwd": "/p",
+        "transcript_path": "/t",
+        "agent_type": "primary-profile",
+    })
+    assert out.strip()
+    assert logged
+
+
 def test_fail_safe_on_garbage_stdin():
     out = io.StringIO()
     saved = (sys.stdin, sys.stdout)
