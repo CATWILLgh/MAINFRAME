@@ -30,9 +30,11 @@ def _load():
 gate = _load()
 
 
-def _drive(payload, *, throttled=False, substantive=True):
+def _drive(payload, *, throttled=False, substantive=True, with_session=True):
     """Run main() with payload on stdin; stub the gates + telemetry. Returns
     (stdout_text, logged_events)."""
+    if with_session:
+        payload = {"session_id": "session-main", **payload}
     out = io.StringIO()
     saved = (sys.stdin, sys.stdout,
              gate._throttled, gate._substantive, gate.log_event)
@@ -40,7 +42,7 @@ def _drive(payload, *, throttled=False, substantive=True):
     try:
         sys.stdin = io.StringIO(json.dumps(payload))
         sys.stdout = out
-        gate._throttled = lambda cwd, stamp_dir=None: throttled
+        gate._throttled = lambda session_id, stamp_dir=None: throttled
         gate._substantive = lambda p: substantive
         gate.log_event = lambda *a, **k: logged.append((a, k))
         gate.main()
@@ -131,6 +133,15 @@ def test_silent_inside_subagent():
     assert logged == []
 
 
+def test_silent_without_session_id():
+    out, logged = _drive(
+        {"cwd": "/p", "transcript_path": "/t"},
+        with_session=False,
+    )
+    assert out == ""
+    assert logged == []
+
+
 def test_main_session_with_agent_type_still_fires():
     out, logged = _drive({
         "cwd": "/p",
@@ -155,14 +166,14 @@ def test_fail_safe_on_garbage_stdin():
 
 def test_throttled_unit():
     with tempfile.TemporaryDirectory() as d:
-        assert gate._throttled("/some/project", stamp_dir=d) is False
-        assert gate._throttled("/some/project", stamp_dir=d) is True
+        assert gate._throttled("session-a", stamp_dir=d) is False
+        assert gate._throttled("session-a", stamp_dir=d) is True
 
 
-def test_throttled_is_per_project():
+def test_throttled_is_per_session():
     with tempfile.TemporaryDirectory() as d:
-        assert gate._throttled("/project/a", stamp_dir=d) is False
-        assert gate._throttled("/project/b", stamp_dir=d) is False
+        assert gate._throttled("session-a", stamp_dir=d) is False
+        assert gate._throttled("session-b", stamp_dir=d) is False
 
 
 def test_substantive_unit():

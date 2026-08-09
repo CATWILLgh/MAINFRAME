@@ -10,7 +10,7 @@ nudge that keeps firing on empty sessions trains the model to ignore it (hub
 lesson: the oxlint react-perf false-positive firehose); the opt-out framing is
 the guard against that.
 
-Throttled to ~once per THROTTLE_SECONDS per project and silent on trivial
+Throttled to ~once per THROTTLE_SECONDS per session and silent on trivial
 sessions (transcript below MIN_TRANSCRIPT_BYTES), so it surfaces a handful of
 times across a long, multi-compact run rather than every turn.
 
@@ -57,10 +57,10 @@ def _note():
     return MEMORY_NOTE + (FEEDBACK_TAIL if feedback_skill_installed() else "")
 
 
-def _throttled(cwd, stamp_dir=None):
-    """True when this project nudged within THROTTLE_SECONDS; stamps otherwise."""
+def _throttled(session_id, stamp_dir=None):
+    """True when this session nudged within THROTTLE_SECONDS; stamps otherwise."""
     d = stamp_dir or tempfile.gettempdir()
-    key = hashlib.sha256(cwd.encode("utf-8", "replace")).hexdigest()[:16]
+    key = hashlib.sha256(session_id.encode("utf-8", "replace")).hexdigest()[:16]
     stamp = os.path.join(d, f"memory-reminder-{key}.stamp")
     try:
         if time.time() - os.path.getmtime(stamp) < THROTTLE_SECONDS:
@@ -91,12 +91,14 @@ def main():
     payload = load_payload()
     if payload.get("agent_id"):
         return
-    cwd = stop_guard_cwd(payload)
-    if cwd is None:
+    if stop_guard_cwd(payload) is None:
+        return
+    session_id = payload.get("session_id")
+    if not isinstance(session_id, str) or not session_id:
         return
     if not _substantive(payload):
         return
-    if _throttled(cwd):
+    if _throttled(session_id):
         return
     emit_note("Stop", _note())
     log_event("memory_reminder", {"trigger": "stop"}, payload)
