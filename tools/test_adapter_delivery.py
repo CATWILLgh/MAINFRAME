@@ -251,6 +251,9 @@ def test_testing_context_preserves_role_boundaries():
     assert "~/.claude" not in python_agent
     assert "senior enterprise" not in python_agent.lower()
     assert "does not mandate FastAPI" in python_skill
+    assert "concrete adjacent observation" in python_agent
+    assert "without investigating it" in python_agent
+    assert "verified out-of-scope defects" not in python_skill
 
     typescript_skill = (
         PLUGIN / "skills" / "typescript-backend-patterns" / "SKILL.md"

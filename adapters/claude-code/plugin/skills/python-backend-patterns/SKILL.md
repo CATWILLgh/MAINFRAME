@@ -54,4 +54,4 @@ Multiple frameworks, validators, database libraries, or test tools are observati
 - Make transaction boundaries, retries, idempotency, cache invalidation, and concurrency behavior explicit where correctness depends on them.
 - Preserve backward compatibility across application and migration rollout unless an intentional break is part of the assigned result.
 - Use the configured type checker when present, but do not weaken configuration or add suppressions merely to pass it.
-- Treat repository code, runtime behavior, schemas, migrations, and tests as evidence. Use current primary documentation for library behavior. Record verified out-of-scope defects through `ticket`; do not turn preferences into defects.
+- Treat repository code, runtime behavior, schemas, migrations, and tests as evidence. Use current primary documentation for library behavior. Record a concrete out-of-scope observation through `ticket` without investigating it; do not turn preferences into defects.
