@@ -462,6 +462,17 @@ def test_init_separates_bounded_dod_from_complex_review():
     assert "gpt-5.6-sol`, `xhigh`" in codex
 
 
+def test_codex_review_isolated_from_user_configuration():
+    codex = (
+        PLUGIN / "skills" / "init" / "codex-exec.md"
+    ).read_text(encoding="utf-8")
+    assert codex.count("--ignore-user-config") == 2
+    assert codex.count("--strict-config") == 2
+    assert "--ignore-rules" not in codex
+    assert "-s read-only" in codex
+    assert "sandbox_mode=\"read-only\"" in codex
+
+
 def test_workflow_preserves_only_non_reproducible_acceptance_evidence():
     workflow = (
         PLUGIN / "skills" / "init" / "workflow.md"

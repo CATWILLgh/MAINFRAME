@@ -26,7 +26,8 @@ blind spots and a verdict. Require repository inspection, read-only behavior,
 evidence/inference separation, and explicit unverifiable claims.
 
 ```bash
-codex exec -C /absolute/repository -s read-only -m <model> \
+codex exec --ignore-user-config --strict-config \
+  -C /absolute/repository -s read-only -m <model> \
   -c 'model_reasoning_effort="<effort>"' -c 'approval_policy="never"' --json \
   -o /absolute/temporary/answer.md \
   "$(< /absolute/temporary/brief.md)" < /dev/null \
@@ -49,7 +50,7 @@ Send the revised neutral package plus a concise factual delta. Ask only for new
 or reintroduced material blind spots, not settled analysis without new evidence.
 
 ```bash
-codex exec resume <thread-id> -m <model> \
+codex exec resume --ignore-user-config --strict-config <thread-id> -m <model> \
   -c 'model_reasoning_effort="<effort>"' -c 'sandbox_mode="read-only"' \
   -c 'approval_policy="never"' --json -o /absolute/temporary/answer-2.md \
   "$(< /absolute/temporary/follow-up-2.md)" < /dev/null \
