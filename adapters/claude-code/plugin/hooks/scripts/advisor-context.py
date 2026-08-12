@@ -13,15 +13,16 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import emit_note, load_payload, run
+    from _hooklib import load_payload, run
 except Exception:
     sys.exit(0)
 
 AGENT = "mainframe-advisor"
 MARKER = "MAINFRAME_ADVISOR_CONTEXT_V1"
 UNAVAILABLE = "MAINFRAME_ADVISOR_CONTEXT_UNAVAILABLE"
-MAX_CONTEXT_CHARS = 120_000
-MAX_SUMMARY_CHARS = 48_000
+MAX_CONTEXT_CHARS = 9_000
+MAX_SUMMARY_CHARS = 3_600
+MAX_HOOK_OUTPUT_CHARS = 9_900
 _COMPACT_MARKER = b'"isCompactSummary":true'
 
 
@@ -196,13 +197,46 @@ def build_context(path, limit=MAX_CONTEXT_CHARS):
     return _render(chain, limit)
 
 
+def _hook_output(text):
+    return json.dumps(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "SubagentStart",
+                "additionalContext": text,
+            }
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _bounded_hook_output(text, limit=MAX_HOOK_OUTPUT_CHARS):
+    encoded = _hook_output(text)
+    if len(encoded) <= limit:
+        return encoded
+
+    low = 0
+    high = len(text)
+    best = _hook_output("")
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = _hook_output(_middle_truncate(text, middle))
+        if len(candidate) <= limit:
+            best = candidate
+            low = middle + 1
+        else:
+            high = middle - 1
+    return best
+
+
 def main():
     payload = load_payload()
     if payload.get("hook_event_name") != "SubagentStart":
         return
     if payload.get("agent_type") != AGENT:
         return
-    emit_note("SubagentStart", build_context(payload.get("transcript_path")))
+    context = build_context(payload.get("transcript_path"))
+    sys.stdout.write(_bounded_hook_output(context))
 
 
 if __name__ == "__main__":

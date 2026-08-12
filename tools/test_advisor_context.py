@@ -144,6 +144,21 @@ def test_context_is_bounded_and_keeps_summary_plus_newest_message():
     assert len(module._middle_truncate("sensitive" * 100, 10)) == 10
 
 
+def test_serialized_hook_output_stays_below_claude_context_cap():
+    module = _load_module()
+    context = (
+        "MAINFRAME_ADVISOR_CONTEXT_V1\n"
+        + ('русский текст с "кавычками"\\n' * 1000)
+        + "\nEND_MAINFRAME_ADVISOR_CONTEXT"
+    )
+    encoded = module._bounded_hook_output(context)
+    decoded = json.loads(encoded)["hookSpecificOutput"]["additionalContext"]
+
+    assert len(encoded) <= module.MAX_HOOK_OUTPUT_CHARS
+    assert decoded.startswith("MAINFRAME_ADVISOR_CONTEXT_V1")
+    assert decoded.endswith("END_MAINFRAME_ADVISOR_CONTEXT")
+
+
 def test_context_falls_back_to_active_branch_after_rewind():
     module = _load_module()
     with tempfile.TemporaryDirectory() as directory:
@@ -226,6 +241,7 @@ def test_advisor_hook_is_registered_before_general_subagent_telemetry():
 if __name__ == "__main__":
     test_context_follows_active_visible_chain_from_latest_compaction()
     test_context_is_bounded_and_keeps_summary_plus_newest_message()
+    test_serialized_hook_output_stays_below_claude_context_cap()
     test_context_falls_back_to_active_branch_after_rewind()
     test_hook_is_silent_for_other_agents_and_injects_only_for_advisor()
     test_missing_transcript_is_explicitly_unavailable()
