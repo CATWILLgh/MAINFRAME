@@ -22,7 +22,7 @@ facts and switch routes before asking the user to agree the DoD.
 1. Verify the facts needed to define the observable result and its boundaries.
 2. Prepare a concise recommendation, draft DoD, and red-evidence design.
 3. Present them without invoking `mainframe-decision-reviewer`, Codex, or
-   `advisor` as ceremony.
+   `mainframe-advisor` as ceremony.
 
 ### Complex route
 
@@ -33,8 +33,10 @@ facts and switch routes before asking the user to agree the DoD.
 3. Have `mainframe-decision-reviewer` challenge the decision and reconcile each
    grounded objection against the repository and sources.
 4. Run an independent Codex review using [codex-exec.md](codex-exec.md).
-5. Invoke the built-in zero-argument `advisor` last. Reconcile its findings,
-   then present the checked recommendation, choices, and draft DoD.
+5. Invoke `mainframe-advisor` last with a preparation-readiness task. Its start
+   hook supplies the filtered parent conversation; name only the review phase
+   and unclear affected paths. Reconcile findings, then present the checked
+   recommendation, choices, and draft DoD.
 
 These checkpoints are required for the complex route. If one is unavailable,
 report the missing capability before agreement; do not silently replace it.
@@ -46,8 +48,7 @@ report the missing capability before agreement; do not silently replace it.
   the current gap. This authorizes evidence, not implementation.
 - If the evidence disproves the premise, return the result instead of inventing
   a task.
-- Prepare a copyable `/goal` only after the DoD and red evidence are sound. Do
-  not activate it; the user's `/goal` message starts autonomous implementation.
+- Prepare a copyable `/goal` only after the DoD and red evidence are sound; only the user's `/goal` message starts autonomous implementation.
 - DoD agreement and `/goal` activation authorize implementation, not destructive, irreversible, or externally mutating actions the user did not explicitly include.
 
 ## Execute
@@ -66,8 +67,8 @@ new local recovery commits; never push, change branches, or perform any other hi
 
 Prove the DoD from the final state. Preserve evidence only when acceptance depends
 on it or it cannot be reproduced later; do not create process artifacts by default.
-The bounded route ends after direct proof. On the complex route, invoke the zero-argument `advisor` on the final state; reconcile material findings and repeat verification when needed.
-Do not declare a complex-route goal done if `advisor` is unavailable.
+The bounded route ends after direct proof. On the complex route, invoke
+`mainframe-advisor` with a final-state task; reconcile material findings and repeat verification when needed. Do not declare the goal done without its filtered parent context and completed review.
 
 A goal ends only when every acceptance condition is proven or continuing is
 proven impossible without changing the agreed product, infrastructure,
@@ -75,5 +76,4 @@ authority, or an unavailable external condition. For impossibility, report the
 blocker, evidence, checked alternatives, and why preparation missed it. Do not
 repeat an unchanged attempt without a new hypothesis or evidence.
 
-An additional Codex review after the final advisor is reserved for irreversible
-data, money, security, broad production impact, or hard-to-reverse architecture.
+An additional Codex review after the final `mainframe-advisor` is reserved for irreversible data, money, security, broad production impact, or hard-to-reverse architecture.

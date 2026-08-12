@@ -39,7 +39,7 @@ _SCRIPT_NAME = re.compile(r"([\w-]+\.py)")
 
 # Top-level settings.json keys surfaced on the Config tab (the behaviour-shaping
 # ones); permission lists, env and plugins are pulled out separately.
-_SETTINGS_FLAG_KEYS = ["model", "effortLevel", "advisorModel", "outputStyle",
+_SETTINGS_FLAG_KEYS = ["model", "effortLevel", "outputStyle",
                        "language", "autoCompactEnabled", "autoMemoryEnabled",
                        "teammateMode"]
 # (name, repo-relative path) layers that exist as reserved-but-empty directories.

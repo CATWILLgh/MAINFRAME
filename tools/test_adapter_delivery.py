@@ -162,7 +162,7 @@ def test_adapter_owns_claude_artifacts():
 
 def test_agents_use_user_scope_names_and_plugin_skill_ids():
     paths = sorted(AGENTS.glob("*.md"))
-    assert len(paths) == 6
+    assert len(paths) == 7
     names = []
     for path in paths:
         body = path.read_text(encoding="utf-8")
@@ -342,6 +342,26 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     assert "user-invocable: false" in method
     assert "Triggered via agent frontmatter `skills:` preload" not in method
     assert "Preloaded into" not in method
+
+
+def test_advisor_is_controlled_read_only_and_replaces_builtin_advisor():
+    advisor = (AGENTS / "mainframe-advisor.md").read_text(encoding="utf-8")
+    assert "tools: Read, Grep, Glob, WebSearch, WebFetch," in advisor
+    assert "Bash" not in advisor and "Write" not in advisor and "Edit" not in advisor
+    assert "model: opus" in advisor
+    assert "effort: high" in advisor
+    assert "background: true" in advisor
+    assert "MAINFRAME_ADVISOR_CONTEXT_V1" in advisor
+    assert "VERDICT: UNVERIFIABLE" in advisor
+
+    workflow = (PLUGIN / "skills" / "init" / "workflow.md").read_text(
+        encoding="utf-8"
+    )
+    settings = json.loads((ADAPTER / "export" / "settings.json").read_text())
+    assert "mainframe-advisor" in workflow
+    assert "zero-argument" not in workflow
+    assert "built-in" not in workflow
+    assert "advisorModel" not in settings
 
 
 def test_old_general_code_audit_is_not_delivered():

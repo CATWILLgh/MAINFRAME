@@ -75,8 +75,6 @@ def main():
         _record("subagent_stop", {"agent_type": payload.get("agent_type") or ""}, payload)
     elif event == "PreToolUse":
         tool = payload.get("tool_name") or ""
-        # advisor is a server-side `server_tool_use` (resolved inside the /v1/messages
-        # call), never executed client-side — so it never reaches the tool-use hooks; only Skill does.
         if tool == "Skill":
             skill = tool_input.get("skill") or tool_input.get("name") or tool_input.get("command") or ""
             _record("skill_load", {"skill": _norm_skill(skill)}, payload)

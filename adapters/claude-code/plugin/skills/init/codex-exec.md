@@ -60,8 +60,8 @@ codex exec resume --ignore-user-config --strict-config <thread-id> -m <model> \
 Stop when no new verified material blind spot remains. Allow at most three
 completed passes; a run that produced no review is not a pass, but diagnose it
 before retrying. Never launch a fourth. Resolve any remainder directly and give
-the package to the preparation `advisor`; without its confirmation, do not seek
-agreement.
+the package to the preparation `mainframe-advisor`; without its confirmation,
+do not seek agreement.
 
 After interruption, prove the process stopped before relaunching. Keep secrets
 out of briefs and inspect only bounded diagnostic excerpts.

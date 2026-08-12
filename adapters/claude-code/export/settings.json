@@ -166,7 +166,6 @@
   },
   "outputStyle": "Explanatory Concise",
   "effortLevel": "xhigh",
-  "advisorModel": "opus",
   "autoMemoryEnabled": true,
   "skipWorkflowUsageWarning": true,
   "editorMode": "normal",

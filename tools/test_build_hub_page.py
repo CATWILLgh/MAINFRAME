@@ -201,7 +201,6 @@ def _fixture_export(root):
         "enabledPlugins": {"context7@official": True, "frontend@official": False},
         "model": "opus[1m]",
         "effortLevel": "xhigh",
-        "advisorModel": "opus",
         "outputStyle": "Explanatory Concise",
         "language": "Russian",
     }))

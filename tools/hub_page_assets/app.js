@@ -619,7 +619,7 @@
     const flags = cfg.flags || {};
     const settingsRows = [
       kv("model", flags.model), kv("effortLevel", flags.effortLevel),
-      kv("advisorModel", flags.advisorModel), kv("outputStyle", flags.outputStyle),
+      kv("outputStyle", flags.outputStyle),
       kv("language", flags.language), kv("defaultMode", cfg.mode),
       kv("autoCompact", flags.autoCompactEnabled), kv("autoMemory", flags.autoMemoryEnabled),
       kv("teammateMode", flags.teammateMode),

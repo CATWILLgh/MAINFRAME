@@ -81,7 +81,7 @@ In plain words — what each piece is for:
 - **Umbrella `CLAUDE.md`** — a minimal role-agnostic contract shared by the primary agent and sub-agents: stay inside the caller's scope, ground important claims, protect secrets, and respect authority boundaries. It contains no user orchestration or stack-specific engineering process.
 - **Manual `/mainframe:init`** — the primary-session context for partnership, user decisions, definitions of done, execution routing, Git authority, and final delivery. Its heavier complex-task workflow and external Codex review instructions load only when needed.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like code review, test selection, secret handling, or stack-specific implementation guidance — instead of one giant document trying to cover everything.
-- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python and server-side TypeScript, a React frontend engineer for Vite and Next.js client work, a decision reviewer for high-stakes design calls, a test auditor, and a researcher for evidence-grounded investigations. Infrastructure stays in the primary session through a focused skill because it commonly crosses environment choice, credentials, downtime, and user authority.
+- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python and server-side TypeScript, a React frontend engineer for Vite and Next.js client work, a decision reviewer for high-stakes design calls, a final readiness advisor, a test auditor, and a researcher for evidence-grounded investigations. Infrastructure stays in the primary session through a focused skill because it commonly crosses environment choice, credentials, downtime, and user authority.
 - **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan current code changes for newly introduced security issues with `ruff`/`oxlint`. Block a finished turn when an attributed blocking problem is still unresolved. Things that fire without you having to remember to fire them — the full list with what each one does is in [Inventory](#inventory--whats-actually-inside) below.
 - **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
 - **Permissions** — three-tier model (deny / ask / allow) that's strict by default. Some things must never run; some need confirmation; the rest run quietly with logging.
@@ -96,7 +96,7 @@ End result the hub aims for: **the same baseline of quality and discipline appli
 
 The concrete list of everything the hub ships, in plain words. Three groups: **agents** (specialist sub-agents you delegate to), **hooks** (automatic checks on tool events), **skills** (focused playbooks Claude pulls when relevant).
 
-### Agents — 6 specialist sub-agents
+### Agents — 7 specialist sub-agents
 
 Each ships with its model and effort already wired in, calibrated separately so you don't pick at call time. Agent identifiers use the collision-safe `mainframe-<name>` prefix.
 
@@ -106,6 +106,7 @@ Each ships with its model and effort already wired in, calibrated separately so 
 | `mainframe-typescript-backend-engineer` | Server-side TypeScript — NestJS / Express / Fastify, Next.js server code, PostgreSQL libraries, auth, jobs, realtime, storage, resilience | Sonnet |
 | `mainframe-react-frontend-engineer` | Client-facing React across Vite and Next.js — components, forms, browser data, PWA/offline, realtime, rich content, accessibility, and frontend tests | Sonnet |
 | `mainframe-decision-reviewer` | Adversarial, evidence-grounded second look at a high-stakes design or approach before you commit | Opus |
+| `mainframe-advisor` | Final read-only readiness check for a prepared complex decision or implemented result, using a filtered copy of the parent conversation | Opus (high) |
 | `mainframe-test-auditor` | Independent audit of regression coverage, test reliability, and execution cost; verifies external contracts through Context7 or primary web sources and can maintain confirmed open tickets, but cannot edit code or tests | Sonnet (medium) |
 | `mainframe-researcher` | External research from caller-supplied context through Context7 and authoritative web sources | Sonnet (medium) |
 
