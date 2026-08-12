@@ -468,6 +468,20 @@ def test_init_uses_one_user_decision_boundary():
         assert "material infrastructure choice" in normalized
 
 
+def test_init_does_not_infer_external_action_authority_from_goal():
+    init_dir = PLUGIN / "skills" / "init"
+    body = " ".join((init_dir / "SKILL.md").read_text(encoding="utf-8").split())
+    workflow = " ".join(
+        (init_dir / "workflow.md").read_text(encoding="utf-8").split()
+    )
+    for text in (body, workflow):
+        assert "destructive, irreversible, or externally mutating" in text
+    assert "grants only the action authority the user explicitly stated" in body
+    assert "authority already supplied" in body
+    assert "authorize implementation, not destructive, irreversible" in workflow
+    assert "the user did not explicitly include" in workflow
+
+
 def test_init_allows_only_ordinary_new_local_commits_without_request():
     init_dir = PLUGIN / "skills" / "init"
     body = " ".join((init_dir / "SKILL.md").read_text(encoding="utf-8").split())

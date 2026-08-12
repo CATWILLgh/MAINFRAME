@@ -1,7 +1,6 @@
 # Formal-task workflow
 
-Load this file only when the task needs a formal definition of done or is known
-to be complex. Check available facts before asking the user to continue.
+Load this file only when the task needs a formal definition of done or is known to be complex. Check available facts before asking the user to continue.
 
 ## Choose the route
 
@@ -49,13 +48,14 @@ report the missing capability before agreement; do not silently replace it.
   a task.
 - Prepare a copyable `/goal` only after the DoD and red evidence are sound. Do
   not activate it; the user's `/goal` message starts autonomous implementation.
+- DoD agreement and `/goal` activation authorize implementation, not destructive, irreversible, or externally mutating actions the user did not explicitly include.
 
 ## Execute
 
 Work autonomously to the agreed goal. Resolve engineering and architecture
 choices without narrating internal routing. Investigate suspected blockers and
 continue when they are false. Return only for a proven product or business-logic
-choice, material infrastructure choice, authority boundary, or external condition that changes the goal.
+choice, material infrastructure choice, missing action authority, or external condition that changes the goal.
 
 Do not fix out-of-scope findings inline. Use `ticket` only to search, record a
 minimal observation, or update a clear match, then resume the goal. A finding

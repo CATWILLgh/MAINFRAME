@@ -100,6 +100,8 @@ def test_fires_on_64th_main_prompt_only():
 def test_note_preserves_user_decision_boundary():
     assert "product or business-logic choice" in hook.INIT_NOTE
     assert "material infrastructure choice" in hook.INIT_NOTE
+    assert "missing authority for a destructive, irreversible" in hook.INIT_NOTE
+    assert "DoD and /goal grant no action authority beyond" in hook.INIT_NOTE
 
 
 def test_note_distinguishes_new_commits_from_other_history_operations():
