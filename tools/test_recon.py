@@ -128,6 +128,12 @@ typeCheckingMode = "standard"
         }
     )
     report = output(root)
+    assert "python_requirement: unknown" in report
+    assert (
+        "dependency_values: declared manifests; verify resolved lock or environment"
+        in report
+    )
+    assert "python_version:" not in report
     assert "frameworks: fastapi" in report
     assert "data_access: asyncpg+sqlalchemy" in report
     assert "type_checker: pyright" in report
@@ -144,6 +150,8 @@ name = "manufacturing-service"
 dependencies = [
   "Flask==3.1.3",
   "Flask-SQLAlchemy==3.1.1",
+  "Flask-Migrate==4.0.5",
+  "flask-smorest==0.46.2",
   "Flask-SocketIO==5.6.1",
   "gevent>=24",
   "gevent-websocket>=0.10",
@@ -174,6 +182,8 @@ test = ["pytest>=9"]
         "frameworks: flask",
         "data_access: sqlalchemy",
         "validation: marshmallow",
+        "api_layers: flask-smorest",
+        "migrations: flask-migrate",
         "workers: rq",
         "auth: jwt+oauth-oidc",
         "realtime: gevent+gevent-websocket+socketio",

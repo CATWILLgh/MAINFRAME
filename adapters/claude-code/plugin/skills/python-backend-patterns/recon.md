@@ -6,7 +6,11 @@ Run the deterministic local inspection first:
 python3 <skill-root>/recon.py <package-root>
 ```
 
-It reads common manifests and lockfiles without importing the application, installing packages, or using the network. It reports every detected framework or library instead of silently selecting the first one.
+It reads common manifests and notices colocated lockfiles without importing
+the application, installing packages, or using the network. Reported
+dependencies and the Python requirement are declarations, not proof of the
+resolved or running version. It reports every detected framework or library
+instead of silently selecting the first one.
 
 Then establish runtime ownership from direct evidence:
 

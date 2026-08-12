@@ -35,6 +35,15 @@ SIGNALS: dict[str, dict[str, str]] = {
         "marshmallow": "marshmallow",
         "djangorestframework": "drf",
     },
+    "api_layers": {
+        "flask-smorest": "flask-smorest",
+        "djangorestframework": "drf",
+    },
+    "migrations": {
+        "alembic": "alembic",
+        "flask-migrate": "flask-migrate",
+        "django": "django",
+    },
     "workers": {
         "celery": "celery",
         "arq": "arq",
@@ -65,9 +74,12 @@ SIGNALS: dict[str, dict[str, str]] = {
     },
     "storage": {
         "minio": "s3-compatible",
+        "boto3": "s3-compatible",
+        "aioboto3": "async-s3-compatible",
     },
     "outbound": {
         "requests": "requests",
+        "httpx": "httpx",
         "aiohttp": "aiohttp",
         "pywebpush": "web-push",
     },
@@ -168,12 +180,13 @@ def detect_type_checker(root: Path) -> str:
 
 def main() -> None:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
-    dependencies, python_version, package_manager = collect(root)
+    dependencies, python_requirement, package_manager = collect(root)
     report = detect_all(dependencies)
     report["type_checker"] = detect_type_checker(root)
     print("RECON:")
-    print(f"  python_version: {python_version}")
+    print(f"  python_requirement: {python_requirement}")
     print(f"  package_manager: {package_manager}")
+    print("  dependency_values: declared manifests; verify resolved lock or environment")
     for key, value in report.items():
         print(f"  {key}: {value}")
     print("  runtime_wiring: inspect entrypoints and imports")
