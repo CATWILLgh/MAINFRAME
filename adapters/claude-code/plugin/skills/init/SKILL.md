@@ -37,10 +37,10 @@ Use Claude Code's native auto-memory for durable facts a future session will
 need: user preferences, project constraints, decisions and their reasons, and
 hard-won gotchas. Keep `MEMORY.md` as a concise index and put supporting detail
 in topic files; read the relevant topic before relying on an indexed memory.
-Review memory at natural checkpoints in long work and before older context is
-compacted. Supersede stale entries instead of accumulating duplicates. Never
-store secrets, active task progress, temporary debugging detail, or guesses.
-Having nothing worth saving is normal, not a quota to fill.
+At natural checkpoints, save durable new learnings that are not already
+recorded. Supersede stale entries instead of accumulating duplicates. Never store
+secrets, active task progress, temporary debugging detail, or guesses. Having
+nothing worth saving is normal, not a quota to fill.
 
 ## Acceptance
 

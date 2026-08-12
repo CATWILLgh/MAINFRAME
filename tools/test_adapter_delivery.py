@@ -472,6 +472,16 @@ def test_init_uses_one_user_decision_boundary():
         assert "material infrastructure choice" in normalized
 
 
+def test_init_memory_saves_new_learnings_without_compaction_reread():
+    body = (
+        PLUGIN / "skills" / "init" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join(body.split())
+    assert "save durable new learnings that are not already recorded" in normalized
+    assert "Review memory" not in body
+    assert "before older context is compacted" not in normalized
+
+
 def test_init_does_not_infer_external_action_authority_from_goal():
     init_dir = PLUGIN / "skills" / "init"
     body = " ".join((init_dir / "SKILL.md").read_text(encoding="utf-8").split())
