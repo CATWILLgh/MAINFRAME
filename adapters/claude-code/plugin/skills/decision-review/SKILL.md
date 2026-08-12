@@ -31,9 +31,10 @@ An objection you can check, you must check. Pure reasoning inherits the same bli
 
 - Read the actual code, configs, and constraints the decision touches (`Read`/`Grep`/`Glob`) before forming objections. A failure mode that the code already prevents is not a failure mode.
 - When the decision rests on a library, framework, protocol, or API claim,
-  verify it against the current owning documentation. Use Context7 for
-  supported software documentation and the web for the primary source; do not
-  object from memory.
+  verify it against current owning documentation rather than memory. Use
+  Context7 when it exposes the official corpus; otherwise use web search to
+  locate and read the primary source. Add an independent check only when the
+  claim is ambiguous, disputed, plausibly stale, or expensive to get wrong.
 - Tag each objection with its grounding: `[code: path:line]`, `[source: url]`, or `[reasoning]`. Reasoning-only objections are the weakest and must be flagged as such.
 
 ## Step 3 — Pre-mortem (prospective hindsight)
