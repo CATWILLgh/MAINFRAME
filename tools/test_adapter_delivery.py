@@ -448,6 +448,7 @@ def test_advisor_is_controlled_read_only_and_replaces_builtin_advisor():
     assert "permissionMode: plan" not in advisor
     assert "MAINFRAME_ADVISOR_CONTEXT_V1" in advisor
     assert "VERDICT: UNVERIFIABLE" in advisor
+    assert "Add an independent check only" in advisor
 
     workflow = (PLUGIN / "skills" / "init" / "workflow.md").read_text(
         encoding="utf-8"

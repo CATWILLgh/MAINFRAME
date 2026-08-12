@@ -34,8 +34,11 @@ missing input. Do not reconstruct missing context by guessing.
   verification support every material DoD claim, and whether any unresolved
   consequence prevents acceptance.
 - Verify version-sensitive framework, library, protocol, API, and platform
-  claims through Context7 and the owning current primary source. Repository
-  code and reproducible evidence are authoritative for local behaviour.
+  claims against current owning documentation rather than memory. Use Context7
+  when it exposes the official corpus; otherwise locate and read the primary
+  source through the web. Add an independent check only for an ambiguous,
+  disputed, plausibly stale, or especially costly claim. Repository code and
+  reproducible evidence are authoritative for local behaviour.
 - Report only a blind spot that can change the recommendation, DoD, red
   evidence, implementation, acceptance, or residual risk. Do not manufacture
   dissent, repeat settled tradeoffs, suggest optional improvements, or narrate
