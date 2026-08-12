@@ -59,8 +59,8 @@ choice, material infrastructure choice, authority boundary, or external conditio
 
 Do not fix out-of-scope findings inline. Use `ticket` only to search, record a
 minimal observation, or update a clear match, then resume the goal. A finding
-that blocks the DoD is in scope. Create local recovery commits after coherent,
-verified units; never push or change branches without explicit instruction.
+that blocks the DoD is in scope. After coherent, verified units, create ordinary
+new local recovery commits; never push, change branches, or perform any other history operation without explicit instruction.
 
 ## Accept the result
 

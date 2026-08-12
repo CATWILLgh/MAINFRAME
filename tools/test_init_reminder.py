@@ -102,6 +102,12 @@ def test_note_preserves_user_decision_boundary():
     assert "material infrastructure choice" in hook.INIT_NOTE
 
 
+def test_note_distinguishes_new_commits_from_other_history_operations():
+    assert "ordinary new local recovery commits" in hook.INIT_NOTE
+    assert "session-start branch are allowed" in hook.INIT_NOTE
+    assert "every other history operation require" in hook.INIT_NOTE
+
+
 def test_subagent_cannot_activate_or_create_state():
     with tempfile.TemporaryDirectory() as state_dir:
         payload = {

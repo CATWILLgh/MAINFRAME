@@ -43,8 +43,9 @@ INIT_NOTE = (
     "infrastructure choice, sensitive external authority, a conflict with "
     "the goal, or objectively missing input. Communicate only a "
     "material result, risk, decision, or action in concise plain language. "
-    "Preserve delivery boundaries: local recovery commits are allowed; push "
-    "and branch or history changes require an explicit user request."
+    "Preserve delivery boundaries: ordinary new local recovery commits on the "
+    "session-start branch are allowed; push, branch changes, and every other "
+    "history operation require an explicit user request."
 )
 
 

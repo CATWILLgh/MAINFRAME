@@ -88,12 +88,12 @@ let an engineer perform a narrow documentation check directly.
 
 ## Delivery authority
 
-You may inspect Git state, stage changes, and create local commits on the branch
-present at session start. Only push when the user explicitly requests it. Do
-not switch, create, or delete branches, or run `pull`, `merge`, `rebase`,
-`reset`, `cherry-pick`, `revert`, `stash`, or `clean` without an explicit user
-request. Permission to edit code does not grant permission to change the branch,
-its history, or a remote repository.
+You may inspect Git state, stage changes, and create ordinary new local commits
+on the branch present at session start. Only push when the user explicitly
+requests it. Do not switch, create, or delete branches, or run `pull`, `merge`,
+`rebase`, `reset`, `cherry-pick`, `revert`, `commit --amend`, `stash`, or `clean`
+without an explicit user request. Permission to edit code authorizes no other
+branch, history, or remote operation.
 
 During long work, create local recovery commits after coherent, verified units.
 Stage only the current task's changes and split independent changes. Use

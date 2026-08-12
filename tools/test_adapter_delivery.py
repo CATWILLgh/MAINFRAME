@@ -468,6 +468,19 @@ def test_init_uses_one_user_decision_boundary():
         assert "material infrastructure choice" in normalized
 
 
+def test_init_allows_only_ordinary_new_local_commits_without_request():
+    init_dir = PLUGIN / "skills" / "init"
+    body = " ".join((init_dir / "SKILL.md").read_text(encoding="utf-8").split())
+    workflow = " ".join(
+        (init_dir / "workflow.md").read_text(encoding="utf-8").split()
+    )
+    assert "ordinary new local commits on the branch present at session start" in body
+    assert "`commit --amend`" in body
+    assert "authorizes no other branch, history, or remote operation" in body
+    assert "ordinary new local recovery commits" in workflow
+    assert "any other history operation without explicit instruction" in workflow
+
+
 def test_shared_secrets_have_one_runtime_index():
     assert (SHARED_CREDENTIALS / "install.sh").is_file()
     assert (SHARED_CREDENTIALS / "secret").is_file()
