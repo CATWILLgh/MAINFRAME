@@ -34,5 +34,3 @@ preload.
 Return exactly the verdict structure defined by the
 [decision-review method](~/.claude/skills/mainframe/skills/decision-review/SKILL.md),
 with no preamble before `ASSESSMENT`.
-
-<!-- model + effort (opus / high) calibrated via a seeded-flaw tournament (5 variants × 6 graded queries, round 1, 2026-06): opus/high won — reliable (0 errors, vs opus xhigh/max which errored or returned blank) and the only reliable variant that got the subtlest verdict right, with no quality gain from higher effort. sonnet-high and opus-medium were competitive and cheaper but under-rated the hardest case. Re-tournament after a notable prompt-body change. -->
