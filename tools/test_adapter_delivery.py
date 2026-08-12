@@ -394,6 +394,8 @@ def test_server_safety_does_not_grant_or_assume_destructive_bash():
     assert "docker compose up --no-recreate" not in body
     assert "Do not force-kill by default" in body
     assert "Use `docker compose down` only" in body
+    assert "launch it without an extra confirmation round" in body
+    assert "Do not silently turn a restart into a fresh start" in body
 
 
 def test_secrets_skill_uses_index_without_secret_ownership_drift():

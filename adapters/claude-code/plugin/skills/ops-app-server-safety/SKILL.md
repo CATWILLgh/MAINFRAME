@@ -94,8 +94,11 @@ Subsequent steps (open a URL, run a test, query the API) need this context; re-d
 - If the target cannot be identified from the task, repository, or process
   evidence, do not start or stop anything. Return the exact missing identifier
   to the immediate caller.
-- If a specific process was named but preflight finds nothing related, return
-  that fact before starting; it may be a different project or environment.
+- If the task is to start a resolved application and no matching instance is
+  running, launch it without an extra confirmation round.
+- If the task is to restart or stop an existing instance but no exact match is
+  running, return that fact. Do not silently turn a restart into a fresh start;
+  the named instance may belong to another project or environment.
 
 ## Known limitation
 
