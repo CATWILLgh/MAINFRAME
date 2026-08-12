@@ -13,7 +13,7 @@ saying “continue” while facts available to the agent remain unchecked.
 2. Synthesize a neutral decision package: facts, constraints, viable options,
    recommendation, load-bearing assumptions, draft definition of done, and a
    design for the red evidence.
-3. Have `decision-reviewer` challenge the proposed decision. Reconcile each
+3. Have `mainframe-decision-reviewer` challenge the proposed decision. Reconcile each
    grounded objection against the repository and sources.
 4. Run an independent Codex review after the decision review. Read
    [codex-exec.md](codex-exec.md) for the adapter-specific invocation, model
@@ -46,10 +46,10 @@ when the suspected blocker is false. Return only for a proven product choice,
 infrastructure choice, authority boundary, or external condition that changes
 the goal or makes it unreachable.
 
-Do not fix an out-of-scope finding inline. Use `surface-ticket` only to find a
-similar ticket, create a minimal `needs-refinement` observation, or append new
-observations, then return to the goal. A finding that blocks the current
-definition of done is in scope and must be investigated.
+Do not fix an out-of-scope finding inline. Use `ticket` only to search the open
+ticket queue, record a minimal observation, or append a materially different
+observation to a clear match, then return to the goal. A finding that blocks the
+current definition of done is in scope and must be investigated.
 
 Create local recovery commits after coherent verified units. Never push or
 change branches without the user's explicit instruction.

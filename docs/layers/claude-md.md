@@ -64,7 +64,7 @@ Structure (as of 2026-05-28, 132 lines):
 |---|---|
 | Partnership | Engineering partner, push back, surface tradeoffs |
 | Communication | Plain language, brief, no fluff |
-| Honesty | No fabrication, severity calibration |
+| Honesty | No fabrication; explicit uncertainty and evidence boundaries |
 | No flattery | No evaluative openers |
 | Thinking and decision making | Anti-rationalization, step-by-step, lowest-risk |
 | Evidence and sources | Context7 primary, authoritative web fallback |

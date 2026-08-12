@@ -1,0 +1,33 @@
+# Project infrastructure map
+
+`.agents/infrastructure.json` is the current non-secret map of a project's
+environments. It reduces repeated discovery; it never replaces live checks.
+
+## Contract
+
+- `schemaVersion` is currently `1`.
+- `environments` is an object keyed by stable, human-readable environment ids.
+- Each environment records `purpose`, `platform`, `deployment`, `resources`,
+  `credentialRefs`, `references`, `approvalRequired`, `lastVerified`, and
+  optional `notes`.
+- `credentialRefs` contains environment-variable names, credential-index names,
+  or native access aliases only. Never store values, DSNs with passwords,
+  private keys, session cookies, or authorization headers.
+- A reference contains a short `purpose` and a repository-relative `path`.
+  Paths must stay inside the project root and point to an existing file.
+- Prefer access aliases and stable platform resource names over raw addresses.
+  Store an address only when it is itself the durable operational identifier.
+- `lastVerified` is an ISO date for the specific environment and changes only
+  after repository or live evidence confirmed the entry.
+- `notes` holds short exceptional facts, not procedures or session history.
+
+## Maintenance
+
+Read only references relevant to the current operation. Update a fact after it
+is observed, remove replaced facts instead of appending a chronology, and let
+Git retain history. Keep long deploy, rollback, migration, recovery, or incident
+procedures in referenced runbooks.
+
+When verified reality and the map disagree, use reality for the active task and
+repair the map in the same authorized change. A stale map never grants authority
+for an operation and never justifies guessing an environment.

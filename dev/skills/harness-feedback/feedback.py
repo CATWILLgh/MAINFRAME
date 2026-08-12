@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Receiver for the `harness-feedback` skill: persist one structured feedback
-file about mainframe-harness friction into the global feedback queue.
+"""Persist one structured Claude-adapter harness report and enqueue analysis.
 
 Usage (body on stdin, all metadata as flags):
     python3 feedback.py --artifact <hub artifact> --type <type> \
@@ -10,9 +9,11 @@ Usage (body on stdin, all metadata as flags):
     ...
     EOF
 
-Writes `$MAINFRAME_FEEDBACK_DIR` (default `~/.claude/mainframe/feedback/`)
+Writes `$MAINFRAME_FEEDBACK_DIR` (default
+`~/.claude/mainframe/claude-code/feedback/`)
 `/<YYYYMMDD-HHMMSS>-<project>-<slug>.md` and prints the written path.
-Exit 0 = written; non-zero = rejected, reason on stderr. Stdlib only.
+After the durable write, a dev-only worker is detached on a best-effort basis.
+Its availability never changes this command's result. Stdlib only.
 """
 
 import argparse
@@ -20,6 +21,7 @@ import datetime
 import json
 import os
 import re
+import subprocess
 import sys
 
 TYPES = ("false-positive", "friction", "unclear-instruction",
@@ -56,7 +58,42 @@ def _unique_path(directory, stem):
 
 def _feedback_dir():
     return (os.environ.get("MAINFRAME_FEEDBACK_DIR")
-            or os.path.expanduser("~/.claude/mainframe/feedback"))
+            or os.path.expanduser(
+                "~/.claude/mainframe/claude-code/feedback"))
+
+
+def _model_lab_worker():
+    override = os.environ.get("MAINFRAME_MODEL_LAB_WORKER")
+    if override:
+        return override
+    root = os.path.realpath(__file__)
+    for _ in range(4):
+        root = os.path.dirname(root)
+    return os.path.join(
+        root, "adapters", "claude-code", "dev", "model-lab",
+        "spark-feedback-worker.py")
+
+
+def _launch_model_lab(path):
+    """Detach optional analysis without delaying or invalidating the report."""
+    if os.environ.get("MAINFRAME_MODEL_LAB_DISABLE") == "1":
+        return False
+    worker = _model_lab_worker()
+    if not os.path.isfile(worker):
+        return False
+    try:
+        subprocess.Popen(
+            [sys.executable, worker, path],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+            env=dict(os.environ),
+        )
+        return True
+    except OSError:
+        return False
 
 
 def _todays_count(directory, day_prefix, project):
@@ -103,6 +140,9 @@ def main(argv=None):
 
     front = "\n".join((
         "---",
+        "schema: 2",
+        "adapter: claude-code",
+        "model_lab_eligible: true",
         f"date: {now.isoformat(timespec='seconds')}",
         f"project: {project}",
         f"session: {os.environ.get('CLAUDE_SESSION_ID', '')}",
@@ -117,6 +157,7 @@ def main(argv=None):
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(f"{front}\n\n# {title}\n\n{body}\n")
     print(path)
+    _launch_model_lab(path)
 
 
 if __name__ == "__main__":

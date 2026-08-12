@@ -1,90 +1,153 @@
 #!/usr/bin/env python3
-"""Main-session Stop hook: advisory reminder to persist durable facts to
-Claude Code's native auto-memory.
+"""Remind the primary session to maintain native auto-memory at context milestones.
 
-Recall is automatic (the harness injects relevant memories into context);
-WRITING is model-discretion, and that is the reliability gap this nudges. The
-note is NON-blocking (a Stop `additionalContext`, never a block) so it reminds
-without coercing — "nothing to save" is an expected, fine outcome. A coercive
-nudge that keeps firing on empty sessions trains the model to ignore it (hub
-lesson: the oxlint react-perf false-positive firehose); the opt-out framing is
-the guard against that.
+Claude Code exposes the main transcript path to Stop hooks. Current local
+transcripts include per-response input usage and explicit compact boundaries;
+their format is not a documented public contract, so every parsing or state
+failure is a silent no-op.
 
-Throttled to ~once per THROTTLE_SECONDS per session and silent on trivial
-sessions (transcript below MIN_TRANSCRIPT_BYTES), so it surfaces a handful of
-times across a long, multi-compact run rather than every turn.
-
-Why Stop and not a compaction hook: PreCompact gives the model no turn, and no
-hook exposes context-fill, so timing a write "just before compaction" is
-impossible — Stop is the only event handing the model a mid-flow turn (and it
-fires in unattended auto-mode too). Coverage is therefore probabilistic, not
-guaranteed. See ADR 0080.
-
-Fail-safe: any error -> exit 0 (no-op).
+The reminder is advisory and main-session-only. It fires at most once when the
+current compact segment first reaches each configured token milestone. State is
+incremental and session-scoped so a large transcript is not reparsed on every
+Stop and concurrent sessions do not share counters.
 """
 
+import fcntl
 import hashlib
+import json
 import os
 import sys
 import tempfile
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import (emit_note, feedback_skill_installed, load_payload,
-                          log_event, run, stop_guard_cwd)
+    from _hooklib import (
+        emit_note, load_payload, log_hook_signal, run, stop_guard_cwd,
+    )
 except Exception:
     sys.exit(0)
 
-THROTTLE_SECONDS = 1800
-MIN_TRANSCRIPT_BYTES = 50_000
+TOKEN_MILESTONES = (300_000, 600_000, 900_000)
+USAGE_FIELDS = (
+    "input_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+)
 
 MEMORY_NOTE = (
-    "Memory check (skip if nothing applies): did a durable, reusable fact "
-    "surface this session — a user preference, a project constraint, a "
-    "hard-won gotcha — that a future session would want? If so, save it to "
-    "your auto-memory now, before older context is compacted away. Recall is "
-    "automatic; writing is your initiative. Nothing to save is a fine answer."
-)
-# Dev-only: a plain clone has no harness-feedback skill to file to (gated like FEEDBACK_NUDGE).
-FEEDBACK_TAIL = (
-    " If the mainframe harness itself got in your way this session, file it "
-    "via the harness-feedback skill."
+    "Memory checkpoint (skip if nothing applies): preserve any durable fact a "
+    "future session will need in native auto-memory now. Keep MEMORY.md as a "
+    "concise index, move detail to topic files, update stale entries, and never "
+    "store secrets, temporary progress, or guesses."
 )
 
 
-def _note():
-    return MEMORY_NOTE + (FEEDBACK_TAIL if feedback_skill_installed() else "")
+def _usage_tokens(row):
+    message = row.get("message")
+    if not isinstance(message, dict):
+        return None
+    usage = message.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    try:
+        values = [int(usage.get(field) or 0) for field in USAGE_FIELDS]
+    except (TypeError, ValueError):
+        return None
+    total = sum(value for value in values if value >= 0)
+    return total or None
 
 
-def _throttled(session_id, stamp_dir=None):
-    """True when this session nudged within THROTTLE_SECONDS; stamps otherwise."""
-    d = stamp_dir or tempfile.gettempdir()
+def _initial_state(path, stat):
+    return {
+        "path": path,
+        "device": stat.st_dev,
+        "inode": stat.st_ino,
+        "offset": 0,
+        "segment": "initial",
+        "peak_tokens": 0,
+        "notified_milestone": 0,
+    }
+
+
+def _load_state(handle, path, stat):
+    try:
+        handle.seek(0)
+        state = json.load(handle)
+    except Exception:
+        return _initial_state(path, stat)
+    if (
+        state.get("path") != path
+        or state.get("device") != stat.st_dev
+        or state.get("inode") != stat.st_ino
+        or not isinstance(state.get("offset"), int)
+        or state["offset"] < 0
+        or state["offset"] > stat.st_size
+    ):
+        return _initial_state(path, stat)
+    return state
+
+
+def _scan_appended(transcript, state):
+    with open(transcript, "rb") as source:
+        source.seek(state["offset"])
+        while True:
+            start = source.tell()
+            raw = source.readline()
+            if not raw:
+                break
+            if not raw.endswith(b"\n"):
+                source.seek(start)
+                break
+            try:
+                row = json.loads(raw.decode("utf-8", "replace"))
+            except Exception:
+                continue
+            if row.get("type") == "system" and row.get("subtype") == "compact_boundary":
+                state["segment"] = str(row.get("uuid") or f"offset-{start}")
+                state["peak_tokens"] = 0
+                state["notified_milestone"] = 0
+            tokens = _usage_tokens(row)
+            if tokens is not None:
+                state["peak_tokens"] = max(int(state.get("peak_tokens") or 0), tokens)
+        state["offset"] = source.tell()
+
+
+def _reached_milestone(payload, state_dir=None):
+    """Return (milestone, observed tokens) once per compact segment, else None."""
+    session_id = payload.get("session_id")
+    transcript = payload.get("transcript_path")
+    if not isinstance(session_id, str) or not session_id or not transcript:
+        return None
+    transcript = os.path.realpath(os.path.expanduser(str(transcript)))
+    try:
+        stat = os.stat(transcript)
+    except OSError:
+        return None
+
+    directory = state_dir or tempfile.gettempdir()
     key = hashlib.sha256(session_id.encode("utf-8", "replace")).hexdigest()[:16]
-    stamp = os.path.join(d, f"memory-reminder-{key}.stamp")
+    state_path = os.path.join(directory, f"memory-reminder-{key}.json")
     try:
-        if time.time() - os.path.getmtime(stamp) < THROTTLE_SECONDS:
-            return True
-    except OSError:
-        pass
-    try:
-        with open(stamp, "w") as fh:
-            fh.write(str(int(time.time())))
-    except OSError:
-        pass
-    return False
-
-
-def _substantive(payload):
-    """True when the transcript is large enough to plausibly hold a
-    memory-worthy fact — a cheap byte-size proxy that skips trivial sessions."""
-    path = payload.get("transcript_path")
-    if not path:
-        return False
-    try:
-        return os.path.getsize(os.path.expanduser(path)) >= MIN_TRANSCRIPT_BYTES
-    except OSError:
-        return False
+        os.makedirs(directory, exist_ok=True)
+        with open(state_path, "a+", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            state = _load_state(handle, transcript, stat)
+            _scan_appended(transcript, state)
+            peak = int(state.get("peak_tokens") or 0)
+            reached = max((value for value in TOKEN_MILESTONES if peak >= value), default=0)
+            previous = int(state.get("notified_milestone") or 0)
+            result = None
+            if reached > previous:
+                state["notified_milestone"] = reached
+                result = (reached, peak)
+            handle.seek(0)
+            handle.truncate()
+            json.dump(state, handle, separators=(",", ":"))
+            handle.flush()
+            os.fsync(handle.fileno())
+            return result
+    except (OSError, TypeError, ValueError):
+        return None
 
 
 def main():
@@ -93,15 +156,16 @@ def main():
         return
     if stop_guard_cwd(payload) is None:
         return
-    session_id = payload.get("session_id")
-    if not isinstance(session_id, str) or not session_id:
+    if not isinstance(payload.get("session_id"), str) or not payload["session_id"]:
         return
-    if not _substantive(payload):
+    reached = _reached_milestone(payload)
+    if reached is None:
         return
-    if _throttled(session_id):
-        return
-    emit_note("Stop", _note())
-    log_event("memory_reminder", {"trigger": "stop"}, payload)
+    emit_note("Stop", MEMORY_NOTE)
+    log_hook_signal(
+        __file__, "memory-checkpoint", "noted", 1, payload,
+        context=MEMORY_NOTE,
+    )
 
 
 if __name__ == "__main__":

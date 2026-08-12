@@ -7,8 +7,10 @@ when_to_use: Trigger when rating or reporting the severity or urgency of a findi
 
 # Severity calibration
 
-A rubric and discipline for assigning severity honestly. Reinforces the global rule
-"calibrate severity honestly" by turning it into a concrete, shared scale.
+A compact MAINFRAME triage scale for findings that actually need a severity
+label. It is not a substitute for a project's own incident levels, support
+priority, regulatory classification, or a security-specific score such as
+CVSS. Use the project's established scale when one exists.
 
 ## Why it matters
 
@@ -19,16 +21,33 @@ trustworthy.
 
 ## The rubric
 
-Assign by real impact, not by how dramatic the finding feels:
+Assign by demonstrated or well-grounded impact, reach, recoverability, and
+available workaround. Severity describes the problem's consequence; confidence
+describes the strength of the evidence. Do not raise severity to compensate for
+uncertainty.
 
-- **Critical** — breaks functionality, creates a security vulnerability, or loses data.
-- **High** — violates a business invariant, significantly degrades UX, or risks data loss.
-- **Medium** — violates a standard, adds technical debt, or degrades performance without breaking.
-- **Low** — style, recommendation, nice-to-have.
+- **Critical** — confirmed or immediately reachable catastrophic harm: broad
+  production unavailability, material compromise, irreversible corruption or
+  loss, or comparable safety, legal, or financial impact. Ordinary broken
+  functionality is not Critical.
+- **High** — a major product or security guarantee fails for a meaningful
+  scope, with serious user or business impact and no safe practical workaround;
+  recovery remains possible or the blast radius is below Critical.
+- **Medium** — a real, bounded defect or material maintainability/performance
+  problem with recoverable impact, limited scope, or a practical workaround.
+- **Low** — localized friction or quality debt with no demonstrated material
+  product impact. Pure preference and speculative improvement are not findings.
 
 ## Discipline
 
-- **Reserve the top level for real impact.** "Could this take down production, leak data, or corrupt state?" If not, it is not Critical.
-- **Borderline → pick the lower level and explain why.** State the assumption that would raise it. Do not round up "to be safe" — that rounding is the inflation that erodes the scale.
-- **Verify before labeling Critical/High.** A high-severity claim that proves wrong costs more trust than a missed Medium. Re-read the code or data to confirm before stamping it.
-- **Be consistent.** The same kind of issue gets the same level throughout — two findings at equal real impact must not land at different levels.
+- Establish the affected guarantee, reachable condition, scope, consequence,
+  recoverability, and workaround before assigning Critical or High.
+- A hypothetical worst case is not the observed severity. State the assumption
+  that would make it reachable and lower the current label when that assumption
+  is unverified.
+- Borderline cases take the lower level. State what evidence would raise it.
+- A standards violation, missing abstraction, long file, or low coverage is not
+  Medium by itself. Tie it to a concrete failure or leave it as an unlabeled
+  observation.
+- Apply the same level to equal impact. If the project already defines a
+  different scale, translate explicitly instead of silently mixing meanings.

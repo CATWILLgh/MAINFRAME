@@ -56,8 +56,7 @@ MAX_SKILL_LINES = 500            # Anthropic recommendation at first load
 MAX_SUPPORT_TOKENS = 5000        # hub discipline
 MAX_SUPPORT_LINES = 60           # hub discipline (distilled snippets)
 MAX_DEPTH = 1                    # SKILL.md + one level of supporting files
-MAX_DESC_CHARS = 1024            # Anthropic
-MAX_DESC_PLUS_WHEN_CHARS = 1536  # Anthropic combined cap
+MAX_DESC_PLUS_WHEN_CHARS = 1536  # Claude Code default; configurable by skillListingMaxDescChars
 
 REQUIRED_FRONTMATTER = ("name", "description")
 
@@ -65,8 +64,9 @@ REQUIRED_FRONTMATTER = ("name", "description")
 # Leading underscore is allowed — empirically works in Claude Code (verified with _symlink-test canary).
 NAME_RE = re.compile(r"^[a-z0-9_][a-z0-9_-]{0,63}$")
 
-# Tokenizer — cl100k_base is the same family Claude uses; counts are close enough
-# for our purposes (we set thresholds with safety margin, not exact tracking)
+# Tokenizer — this is only a stable local estimate, not Claude's documented
+# tokenizer. Thresholds are repository budgets with safety margin, not exact
+# runtime accounting.
 _ENCODER = tiktoken.get_encoding("cl100k_base")
 
 
@@ -208,13 +208,9 @@ def validate_skill(skill_dir: Path) -> list[dict]:
         issues.append(issue("NAME-DIR", "warning", skill_md,
                             f"name `{name}` does not match directory name `{skill_dir.name}`"))
 
-    # description length
+    # Claude Code caps the combined discovery entry. It documents no separate
+    # description-only limit; a long description is already covered below.
     desc = str(fm.get("description", ""))
-    if desc and len(desc) > MAX_DESC_CHARS:
-        issues.append(issue("DESC-LEN", "error", skill_md,
-                            f"description is {len(desc)} chars (Anthropic limit {MAX_DESC_CHARS})"))
-
-    # description + when_to_use combined cap
     when = str(fm.get("when_to_use", ""))
     combined_len = len(desc) + len(when)
     if combined_len > MAX_DESC_PLUS_WHEN_CHARS:

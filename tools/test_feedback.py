@@ -3,8 +3,9 @@
 
 Run: `python3 tools/test_feedback.py` (exit 0 = pass). Stdlib only. Uses a temp
 target dir via the `MAINFRAME_FEEDBACK_DIR` env var so the real
-`~/.claude/mainframe/feedback` is never touched. CLI-level tests spawn real subprocesses —
-the actual skill scenario (agent runs the script via Bash).
+`~/.claude/mainframe/claude-code/feedback` is never touched. CLI-level tests
+spawn real subprocesses — the actual skill scenario (agent runs the script via
+Bash). Model analysis is disabled except in its dedicated launch test.
 """
 
 import os
@@ -17,7 +18,7 @@ sys.dont_write_bytecode = True   # keep __pycache__ out of the validated skill d
 _SKILL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "..", "dev", "skills", "harness-feedback")
 sys.path.insert(0, _SKILL_DIR)
-import feedback
+import feedback  # noqa: E402
 
 SCRIPT = os.path.join(_SKILL_DIR, "feedback.py")
 
@@ -33,6 +34,7 @@ GOOD_BODY = (
 def _run(args, body=GOOD_BODY, env_extra=None, cwd=None):
     env = dict(os.environ)
     env.pop("CLAUDE_SESSION_ID", None)
+    env["MAINFRAME_MODEL_LAB_DISABLE"] = "1"
     if env_extra:
         env.update(env_extra)
     return subprocess.run(
@@ -59,7 +61,9 @@ def test_writes_file_with_frontmatter():
     assert os.path.isfile(path), path
     text = open(path, encoding="utf-8").read()
     assert text.startswith("---\n"), text[:40]
-    for needle in ("artifact: ", "type: false-positive", "severity: medium",
+    for needle in ("schema: 2", "adapter: claude-code",
+                   "model_lab_eligible: true", "artifact: ",
+                   "type: false-positive", "severity: medium",
                    "project: ", "date: ", "session: ", 'title: "'):
         assert needle in text, f"missing {needle!r} in frontmatter"
     assert "## Trigger" in text and "rm -r build" in text
@@ -135,6 +139,49 @@ def test_daily_cap_warns_but_still_writes():
     assert r.returncode == 0, r.stderr
     assert "consider consolidating" in r.stderr.lower(), r.stderr
     assert len(os.listdir(d)) == feedback.WARN_DAILY_CAP + 1
+
+
+def test_detaches_optional_worker_after_write():
+    root = _tmp()
+    out = os.path.join(root, "feedback")
+    marker = os.path.join(root, "worker-ran")
+    worker = os.path.join(root, "worker.py")
+    with open(worker, "w", encoding="utf-8") as handle:
+        handle.write(
+            "import os, pathlib, sys\n"
+            "pathlib.Path(os.environ['TEST_WORKER_MARKER']).write_text(sys.argv[1])\n"
+        )
+    r = _run(
+        _base_args(),
+        env_extra={
+            "MAINFRAME_FEEDBACK_DIR": out,
+            "MAINFRAME_MODEL_LAB_DISABLE": "0",
+            "MAINFRAME_MODEL_LAB_WORKER": worker,
+            "TEST_WORKER_MARKER": marker,
+        },
+    )
+    assert r.returncode == 0, r.stderr
+    for _ in range(40):
+        if os.path.exists(marker):
+            break
+        import time
+        time.sleep(0.025)
+    assert os.path.isfile(marker), "detached worker did not run"
+    assert open(marker, encoding="utf-8").read() == r.stdout.strip()
+
+
+def test_missing_worker_never_breaks_feedback():
+    d = _tmp()
+    r = _run(
+        _base_args(),
+        env_extra={
+            "MAINFRAME_FEEDBACK_DIR": d,
+            "MAINFRAME_MODEL_LAB_DISABLE": "0",
+            "MAINFRAME_MODEL_LAB_WORKER": os.path.join(d, "absent.py"),
+        },
+    )
+    assert r.returncode == 0, r.stderr
+    assert os.path.isfile(r.stdout.strip())
 
 
 def main():

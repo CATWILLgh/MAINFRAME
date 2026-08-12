@@ -27,7 +27,7 @@
 | In main context, only on path trigger | Rule with `paths:` ([rules.md](rules.md)) |
 | In main context, only on semantic trigger | Skill with a narrow `when_to_use` |
 | In a separate forked context, summary returned | Skill `context: fork` **or** Subagent |
-| Only in a dedicated subagent, main never sees it | Skill `disable-model-invocation: true` + Subagent `skills: [name]` |
+| Only in a dedicated subagent, main never sees it | Hidden skill + explicit `Read` from the dedicated agent + agent-scoped path guard |
 
 ## Q3 — What is it, fundamentally?
 
@@ -54,7 +54,9 @@ Without an explicit mechanism — silent reliance on hope. Do not place an artif
 **Explicit cross-references (expand the trigger surface):**
 - Mentioning a skill name in CLAUDE.md → the model sees both frontmatter and the explicit instruction.
 - Mentioning a skill name in another skill's body → relationship hint.
-- `skills: [name]` in a subagent frontmatter → preload on subagent start.
+- `skills: [name]` in a subagent frontmatter → preload on subagent start only
+  when the skill remains model-invocable; current docs exclude
+  `disable-model-invocation: true` skills.
 - Skill mentioned in an agent description → agent activates it explicitly.
 
 ---
@@ -65,7 +67,9 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 
 1. **Rule with `paths:`** — if the knowledge is bound to files by pattern (`.ts`, `migrations/**`), it is loaded only when Claude actually reads such a file. See [rules.md](rules.md).
 2. **Narrow `when_to_use`** — the skill does not trigger unnecessarily.
-3. **`disable-model-invocation: true`** on the skill + `skills: [name]` in the subagent — the skill is loaded ONLY when the subagent is active. Main context stays clean.
+3. **Private agent knowledge:** `disable-model-invocation: true` on the skill,
+   an explicit entrypoint link in the dedicated agent, and a profile-scoped
+   `Read` hook that permits only that skill tree. Main context stays clean.
 4. **`context: fork`** — heavy skill in a separate context; summary is returned.
 5. **Narrow `tools:` allowlist on the subagent** — `Skill` not in tools = subagent does not load skills at all.
 
@@ -73,11 +77,12 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 
 ## Recipe — canonical patterns
 
-### Recipe A: global behavioral rule
+### Recipe A: conditional calibration
 
-> "Always be honest about severity" — applies everywhere, in every project.
+> "Assign a severity label to a finding" — needed only when a review or triage
+> actually uses severity.
 
-→ **CLAUDE.md (adapters/claude-code/export/)**. One bullet in the relevant section.
+→ **Skill** (`severity-calibration`), not the global CLAUDE.md.
 
 ### Recipe B: disciplinary self-check
 
@@ -89,7 +94,9 @@ Every time a new artifact is added, ask: "could it bloat the main context in eve
 
 > "Analyze DB query performance" — needs several Explore subagents, doc lookups, synthesis.
 
-→ **Subagent** (`perf-analyzer`) with a preloaded skill (`perf-analysis`, `disable-model-invocation: true`). Main context is not burdened with perf knowledge in unrelated projects.
+→ **Subagent** (`perf-analyzer`) with a private skill (`perf-analysis`,
+`disable-model-invocation: true`) read through a profile-scoped path guard. Main
+context is not burdened with perf knowledge in unrelated projects.
 
 ### Recipe D: technical gate on a dangerous command
 
@@ -194,15 +201,15 @@ Template migrations; the same 4 axes of the decision tree are walked as during i
 2. If **contextual activation matters more** (the model must understand why it fires) → skill is primary, hook is optional as a fail-safe.
 3. ADR.
 
-### Recipe M5: Domain-specific knowledge from always-on → Subagent + scoped skill
+### Recipe M5: Domain-specific knowledge from always-on → specialist skill and optional subagent
 
 **Trigger:** domain-specific content in CLAUDE.md or a broad skill (e.g., framework patterns, perf procedures).
 
 **Action:**
-1. Create a subagent (`adapters/claude-code/plugin/agents/<domain>.md`) with a `description` scoped to the domain.
-2. Domain knowledge → skill with `disable-model-invocation: true`, so main context does not pick it up.
-3. In subagent frontmatter: `skills: [<domain-skill>]` — preload.
-4. Remove domain fragments from CLAUDE.md / the broad skill.
+1. Create a focused skill for the reusable domain knowledge and remove it from CLAUDE.md.
+2. Keep it model-invocable when the primary agent may use the capability directly.
+3. Create a subagent only when isolated execution is useful; preload its compact core and give it the `Skill` tool for conditional capabilities.
+4. Use `disable-model-invocation: true`, an explicit link, and a narrow `Read` boundary only when the knowledge is intentionally private to one role.
 5. ADR.
 
 ### Recipe M6: Heavy skill always burdens main → `context: fork`
@@ -322,10 +329,6 @@ The source check is an **additional layer of protection against "confident hallu
 
 ## Sanity check for the new evolution section
 
-Applying these rules to the extraction of `severity-calibration` into a separate skill by back-modeling:
-- At that point, an honesty rule already existed in CLAUDE.md.
-- Signal, per §A: "rule contains conditional language / is growing a rubric and discipline details".
-- Recipe M1 (CLAUDE.md → Skill): capability "assign severity" + rubric + discipline → skill `severity-calibration`; the universal principle ("reserve top level for real impact") stayed in CLAUDE.md.
-- Disposition (§C): not delete (one line remained in CLAUDE.md), not split — this is `extend` (extraction into a skill while keeping a short pointer in CLAUDE.md). This variant is not covered explicitly — but fits within **M1 by design**: "a universal summary phrase stays in CLAUDE.md".
-
-→ Sanity check passed: applying the new rules would have led to the same decomposition that was done historically. Mutual correction works.
+Applying these rules to `severity-calibration`: severity is conditional review
+vocabulary, not an always-on behavior. The rubric therefore lives entirely in
+the skill and is preloaded only into a profile that must emit severity labels.

@@ -1,35 +1,30 @@
-# Motion — purposeful, accessible, cheap
+# Motion
 
-Motion conveys cause and continuity; never decoration (Apple HIG). Default to subtle — most UI needs state transitions, not animation.
+Use motion to communicate cause, continuity, hierarchy, or intentional expression. Decorative motion is acceptable on an expressive surface when it supports the direction, remains controllable, and does not obscure content or operation.
 
-## Hard rules (specs, not taste)
+## Accessibility and control
 
-- **Reduced motion** — wrap every non-essential transition in `@media (prefers-reduced-motion: reduce)` and drop or replace it. With Framer Motion, honour `useReducedMotion()`.
-- **Disable-able** — interaction-triggered motion must be switch-off-able unless essential (WCAG SC 2.3.3); auto-playing motion over 5s needs pause / stop / hide (SC 2.2.2).
-- **Compositor only** — animate `transform` and `opacity` only. Animating width / height / top / left / `box-shadow` triggers layout / paint and janks (web.dev). For a shadow or size illusion, transform a layer instead.
+- Honor `prefers-reduced-motion` by removing or replacing non-essential movement while preserving state and meaning.
+- Provide pause, stop, or hide controls for qualifying moving, blinking, scrolling, or auto-updating content under WCAG SC 2.2.2.
+- Treat WCAG SC 2.3.3 Animation from Interactions as an enhanced AAA safeguard unless the project adopts it as a stronger requirement; do not mislabel it as part of the AA floor.
+- Avoid flashes that violate WCAG seizure thresholds.
 
-## Budget (convention — Material 3 token ranges)
+## Performance
 
-| Use | Duration |
-|---|---|
-| Micro (hover, press, toggle) | 150–200ms |
-| Standard (enter / expand, dialog) | 200–300ms |
-| Large / complex transition | 300–500ms |
+Prefer `transform` and `opacity` for frequent or large animations because browsers can often composite them efficiently. Other properties are not categorically forbidden: measure them on representative devices and bound their affected area. Avoid layout thrashing, unnecessary layers, and long animation chains.
 
-- Duration scales with travel distance / size; > 500ms feels sluggish for UI.
-- Exit shorter than enter (~60–70%) — established convention, not a spec.
-- Easing: `ease-out` entering, `ease-in` exiting; avoid `linear` for UI.
+## Timing and vocabulary
+
+Reuse the project's motion tokens. Choose duration and easing from distance, scale, complexity, frequency, and surface mode. Short responses commonly feel appropriate for direct manipulation, while larger spatial transitions can take longer. Material or platform ranges are starting points, not universal acceptance criteria. Verify perceived responsiveness rather than enforcing a fixed millisecond table.
 
 ## What to animate
 
-State changes (hover / expanded / selected), entrance of one or two focal elements, spatial continuity (a dialog scaling from its trigger). Not: everything at once, decorative loops, layout-shifting transforms.
+State changes, feedback, spatial continuity, and selected expressive moments are useful candidates. Avoid motion everywhere at once, movement that hides causality, scroll hijacking, and effects whose performance or reduced-motion behavior is unknown.
 
 ## Sources
 
 - prefers-reduced-motion — https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion
 - WCAG SC 2.3.3 / 2.2.2 — https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html
-- Compositor-only properties — https://web.dev/articles/stick-to-compositor-only-properties-and-manage-layer-count
+- Animation performance — https://web.dev/articles/animations-and-performance
 - Material 3 duration / easing — https://m3.material.io/styles/motion/easing-and-duration
 - HIG Motion — https://developer.apple.com/design/human-interface-guidelines/motion
-
-Hard specs: reduced-motion, SC 2.3.3 / 2.2.2, compositor-only. The ms ranges are convention (M3 token windows), not a mandate.

@@ -6,8 +6,11 @@
 # Linked:
 #   - plugin:       plugin/  →  ~/.claude/skills/mainframe/
 #                   Claude Code auto-loads it as the 'mainframe' plugin via
-#                   the skills-dir mechanism. Skills, agents, commands, and
-#                   hooks inside get the `mainframe:` namespace prefix.
+#                   the skills-dir mechanism. Skills, commands, and hooks
+#                   inside get the `mainframe:` namespace prefix.
+#   - agents:       agents/  →  ~/.claude/agents/mainframe/
+#                   User-level agents retain agent-scoped hooks and MCP
+#                   servers, which Claude Code ignores for plugin agents.
 #   - umbrella:     export/CLAUDE.md  →  ~/.claude/CLAUDE.md
 #                   export/settings.json  →  ~/.claude/settings.json
 #                   (Plugin format does not provide an equivalent for these.)
@@ -15,14 +18,12 @@
 #                   (Plugin format does not support path-scoped rules with
 #                   `paths:` frontmatter; per-item keeps the layer composable.)
 #
-# Migration cleanup: removes any stale per-item symlinks in
-# ~/.claude/{skills,agents,hooks}/ left over from the pre-plugin layout. If
-# the per-layer directories end up empty, they are removed (the plugin owns
-# those artifacts now).
+# Migration cleanup removes stale per-item symlinks left by older layouts.
 #
 # Usage:
 #   ./install.sh              # install (with backup of existing files)
 #   ./install.sh --dry-run    # show what would happen, no changes
+#   ./install.sh --yes        # approve a required Claude Code update
 #   ./install.sh --uninstall  # remove symlinks managed by this hub
 #   ./install.sh --help
 #
@@ -54,15 +55,21 @@ log_action()  { echo "${BOLD}→${NC} $1"; }
 DRY_RUN=0
 UNINSTALL=0
 DEV=0
+ASSUME_YES=0
+PREFLIGHT_ONLY=0
 
 usage() {
     cat <<EOF
 MAINFRAME Claude Code adapter installer
 
-Installs the hub as a Claude Code plugin: a single symlink in
+Installs the shared hub runtime as a Claude Code plugin: a single symlink in
 ~/.claude/skills/ points to this adapter's plugin/ directory, which Claude
-Code auto-loads as the 'mainframe' plugin. Skills, agents, commands, and hooks
-inside the plugin become available with the 'mainframe:' namespace prefix.
+Code auto-loads as the 'mainframe' plugin. Skills, commands, and hooks inside
+the plugin become available with the 'mainframe:' namespace prefix.
+
+Specialist profiles are installed separately at ~/.claude/agents/mainframe/ as
+user-level agents named mainframe-*. This preserves agent-scoped hooks and MCP
+servers, which Claude Code intentionally ignores on plugin-shipped agents.
 
 Single-file artifacts that the plugin format does not support stay as direct
 symlinks: CLAUDE.md (umbrella instructions) and settings.json (permissions
@@ -78,10 +85,12 @@ Usage:
                       the 'harness-feedback' skill and the hub data
                       namespace ~/.claude/mainframe -> workspace/runtime/
                       in this repo (gitignored), holding friction reports
-                      (feedback/) and local usage telemetry (telemetry/ —
-                      a local SQLite DB; nothing leaves the machine).
+                      (feedback/) and Claude-specific local usage telemetry
+                      (claude-code/telemetry/ — a local SQLite DB; nothing
+                      leaves the machine).
                       Ordinary users do not need this.
   $0 --dry-run        Show what would happen, no changes.
+  $0 --yes            Approve a required Claude Code update without prompting.
   $0 --uninstall      Remove symlinks created by this script (incl. --dev
                       ones; telemetry/feedback data is left in place).
   $0 --help           Show this message.
@@ -98,6 +107,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --dry-run)   DRY_RUN=1 ;;
         --dev)       DEV=1 ;;
+        --yes)       ASSUME_YES=1 ;;
+        --preflight) PREFLIGHT_ONLY=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)   usage; exit 0 ;;
         *) log_error "Unknown argument: $1"; usage; exit 2 ;;
@@ -111,12 +122,16 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ADAPTER_ROOT="${PROJECT_ROOT}/adapters/claude-code"
 CLAUDE_DIR="$HOME/.claude"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+MIN_CLAUDE_VERSION="2.1.226"
 
 # Single-file (and single-dir) artifacts. Format: "<source-relative-to-project>:<target-absolute>"
 # Layout:
 #   - plugin/ is symlinked as a single directory under ~/.claude/skills/mainframe/.
 #     Claude Code auto-loads it as the 'mainframe' plugin via the skills-dir mechanism,
-#     and skills/agents/commands/hooks inside get the `mainframe:` namespace prefix.
+#     and skills/commands/hooks inside get the `mainframe:` namespace prefix.
+#   - agents/ is symlinked under ~/.claude/agents/mainframe/ so Claude Code loads
+#     the profiles at user scope and honors agent-scoped fields unavailable to
+#     plugin agents.
 #   - CLAUDE.md and settings.json stay as direct symlinks because the plugin format
 #     does not provide an equivalent for the umbrella instructions or user-level
 #     permission rules.
@@ -124,16 +139,19 @@ ARTIFACTS=(
     "adapters/claude-code/export/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md"
     "adapters/claude-code/export/settings.json:${CLAUDE_DIR}/settings.json"
     "adapters/claude-code/plugin:${CLAUDE_DIR}/skills/mainframe"
+    "adapters/claude-code/agents:${CLAUDE_DIR}/agents/mainframe"
 )
 
 # Hub-development instrumentation, installed ONLY with --dev (see usage).
-# ~/.claude/mainframe is the hub-OWNED data namespace: the hooks log telemetry
-# only while it exists. ~/.claude/telemetry cannot serve as the opt-in marker —
-# Claude Code itself creates and uses that directory on every machine.
+# ~/.claude/mainframe is the hub-OWNED data namespace. The telemetry hook's
+# early shell gate opens only while claude-code/telemetry exists. The adapter
+# segment prevents a future Codex dev install from enabling Claude telemetry.
 DEV_ARTIFACTS=(
     "dev/skills/harness-feedback:${CLAUDE_DIR}/skills/harness-feedback"
     "workspace/runtime:${CLAUDE_DIR}/mainframe"
 )
+TELEMETRY_DIR="${PROJECT_ROOT}/workspace/runtime/claude-code/telemetry"
+TELEMETRY_DB="${TELEMETRY_DIR}/telemetry.db"
 
 # Directories whose CONTENTS are linked item-by-item into ~/.claude/<dir>/.
 # These layers have no plugin-format equivalent, so they stay outside the plugin and
@@ -155,9 +173,88 @@ SAFE_BACKUP_DIR=""
 
 # ---- Helpers ----
 
+claude_version() {
+    local output
+    output="$(claude --version 2>/dev/null || true)"
+    if [[ "$output" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+        printf '%s.%s.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+        return 0
+    fi
+    return 1
+}
+
+version_at_least() {
+    local current="$1" required="$2"
+    local current_major current_minor current_patch
+    local required_major required_minor required_patch
+    IFS=. read -r current_major current_minor current_patch <<<"$current"
+    IFS=. read -r required_major required_minor required_patch <<<"$required"
+    [[ "$current_major$current_minor$current_patch$required_major$required_minor$required_patch" =~ ^[0-9]+$ ]] || return 1
+
+    if (( current_major != required_major )); then
+        (( current_major > required_major ))
+    elif (( current_minor != required_minor )); then
+        (( current_minor > required_minor ))
+    else
+        (( current_patch >= required_patch ))
+    fi
+}
+
+check_claude_version() {
+    if ! command -v claude >/dev/null 2>&1; then
+        log_error "Claude Code ${MIN_CLAUDE_VERSION}+ is required but 'claude' is not on PATH."
+        log_error "Install it from https://code.claude.com/docs/en/installation and retry."
+        return 1
+    fi
+
+    local current
+    if ! current="$(claude_version)"; then
+        log_error "Could not parse the installed Claude Code version from 'claude --version'."
+        return 1
+    fi
+    if version_at_least "$current" "$MIN_CLAUDE_VERSION"; then
+        log_ok "Claude Code ${current} satisfies the required ${MIN_CLAUDE_VERSION}+."
+        return 0
+    fi
+
+    log_warn "MAINFRAME requires Claude Code ${MIN_CLAUDE_VERSION}+; found ${current}."
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log_action "would ask to run 'claude update' before installation"
+        return 0
+    fi
+
+    local approve=0 reply=""
+    if [[ $ASSUME_YES -eq 1 ]]; then
+        approve=1
+    elif [[ -t 0 && -t 1 ]]; then
+        printf 'Update Claude Code now with `claude update`? [y/N] ' > /dev/tty
+        IFS= read -r reply < /dev/tty || true
+        case "$reply" in
+            y|Y|yes|YES|Yes) approve=1 ;;
+        esac
+    fi
+
+    if [[ $approve -ne 1 ]]; then
+        log_error "Installation stopped before making changes."
+        log_error "Run 'claude update', or rerun this installer with '--yes'."
+        return 1
+    fi
+
+    log_info "Updating Claude Code with the official updater..."
+    if ! claude update; then
+        log_error "'claude update' failed; installation stopped."
+        return 1
+    fi
+    if ! current="$(claude_version)" || ! version_at_least "$current" "$MIN_CLAUDE_VERSION"; then
+        log_error "Claude Code is still below ${MIN_CLAUDE_VERSION} after the update; installation stopped."
+        return 1
+    fi
+    log_ok "Claude Code updated to ${current}."
+}
+
 # Verify the adapter sources are present.
 check_prerequisites() {
-    if [[ ! -d "${ADAPTER_ROOT}/export" || ! -d "${ADAPTER_ROOT}/plugin" ]]; then
+    if [[ ! -d "${ADAPTER_ROOT}/export" || ! -d "${ADAPTER_ROOT}/plugin" || ! -d "${ADAPTER_ROOT}/agents" ]]; then
         log_error "Claude Code adapter sources are incomplete at ${ADAPTER_ROOT}"
         exit 1
     fi
@@ -346,7 +443,7 @@ check_tooling_prerequisites() {
     fi
     log_warn "Some tooling prerequisites are missing — related hooks stay SILENT until installed:"
     if [[ $need_py -eq 1 ]]; then
-        log_warn "  - uv OR pipx (for ruff / pip-audit / semgrep):"
+        log_warn "  - uv OR pipx (for ruff):"
         case "$mgr" in
             apt)  log_warn "      sudo apt install -y pipx && pipx ensurepath" ;;
             brew) log_warn "      brew install uv   (or: brew install pipx)" ;;
@@ -355,7 +452,7 @@ check_tooling_prerequisites() {
         esac
     fi
     if [[ $need_npm -eq 1 ]]; then
-        log_warn "  - npm / Node.js (for oxlint / dependency-cruiser / knip / fallow):"
+        log_warn "  - npm / Node.js (for oxlint / fallow):"
         case "$mgr" in
             apt)  log_warn "      sudo apt install -y nodejs npm" ;;
             brew) log_warn "      brew install node" ;;
@@ -402,46 +499,6 @@ bootstrap_python_security_tools() {
     # Tooling installs are best-effort: `|| true` keeps one failure from aborting
     # the phase under `set -e` (each helper warns internally on failure).
     _install_tool ruff ruff@latest || true
-    _install_tool pip-audit pip-audit || true
-}
-
-_install_osv_scanner() {
-    if command -v osv-scanner >/dev/null 2>&1; then
-        log_ok "osv-scanner already installed ($(osv-scanner --version 2>&1 | head -1)) — nodejs-deps-audit hook active."
-        return 0
-    fi
-    if [[ $DRY_RUN -eq 1 ]]; then
-        log_info "[dry-run] would download osv-scanner binary from GitHub releases to ~/.local/bin/."
-        return 0
-    fi
-    local os="$(uname -s | tr '[:upper:]' '[:lower:]')"
-    local arch="$(uname -m)"
-    case "$arch" in
-        x86_64|amd64) arch=amd64 ;;
-        arm64|aarch64) arch=arm64 ;;
-        *) log_warn "Unsupported arch ($arch) for osv-scanner binary download."; return 1 ;;
-    esac
-    local asset="osv-scanner_${os}_${arch}"
-    local target="${HOME}/.local/bin/osv-scanner"
-    mkdir -p "${HOME}/.local/bin"
-    local latest_tag
-    latest_tag="$(curl -fsSL https://api.github.com/repos/google/osv-scanner/releases/latest 2>/dev/null \
-                    | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"v?[^"]+"' \
-                    | sed -E 's/.*"v?([^"]+)"$/\1/')"
-    if [[ -z "$latest_tag" ]]; then
-        log_warn "Could not query GitHub for osv-scanner latest release; skipping."
-        return 1
-    fi
-    local url="https://github.com/google/osv-scanner/releases/download/v${latest_tag}/${asset}"
-    log_info "Downloading osv-scanner v${latest_tag} from $url..."
-    if curl -fsSL "$url" -o "$target" && chmod +x "$target"; then
-        log_ok "osv-scanner installed at $target — nodejs-deps-audit hook active."
-        return 0
-    fi
-    rm -f "$target"
-    log_warn "Could not download osv-scanner binary; nodejs-deps-audit hook will be SILENT."
-    log_warn "Install manually from https://github.com/google/osv-scanner/releases or 'go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest'."
-    return 1
 }
 
 _install_npm_global() {
@@ -473,14 +530,10 @@ _install_npm_global() {
 }
 
 bootstrap_nodejs_security_tools() {
-    _install_tool semgrep semgrep || true
-    _install_osv_scanner || true
     _install_npm_global oxlint || true
 }
 
 bootstrap_frontend_quality_tools() {
-    _install_npm_global dependency-cruiser depcruise || true
-    _install_npm_global knip || true
     _install_npm_global fallow || true
 }
 
@@ -542,19 +595,20 @@ list_backups() {
     fi
 }
 
-# Old per-item symlinks under ~/.claude/{skills,agents,hooks}/ from the
-# pre-plugin install layout dangle after the move; left in place they
-# would shadow the new plugin's namespaced artifacts.
+# Old per-item symlinks under ~/.claude/{skills,agents,hooks}/ from previous
+# layouts can shadow the current plugin skills or user-level agents.
 cleanup_stale_post_migration() {
     local stale_skills=(
         code-audit curl-requests git-conventional-commits-ru nestjs-backend-patterns
+        nextjs-backend-patterns
         no-suppression-markers ops-app-server-safety python-backend-patterns
         react-frontend-patterns secrets-handling severity-calibration shadcn
-        surface-ticket task-workflow testing-strategy
+        surface-ticket ticket task-workflow testing-strategy
     )
     local stale_agents=(
-        nestjs-backend-engineer.md python-backend-engineer.md
-        react-frontend-engineer.md web-search.md
+        decision-reviewer.md devops-engineer.md mainframe-devops-engineer.md nestjs-backend-engineer.md
+        nextjs-backend-engineer.md python-backend-engineer.md
+        react-frontend-engineer.md researcher.md web-search.md
     )
     local stale_hooks=(
         bash-pattern-reminder.py comment-discipline-reminder.py frontend-dead-code.py
@@ -608,8 +662,8 @@ cleanup_stale_post_migration() {
         log_info "removed ${removed} stale per-item symlinks from the pre-migration layout"
     fi
 
-    # If agents/ and hooks/ are now empty (all entries were stale and removed),
-    # remove the directories themselves — the plugin owns them now.
+    # Remove empty legacy layer directories. Required parents are recreated
+    # immediately before installing the current artifacts.
     local dir
     for dir in "${CLAUDE_DIR}/agents" "${CLAUDE_DIR}/hooks"; do
         if [[ -d "$dir" && -z "$(ls -A "$dir" 2>/dev/null)" ]]; then
@@ -628,6 +682,13 @@ cleanup_stale_post_migration() {
 main() {
     if [[ $DRY_RUN -eq 1 ]]; then
         log_info "${BOLD}DRY RUN${NC} — nothing will be changed."
+    fi
+
+    if [[ $UNINSTALL -eq 0 ]]; then
+        check_claude_version
+    fi
+    if [[ $PREFLIGHT_ONLY -eq 1 ]]; then
+        return 0
     fi
 
     check_prerequisites
@@ -654,20 +715,23 @@ main() {
     fi
 
     log_info "Installing the MAINFRAME Claude Code adapter into ${CLAUDE_DIR}..."
-    log_info "Source: ${ADAPTER_ROOT}/{export,plugin}"
+    log_info "Source: ${ADAPTER_ROOT}/{agents,export,plugin}"
     log_info "Timestamp tag for any backups: ${TIMESTAMP}"
     echo
 
     cleanup_stale_post_migration
 
-    if [[ ! -d "${CLAUDE_DIR}/skills" ]]; then
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log_action "would create ${CLAUDE_DIR}/skills"
-        else
-            mkdir -p "${CLAUDE_DIR}/skills"
-            log_ok "created ${CLAUDE_DIR}/skills"
+    local layer_dir
+    for layer_dir in "${CLAUDE_DIR}/skills" "${CLAUDE_DIR}/agents"; do
+        if [[ ! -d "$layer_dir" ]]; then
+            if [[ $DRY_RUN -eq 1 ]]; then
+                log_action "would create ${layer_dir}"
+            else
+                mkdir -p "$layer_dir"
+                log_ok "created ${layer_dir}"
+            fi
         fi
-    fi
+    done
 
     for entry in "${ARTIFACTS[@]}"; do
         local src="${entry%%:*}"
@@ -676,10 +740,17 @@ main() {
     done
     if [[ $DEV -eq 1 ]]; then
         if [[ $DRY_RUN -eq 1 ]]; then
-            log_action "would create workspace/runtime/{telemetry,feedback} (hub data, gitignored)"
+            log_action "would create workspace/runtime/claude-code/{telemetry,feedback,model-lab} (hub data, gitignored)"
         else
-            mkdir -p "${PROJECT_ROOT}/workspace/runtime/telemetry" \
-                     "${PROJECT_ROOT}/workspace/runtime/feedback"
+            mkdir -p "${TELEMETRY_DIR}" \
+                     "${PROJECT_ROOT}/workspace/runtime/claude-code/feedback" \
+                     "${PROJECT_ROOT}/workspace/runtime/claude-code/model-lab/spark/hook-regression-candidates"
+            if python3 "${ADAPTER_ROOT}/plugin/hooks/scripts/telemetry.py" \
+                    --initialize "${TELEMETRY_DB}"; then
+                log_ok "Initialized Claude telemetry database in WAL mode."
+            else
+                log_warn "Could not initialize Claude telemetry; dev telemetry will report the failure when invoked."
+            fi
         fi
         for entry in "${DEV_ARTIFACTS[@]}"; do
             install_one "${entry%%:*}" "${entry##*:}"
@@ -699,6 +770,15 @@ main() {
         else
             log_warn "Skipped hub.html — .venv missing (python3 -m venv .venv && .venv/bin/pip install pyyaml tiktoken)."
         fi
+    else
+        # A plain reinstall explicitly turns adapter development mode off.
+        # Remove only symlinks owned by this repository; runtime data remains.
+        for entry in "${DEV_ARTIFACTS[@]}"; do
+            local dev_target="${entry##*:}"
+            if [[ -L "$dev_target" ]]; then
+                uninstall_one "${entry%%:*}" "$dev_target"
+            fi
+        done
     fi
     for entry in "${MANAGED_DIRS[@]}"; do
         install_dir_contents "${entry%%:*}" "${entry##*:}"

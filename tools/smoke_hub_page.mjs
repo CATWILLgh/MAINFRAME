@@ -75,11 +75,11 @@ ok(visibleCards().length === totalCards, "clearing the query restores all cards"
 ok(visibleNodes().length === totalNodes, "clearing the query restores all graph nodes");
 
 const nodeFor = (id) => q(".gnode").find((g) => g.querySelector("text") && g.querySelector("text").textContent === id);
-const stNode = nodeFor("surface-ticket");
-ok(!!stNode, "found the surface-ticket graph node");
+const stNode = nodeFor("ticket");
+ok(!!stNode, "found the ticket graph node");
 fire(stNode, "click");
 ok(!detail.hidden, "clicking a node opens the detail drawer");
-ok(detail.textContent.includes("surface-ticket"), "detail shows the clicked artifact name");
+ok(detail.textContent.includes("ticket"), "detail shows the clicked artifact name");
 ok(/referenced|preloaded|cross-refs/i.test(detail.textContent), "detail shows a reverse-lookup section");
 
 const link = detail.querySelector(".chip.link");

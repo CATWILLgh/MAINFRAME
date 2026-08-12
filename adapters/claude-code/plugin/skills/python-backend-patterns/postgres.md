@@ -1,36 +1,27 @@
-# PostgreSQL — indexing, EXPLAIN, JSONB, upsert
+# PostgreSQL queries and indexes
 
-App-level PostgreSQL an engineer gets wrong. Concurrency, pooling and the ops boundary live in [postgres-concurrency.md](postgres-concurrency.md).
+Base changes on the target PostgreSQL version, schema, representative data, and an observed query plan. An index is not automatically useful because a column appears in `WHERE`.
 
-## Indexing
+## Query evidence
 
-- **Index selective WHERE / JOIN / ORDER BY columns; do not over-index.** Every index is maintained on INSERT/DELETE and on any UPDATE that changes an indexed column (a HOT update changing none skips index work) — so N indexes multiply write cost. Drop unused ones.
-- **Composite index = leftmost-prefix.** `(a, b)` serves filters on `a` and on `a, b`, but NOT on `b` alone. Put the most selective equality column first.
-- **B-tree** for equality / range / sort; **GIN** for JSONB, arrays, full-text (multi-value columns).
-- **Partial index** to skip common values: `CREATE INDEX ... WHERE status = 'active'`. The predicate must match the query's WHERE *exactly* — Postgres has no theorem prover for equivalent expressions.
-- **Covering / index-only scan:** `CREATE INDEX t_x ON t(x) INCLUDE (y)` lets a query reading only `x, y` skip the heap (confirm with `Heap Fetches: 0`).
+- Use `EXPLAIN` for plan inspection and `EXPLAIN (ANALYZE, BUFFERS)` only when executing the statement is safe. `ANALYZE` actually runs writes as well as reads.
+- Compare estimates with actual rows, loops, filtering, heap fetches, I/O, and total work. A sequential scan can be correct for a small table or broad result.
+- Choose composite index order from the real equality, range, ordering, and access patterns. The simplistic rule “most selective column first” is not generally sufficient.
+- Account for write amplification, storage, vacuum behavior, and overlap with existing indexes before adding one.
 
-## Reading EXPLAIN
+## PostgreSQL-specific data
 
-`EXPLAIN (ANALYZE, BUFFERS)` runs the query and prints **actual** rows/time beside planner **estimates**. Read for:
-- **Estimate vs actual rows far apart** → stale stats or a bad plan; run `ANALYZE`.
-- **Seq Scan** on a large table with a selective filter → missing/unused index. A Seq Scan on a *small* table is correct — don't "fix" it.
-- **Bitmap Heap Scan** = many scattered matches (fine); an **Index Scan** with high `Rows Removed by Filter` → the index doesn't cover the filter.
+- Use JSONB when flexible document structure is part of the domain. Prefer typed relational columns for frequently constrained, joined, or independently updated fields.
+- Select GIN operator class from actual operators: default `jsonb_ops` supports more operators; `jsonb_path_ops` supports a narrower set with different size and performance characteristics.
+- Use partial indexes only when the query predicate can use them, and verify that with the planner.
 
-## JSONB
+## Atomic writes
 
-- JSONB when the shape is dynamic/sparse; normalized columns when you filter or constrain individual fields hard. Don't model a fixed schema as JSONB to "save a migration".
-- GIN index: default `jsonb_ops` supports key-exists (`?`), containment (`@>`), jsonpath; `jsonb_path_ops` is smaller/faster but only `@>` + jsonpath. Query containment with `@>` (`WHERE doc @> '{"k":"v"}'`).
-- Anti-pattern: a B-tree on the whole JSONB column (useless for containment), or an expression index per key (over-indexing).
-
-## Upsert
-
-`INSERT ... ON CONFLICT (col) DO UPDATE SET ...` is an atomic insert-or-update even under high concurrency. It requires a real UNIQUE / exclusion constraint on `col` (a `conflict_target` is mandatory for `DO UPDATE`).
-**Gotcha:** `ON CONFLICT DO NOTHING ... RETURNING` returns **nothing** for the conflicting row — you don't get the existing id back. Use `DO UPDATE ... RETURNING` or a follow-up SELECT.
-
-Per-ORM: SQLAlchemy `Index(..., postgresql_using="gin")` + `pg_insert(...).on_conflict_do_update()`; Django `GinIndex` + `bulk_create(update_conflicts=True)` (note `update_or_create` is app-level, NOT atomic). JSONB containment: SQLAlchemy `col.op("@>")`, Django `field__contains`.
+`INSERT ... ON CONFLICT` can express an atomic insert-or-update against a matching unique or exclusion constraint. Define what a conflict means and which values may be updated. `DO NOTHING ... RETURNING` returns no row for an existing conflict, so obtain an existing identifier through an intentional alternative when needed.
 
 ## Sources
 
-- PostgreSQL — index types / partial / index-only-scans / EXPLAIN / JSONB — https://www.postgresql.org/docs/current/indexes-types.html
-- use-the-index-luke.com — concatenated keys, EXPLAIN — https://use-the-index-luke.com/
+- PostgreSQL indexes — https://www.postgresql.org/docs/current/indexes.html
+- PostgreSQL EXPLAIN — https://www.postgresql.org/docs/current/using-explain.html
+- PostgreSQL JSON — https://www.postgresql.org/docs/current/datatype-json.html
+- PostgreSQL INSERT — https://www.postgresql.org/docs/current/sql-insert.html

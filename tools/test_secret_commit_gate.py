@@ -1,212 +1,268 @@
 #!/usr/bin/env python3
-"""Unit tests for the secret-commit PreToolUse gate.
-
-Run: `python3 tools/test_secret_commit_gate.py` (exit 0 = pass). Stdlib only,
-Tier 1 — no real git: the diff-parsing layer is fed canned diff text, and the
-main() orchestration is driven with the git-touching helpers monkeypatched.
-
-Fixture tokens are ASSEMBLED AT RUNTIME from a charset (never a literal token in
-source) so this very test file is safe to commit through the live gate — the
-staged source never contains a secret-shaped string.
-"""
+"""Unit and real-Git tests for the secret commit gate."""
 
 import importlib.util
-import io
 import json
 import os
+import sqlite3
+import subprocess
 import sys
+import tempfile
 
-_SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "..", "adapters/claude-code/plugin", "hooks", "scripts")
-sys.path.insert(0, _SCRIPTS)
-import _hooklib
+SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "..", "adapters/claude-code/plugin/hooks/scripts")
+SCRIPT = os.path.join(SCRIPTS, "secret-commit-gate.py")
+sys.path.insert(0, SCRIPTS)
 
 
 def _load_gate():
-    path = os.path.join(_SCRIPTS, "secret-commit-gate.py")
-    spec = importlib.util.spec_from_file_location("secret_commit_gate", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    spec = importlib.util.spec_from_file_location("secret_commit_gate", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 gate = _load_gate()
+ALNUM = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-_ALNUM = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-_UPPER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-
-def _body(charset, n):
-    """Varied run-free body of length n — no 8+ identical run, no 'example'."""
-    return (charset * ((n // len(charset)) + 1))[:n]
+def _body(charset, size):
+    return (charset * ((size // len(charset)) + 1))[:size]
 
 
 def _ghp():
-    return "ghp_" + _body(_ALNUM, 36)
+    return "ghp_" + _body(ALNUM, 36)
 
 
 def _aws():
-    return "AKIA" + _body(_UPPER, 16)
+    return "AKIA" + _body(UPPER, 16)
 
 
-def _stripe():
-    return "sk_live_" + _body(_ALNUM, 24)
+def _diff(filename, added, removed=()):
+    lines = [f"diff --git a/{filename} b/{filename}", f"--- a/{filename}",
+             f"+++ b/{filename}", "@@ -1 +1 @@"]
+    lines.extend(f"-{line}" for line in removed)
+    lines.extend(f"+{line}" for line in added)
+    return "\n".join(lines) + "\n"
 
 
-def _diff(filename, added_lines, removed_lines=()):
-    out = [f"diff --git a/{filename} b/{filename}",
-           "index 1111111..2222222 100644",
-           f"--- a/{filename}", f"+++ b/{filename}",
-           "@@ -1,0 +1,9 @@"]
-    out += [f"-{l}" for l in removed_lines]
-    out += [f"+{l}" for l in added_lines]
-    return "\n".join(out) + "\n"
+def _git(cwd, *args):
+    return subprocess.run(["git", *args], cwd=cwd, check=True,
+                          capture_output=True, text=True, timeout=30)
 
 
-def test_scan_finds_github_pat():
-    tok = _ghp()
-    hits = gate._scan_diff_text(_diff(".env", [f"GITHUB_TOKEN={tok}"]))
-    assert any(k == "github_pat" for k, _ in hits), hits
-    assert all(f == ".env" for _, f in hits)
+def _repo(initial=True):
+    root = tempfile.mkdtemp()
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "test@example.invalid")
+    _git(root, "config", "user.name", "Test")
+    if initial:
+        with open(os.path.join(root, "base.txt"), "w", encoding="utf-8") as handle:
+            handle.write("base\n")
+        _git(root, "add", "base.txt")
+        _git(root, "commit", "-qm", "base")
+    return root
 
 
-def test_scan_finds_aws_and_stripe():
-    text = _diff("config.yaml", [f"aws: {_aws()}", f"stripe: {_stripe()}"])
-    kinds = {k for k, _ in gate._scan_diff_text(text)}
-    assert "aws_access_key" in kinds and "stripe_key" in kinds, kinds
+def _write(root, name, text):
+    path = os.path.join(root, name)
+    os.makedirs(os.path.dirname(path) or root, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
 
 
-def test_aws_example_placeholder_ignored():
-    # Real AWS doc example key — matches the regex but is a placeholder.
-    text = _diff("README.md", ["key = AKIAIOSFODNN7EXAMPLE"])
-    assert gate._scan_diff_text(text) == [], gate._scan_diff_text(text)
+def _run_hook(command, cwd, extra_env=None):
+    payload = json.dumps({
+        "hook_event_name": "PreToolUse", "session_id": "secret-test",
+        "tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command},
+    })
+    env = dict(os.environ, MAINFRAME_FEEDBACK_NUDGE="0")
+    env.pop("MAINFRAME_TELEMETRY_DB", None)
+    if extra_env:
+        env.update(extra_env)
+    proc = subprocess.run([sys.executable, SCRIPT], input=payload, text=True,
+                          capture_output=True, env=env, timeout=30, check=True)
+    return json.loads(proc.stdout) if proc.stdout.strip() else None
 
 
-def test_removed_line_not_flagged():
-    # A secret on a deleted (`-`) line is not newly entering history.
-    text = _diff(".env", ["clean=1"], removed_lines=[f"OLD={_ghp()}"])
-    assert not any(k == "github_pat" for k, _ in gate._scan_diff_text(text))
+def _decision(result):
+    return result["hookSpecificOutput"]["permissionDecision"] if result else None
 
 
-def test_is_placeholder_detects_repeats_and_keywords():
-    assert gate._is_placeholder("ghp_" + "a" * 36)        # 8+ identical run
-    assert gate._is_placeholder("AKIAIOSFODNN7EXAMPLE")   # keyword
-    assert not gate._is_placeholder(_ghp())               # real-shaped
+def test_scan_finds_added_tokens_but_not_removed_or_placeholder():
+    findings = gate._scan_diff_text(_diff(
+        ".env", [f"GH={_ghp()}", f"AWS={_aws()}", "AKIAIOSFODNN7EXAMPLE"],
+        removed=[f"OLD={_ghp()}"]))
+    assert {kind for kind, _ in findings} == {"github_pat", "aws_access_key"}
+    assert all(name == ".env" for _, name in findings)
 
 
-def test_commit_stages_all():
-    assert gate._commit_stages_all("git commit -am 'x'")
-    assert gate._commit_stages_all("git commit -a -m 'x'")
-    assert gate._commit_stages_all("git commit --all -m 'x'")
-    assert not gate._commit_stages_all("git commit -m 'x'")
-    assert not gate._commit_stages_all("git commit --amend -m 'x'")
+def test_clean_staged_commit_defers():
+    root = _repo()
+    _write(root, "clean.txt", "clean\n")
+    _git(root, "add", "clean.txt")
+    assert _run_hook("git commit -m clean", root) is None
 
 
-def test_is_git_commit_shared_helper():
-    assert _hooklib.is_git_commit("git commit -m 'x'")
-    assert _hooklib.is_git_commit("git -C /p commit -m 'x'")
-    assert not _hooklib.is_git_commit("git status")
+def test_staged_secret_is_denied_without_value_in_reason():
+    root = _repo()
+    token = _ghp()
+    _write(root, ".env", f"TOKEN={token}\n")
+    _git(root, "add", ".env")
+    result = _run_hook("git commit -m secret", root)
+    assert _decision(result) == "deny"
+    reason = result["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "github_pat" in reason and ".env" in reason and token not in reason
 
 
-def _drive(command, *, repo="/repo", encrypted=False, findings=None,
-           tool="Bash", session="s1", agent_type=""):
-    """Run gate.main() against a payload, with git helpers stubbed. Returns the
-    parsed stdout JSON (or None when the gate deferred with no output)."""
-    gate._repo_root = lambda cwd: repo
-    gate._is_encrypted_repo = lambda root: encrypted
-    gate._scan_staged = lambda root, include_unstaged: list(findings or [])
-    payload = {"hook_event_name": "PreToolUse", "tool_name": tool,
-               "session_id": session, "agent_type": agent_type, "cwd": "/repo",
-               "tool_input": {"command": command}}
-    old_in, old_out = sys.stdin, sys.stdout
-    sys.stdin = io.StringIO(json.dumps(payload))
-    sys.stdout = io.StringIO()
-    try:
-        gate.main()
-        captured = sys.stdout.getvalue()
-    finally:
-        sys.stdin, sys.stdout = old_in, old_out
-    return json.loads(captured) if captured.strip() else None
+def test_commit_all_scans_tracked_worktree_and_staged_new_files():
+    root = _repo()
+    _write(root, "base.txt", f"TOKEN={_ghp()}\n")
+    assert _decision(_run_hook("git commit -am update", root)) == "deny"
+    _write(root, "base.txt", "clean\n")
+    _write(root, "new.env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", "new.env")
+    assert _decision(_run_hook("git commit --all -m update", root)) == "deny"
 
 
-def test_deny_on_secret():
-    os.environ["MAINFRAME_FEEDBACK_NUDGE"] = "0"
-    out = _drive("git commit -m 'x'", findings=[("github_pat", ".env")])
-    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-    reason = out["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "github_pat" in reason and ".env" in reason
+def test_explicit_pathspec_and_only_scan_worktree_content():
+    for command in ("git commit target.txt -m update",
+                    "git commit --only target.txt -m update"):
+        root = _repo()
+        _write(root, "target.txt", "clean\n")
+        _git(root, "add", "target.txt")
+        _git(root, "commit", "-qm", "target")
+        _write(root, "target.txt", f"TOKEN={_ghp()}\n")
+        assert _decision(_run_hook(command, root)) == "deny", command
 
 
-def test_deny_reason_omits_secret_value():
-    os.environ["MAINFRAME_FEEDBACK_NUDGE"] = "0"
-    tok = _ghp()
-    # The gate is handed findings as (kind, file) only — it never receives the
-    # value, so it cannot leak it. Assert the contract end to end.
-    out = _drive("git commit -m 'x'", findings=[("github_pat", "secrets.env")])
-    assert tok not in out["hookSpecificOutput"]["permissionDecisionReason"]
+def test_include_scans_existing_index_and_named_worktree_paths():
+    root = _repo()
+    _write(root, "named.txt", "clean\n")
+    _git(root, "add", "named.txt")
+    _git(root, "commit", "-qm", "named")
+    _write(root, "staged.env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", "staged.env")
+    _write(root, "named.txt", "changed\n")
+    assert _decision(_run_hook("git commit --include named.txt -m update", root)) == "deny"
 
 
-def test_encrypted_repo_allows_silently():
-    out = _drive("git commit -m 'x'", encrypted=True,
-                 findings=[("github_pat", ".env")])
-    assert out is None                       # defer: no decision emitted
+def test_initial_commit_without_head_is_scanned():
+    root = _repo(initial=False)
+    _write(root, ".env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", ".env")
+    assert _decision(_run_hook("git commit -m initial", root)) == "deny"
 
 
-def test_clean_commit_defers():
-    out = _drive("git commit -m 'x'", findings=[])
-    assert out is None
+def test_git_c_and_cd_chain_scan_the_actual_repository():
+    parent = tempfile.mkdtemp()
+    root = os.path.join(parent, "repo")
+    os.mkdir(root)
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "test@example.invalid")
+    _git(root, "config", "user.name", "Test")
+    _write(root, ".env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", ".env")
+    assert _decision(_run_hook("git -C repo commit -m initial", parent)) == "deny"
+    assert _decision(_run_hook("cd repo && git commit -m initial", parent)) == "deny"
 
 
-def test_non_commit_bash_defers():
-    out = _drive("ls -la", findings=[("github_pat", ".env")])
-    assert out is None
+def test_env_and_nested_shell_forms_are_scanned():
+    root = _repo()
+    _write(root, ".env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", ".env")
+    for command in (
+        "env MODE=test git commit -m secret",
+        "sh -c 'git commit -m secret'",
+        "eval 'git commit -m secret'",
+    ):
+        assert _decision(_run_hook(command, root)) == "deny", command
 
 
-def test_non_bash_tool_defers():
-    out = _drive("git commit -m 'x'", tool="Skill",
-                 findings=[("github_pat", ".env")])
-    assert out is None
+def test_sops_and_git_crypt_markers_do_not_disable_scanning():
+    root = _repo()
+    _write(root, ".sops.yaml", "creation_rules: []\n")
+    _write(root, ".gitattributes", "secret filter=git-crypt diff=git-crypt\n")
+    _write(root, "plain.env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", ".sops.yaml", ".gitattributes", "plain.env")
+    assert _decision(_run_hook("git commit -m secrets", root)) == "deny"
 
 
-def test_not_a_git_repo_defers():
-    gate._repo_root = lambda cwd: None
-    payload = {"tool_name": "Bash", "cwd": "/x",
-               "tool_input": {"command": "git commit -m 'x'"}}
-    old_in, old_out = sys.stdin, sys.stdout
-    sys.stdin = io.StringIO(json.dumps(payload))
-    sys.stdout = io.StringIO()
-    try:
-        gate.main()
-        captured = sys.stdout.getvalue()
-    finally:
-        sys.stdin, sys.stdout = old_in, old_out
-    assert not captured.strip()
+def test_non_commit_text_and_git_outside_repo_defer():
+    outside = tempfile.mkdtemp()
+    assert _run_hook("echo git commit -m example", outside) is None
+    assert _run_hook("git status", outside) is None
+    assert _run_hook("git commit -m impossible", outside) is None
 
 
-def test_telemetry_logged_on_block():
-    import tempfile
-    import sqlite3
-    os.environ["MAINFRAME_FEEDBACK_NUDGE"] = "0"
+def test_unverifiable_commit_forms_fail_closed():
+    root = _repo()
+    cases = (
+        "git --git-dir=.git commit -m x",
+        "git commit --pathspec-from-file=paths.txt -m x",
+        "cd $TARGET && git commit -m x",
+        "git commit -m 'unterminated",
+        "xargs git commit -m x",
+        "sudo git commit -m x",
+    )
+    for command in cases:
+        result = _run_hook(command, root)
+        assert _decision(result) == "deny", command
+        assert "could not verify" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_telemetry_contains_no_filename_or_secret_value():
+    root = _repo()
+    token = _ghp()
+    filename = "private-production-name.env"
+    _write(root, filename, f"TOKEN={token}\n")
+    _git(root, "add", filename)
     db = os.path.join(tempfile.mkdtemp(), "telemetry.db")
-    os.environ["MAINFRAME_TELEMETRY_DB"] = db
-    _drive("git commit -m 'x'", findings=[("aws_access_key", "prod.env")])
-    con = sqlite3.connect(db)
-    try:
-        rows = con.execute(
-            "SELECT event, payload FROM events WHERE event='secret_block'").fetchall()
-    finally:
-        con.close()
-    assert len(rows) == 1, rows
-    body = json.loads(rows[0][1])
-    assert "aws_access_key" in body["types"] and "prod.env" in body["files"]
-    del os.environ["MAINFRAME_TELEMETRY_DB"]
+    result = _run_hook("git commit -m secret", root,
+                       {"MAINFRAME_TELEMETRY_DB": db})
+    assert _decision(result) == "deny"
+    with sqlite3.connect(db) as connection:
+        row = connection.execute(
+            "SELECT payload FROM events WHERE event='hook_signal'").fetchone()
+    body = json.loads(row[0])
+    assert body == {
+        "hook": "secret-commit-gate.py", "rule_id": "secret-material",
+        "outcome": "blocked", "count": 1,
+        "context_chars": len(
+            result["hookSpecificOutput"]["permissionDecisionReason"]),
+    }
+    assert filename not in row[0] and token not in row[0]
+
+
+def test_parallel_read_only_scans_do_not_interfere():
+    root = _repo()
+    _write(root, ".env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", ".env")
+    procs = []
+    payload = json.dumps({
+        "hook_event_name": "PreToolUse", "session_id": "parallel",
+        "tool_name": "Bash", "cwd": root,
+        "tool_input": {"command": "git commit -m secret"},
+    })
+    env = dict(os.environ, MAINFRAME_FEEDBACK_NUDGE="0")
+    env.pop("MAINFRAME_TELEMETRY_DB", None)
+    for _ in range(24):
+        procs.append(subprocess.Popen(
+            [sys.executable, SCRIPT], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env))
+    outputs = [proc.communicate(payload, timeout=30) for proc in procs]
+    assert all(proc.returncode == 0 for proc in procs), outputs
+    assert all(_decision(json.loads(stdout)) == "deny" for stdout, _ in outputs)
 
 
 def main():
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
-    for t in tests:
-        t()
-        print(f"  ok {t.__name__}")
+    tests = [value for name, value in sorted(globals().items())
+             if name.startswith("test_") and callable(value)]
+    for test in tests:
+        test()
+        print(f"  ok {test.__name__}")
     print(f"OK secret-commit-gate — {len(tests)} tests passed")
 
 

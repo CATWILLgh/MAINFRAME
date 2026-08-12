@@ -39,6 +39,17 @@ DEBUG_RESIDUE = [
     ("dd()", re.compile(r"\bdd\s*\("), PHP),
 ]
 
+
+def marker_counts(text, file_ext, file_path=None):
+    """Count each disallowed marker label in one source text."""
+    counts = {label: len(rx.findall(text)) for label, rx in MARKERS}
+    counts.update({
+        label: len(rx.findall(text))
+        for label, rx, extensions in DEBUG_RESIDUE
+        if file_ext in extensions
+    })
+    return {label: count for label, count in counts.items() if count}
+
 # Process-narration comment forms (Clean Code Position/Phase Marker + Nonlocal
 # Information). Shared by comment-discipline-reminder + its stop-gate. Operates
 # on EXTRACTED comment/docstring text (comment_extract), never on raw lines —

@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: surface a reminder when a code edit adds new comments.
+"""PostToolUse hook: review newly added comments while their context is fresh.
 
-Two layers, both non-blocking (PostToolUse only emits additionalContext):
-
-1. Generic reminder — fires on a net increase in comments. Lists the banned
-   comment forms; the model decides if each added comment is genuine WHY or an
-   anti-pattern per the CLAUDE.md Engineering rule.
-
-2. Targeted process-leakage callout — fires when an ADDED comment matches a
+The generic reminder asks the writer to preserve only durable, code-relevant
+rationale. A targeted callout fires when an ADDED comment matches a
    high-precision marker shape: an ordinal phase/stage/step marker, a decorative
    section divider, or a reference to an ephemeral plan/todo. This is the
-   canonical LLM failure mode: the agent narrates its work plan into permanent
-   code (Clean Code "Nonlocal Information" + Position/Phase Marker), referencing
-   a plan/todo/doc that exists only in the moment and never lands in the repo.
-   The callout quotes the offending line verbatim and overrides the generic one.
+   common failure mode where a temporary work plan leaks into permanent code.
+   The callout quotes the candidate while the original information still exists.
 
 Two distinct false positives are avoided:
 - Extraction-FP (calling non-comment text a comment) — handled by
@@ -26,9 +19,8 @@ Two distinct false positives are avoided:
   comments only; only the always-leakage ephemeral references apply to
   docstrings.
 
-Attribution is per-edit, not vs git HEAD: the pre-edit file is reconstructed
-from the edit's own old/new strings, so a marker added earlier in the session
-does not re-fire on every later edit to the same file.
+Attribution is per edit and persisted by session and agent for the matching Stop
+gate. Unrelated dirty work and other sessions are never attributed to the writer.
 
 Design: non-blocking; fail-safe (any error -> exit 0); stdlib only.
 """
@@ -40,19 +32,17 @@ from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import comment_extract as ce  # noqa: E402
 try:
-    from _hooklib import (CODE_EXTENSIONS, ext, load_payload, log_event,
+    from _comment_findings import added, finding_counts
+    from _hooklib import (CODE_EXTENSIONS, ext, load_payload, log_hook_signal,
                           read_git_head, emit_note, run)
-    from _markers import flag_comment
+    from _markers import marker_counts
+    from _marker_state import update
 except Exception:
     sys.exit(0)
 
 _SELF_FILES = {"comment-discipline-reminder.py", "comment_extract.py"}
 
 _MAX_BYTES = 2_000_000
-
-
-def _flag(text, kind):
-    return flag_comment(text, kind == ce.DOCSTRING)
 
 
 def _read_file(path):
@@ -117,30 +107,38 @@ def main():
 
     before, after = _before_after(tool_name, tool_input, file_path)
 
-    # Targeted layer — airtight extraction; the precise process-leakage callout.
-    after_c = Counter((t, k) for _, t, k in ce.extract(after, file_ext))
-    before_c = Counter((t, k) for _, t, k in ce.extract(before, file_ext))
-    flagged = [(t, k) for (t, k) in (after_c - before_c).elements() if _flag(t, k)]
+    before_findings = Counter(finding_counts(before, file_ext))
+    after_findings = Counter(finding_counts(after, file_ext))
+    deltas = after_findings - before_findings
+    _, _, resolved = update(
+        payload.get("session_id"), payload.get("agent_id"), file_path,
+        dict(deltas), counter=finding_counts, namespace="comments",
+    )
+    if resolved:
+        log_hook_signal(
+            __file__, "process-leakage", "resolved", len(resolved), payload
+        )
+
+    # Targeted layer — precise candidates, with the original text still present.
+    flagged = added(before, after, file_ext)
     if flagged:
-        quoted = "".join(f"  - {_first_line(t)}\n" for t, _ in flagged[:3])
+        quoted = "".join(f"  - {_first_line(text)}\n" for _, _, text, _ in flagged[:3])
         if len(flagged) > 3:
             quoted += f"  - … {len(flagged) - 3} more\n"
         note = (
-            "Process-leakage in an added comment/docstring — it references "
-            "ephemeral plan / phase / step state that will not exist for a "
-            "future reader (Clean Code \"Nonlocal Information\" + Position/Phase "
-            "Marker, both banned by the engineering rule):\n"
+            "Review these newly added comments/docstrings; they look dependent "
+            "on temporary plan, phase, step, or discussion context:\n"
             + quoted +
-            "Cut the phase/stage/step/plan reference and let the code stand on "
-            "its own. Keep ONLY if it is genuine domain WHY (e.g. a real signal "
-            "\"phase 0\"), not narration of your work plan. A temporary "
-            "workaround belongs in a ticket (surface-ticket skill), not a "
-            "comment. This is a reminder, not a block."
+            "A correct comment must remain understandable from the repository "
+            "alone and preserve durable, code-relevant rationale. Rewrite each "
+            "candidate to retain that rationale without transient work context, "
+            "or remove it only when it contains no durable information."
         )
         emit_note("PostToolUse", note)
-        log_event("incident", {"hook": "comment-discipline-reminder",
-                               "rule_id": "process-leakage",
-                               "count": len(flagged)}, payload)
+        log_hook_signal(
+            __file__, "process-leakage", "noted", len(flagged), payload,
+            context=note,
+        )
         return
 
     # Generic nudge — a low-stakes line-start signal, kept alive even on files
@@ -148,24 +146,27 @@ def main():
     # block comments are intentionally out of this count; targeted never uses it.
     la = Counter(t for _, t, _ in ce.extract_lenient(after, file_ext))
     lb = Counter(t for _, t, _ in ce.extract_lenient(before, file_ext))
-    n = sum((la - lb).values())
+    added_comments = la - lb
+    # The suppression hook already returns a stronger, actionable note for
+    # TODOs, diagnostic suppressions, skipped tests, and debug residue. Do not
+    # inject a second generic comment reminder for the same text; still count
+    # any other comments added by the same tool call.
+    n = sum(count for text, count in added_comments.items()
+            if not marker_counts(text, file_ext))
     if n == 0:
         return
     plural = "s" if n > 1 else ""
     note = (
-        f"Heads-up: this change added {n} new comment{plural}. Per the "
-        "engineering rule (default to writing no comments — only comment the WHY "
-        "that is non-obvious), check each against the banned forms: Position/"
-        "Phase Marker (\"// === Phase B ===\", \"// Step 1 of 3\"), Journal/"
-        "Byline (\"// added 2024-01-15 for X\"), Redundant Paraphrase (\"// "
-        "increments i\"), Nonlocal Information (facts about other modules, "
-        "references to a plan/todo not in the repo), Mandated boilerplate, Noise "
-        "(decorative lines, \"// end of if\"). If a comment captures genuine WHY "
-        "(hidden constraint, subtle invariant, workaround for a specific bug) — "
-        "keep it, short: one sentence per non-obvious WHY. Otherwise remove "
-        "before declaring done. This is a reminder, not a block."
+        f"Review the {n} new comment{plural}. Every comment must preserve "
+        "durable, code-relevant rationale that a future reader cannot obtain "
+        "from the code alone. Rewrite or remove narration, phase/step labels, "
+        "discussion history, and references to transient plans. Do not discard "
+        "useful rationale merely to silence this reminder."
     )
     emit_note("PostToolUse", note)
+    log_hook_signal(
+        __file__, "new-comment-review", "noted", n, payload, context=note
+    )
 
 
 if __name__ == "__main__":

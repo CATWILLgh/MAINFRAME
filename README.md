@@ -6,23 +6,19 @@
 
 [![CI](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-v2.1%2B-blueviolet)](https://code.claude.com)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-v2.1.226%2B-blueviolet)](https://code.claude.com)
 [![Status](https://img.shields.io/badge/status-personal--use-orange.svg)]()
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#platforms)
 [![Tuned for](https://img.shields.io/badge/tuned%20for-Opus%204.7%2B-blueviolet.svg)](#tested-configuration)
 [![Last commit](https://img.shields.io/github/last-commit/CATWILLgh/MAINFRAME?label=last%20commit)](https://github.com/CATWILLgh/MAINFRAME/commits)
 [![Skills](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/adapters/claude-code/plugin/skills?type=dir&label=skills&color=blue)](adapters/claude-code/plugin/skills)
-[![Agents](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/adapters/claude-code/plugin/agents?type=file&extension=md&label=agents&color=blue)](adapters/claude-code/plugin/agents)
+[![Agents](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/adapters/claude-code/agents?type=file&extension=md&label=agents&color=blue)](adapters/claude-code/agents)
 [![Hooks](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/adapters/claude-code/plugin/hooks/scripts?type=file&extension=py&label=hooks&color=blue)](adapters/claude-code/plugin/hooks/scripts)
 [![Style](https://img.shields.io/badge/principles-agnostic%20%7C%20evidence--based%20%7C%20English-blue.svg)](#principles)
 
 <img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
 
 A baseline of operating rules, focused sub-agents, and small automatic checks I want to apply in **every** Claude Code session on my machine. Set up once — every project, every session, inherits the same discipline.
-
-> **Architecture review in progress.** The current hub is being reconsidered
-> through a user interview. Confirmed principles and the separation of context
-> by recipient are recorded in [`docs/principles.md`](docs/principles.md).
 
 It's shaped for one workflow in particular: long **auto-mode** runs — hours, sometimes days, where Claude and I plan a larger feature up front, then it executes on its own with no one watching each step. Every rule, hook, and permission tier here is built to hold quality through exactly that: an unattended run where a missed check turns into a bug nobody catches until later.
 
@@ -85,8 +81,8 @@ In plain words — what each piece is for:
 - **Umbrella `CLAUDE.md`** — a minimal role-agnostic contract shared by the primary agent and sub-agents: stay inside the caller's scope, ground important claims, protect secrets, and respect authority boundaries. It contains no user orchestration or stack-specific engineering process.
 - **Manual `/mainframe:init`** — the primary-session context for partnership, user decisions, definitions of done, execution routing, Git authority, and final delivery. Its heavier complex-task workflow and external Codex review instructions load only when needed.
 - **Skills** — small focused playbooks Claude pulls when they're relevant. Things like code review, test selection, secret handling, or stack-specific implementation guidance — instead of one giant document trying to cover everything.
-- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python, Node.js, and Next.js (App Router server layer), a frontend engineer for React, a devops engineer for deploys and infra, a decision-reviewer for high-stakes design calls, and a web-search agent for authoritative source-checking. You don't have to remember which model to pick for what — the right one is already attached.
-- **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan diffs for security issues with `ruff`/`semgrep`/`osv-scanner`. Block a finished turn when a real problem is still unresolved. Things that fire without you having to remember to fire them — the full list with what each one does is in [Inventory](#inventory--whats-actually-inside) below.
+- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python and server-side TypeScript, a React frontend engineer for Vite and Next.js client work, a decision reviewer for high-stakes design calls, a test auditor, and a researcher for evidence-grounded investigations. Infrastructure stays in the primary session through a focused skill because it commonly crosses environment choice, credentials, downtime, and user authority.
+- **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan current code changes for newly introduced security issues with `ruff`/`oxlint`. Block a finished turn when an attributed blocking problem is still unresolved. Things that fire without you having to remember to fire them — the full list with what each one does is in [Inventory](#inventory--whats-actually-inside) below.
 - **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
 - **Permissions** — three-tier model (deny / ask / allow) that's strict by default. Some things must never run; some need confirmation; the rest run quietly with logging.
 
@@ -100,23 +96,22 @@ End result the hub aims for: **the same baseline of quality and discipline appli
 
 The concrete list of everything the hub ships, in plain words. Three groups: **agents** (specialist sub-agents you delegate to), **hooks** (automatic checks on tool events), **skills** (focused playbooks Claude pulls when relevant).
 
-### Agents — 7 specialist sub-agents
+### Agents — 6 specialist sub-agents
 
-Each ships with its model and effort already wired in, calibrated separately so you don't pick at call time. Invoked as `subagent_type: "mainframe:<name>"`.
+Each ships with its model and effort already wired in, calibrated separately so you don't pick at call time. Agent identifiers use the collision-safe `mainframe-<name>` prefix.
 
 | Agent | What it's for | Model |
 |---|---|---|
-| `python-backend-engineer` | Python backend work — FastAPI / Django / Flask endpoints, ORM models, auth, background workers | Sonnet |
-| `nestjs-backend-engineer` | Node.js / NestJS backend — endpoints, ORM, auth, WebSocket gateways, queue workers | Sonnet |
-| `nextjs-backend-engineer` | Next.js App Router server layer — route handlers, server actions, RSC data, caching, auth | Sonnet |
-| `react-frontend-engineer` | React + Vite frontend — pages, components, forms, data fetching, API integration | Sonnet |
-| `devops-engineer` | Deploys, CI/CD, containers, infra config, managed databases, Dokploy | Opus |
-| `decision-reviewer` | Adversarial, evidence-grounded second look at a high-stakes design or approach before you commit | Opus |
-| `web-search` | Authoritative source lookup — Context7 docs + live web, returns cited quotes | Sonnet (low) |
+| `mainframe-python-backend-engineer` | Server-side Python across FastAPI, Django, Flask, and established services: contracts, data, authentication, workers and realtime, storage and integrations, observability, and tests | Sonnet |
+| `mainframe-typescript-backend-engineer` | Server-side TypeScript — NestJS / Express / Fastify, Next.js server code, PostgreSQL libraries, auth, jobs, realtime, storage, resilience | Sonnet |
+| `mainframe-react-frontend-engineer` | Client-facing React across Vite and Next.js — components, forms, browser data, PWA/offline, realtime, rich content, accessibility, and frontend tests | Sonnet |
+| `mainframe-decision-reviewer` | Adversarial, evidence-grounded second look at a high-stakes design or approach before you commit | Opus |
+| `mainframe-test-auditor` | Independent audit of regression coverage, test reliability, and execution cost; verifies external contracts through Context7 or primary web sources and can maintain confirmed open tickets, but cannot edit code or tests | Sonnet (medium) |
+| `mainframe-researcher` | External research from caller-supplied context through Context7 and authoritative web sources | Sonnet (medium) |
 
 ### Hooks — what each one checks, and when
 
-Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it stops the action or the turn until something is fixed); an **advisory** only injects a note and never blocks. The core design is **warn early, block at the end** — when you edit a file the advisory scanners flag a problem immediately, and if it's still unresolved when Claude tries to finish, the matching **Stop-gate** blocks the finish. So a real issue can't quietly slip through to the end of an unattended run. Every hook is fail-safe: if it errors, or its tool isn't installed, it exits silently and never breaks your session.
+Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it stops the action or the turn until something is fixed); an **advisory** only injects a note and never blocks. The core design is **warn early, block at the end** — when you edit a file the advisory scanners flag a problem immediately, and if it's still unresolved when Claude tries to finish, the matching **Stop-gate** blocks the finish. So a real issue can't quietly slip through to the end of an unattended run. A broken hook is reported once to the current model for relay to its immediate caller instead of silently disabling protection or repeatedly spamming the session.
 
 #### At session start — `SessionStart` (fresh start, resume, `/clear`, and after every compaction)
 
@@ -131,39 +126,37 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 
 - **`scan-suppression-markers.py`** — Flags suppression markers (`TODO` / `FIXME` / `HACK`, skipped or focused tests, `@ts-ignore` / `eslint-disable` / `# noqa`) and debug residue (`debugger`, `breakpoint()`, `console.debug`, `var_dump` / `dd`) that the edit just introduced. Diff-aware: it flags only what the change added, not what was already there.
 - **`comment-discipline-reminder.py`** — Flags comments the edit just added that match a banned form — process narration, redundant paraphrase of the code, position / phase markers, journal / byline notes. The "comment the WHY, not the WHAT" rule, surfaced at write time.
-- **`ticket-id-format-reminder.py`** — On a new `docs/tickets/<id>-*.md` whose id is a short sequential number (`NNN`), nudges to use a random 8-hex id instead (`openssl rand -hex 4`). Sequential ids collide when several branches or agents each allocate "the next number" independently; random ones don't. Write-only, so editing a legacy `NNN` ticket doesn't nag.
-- **`python-security-scan.py`** — Runs Ruff's curated S (flake8-bandit, OWASP-aligned) + B (flake8-bugbear) rules over the changed Python and notes high-confidence dangerous patterns and correctness bugs — `pickle.load`, unsafe `yaml.load`, `subprocess(..., shell=True)`, and similar.
-- **`python-deps-audit.py`** — When a Python dependency file changes, runs `pip-audit` and notes known CVEs in the dependency tree.
-- **`nodejs-security-scan.py`** — Runs oxlint's curated dangerous-pattern subset over the changed JS / TS — classic RCE (`eval`, `new Function`), unsafe React, and more — and notes the hits.
-- **`nodejs-deps-audit.py`** — When a Node dependency file changes, runs `osv-scanner` and notes known CVEs.
+- **`ticket-id-format-reminder.py`** — After writing a ticket, checks the compact filename contract: a new ticket uses an unused random 4-hex id (`openssl rand -hex 2`), a descriptive kebab-case slug, and the same frontmatter `id`. The note asks for a rename and a small frontmatter edit rather than regenerating the ticket body; existing ids stay stable when their slug is clarified.
+- **`python-security-scan.py`** — Compares complete before/after Python snapshots with the existing curated Ruff S + B rule set. It reports only a finding introduced by the current work, once. Pre-existing findings stay silent. State is isolated by session and subagent.
+- **`nodejs-security-scan.py`** — Runs Oxlint's curated subset and reports only findings on lines written by the current Edit, MultiEdit, or Write call. Findings elsewhere in the file stay silent; ambiguous repeated replacements are skipped rather than guessed.
+- **`fallow-quality-note.py`** — Silently records the TS / JS lines owned by each successful edit using path, line number, and a short digest. Source text is not persisted by the hook; the recorded scope is consumed by its `Stop` audit below.
+- **`length-quality-note.py`** — Captures file length and Python function spans before an edit, then confirms the baseline only after the tool succeeds. This produces no model-facing text; it only prepares the session-owned comparison used at `Stop`.
 
 #### Before the turn ends — `Stop` (the final gates, plus a few advisory notes)
 
 - **`stop-gate-suppression-markers.py`** — *Gate (blocks).* Blocks the turn from finishing while suppression markers or debug residue added this session remain unresolved — the hard backstop to the advisory scanner above.
 - **`stop-gate-comment-discipline.py`** — *Gate (blocks).* Blocks finishing while banned narration comments (measured against `git HEAD`) remain.
-- **`python-security-stop-gate.py`** — *Gate (blocks).* Blocks finishing while unresolved Ruff security findings remain in changed Python.
-- **`nodejs-security-stop-gate.py`** — *Gate (blocks).* Blocks finishing while unresolved Semgrep security findings remain in changed JS / TS (using the YAML rules under `hooks/rules/`).
-- **`frontend-fsd-gate.py`** — *Gate (blocks).* Blocks finishing on Feature-Sliced-Design import-direction violations (a lower layer importing an upper one), via dependency-cruiser.
-- **`frontend-dead-code.py`** — *Advisory.* Notes dead / unused files via Knip. Opt-in per project.
-- **`fallow-quality-note.py`** — *Advisory.* Notes quality smells in changed TS / JS — import cycles, layer-boundary breaks, dead files, over-complexity, copy-paste — via the `fallow` analyzer. Throttled, conservative categories only.
+- **`python-security-stop-gate.py`** — *Gate (blocks).* Blocks only on unresolved Ruff findings introduced by the current session or subagent. The main session also aggregates its subagents; pre-existing findings, other sessions, and unrelated dirty work do not participate.
+- **`fallow-quality-note.py`** — *Advisory.* Runs `fallow audit` against an in-memory diff containing only still-live TS / JS lines attributed to this session and its subagents. Reports only `introduced: true` dead files, import cycles, boundary violations, complexity, and duplication; inherited debt, unrelated dirty work, and repeated unchanged `Stop` events stay silent.
+- **`length-quality-note.py`** — *Advisory.* Reports only a file that this session moved from at most 400 lines to over 400, or a Python function it moved from at most 60 lines to over 60. Existing oversized code, failed edits, other sessions, and repeated unchanged `Stop` events stay silent. JS / TS structural growth remains covered by Fallow; deeper language-specific rules belong to project testing.
 - **`memory-reminder.py`** — *Advisory.* A main-session-only nudge to save a durable cross-session fact to Claude's native auto-memory after a substantive session. Throttled independently per session (~30 min), skips trivial sessions and subagents, and is framed so "nothing worth saving" is a fine answer.
 
 #### Always-on, and the plumbing
 
-- **`telemetry.py`** — *(dev-only.)* Fires across many events — session start/end, skill loads, file edits, todo-list updates, permission denials, sub-agent starts — and logs local-only event metadata (counts and coarse buckets, never prompts, code, todo text, or file paths) into a local SQLite DB. Present only when the `--dev` instrumentation is installed; on a plain install it isn't wired and writes nothing.
+- **`telemetry.py`** — *(dev-only.)* Fires across selected lifecycle and tool events and logs local-only metadata into SQLite. Quality hooks share one effectiveness vocabulary — `noted`, `asked`, `blocked`, `resolved` — so the hub can compare signal volume, confirmed fixes, session coverage, and context characters by hook and stable rule id. Prompts, code, todo text, paths, emitted messages, stdout, stderr, and exception text are never stored. Registrations stay in the plugin, but an early shell gate exits before Python, temporary files, and SQLite unless this Claude adapter was installed with `--dev`.
 - **Shared libraries** (not hooks themselves): `_hooklib.py` — common scaffolding (payload parsing, the emit / gate helpers, git diffing); `_markers.py` — the suppression-marker and debug-residue detector sets; `comment_extract.py` — false-positive-free comment / docstring extraction.
 
-### Skills — 17 focused playbooks
+### Skills — 18 focused playbooks
 
 Most are pulled automatically when the situation matches. The primary-session
 `init` skill is invoked manually as `/mainframe:init`.
 
 | Group | Skills |
 |---|---|
-| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `surface-ticket` (record deferred problems), `no-suppression-markers` (completion gate), `testing-strategy` (choose test evidence), `severity-calibration` (rank findings honestly), `code-audit` (parallel multi-aspect review), `decision-review` (validate an approach) |
-| **Backend** | `python-backend-patterns`, `nestjs-backend-patterns`, `nextjs-backend-patterns` — stack recon + ORM / validation / auth / observability patterns |
-| **Frontend** | `react-frontend-patterns` (FSD, state, data fetching), `frontend-design` (colour, type, a11y, motion, layout), `shadcn` (shadcn/ui composition) |
-| **Ops & misc** | `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (Dokploy PaaS HTTP API), `curl-requests` (HTTP request templates), `secrets-handling` (credentials layout + pre-reply secret scan) |
+| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `ticket` (record concrete out-of-scope problems), `no-suppression-markers` (completion gate), `testing-strategy` (choose test evidence), `severity-calibration` (rank findings honestly), `decision-review` (private method used by the decision reviewer) |
+| **Backend** | `python-backend-patterns`, `typescript-backend-patterns` — version-aware stack discovery plus data, auth, contracts, jobs, runtime, observability, and testing patterns |
+| **Frontend** | `react-frontend-patterns` (Vite and Next.js client behavior, architecture, state, forms, offline/realtime, content, testing), plus compact preloaded `frontend-design` and `shadcn` routers. Detailed UX, visual, and component guidance loads only for the matching surface or local shadcn project. |
+| **Ops & misc** | `infrastructure` (primary-session infrastructure work plus the adapter-neutral `.agents/infrastructure.json` topology), `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (hidden Dokploy branch), `curl-requests` (HTTP request templates), `secrets-handling` (credential discovery and value-safe process delivery) |
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -201,18 +194,17 @@ See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
 **Required:**
 
-- **Claude Code v2.1+** — the host (CLI or IDE extension).
+- **Claude Code v2.1.226+** — the host (CLI or IDE extension). The installer checks this before changing anything and can run the official updater after confirmation.
 - **git** — to clone the repo, and for the hooks that diff your working tree.
 - **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
 - **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the linters below, but need no Python packages of their own). Without Python 3 they silently no-op (the installer warns; it does not fail).
 
-**Recommended — each unlocks a group of checks; anything missing just stays silent, and `install.sh` prints an OS-specific install hint:**
+**Recommended — each unlocks a group of checks. `install.sh` prints an OS-specific install hint; if a required analyzer is still unavailable at runtime, the common hook reporter surfaces that failure once per session instead of repeating it:**
 
-- **Node.js / npm** — the React and Node.js agents, the shadcn CLI (`npx`), the frontend recon script, and the JS hooks (`oxlint`, `dependency-cruiser`, `knip`, `fallow`). `install.sh` installs the four hook tools as npm globals for you.
-- **uv or pipx** — installs the Python-packaged linters the hooks call: `ruff`, `semgrep`, `pip-audit` (`semgrep` powers the JS/TS security stop-gate, but installs as a Python package).
-- **osv-scanner** — the dependency-vulnerability hook (`install.sh` can fetch the binary for you).
+- **Node.js / npm** — the React and Node.js agents, the shadcn CLI (`npx`), the frontend recon script, and the JS hooks (`oxlint`, `fallow`). `install.sh` installs both hook tools as npm globals for you.
+- **uv or pipx** — installs the Python-packaged linter the hooks call: `ruff`.
 
-Nothing here hard-fails a session: a tool that isn't installed disables only its own hook. Run `./install.sh --claude --dry-run` to preview everything and see exactly what's missing.
+A missing tool affects only its own hook. Run `./install.sh --claude --dry-run` to preview installation without changing the machine.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -230,10 +222,12 @@ cd ~/Documents/projects/MAINFRAME
 graph LR
     A[git clone] --> B[./install.sh --claude]
     B --> C[adapters/claude-code/plugin/ →<br/>~/.claude/skills/mainframe/]
+    B --> I[adapters/claude-code/agents/ →<br/>~/.claude/agents/mainframe/]
     B --> D[adapters/claude-code/export/CLAUDE.md & settings.json<br/>→ ~/.claude/ symlinks]
     B --> E[adapters/claude-code/export/rules/* →<br/>~/.claude/rules/ per-item]
     B --> H[shared/credentials/secret →<br/>~/.local/bin/secret]
     C --> F[Claude auto-loads<br/>'mainframe' plugin]
+    I --> G
     D --> G[Umbrella + permissions<br/>active in every session]
     E --> G
     F --> G
@@ -241,10 +235,12 @@ graph LR
 
 What `install.sh` does:
 
-- **One symlink for the plugin** — `adapters/claude-code/plugin/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads it and prefixes everything inside with the `mainframe:` namespace.
+- **One symlink for the shared plugin runtime** — `adapters/claude-code/plugin/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads its namespaced skills and global hooks.
+- **One user-agent directory symlink** — `adapters/claude-code/agents/` becomes `~/.claude/agents/mainframe/`. The profiles keep collision-safe `mainframe-*` identifiers and retain agent-scoped hooks and MCP servers.
 - **Single-file symlinks** for the umbrella `CLAUDE.md` and the permission `settings.json` (the plugin format does not provide an equivalent for these).
 - **Per-item symlinks** for `adapters/claude-code/export/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
 - **Shared credentials component** — links `shared/credentials/secret` into `~/.local/bin/`, preserves the values under `~/.config/credentials/`, and seeds the gitignored `shared/credentials/credentials-index.md` from its adjacent template only when missing.
+- **Claude Code version preflight** — requires v2.1.226+, offers `claude update` in an interactive terminal, fails before changing anything in non-interactive runs, and accepts `--yes` for explicit unattended approval.
 - **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
 - **Backs up** any pre-existing real file before replacing it with a symlink.
 - **Idempotent** — re-running is a no-op when state matches.
@@ -254,6 +250,7 @@ Options:
 ```
 ./install.sh                         # show help; make no changes
 ./install.sh --claude                # install shared secrets + Claude Code
+./install.sh --claude --yes          # approve a required Claude Code update
 ./install.sh --claude --dev          # also install hub-development instrumentation
 ./install.sh --claude --dry-run      # preview, no changes
 ./install.sh --claude --uninstall    # remove only the Claude Code adapter
@@ -262,9 +259,9 @@ Options:
 
 **`--dev` — hub-development instrumentation (most users don't need this).** A plain install ships none of it. The flag adds three opt-in pieces, all strictly local; their data lives inside the repo at `workspace/runtime/` (gitignored), reached via the hub-owned symlink `~/.claude/mainframe`:
 
-- **`harness-feedback` skill** (`dev/skills/`) — agents file structured friction reports about the hub's own rules/hooks into `~/.claude/mainframe/feedback/` for later triage. Without the skill installed, the related nudges in hook output stay silent.
-- **Usage telemetry** — hooks log event metadata (no prompts, no code, no paths) into a local SQLite DB under `~/.claude/mainframe/telemetry/`, and only while that hub-owned namespace exists. Nothing is ever sent anywhere. Remove the symlink to stop logging.
-- **Local hub map** — a self-contained `workspace/runtime/hub.html` page. A searchable catalog of every skill, agent, and hook — click any card, or any graph node, for its details and what references it; the hook trigger matrix; a **Config** panel showing the permission tiers and key settings; a **Health** panel that surfaces broken cross-references, orphaned skills, and missing hook scripts; a telemetry panel broken down by agent, by day, and by miss type; and a relationship graph. Generated on `--dev` install; regenerate any time with `.venv/bin/python3 tools/build_hub_page.py`. Open it straight from disk (no server) — it reads nothing remote.
+- **`harness-feedback` skill** (`dev/skills/`) — agents file structured friction reports about the hub's own rules/hooks into `~/.claude/mainframe/claude-code/feedback/` for later triage. Once a report is safely written, a detached best-effort Spark `medium` pass may turn it into a narrow regression-test candidate under `~/.claude/mainframe/claude-code/model-lab/`. The report never waits for that pass, and unavailable model access stays silent. Without the skill installed, neither this analysis nor the related nudges are active.
+- **Usage and hook-effectiveness telemetry** — an early shell gate starts the telemetry runtime only while the Claude adapter's dev marker exists. Hooks log lifecycle counts, the compact quality cycle `noted` / `asked` / `blocked` / `resolved`, and privacy-safe model-lab lifecycle statuses into a local SQLite DB under `~/.claude/mainframe/claude-code/telemetry/`. The data identifies a hook and stable rule, not the affected source: no prompts, code, paths, emitted messages, stdout, stderr, model output, or exception text are retained. A feedback-triggered model-lab pass sends that one report and the repository files it chooses to inspect to OpenAI through the locally authenticated Codex CLI; ordinary telemetry itself sends nothing. A plain `--claude` reinstall disables dev instrumentation without deleting its data.
+- **Local hub map** — a self-contained `workspace/runtime/hub.html` page. A searchable catalog of every skill, agent, and hook — click any card, or any graph node, for its details and what references it; the hook trigger matrix; a **Config** panel showing the permission tiers and key settings; a **Health** panel that surfaces broken cross-references, orphaned skills, and missing hook scripts; telemetry panels broken down by agent, by day, by miss type, and by hook effectiveness; and a relationship graph. Generated on `--dev` install; regenerate any time with `.venv/bin/python3 tools/build_hub_page.py`. Open it straight from disk (no server) — it reads nothing remote.
 
 To temporarily disable the plugin without uninstalling, use `claude plugin disable mainframe` (and `claude plugin enable mainframe` to re-enable).
 
@@ -350,6 +347,7 @@ MAINFRAME/
 ├── tools/                                # Python validators (used by hooks; runnable manually)
 │   ├── validate-claude-md.py             # umbrella spec + project-agnosticism check
 │   ├── validate-skill.py                 # skill format + size limits
+│   ├── validate-agent.py                 # agent routing metadata contract
 │   └── agnostic-blacklist.txt.example    # copy to agnostic-blacklist.txt and add your own project names
 │
 └── docs/

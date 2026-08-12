@@ -66,6 +66,9 @@ Always set `model` explicitly in `Agent` calls — never let it default.
    
    # New / changed skills
    .venv/bin/python3 tools/validate-skill.py adapters/claude-code/plugin/skills/<your-skill>/
+
+   # New / changed agents
+   .venv/bin/python3 tools/validate-agent.py adapters/claude-code/agents/<agent>.md
    ```
 5. **Test in a fresh Claude Code session** — `./install.sh --claude` then start a new project session and verify activation (the artifact should appear with the `mainframe:` namespace prefix).
 6. **Commit** with conventional format (see below).
@@ -74,7 +77,8 @@ Always set `model` explicitly in `Agent` calls — never let it default.
 
 ## Validators
 
-Two Python validators ship with the repo. Both also run as `SessionStart` hooks in the live Claude Code environment after install.
+Repository validators run directly and in the test suite. Runtime hooks remain
+reserved for checks that belong in every installed project.
 
 ### `tools/validate-claude-md.py`
 Anthropic `CLAUDE.md` spec + project-agnosticism check across the import graph. Targets `CLAUDE.md` (project) and `adapters/claude-code/export/CLAUDE.md` (umbrella). Uses system `python3`, no dependencies.
@@ -97,6 +101,17 @@ Skill format rules:
 ```bash
 .venv/bin/python3 tools/validate-skill.py adapters/claude-code/plugin/skills/<your-skill>/
 .venv/bin/python3 tools/validate-skill.py --all
+```
+
+### `tools/validate-agent.py`
+
+Agent discovery metadata rules:
+- `description` contains routing information, not execution instructions;
+- 250-600 characters is the authoring target; more than 800 is rejected;
+- unsupported agent `when_to_use` is rejected.
+
+```bash
+.venv/bin/python3 tools/validate-agent.py
 ```
 
 **Bootstrap the venv once**:

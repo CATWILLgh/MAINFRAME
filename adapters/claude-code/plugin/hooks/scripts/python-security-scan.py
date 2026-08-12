@@ -1,167 +1,105 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: scan freshly-written/edited Python files for high-confidence
-OWASP-aligned dangerous patterns AND zero-FP correctness bugs, via Ruff's
-curated S (flake8-bandit) + B (flake8-bugbear) rule subsets.
+"""Report newly introduced or first-observed Python safety findings once."""
 
-Reads the PostToolUse hook payload from stdin (JSON), filters to .py edits,
-runs `ruff check --select <subset> --output-format json` on the file, and emits
-a non-blocking `additionalContext` note. Findings are split by changed-line
-overlap: delta findings get the resolve-now note; inherited (untouched-line)
-findings only nudge toward a ticket, and only while no ticket names the file.
-Ambiguous classification counts as delta.
-
-Design:
-- Curated subset (not `--select S` wholesale): S-rules — S102 exec, S307 eval,
-  S301 pickle.load, S506 unsafe yaml.load, S602/S603/S604 subprocess shell=True,
-  S501 requests verify=False, S324 insecure hash (md5/sha1), S311 random for
-  crypto, S105/S106/S107 hardcoded password literals. B-rules (zero-FP
-  correctness bugs) — B006 mutable default arg, B008 function call as default,
-  B011 assert False (stripped by python -O), B904 raise without from in except
-  (loses traceback chain). Sources: Bandit catalog (PyCQA) ported in Ruff under
-  S-prefix, flake8-bugbear under B-prefix (docs.astral.sh/ruff/rules/).
-  Curation matters — wholesale `--select S` includes S101 which fires on every
-  pytest `assert`, training the agent to ignore the hook (advisor 2026-05-30).
-  Deliberately excluded from B: B007 (unused loop var — legitimate with `_`),
-  B017 (assert raises broad Exception — test style not bug), and SIM/PERF/PIE
-  (stylistic opinions, not real bugs).
-- Inline `# noqa: S<id>` is NOT honored: this hook passes
-  `--no-cache --ignore-noqa` to ruff. Genuine exceptions surface via the
-  `surface-ticket` skill, not silenced markers — keeps `no-suppression-markers`
-  hub rule coherent.
-- Non-blocking: PostToolUse cannot block; only emits additionalContext.
-- Fail-safe: ANY error -> exit 0 with no output (consistent with the existing
-  hub hook precedent). Hook must never break or noise-up a session.
-- Stdlib only: no venv, no third-party Python deps. The hook DOES shell out
-  to `ruff`; if ruff is absent the hook surfaces a single install hint.
-"""
-
-import json
 import os
-import shutil
-import subprocess
 import sys
+from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import (changed_line_ranges, emit_note, ext, finding_is_delta,
-                          load_payload, run, tickets_mentioning)
+    from _hooklib import (
+        emit_note, ext, load_payload, log_hook_signal, read_git_head, run,
+    )
+    from _marker_state import update
+    from _python_findings import finding_counts, findings, PY_EXTS
 except Exception:
     sys.exit(0)
 
-CURATED_RULES = (
-    "S102,S307,S301,S506,S602,S604,S501,S324,S311,S105,S106,S107,"
-    "B006,B008,B011,B904"
-)
-PY_EXTS = (".py", ".pyi")
-
-RULE_LABELS = {
-    "S102": "exec()",
-    "S307": "eval()",
-    "S301": "pickle.load (RCE on untrusted input)",
-    "S506": "yaml.load without SafeLoader",
-    "S602": "subprocess call with shell=True",
-    "S604": "function call with shell=True",
-    "S501": "request verify=False (TLS disabled)",
-    "S324": "insecure hash (md5/sha1) for security purpose",
-    "S311": "random module for crypto/security",
-    "S105": "possible hardcoded password (string literal)",
-    "S106": "possible hardcoded password (func arg)",
-    "S107": "possible hardcoded password (default arg)",
-    "B006": "mutable default arg (persists across calls)",
-    "B008": "function call as default arg (evaluated at def time)",
-    "B011": "assert False (stripped by python -O; use raise)",
-    "B904": "raise without `from` in except (loses traceback chain)",
-}
+_MAX_ROWS = 6
 
 
-def _run_ruff(file_path):
-    """Run ruff S-subset on `file_path`. Return list of finding dicts or None."""
-    ruff = shutil.which("ruff")
-    if not ruff:
-        return "RUFF_MISSING"
-    try:
-        proc = subprocess.run(
-            [ruff, "check", "--select", CURATED_RULES, "--output-format", "json",
-             "--no-cache", "--ignore-noqa", "--force-exclude", file_path],
-            capture_output=True, text=True, timeout=10,
-        )
-    except Exception:
-        return None
-    if proc.returncode not in (0, 1):
-        return None
-    try:
-        return json.loads(proc.stdout) if proc.stdout.strip() else []
-    except json.JSONDecodeError:
-        return None
+def _read(path):
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        return handle.read()
+
+
+def _before_after(tool_name, tool_input, file_path):
+    after = _read(file_path)
+    if tool_name == "Edit":
+        old = tool_input.get("old_string", "") or ""
+        new = tool_input.get("new_string", "") or ""
+        if new and new in after:
+            return after.replace(new, old, 1), after
+    elif tool_name == "MultiEdit":
+        before = after
+        for edit in reversed(tool_input.get("edits", []) or []):
+            new = edit.get("new_string", "") or ""
+            old = edit.get("old_string", "") or ""
+            if new and new in before:
+                before = before.replace(new, old, 1)
+        return before, after
+    elif tool_name == "Write":
+        return read_git_head(file_path) or "", after
+    return read_git_head(file_path) or "", after
+
+
+def _format(path, rows, cwd):
+    display_path = os.path.relpath(path, cwd)
+    lines = [
+        f"  {display_path}:{row['row']} — {row['code']}: {row['message']}"
+        for row in rows[:_MAX_ROWS]
+    ]
+    if len(rows) > _MAX_ROWS:
+        lines.append(f"  …and {len(rows) - _MAX_ROWS} more")
+    return "\n".join(lines)
 
 
 def main():
     payload = load_payload()
+    tool_name = payload.get("tool_name", "")
+    if tool_name not in ("Edit", "MultiEdit", "Write"):
+        return
     tool_input = payload.get("tool_input", {}) or {}
     file_path = tool_input.get("file_path", "")
-    if not file_path or ext(file_path) not in PY_EXTS:
-        return
-    if not os.path.exists(file_path):
+    file_ext = ext(file_path)
+    if not file_path or file_ext not in PY_EXTS or not os.path.exists(file_path):
         return
 
-    findings = _run_ruff(file_path)
-    if findings is None:
-        return
-    if findings == "RUFF_MISSING":
+    before, after = _before_after(tool_name, tool_input, file_path)
+    before_rows = findings(before, file_ext, file_path)
+    after_rows = findings(after, file_ext, file_path)
+    before_counts = Counter(row["key"] for row in before_rows)
+    after_counts = Counter(row["key"] for row in after_rows)
+    delta_counts = after_counts - before_counts
+    session_id = payload.get("session_id")
+    agent_id = payload.get("agent_id")
+
+    delta_added, _, resolved = update(
+        session_id, agent_id, file_path, dict(delta_counts),
+        counter=finding_counts, namespace="python-delta",
+        current_counts=after_counts,
+    )
+    cwd = payload.get("cwd") or os.getcwd()
+
+    if resolved:
+        log_hook_signal(
+            __file__, "python-safety", "resolved", len(resolved), payload
+        )
+
+    if delta_added:
+        wanted = set(delta_added)
+        rows = [row for row in after_rows if row["key"] in wanted]
         note = (
-            "python-security-scan: `ruff` is not installed; Python security "
-            "scanning is OFF. Install via `uv tool install ruff@latest` (or "
-            "`pipx install ruff`) for OWASP/Bandit-aligned high-confidence "
-            "anti-pattern detection on Python edits."
+            f"Python safety check found {len(delta_added)} new issue(s):\n" +
+            _format(file_path, rows, cwd) +
+            "\nReview and resolve the underlying code before completion; "
+            "suppressing the diagnostic does not resolve it."
         )
         emit_note("PostToolUse", note)
-        return
-    if not findings:
-        return
-
-    # Delta vs inherited: only findings overlapping this session's changed
-    # lines demand fixing now; untouched-line debt routes to ticket discipline
-    # (harness feedback 2026-06-14/23). Every ambiguity classifies as delta.
-    cwd = payload.get("cwd") or os.getcwd()
-    ranges, git_ok = changed_line_ranges(cwd)
-    delta, inherited = [], []
-    for f in findings:
-        row = (f.get("location") or {}).get("row") or 0
-        end = (f.get("end_location") or {}).get("row") or row
-        target = delta if finding_is_delta(file_path, row, end, ranges, git_ok) \
-            else inherited
-        target.append(f)
-
-    parts = []
-    if delta:
-        lines = []
-        for f in delta[:10]:
-            code = f.get("code", "?")
-            ln = (f.get("location") or {}).get("row", "?")
-            msg = (f.get("message") or "").strip()
-            label = RULE_LABELS.get(code, "")
-            lines.append(f"  L{ln} — {code} {label}: {msg}")
-        more = f"\n  …and {len(delta) - 10} more" if len(delta) > 10 else ""
-        parts.append(
-            f"python-security-scan caught {len(delta)} finding(s) on lines "
-            f"changed this session in {file_path}:\n" + "\n".join(lines) + more +
-            "\nThese are OWASP/Bandit-aligned dangerous patterns (S-rules) and "
-            "zero-FP correctness bugs (B-rules) enforced via the ruff curated "
-            "subset. Inline `# noqa` is NOT honored — a genuine exception "
-            "surfaces via the `surface-ticket` skill, not as a silenced marker. "
-            "Resolve before declaring done."
+        log_hook_signal(
+            __file__, "python-safety", "noted", len(delta_added), payload,
+            context=note,
         )
-    if inherited and not tickets_mentioning(cwd, file_path):
-        codes = sorted({f.get("code", "?") for f in inherited})
-        parts.append(
-            f"{len(inherited)} inherited finding(s) on untouched lines in "
-            f"{file_path} ({', '.join(codes)}) — pre-existing debt, not this "
-            "edit's job to fix, but no ticket covers this file: create or "
-            "update one via the `surface-ticket` skill, mentioning the file's "
-            "repo-relative path and the finding codes."
-        )
-    if parts:
-        emit_note("PostToolUse", "\n".join(parts))
 
 
 if __name__ == "__main__":

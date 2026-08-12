@@ -1,86 +1,70 @@
 #!/usr/bin/env python3
-"""Stop hook: hard gate against process-narration comments added vs `git HEAD`.
-
-The non-blocking per-edit reminder (comment-discipline-reminder.py) can be
-ignored mid-run; this gate is the turn-end backstop, mirroring the suppression
-stop-gate. It diffs EXTRACTED comments/docstrings (comment_extract — never raw
-lines, so UI strings with ordinal text stay silent) between the working tree
-and HEAD, and blocks the stop when an added one matches the shared
-process-narration detectors in `_markers.flag_comment`.
-
-Self-loop-guarded; fail-open on git/lib failure (any error -> exit 0).
-"""
+"""Block completion on unresolved comment findings owned by this session."""
 
 import os
 import sys
-from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    import comment_extract as ce
-    from _hooklib import (CODE_EXTENSIONS, HUB_HOOK_FILES, changed_files,
-                          emit_block, ext, load_payload, log_event,
-                          read_git_head, run, stop_guard_cwd)
-    from _markers import flag_comment
+    from _comment_findings import finding_counts, findings
+    from _hooklib import (
+        emit_block, ext, load_payload, log_hook_signal, run, stop_guard_cwd,
+    )
+    from _marker_state import unresolved
 except Exception:
     sys.exit(0)
 
-# Hub detector files legitimately carry narration-shaped fixtures/patterns.
-_SELF_FILES = HUB_HOOK_FILES | {"comment_extract.py",
-                                "comment-discipline-reminder.py",
-                                "stop-gate-comment-discipline.py"}
-_MAX_BYTES = 2_000_000
 _MAX_QUOTED = 5
 
 
-def _added_flagged(cwd):
-    """(basename, first_line) per flagged comment added vs HEAD, across the
-    working-tree diff. Empty if git is unavailable."""
+def _current_rows(files, keys):
     rows = []
-    for path in changed_files(cwd, CODE_EXTENSIONS):
-        if os.path.basename(path) in _SELF_FILES:
-            continue
+    wanted = set(keys)
+    for path in files:
         try:
-            if os.path.getsize(path) > _MAX_BYTES:
-                continue
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                after = fh.read()
-        except Exception:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except (FileNotFoundError, OSError):
             continue
-        before = read_git_head(path) or ""
-        e = ext(path)
-        after_c = Counter((t, k) for _, t, k in ce.extract(after, e))
-        before_c = Counter((t, k) for _, t, k in ce.extract(before, e))
-        for text, kind in (after_c - before_c).elements():
-            if flag_comment(text, kind == ce.DOCSTRING):
-                first = text.strip().splitlines()[0].strip()[:100]
-                rows.append((os.path.basename(path), first))
+        for key, line, value, _ in findings(text, ext(path)):
+            if key in wanted:
+                first = value.strip().splitlines()[0].strip()[:100]
+                rows.append((os.path.basename(path), line, first))
     return rows
 
 
 def main():
     payload = load_payload()
-    cwd = stop_guard_cwd(payload)
-    if cwd is None:
+    if stop_guard_cwd(payload) is None:
         return
-    rows = _added_flagged(cwd)
-    if not rows:
+    session_id = payload.get("session_id")
+    if not session_id:
+        raise ValueError("comment stop gate requires session_id")
+    agent_id = payload.get("agent_id")
+    keys, files = unresolved(
+        session_id, agent_id, include_subagents=not bool(agent_id),
+        counter=finding_counts, namespace="comments", include_files=True,
+    )
+    if not keys:
         return
-    quoted = "".join(f"  {f}: {t}\n" for f, t in rows[:_MAX_QUOTED])
+    rows = _current_rows(files, keys)
+    quoted = "".join(
+        f"  {name}:{line}: {text}\n" for name, line, text in rows[:_MAX_QUOTED]
+    )
     more = f"  …and {len(rows) - _MAX_QUOTED} more\n" if len(rows) > _MAX_QUOTED else ""
     reason = (
-        f"comment-discipline-stop-gate: {len(rows)} process-narration "
-        "comment(s)/docstring(s) added in the working-tree diff vs HEAD:\n"
-        + quoted + more +
-        "These narrate the work process (ordinal phase/step markers, decorative "
-        "dividers, references to an ephemeral plan/todo) and carry no meaning "
-        "for a future reader — banned by the engineering comment rule. Remove "
-        "them (or rephrase into genuine domain WHY) before stopping the turn."
+        f"{len(keys)} unresolved comment candidate(s) introduced by this "
+        "session still depend on temporary plan, phase, step, or discussion "
+        "context:\n" + quoted + more +
+        "Make every comment understandable from the repository alone. Preserve "
+        "durable, code-relevant rationale by rewriting it; remove a comment "
+        "only when it contains no durable information."
     )
-    emit_block(reason)
-    log_event("incident", {"hook": "stop-gate-comment-discipline",
-                           "rule_id": "process-leakage",
-                           "count": len(rows)}, payload)
+    emitted_reason = emit_block(reason)
+    log_hook_signal(
+        __file__, "process-leakage", "blocked", len(keys), payload,
+        context=emitted_reason,
+    )
 
 
 if __name__ == "__main__":

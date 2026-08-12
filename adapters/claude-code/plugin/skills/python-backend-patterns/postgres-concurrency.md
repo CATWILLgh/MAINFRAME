@@ -1,34 +1,27 @@
-# PostgreSQL — concurrency, pooling, ops boundary
+# PostgreSQL concurrency and pooling
 
-## Job queue: SKIP LOCKED
+Use real PostgreSQL tests when the result depends on locking, isolation, constraints, pooling, or concurrent writes.
 
-`SELECT ... FOR UPDATE SKIP LOCKED LIMIT n` lets each worker claim rows others haven't locked instead of blocking — throughput scales with worker count. Per Postgres this gives "an inconsistent view of the data … not suitable for general purpose work, but … to avoid lock contention with multiple consumers accessing a queue-like table." Use `FOR NO KEY UPDATE` (weaker — won't block FK-share readers) unless you will delete the row. Never use SKIP LOCKED where a consistent full-table view is required.
+## Transactions and retries
 
-## Isolation & retry
+- Keep the invariant check and its write in one transaction. Choose row locks, an atomic statement, a constraint, optimistic versioning, or serializable execution from the actual contention and invariant.
+- `SKIP LOCKED` is useful for queue-like consumers that may intentionally skip claimed rows. It produces an inconsistent view and is not a general pagination or reporting tool.
+- PostgreSQL can abort transactions with serialization failure `40001` or deadlock `40P01`. Retry the complete transaction only when its inputs and external side effects make retry safe; bound retries and surface exhaustion.
+- Raising isolation does not replace a correct retry and side-effect design.
 
-- **Read Committed** (default): each statement sees a fresh snapshot — two SELECTs in one txn can differ. Fine for most OLTP.
-- **Repeatable Read**: a whole-transaction snapshot; a concurrent update makes it fail with SQLSTATE `40001`.
-- **Serializable**: emulates serial execution; also fails with `40001` on dependency cycles.
-- **Mandatory retry:** anything that can raise `40001` needs an app-side retry loop (also handle `40P01` deadlock) — Postgres won't auto-retry ("it cannot do so with any guarantee of correctness"). At Repeatable Read only *writing* txns raise it; under Serializable even *read-only* txns can, unless declared `SERIALIZABLE READ ONLY DEFERRABLE`. Default to Read Committed; raise isolation only when cross-statement consistency drives a write.
+## Pooling
 
-## Connection pooling
+- Reuse bounded connections and size the pool from database capacity, instance count, workload, and measurements. A fixed cores-based formula is not a portable truth.
+- With PgBouncer transaction pooling, transaction-local state is safer than session state. Check compatibility for prepared statements, advisory locks, temporary tables, server-side cursors, and listen/notify against the installed PgBouncer version and client behavior.
+- Keep tenant context and transaction lifetime aligned so pooled connections cannot leak state.
 
-- Postgres forks a process per connection (several MB each) — pool, never open per-request. Size to roughly `cores × 2`, not application thread count; more connections ≠ more throughput (engineering convention, not a spec figure).
-- **PgBouncer transaction mode** (server connection returned per txn) maximizes reuse but **breaks session state**: use `SET LOCAL`, not `SET` (else config bleeds into the next client). Session-scoped features — advisory locks, `LISTEN`/`NOTIFY`, server-side cursors, pre-1.21 prepared statements — need session mode.
+## Operational boundary
 
-Per-ORM SKIP LOCKED: SQLAlchemy `.with_for_update(skip_locked=True, key_share=True)`; Django `select_for_update(skip_locked=True, no_key=True)`. Pool: SQLAlchemy `pool_size` / `max_overflow` on the engine; Django `CONN_MAX_AGE` plus an external pooler.
-
-## Ops boundary — recognize & escalate (not yours to fix)
-
-| Topic | Signal → surface for `devops-engineer` / DBA |
-|---|---|
-| Partitioning | a single table exceeds RAM; plans scan all partitions despite indexes |
-| Autovacuum / bloat | `n_dead_tup` persistently high; `VACUUM` shows up in the slow-query log |
-| Replication lag | a replica's `replay_lag` grows under load, or stale reads break invariants |
-
-Surface the signal; do not tune autovacuum or design partitions from application code — that is the `devops-engineer` role.
+Application work may expose autovacuum pressure, bloat, replication lag, saturation, or partition-pruning problems. Return the evidence to the immediate caller for infrastructure or DBA handling rather than silently changing server settings from application code.
 
 ## Sources
 
-- PostgreSQL — SELECT locking / transaction isolation / serialization failure — https://www.postgresql.org/docs/current/transaction-iso.html
-- PgBouncer FAQ — https://www.pgbouncer.org/faq.html
+- PostgreSQL transaction isolation — https://www.postgresql.org/docs/current/transaction-iso.html
+- PostgreSQL explicit locking — https://www.postgresql.org/docs/current/explicit-locking.html
+- PostgreSQL SELECT locking — https://www.postgresql.org/docs/current/sql-select.html
+- PgBouncer features — https://www.pgbouncer.org/features.html

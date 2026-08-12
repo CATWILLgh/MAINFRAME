@@ -14,7 +14,7 @@ import tempfile
 
 _TOOLS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _TOOLS)
-import build_hub_page as bhp
+import build_hub_page as bhp  # noqa: E402
 
 
 def _write(path, text):
@@ -34,9 +34,9 @@ def _fixture_repo():
            "---\nname: review-flow\nuser-invocable: false\n"
            "description: The universal cycle.\nwhen_to_use: Any modifying task.\n---\n\n"
            "See [`surface-ticket`](../surface-ticket/SKILL.md) and "
-           "[`web-search`](../../agents/web-search.md).\n")
-    _write(os.path.join(root, "adapters/claude-code/plugin/agents/decision-reviewer.md"),
-           "---\nname: decision-reviewer\ndescription: Adversarial review.\n"
+           "[`mainframe-researcher`](../../agents/mainframe-researcher.md).\n")
+    _write(os.path.join(root, "adapters/claude-code/agents/mainframe-decision-reviewer.md"),
+           "---\nname: mainframe-decision-reviewer\ndescription: Adversarial review.\n"
            "model: opus\nskills:\n  - surface-ticket\n  - review-flow\n"
            "tools: Read, Grep, Glob\n---\n\nbody\n")
     # Mirror the real hooks.json shape: command is "python3", the script path
@@ -78,16 +78,16 @@ def test_collect_skills_reads_fields_and_crossrefs():
     assert skills["surface-ticket"]["user_invocable"] is False
     assert skills["surface-ticket"]["description"].startswith("Capture")
     assert "surface-ticket" in skills["review-flow"]["crossrefs"]
-    assert "web-search" in skills["review-flow"]["crossrefs"]
+    assert "mainframe-researcher" in skills["review-flow"]["crossrefs"]
     assert skills["surface-ticket"]["crossrefs"] == []
 
 
 def test_collect_agents_reads_skills_list():
     root = _fixture_repo()
     agents = {a["name"]: a for a in bhp.collect_agents(root)}
-    assert "decision-reviewer" in agents
-    assert agents["decision-reviewer"]["model"] == "opus"
-    assert agents["decision-reviewer"]["skills"] == ["surface-ticket", "review-flow"]
+    assert "mainframe-decision-reviewer" in agents
+    assert agents["mainframe-decision-reviewer"]["model"] == "opus"
+    assert agents["mainframe-decision-reviewer"]["skills"] == ["surface-ticket", "review-flow"]
 
 
 def test_collect_hooks_maps_event_matcher_script():
@@ -113,8 +113,8 @@ def test_build_edges_covers_all_three_kinds():
     edges = bhp.build_edges(skills, agents, hooks)
     triples = {(e["source"], e["target"], e["kind"]) for e in edges}
     assert ("review-flow", "surface-ticket", "skill-ref") in triples
-    assert ("decision-reviewer", "surface-ticket", "agent-skill") in triples
-    assert ("decision-reviewer", "review-flow", "agent-skill") in triples
+    assert ("mainframe-decision-reviewer", "surface-ticket", "agent-skill") in triples
+    assert ("mainframe-decision-reviewer", "review-flow", "agent-skill") in triples
     assert ("memory-reminder.py", "Stop", "hook-event") in triples
 
 
@@ -123,10 +123,10 @@ def test_build_edges_skips_crossref_to_unknown_node():
     skills = bhp.collect_skills(root)
     agents = bhp.collect_agents(root)
     edges = bhp.build_edges(skills, agents, [])
-    # web-search is referenced from review-flow but has no agent file in the
+    # mainframe-researcher is referenced from review-flow but has no agent file in the
     # fixture; dropping the edge keeps the graph free of dangling targets.
     targets = {e["target"] for e in edges}
-    assert "web-search" not in targets
+    assert "mainframe-researcher" not in targets
 
 
 def test_dev_state_absent_db_reports_inactive():
@@ -298,6 +298,28 @@ def test_payload_breakdown_groups_by_key_and_degrades_visibly():
     assert b["unrecognized"] == 2
 
 
+def test_hook_effectiveness_aggregates_outcomes_and_skips_malformed_rows():
+    db = _telemetry_db([
+        ("2026-08-11T10:00:00", "s1", "", "hook_signal",
+         '{"hook":"check.py","rule_id":"r","outcome":"noted",'
+         '"count":3,"context_chars":120}'),
+        ("2026-08-11T10:01:00", "s1", "", "hook_signal",
+         '{"hook":"check.py","rule_id":"r","outcome":"resolved",'
+         '"count":2,"context_chars":0}'),
+        ("2026-08-11T10:02:00", "s2", "", "hook_signal",
+         '{"hook":"check.py","rule_id":"r","outcome":"blocked",'
+         '"count":1,"context_chars":80}'),
+        ("2026-08-11T10:03:00", "s2", "", "hook_signal", "not json"),
+    ])
+    state = bhp.collect_dev_state(db_path=db, feedback_dir="/nonexistent")
+    rows = state["telemetry"]["hook_effectiveness"]
+    assert rows == [{
+        "hook": "check.py", "rule_id": "r", "signals": 3, "sessions": 2,
+        "noted": 3, "asked": 0, "blocked": 1, "resolved": 2,
+        "context_chars": 200, "last_seen": "2026-08-11T10:02:00",
+    }]
+
+
 def _fixture_health(root):
     """A tree seeded with one broken cross-ref, one orphan, one missing script."""
     _write(os.path.join(root, "adapters/claude-code/plugin/skills/alpha/SKILL.md"),
@@ -306,7 +328,7 @@ def _fixture_health(root):
            "---\nname: anchor\n---\n\nSee [`alpha`](../alpha/SKILL.md).\n")
     _write(os.path.join(root, "adapters/claude-code/plugin/skills/beta/SKILL.md"),
            "---\nname: beta\n---\n\nno refs here\n")
-    _write(os.path.join(root, "adapters/claude-code/plugin/agents/gamma.md"),
+    _write(os.path.join(root, "adapters/claude-code/agents/gamma.md"),
            "---\nname: gamma\nskills:\n  - delta\n---\n\nbody\n")
     _write(os.path.join(root, "adapters/claude-code/plugin/hooks/hooks.json"), json.dumps({"hooks": {
         "Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "python3",
@@ -375,7 +397,7 @@ def _usage_fixture():
          "message": {"id": "mD", "model": "claude-opus-4-8"}},
     ]
     _write(os.path.join(sess, "s1.jsonl"),
-           "\n".join(json.dumps(l) for l in lines) + "\n")
+           "\n".join(json.dumps(line) for line in lines) + "\n")
     return proj
 
 

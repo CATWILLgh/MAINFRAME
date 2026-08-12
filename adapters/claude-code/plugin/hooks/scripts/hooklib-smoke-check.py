@@ -1,45 +1,74 @@
 #!/usr/bin/env python3
-"""SessionStart smoke-check: verify the shared hook library imports.
-
-If `_hooklib` or `_markers` fails to import, every hook that depends on them
-silently no-ops (each guards its own import -> exit 0). That silence is only safe
-if the off-state is announced ONCE at a chokepoint — this hook is that chokepoint.
-On a failed import it emits a LOUD note naming the disabled gates.
-
-Deliberately self-contained: it must NOT import the library it is verifying, so
-it uses only json/os/sys and its own fail-safe.
-"""
+"""SessionStart check for shared hook imports and deferred failures."""
 
 import json
 import os
 import sys
 
 
+def _state_root():
+    return os.environ.get(
+        "MAINFRAME_HOOK_FAILURE_STATE_DIR",
+        os.path.expanduser("~/.claude/mainframe/state/hook-failures"),
+    )
+
+
+def _claim_pending():
+    """Atomically claim pending notices so parallel starts report them once."""
+    root = _state_root()
+    try:
+        names = [name for name in os.listdir(root) if name.endswith(".json")]
+    except FileNotFoundError:
+        return []
+    messages = []
+    for name in sorted(names):
+        source = os.path.join(root, name)
+        claim = source + f".claim-{os.getpid()}"
+        try:
+            os.replace(source, claim)
+        except FileNotFoundError:
+            continue
+        try:
+            with open(claim, encoding="utf-8") as handle:
+                value = json.load(handle)
+            message = value.get("message") if isinstance(value, dict) else None
+            if isinstance(message, str) and message:
+                messages.append(message)
+        finally:
+            try:
+                os.unlink(claim)
+            except FileNotFoundError:
+                pass
+    return messages
+
+
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    notices = _claim_pending()
     broken = []
-    for mod in ("_hooklib", "_markers"):
+    for module in ("_hooklib", "_markers"):
         try:
-            __import__(mod)
+            __import__(module)
         except Exception as exc:
-            broken.append(f"{mod} ({type(exc).__name__}: {exc})")
-    if not broken:
+            broken.append(f"{module} ({type(exc).__name__}: {exc})")
+    if broken:
+        notices.append(
+            "MAINFRAME hook failure: shared hook modules could not be loaded: "
+            f"{'; '.join(broken)}. Checks depending on them are unavailable. "
+            "Report this failure to the user before claiming hook-backed "
+            "verification. Do not repair MAINFRAME unless assigned."
+        )
+    if not notices:
         return
-    note = (
-        "MAINFRAME hub: shared hook library failed to import — "
-        f"{'; '.join(broken)}. The suppression-marker and debug-residue gates "
-        "(and any hook sharing _hooklib) are SILENTLY DISABLED until this is "
-        "fixed in adapters/claude-code/plugin/hooks/scripts/. Fix the module, then start a new "
-        "session to re-enable the gates."
-    )
+    text = "\n".join(notices)
     print(json.dumps({
-        "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": note}
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": text,
+        },
+        "systemMessage": text,
     }))
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception:
-        pass
-    sys.exit(0)
+    main()

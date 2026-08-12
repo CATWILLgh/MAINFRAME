@@ -1,55 +1,29 @@
-# Observability — structlog + OpenTelemetry
+# Observability
 
-Current de-facto stack for enterprise Python backends. Three separate signals: structured logs, distributed traces, metrics — each with its own pipeline, joined at the observability backend.
+Preserve the project's logging, metrics, tracing, and error-reporting pipeline. Do not introduce structlog, OpenTelemetry, Sentry, or Prometheus merely because this reference covers them.
 
-## structlog setup
+## Useful signals
 
-- `structlog.get_logger()` per module, top of file. NOT a singleton at app level.
-- Configure once at startup (in `create_app()` / `lifespan`): JSON renderer for production, console renderer for dev.
-- Add processors for `add_log_level`, `add_logger_name`, timestamp, exception formatting.
-- Bind request-scoped context (`request_id`, `user_id`, `org_id`) once per request and let structlog propagate it.
+- Emit structured, stable event names and fields through the existing logger. Include correlation identifiers already supported by the runtime.
+- Record outcomes and durations for important external or business operations without logging complete payloads.
+- Use bounded-cardinality metric labels. User, tenant, request, entity, URL, and exception-message values usually do not belong in metric labels.
+- Add manual spans only around meaningful work not already represented by framework or client instrumentation.
+- Preserve exception causality and distinguish expected domain rejection from operational failure.
 
-```python
-import structlog
-logger = structlog.get_logger()
-logger.info("job.create", job_id=j.id, org_id=org.id, duration_ms=dt)
-```
+## Sensitive data
 
-## OpenTelemetry — auto-instrumentation first
+Treat request and response bodies, credentials, cookies, authorization headers, database URLs, personal data, and arbitrary query values as sensitive. Prefer an allowlist of safe fields and central filtering at the logging or telemetry boundary.
 
-- Per dash0/OTel docs: "The OpenTelemetry LoggingHandler connects Python's familiar logging API to the OTel ecosystem, and every logging call flows into your observability pipeline as a first-class OTel log record, with trace context, typed attributes, and resource metadata attached."
-- Add framework auto-instrumentation: `opentelemetry-instrumentation-{fastapi,flask,django,sqlalchemy,requests}`. Picks up spans for free.
-- Manual spans for business operations: `tracer.start_as_current_span("billing.charge")` around the operation that matters to the user.
+## Library branches
 
-## Trace correlation in logs
-
-- Configure structlog to inject `trace_id` / `span_id` from current OTel span.
-- Logs become joinable to traces in the backend (Grafana Tempo + Loki, Datadog, Honeycomb).
-
-```python
-def add_trace_ids(_, __, event_dict):
-    span = trace.get_current_span()
-    if span.is_recording():
-        ctx = span.get_span_context()
-        event_dict["trace_id"] = format(ctx.trace_id, "032x")
-    return event_dict
-```
-
-## Sensitive data masking
-
-- Never log raw request bodies — credentials, PII, tokens may be inside.
-- Whitelist fields explicitly: `logger.info("user.login", email_hash=hash(email), org_id=org_id)`, not `**request.json`.
-- Mask Authorization headers, cookies, query strings with secrets. Centralised mask helper, applied at the log boundary.
-
-## Metrics
-
-- Counters: `requests_total{status,route}`, `errors_total{type}`.
-- Histograms: latency per route, DB query duration.
-- Active gauges: tenant count, queue depth.
-- Prometheus exposition via `prometheus_client` (sync) or `opentelemetry-exporter-prometheus`.
+- With stdlib logging, preserve configured handlers and structured formatting rather than adding a parallel pipeline.
+- With structlog, bind request context through its supported context mechanism and configure processors once at startup.
+- With OpenTelemetry, verify compatible instrumentation versions and exporter ownership before enabling automatic instrumentation; duplicate instrumentation can emit duplicate spans.
+- With Sentry or another error reporter, inspect scrubbing, environment, release, and sampling configuration before adding captured context.
 
 ## Sources
 
-- structlog docs — https://www.structlog.org/en/stable/
+- Python logging — https://docs.python.org/3/library/logging.html
+- structlog — https://www.structlog.org/en/stable/
 - OpenTelemetry Python — https://opentelemetry.io/docs/languages/python/
-- Dash0 — https://www.dash0.com/guides/opentelemetry-logging-python
+- OpenTelemetry metrics — https://opentelemetry.io/docs/specs/otel/metrics/api/

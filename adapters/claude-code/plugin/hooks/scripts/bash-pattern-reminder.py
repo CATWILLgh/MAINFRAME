@@ -1,109 +1,140 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: surface guidance when Bash commands contain known
-auto-mode-classifier triggers, before they cause permission prompts.
+"""Warn when an actual ripgrep command contains a risky short ``-r`` cluster.
 
-Catches patterns that historically trigger ask prompts in auto-mode (per memory
-`rm-rf-anywhere-deny-pattern`), even when settings.json allow rules permit them
-— because the auto-mode classifier sits ON TOP of settings.json and may still
-ask. Surfaces structured `additionalContext` with the better mechanism.
-
-Design (non-blocking, enforcement-of-discipline layer):
-- Non-blocking: emits only `additionalContext`. Does NOT use decision=ask or
-  decision=block — those become defer in auto-mode (per memory
-  `permissions-auto-mode-classifier`), breaking the user's primary workflow.
-- Stdlib only. Reads PreToolUse payload from stdin, parses tool_input.command.
-- Pattern-matches via small set of regexes. Each match contributes one bullet
-  to the reminder; multiple matches surface together.
-- Fail-safe: ANY error -> exit 0 with no output. Hook must never break a
-  Bash invocation because of itself.
-- Filter: only fires on Bash tool. Other tools pass through.
-
-Patterns caught (sourced from memory `rm-rf-anywhere-deny-pattern` 3 classes):
-
-| Pattern | Suggested mechanism |
-|---|---|
-| `rm -rf` literal | `rm -r` (different command, passes the deny pattern) |
-| `cat > /tmp/...` heredoc | Write tool — content goes to transcript verbatim |
-| `echo ... > /tmp/...` redirect | Write tool |
-| `tee /tmp/...` | Write tool |
-| `chmod +x /tmp/...` | Avoid /tmp executables; use project dir + `bash path/to/file.sh` |
-| `npm install -g <pkg>` ad-hoc | install.sh `_install_npm_global` helper if hub-scoped |
-| `uv tool install <pkg>` ad-hoc | install.sh `_install_tool` helper |
-| `pipx install <pkg>` ad-hoc | install.sh `_install_tool` helper |
+In ripgrep, ``-r`` takes replacement text; it is not grep's recursive flag.
+The hook is advisory and silent for every other Bash pattern. It tokenizes
+shell commands so quoted examples and arguments to commands such as ``echo``
+do not trigger the reminder.
 """
+
+from __future__ import annotations
 
 import os
 import re
+import shlex
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import load_payload, emit_note, log_event, run
+    from _hooklib import emit_note, load_payload, log_hook_signal, run
 except Exception:
     sys.exit(0)
 
-PATTERNS = [
-    ("rm-rf", re.compile(r"\brm\s+-rf\b"),
-     "`rm -rf` matches the hub deny pattern. Use `rm -r` instead — different command, passes the deny."),
-    ("cat-tmp", re.compile(r"\bcat\s*>\s*/tmp/"),
-     "`cat > /tmp/...` heredoc creates files via shell. Prefer the Write tool — content goes to the transcript verbatim, classifier sees it, no prompt."),
-    ("echo-tmp", re.compile(r"\becho\s+.+?>\s*/tmp/"),
-     "`echo ... > /tmp/...` writes via shell redirect. Prefer the Write tool — content visible to classifier."),
-    ("printf-tmp", re.compile(r"\bprintf\s+.+?>\s*/tmp/"),
-     "`printf ... > /tmp/...` writes via shell redirect. Prefer the Write tool — content visible to classifier."),
-    ("tee-tmp", re.compile(r"\btee\s+/tmp/"),
-     "`tee /tmp/...` writes via shell pipe. Prefer the Write tool — structured content visibility."),
-    ("chmod-tmp", re.compile(r"\bchmod\s+\S*[+]?x\S*\s+\S*/tmp/"),
-     "`chmod +x /tmp/...` makes a tmp file executable. Avoid /tmp for executables; use the project dir, or Write tool then invoke via `bash path/to/file.sh` (no chmod needed)."),
-    ("npm-global", re.compile(r"\bnpm\s+install\s+(?:-g|--global)\b"),
-     "`npm install -g` modifies the user environment globally. If this is a hub-scoped tool, add to install.sh `_install_npm_global` helper. Ad-hoc installs should surface to the user first."),
-    ("uv-tool", re.compile(r"\buv\s+tool\s+install\b"),
-     "`uv tool install` is a global tool install. Hub-scoped tools belong in install.sh `_install_tool` helper. Ad-hoc installs should surface to the user first."),
-    ("pipx", re.compile(r"\bpipx\s+install\b"),
-     "`pipx install` is a global tool install. Hub-scoped tools belong in install.sh `_install_tool` helper. Ad-hoc installs should surface to the user first."),
-    # grep muscle memory: in ripgrep -r takes a value, so a cluster with r
-    # silently rewrites matched output (-rln = --replace=ln) or, ending in r,
-    # swallows the next token; bare `-r value` / --replace stay deliberate.
-    ("rg-replace-cluster",
-     re.compile(r"\brg\b[^;&|]*?\s-(?:[a-qs-z]*r[a-z]+|[a-z]+r)(?=\s|$)"),
-     "`rg` short-flag cluster containing `r`: in ripgrep `-r` takes a "
-     "REPLACEMENT value — grep-style `-rln` means `--replace=ln` and silently "
-     "rewrites the matched text in the output (reads as corruption), and a "
-     "cluster ending in `r` swallows the NEXT token as the replacement. Write "
-     "flags separately (`-l -n`); for a real replacement use explicit "
-     "`--replace=...`."),
-]
+
+OPERATORS = {"&&", "||", ";", "|", "|&", "&", "(", ")"}
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "eval"}
+SIMPLE_WRAPPERS = {"command", "builtin", "exec", "nohup", "time"}
+SHORT_CLUSTER_RE = re.compile(r"-[A-Za-z]{2,}")
+MAX_RENDERED_CLUSTERS = 5
+MAX_CLUSTER_CHARS = 24
 
 
-def main():
+def _tokenize(command: str) -> list[str] | None:
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        return list(lexer)
+    except ValueError:
+        return None
+
+
+def _segments(tokens: list[str]) -> list[list[str]]:
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token in OPERATORS:
+            if current:
+                segments.append(current)
+                current = []
+        else:
+            current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def _is_assignment(token: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token))
+
+
+def _command_index(tokens: list[str]) -> int:
+    index = 0
+    while index < len(tokens) and _is_assignment(tokens[index]):
+        index += 1
+    while index < len(tokens) and os.path.basename(tokens[index]) in SIMPLE_WRAPPERS:
+        index += 1
+    return index
+
+
+def _nested_command(tokens: list[str]) -> str | None:
+    index = _command_index(tokens)
+    if index >= len(tokens) or os.path.basename(tokens[index]) not in SHELLS:
+        return None
+    if os.path.basename(tokens[index]) == "eval":
+        return " ".join(tokens[index + 1:]) if index + 1 < len(tokens) else None
+    for offset, token in enumerate(tokens[index + 1:], index + 1):
+        if token == "-c" or (token.startswith("-") and "c" in token[1:]):
+            return tokens[offset + 1] if offset + 1 < len(tokens) else None
+    return None
+
+
+def _risky_clusters_in_rg(tokens: list[str]) -> list[str]:
+    index = _command_index(tokens)
+    if index >= len(tokens) or os.path.basename(tokens[index]) != "rg":
+        return []
+    risky: list[str] = []
+    for token in tokens[index + 1:]:
+        if token == "--":
+            break
+        if SHORT_CLUSTER_RE.fullmatch(token) and "r" in token[1:]:
+            risky.append(token)
+    return risky
+
+
+def risky_rg_clusters(command: str, *, depth: int = 0) -> list[str]:
+    if depth > 3:
+        return []
+    tokens = _tokenize(command)
+    if tokens is None:
+        return []
+    findings: list[str] = []
+    for segment in _segments(tokens):
+        nested = _nested_command(segment)
+        if nested is not None:
+            findings.extend(risky_rg_clusters(nested, depth=depth + 1))
+        else:
+            findings.extend(_risky_clusters_in_rg(segment))
+    return list(dict.fromkeys(findings))
+
+
+def main() -> None:
     payload = load_payload()
     if payload.get("tool_name") != "Bash":
         return
-    command = (payload.get("tool_input") or {}).get("command", "")
-    if not command:
+    command = (payload.get("tool_input") or {}).get("command") or ""
+    clusters = risky_rg_clusters(command)
+    if not clusters:
         return
-
-    findings = []
-    for label, rx, guidance in PATTERNS:
-        if rx.search(command):
-            findings.append((label, guidance))
-
-    if not findings:
-        return
-
-    bullets = "\n".join(f"  - {g}" for _, g in findings)
+    shown = clusters[:MAX_RENDERED_CLUSTERS]
+    rendered = ", ".join(
+        f"`{cluster[:MAX_CLUSTER_CHARS]}`" for cluster in shown
+    )
+    if len(clusters) > MAX_RENDERED_CLUSTERS:
+        rendered += f", …and {len(clusters) - MAX_RENDERED_CLUSTERS} more"
     note = (
-        f"bash-pattern-reminder: this Bash command contains {len(findings)} "
-        f"pattern(s) known to trigger auto-mode classifier prompts or break "
-        f"long autonomous runs:\n{bullets}\n"
-        f"These rules are documented in memory `rm-rf-anywhere-deny-pattern`. "
-        f"If the command is genuinely correct as written, proceed — this is a "
-        f"reminder, not a block."
+        "ripgrep option check: " + rendered + " contains `r` in a short "
+        "option cluster. In ripgrep, `-r` consumes replacement text and "
+        "changes printed matches; it does not enable recursive search and "
+        "does not modify files. If replacement is intended, use explicit "
+        "`--replace=...`; otherwise remove `r` and write the intended flags "
+        "separately."
     )
     emit_note("PreToolUse", note)
-    log_event("incident", {"hook": "bash-pattern-reminder",
-                           "rule_id": ",".join(l for l, _ in findings),
-                           "count": len(findings)}, payload)
+    log_hook_signal(
+        __file__, "rg-replace-cluster", "noted", len(clusters), payload,
+        context=note,
+    )
 
 
 if __name__ == "__main__":

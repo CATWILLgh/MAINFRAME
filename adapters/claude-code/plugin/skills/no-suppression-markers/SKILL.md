@@ -1,14 +1,14 @@
 ---
 name: no-suppression-markers
 user-invocable: false
-description: Verify a coding change introduced no placeholder or suppression markers without explicit user permission. Covers TODO/FIXME/HACK/XXX, commented-out code, skipped or focused tests (.skip/.only/xit/fit), and silenced type/lint checks (@ts-ignore, @ts-nocheck, eslint-disable, # type: ignore, # noqa, pylint: disable).
+description: Verify a coding change introduced no placeholder, suppression, skipped-test, or diagnostic-residue markers. Covers TODO/FIXME/HACK/XXX, commented-out code, skipped or focused tests (.skip/.only/xit/fit), and silenced type/lint checks (@ts-ignore, @ts-nocheck, eslint-disable, # type: ignore, # noqa, pylint: disable).
 when_to_use: Trigger when wrapping up a coding task — before declaring it done, before a commit, when reviewing a diff, or when finalizing/auditing changed files for leftover shortcuts.
 ---
 
 # No suppression / placeholder markers
 
-A completion gate for code changes. Reinforces the global rule "No placeholder or
-suppression markers in completed work" by turning it into a concrete, run-before-done check.
+A completion gate for code changes. It turns the product decision "No placeholder
+or suppression markers in completed work" into a concrete, run-before-done check.
 
 ## What counts as a marker
 
@@ -20,7 +20,14 @@ suppression markers in completed work" by turning it into a concrete, run-before
 ## The rule
 
 - These are **not allowed in work you declare complete**.
-- Introducing any of them **requires explicit user permission** — name it, say why, and wait.
+- A marker attached to behavior required by the current task means that behavior
+  is unfinished. Replace it with the complete working implementation and its
+  required tests. Deleting the marker, comment, or stub without delivering that
+  behavior is not a resolution.
+- Do not leave any marker in code delivered as complete. A genuinely unrelated
+  observation belongs in the repository's ticket mechanism, not in a code marker;
+  this exception cannot be used to reclassify a current task requirement as
+  out of scope.
 - A failing test or a type/lint error is a **contract signal**: surface it and discuss the fix. Silencing it hides the contract break instead of resolving it.
 - Prefer self-documenting suppressions when one is genuinely justified and approved: e.g. `@ts-expect-error` (errors once the suppression is no longer needed) over `@ts-ignore`.
 
@@ -40,11 +47,12 @@ list to the project's languages.
 
 ## If markers are found
 
-1. Resolve them — implement the deferred work, restore the skipped test, fix the
-   underlying type/lint error.
-2. If a marker is genuinely justified (e.g. an external blocker), **stop and ask the
-   user** before keeping it. Get explicit permission; do not declare done with it
-   silently in place.
+1. Deliver the behavior the marker stands for: implement the complete working
+   path, restore or add the required tests, and fix the underlying type/lint
+   error. The marker disappears as a consequence of finishing the work.
+2. If the marker only annotated a genuinely unrelated observation, revert that
+   annotation and record or update the appropriate ticket through the repository
+   workflow without expanding the current task.
 3. Re-run the scan until it is clean.
 
 ## Notes
@@ -52,5 +60,5 @@ list to the project's languages.
 - A non-blocking `PostToolUse` hook (`adapters/claude-code/plugin/hooks/scripts/scan-suppression-markers.py`)
   surfaces newly introduced markers per edit as an immediate reminder. This skill is the
   deliberate before-done gate — run it when finalizing, not just per edit.
-- The hub's engineer agents in `adapters/claude-code/plugin/agents/` reference this gate in their pre-done
+- The hub's engineer agents in `adapters/claude-code/agents/` reference this gate in their pre-done
   verification; any agent that finalizes or reviews code should run it before declaring done.

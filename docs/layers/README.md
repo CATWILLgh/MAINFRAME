@@ -25,7 +25,7 @@ A layer = a type of artifact the hub delivers to `~/.claude/`, applied across **
 | 4 | **Hooks** | `adapters/claude-code/plugin/hooks/scripts/*.py` + `adapters/claude-code/plugin/hooks/hooks.json` | via the `mainframe` plugin | [hooks.md](hooks.md) |
 | 5 | **Permissions** | `adapters/claude-code/export/settings.json` `permissions.{allow,deny,ask}` | part of `~/.claude/settings.json` (whole-file symlink) | [permissions.md](permissions.md) |
 | 6 | **Settings** (other fields) | `adapters/claude-code/export/settings.json` (everything except permissions) | part of `~/.claude/settings.json` | [settings.md](settings.md) |
-| 7 | **Agents** | `adapters/claude-code/plugin/agents/<name>.md` | via the `mainframe` plugin | [agents.md](agents.md) |
+| 7 | **Agents** | `adapters/claude-code/agents/<name>.md` | `~/.claude/agents/mainframe/` (directory symlink) | [agents.md](agents.md) |
 | 8 | **Manual workflows** | `adapters/claude-code/plugin/skills/<name>/SKILL.md` with `disable-model-invocation: true` | via the `mainframe` plugin | [skills.md](skills.md) |
 | 9 | **Output styles** | `adapters/claude-code/export/output-styles/<name>.md` | `~/.claude/output-styles/<name>.md` (symlink) | [output-styles.md](output-styles.md) |
 

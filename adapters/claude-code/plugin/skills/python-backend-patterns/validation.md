@@ -1,49 +1,29 @@
-# Validation patterns
+# Python validation boundaries
 
-Per-stack choice. Universal principle: validate at system boundaries (untrusted input), trust type-system inside.
+Use the validator already established on the active path. Validate untrusted input at runtime; inside the validated boundary, rely on types and domain invariants instead of repeatedly parsing the same object.
 
-## Pydantic 2 (FastAPI, Litestar, standalone)
+## Pydantic
 
-- Core in Rust → 5-20× faster than Pydantic 1.
-- Use `BaseModel` for inbound (request, mutation): full validation, field-level errors with paths.
-- For read-heavy response models (nested collections) — `TypedDict` + `TypeAdapter` is faster than nested `BaseModel`. Tradeoff: looser typing in IDE.
-- Distinct `*In` / `*Out` models per resource. Never reuse same model for request and response — write fields and read fields differ (e.g. `password_hash` write-only, `created_at` read-only).
-- `Field(...)` for constraints (`gt=0`, `min_length=1`, `max_length=255`); `field_validator` / `model_validator` for cross-field invariants.
-- Sensitive fields: omit from `Out` model entirely. Per FastAPI docs, fields not declared in `response_model` are dropped from JSON.
+- Establish the installed major before using validators, settings, or serialization APIs.
+- Use constrained fields and field or model validators for invariants that belong to the input contract.
+- Separate request and response models when their accepted and exposed fields differ. Reuse is acceptable when the contracts genuinely match.
+- Configure unknown-field behavior deliberately: rejecting protects strict contracts; ignoring can support compatibility where extra fields are expected.
+- Omit sensitive or internal values from response schemas rather than hoping later serialization removes them.
 
-```python
-class UserOut(BaseModel):
-    id: int
-    email: EmailStr
-    # password_hash deliberately absent
+## Marshmallow
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=12)
-```
+- Use `load` for validation and deserialization and `dump` for serialization.
+- Choose `unknown=RAISE`, `EXCLUDE`, or `INCLUDE` from the external contract rather than a global preference.
+- Use schema-level validation for cross-field invariants and keep database-dependent business rules in the owning service.
 
-## Marshmallow (Flask, when Pydantic not adopted)
+## Django REST Framework
 
-- Schemas separate from models (unlike Django serializers / Pydantic). `class Schema(Schema): ...` with declarative fields.
-- `load()` to deserialise → dict; `dump()` to serialise → dict. Flask-smorest does this around routes via `@blp.arguments` / `@blp.response`.
-- `meta` `unknown=EXCLUDE` to silently drop unknown input fields; `unknown=RAISE` (default) to surface them as validation errors — usually correct for `*In` schemas.
-- `validates_schema` for cross-field invariants. Numeric fields: `Range(min=...)` + `gt`.
-
-## DRF serializers (Django)
-
-- `ModelSerializer` for direct model mapping; `Serializer` for non-model contracts (filters, queries, action payloads).
-- `read_only_fields` / `write_only_fields` to separate read/write surface — same model class, different lenses.
-- `validate_<field>` for single-field; `validate(self, attrs)` for cross-field.
-- For nested writes — disable by default (overrides are easy footgun); prefer separate endpoints per related resource.
-
-## Universal anti-patterns
-
-- Trusting client-supplied IDs / foreign keys without ownership check.
-- Reusing one schema for in + out → leaks write-only fields or accepts read-only inputs.
-- Silent unknown-field drop on `*In` when audit/compliance requires strict input — set `extra="forbid"` (Pydantic) / `unknown=RAISE` (Marshmallow).
+- Use `ModelSerializer` when direct model mapping is the intended API; use `Serializer` for commands, filters, or contracts that do not mirror one model.
+- Mark writable and readable fields explicitly. Treat nested writes as a deliberate transactional contract, not a free consequence of nested output.
+- Keep object authorization outside serializer shape validation.
 
 ## Sources
 
-- Pydantic — https://docs.pydantic.dev/latest/
+- Pydantic models — https://docs.pydantic.dev/latest/concepts/models/
 - Marshmallow — https://marshmallow.readthedocs.io/
-- DRF — https://www.django-rest-framework.org/api-guide/serializers/
+- DRF serializers — https://www.django-rest-framework.org/api-guide/serializers/

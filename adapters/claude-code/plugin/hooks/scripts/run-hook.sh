@@ -1,31 +1,35 @@
 #!/bin/sh
-# Hook launcher: convert interpreter-level launch failures into a LOUD no-op.
+# Run one hook without turning an infrastructure failure into a tool denial.
 #
-# python3 exits 2 when it cannot OPEN the script file (mid-session FS/EPERM
-# outage, WeBuy 2026-06-20), and the hooks contract reads exit 2 on PreToolUse
-# as BLOCK — so an unreadable hook froze every Bash call. In-script fail-safes
-# cannot help: the failure precedes the script. No hub hook blocks via exit
-# code (all blocking is JSON + exit 0), so ANY nonzero exit here is
-# infrastructure failure by construction — safe to swallow, but never silently
-# (user directive): notify the agent (additionalContext) and the user
-# (systemMessage, honored on all hook events), once per parent process while a
-# latch is possible, on every call when even the latch fails (total outage —
-# loud is correct, a restart is needed anyway).
-#
-# Usage: run-hook.sh <HookEventName> <script.py>
+# The hook payload is buffered so the failure reporter sees the same session
+# identity as the failed script. Successful stdout is passed through exactly;
+# failed/partial stdout is discarded and replaced by one role-neutral report.
 
 EVENT="$1"
 SCRIPT="$2"
+DIR=$(dirname "$0")
+umask 077
+INPUT=$(mktemp "${TMPDIR:-/tmp}/mainframe-hook-input.XXXXXX") || exit 0
+OUTPUT=$(mktemp "${TMPDIR:-/tmp}/mainframe-hook-output.XXXXXX") || {
+    rm -f "$INPUT"
+    exit 0
+}
+trap 'rm -f "$INPUT" "$OUTPUT"' EXIT HUP INT TERM
 
-python3 "$SCRIPT"
+cat >"$INPUT"
+python3 "$SCRIPT" <"$INPUT" >"$OUTPUT"
 STATUS=$?
-[ "$STATUS" -eq 0 ] && exit 0
+if [ "$STATUS" -eq 0 ]; then
+    cat "$OUTPUT"
+    exit 0
+fi
 
-LATCH="${TMPDIR:-/tmp}/mainframe-hooks-degraded-$PPID"
-[ -e "$LATCH" ] && exit 0
+python3 "$DIR/hook-failure-report.py" \
+    "$EVENT" "$SCRIPT" "$STATUS" "$PPID" <"$INPUT" && exit 0
 
+# The reporter is itself part of the failed infrastructure. Stay role-neutral
+# and loud; duplicate output is preferable to an invisible safety-net outage.
 NAME=$(basename "$SCRIPT" 2>/dev/null || printf 'hook')
-printf '{"hookSpecificOutput":{"hookEventName":"%s","additionalContext":"mainframe harness DEGRADATION: hook script %s failed to launch (interpreter exit %s). Plugin gates and reminders may be inactive for this whole session - do not assume they are running. Tell the user explicitly and suggest restarting Claude Code."},"systemMessage":"mainframe: hook %s failed to launch (exit %s) - harness degraded, gates/reminders may be off; consider restarting Claude Code."}\n' \
-    "$EVENT" "$NAME" "$STATUS" "$NAME" "$STATUS"
-mkdir "$LATCH" 2>/dev/null
+printf '{"hookSpecificOutput":{"hookEventName":"%s","additionalContext":"MAINFRAME hook failure: %s did not complete during %s (exit %s), and its failure reporter also failed. Return this exact failure to your immediate caller before claiming the affected operation or task is verified. Do not retry or repair MAINFRAME unless assigned."},"systemMessage":"MAINFRAME hook failure: %s failed during %s (exit %s); failure reporter unavailable."}\n' \
+    "$EVENT" "$NAME" "$EVENT" "$STATUS" "$NAME" "$EVENT" "$STATUS"
 exit 0

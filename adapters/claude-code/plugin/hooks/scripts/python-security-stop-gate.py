@@ -1,67 +1,61 @@
 #!/usr/bin/env python3
-"""Stop hook: hard gate against unresolved Python security findings.
+"""Block completion on unresolved Python findings owned by this session."""
 
-Fires when Claude is about to stop a turn. Collects .py files modified in the
-session's working-tree diff vs `git HEAD`, runs Ruff's curated S-rule subset on
-the union, and splits findings by changed-line overlap: delta findings always
-block; inherited (untouched-line) findings block only while no ticket under
-docs/tickets/ names the file — the ticket, not an inline fix, is the required
-outlet for pre-existing debt. Ambiguous classification counts as delta.
-
-Design mirrors `stop-gate-suppression-markers.py`:
-- Block via `{"decision": "block", "reason": ...}` on stdout, exit 0.
-- Self-loop guard: if `stop_hook_active` is true on input, exit 0 silently.
-- Diff-aware file selection: only files touched in this session (via
-  `git diff HEAD --name-only`). Pre-existing security findings in untouched
-  files are not the agent's job to fix here.
-- Ruff is the analyzer: full-file scan with the same curated subset as
-  `python-security-scan.py` (PostToolUse). `--ignore-noqa` — silenced markers
-  do not buy past this gate.
-- Fail-safe: any error -> exit 0 without output. Gate must never break a
-  session because of itself. Missing ruff -> exit 0 (PostToolUse already
-  surfaced the install hint once).
-- Stdlib only on the Python side; shells out to `git` and `ruff`.
-"""
-
-import json
 import os
-import shutil
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import (changed_files, changed_line_ranges, emit_block,
-                          finding_is_delta, load_payload, run, stop_guard_cwd,
-                          tickets_mentioning)
+    from _hooklib import (
+        emit_block, ext, load_payload, log_hook_signal, run, stop_guard_cwd,
+    )
+    from _marker_state import unresolved
+    from _python_findings import findings
 except Exception:
     sys.exit(0)
 
-CURATED_RULES = (
-    "S102,S307,S301,S506,S602,S604,S501,S324,S311,S105,S106,S107,"
-    "B006,B008,B011,B904"
-)
-PY_EXTS = (".py", ".pyi")
+_MAX_ROWS = 8
+_CACHE = {}
 
 
-def _run_ruff(files):
-    ruff = shutil.which("ruff")
-    if not ruff or not files:
-        return []
-    try:
-        proc = subprocess.run(
-            [ruff, "check", "--select", CURATED_RULES, "--output-format", "json",
-             "--no-cache", "--ignore-noqa", "--force-exclude", *files],
-            capture_output=True, text=True, timeout=30,
-        )
-    except Exception:
-        return []
-    if proc.returncode not in (0, 1):
-        return []
-    try:
-        return json.loads(proc.stdout) if proc.stdout.strip() else []
-    except json.JSONDecodeError:
-        return []
+def _cached_findings(text, file_ext, file_path):
+    key = (file_path, text)
+    if key not in _CACHE:
+        _CACHE[key] = findings(text, file_ext, file_path)
+    return _CACHE[key]
+
+
+def _finding_counts(text, file_ext, file_path=None):
+    counts = {}
+    for row in _cached_findings(text, file_ext, file_path):
+        counts[row["key"]] = counts.get(row["key"], 0) + 1
+    return counts
+
+
+def _rows(files, keys):
+    rows = []
+    for path in files:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                text = handle.read()
+        except (FileNotFoundError, OSError):
+            continue
+        for row in _cached_findings(text, ext(path), path):
+            if row["key"] not in keys:
+                continue
+            rows.append((path, row))
+    return rows
+
+
+def _format(rows, cwd):
+    lines = [
+        f"  {os.path.relpath(path, cwd)}:{row['row']} — "
+        f"{row['code']}: {row['message']}"
+        for path, row in rows[:_MAX_ROWS]
+    ]
+    if len(rows) > _MAX_ROWS:
+        lines.append(f"  …and {len(rows) - _MAX_ROWS} more")
+    return "\n".join(lines)
 
 
 def main():
@@ -69,62 +63,30 @@ def main():
     cwd = stop_guard_cwd(payload)
     if cwd is None:
         return
-    files = changed_files(cwd, PY_EXTS)
-    if not files:
-        return
-    findings = _run_ruff(files)
-    if not findings:
+    session_id = payload.get("session_id")
+    if not session_id:
+        raise ValueError("Python safety stop gate requires session_id")
+    agent_id = payload.get("agent_id")
+    include_subagents = not bool(agent_id)
+
+    delta_keys, delta_files = unresolved(
+        session_id, agent_id, include_subagents=include_subagents,
+        counter=_finding_counts, namespace="python-delta", include_files=True,
+    )
+    if not delta_keys:
         return
 
-    # Delta findings always block; inherited (untouched-line) debt blocks only
-    # while no ticket names the file — the ticket, not an inline fix, is the
-    # required outlet for pre-existing findings (harness feedback 2026-06-23).
-    ranges, git_ok = changed_line_ranges(cwd)
-    delta, inherited_by_file = [], {}
-    for f in findings:
-        fn = f.get("filename") or ""
-        row = (f.get("location") or {}).get("row") or 0
-        end = (f.get("end_location") or {}).get("row") or row
-        if finding_is_delta(fn, row, end, ranges, git_ok):
-            delta.append(f)
-        else:
-            inherited_by_file.setdefault(fn, []).append(f)
-    unticketed = {fn: fs for fn, fs in inherited_by_file.items()
-                  if not tickets_mentioning(cwd, fn)}
-    if not delta and not unticketed:
-        return
-
-    sections = []
-    if delta:
-        lines = []
-        for f in delta[:15]:
-            code = f.get("code", "?")
-            fn = f.get("filename") or "?"
-            ln = (f.get("location") or {}).get("row", "?")
-            msg = (f.get("message") or "").strip()
-            lines.append(f"  {fn}:{ln} — {code}: {msg}")
-        more = f"\n  …and {len(delta) - 15} more" if len(delta) > 15 else ""
-        sections.append(
-            f"{len(delta)} finding(s) on lines changed this session:\n" +
-            "\n".join(lines) + more +
-            "\nOWASP/Bandit-aligned patterns (S-rules) and zero-FP correctness "
-            "bugs (B-rules) via Ruff curated subset. Resolve before declaring "
-            "the turn done — `# noqa` is not honored by this gate."
-        )
-    if unticketed:
-        lines = []
-        for fn, fs in sorted(unticketed.items()):
-            codes = sorted({f.get("code", "?") for f in fs})
-            lines.append(f"  {fn} — {len(fs)} inherited finding(s) "
-                         f"({', '.join(codes)})")
-        sections.append(
-            "Inherited findings on untouched lines with NO ticket naming the "
-            "file:\n" + "\n".join(lines) +
-            "\nFixing them now is NOT required — create or update a ticket via "
-            "the `surface-ticket` skill (mention the file's repo-relative path "
-            "and the codes), then finish the turn."
-        )
-    emit_block("python-security-stop-gate: " + "\n".join(sections))
+    delta_rows = _rows(delta_files, delta_keys)
+    reason = (
+        f"Python safety gate: {len(delta_rows)} unresolved issue(s) introduced "
+        "by this session:\n" + _format(delta_rows, cwd) +
+        "\nResolve the underlying code before completion."
+    )
+    emitted_reason = emit_block(reason)
+    log_hook_signal(
+        __file__, "python-safety", "blocked", len(delta_rows), payload,
+        context=emitted_reason,
+    )
 
 
 if __name__ == "__main__":

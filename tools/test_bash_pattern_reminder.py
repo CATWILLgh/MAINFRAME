@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for bash-pattern-reminder.py — the known-Bash-traps nudge.
-
-Focus: the rg replace-cluster rule (feedback 2026-06-29): in ripgrep `-r`
-takes a REPLACEMENT value, so grep-muscle-memory clusters silently rewrite
-matched text in the output (`-rln` = `--replace=ln`) and read as corruption.
-"""
+"""Tests for the narrow ripgrep short-cluster reminder."""
 
 import importlib.util
 import io
@@ -18,71 +13,108 @@ os.environ["MAINFRAME_TELEMETRY_DB"] = os.path.join(
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(
-    HERE, "..", "adapters/claude-code/plugin", "hooks", "scripts", "bash-pattern-reminder.py")
+    HERE, "..", "adapters/claude-code/plugin/hooks/scripts/bash-pattern-reminder.py")
 spec = importlib.util.spec_from_file_location("bash_pattern_reminder", SCRIPT)
-bpr = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bpr)
+hook = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hook)
 
 
 def _drive(command, tool="Bash"):
     payload = {"hook_event_name": "PreToolUse", "tool_name": tool,
                "tool_input": {"command": command}, "session_id": "t"}
-    out = io.StringIO()
-    saved = (sys.stdin, sys.stdout)
+    output = io.StringIO()
+    saved = sys.stdin, sys.stdout
     try:
         sys.stdin = io.StringIO(json.dumps(payload))
-        sys.stdout = out
-        bpr.main()
+        sys.stdout = output
+        hook.main()
     finally:
-        (sys.stdin, sys.stdout) = saved
-    return out.getvalue()
+        sys.stdin, sys.stdout = saved
+    return output.getvalue()
 
 
-def test_rg_cluster_r_first_fires():
-    out = _drive('rg -rln "dto/move-nm|dto/media-save" src/modules')
-    assert "ripgrep" in out and "REPLACEMENT" in out
+def test_risky_clusters_fire():
+    for command in (
+        'rg -rln "pattern" src',
+        'rg -irn "pattern" src',
+        'rg -nr pattern src',
+        '/opt/bin/rg -ur pattern src',
+    ):
+        output = _drive(command)
+        assert "replacement text" in output and "--replace" in output, command
 
 
-def test_rg_cluster_r_mid_fires():
-    assert "ripgrep" in _drive('rg -irn "capKopecks" src')
+def test_separate_or_explicit_replacement_is_silent():
+    for command in (
+        "rg -n pattern src", "rg -l -n pattern src",
+        "rg -r ln pattern src", "rg --replace=ln pattern src",
+        "rg -- -rln", "rg -r=ln pattern src",
+    ):
+        assert _drive(command) == "", command
 
 
-def test_rg_cluster_trailing_r_fires():
-    # `-nr` ends in r: the NEXT token becomes the replacement value.
-    assert "ripgrep" in _drive('rg -nr pattern src/')
+def test_only_actual_rg_commands_fire():
+    for command in (
+        "echo rg -rln pattern src",
+        "printf '%s' 'rg -rln pattern src'",
+        "echo 'example: rg -rln pattern src'",
+        "other-command --text 'rg -rln pattern src'",
+    ):
+        assert _drive(command) == "", command
 
 
-def test_rg_plain_flags_silent():
-    assert _drive('rg -n "capKopecks|spentKopecks" src').strip() == ""
+def test_shell_operators_and_quotes_are_parsed():
+    assert _drive('echo "a|b" && rg -rln pattern src')
+    assert _drive("echo safe | rg -irn pattern src")
+    assert _drive("echo 'rg -rln pattern src' && rg -n pattern src") == ""
 
 
-def test_rg_deliberate_replace_forms_silent():
-    assert _drive("rg -r ln 'pat' src").strip() == ""
-    assert _drive("rg --replace=ln 'pat' src").strip() == ""
+def test_wrappers_and_nested_shell_are_supported():
+    for command in (
+        "MODE=test command rg -rln pattern src",
+        "time rg -irn pattern src",
+        "sh -c 'rg -nr pattern src'",
+        "eval 'rg -rln pattern src'",
+    ):
+        assert _drive(command), command
 
 
-def test_non_bash_tool_silent():
-    assert _drive('rg -rln x', tool="Read").strip() == ""
+def test_removed_historical_patterns_are_silent():
+    for command in (
+        "rm -rf ./cache",
+        "cat > /tmp/file",
+        "echo text > /tmp/file",
+        "chmod +x /tmp/tool",
+        "npm install -g package",
+        "uv tool install package",
+        "pipx install package",
+    ):
+        assert _drive(command) == "", command
 
 
-def test_existing_rm_rf_rule_still_fires():
-    assert "rm -r" in _drive("rm -rf /tmp/probe-x")
+def test_non_bash_and_malformed_commands_are_silent():
+    assert _drive("rg -rln pattern", tool="Read") == ""
+    assert _drive("rg -rln 'unterminated") == ""
 
 
-def _run_all():
-    failures = 0
-    tests = [(n, f) for n, f in sorted(globals().items())
-             if n.startswith("test_") and callable(f)]
-    for name, fn in tests:
-        try:
-            fn()
-            print(f"  ok  {name}")
-        except Exception as exc:
-            failures += 1
-            print(f"FAIL  {name}: {exc!r}")
-    print(f"\n{len(tests) - failures}/{len(tests)} passed")
-    sys.exit(1 if failures else 0)
+def test_rendered_cluster_list_and_cluster_length_are_bounded():
+    commands = [f"rg -{letter}r pattern src" for letter in "abcdefghij"]
+    commands.append("rg -" + "a" * 1000 + "r pattern src")
+    output = _drive(" ; ".join(commands))
+    note = json.loads(output)["hookSpecificOutput"]["additionalContext"]
+    assert "…and 6 more" in note
+    assert "a" * 100 not in note
+    assert len(note) < 600
+
+
+def main():
+    tests = [value for name, value in sorted(globals().items())
+             if name.startswith("test_") and callable(value)]
+    for test in tests:
+        test()
+        print(f"  ok {test.__name__}")
+    print(f"OK bash-pattern-reminder — {len(tests)} tests passed")
 
 
 if __name__ == "__main__":
-    _run_all()
+    main()

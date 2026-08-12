@@ -21,6 +21,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import time
 
 # Source-code extensions the hooks scan. Prose/config (.md/.json/.yaml/.txt) is
 # skipped on purpose: it legitimately mentions markers (incl. the hub's own docs).
@@ -37,13 +38,14 @@ CODE_EXTENSIONS = frozenset({
 HUB_HOOK_FILES = frozenset({
     "scan-suppression-markers.py", "stop-gate-suppression-markers.py",
     "python-security-scan.py", "python-security-stop-gate.py",
-    "nodejs-security-scan.py", "nodejs-security-stop-gate.py",
-    "nodejs-deps-audit.py", "python-deps-audit.py",
+    "nodejs-security-scan.py",
     "bash-pattern-reminder.py", "comment-discipline-reminder.py",
     "stop-gate-comment-discipline.py", "comment_extract.py",
-    "frontend-fsd-gate.py", "frontend-dead-code.py",
-    "_hooklib.py", "_markers.py", "test_hooklib.py", "test_markers.py",
-    "telemetry.py", "test_telemetry.py",
+    "_comment_findings.py", "_python_findings.py", "_fallow_state.py",
+    "_length_check.py", "_length_state.py", "fallow-quality-note.py",
+    "length-quality-note.py",
+    "_hooklib.py", "_markers.py", "_marker_state.py", "test_hooklib.py",
+    "telemetry.py", "hook-failure-report.py", "test_telemetry.py",
 })
 
 
@@ -85,6 +87,7 @@ def emit_permission(decision, reason):
             "permissionDecisionReason": reason,
         }
     }))
+    return reason
 
 
 # `git [-c k=v | -C path | --opts] commit ...` — the commit subcommand. `-c`/`-C`
@@ -123,6 +126,7 @@ def emit_block(reason):
     if feedback_skill_installed():
         reason += FEEDBACK_NUDGE
     print(json.dumps({"decision": "block", "reason": reason}))
+    return reason
 
 
 def stop_guard_cwd(payload):
@@ -187,90 +191,33 @@ def changed_files(cwd, exts):
     return files
 
 
-_HUNK_NEW_SIDE_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
-
-
-def changed_line_ranges(cwd):
-    """(ranges, ok): new-side line numbers changed vs HEAD, per absolute path.
-
-    `ranges[path]` is a set of line numbers, or None for untracked files (every
-    line is new). `ok=False` means git gave no answer — callers must then treat
-    every finding as delta (the strict branch): ambiguity may never widen the
-    inherited (weakened) branch. Deletion-only hunks contribute no lines, so a
-    file edited purely by deletion keeps an empty set — `finding_is_delta`
-    reads that as ambiguous, again toward strict.
-    """
-    try:
-        diff = subprocess.check_output(
-            ["git", "diff", "HEAD", "-U0", "--no-color", "--diff-filter=AM"],
-            cwd=cwd, stderr=subprocess.DEVNULL, timeout=10).decode(errors="replace")
-        untracked = subprocess.check_output(
-            ["git", "ls-files", "--others", "--exclude-standard"],
-            cwd=cwd, stderr=subprocess.DEVNULL, timeout=10).decode(errors="replace")
-    except Exception:
-        return {}, False
-    ranges, current = {}, None
-    for line in diff.splitlines():
-        if line.startswith("+++ "):
-            target = line[4:].strip()
-            if target.startswith("b/"):
-                target = target[2:]
-            current = (None if target == "/dev/null"
-                       else os.path.realpath(os.path.join(cwd, target)))
-            if current is not None:
-                ranges.setdefault(current, set())
-        elif current is not None and line.startswith("@@"):
-            m = _HUNK_NEW_SIDE_RE.match(line)
-            if not m:
-                continue
-            start = int(m.group(1))
-            count = 1 if m.group(2) is None else int(m.group(2))
-            ranges[current].update(range(start, start + count))
-    for rel in untracked.splitlines():
-        rel = rel.strip()
-        if rel:
-            ranges[os.path.realpath(os.path.join(cwd, rel))] = None
-    return ranges, True
-
-
-def finding_is_delta(file_path, start_row, end_row, ranges, git_ok):
-    """True when a finding overlaps this session's changed lines — or when the
-    classification is ambiguous (no git, file absent from ranges, empty entry).
-    Security gates weaken only on a PROVEN inherited finding, never by default."""
-    if not git_ok:
-        return True
-    lines = ranges.get(os.path.realpath(file_path), ())
-    if lines is None:
-        return True
-    if not lines:
-        return True
-    lo = min(start_row or 0, end_row or start_row or 0)
-    hi = max(start_row or 0, end_row or start_row or 0)
-    return any(n in lines for n in range(lo, hi + 1))
-
-
 def tickets_mentioning(cwd, file_path, max_bytes=262144):
-    """Ticket files under docs/tickets/ whose text contains the repo-relative
-    path of `file_path`. Path anchor, never the basename — `auth.py` is a
-    substring of `oauth.py`, and utils.py recurs across any repo."""
-    tickets_dir = os.path.join(cwd, "docs", "tickets")
+    """Open ticket files whose text contains the repo-relative file path.
+
+    Search every lifecycle directory below docs/tickets/open, but never the
+    immutable archive. Match the path anchor rather than a basename: auth.py is
+    a substring of oauth.py, and utils.py commonly recurs across a repository.
+    """
+    tickets_dir = os.path.join(cwd, "docs", "tickets", "open")
     rel = os.path.relpath(os.path.realpath(file_path), os.path.realpath(cwd))
     rel = rel.replace(os.sep, "/")
     if rel.startswith("..") or not os.path.isdir(tickets_dir):
         return []
     hits = []
-    for name in sorted(os.listdir(tickets_dir)):
-        if not name.endswith(".md") or name == "README.md":
-            continue
-        path = os.path.join(tickets_dir, name)
-        try:
-            if os.path.getsize(path) > max_bytes:
+    for root, dirs, names in os.walk(tickets_dir):
+        dirs.sort()
+        for name in sorted(names):
+            if not name.endswith(".md") or name == "README.md":
                 continue
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                if rel in fh.read():
-                    hits.append(name)
-        except OSError:
-            continue
+            path = os.path.join(root, name)
+            try:
+                if os.path.getsize(path) > max_bytes:
+                    continue
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    if rel in fh.read():
+                        hits.append(name)
+            except OSError:
+                continue
     return hits
 
 
@@ -310,16 +257,17 @@ def added_lines_by_file(cwd, self_files=HUB_HOOK_FILES):
 
 _TELEMETRY_BANNED_KEYS = frozenset({
     "tool_input", "prompt", "command", "content", "code", "text",
-    "path", "file_path", "cwd", "transcript_path",
+    "path", "file_path", "cwd", "transcript_path", "reason", "message",
+    "stdout", "stderr", "output", "exception",
 })
 
 
 def _telemetry_db_path():
-    # ~/.claude/mainframe is the hub-OWNED namespace (a --dev symlink into the
-    # hub repo). ~/.claude/telemetry is unusable as an opt-in marker: Claude
-    # Code itself creates and uses it, so it exists on every machine.
+    # ~/.claude/mainframe is the hub-OWNED --dev namespace. Keep the adapter
+    # segment explicit so a future Codex adapter can opt in independently.
     return (os.environ.get("MAINFRAME_TELEMETRY_DB")
-            or os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db"))
+            or os.path.expanduser(
+                "~/.claude/mainframe/claude-code/telemetry/telemetry.db"))
 
 
 def _telemetry_project_key(cwd):
@@ -332,16 +280,84 @@ def _telemetry_project_key(cwd):
     return f"{base}-{digest}"
 
 
-def log_event(event, payload=None, hook_payload=None):
-    """Append one telemetry row, best-effort — any failure is a silent no-op.
+_TELEMETRY_SCHEMA = (
+    "CREATE TABLE IF NOT EXISTS events ("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, session_id TEXT, "
+    "agent_type TEXT, project TEXT, event TEXT, payload TEXT)"
+)
+_TELEMETRY_EFFECTIVENESS_VIEW = """
+CREATE VIEW hook_effectiveness AS
+SELECT
+  json_extract(payload, '$.hook') AS hook,
+  json_extract(payload, '$.rule_id') AS rule_id,
+  COUNT(*) AS signals,
+  COUNT(DISTINCT session_id) AS sessions,
+  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'noted'
+      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS noted,
+  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'asked'
+      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS asked,
+  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'blocked'
+      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS blocked,
+  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'resolved'
+      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS resolved,
+  SUM(CAST(json_extract(payload, '$.context_chars') AS INTEGER)) AS context_chars,
+  MAX(ts) AS last_seen
+FROM events
+WHERE event = 'hook_signal' AND json_valid(payload)
+GROUP BY hook, rule_id
+"""
+_HOOK_SIGNAL_OUTCOMES = frozenset({"noted", "asked", "blocked", "resolved"})
+_HOOK_SIGNAL_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+_HOOK_SIGNAL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+_TELEMETRY_RETRY_DELAYS = (0.0, 0.005, 0.015, 0.030)
 
-    Passive Bucket-1 sink (ADR 0073). Must never stall or break a session:
-    short busy_timeout, whole body guarded. `payload` is event-specific metadata
-    — banned structural keys are stripped as a secrets second-line-of-defence.
-    `hook_payload` is the hook stdin JSON, read only for session_id / agent_type
-    / cwd, never dumped wholesale.
+
+def initialize_telemetry_db(db=None):
+    """Create the dev-only sink once and configure its persistent WAL mode."""
+    path = db or _telemetry_db_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    conn = sqlite3.connect(path, timeout=5)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute(_TELEMETRY_SCHEMA)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_event_ts ON events(event, ts)")
+        # The view is derived state. Recreate it during explicit dev
+        # initialization so its schema can evolve without a data migration.
+        conn.execute("DROP VIEW IF EXISTS hook_effectiveness")
+        conn.execute(_TELEMETRY_EFFECTIVENESS_VIEW)
+        conn.commit()
+    finally:
+        conn.close()
+    return path
+
+
+def _telemetry_busy(exc):
+    text = str(exc).lower()
+    return "locked" in text or "busy" in text
+
+
+def log_event(event, payload=None, hook_payload=None):
+    """Append one telemetry row and return written/disabled/busy/error.
+
+    The adapter's shell gate prevents telemetry-only Python startup outside
+    --dev. Product hooks that are already running also call this function, so
+    the directory check deliberately happens before row construction. In dev,
+    schema/WAL initialization belongs to installation; only a missing database
+    is repaired lazily. Contending writers receive a short bounded retry with
+    process-based jitter and never stall or break a session indefinitely.
     """
     try:
+        db = _telemetry_db_path()
+        directory = os.path.dirname(db)
+        if os.environ.get("MAINFRAME_TELEMETRY_DB"):
+            os.makedirs(directory, exist_ok=True)
+        elif not os.path.isdir(directory):
+            return "disabled"
+        if not os.path.exists(db):
+            initialize_telemetry_db(db)
+
         hp = hook_payload or {}
         safe = {k: v for k, v in (payload or {}).items()
                 if k not in _TELEMETRY_BANNED_KEYS}
@@ -353,38 +369,68 @@ def log_event(event, payload=None, hook_payload=None):
             str(event),
             json.dumps(safe, separators=(",", ":")),
         )
-        db = _telemetry_db_path()
-        if os.environ.get("MAINFRAME_TELEMETRY_DB"):
-            os.makedirs(os.path.dirname(db), exist_ok=True)
-        elif not os.path.isdir(os.path.dirname(db)):
-            return  # dir absent = telemetry not opted in (dev-only, install.sh --dev)
-        conn = sqlite3.connect(db, timeout=0.05)
-        try:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("PRAGMA busy_timeout=50")
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS events ("
-                "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, session_id TEXT, "
-                "agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_events_event_ts ON events(event, ts)")
-            conn.execute(
-                "INSERT INTO events(ts, session_id, agent_type, project, event, payload) "
-                "VALUES (?,?,?,?,?,?)", row)
-            conn.commit()
-        finally:
-            conn.close()
+        for attempt, delay in enumerate(_TELEMETRY_RETRY_DELAYS):
+            if delay:
+                jitter = ((os.getpid() + attempt) % 5) / 1000
+                time.sleep(delay + jitter)
+            conn = None
+            try:
+                conn = sqlite3.connect(db, timeout=0.05)
+                conn.execute("PRAGMA busy_timeout=50")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute(
+                    "INSERT INTO events(ts, session_id, agent_type, project, event, payload) "
+                    "VALUES (?,?,?,?,?,?)", row)
+                conn.commit()
+                return "written"
+            except sqlite3.OperationalError as exc:
+                if not _telemetry_busy(exc):
+                    return "error"
+            finally:
+                if conn is not None:
+                    conn.close()
+        return "busy"
+    except sqlite3.OperationalError:
+        return "error"
     except Exception:
-        pass
+        return "error"
+
+
+def log_hook_signal(hook, rule_id, outcome, count, hook_payload, context=""):
+    """Record one privacy-safe, comparable hook effectiveness signal.
+
+    Callers provide only stable identifiers and counts. Source text, paths,
+    commands, diagnostics, and model output cannot enter this contract. The
+    context itself is never stored; only its character count is retained so
+    dev analysis can compare quality signal with context cost.
+    """
+    try:
+        outcome = str(outcome)
+        count = int(count)
+        hook = os.path.basename(str(hook))
+        rule_id = str(rule_id)
+        if (
+            outcome not in _HOOK_SIGNAL_OUTCOMES or count <= 0
+            or _HOOK_SIGNAL_NAME_RE.fullmatch(hook) is None
+            or _HOOK_SIGNAL_ID_RE.fullmatch(rule_id) is None
+        ):
+            return "error"
+        data = {
+            "hook": hook,
+            "rule_id": rule_id,
+            "outcome": outcome,
+            "count": count,
+            "context_chars": len(str(context or "")),
+        }
+        return log_event("hook_signal", data, hook_payload)
+    except Exception:
+        return "error"
 
 
 def run(main_fn):
-    """Fail-safe entrypoint: run main_fn(), swallow any error, always exit 0.
-
-    A hook must never break or noise-up a session because of itself.
-    """
+    """Exit nonzero on an internal failure so run-hook can report it safely."""
     try:
         main_fn()
     except Exception:
-        pass
+        sys.exit(1)
     sys.exit(0)

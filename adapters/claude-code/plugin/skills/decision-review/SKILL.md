@@ -2,13 +2,14 @@
 name: decision-review
 user-invocable: false
 disable-model-invocation: true
-description: "Methodology for rigorous, evidence-grounded validation of a proposed decision, design, or approach. Covers pre-mortem failure-scenario generation, disconfirmation testing, counter-model construction, evidence-grounding of every objection, and honest severity ranking — with the hard discipline that an objection which cannot be grounded is reported as ungrounded, never manufactured or inflated. Loaded by the `decision-reviewer` agent only; closed to main-context auto-invocation."
-when_to_use: "A decision/design/approach review is in flight inside the `decision-reviewer` sub-agent — validating an architecture choice, a design fork, or a plan before it is committed to. Triggered via agent frontmatter `skills:` preload, not by direct user invocation."
+description: Private evidence-grounded decision-review method read directly by the mainframe decision reviewer. Not a primary-session capability.
 ---
 
 # Decision review — method
 
-Preloaded into the `decision-reviewer` sub-agent. The job is to find the strongest grounded reasons a proposed decision will fail, so the decision is hardened before it is committed to.
+Read directly by the `mainframe-decision-reviewer` subagent before every review.
+The job is to find the strongest grounded reasons a proposed decision will fail,
+so the decision is hardened before it is committed to.
 
 ## Prime directive — grounding, not posture
 
@@ -29,7 +30,10 @@ LLMs drift toward agreeing with the framing they are handed. Evaluate the artifa
 An objection you can check, you must check. Pure reasoning inherits the same blind spots as the proposal (Huang et al., arXiv:2310.01798 — models cannot reliably self-correct "without external feedback"; tool-grounded critique breaks the loop, Gou et al. CRITIC, arXiv:2305.11738).
 
 - Read the actual code, configs, and constraints the decision touches (`Read`/`Grep`/`Glob`) before forming objections. A failure mode that the code already prevents is not a failure mode.
-- When the decision rests on a library / framework / protocol / API claim, verify it against authoritative sources (Context7 first, then web) — do not object from memory.
+- When the decision rests on a library, framework, protocol, or API claim,
+  verify it against the current owning documentation. Use Context7 for
+  supported software documentation and the web for the primary source; do not
+  object from memory.
 - Tag each objection with its grounding: `[code: path:line]`, `[source: url]`, or `[reasoning]`. Reasoning-only objections are the weakest and must be flagged as such.
 
 ## Step 3 — Pre-mortem (prospective hindsight)
@@ -86,13 +90,14 @@ If the proposal is sound and you could not ground a serious objection, the verdi
 ## Cross-refs
 
 - [`severity-calibration`](../severity-calibration/SKILL.md) — the rubric for Step 6; reused, not duplicated.
-- [`code-audit`](../code-audit/SKILL.md) — for finding defects in *existing code*; this skill reviews *decisions*, not implementations.
+- An implementation audit is a different task: this skill reviews a proposed
+  decision, not defects in existing code.
 
 ## Sources
 
-- Klein, "Performing a Project Premortem," *HBR* Sept 2007 — prospective hindsight (~30% lift in cause identification). https://hbr.org/2007/09/performing-a-project-premortem
-- Nemeth et al., "Devil's advocate versus authentic dissent," *European Journal of Social Psychology* 2001 — assigned dissent can bolster the majority view. https://onlinelibrary.wiley.com/doi/abs/10.1002/ejsp.58
-- Heuer, *Psychology of Intelligence Analysis* (CIA, 1999) — Analysis of Competing Hypotheses; disconfirmation over confirmation.
-- Huang et al., "Large Language Models Cannot Self-Correct Reasoning Yet," arXiv:2310.01798 — self-correction needs an external signal.
-- Gou et al., "CRITIC: LLMs Can Self-Correct with Tool-Interactive Critiquing," arXiv:2305.11738 — tool-grounding breaks the hallucination loop.
-- Cosier, "A critical view of dialectical inquiry as a tool in strategic planning," *Strategic Management Journal* 1980 — full counter-model beats a list of objections.
+- [Klein, "Performing a Project Premortem," *HBR* (2007)](https://hbr.org/2007/09/performing-a-project-premortem) — prospective hindsight and failure-cause identification.
+- [Nemeth et al., "Devil's advocate versus authentic dissent," *European Journal of Social Psychology* (2001)](https://onlinelibrary.wiley.com/doi/abs/10.1002/ejsp.58) — assigned dissent can bolster the majority view.
+- [Heuer, *Psychology of Intelligence Analysis* (CIA, 1999)](https://www.cia.gov/resources/csi/books-monographs/psychology-of-intelligence-analysis-2/) — Analysis of Competing Hypotheses and disconfirmation.
+- [Huang et al., "Large Language Models Cannot Self-Correct Reasoning Yet" (2023)](https://arxiv.org/abs/2310.01798) — self-correction needs an external signal.
+- [Gou et al., "CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing" (2023)](https://arxiv.org/abs/2305.11738) — tool-grounding supplies external feedback.
+- [Cosier, "A critical view of dialectical inquiry as a tool in strategic planning," *Strategic Management Journal* (1980)](https://doi.org/10.1002/smj.4250010403) — counter-model reasoning rather than ritual objection lists.

@@ -1,12 +1,16 @@
 ---
 name: dokploy-api
-description: "Operate a Dokploy instance through its HTTP API (self-hosted PaaS on Docker + Traefik): authentication via the `x-api-key` header, the tRPC-over-OpenAPI call convention (GET = flat query params, POST = JSON body, bare-JSON responses, `{message,code,issues}` errors), the resource hierarchy Project -> Environment -> {Application | Compose | Database}, and canonical workflows for deploying applications and Compose stacks, provisioning databases, attaching domains/TLS, and managing servers and backups. Includes destructive-operation safety and a live-spec navigation technique for any endpoint beyond the cookbook."
-when_to_use: "Use when interacting with a Dokploy server: creating projects or environments, deploying or redeploying an application or Docker Compose stack, provisioning a database (Postgres/MySQL/MongoDB/Redis/MariaDB/LibSQL), attaching a domain or issuing Let's Encrypt certificates, reading deployment logs or status, managing servers or backups, or calling any tRPC-style `*.create` / `*.deploy` / `*.one` endpoint with an `x-api-key`. Also applies when a project's config references a Dokploy instance, `DOKPLOY_URL`, or a `DOKPLOY_API_KEY`."
+description: "Internal Dokploy branch for the model-invocable `infrastructure` skill: HTTP API mechanics, resource hierarchy, deployment and Compose workflows, databases, domains/TLS, servers, backups, destructive-operation safety, and live-spec navigation."
+when_to_use: "A Dokploy operation is already in flight through the `infrastructure` skill. Read directly from that skill's routing instructions; this branch is not independently model-invocable."
 user-invocable: false
 disable-model-invocation: true
 ---
 
 # Working with the Dokploy API
+
+This is the hidden Dokploy branch of `mainframe:infrastructure`. The primary
+session reads it through that skill when the project map or verified recon
+identifies Dokploy.
 
 Dokploy is a self-hostable PaaS (Docker + Traefik) — a Heroku/Vercel/Netlify alternative. This skill drives a running instance through its HTTP API.
 
@@ -111,4 +115,4 @@ Use this for any endpoint not covered by the cookbook below.
 
 - [`curl-requests`](../curl-requests/SKILL.md) — HTTP mechanics: `--fail-with-body`, timeouts, never inlining secrets.
 - [`secrets-handling`](../secrets-handling/SKILL.md) — where `DOKPLOY_API_KEY` lives and how to substitute it without leaking the value.
-- [`surface-ticket`](../surface-ticket/SKILL.md) — defer an out-of-scope Dokploy fix instead of silently working around it.
+- [`ticket`](../ticket/SKILL.md) — defer an out-of-scope Dokploy fix instead of silently working around it.

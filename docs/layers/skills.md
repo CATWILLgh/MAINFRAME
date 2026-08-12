@@ -10,7 +10,7 @@ The hub's `init` skill is the manual primary-session context: it sets `disable-m
 
 ## Where it lives / How to install
 
-- In the hub: `adapters/claude-code/plugin/skills/<name>/SKILL.md` (+ optional `<name>/*.md` supporting files). Depth is strictly = 1.
+- In the hub: `adapters/claude-code/plugin/skills/<name>/SKILL.md` (+ optional supporting files directly beside it or one directory below, such as `<name>/references/*.md`).
 - On the machine: delivered via the `mainframe` plugin (`adapters/claude-code/plugin/` symlinked as one plugin), not an individual per-skill symlink.
 - Activation: once the plugin is loaded, the skill becomes visible to Claude through the frontmatter "showcase".
 
@@ -44,15 +44,17 @@ Combined `description + when_to_use` truncated at **1536 chars** (hub validator 
 ### 1.2. Depth and supporting files
 
 - A skill = a `<name>/` folder containing `SKILL.md` inside.
-- Optional supporting markdown files in the same folder (`<name>/helper.md` etc.).
-- **Depth = 1**: nested subfolders are not supported.
+- Optional supporting files can live beside `SKILL.md` or in one descriptive
+  subfolder such as `references/`, `examples/`, or `scripts/`.
+- **Maximum supporting-file depth = 1** below the skill root. Deeper trees are
+  rejected by the hub validator.
 - Cross-skill `@import` does not exist. Relationships between skills are expressed by mentioning the skill name in the body; both frontmatter entries are visible at session start.
 
 ### 1.2.1. Supporting-file loading — the only signal is an inline link (verified 2026-06-13)
 
-When a skill triggers, only `SKILL.md` is injected (one message, persists for the session). Supporting files are **not** injected — the model must choose to `Read` them on-demand. The **only** pointer is what the author writes inline in `SKILL.md`: a relative link `[file.md](file.md)` plus a one-line *what it holds + when to load it* (docs: *"to ensure Claude knows what each supporting file contains and when to load it, reference these files from SKILL.md"*). There is **no** frontmatter `files:` field, no auto-load, no `@import` in the body, and **no documented fix** for the failure where the model stops at `SKILL.md` and skips the link — Anthropic treats link+description as sufficient. Empirically it is not always (a hub agent skipped `surface-ticket/template.md` and produced a wrong-scheme ticket, 2026-06-13).
+When a skill triggers, only `SKILL.md` is injected (one message, persists for the session). Supporting files are **not** injected — the model must choose to `Read` them on-demand. The **only** pointer is what the author writes inline in `SKILL.md`: a relative link `[file.md](file.md)` plus a one-line *what it holds + when to load it* (docs: *"to ensure Claude knows what each supporting file contains and when to load it, reference these files from SKILL.md"*). There is **no** frontmatter `files:` field, no auto-load, no `@import` in the body, and **no documented fix** for the failure where the model stops at `SKILL.md` and skips the link — Anthropic treats link+description as sufficient. Empirically it is not always: an earlier hub skill's linked template was skipped and a wrong-scheme ticket was produced on 2026-06-13.
 
-Escape hatches for a must-load-every-time file: fold it into `SKILL.md` if small. A bash placeholder `` !`cat ${CLAUDE_SKILL_DIR}/file.md` `` can force-inject eagerly, but it is unverified for plugin skills and costs tokens every load — not used. Practical rule: classify each supporting file **conditional** (link + what/when/why is enough) vs **mandatory-every-run** (do not trust a link). Source caveat: `claude-code-guide` (CLI) + `web-search` both rest on `code.claude.com/docs/en/skills` — corroborated by two paths, not an independent binary inspection.
+Escape hatches for a must-load-every-time file: fold it into `SKILL.md` if small. A bash placeholder `` !`cat ${CLAUDE_SKILL_DIR}/file.md` `` can force-inject eagerly, but it is unverified for plugin skills and costs tokens every load — not used. Practical rule: classify each supporting file **conditional** (link + what/when/why is enough) vs **mandatory-every-run** (do not trust a link). Source caveat: the original CLI guide and research pass both rested on `code.claude.com/docs/en/skills` — two retrieval paths to one underlying source, not independent evidence.
 
 ### 1.3. Eval — when the model loads a skill
 
@@ -60,7 +62,10 @@ Escape hatches for a must-load-every-time file: fold it into `SKILL.md` if small
 2. On tool use / a topical request, the model evaluates relevance and loads the body if there is a match.
 3. `user-invocable: true` → skill appears in the `/`-menu (user can invoke it explicitly).
 4. `user-invocable: false` → hidden from the menu, but **Claude still auto-invokes it on triggers**.
-5. `disable-model-invocation: true` → Claude does NOT auto-invoke. Activation only via explicit `/<name>` (if user-invocable) or subagent `skills:` preload.
+5. `disable-model-invocation: true` → Claude does NOT auto-invoke. Current
+   Anthropic documentation also says that this prevents `skills:` preload into
+   subagents. Activation is therefore only explicit `/<name>` when the skill is
+   user-invocable, or an explicitly controlled file read by a dedicated agent.
 
 ### 1.4. `context: fork` — skill in an isolated context
 
@@ -95,9 +100,17 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
   - `tools:` is specified and **does not contain `Skill`** → invoking a skill is **not possible**.
   - `tools:` is **omitted** → inherits all tools, including `Skill` → can invoke any project/user/plugin skill.
   - To block entirely: remove `Skill` from `tools` **or** add it to `disallowedTools`.
-- **Preload** (`skills:` in frontmatter) — injects the **full content** of the listed skills into context at startup, bypassing semantic matching. Verbatim: *"controls which skills are preloaded, not which skills the subagent can access"*.
+- **Preload** (`skills:` in frontmatter) — injects the **full content** of listed
+  model-invocable skills into context at startup. Current Anthropic docs say a
+  skill with `disable-model-invocation: true` is excluded from this preload.
 
-**Consequence:** a subagent without `Skill` in `tools` and without the required skill in `skills:` **cannot reach** that skill by any means — neither by auto-match nor by explicit invocation. Therefore a reminder hook must carry knowledge **inline**, not as "go read the skill" (the subagent may physically be unable to). All our hub agents have a narrow `tools:` without `Skill`; they access skills only via `skills:` preload.
+**Consequence:** `skills:` is not a reliable private preload for a skill hidden
+with `disable-model-invocation: true`. When such knowledge must remain private to
+one agent, give that agent a narrow `Read` capability, point it at the skill
+entrypoint, and enforce the allowed skill tree with an agent-scoped `PreToolUse`
+hook. `mainframe-researcher` uses this pattern without a `skills:` binding: the
+agent body points directly to the hidden skill entrypoint, so the primary agent
+does not load or route its internal methodology.
 
 ---
 
@@ -105,12 +118,23 @@ Two **orthogonal** axes (source: `code.claude.com/docs/en/sub-agents`). This is 
 
 ### 2.1. Current skills in `adapters/claude-code/plugin/skills/`
 
-17 skills as of 2026-08-09, shipped via the `mainframe` plugin. The directory is the source of truth — this is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew). Roles:
+17 skills as of 2026-08-12, shipped via the `mainframe` plugin. The directory is the source of truth — this is grouped by role rather than re-enumerated per skill, because the per-skill table is exactly what rotted here (it sat at 5 while the count grew). Roles:
 
-- **Process / workflow:** `init`, `code-audit`, `decision-review`.
-- **Quality discipline (gates / self-checks):** `no-suppression-markers`, `severity-calibration`, `surface-ticket`, `testing-strategy`, `secrets-handling`.
-- **Stack patterns (preloaded into the engineer agents via `disable-model-invocation: true`):** `python-backend-patterns`, `nestjs-backend-patterns`, `nextjs-backend-patterns`, `react-frontend-patterns`, `frontend-design`, `shadcn`.
-- **Ops / external services:** `ops-app-server-safety`, `dokploy-api`, `curl-requests`.
+- **Process / workflow:** `init`; private `decision-review` is
+  read directly by `mainframe-decision-reviewer` and stays outside primary-session
+  discovery.
+- **Quality discipline (gates / self-checks):** `no-suppression-markers`, `severity-calibration`, `ticket`, `testing-strategy`, `secrets-handling`.
+- **Specialist stack patterns:** `python-backend-patterns`,
+  `typescript-backend-patterns`,
+  `react-frontend-patterns`, `frontend-design`, `shadcn`. These are deliberately
+  model-invocable so the primary agent can use them and subagents can preload or
+  invoke them. Backend agents preload their compact core. The React agent also
+  preloads compact `frontend-design` and `shadcn` entrypoints: they route to
+  supporting files only for the active surface, while the shadcn branch exits
+  after a local check when `components.json` is absent.
+- **Private research methodology:** `research-method`, read only by
+  `mainframe-researcher` through its profile-scoped path guard.
+- **Ops / external services:** `infrastructure` is the model-visible primary-session entry; `dokploy-api` is its hidden Dokploy branch; `ops-app-server-safety`, `curl-requests`, and `secrets-handling` remain focused reusable capabilities. The infrastructure entry reads a project's adapter-neutral `.agents/infrastructure.json` only when applicable and follows only the referenced runbooks needed for the active operation.
 
 The `description + when_to_use` split in neutral, situation-based phrasing (describe the trigger, not its source) is the standard; combined chars stay within the validator limit (1536).
 
@@ -124,7 +148,7 @@ The `description + when_to_use` split in neutral, situation-based phrasing (desc
 | Supporting file | 5K tokens / 60 lines |
 | `description` | ≤ 1024 chars |
 | `description + when_to_use` | ≤ 1536 chars |
-| Depth | exactly 1 |
+| Supporting-file depth | at most one directory below the skill root |
 | Dead supporting files | flagged |
 | Required frontmatter | `name`, `description` (minimum) |
 
@@ -133,8 +157,12 @@ The `description + when_to_use` split in neutral, situation-based phrasing (desc
 - **Trigger phrases go in `when_to_use`, not in `description`.** Description = what it does; when_to_use = when to activate. After the 2026-05-28 split, our skills follow this exactly.
 - **Neutral, situation-based phrasing — not tied to which side triggers it** (2026-05-28). Describe the trigger, not its source. Formulations like `"Use when the user asks..."` or `"Trigger when Claude is planning..."` are forbidden. Correct: `"Use when starting, restarting, or stopping a long-running development server or container stack."` Rationale — the activation mechanism matches *task* against *description* without distinguishing the source of the task (user message vs. the model's own plan). Style applicability conditions: (a) specificity — vague formulations cause false positives; (b) preserving anchor keywords (commands like `npm run dev`, process names, action verbs).
 - **`user-invocable: false` by default**, except for skills with side effects (commit, deploy, scaffold). The criterion is side effects, not invocation frequency.
-- **`disable-model-invocation: true`** — use when a skill **must not auto-load in main context**, but only be preloaded in a dedicated subagent. Used by the stack-pattern skills (e.g. `python-backend-patterns`), each preloaded into its engineer agent via `skills:` and hidden from the main context.
-- **Relationships between skills** — expressed by mentioning the skill name in the body (`severity-calibration` is referenced in `code-audit`).
+- **`disable-model-invocation: true`** — use when a skill must not auto-load.
+  Do not assume it will still preload through a subagent `skills:` binding;
+  current Anthropic documentation explicitly says it will not.
+- **Relationships between skills** — expressed by mentioning the skill name in
+  the body or preloading it in the owning profile (`severity-calibration` is
+  preloaded by `mainframe-decision-reviewer`).
 
 ---
 
@@ -143,7 +171,12 @@ The `description + when_to_use` split in neutral, situation-based phrasing (desc
 1. **Skill activation conditions are resolved by the model contextually.** Known (verified 2026-05-28 against `features-overview`): descriptions are visible to Claude on every request in the session, matching is done against "task" (not only the user message — also the model's own plan), specificity beats vagueness, vague descriptions → false positives. The exact matching algorithm is not documented.
 2. **Conflicts between skills** with overlapping `when_to_use` — which one gets loaded first? Not documented.
 3. **Token budget after compaction** — does the frontmatter stay in the system or get reloaded? Not verified.
-4. ✓ **RESOLVED (2026-06-01).** Sub-agent `skills:` preload verified empirically (hub agents `decision-reviewer` / `*-engineer` start with preloaded skills and work correctly). The access vs preload mechanics have been clarified — see §1.6.
+4. **Runtime conflict (2026-08-09).** Older hub probes observed
+   `disable-model-invocation: true` skills through a subagent `skills:` binding,
+   but current Anthropic documentation says this combination does not preload.
+   CLI 2.1.226 accepted the binding, but the live semantic probe could not reach
+   its first model turn because the organization returned
+   `oauth_org_not_allowed`. See §1.6; do not depend on the disputed behavior.
 
 ---
 

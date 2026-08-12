@@ -5,6 +5,8 @@ Definition of done:
 - the root installer is a no-op help entrypoint unless an adapter is selected;
 - ``--claude`` routes through shared secrets and then the Claude Code adapter;
 - Claude artifacts have one adapter-owned tree and no legacy root copies;
+- specialists are delivered as user-level ``mainframe-*`` agents, outside the
+  plugin boundary that drops agent-scoped hooks, MCP servers, and permissions;
 - ``/mainframe:init`` is user-only and absent from automatic model context;
 - the old automatic task workflow and its reminder hooks are not shipped;
 - the credentials index has one gitignored repository location, seeded from a
@@ -23,16 +25,37 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 ROOT_INSTALLER = ROOT / "install.sh"
 ADAPTER = ROOT / "adapters" / "claude-code"
 PLUGIN = ADAPTER / "plugin"
+AGENTS = ADAPTER / "agents"
 SHARED_CREDENTIALS = ROOT / "shared" / "credentials"
+ADAPTER_INSTALLER = ADAPTER / "install.sh"
+MIN_CLAUDE_VERSION = re.search(
+    r'^MIN_CLAUDE_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$',
+    ADAPTER_INSTALLER.read_text(encoding="utf-8"),
+    re.MULTILINE,
+).group(1)
 
 
-def _run_installer(*args, home=None):
+def _run_installer(*args, home=None, claude_version=None):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
     fake_bin.mkdir(exist_ok=True)
+    version_file = home / "claude-version"
+    version_file.write_text(claude_version or MIN_CLAUDE_VERSION, encoding="utf-8")
+    claude = fake_bin / "claude"
+    claude.write_text(
+        "#!/bin/sh\n"
+        f"version_file='{version_file}'\n"
+        f"minimum='{MIN_CLAUDE_VERSION}'\n"
+        "case \"${1:-}\" in\n"
+        "  --version|-v) printf '%s (Claude Code)\\n' \"$(cat \"$version_file\")\" ;;\n"
+        "  update|upgrade) printf '%s' \"$minimum\" > \"$version_file\"; echo updated ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    claude.chmod(claude.stat().st_mode | stat.S_IXUSR)
     for command in (
-        "ruff", "pip-audit", "semgrep", "osv-scanner", "oxlint",
-        "depcruise", "knip", "fallow",
+        "ruff", "oxlint",
+        "fallow",
     ):
         executable = fake_bin / command
         executable.write_text("#!/bin/sh\necho test-version\n", encoding="utf-8")
@@ -52,7 +75,7 @@ def test_root_without_arguments_is_help_only():
     proc, home = _run_installer()
     assert proc.returncode == 0
     assert "Usage:" in proc.stdout and "--claude" in proc.stdout
-    assert sorted(home.iterdir()) == [home / "fake-bin"]
+    assert sorted(home.iterdir()) == [home / "claude-version", home / "fake-bin"]
 
 
 def test_root_dispatches_claude_dry_run():
@@ -62,25 +85,310 @@ def test_root_dispatches_claude_dry_run():
     assert "claude code adapter" in proc.stdout.lower()
 
 
+def test_claude_dev_dry_run_is_adapter_scoped():
+    proc, _ = _run_installer("--claude", "--dev", "--dry-run")
+    assert proc.returncode == 0, proc.stderr
+    assert "claude-code/{telemetry,feedback,model-lab}" in proc.stdout
+
+
+def test_plain_reinstall_disables_owned_dev_links():
+    installed, home = _run_installer("--claude")
+    assert installed.returncode == 0, installed.stderr
+    claude_dir = home / ".claude"
+    data_link = claude_dir / "mainframe"
+    feedback_link = claude_dir / "skills" / "harness-feedback"
+    data_link.symlink_to(ROOT / "workspace" / "runtime")
+    feedback_link.symlink_to(ROOT / "dev" / "skills" / "harness-feedback")
+
+    reinstalled, _ = _run_installer("--claude", home=home)
+    assert reinstalled.returncode == 0, reinstalled.stderr
+    assert not data_link.exists() and not data_link.is_symlink()
+    assert not feedback_link.exists() and not feedback_link.is_symlink()
+
+
+def test_old_claude_stops_before_any_install_in_noninteractive_mode():
+    proc, home = _run_installer("--claude", claude_version="2.1.100")
+    assert proc.returncode != 0
+    assert f"requires Claude Code {MIN_CLAUDE_VERSION}+" in proc.stdout
+    assert "before making changes" in proc.stderr
+    assert not (home / ".local" / "bin" / "secret").exists()
+    assert not (home / ".claude").exists()
+
+
+def test_yes_updates_old_claude_before_installing():
+    proc, home = _run_installer(
+        "--claude", "--yes", claude_version="2.1.100")
+    assert proc.returncode == 0, proc.stderr
+    assert (home / "claude-version").read_text() == MIN_CLAUDE_VERSION
+    assert "Claude Code updated" in proc.stdout
+    assert (home / ".local" / "bin" / "secret").is_symlink()
+
+
+def test_old_claude_dry_run_reports_update_without_changing_version():
+    proc, home = _run_installer(
+        "--claude", "--dry-run", claude_version="2.1.100")
+    assert proc.returncode == 0, proc.stderr
+    assert "would ask to run 'claude update'" in proc.stdout
+    assert (home / "claude-version").read_text() == "2.1.100"
+    assert not (home / ".local" / "bin" / "secret").exists()
+
+
 def test_claude_uninstall_preserves_shared_secrets():
     installed, home = _run_installer("--claude")
     assert installed.returncode == 0, installed.stderr
     helper = home / ".local" / "bin" / "secret"
     assert helper.is_symlink()
     assert (home / ".claude" / "CLAUDE.md").is_symlink()
+    assert (home / ".claude" / "skills" / "mainframe").is_symlink()
+    assert (home / ".claude" / "agents" / "mainframe").is_symlink()
 
     removed, _ = _run_installer("--claude", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
     assert helper.is_symlink()
     assert not (home / ".claude" / "CLAUDE.md").exists()
+    assert not (home / ".claude" / "skills" / "mainframe").exists()
+    assert not (home / ".claude" / "agents" / "mainframe").exists()
 
 
 def test_adapter_owns_claude_artifacts():
     assert (ADAPTER / "install.sh").is_file()
     assert (ADAPTER / "export" / "CLAUDE.md").is_file()
     assert (PLUGIN / ".claude-plugin" / "plugin.json").is_file()
+    assert AGENTS.is_dir()
+    assert not (PLUGIN / "agents").exists()
     assert not (ROOT / "export").exists()
     assert not (ROOT / "plugin-dist").exists()
+
+
+def test_agents_use_user_scope_names_and_plugin_skill_ids():
+    paths = sorted(AGENTS.glob("*.md"))
+    assert len(paths) == 6
+    names = []
+    for path in paths:
+        body = path.read_text(encoding="utf-8")
+        match = re.search(r"^name: ([a-z0-9-]+)$", body, re.MULTILINE)
+        assert match, path
+        name = match.group(1)
+        names.append(name)
+        assert name == path.stem
+        assert name.startswith("mainframe-")
+        assert "adapters/claude-code/plugin/agents" not in body
+        skills = re.search(r"^skills:\n((?:  - .+\n)+)", body, re.MULTILINE)
+        if skills:
+            for skill in re.findall(r"^  - (.+)$", skills.group(1), re.MULTILINE):
+                assert skill.startswith("mainframe:"), (path, skill)
+    assert len(names) == len(set(names))
+
+
+def test_infrastructure_is_primary_session_skill_not_agent():
+    assert not (AGENTS / "mainframe-devops-engineer.md").exists()
+    skill = PLUGIN / "skills" / "infrastructure"
+    body = (skill / "SKILL.md").read_text(encoding="utf-8")
+    assert "disable-model-invocation: true" not in body
+    assert "<project-root>/.agents/infrastructure.json" in body
+    assert "mainframe:secrets-handling" in body
+    assert "../dokploy-api/SKILL.md" in body
+    example = json.loads(
+        (skill / "infrastructure.example.json").read_text(encoding="utf-8")
+    )
+    assert example["schemaVersion"] == 1
+    assert example["environments"]["production"]["credentialRefs"]
+
+
+def test_test_auditor_is_non_implementing_and_ticket_scoped():
+    auditor = (AGENTS / "mainframe-test-auditor.md").read_text(encoding="utf-8")
+    assert "tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch," in auditor
+    assert "current primary documentation" in auditor
+    assert "mainframe:testing-strategy" in auditor
+    assert "mainframe:ticket" in auditor
+    assert 'matcher: "Edit|Write"' in auditor
+    assert "test-auditor-write-guard.py" in auditor
+    assert "Do not use for routine implementation" in auditor
+    assert (AGENTS / "hooks" / "test-auditor-write-guard.py").is_file()
+
+
+def test_testing_context_preserves_role_boundaries():
+    strategy = (PLUGIN / "skills" / "testing-strategy" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    normalized_strategy = " ".join(strategy.split())
+    assert "An implementation owner may create, change, and run tests" in normalized_strategy
+    assert "An audit-only recipient evaluates the existing evidence" in normalized_strategy
+
+    profiles = {
+        "mainframe-python-backend-engineer.md": "mainframe:python-backend-patterns",
+        "mainframe-typescript-backend-engineer.md": "mainframe:typescript-backend-patterns",
+        "mainframe-react-frontend-engineer.md": "mainframe:react-frontend-patterns",
+    }
+    for filename, profile_skill in profiles.items():
+        body = (AGENTS / filename).read_text(encoding="utf-8")
+        assert profile_skill in body
+        assert "mainframe:testing-strategy" not in body
+
+    python_agent = (AGENTS / "mainframe-python-backend-engineer.md").read_text(
+        encoding="utf-8"
+    )
+    python_skill = (PLUGIN / "skills" / "python-backend-patterns" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "disable-model-invocation: true" not in python_skill
+    assert "user-invocable: false" in python_skill
+    assert "[testing.md](testing.md)" in python_skill
+    for reference in (
+        "auth-and-sessions.md",
+        "background-and-realtime.md",
+        "files-and-integrations.md",
+    ):
+        assert f"]({reference})" in python_skill
+    assert "~/.claude" not in python_agent
+    assert "senior enterprise" not in python_agent.lower()
+    assert "does not mandate FastAPI" in python_skill
+
+    typescript_skill = (
+        PLUGIN / "skills" / "typescript-backend-patterns" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "disable-model-invocation: true" not in typescript_skill
+    assert "[testing.md](testing.md)" in typescript_skill
+    assert not (AGENTS / "mainframe-nestjs-backend-engineer.md").exists()
+    assert not (AGENTS / "mainframe-nextjs-backend-engineer.md").exists()
+    assert not (PLUGIN / "skills" / "nestjs-backend-patterns").exists()
+    assert not (PLUGIN / "skills" / "nextjs-backend-patterns").exists()
+
+    react_agent = (AGENTS / "mainframe-react-frontend-engineer.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Bash, Skill, WebSearch" in react_agent
+    assert "TodoWrite" not in react_agent
+    react_preloads = re.search(
+        r"^skills:\n((?:  - .+\n)+)", react_agent, re.MULTILINE
+    ).group(1)
+    for expected in (
+        "mainframe:react-frontend-patterns",
+        "mainframe:frontend-design",
+        "mainframe:shadcn",
+        "mainframe:ticket",
+    ):
+        assert expected in react_preloads
+    for skill_name in ("react-frontend-patterns", "shadcn", "frontend-design"):
+        skill_body = (PLUGIN / "skills" / skill_name / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert "disable-model-invocation: true" not in skill_body
+    react_skill = (
+        PLUGIN / "skills" / "react-frontend-patterns" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "[testing.md](testing.md)" in react_skill
+    assert "does not mandate FSD" in react_skill
+
+    design_skill = (PLUGIN / "skills" / "frontend-design" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    for route in ("modes/operate.md", "modes/persuade.md", "modes/read.md", "modes/experience.md"):
+        assert route in design_skill
+    assert "quality/flows-and-feedback.md" in design_skill
+
+    shadcn_skill = (PLUGIN / "skills" / "shadcn" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "scripts/inspect-ui.mjs" in shadcn_skill
+    assert '"shadcn": false' in shadcn_skill
+
+    principles = (ROOT / "docs" / "principles.md").read_text(encoding="utf-8")
+    assert "`surface-ticket`" not in principles
+    assert "`needs-refinement`" not in principles
+    for state in (
+        "observations",
+        "needs-scope-review",
+        "needs-decision",
+        "ready",
+        "needs-verification",
+    ):
+        assert state in principles
+
+
+def test_researcher_has_private_methodology_boundary():
+    researcher = (AGENTS / "mainframe-researcher.md").read_text(encoding="utf-8")
+    assert "tools: Read, WebSearch, WebFetch," in researcher
+    assert "Grep" not in researcher and "Glob" not in researcher and "Bash" not in researcher
+    assert "skills:" not in researcher
+    assert 'matcher: "Read"' in researcher
+    assert 'matcher: "WebSearch"' in researcher
+    assert 'matcher: "WebFetch"' in researcher
+    assert "research-read-guard.py" in researcher
+    assert "skills/mainframe/skills/research-method/SKILL.md" in researcher
+
+    method = PLUGIN / "skills" / "research-method"
+    body = (method / "SKILL.md").read_text(encoding="utf-8")
+    assert "disable-model-invocation: true" in body
+    assert "user-invocable: false" in body
+    for guide in ("software-documentation.md", "economics.md", "news.md"):
+        assert (method / "references" / guide).is_file()
+
+
+def test_decision_reviewer_reads_private_method_without_false_preload():
+    reviewer = (AGENTS / "mainframe-decision-reviewer.md").read_text(
+        encoding="utf-8"
+    )
+    assert "mainframe:severity-calibration" in reviewer
+    assert "mainframe:decision-review" not in reviewer
+    assert "skills/mainframe/skills/decision-review/SKILL.md" in reviewer
+    assert "CLAUDE.md" not in reviewer
+    assert "Cap source lookups" not in reviewer
+
+    method = (PLUGIN / "skills" / "decision-review" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "disable-model-invocation: true" in method
+    assert "user-invocable: false" in method
+    assert "Triggered via agent frontmatter `skills:` preload" not in method
+    assert "Preloaded into" not in method
+
+
+def test_old_general_code_audit_is_not_delivered():
+    assert not (PLUGIN / "skills" / "code-audit").exists()
+
+    severity = (PLUGIN / "skills" / "severity-calibration" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    normalized = " ".join(severity.split())
+    assert "Ordinary broken functionality is not Critical" in normalized
+    assert "confidence" in normalized
+
+
+def test_server_safety_does_not_grant_or_assume_destructive_bash():
+    body = (PLUGIN / "skills" / "ops-app-server-safety" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "allowed-tools: Bash" not in body
+    assert "docker compose up --no-recreate" not in body
+    assert "Do not force-kill by default" in body
+    assert "Use `docker compose down` only" in body
+
+
+def test_secrets_skill_uses_index_without_secret_ownership_drift():
+    body = (PLUGIN / "skills" / "secrets-handling" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    normalized = " ".join(body.split())
+    assert "shared/credentials/credentials-index.md" in normalized
+    assert "Never read" in normalized
+    assert "Return the exact missing credential" in normalized
+    assert "Ask the user" not in normalized
+    assert "migrate first" not in normalized
+    assert "Regex (PCRE)" not in normalized
+
+
+def test_curl_skill_preserves_http_and_authority_boundaries():
+    body = (PLUGIN / "skills" / "curl-requests" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    normalized = " ".join(body.split())
+    assert "400 or greater" in normalized
+    assert "do not treat 3xx as failure" in normalized
+    assert "does not authorize POST" in normalized
+    assert "--location-trusted" in normalized
+    assert "Show the command before executing" not in normalized
+    assert "Do not add `-X POST`" in normalized
 
 
 def test_umbrella_has_no_delivery_metadata_comment():
@@ -147,12 +455,97 @@ def test_shared_secrets_have_one_runtime_index():
 
 def test_claude_permissions_expose_only_helper_and_index():
     settings = json.loads((ADAPTER / "export" / "settings.json").read_text())
+    assert "minimumVersion" not in settings
     allowed = settings["permissions"]["allow"]
     denied = settings["permissions"]["deny"]
     assert "Bash(secret *)" in allowed
     assert "Read(~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md)" in allowed
     assert "Read(~/.config/credentials/**)" in denied
     assert "Read(**/secrets/**)" in denied
+
+
+def test_global_settings_preserve_role_language_and_model_contracts():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    assert settings["model"] == "fable"
+    assert "language" not in settings
+    assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in settings.get("env", {})
+    assert "teammateMode" not in settings
+
+
+def test_sensitive_git_actions_require_runtime_confirmation():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    allowed = settings["permissions"]["allow"]
+    asked = settings["permissions"]["ask"]
+    assert "Bash(git add *)" in allowed
+    assert "Bash(git commit *)" in allowed
+    for command in (
+        "git push", "git checkout", "git switch", "git stash", "git pull",
+        "git merge", "git rebase", "git reset", "git cherry-pick",
+        "git revert",
+    ):
+        rule = f"Bash({command} *)"
+        assert rule in asked
+        assert rule not in allowed
+    assert "Bash(git commit *--amend*)" in asked
+    assert not any("git branch" in rule for rule in asked)
+    hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
+    assert "git-branch-authority.py" in hooks
+    assert '"if": "Bash(git *)"' in hooks
+    assert (PLUGIN / "hooks" / "scripts" / "git-branch-authority.py").is_file()
+
+
+def test_arbitrary_execution_and_network_do_not_bypass_auto_mode_checks():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    allowed = settings["permissions"]["allow"]
+    for rule in (
+        "Bash(npx *)", "Bash(python *)", "Bash(python3 *)", "Bash(node *)",
+        "Bash(curl *)", "Bash(wget *)", "Bash(env *)", "Bash(source *)",
+        "Bash(. *)", "Bash(direnv *)", "Bash(bash /tmp/*)",
+        "Bash(sh /tmp/*)", "Bash(zsh /tmp/*)", "Bash(docker run *)",
+        "Bash(docker compose up *)", "Bash(docker compose down *)",
+        "Bash(docker compose restart *)",
+    ):
+        assert rule not in allowed
+
+    bash_rules = {rule for rule in allowed if rule.startswith("Bash(")}
+    assert bash_rules == {
+        "Bash(secret *)",
+        "Bash(git add *)",
+        "Bash(git commit *)",
+        "Bash(git fetch *)",
+    }
+
+
+def test_recursive_delete_policy_is_owned_by_the_path_hook():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    assert "Bash(rm -rf *)" not in settings["permissions"]["ask"]
+    hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
+    assert "path-validation.py" in hooks
+
+
+def test_language_dependencies_use_auto_mode_not_manual_confirmation():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    asked = settings["permissions"]["ask"]
+    for rule in (
+        "Bash(npm install *)", "Bash(npm i *)", "Bash(yarn add *)",
+        "Bash(pnpm add *)", "Bash(pnpm install *)", "Bash(pip install *)",
+        "Bash(pip3 install *)", "Bash(cargo install *)",
+        "Bash(gem install *)", "Bash(go install *)",
+    ):
+        assert rule not in asked
+    assert "Bash(brew install *)" in asked
+    assert "Bash(apt install *)" in asked
+    assert "Bash(npm publish *)" in asked
 
 
 def _run_all():

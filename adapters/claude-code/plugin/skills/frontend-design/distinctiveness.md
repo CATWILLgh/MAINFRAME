@@ -1,14 +1,14 @@
-# Distinctiveness — intentional, not generic
+# Distinctiveness
 
-The gap between "correct" and "good": why default-everything reads as generic ("AI slop"), and how to make design intentional **without breaking pattern quality**. Core idea: you earn character by *restraint* — limiting choices — not by adding quirks.
+Make the interface specific to its product without sacrificing clarity, reuse, or accessibility. Distinctiveness comes from a coherent relationship among content, typography, layout, color, imagery, and interaction—not from a quota of unusual decisions.
 
-## Rules — apply literally (this IS the de-slop)
+## Establish character
 
-- **Anchor personality up front, in the token layer.** Before building components, fix ONE value each for: font classification, border-radius, accent hue, shadow presence. No token = no permission to use it. Consistency of these four is the personality.
-- **One focal point per screen.** Raise it with size or colour; lower everything else (weight, size, contrast). Never add emphasis elsewhere — if everything is emphasised, nothing is.
-- **Restraint by count:** ≤ 3 type sizes in view at once, ≤ 2 radius values, ≤ 1 accent colour per surface, ≤ 2 font families. Scarcity is what makes hierarchy legible.
-- **De-emphasise to emphasise** — get contrast by lowering competitors, not raising the hero.
-- **Every spacing decision answers a hierarchy question**, never just fills distance (see [layout.md](layout.md)).
+- Derive character from the subject, audience, content, user job, and existing product language.
+- For a new direction, define a small coherent set of durable choices in the token and primitive layers. Do not fork components to manufacture variety.
+- Establish a dominant reading or action path. A complex operating surface may legitimately contain several priorities; hierarchy should clarify their order rather than pretend only one exists.
+- Use de-emphasis as well as emphasis. More size, saturation, weight, shadow, and motion are not the only ways to create hierarchy.
+- Apply restraint contextually. Count-based limits can reveal inconsistency during review, but they are not universal acceptance criteria.
 
 ## Generic tell → intentional move
 
@@ -16,7 +16,7 @@ Directional, not mandatory — each move is a corrective to consider when the te
 
 | Generic tell (reads as default) | Intentional move |
 |---|---|
-| Default blue/violet primary (Tailwind/shadcn default) | One deliberate accent outside the safe blue band, used sparingly |
+| Untouched scaffold with no project rationale | Deliberate token choices tied to product or brand intent |
 | Even spacing everywhere | Generous around the focal block, tight in dense data — rhythm, not uniformity |
 | Centred-everything hero | Editorial: flush-left type mass, or a type-only hero, no stock image |
 | One weight + one size | Real type contrast — heavy display vs light body (see [type-craft.md](type-craft.md)) |
@@ -25,13 +25,15 @@ Directional, not mandatory — each move is a corrective to consider when the te
 | A card around everything | Cards only for card-shaped content; elevate by whitespace + type, not borders |
 | Muted-grey-on-white throughout | One zone that breaks the scheme (ink-dark footer, a saturated header) |
 
-## Distinctiveness is taste — examples, NOT quotas
+## Use judgment, not a style blacklist
 
-Do not mechanically inject novelty: forced quirk is just a different generic, and worse on a dashboard. There is no "break the grid once" counter. When a design *earns* it, intentional moves look like — an oversized typographic headline carrying a page with no hero image; one full-bleed asymmetric section against an otherwise tight grid; a single saturated zone among neutrals. Reach for these when they serve the content, not to hit a number.
+Do not mechanically inject novelty or ban a recognizable pattern merely because it is common. Cards, centered composition, blue, gradients, serif italics, eyebrows, large type, and decorative motion can be right or wrong depending on meaning and execution. Require a reason for the choice and judge its effect on the actual user journey.
+
+Intentional moves may include an oversized typographic headline, an asymmetric section, a dense operational layout, a quiet editorial measure, or a saturated zone among neutrals. Use them when they support the content and mode, not to satisfy a checklist.
 
 ## Reuse — one component per role
 
-Don't ship a second implementation of a component that already exists — two near-identical buttons are a slop tell and a maintenance cost. The operative rule + mechanism (use the one component with variants; don't reinvent) live in [shadcn](../shadcn/SKILL.md); the home is `shared/ui` ([fsd.md](../react-frontend-patterns/fsd.md)). Here it is a *consistency* concern.
+Don't ship a second implementation of a component that already exists — two near-identical buttons are a slop tell and a maintenance cost. The operative rule and mechanism (reuse the owned component or extend its variants) live in [shadcn](../shadcn/SKILL.md); placement follows the project's existing [architecture](../react-frontend-patterns/architecture.md). Here it is a consistency concern.
 
 ## Sources
 
@@ -40,4 +42,4 @@ Don't ship a second implementation of a component that already exists — two ne
 - NN/g — 5 Principles of Visual Design — https://www.nngroup.com/articles/principles-visual-design/
 - Smashing — design communicates, not decorates — https://www.smashingmagazine.com/2012/03/symptoms-of-epidemic-web-design-trends/
 
-Honest note: "generic / AI-slop tells" have no single authoritative source — the tells are assembled from the hierarchy / restraint literature above.
+The examples above are design heuristics, not standards violations. Confirm them against the project brief and rendered evidence.

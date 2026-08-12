@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for _length_check.py: count_lines, python_function_spans,
-over_threshold_functions, FILE_LENGTH_EXTENSIONS.
-
-Design under test (decision-reviewer + advisor, 2026-07-06): no before/after
-size comparison (the reviewer's counter-model, adopted) -- flag any
-over-threshold file/function on the current content alone; ticket-discipline
-(not a delta split) is the noise-reduction mechanism. Qualname must be built
-via a recursive NodeVisitor (push/pop per scope), never `ast.walk` (breadth-
-first, no ancestor context -- the reviewer's bug catch on the original plan).
-"""
+"""Tests for pure line-count and Python function-span helpers."""
 
 import importlib.util
 import os
@@ -127,10 +118,10 @@ def test_over_threshold_custom_threshold_boundary():
     assert len(lc.over_threshold_functions(src2, threshold=5)) == 1
 
 
-def test_file_length_extensions_excludes_sql_vue_svelte():
+def test_file_length_extensions_excludes_sql_but_includes_sfc_formats():
     assert ".sql" not in lc.FILE_LENGTH_EXTENSIONS
-    assert ".vue" not in lc.FILE_LENGTH_EXTENSIONS
-    assert ".svelte" not in lc.FILE_LENGTH_EXTENSIONS
+    assert ".vue" in lc.FILE_LENGTH_EXTENSIONS
+    assert ".svelte" in lc.FILE_LENGTH_EXTENSIONS
 
 
 def test_file_length_extensions_includes_common_code():

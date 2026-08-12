@@ -1,59 +1,47 @@
 #!/usr/bin/env python3
-"""Stop hook: hard gate against unresolved suppression markers / debug residue.
-
-Fires when Claude is about to stop a turn. If the working-tree diff vs `git HEAD`
-contains newly-added suppression / placeholder markers or debug residue
-(`debugger`, `breakpoint()`, `pdb.set_trace`, `var_dump`/`dd`, `console.debug`)
-in source-code files, block the stop with a reason — forcing resolution (or
-explicit user permission) before the turn is declared done.
-
-Only ADDED (`+`) lines are flagged, so legacy markers from prior commits don't
-trip it. Shared scaffolding is in `_hooklib`, the detector sets in `_markers`.
-Self-loop-guarded; fail-open on git/lib failure (any error -> exit 0).
-"""
+"""Block completion on unresolved residue introduced by this session."""
 
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import added_lines_by_file, emit_block, load_payload, run, stop_guard_cwd
-    from _markers import MARKERS, DEBUG_RESIDUE
+    from _hooklib import (
+        emit_block, load_payload, log_hook_signal, run, stop_guard_cwd,
+    )
+    from _marker_state import unresolved
 except Exception:
     sys.exit(0)
 
 
-def _added_markers_in_diff(cwd):
-    """Sorted labels of markers / debug residue in added (`+`) lines of the
-    working-tree diff vs HEAD. Empty if none, or if git is unavailable."""
-    found = set()
-    for file_ext, body in added_lines_by_file(cwd):
-        for label, rx in MARKERS:
-            if rx.search(body):
-                found.add(label)
-        for label, rx, exts in DEBUG_RESIDUE:
-            if file_ext in exts and rx.search(body):
-                found.add(label)
-    return sorted(found)
-
-
 def main():
     payload = load_payload()
-    cwd = stop_guard_cwd(payload)
-    if cwd is None:
-        return  # already blocked once this turn -> let the stop through
-    labels = _added_markers_in_diff(cwd)
-    if not labels:
-        return  # nothing found, or git unavailable -> let Claude stop
-    reason = (
-        "Suppression markers or debug residue are present in the working-tree "
-        f"diff vs HEAD: {', '.join(labels)}. Per the global engineering rules "
-        "these are not allowed in work declared complete — suppression markers "
-        "need explicit user permission, debug residue must be removed. Resolve "
-        "them in the affected source files (or obtain explicit user permission "
-        "to keep a marker) before stopping the turn."
+    if stop_guard_cwd(payload) is None:
+        return
+    session_id = payload.get("session_id")
+    if not session_id:
+        raise ValueError("marker stop gate requires session_id")
+    agent_id = payload.get("agent_id")
+    labels = unresolved(
+        session_id, agent_id,
+        include_subagents=not bool(agent_id),
     )
-    emit_block(reason)
+    if not labels:
+        return
+    reason = (
+        "Unresolved unfinished-code or diagnostic residue introduced by this "
+        f"session remains: {', '.join(labels)}. Replace it with the complete "
+        "working behavior and the tests the task requires before stopping. "
+        "Deleting the marker alone is not a valid resolution. If it only "
+        "annotated an unrelated observation, revert that annotation and record "
+        "the observation through the repository ticket workflow without "
+        "expanding the current scope."
+    )
+    emitted_reason = emit_block(reason)
+    log_hook_signal(
+        __file__, "unfinished-residue", "blocked", len(labels), payload,
+        context=emitted_reason,
+    )
 
 
 if __name__ == "__main__":

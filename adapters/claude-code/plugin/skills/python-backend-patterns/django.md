@@ -1,50 +1,28 @@
-# Django + DRF patterns
+# Django and Django REST Framework
 
-Batteries-included sync-first framework. ORM: Django ORM (built-in). API layer: Django REST Framework. Validation: DRF serializers → also [validation.md](validation.md).
+Preserve the project's app boundaries and API layer. Django REST Framework is optional; use its guidance only when it owns the active path.
 
-## Apps + project structure
+## Structure and behavior
 
-- One Django app per bounded context (`apps/jobs/`, `apps/users/`, `apps/billing/`).
-- `models.py` for ORM models, `serializers.py` for DRF, `views.py` or `viewsets.py` for endpoints, `urls.py` for routing.
-- Business logic in a `services.py` per app — keep ViewSets thin, models don't carry orchestration.
+- Split or create an app only when ownership and dependency direction become clearer, not to satisfy a generic layout.
+- Keep non-trivial workflows outside transport-specific views. Follow an existing service, model-method, command, or domain convention instead of introducing a second one.
+- Use `ModelViewSet` only when full CRUD is intended; use narrower generic or explicit views for narrower contracts.
+- Preserve existing router and explicit URL patterns.
 
-## DRF ViewSets + routers
+## Data and authorization
 
-- `ModelViewSet` for full CRUD; mix-in specific generics (`ListAPIView`, `CreateAPIView`) for partial surface.
-- `DefaultRouter` auto-generates URL patterns; explicit `path()` only for non-RESTful actions.
-- `@action(detail=True, methods=["post"])` for state-transition endpoints (e.g. `/jobs/{id}/complete/`).
+- Use `select_related` for single-valued relationships and `prefetch_related` for collections when the response traverses them. Confirm query behavior rather than adding eager loads blindly.
+- Apply authentication and operation or object permission to protected paths. A request-carried organization identifier is input, not proof of access.
+- Keep transaction scope around the business operation that must succeed or fail together.
 
-```python
-class JobViewSet(viewsets.ModelViewSet):
-    queryset = Job.objects.select_related("machine").prefetch_related("downtimes")
-    serializer_class = JobSerializer
-    permission_classes = [IsAuthenticated, HasRole]
-```
+## Migrations and async
 
-## Eager loading — Django equivalents
-
-- `select_related(...)` — many-to-one / one-to-one (JOIN, single query). Mirror of SA `joinedload`.
-- `prefetch_related(...)` — one-to-many / many-to-many (separate query, IN-clause). Mirror of SA `selectinload`.
-- Anti-pattern: chained `.objects.get(...).related.all()` loops → N+1. Define a manager method that pre-fetches.
-
-## Permissions + authentication
-
-- DRF `permission_classes` per ViewSet OR a global default in `REST_FRAMEWORK` settings.
-- Custom `permissions.BasePermission` for role + tenant checks. `request.user.organization_id` is the truth, not request body.
-- `IsAuthenticated` is the floor on protected endpoints — never `AllowAny` by default.
-
-## Migrations
-
-- One migration per logical change, generated via `python manage.py makemigrations`.
-- Always inspect the generated file before committing — Django sometimes generates redundant operations.
-- Data migrations: use `RunPython` with both `forward` and `reverse` functions; never irreversible by default.
-- **Zero-downtime safety — `AddIndexConcurrently` + `atomic = False`, expand-contract, batched backfills: see [migrations.md](migrations.md).**
-
-## Async caveat
-
-Django ≥ 4.1 supports async views and async ORM (`await Model.objects.aget(...)`). Mature for read-heavy use; for write-heavy multi-step business logic, sync remains less risky in 2026.
+- Generate migrations through the project's command and inspect their real operations before delivery.
+- Data migrations need a recovery path. Provide a reverse function when reversal is truthful and safe; do not fabricate a destructive or lossy reverse.
+- Current Django supports async views and part of its ORM, while transactions still have async limitations. Check the installed version and keep sync-only work behind the documented sync boundary.
 
 ## Sources
 
-- Django docs — https://docs.djangoproject.com/
-- DRF docs — https://www.django-rest-framework.org/
+- Django documentation — https://docs.djangoproject.com/
+- Django async support — https://docs.djangoproject.com/en/stable/topics/async/
+- Django REST Framework — https://www.django-rest-framework.org/

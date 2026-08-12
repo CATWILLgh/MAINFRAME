@@ -313,6 +313,28 @@
     if (t.by_agent && t.by_agent.length) {
       root.appendChild(section("Events by agent", "agents", t.by_agent.length, barList(t.by_agent)));
     }
+    if (t.hook_effectiveness && t.hook_effectiveness.length) {
+      const hrows = t.hook_effectiveness.map((item) => el("tr", null, [
+        el("td", { class: "mono" }, item.hook),
+        el("td", { class: "mono" }, item.rule_id),
+        el("td", { class: "num" }, String(item.noted)),
+        el("td", { class: "num" }, String(item.asked)),
+        el("td", { class: "num" }, String(item.blocked)),
+        el("td", { class: "num" }, String(item.resolved)),
+        el("td", { class: "num" }, String(item.context_chars)),
+        el("td", { class: "num" }, String(item.sessions)),
+      ]));
+      root.appendChild(section("Hook effectiveness", "hooks", hrows.length,
+        el("table", { class: "matrix" }, [
+          el("thead", null, el("tr", null, [
+            el("th", null, "hook"), el("th", null, "rule"),
+            el("th", null, "noted"), el("th", null, "asked"),
+            el("th", null, "blocked"), el("th", null, "resolved"),
+            el("th", null, "context chars"), el("th", null, "sessions"),
+          ])),
+          el("tbody", null, hrows),
+        ])));
+    }
     (t.breakdowns || []).forEach((b) => {
       const brows = b.items.map(([v, n]) => el("tr", null, [
         el("td", { class: "mono" }, v), el("td", { class: "num" }, String(n))]));

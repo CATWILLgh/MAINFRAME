@@ -1,57 +1,34 @@
-# API conventions — situational
+# HTTP service concerns
 
-Read when building or reviewing an HTTP endpoint and one of these concerns is in scope. Not always-on background discipline.
+Read only when the changed contract involves one of these concerns.
 
-## Idempotency keys for POST
+## Idempotency
 
-State-changing POST operations should accept an `Idempotency-Key` header. Server stores request hash + response for N hours; replays return the cached response without re-executing. Per Stripe API docs: "All `POST` requests accept idempotency keys."
+Use an idempotency key when a client may safely retry an operation whose duplicate execution would cause harm: payments, order creation, subscription changes, or externally triggered jobs. Preserve the project's existing contract; do not add the header to every POST by default. Scope stored keys to the caller and operation, compare a request fingerprint, retain the authoritative outcome, and set a deliberate expiry.
 
-```python
-key = request.headers.get("Idempotency-Key")
-if key and (cached := idem_store.get(org_id, key)): return cached.response, cached.status
-result = handler(...)
-if key: idem_store.put(org_id, key, result, ttl=24*3600)
-```
-
-Critical: payment / charge / order create / subscription change endpoints. Optional but recommended for any state-creating POST.
+Stripe's all-POST behavior is one API's policy, not a universal REST rule.
 
 ## Pagination
 
-Offset-based (`?page=N&per_page=K`) — admin / reporting UIs where jumping to page is needed; cost grows with offset, drift under concurrent writes. Cursor-based (`?after=<opaque>&limit=K`) — append-mostly feeds, infinite scroll, exports; no random access, stable under writes. Cursor opacity: never expose raw row ID — encode (encrypt or sign) so client cannot probe / forge.
+- Offset pagination supports page jumps but becomes expensive at large offsets and can drift under concurrent writes.
+- Cursor pagination suits ordered feeds and exports but needs a deterministic, unique ordering and explicit forward or backward semantics.
+- A cursor should prevent clients from constructing unsafe ordering state when that matters. Base64 is encoding, not integrity protection; use a signed or server-issued cursor when forgery affects correctness or access.
 
-## Rate limiting
+## Rate limits
 
-Per RFC 6585: "The 429 status code indicates that the user has sent too many requests in a given amount of time ('rate limiting')." Pair with `Retry-After` header (seconds or HTTP-date).
+Return `429` and a useful `Retry-After` contract when the caller may retry. Choose identity from the abuse boundary: user, tenant, credential, route, IP, or a combination. A process-local limiter is not a distributed limit across workers or instances. Preserve an established gateway or limiter instead of adding a second one.
 
-Algorithm — token bucket (burst-tolerant, common for API gateways) or sliding window (smoother, slightly more expensive). Implement at the gateway layer (Cloudflare / Fastly / nginx `limit_req`) or via `slowapi` (FastAPI) / `flask-limiter` (Flask).
+## Health
 
-Authenticated users — limit per `user_id`, NOT per IP (shared NAT / corporate proxies cause collateral damage). Unauthenticated endpoints — per IP.
+Keep liveness cheap and independent of downstream availability. Readiness may check dependencies required to serve traffic. Preserve platform-specific paths and response shapes; do not rename a working contract merely to use `/live` and `/ready`.
 
-## Health and readiness probes
+## Configuration
 
-Per Kubernetes: "If the liveness probe fails, the container will be restarted… If the readiness probe fails, the pod will be marked unready and will not receive traffic from any services."
-
-- `GET /live` — process alive; returns 200 with minimal work. Failure → restart.
-- `GET /ready` — process ready to serve (DB reachable, cache reachable). Failure → traffic gated off, no restart.
-
-Anti-pattern: single `/health` conflating both — restart loops on transient downstream issues. Keep separate.
-
-## Configuration via pydantic-settings
-
-Prefer `pydantic-settings` over ad-hoc `os.environ.get(...)`. Per official docs: "Fields not provided as keyword arguments will be read from environment variables."
-
-```python
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="APP_")
-    database_url: PostgresDsn
-    jwt_secret: SecretStr
-```
-
-Type validation at startup → fail fast vs cryptic mid-request errors. `SecretStr` masks values in logs. Twelve-factor `III. Config` materialised in Python idiom.
+Use the project's established typed configuration layer and fail early on missing required values. When Pydantic is already used, `pydantic-settings` can validate environment-backed configuration and `SecretStr` can reduce accidental display. Neither replaces correct secret storage or log filtering.
 
 ## Sources
 
-- Stripe Idempotent Requests — https://docs.stripe.com/api/idempotent_requests
+- Stripe idempotent requests — https://docs.stripe.com/api/idempotent_requests
 - RFC 6585 — https://www.rfc-editor.org/rfc/rfc6585
-- Kubernetes Probes — https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-- pydantic-settings — https://docs.pydantic.dev/latest/concepts/pydantic_settings/
+- Kubernetes probes — https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+- Pydantic settings — https://docs.pydantic.dev/latest/concepts/pydantic_settings/

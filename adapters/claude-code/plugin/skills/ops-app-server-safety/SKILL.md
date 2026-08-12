@@ -1,18 +1,23 @@
 ---
 name: ops-app-server-safety
 user-invocable: false
-allowed-tools: Bash
-description: Prevent duplicate instances of long-running development processes (dev servers, application processes, Docker Compose stacks). Run a preflight check before launching to detect an already-running instance by port or process name; if already running, do not start a second one. Handle restarts by stopping the current instance gracefully (SIGTERM, escalate to SIGKILL only on timeout) before launching once.
+description: Prevent accidental duplicate native development servers and choose the least disruptive correct action for an existing Docker Compose project. Identifies the exact process or Compose project before start, restart, or stop operations.
 when_to_use: Trigger when a task involves starting, restarting, or stopping a long-running development process or container stack. Signal commands include `npm run dev`, `npm start`, `yarn dev`, `pnpm dev`, `vite`, `next dev`, `nodemon`, `uvicorn`, `gunicorn`, `flask run`, `rails s`, `docker compose up`, `docker compose down`, `docker compose restart`. Signal phrases include "start the dev server", "launch the app", "restart the backend", "bring up docker compose".
 ---
 
 # Server safety: no duplicate long-running processes
 
-A preflight gate before launching dev servers, application processes, and container stacks. Prevents the most common operational failure mode: a second instance fighting the first for the port, mid-state, or shared volumes.
+A preflight before launching dev servers, application processes, and container
+stacks. Discovery does not grant permission to stop a process or mutate a
+Compose project; use only the authority supplied by the active task.
 
 ## Rule
 
-Before launching a long-running process (dev / start / serve, container `up`), run preflight first. If an instance is already running, use it — do not start a second. If a restart is explicitly requested, stop the current instance gracefully, then launch once.
+Before launching a long-running process, establish its expected working
+directory, command or Compose project, and port or service when known. Reuse an
+already-running matching instance unless the task requires a restart or a
+configuration/image change. Never stop a process merely because its name or
+port looks similar.
 
 ## Preflight — native processes
 
@@ -25,40 +30,59 @@ Applies to: dev servers like `vite`, `next dev`, `nodemon`, `uvicorn`, `gunicorn
    - macOS / Linux: `ps -ef | grep -E 'vite|next dev|nodemon|uvicorn|gunicorn|flask run|rails s' | grep -v grep`
    - If multiple projects on the host could host similar processes, disambiguate by working directory: `ps -o pid,command -p <PID>` and `lsof -p <PID> | grep cwd`.
 
-PID files are not used here — modern dev tools rarely write them, and the twelve-factor app (§VIII Concurrency) explicitly recommends against manual PID-file management.
+3. **Prove ownership before acting.** Confirm the PID's working directory and
+   full command. A regex match alone may belong to another project or session.
+   A project-provided PID file or process manager is valid evidence when the
+   repository actually uses one.
 
 ## Preflight — Docker Compose
 
 Applies to any `docker compose up` invocation.
 
-1. **Check existing containers for this compose project.**
+1. **Resolve the intended Compose file, project name, and working directory.**
+   Do not let an incidental current directory select the target.
+2. **Check existing containers for this compose project.**
    - `docker compose ps --status running`
    - Non-empty → containers already up for this project.
-2. **If running and recreate was not requested** — do not call `docker compose up` again. Use the existing stack (logs, healthchecks, URLs).
-3. **If launching anyway** — prefer `docker compose up --no-recreate` to avoid rebuilds when configuration is unchanged.
+3. **Choose by intended change.**
+   - No restart or configuration change: use the running services.
+   - Restart with unchanged Compose configuration: use
+     `docker compose restart [SERVICE...]`.
+   - Changed configuration or image: use `docker compose up -d [SERVICE...]`
+     with the project's normal build or pull policy. Compose reconciles changed
+     services; `restart` does not apply configuration changes.
+   - Use `docker compose down` only when removal of the project's containers and
+     networks is explicitly intended. It is not the default restart primitive.
 
 Do not preflight a Docker stack by host port. Compose orchestrates a network of containers; a port conflict may be unrelated to this stack. `docker compose ps` is the correct probe.
 
 ## When already running
 
 - Do not start a second instance.
-- Report what is running: `<command> @ pid <PID>` on port `<PORT>` (native), or `<service-name> @ <container-id>` (compose).
+- Return what is running: `<command> @ pid <PID>` on port `<PORT>` (native), or `<service-name> @ <container-id>` (compose).
 - If the task can be completed against the existing instance (open a URL, hit a healthcheck, read logs) — use it.
 
 ## When a restart is explicitly requested
 
-1. **Stop gracefully first** — send SIGTERM, not SIGKILL.
+1. **Confirm the matched target and restart authority.** A restart request
+   authorizes stopping that exact instance, not a similarly named process or a
+   broader Compose project.
+2. **Stop gracefully first** — send SIGTERM, not SIGKILL.
    - Native: `kill <PID>` (default SIGTERM).
-   - Compose: `docker compose down` (sends SIGTERM to containers, escalates to SIGKILL after its own timeout).
-2. **Wait briefly** — give the process up to ~10 seconds to shut down. Re-check with the same preflight commands.
-3. **Escalate only on timeout** — `kill -9 <PID>` or `docker compose kill` only if SIGTERM did not work in the allotted window.
-4. **Launch once.** Do not loop.
+   - Compose with unchanged configuration: `docker compose restart [SERVICE...]`.
+3. **Wait for the target's documented or project-configured shutdown window.**
+   Re-check with the same preflight evidence.
+4. **Do not force-kill by default.** If graceful shutdown fails, return the
+   exact still-running target and the consequence of forced termination to the
+   immediate caller. Use SIGKILL or `docker compose kill` only when that
+   escalation is explicitly authorized.
+5. **Launch or reconcile once.** Do not loop.
 
 The graceful-stop discipline follows twelve-factor app §IX Disposability: processes should shut down on SIGTERM. SIGKILL skips cleanup hooks and may leave state corrupted (open sockets, half-written files, dangling locks).
 
 ## After launch
 
-Record for the rest of the session:
+Keep in the active task context:
 - The exact command used and its working directory (`cwd`).
 - The port or URL the process serves.
 - Where logs are written (stdout, file, container log).
@@ -67,8 +91,11 @@ Subsequent steps (open a URL, run a test, query the API) need this context; re-d
 
 ## Stop conditions
 
-- If port / command / service is unclear from context, ask **one** clarifying question before running anything. Do not guess.
-- If a specific process was named but preflight finds nothing related, surface that ("no `vite` process or listener on :5173 found") before starting — it may be a different project or environment.
+- If the target cannot be identified from the task, repository, or process
+  evidence, do not start or stop anything. Return the exact missing identifier
+  to the immediate caller.
+- If a specific process was named but preflight finds nothing related, return
+  that fact before starting; it may be a different project or environment.
 
 ## Known limitation
 
@@ -76,6 +103,7 @@ Between preflight and start there is a race window: a third process can grab the
 
 ## Sources
 
-- The Twelve-Factor App, §VI Processes / §VIII Concurrency / §IX Disposability — https://12factor.net/
-- Docker Compose CLI reference (`up`, `ps`, `down`) — https://docs.docker.com/reference/cli/docker/compose/up/
-- `lsof(8)` man page — https://man7.org/linux/man-pages/man8/lsof.8.html
+- [The Twelve-Factor App, processes](https://12factor.net/processes) and
+  [disposability](https://12factor.net/disposability)
+- [Docker Compose `up`](https://docs.docker.com/reference/cli/docker/compose/up/), [`restart`](https://docs.docker.com/reference/cli/docker/compose/restart/), and [`down`](https://docs.docker.com/reference/cli/docker/compose/down/)
+- [`lsof(8)` manual](https://man7.org/linux/man-pages/man8/lsof.8.html)

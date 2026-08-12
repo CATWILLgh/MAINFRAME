@@ -1,29 +1,29 @@
-# Layout — spacing, responsive, hierarchy
+# Layout
 
-## Spacing — one scale
+## Spacing and grouping
 
-8px rhythm on a 4px sub-unit (the 8pt grid). Tailwind roots spacing at `--spacing: 0.25rem` (4px); use `gap` / `p` / `m` `{2,4,6,8,12,16}` (8–64px) as the rhythm, `1` (4px) only for hairline insets. Never an off-scale value (`p-[7px]`). Proximity communicates grouping before borders do — group with spacing first.
+Reuse the project's spacing scale. A 4px sub-unit or 8px rhythm is a common implementation choice, not a universal law. Prefer scale values because they preserve rhythm and maintainability; use an exception when optical alignment, a third-party constraint, or a real layout requirement justifies it. Proximity communicates grouping before borders do.
 
-## Responsive — mobile-first
+## Responsive behavior
 
-Tailwind breakpoints: `sm` 640 / `md` 768 / `lg` 1024 / `xl` 1280 / `2xl` 1536. Unprefixed = all sizes; add `md:` / `lg:` to scale up. Design the small layout first, then enhance — don't shrink a desktop layout down.
+Start with the narrowest meaningful layout and add capacity as content needs it. Reuse project breakpoints instead of assuming framework defaults are product requirements. Choose breakpoints where content or interaction stops working, and use container queries when component space matters more than viewport width.
 
 ## Width
 
-- App / content shell: cap at `max-w-7xl` (1280px); full-bleed only for backgrounds / hero.
-- Long-form text column: `max-w-prose` (~65ch) — measure beats container width for reading.
+- Set shell width from the task, density, and target displays; do not impose a universal 1280px cap.
+- Keep long-form measure readable. Roughly 45–75 characters per line is a useful starting range, then verify with the actual typeface, language, size, and content.
+- Preserve usable reflow and avoid horizontal scrolling at narrow widths except where two-dimensional content genuinely requires it.
 
 ## Visual hierarchy — levers in order
 
-**Size → spacing → contrast → colour.** Never colour alone (a11y + clarity). Start with more whitespace than feels necessary, then remove (Refactoring UI). One primary action per view; subordinate the rest visually.
+Use content order, size, spacing, weight, contrast, alignment, and color together. Never rely on color alone. A surface may have more than one important action; make their priority and relationship understandable instead of enforcing a numerical limit.
 
 ## Density by surface
 
-Tighter spacing for data-dense surfaces (tables, dashboards) where glanceability wins; generous spacing for marketing / content where focus and calm win. Keep density consistent within a surface — mixed rhythm reads as broken.
+Tighter spacing can support data-dense surfaces where comparison and repeated work matter; more generous spacing can support persuasion or reading. Density may change intentionally between regions, but repeated structures should remain predictable.
 
 ## Sources
 
-- 8pt grid — https://spec.fm/specifics/8-pt-grid
 - Tailwind spacing + responsive — https://tailwindcss.com/docs/responsive-design
 - Screen-space / density — https://www.nngroup.com/articles/utilize-available-screen-space/
-- Whitespace & hierarchy — Refactoring UI (Wathan & Schoger), https://www.refactoringui.com/
+- WCAG reflow — https://www.w3.org/WAI/WCAG22/Understanding/reflow.html

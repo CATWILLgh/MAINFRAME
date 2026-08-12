@@ -12,7 +12,7 @@ usage() {
 MAINFRAME shared secrets installer
 
 Usage:
-  install.sh [--dry-run] [--uninstall]
+  install.sh [--dry-run] [--yes] [--uninstall]
 EOF
 }
 
@@ -25,7 +25,7 @@ parse_args() {
         case "$1" in
             --dry-run) DRY_RUN=1 ;;
             --uninstall) UNINSTALL=1 ;;
-            --dev) ;;
+            --dev|--yes) ;;
             -h|--help) usage; exit 0 ;;
             *) echo "Unknown shared-secrets option: $1" >&2; exit 2 ;;
         esac

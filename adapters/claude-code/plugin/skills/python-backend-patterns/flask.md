@@ -1,50 +1,27 @@
-# Flask + Flask-smorest patterns
+# Flask
 
-Sync-first by default. ORM: SQLAlchemy 2.0 → [sqlalchemy.md](sqlalchemy.md). Validation: Marshmallow (typical) or Pydantic 2 → [validation.md](validation.md).
+Flask has an extension-driven ecosystem. Preserve the project's application startup, data layer, validation, authentication, and API extension instead of assuming Flask-Smorest, SQLAlchemy, Marshmallow, or Flask-JWT-Extended.
 
-## App factory
+## Application and routes
 
-Single `create_app()` function in `app.py`. Register blueprints, JWT handlers, error handlers, observability inside the factory. Avoid module-level state. Configuration via env-vars + `app.config.from_*`.
+- For new testable setup, prefer an application factory and initialize extensions through the application. Preserve a working established startup convention unless migration is assigned.
+- Keep Blueprint boundaries aligned with the project's features or modules; do not force one blueprint per resource.
+- If Flask-Smorest owns the path, use its argument and response decorators consistently. Do not introduce it for one endpoint.
+- Split a module when it has distinct ownership or reasons to change, not at a universal line count.
 
-## Blueprints via Flask-smorest
+## Request boundary
 
-- `Blueprint` per resource. Use `MethodView` for class-based routes.
-- Decorators `@blp.arguments(SchemaIn)` for input, `@blp.response(200, SchemaOut)` for output — give OpenAPI spec for free.
-- Split large blueprint into a package (`api/<resource>/`) when the file exceeds the umbrella file-size rule (CLAUDE.md): one module per concern (crud, lifecycle, attachments, etc).
+- Use the established session, JWT, or service-auth mechanism and verify operation plus resource ownership server-side.
+- Use request hooks only for genuinely request-scoped setup and cleanup. Align tenant and database context with transaction lifetime.
+- Do not log raw bodies, credentials, cookies, authorization headers, or secret-bearing query values.
+- Translate domain and database failures at the HTTP boundary using the project's stable error contract.
 
-```python
-@blp.route("/")
-class JobList(MethodView):
-    @blp.arguments(JobListArgs, location="query")
-    @blp.response(200, JobOutSchema(many=True))
-    @role_required("operator")
-    def get(self, args): ...
-```
+## Async and background work
 
-## Auth — Flask-JWT-Extended
-
-- `@jwt_required()` on protected routes. Tenant + role data go into JWT claims; extract via `get_jwt()` or a custom `@role_required` decorator.
-- Refresh-token rotation: register a `@jwt.token_in_blocklist_loader` to revoke old refresh tokens after rotation.
-- Never accept `organization_id` from request body for tenant scoping — always from JWT.
-
-## Request lifecycle
-
-- `before_request` — set tenant context (e.g. PostgreSQL GUC for RLS, or `flask.g.tenant_id`).
-- `after_request` — log response metadata (status, duration). Do NOT log bodies (may contain secrets).
-- `teardown_appcontext` — close DB sessions.
-
-## Error handling
-
-- Domain exceptions raised in services → caught by error handlers, mapped to 4xx with localised messages.
-- Flask-smorest `abort(400, message="...")` for validation/business errors.
-- `IntegrityError` discrimination → 409 (unique) vs 400 (FK) vs 422 (CHECK). See [sqlalchemy.md](sqlalchemy.md).
-
-## Async caveat
-
-Flask 2+ supports `async def` views via `asgiref`, but the WSGI server still runs each request on a thread. Real async requires switching to ASGI (Quart, FastAPI). Do NOT use `async def` with sync DB driver — no benefit, possible event-loop blocking under ASGI.
+Flask supports async views when installed with its async extra, but each request still occupies one WSGI worker. Tasks spawned from an async view are cancelled when the view completes. Use an established durable worker for background work; moving to an ASGI-native framework is a separate architectural decision.
 
 ## Sources
 
-- Flask docs — https://flask.palletsprojects.com/
-- Flask-smorest — https://flask-smorest.readthedocs.io/
-- Flask-JWT-Extended — https://flask-jwt-extended.readthedocs.io/
+- Flask documentation — https://flask.palletsprojects.com/
+- Flask async behavior — https://flask.palletsprojects.com/en/stable/async-await/
+- Flask-Smorest — https://flask-smorest.readthedocs.io/

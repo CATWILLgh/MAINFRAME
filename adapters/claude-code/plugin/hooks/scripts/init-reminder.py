@@ -19,6 +19,8 @@ import json
 import os
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -29,6 +31,8 @@ except Exception:
 INIT_COMMAND = "mainframe:init"
 REMINDER_EVERY_N = 64
 _STATE_DIR = os.path.join(tempfile.gettempdir(), "mainframe-init-reminder")
+_LOCK_STALE_SECONDS = 60
+_STATE_STALE_SECONDS = 30 * 24 * 60 * 60
 
 INIT_NOTE = (
     "MAINFRAME init remains active. Re-anchor on the already loaded primary-"
@@ -57,37 +61,91 @@ def _every():
 
 
 def _state_path(session_id, state_dir=None):
-    directory = state_dir or _STATE_DIR
+    directory = state_dir or os.environ.get(
+        "MAINFRAME_INIT_REMINDER_STATE_DIR", _STATE_DIR)
     key = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:16]
     return os.path.join(directory, key + ".json")
 
 
 def _load(path):
-    """Return `(active, turns)`; malformed or absent state is inactive."""
+    """Return `(active, turns)`; only absent state is inactive."""
     try:
         with open(path, encoding="utf-8") as fh:
             state = json.load(fh)
         active = state.get("active") is True
         turns = int(state.get("turns", 0))
         return active, max(0, turns)
-    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    except FileNotFoundError:
         return False, 0
 
 
 def _save(path, active, turns):
+    directory = os.path.dirname(path)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    fd, temp = tempfile.mkstemp(prefix=".state-", dir=directory, text=True)
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as fh:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump({"active": bool(active), "turns": max(0, int(turns))}, fh)
-    except (OSError, TypeError, ValueError):
-        pass
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp, path)
+    finally:
+        try:
+            os.unlink(temp)
+        except FileNotFoundError:
+            pass
 
 
 def _clear(path):
     try:
         os.unlink(path)
-    except OSError:
+    except FileNotFoundError:
         pass
+
+
+@contextmanager
+def _session_lock(path):
+    lock = path + ".lock"
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    for _ in range(100):
+        try:
+            os.mkdir(lock, mode=0o700)
+            break
+        except FileExistsError:
+            try:
+                if time.time() - os.path.getmtime(lock) > _LOCK_STALE_SECONDS:
+                    os.rmdir(lock)
+                    continue
+            except FileNotFoundError:
+                continue
+            time.sleep(0.01)
+    else:
+        raise TimeoutError("init reminder state lock unavailable")
+    try:
+        yield
+    finally:
+        try:
+            os.rmdir(lock)
+        except FileNotFoundError:
+            pass
+
+
+def _cleanup_stale(directory):
+    try:
+        names = os.listdir(directory)
+    except FileNotFoundError:
+        return
+    now = time.time()
+    for name in names:
+        path = os.path.join(directory, name)
+        try:
+            age = now - os.path.getmtime(path)
+            if name.endswith(".lock") and age > _LOCK_STALE_SECONDS:
+                os.rmdir(path)
+            elif name.endswith(".json") and age > _STATE_STALE_SECONDS:
+                os.unlink(path)
+        except (FileNotFoundError, OSError):
+            continue
 
 
 def _is_init_expansion(payload):
@@ -100,6 +158,11 @@ def _is_init_expansion(payload):
 
 def should_remind(active, turns, every):
     return active and turns > 0 and every > 0 and turns % every == 0
+
+
+def _log_telemetry(event, data, payload):
+    if log_event(event, data, payload) == "error":
+        raise RuntimeError("telemetry sink unavailable")
 
 
 def main():
@@ -119,33 +182,36 @@ def main():
 
     if event == "UserPromptExpansion":
         if _is_init_expansion(payload):
-            _save(path, True, 0)
-            log_event("init_reminder_activated", {}, payload)
+            with _session_lock(path):
+                _save(path, True, 0)
+            _log_telemetry("init_reminder_activated", {}, payload)
         return
 
     if event == "SessionStart":
+        _cleanup_stale(os.path.dirname(path))
         source = payload.get("source")
-        if source in ("startup", "clear"):
-            _clear(path)
-        elif source == "compact":
-            active, _ = _load(path)
-            if active:
-                _save(path, True, 0)
+        with _session_lock(path):
+            if source in ("startup", "clear"):
+                _clear(path)
+            elif source == "compact":
+                active, _ = _load(path)
+                if active:
+                    _save(path, True, 0)
         return
 
     if event != "UserPromptSubmit":
         return
 
-    active, turns = _load(path)
-    if not active:
-        return
-
-    turns += 1
-    reminded = should_remind(active, turns, _every())
-    _save(path, True, turns)
+    with _session_lock(path):
+        active, turns = _load(path)
+        if not active:
+            return
+        turns += 1
+        reminded = should_remind(active, turns, _every())
+        _save(path, True, turns)
     if reminded:
         emit_note("UserPromptSubmit", INIT_NOTE)
-    log_event(
+    _log_telemetry(
         "init_reminder",
         {"turn": turns, "reminded": reminded, "every": _every()},
         payload,

@@ -1,39 +1,36 @@
-# Typography — scale, measure, hierarchy
+# Typography
 
-Owns type decisions; `shadcn` sets none. Declare fonts in Tailwind v4 via `@theme { --font-sans: …; --font-heading: …; }`.
+Preserve the project's typographic contract. For a new direction, choose type from the content, language, platform, brand character, readability, and loading constraints—not from a fixed scale or fashionable pairing.
 
 ## Scale
 
-Build a modular scale from a 16px base with a **1.333 (Perfect Fourth)** ratio — 5–6 steps cover label → display. Body stays 16px (never below for primary text). Map every size to a scale step; no arbitrary one-off sizes.
+Use a small coherent set of semantic roles such as body, label, heading, and display. A modular scale can help, but no single ratio or base size fits every typeface, language, density, or platform. Reuse tokens and introduce an exception only when the content hierarchy needs it.
 
 ## Measure & leading
 
-- Body line length **50–75 characters**, target ~60–66 (`max-w-prose` ≈ 65ch).
-- Body `line-height` ~**1.5** (sound default); the layout must not break when a user overrides line-height to 1.5× (WCAG SC 1.4.12, Text Spacing — an adaptability requirement, not an authoring floor). Headings tighten **1.1–1.3** as size grows.
+- Roughly 45–75 characters per line is a useful starting range for long-form text; verify with the actual language, typeface, size, and reading task.
+- Choose line height for the typeface and measure. The layout must remain usable when users apply the overrides in WCAG SC 1.4.12; those values are an adaptability test, not mandatory authored spacing.
 
 ## Hierarchy — weight first
 
-Express level by **weight → size → colour**, not size alone (Apple HIG):
+Express hierarchy with a deliberate combination of content order, weight, size, spacing, contrast, and style. Do not rely on color alone. Use real available weights and verify that secondary text remains readable. Multiple families are acceptable when each has a stable role; unnecessary near-duplicates usually weaken coherence.
 
-- Body 400, labels / UI 500–600, headings 600–700.
-- Secondary text = `text-muted-foreground`, not a lighter grey hex.
-- One or two families maximum — more families collapse hierarchy, not strengthen it.
-
-## Pairing archetypes (by genre — choose, then load)
+## Pairing examples
 
 | Genre | Heading | Body |
 |---|---|---|
 | Clinical-warm | geometric sans | humanist sans |
 | Editorial | high-contrast serif | low-contrast grotesque |
-| Technical | slab serif | monospaced |
+| Technical | sturdy sans or slab serif | sans or monospaced where the content benefits |
+
+These are prompts for exploration, not genre rules.
 
 ## Loading
 
-`font-display: swap` to avoid invisible text (FOIT). `<link rel="preload">` only the one or two above-the-fold fonts — preloading every weight regresses load.
+Choose `font-display` and preload behavior from the product's tolerance for invisible text, fallback mismatch, layout shift, and caching. Preload only fonts proven critical to the first render; unnecessary font and weight downloads compete with more important resources.
 
 ## Sources
 
-- Type scale ratios — https://typescale.com/
 - Material 3 type roles — https://m3.material.io/styles/typography/applying-type
 - Line length (measure) — https://baymard.com/blog/line-length-readability
 - Line-height SC 1.4.12 — https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html

@@ -1,13 +1,13 @@
 ---
 name: harness-feedback
 user-invocable: true
-description: File a structured feedback report about friction caused by the mainframe harness itself — a hook gate block that looks like a false positive, a permission rule that denied legitimate work, a skill or rule instruction that proved unclear or contradictory, or a capability the harness lacks. Writes one Markdown file with YAML frontmatter (date/project/session/artifact/type/severity/title) and a mandatory `## Trigger` section into the global `~/.claude/mainframe/feedback/` queue via the bundled `feedback.py` receiver; the hub processes the queue as candidates and tunes the harness. Friction-only channel — not for praise, not for problems in the project's own code (that is `surface-ticket`), and filing feedback never replaces fixing a gate finding.
+description: File a structured feedback report about friction caused by the mainframe harness itself — a hook gate block that looks like a false positive, a permission rule that denied legitimate work, a skill or rule instruction that proved unclear or contradictory, or a capability the harness lacks. Writes one Markdown file with YAML frontmatter and a mandatory `## Trigger` section into the Claude adapter's dev feedback queue via the bundled `feedback.py` receiver; the hub processes the queue as candidates and tunes the harness. Friction-only channel — not for praise, not for problems in the project's own code (that is `ticket`), and filing feedback never replaces fixing a gate finding.
 when_to_use: Trigger when the harness itself — not the project — got in the way and the friction is concrete and reproducible — a stop-gate or scan hook flagged correct code (false positive), an auto-mode permission rule denied or stalled legitimate work, a global rule or skill instruction proved ambiguous or contradictory in practice, or a needed harness capability is missing. File AFTER resolving the block or finishing the workaround, never instead of it; one report per distinct friction, not per occurrence.
 ---
 
 # Harness feedback
 
-The feedback channel for the mainframe harness (global CLAUDE.md rules, plugin skills, hooks, agents, permission rules). Telemetry already counts events; this skill carries the *meaning* — what blocked you, why it was wrong, what would fix it. Reports land in `~/.claude/mainframe/feedback/` and are processed by the hub as candidates, not as truths.
+The feedback channel for the mainframe harness (global CLAUDE.md rules, plugin skills, hooks, agents, permission rules). Telemetry already counts events; this skill carries the *meaning* — what blocked you, why it was wrong, what would fix it. Reports land in `~/.claude/mainframe/claude-code/feedback/` and are processed by the hub as candidates, not as truths. After the receiver has safely written a report it may detach an optional Spark analysis; model unavailability never delays or invalidates filing the report.
 
 **Non-waiver rule:** feedback never unblocks anything. A gate finding still gets fixed (or explicit user permission obtained); a denied command still goes through the permission flow. File feedback after the friction is handled.
 
@@ -54,7 +54,7 @@ The script validates the type, requires the `## Trigger` section, and prints the
 
 ## What NOT to file
 
-- Problems in the project's own code or tests → `surface-ticket`.
+- Problems in the project's own code or tests → `ticket`.
 - Praise / "worked well" notes — this channel is friction-only by design.
 - Secrets, tokens, whole file dumps — quote the minimal excerpt that reproduces.
 - A second report for the same friction in the same session — update nothing, it is already queued.

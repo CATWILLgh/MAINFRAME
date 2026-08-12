@@ -5,12 +5,9 @@ counting and AST logic are unit-testable independent of the hook payload
 plumbing (mirrors the `_markers.py` shared-detector-module pattern). Stdlib
 only.
 
-Design (decision-reviewer + advisor, 2026-07-06): no before/after size
-comparison -- flag any over-threshold file/function on the current content
-alone; ticket-discipline (`_hooklib.tickets_mentioning`), not a delta split,
-is the noise-reduction mechanism. Qualnames are built via a recursive
-NodeVisitor (push/pop per scope) -- `ast.walk` is breadth-first with no
-ancestor context and cannot do this.
+The owning hook compares these pure measurements with a session baseline.
+Qualnames are built via a recursive NodeVisitor (push/pop per scope) because
+`ast.walk` is breadth-first and carries no ancestor context.
 """
 
 import ast
@@ -20,11 +17,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _hooklib import CODE_EXTENSIONS
 
-# SQL migrations/schema dumps and Vue/Svelte SFCs (template+script+style
-# bundled in one file) legitimately exceed 400 lines for reasons unrelated to
-# hand-written imperative-logic bulk, which is the rule's intent. Carved out
-# of the file-length check only; function-length stays Python-only regardless.
-FILE_LENGTH_EXTENSIONS = CODE_EXTENSIONS - {".sql", ".vue", ".svelte"}
+# Generated migrations and schema dumps legitimately exceed the generic file
+# threshold. Vue/Svelte are now safe to include because only a session-owned
+# crossing is reported; an inherited long SFC stays silent.
+FILE_LENGTH_EXTENSIONS = CODE_EXTENSIONS - {".sql"}
 
 FILE_LENGTH_THRESHOLD = 400
 FUNCTION_LENGTH_THRESHOLD = 60

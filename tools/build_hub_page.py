@@ -23,8 +23,10 @@ import sys
 import yaml
 
 _ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hub_page_assets")
-_DEFAULT_DB = os.path.expanduser("~/.claude/mainframe/telemetry/telemetry.db")
-_DEFAULT_FEEDBACK = os.path.expanduser("~/.claude/mainframe/feedback")
+_DEFAULT_DB = os.path.expanduser(
+    "~/.claude/mainframe/claude-code/telemetry/telemetry.db")
+_DEFAULT_FEEDBACK = os.path.expanduser(
+    "~/.claude/mainframe/claude-code/feedback")
 _DEFAULT_PROJECTS = os.path.expanduser("~/.claude/projects")
 _DEFAULT_USAGE_CACHE = os.path.expanduser("~/.claude/mainframe/usage-cache/usage-cache.json")
 
@@ -100,7 +102,8 @@ def collect_skills(root):
 
 
 def collect_agents(root):
-    adir = os.path.join(root, "adapters/claude-code/plugin/agents")
+    """User-level agents from adapters/claude-code/agents/."""
+    adir = os.path.join(root, "adapters/claude-code/agents")
     out = []
     if not os.path.isdir(adir):
         return out
@@ -170,8 +173,9 @@ def build_edges(skills, agents, hooks):
                 edges.append({"source": s["name"], "target": target, "kind": "skill-ref"})
     for a in agents:
         for skill in a["skills"]:
-            if skill in skill_names:
-                edges.append({"source": a["name"], "target": skill, "kind": "agent-skill"})
+            local_name = skill.removeprefix("mainframe:")
+            if local_name in skill_names:
+                edges.append({"source": a["name"], "target": local_name, "kind": "agent-skill"})
     for h in hooks:
         edges.append({"source": h["script"], "target": h["event"], "kind": "hook-event"})
     return edges
@@ -203,9 +207,52 @@ def _payload_breakdown(con, event, key):
             "items": [list(i) for i in items], "unrecognized": unrecognized}
 
 
+def _hook_effectiveness(con):
+    """Aggregate the strict hook_signal payload without requiring SQLite JSON1."""
+    rows = con.execute(
+        "SELECT session_id, ts, payload FROM events WHERE event = 'hook_signal'"
+    ).fetchall()
+    grouped = {}
+    for session_id, ts, payload in rows:
+        try:
+            value = json.loads(payload or "")
+            hook = value["hook"]
+            rule_id = value["rule_id"]
+            outcome = value["outcome"]
+            count = int(value["count"])
+            context_chars = int(value["context_chars"])
+            if (
+                not isinstance(hook, str) or not hook
+                or not isinstance(rule_id, str) or not rule_id
+                or outcome not in {"noted", "asked", "blocked", "resolved"}
+                or count <= 0 or context_chars < 0
+            ):
+                continue
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+        key = (hook, rule_id)
+        item = grouped.setdefault(key, {
+            "hook": hook, "rule_id": rule_id, "signals": 0,
+            "sessions": set(), "noted": 0, "asked": 0, "blocked": 0,
+            "resolved": 0, "context_chars": 0, "last_seen": "",
+        })
+        item["signals"] += 1
+        if session_id:
+            item["sessions"].add(session_id)
+        item[outcome] += count
+        item["context_chars"] += context_chars
+        item["last_seen"] = max(item["last_seen"], ts or "")
+    result = []
+    for item in grouped.values():
+        item["sessions"] = len(item["sessions"])
+        result.append(item)
+    return sorted(result, key=lambda item: (-item["signals"], item["hook"], item["rule_id"]))
+
+
 def collect_dev_state(db_path, feedback_dir):
     """Read-only telemetry + feedback snapshot. Absence => dev not active."""
-    empty_tel = {"sessions": 0, "events": [], "by_agent": [], "by_day": [], "breakdowns": []}
+    empty_tel = {"sessions": 0, "events": [], "by_agent": [], "by_day": [],
+                 "breakdowns": [], "hook_effectiveness": []}
     state = {"active": False, "telemetry": dict(empty_tel), "feedback": []}
     if os.path.isfile(db_path):
         try:
@@ -223,6 +270,7 @@ def collect_dev_state(db_path, feedback_dir):
                     "WHERE ts IS NOT NULL AND ts != '' GROUP BY day ORDER BY day").fetchall()
                 breakdowns = [b for b in (_payload_breakdown(con, ev, key)
                                           for ev, key in _PAYLOAD_BREAKDOWNS) if b["total"]]
+                hook_effectiveness = _hook_effectiveness(con)
             finally:
                 con.close()
             state["telemetry"] = {
@@ -231,6 +279,7 @@ def collect_dev_state(db_path, feedback_dir):
                 "by_agent": [list(r) for r in by_agent],
                 "by_day": [list(r) for r in by_day],
                 "breakdowns": breakdowns,
+                "hook_effectiveness": hook_effectiveness,
             }
             state["active"] = True
         except sqlite3.Error:
@@ -595,7 +644,8 @@ def compute_layout(nodes, layer_order):
     by_layer = {}
     for n in nodes:
         by_layer.setdefault(n["layer"], []).append(n["id"])
-    ordered = list(layer_order) + [l for l in by_layer if l not in layer_order]
+    ordered = list(layer_order) + [
+        layer_name for layer_name in by_layer if layer_name not in layer_order]
     pos = {}
     for li, layer in enumerate(ordered):
         x = x0 + li * col_w

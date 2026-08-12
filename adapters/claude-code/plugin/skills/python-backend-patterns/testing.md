@@ -1,58 +1,40 @@
-# Testing patterns
+# Python backend testing
 
-`pytest` + (for async stacks) `pytest-asyncio` + `httpx.AsyncClient`. Real-DB tests via `testcontainers-python` when DB semantics matter (RLS, locking, JSONB, triggers). Tier orientation per hub `testing-strategy` skill — Tier 1 (no real environment: in-process unit + `httpx.AsyncClient`) is the default and the continuous-regression gate; real-DB integration is a higher tier, reached only when a cross-boundary contract demands it. Cheaper is not less important — the higher tier guards risk Tier 1 cannot.
+Use the project's existing pytest setup and fixtures. Protect the behaviour
+changed by the task with the smallest test that can catch its regression.
 
-## Per-endpoint contract — 4 mandatory scenarios
+## HTTP and service behaviour
 
-| Scenario | Expected |
-|---|---|
-| Happy path | 200 / 201, response shape matches schema |
-| Unauthorized | 401 (no token) or 403 (insufficient role) |
-| Not found | 404 with a stable error envelope |
-| Invalid input | 400 / 422, field-level errors in body |
+- Prove the intended success result.
+- Add invalid-input, unauthorised, forbidden, missing-resource, conflict, or
+  failure scenarios only when that branch exists in the changed contract.
+- Keep business-rule variations at the service or pure-function level when an
+  HTTP test would only repeat the same guarantee more slowly.
+- Use `httpx.AsyncClient` or the framework's in-process client when the HTTP
+  boundary matters but a real socket does not.
 
-## Async tests (FastAPI, async SA)
+## PostgreSQL boundary
 
-`AsyncClient(app=app, base_url="http://test")` from `httpx` runs ASGI in-process, no socket — faster than a real server.
+Use real PostgreSQL only for behaviour a fake cannot represent faithfully:
+migrations, SQL shape, constraints, indexes, RLS, JSONB, transactions, locking,
+isolation, triggers, or concurrent writes. Prefer the project's established
+local database path. Do not introduce Testcontainers or another service merely
+to satisfy a generic testing pattern.
 
-```python
-@pytest.mark.asyncio
-async def test_create_job(async_client, auth_header):
-    r = await async_client.post("/jobs", json={...}, headers=auth_header)
-    assert r.status_code == 201
-```
+When the change prevents a race, write a concurrent test against the real
+database and assert the business outcome. The implementation detail
+(`SELECT FOR UPDATE`, an atomic update, or a constraint) is not the assertion.
 
-## Real-DB integration via testcontainers
+## Completion
 
-For PostgreSQL-specific semantics (RLS, FK, advisory locks, JSONB, `LISTEN/NOTIFY`):
-
-```python
-@pytest.fixture(scope="session")
-def pg_url():
-    with PostgresContainer("postgres:16") as pg:
-        yield pg.get_connection_url()
-```
-
-Per-test transaction wrap → instant cleanup. Per-session container → fast amortised startup.
-
-## Race-condition tests for `SELECT FOR UPDATE`
-
-Status-changing operations are vulnerable to read-then-write races. Test with concurrent attempts — one wins, the rest fail (409 / 422):
-
-```python
-def test_complete_shift_race(client, shift):
-    errors = []
-    def w():
-        r = client.post(f"/shifts/{shift.id}/complete")
-        if r.status_code != 200: errors.append(r.json())
-    ts = [Thread(target=w) for _ in range(2)]; [t.start() for t in ts]; [t.join() for t in ts]
-    assert len(errors) == 1
-```
-
-For async: replace threads with `asyncio.gather` + multiple `AsyncClient` calls.
+For a bug or changed business rule, observe the focused test fail for the
+intended reason before the fix when an automated reproduction is practical.
+Then observe it pass and run the nearest relevant fast suite with the project's
+native command. Do not weaken assertions, duplicate the same rule across
+levels, or leave skipped tests and temporary markers.
 
 ## Sources
 
 - pytest — https://docs.pytest.org/
-- pytest-asyncio — https://pytest-asyncio.readthedocs.io/
-- testcontainers-python — https://testcontainers-python.readthedocs.io/
+- HTTPX ASGI transports — https://www.python-httpx.org/advanced/transports/
+- PostgreSQL concurrency control — https://www.postgresql.org/docs/current/mvcc.html

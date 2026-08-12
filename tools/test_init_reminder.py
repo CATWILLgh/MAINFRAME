@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 
@@ -118,7 +119,7 @@ def test_subagent_neither_advances_nor_receives_reminder():
         path = hook._state_path("main", state_dir)
         hook._save(path, True, 63)
         out, logged = _submit(
-            state_dir, agent_id="agent-123", agent_type="researcher")
+            state_dir, agent_id="agent-123", agent_type="mainframe-researcher")
         assert out == ""
         assert logged == []
         assert hook._load(path) == (True, 63)
@@ -206,6 +207,40 @@ def test_env_can_retune_positive_interval():
             os.environ.pop("MAINFRAME_INIT_REMINDER_EVERY", None)
         else:
             os.environ["MAINFRAME_INIT_REMINDER_EVERY"] = saved
+
+
+def test_malformed_state_is_reportable_failure():
+    with tempfile.TemporaryDirectory() as state_dir:
+        path = hook._state_path("main", state_dir)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("not-json")
+        try:
+            hook._load(path)
+        except json.JSONDecodeError:
+            pass
+        else:
+            raise AssertionError("corrupt state was silently treated as inactive")
+
+
+def test_parallel_submits_do_not_lose_turns():
+    with tempfile.TemporaryDirectory() as state_dir:
+        env = dict(os.environ, MAINFRAME_INIT_REMINDER_STATE_DIR=state_dir,
+                   MAINFRAME_INIT_REMINDER_EVERY="1000")
+        activation = {
+            "hook_event_name": "UserPromptExpansion", "session_id": "parallel",
+            "expansion_type": "slash_command", "command_name": "mainframe:init",
+            "command_source": "plugin",
+        }
+        subprocess.run([sys.executable, SCRIPT], input=json.dumps(activation),
+                       text=True, env=env, check=True, timeout=30)
+        submit = json.dumps({"hook_event_name": "UserPromptSubmit",
+                             "session_id": "parallel", "prompt": "continue"})
+        procs = [subprocess.Popen([sys.executable, SCRIPT], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  text=True, env=env) for _ in range(32)]
+        results = [proc.communicate(submit, timeout=30) for proc in procs]
+        assert all(proc.returncode == 0 for proc in procs), results
+        assert hook._load(hook._state_path("parallel", state_dir)) == (True, 32)
 
 
 def main():
