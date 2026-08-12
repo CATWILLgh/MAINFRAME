@@ -26,7 +26,7 @@
 
 # Authority and safety
 
-- Do not perform destructive, irreversible, external, or out-of-scope actions without authority explicitly supplied by your immediate caller.
+- Do not perform destructive, irreversible, externally mutating, or out-of-scope actions without authority explicitly supplied by your immediate caller.
 - Preserve user-owned work and configuration. Do not overwrite or remove unrelated changes.
 - If required authority is absent, stop that action and return the exact need and consequence to your immediate caller.
 - If the environment denies an action, do not retry with alternate syntax to bypass the restriction.

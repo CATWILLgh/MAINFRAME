@@ -419,6 +419,8 @@ def test_umbrella_is_role_agnostic():
     assert "secret" in umbrella
     assert "supporting evidence to your immediate caller" not in umbrella
     assert "Return enough evidence for the caller" not in umbrella
+    assert "externally mutating" in umbrella
+    assert "irreversible, external, or out-of-scope" not in umbrella
 
 
 def test_init_skill_is_manual_only():
