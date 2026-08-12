@@ -15,7 +15,9 @@ Use this skill for both new React work and established applications. Discover th
 2. Trace the changed user flow through route, component, state, browser boundary, server contract, and existing tests.
 3. Read only the references matching the task.
 4. Verify installed majors and version-sensitive APIs through Context7 or current primary documentation.
-5. Follow [testing.md](testing.md) and the project's native commands.
+5. Apply the testing baseline below. Read [testing.md](testing.md) when the task
+   requires choosing between logic, component, and browser-level evidence or
+   keeping the local and CI paths economical.
 
 Several state libraries, routers, validators, or UI packages are observations, not automatic blockers. Determine which one owns the active path from imports, providers, configuration, and runtime wiring. Ask the caller only when evidence cannot resolve a choice that changes product behavior or infrastructure.
 
@@ -23,6 +25,21 @@ Several state libraries, routers, validators, or UI packages are observations, n
 
 - **Established system:** preserve its framework, rendering model, architecture, router, state, forms, validation, styling, UI primitives, and contracts. Improve the changed path without starting an unrelated migration.
 - **New or isolated component:** prefer supported React and TypeScript, clear server/client boundaries, semantic HTML, accessible interactions, explicit async states, focused tests, and the surrounding project's existing primitives. Choose libraries from actual requirements; this skill does not mandate FSD, TanStack Query, React Hook Form, Zod, Tailwind, or shadcn.
+
+## Testing baseline
+
+- Use the project's existing test runner and the smallest faithful test for the
+  changed user-visible behavior or business-facing frontend rule.
+- Inspect the exact package script, lifecycle scripts, runner configuration,
+  and reached setup before execution. Names such as `test`, `lint`, `format`,
+  `check`, and `generate` do not prove that a command is read-only,
+  infrastructure-free, or safe for the current environment.
+- When practical, observe the focused test fail for the intended reason before
+  the fix, then pass, followed by the nearest relevant fast suite.
+- Use browser-level evidence only when browser behavior, layout, focus, motion,
+  navigation, or the complete journey is the changed risk.
+- Assert observable outcomes and protected side effects. Never weaken
+  assertions, hide failures, leave skipped tests, or claim an unobserved result.
 
 ## References
 

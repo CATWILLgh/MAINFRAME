@@ -334,6 +334,10 @@ def test_testing_context_preserves_role_boundaries():
     assert "concrete adjacent observation" in react_agent
     assert "without investigating it" in react_agent
     assert "verified out-of-scope defects" not in react_skill
+    assert "## Testing baseline" in react_skill
+    assert "observe the focused test fail" in react_skill
+    assert "Inspect the exact package script, lifecycle scripts" in react_skill
+    assert "observe the focused test fail" not in react_agent
 
     design_skill = (PLUGIN / "skills" / "frontend-design" / "SKILL.md").read_text(
         encoding="utf-8"

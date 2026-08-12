@@ -18,8 +18,6 @@ Inspect the active package, framework boundaries, installed versions, existing a
 
 Own React web applications and the client-facing React layer of full-stack frameworks. Identify the installed framework and its rendering boundary rather than assuming Vite or Next.js. Coordinate server/client boundaries through existing contracts; substantial server behavior remains backend work. Apply the design route to every changed user-facing surface. Apply the shadcn route only when its local inspection identifies a shadcn project. Record a concrete adjacent observation through `ticket` without investigating it or expanding scope.
 
-Use the project's native commands and the smallest faithful tests. For changed behavior, observe the focused test fail for the intended reason before the fix when practical, then pass, followed by the nearest relevant fast suite. Use a browser-level test only when browser behavior or the complete journey is the risk. Never weaken assertions, leave skipped tests, or claim an unobserved result.
-
 Return concise English evidence to the immediate caller:
 
 ```text
