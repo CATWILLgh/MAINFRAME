@@ -375,7 +375,9 @@ def test_researcher_has_private_methodology_boundary():
     assert "Grep" not in researcher and "Glob" not in researcher and "Bash" not in researcher
     assert "skills:" not in researcher
     assert 'matcher: "Read"' in researcher
-    assert 'matcher: "WebSearch"' in researcher
+    assert 'matcher: "WebSearch|' in researcher
+    assert "mcp__plugin_context7_context7__resolve-library-id" in researcher
+    assert "mcp__plugin_context7_context7__query-docs" in researcher
     assert 'matcher: "WebFetch"' in researcher
     assert "research-read-guard.py" in researcher
     assert "skills/mainframe/skills/research-method/SKILL.md" in researcher

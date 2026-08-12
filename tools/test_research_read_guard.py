@@ -77,6 +77,18 @@ def search(home: pathlib.Path):
     return run_guard(home, payload=payload, mode="require-profile")
 
 
+def context7(home: pathlib.Path, tool_name: str):
+    payload = {
+        "session_id": SESSION_ID,
+        "agent_id": AGENT_ID,
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_use_id": "toolu_context7",
+        "tool_input": {"query": "example"},
+    }
+    return run_guard(home, payload=payload, mode="require-profile")
+
+
 def test_allows_skill_and_reference_files():
     home, root, _ = fixture()
     assert run_guard(home, root / "SKILL.md")["permissionDecision"] == "allow"
@@ -128,10 +140,20 @@ def test_external_research_requires_a_domain_profile():
     assert denied_search["permissionDecision"] == "deny"
     assert "every applicable research profile" in denied_search["permissionDecisionReason"]
     assert record_fetch(home, "toolu_before_profile")["permissionDecision"] == "deny"
+    for tool_name in (
+        "mcp__plugin_context7_context7__resolve-library-id",
+        "mcp__plugin_context7_context7__query-docs",
+    ):
+        assert context7(home, tool_name)["permissionDecision"] == "deny"
 
     assert run_guard(home, root / "references" / "news.md")["permissionDecision"] == "allow"
     assert search(home)["permissionDecision"] == "allow"
     assert record_fetch(home, "toolu_after_profile")["permissionDecision"] == "allow"
+    for tool_name in (
+        "mcp__plugin_context7_context7__resolve-library-id",
+        "mcp__plugin_context7_context7__query-docs",
+    ):
+        assert context7(home, tool_name)["permissionDecision"] == "allow"
 
 
 def test_fails_closed_for_bad_payload_or_missing_path():

@@ -8,7 +8,7 @@ maxTurns: 20
 background: true
 hooks:
   PreToolUse:
-    - matcher: "WebSearch"
+    - matcher: "WebSearch|mcp__plugin_context7_context7__resolve-library-id|mcp__plugin_context7_context7__query-docs"
       hooks:
         - type: command
           command: sh

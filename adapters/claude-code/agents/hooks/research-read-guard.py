@@ -13,6 +13,11 @@ from pathlib import Path
 SKILL_ROOT = Path.home() / ".claude" / "skills" / "mainframe" / "skills" / "research-method"
 STATE_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / "mainframe-researcher-fetches"
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+PROFILE_GATED_TOOLS = {
+    "WebSearch",
+    "mcp__plugin_context7_context7__resolve-library-id",
+    "mcp__plugin_context7_context7__query-docs",
+}
 
 
 def decision(kind: str, reason: str) -> dict:
@@ -110,7 +115,7 @@ def main() -> int:
             allowed = record_webfetch(payload)
             reason = "WebFetch registered" if allowed else "Read every applicable research profile before external research."
         elif mode == "require-profile":
-            allowed = payload.get("tool_name") == "WebSearch" and has_profile(payload)
+            allowed = payload.get("tool_name") in PROFILE_GATED_TOOLS and has_profile(payload)
             reason = "Research profile loaded" if allowed else "Read every applicable research profile before external research."
         elif mode == "guard-read":
             allowed = guard_read(payload)
