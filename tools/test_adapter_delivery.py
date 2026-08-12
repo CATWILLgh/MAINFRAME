@@ -408,6 +408,10 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     assert "skills/mainframe/skills/decision-review/SKILL.md" in reviewer
     assert "CLAUDE.md" not in reviewer
     assert "Cap source lookups" not in reviewer
+    assert "permissionMode: plan" not in reviewer
+    assert "Write" not in reviewer.split("---", 2)[1]
+    assert "Edit" not in reviewer.split("---", 2)[1]
+    assert "Bash" not in reviewer.split("---", 2)[1]
 
     method = (PLUGIN / "skills" / "decision-review" / "SKILL.md").read_text(
         encoding="utf-8"

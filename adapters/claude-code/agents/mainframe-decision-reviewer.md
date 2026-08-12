@@ -6,7 +6,6 @@ model: opus
 effort: high
 background: true
 maxTurns: 50
-permissionMode: plan
 skills:
   - mainframe:severity-calibration
 ---
