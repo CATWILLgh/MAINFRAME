@@ -30,6 +30,11 @@ Multiple frameworks, validators, database libraries, or test tools are observati
 
 - Use the project's native commands and the smallest faithful test for the
   changed behavior.
+- Inspect the exact command, task, configuration, and relevant fixtures before
+  running it. Names such as `lint`, `format`, `test`, and `check` do not prove
+  that a command is read-only, infrastructure-free, or safe for the current
+  environment; prefer its check-only or focused form when verification must
+  not change files or external state.
 - When practical, observe the focused test fail for the intended reason before
   the fix, then pass, followed by the nearest relevant fast suite.
 - Use real PostgreSQL when database semantics are the changed risk; do not add

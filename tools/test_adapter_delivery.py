@@ -256,6 +256,11 @@ def test_testing_context_preserves_role_boundaries():
     assert "verified out-of-scope defects" not in python_skill
     assert "## Testing baseline" in python_skill
     assert "observe the focused test fail" in python_skill
+    assert (
+        "Inspect the exact command, task, configuration, and relevant fixtures"
+        in python_skill
+    )
+    assert "do not prove" in python_skill
     assert "observe the focused test fail" not in python_agent
 
     typescript_skill = (

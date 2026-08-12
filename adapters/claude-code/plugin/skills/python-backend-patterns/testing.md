@@ -4,6 +4,12 @@ Read this branch when the testing baseline in `SKILL.md` is not enough to
 choose the correct test boundary or keep the suite economical. Preserve the
 project's existing pytest setup and fixtures.
 
+Before execution, inspect the selected wrapper, pytest configuration, and the
+fixtures reached by the focused test. Formatters and fix modes can rewrite
+files; session or autouse fixtures and integration markers can initialize a
+database, start services, or expect an already running endpoint. Choose the
+narrowest command whose effects match the current task and environment.
+
 ## HTTP and service behaviour
 
 - Prove the intended success result.
