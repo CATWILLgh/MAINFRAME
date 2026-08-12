@@ -86,7 +86,7 @@ silently mixing classifications.
 End with an honest, decision-useful verdict. Structure:
 
 ```
-ASSESSMENT: <proceed | proceed-with-mitigations | reconsider> — one line, why.
+ASSESSMENT: <proceed | proceed-with-mitigations | reconsider | unverifiable> — one line, why.
 
 LOAD-BEARING ASSUMPTIONS:
 - <assumption> — [holds | unverified | false] — <grounding>
@@ -102,6 +102,11 @@ HONEST LIMITS:
 ```
 
 If the proposal is sound and you could not ground a serious objection, the verdict is `proceed` and the GROUNDED OBJECTIONS section says so — do not pad it.
+
+Use `unverifiable` only when load-bearing input or evidence is unavailable and
+bounded inspection cannot recover it. Name the missing fact and what would
+establish it; uncertainty that can be resolved with the available tools is not
+grounds for this verdict.
 
 ## Anti-patterns
 
