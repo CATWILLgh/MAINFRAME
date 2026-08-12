@@ -30,8 +30,11 @@ facts and switch routes before asking the user to agree the DoD.
    path to verification. Verify drift-prone claims against current authorities.
 2. Synthesize the facts, viable options, recommendation, load-bearing
    assumptions, draft DoD, and red-evidence design.
-3. Have `mainframe-decision-reviewer` challenge the decision and reconcile each
-   grounded objection against the repository and sources.
+3. Give `mainframe-decision-reviewer` the prepared facts, viable options,
+   recommendation, load-bearing assumptions, draft DoD, red-evidence design,
+   and affected paths. Have it challenge the decision, then reconcile each
+   grounded objection against the repository and sources. Do not refer to
+   conversation context that the subagent does not receive.
 4. Run an independent Codex review using [codex-exec.md](codex-exec.md).
 5. Invoke `mainframe-advisor` last with a preparation-readiness task. Its start
    hook supplies the filtered parent conversation; name only the review phase

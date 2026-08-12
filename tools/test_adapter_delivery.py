@@ -430,6 +430,12 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     assert "unverifiable" in reviewer and "unverifiable" in method
     assert not (PLUGIN / "skills" / "severity-calibration").exists()
 
+    workflow = (PLUGIN / "skills" / "init" / "workflow.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Give `mainframe-decision-reviewer` the prepared facts" in workflow
+    assert "conversation context that the subagent does not receive" in workflow
+
 
 def test_advisor_is_controlled_read_only_and_replaces_builtin_advisor():
     advisor = (AGENTS / "mainframe-advisor.md").read_text(encoding="utf-8")
