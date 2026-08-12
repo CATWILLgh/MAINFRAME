@@ -447,15 +447,19 @@ def test_init_replaces_automatic_task_workflow():
 
 
 def test_init_separates_bounded_dod_from_complex_review():
-    workflow = (
-        PLUGIN / "skills" / "init" / "workflow.md"
-    ).read_text(encoding="utf-8")
+    init_dir = PLUGIN / "skills" / "init"
+    workflow = (init_dir / "workflow.md").read_text(encoding="utf-8")
+    codex = (init_dir / "codex-exec.md").read_text(encoding="utf-8")
     assert "A formal DoD alone does not make a task complex" in workflow
     assert "### Bounded formal route" in workflow
     assert "### Complex route" in workflow
     assert "without invoking `mainframe-decision-reviewer`," in workflow
     assert "These checkpoints are required for the complex route" in workflow
     assert "The bounded route ends\nafter direct proof" in workflow
+    assert "bounded formal" not in codex
+    assert "gpt-5.6-terra" not in codex
+    assert "gpt-5.6-sol`, `medium`" in codex
+    assert "gpt-5.6-sol`, `xhigh`" in codex
 
 
 def test_init_uses_one_user_decision_boundary():

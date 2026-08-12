@@ -8,7 +8,6 @@ a second model's blind spots, not delegated ownership.
 Inspect `codex exec --help` and `codex exec resume --help`; use only supported
 options. Choose by the cost of a missed issue:
 
-- bounded formal, local, reversible: `gpt-5.6-terra`, `medium`;
 - complex, ambiguous, cross-cutting, architectural: `gpt-5.6-sol`, `medium`;
 - irreversible data, money, security, broad production, or hard-to-reverse
   architecture: `gpt-5.6-sol`, `xhigh`.
