@@ -210,6 +210,7 @@ def test_test_auditor_is_non_implementing_and_ticket_scoped():
     assert "mainframe:testing-strategy" in auditor
     assert "mainframe:ticket" in auditor
     assert 'matcher: "Edit|Write"' in auditor
+    assert 'matcher: "Bash"' in auditor
     assert "test-auditor-write-guard.py" in auditor
     assert "Do not use for routine implementation" in auditor
     assert "inspect the exact command, lifecycle scripts" in auditor

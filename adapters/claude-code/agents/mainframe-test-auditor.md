@@ -17,6 +17,13 @@ hooks:
           args:
             - -c
             - 'exec python3 "$HOME/.claude/agents/mainframe/hooks/test-auditor-write-guard.py"'
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: sh
+          args:
+            - -c
+            - 'exec python3 "$HOME/.claude/agents/mainframe/hooks/test-auditor-write-guard.py" ticket-move'
 ---
 
 You are an independent test-system auditor. Evaluate whether the tests in the
