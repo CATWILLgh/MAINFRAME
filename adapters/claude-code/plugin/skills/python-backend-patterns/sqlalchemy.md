@@ -18,12 +18,16 @@ Establish the installed major, sync or async engine, session ownership, and exis
 
 ## Concurrency
 
-Keep row locks and the predicate they protect inside one transaction. SQLAlchemy warns that `with_for_update` combined with joined eager loading is not officially supported across backends; load only what the locked operation requires and verify generated SQL.
+Keep row locks and the predicate they protect inside one transaction.
+SQLAlchemy does not recommend combining `with_for_update` with joined eager
+loading because the joined table may also be locked depending on the database.
+Load only what the locked operation requires and verify the generated SQL and
+lock scope against the active backend.
 
 Use [migrations.md](migrations.md) for Alembic and [postgres-concurrency.md](postgres-concurrency.md) when transaction isolation or contention is the risk.
 
 ## Sources
 
-- SQLAlchemy ORM querying — https://docs.sqlalchemy.org/en/20/orm/queryguide/
+- SQLAlchemy relationship loading — https://docs.sqlalchemy.org/en/20/orm/queryguide/relationships.html
 - SQLAlchemy sessions — https://docs.sqlalchemy.org/en/20/orm/session_basics.html
 - SQLAlchemy exceptions — https://docs.sqlalchemy.org/en/20/core/exceptions.html

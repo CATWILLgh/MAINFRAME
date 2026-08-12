@@ -269,6 +269,12 @@ def test_testing_context_preserves_role_boundaries():
     assert "existing test runner" in python_testing
     assert "do not introduce pytest" in python_testing
 
+    python_sqlalchemy = (
+        PLUGIN / "skills" / "python-backend-patterns" / "sqlalchemy.md"
+    ).read_text(encoding="utf-8")
+    assert "does not recommend combining" in python_sqlalchemy
+    assert "not officially supported across backends" not in python_sqlalchemy
+
     typescript_skill = (
         PLUGIN / "skills" / "typescript-backend-patterns" / "SKILL.md"
     ).read_text(encoding="utf-8")
