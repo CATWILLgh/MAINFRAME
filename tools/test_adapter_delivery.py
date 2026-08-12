@@ -427,6 +427,7 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     assert "six months later" not in method
     assert "realistic failure horizon" in method
     assert "Add an independent check only when" in method
+    assert "anthropic.com/news/towards-understanding-sycophancy" in method
     assert "unverifiable" in reviewer and "unverifiable" in method
     assert not (PLUGIN / "skills" / "severity-calibration").exists()
 

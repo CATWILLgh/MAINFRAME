@@ -8,12 +8,15 @@ description: Private evidence-grounded decision-review method read directly by t
 # Decision review — method
 
 Read directly by the `mainframe-decision-reviewer` subagent before every review.
-The job is to find the strongest grounded reasons a proposed decision will fail,
-so the decision is hardened before it is committed to.
+Test the proposed decision against its strongest grounded failure modes and
+report honestly whether they change the decision.
 
 ## Prime directive — grounding, not posture
 
-The value here is not that you disagree. An assigned contrarian who manufactures objections to fill the role makes the decision *worse*, not better: the proposer refutes the weak objections and walks away more confident (Nemeth, *EJSP* 2001 — assigned devil's advocacy fosters "cognitive bolstering of the initial viewpoint" rather than genuine reconsideration). The value is **specific, falsifiable, evidence-backed failure modes**.
+The value here is not disagreement itself. Research on assigned devil's
+advocacy found that it can bolster the initial view rather than produce genuine
+reconsideration (Nemeth, *EJSP* 2001). The value is **specific, falsifiable,
+evidence-backed failure modes**.
 
 Therefore the one rule that overrides every other:
 
@@ -23,7 +26,10 @@ State the truth about your own findings: *"The strongest objection I can ground 
 
 ## Step 1 — Strip the framing (defeat sycophancy)
 
-LLMs drift toward agreeing with the framing they are handed. Evaluate the artifact, not the author's confidence in it. Ignore "I think this is a great plan", "obviously the right call", enthusiasm, and seniority cues. If the input carries the author's opinion, discard the opinion and keep the neutral proposal. Judge what is actually proposed, against reality — not against how it was sold.
+RLHF assistants can match a user's expressed beliefs over truthful answers
+(Anthropic, 2023). Evaluate the artifact, not the author's confidence in it.
+Ignore enthusiasm, seniority cues, and claims that the answer is obvious. Keep
+the neutral proposal and judge it against reality, not how it was sold.
 
 ## Step 2 — Ground yourself in the real system
 
@@ -120,12 +126,13 @@ grounds for this verdict.
 ## Boundary
 
 An implementation audit is a different task: this skill reviews a proposed
-  decision, not defects in existing code.
+decision, not defects in existing code.
 
 ## Sources
 
 - [Klein, "Performing a Project Premortem," *HBR* (2007)](https://hbr.org/2007/09/performing-a-project-premortem) — prospective hindsight and failure-cause identification.
 - [Nemeth et al., "Devil's advocate versus authentic dissent," *European Journal of Social Psychology* (2001)](https://onlinelibrary.wiley.com/doi/abs/10.1002/ejsp.58) — assigned dissent can bolster the majority view.
+- [Sharma et al., "Towards Understanding Sycophancy in Language Models" (Anthropic, 2023)](https://www.anthropic.com/news/towards-understanding-sycophancy-in-language-models) — assistants can favor agreement with user beliefs over truthfulness.
 - [Heuer, *Psychology of Intelligence Analysis* (CIA, 1999)](https://www.cia.gov/resources/csi/books-monographs/psychology-of-intelligence-analysis-2/) — Analysis of Competing Hypotheses and disconfirmation.
 - [Huang et al., "Large Language Models Cannot Self-Correct Reasoning Yet" (2023)](https://arxiv.org/abs/2310.01798) — self-correction needs an external signal.
 - [Gou et al., "CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing" (2023)](https://arxiv.org/abs/2305.11738) — tool-grounding supplies external feedback.
