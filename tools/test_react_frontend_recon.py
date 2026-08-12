@@ -83,6 +83,10 @@ class ReactFrontendReconTests(unittest.TestCase):
                     "@tiptap/react": "^3.0.0",
                     "react-markdown": "^9.0.0",
                     "recharts": "^3.0.0",
+                    "@dnd-kit/core": "^6.0.0",
+                    "@xyflow/react": "^12.0.0",
+                    "@tanstack/react-virtual": "^3.0.0",
+                    "@tanstack/react-query-persist-client": "^5.0.0",
                     "zod": "^4.0.0",
                 },
                 "devDependencies": {
@@ -103,6 +107,10 @@ class ReactFrontendReconTests(unittest.TestCase):
         self.assertIn("@tiptap/react", report["content"])
         self.assertIn("react-markdown", report["content"])
         self.assertIn("recharts", report["data_ui"])
+        self.assertIn("@dnd-kit/core", report["interaction_ui"])
+        self.assertIn("@xyflow/react", report["interaction_ui"])
+        self.assertIn("@tanstack/react-virtual", report["interaction_ui"])
+        self.assertIn("@tanstack/react-query-persist-client", report["offline"])
         strictness = report["runtime"]["typescript_configs"][0]["strictness"]
         self.assertTrue(strictness["strict"])
         self.assertTrue(strictness["noUncheckedIndexedAccess"])
