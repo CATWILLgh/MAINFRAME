@@ -254,6 +254,9 @@ def test_testing_context_preserves_role_boundaries():
     assert "concrete adjacent observation" in python_agent
     assert "without investigating it" in python_agent
     assert "verified out-of-scope defects" not in python_skill
+    assert "## Testing baseline" in python_skill
+    assert "observe the focused test fail" in python_skill
+    assert "observe the focused test fail" not in python_agent
 
     typescript_skill = (
         PLUGIN / "skills" / "typescript-backend-patterns" / "SKILL.md"

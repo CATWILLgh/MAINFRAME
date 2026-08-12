@@ -1,7 +1,8 @@
 # Python backend testing
 
-Use the project's existing pytest setup and fixtures. Protect the behaviour
-changed by the task with the smallest test that can catch its regression.
+Read this branch when the testing baseline in `SKILL.md` is not enough to
+choose the correct test boundary or keep the suite economical. Preserve the
+project's existing pytest setup and fixtures.
 
 ## HTTP and service behaviour
 
@@ -25,13 +26,8 @@ When the change prevents a race, write a concurrent test against the real
 database and assert the business outcome. The implementation detail
 (`SELECT FOR UPDATE`, an atomic update, or a constraint) is not the assertion.
 
-## Completion
-
-For a bug or changed business rule, observe the focused test fail for the
-intended reason before the fix when an automated reproduction is practical.
-Then observe it pass and run the nearest relevant fast suite with the project's
-native command. Do not weaken assertions, duplicate the same rule across
-levels, or leave skipped tests and temporary markers.
+Do not add arbitrary waits or duplicate the same guarantee across several test
+levels merely to increase test count.
 
 ## Sources
 

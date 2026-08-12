@@ -15,7 +15,9 @@ Use this skill for both new Python work and established services. Discover the a
 2. Trace the changed behavior through entrypoint, business logic, data boundary, side effects, and callers.
 3. Read only the references matching the active path and task.
 4. Verify version-sensitive behavior against installed versions and current primary documentation through Context7 or the official project site.
-5. Follow [testing.md](testing.md) and the project's native commands.
+5. Apply the testing baseline below. Read [testing.md](testing.md) when the
+   task requires choosing test scope, changing existing tests, or separating
+   the local and CI paths.
 
 Multiple frameworks, validators, database libraries, or test tools are observations, not automatic blockers. Determine which one owns the changed path from imports, configuration, entrypoints, and runtime wiring. Ask the caller only when evidence cannot resolve a choice that changes product behavior or infrastructure.
 
@@ -23,6 +25,17 @@ Multiple frameworks, validators, database libraries, or test tools are observati
 
 - **Established system:** preserve its supported framework, package manager, architecture, validator, data layer, contracts, logging, and tests. Make the smallest coherent change; do not add a competing library or reorganize unrelated code.
 - **New or isolated component:** prefer a supported Python version, explicit boundaries, maintained libraries, typed public contracts, focused tests, and PostgreSQL when relational semantics are required. Choose libraries from actual requirements; this skill does not mandate FastAPI, SQLAlchemy, Pydantic, structlog, OpenTelemetry, Redis, or a universal folder structure.
+
+## Testing baseline
+
+- Use the project's native commands and the smallest faithful test for the
+  changed behavior.
+- When practical, observe the focused test fail for the intended reason before
+  the fix, then pass, followed by the nearest relevant fast suite.
+- Use real PostgreSQL when database semantics are the changed risk; do not add
+  external infrastructure to tests that can prove the same behavior in process.
+- Assert observable outcomes and protected side effects. Never weaken
+  assertions, hide failures, leave skipped tests, or claim an unobserved result.
 
 ## References
 
