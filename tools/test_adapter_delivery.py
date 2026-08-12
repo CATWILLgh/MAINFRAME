@@ -263,6 +263,12 @@ def test_testing_context_preserves_role_boundaries():
     assert "do not prove" in python_skill
     assert "observe the focused test fail" not in python_agent
 
+    python_testing = (
+        PLUGIN / "skills" / "python-backend-patterns" / "testing.md"
+    ).read_text(encoding="utf-8")
+    assert "existing test runner" in python_testing
+    assert "do not introduce pytest" in python_testing
+
     typescript_skill = (
         PLUGIN / "skills" / "typescript-backend-patterns" / "SKILL.md"
     ).read_text(encoding="utf-8")

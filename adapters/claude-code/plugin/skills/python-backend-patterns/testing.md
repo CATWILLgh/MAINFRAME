@@ -2,13 +2,16 @@
 
 Read this branch when the testing baseline in `SKILL.md` is not enough to
 choose the correct test boundary or keep the suite economical. Preserve the
-project's existing pytest setup and fixtures.
+project's existing test runner, setup, and fixtures; do not introduce pytest
+merely to follow this reference.
 
-Before execution, inspect the selected wrapper, pytest configuration, and the
-fixtures reached by the focused test. Formatters and fix modes can rewrite
-files; session or autouse fixtures and integration markers can initialize a
-database, start services, or expect an already running endpoint. Choose the
-narrowest command whose effects match the current task and environment.
+Before execution, inspect the selected wrapper, runner configuration, and the
+setup reached by the focused test. When pytest owns the active path, include
+its fixtures and markers in that inspection. Formatters and fix modes can
+rewrite files; suite-level or automatic setup and integration groups can
+initialize a database, start services, or expect an already running endpoint.
+Choose the narrowest command whose effects match the current task and
+environment.
 
 ## HTTP and service behaviour
 
@@ -37,6 +40,7 @@ levels merely to increase test count.
 
 ## Sources
 
+- Python `unittest` — https://docs.python.org/3/library/unittest.html
 - pytest — https://docs.pytest.org/
 - HTTPX ASGI transports — https://www.python-httpx.org/advanced/transports/
 - PostgreSQL concurrency control — https://www.postgresql.org/docs/current/mvcc.html
