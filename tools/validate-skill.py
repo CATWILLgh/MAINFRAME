@@ -2,7 +2,7 @@
 """
 Validator for skills in MAINFRAME hub (adapters/claude-code/plugin/skills/**).
 
-Checks Anthropic spec + hub discipline limits (see docs/layers/skills.md).
+Checks the supported skill shape and the repository's authoring budgets.
 
 Run with the project's local venv (which has tiktoken and pyyaml):
   .venv/bin/python3 tools/validate-skill.py <skill_dir>
@@ -50,7 +50,7 @@ except ImportError as e:
 SKILLS_DIR = PROJECT_ROOT / "adapters/claude-code/plugin" / "skills"
 DEV_SKILLS_DIR = PROJECT_ROOT / "dev" / "skills"
 
-# Limits (see docs/layers/skills.md)
+# Repository authoring budgets
 MAX_SKILL_TOKENS = 5000          # body that survives auto-compaction in full
 MAX_SKILL_LINES = 500            # Anthropic recommendation at first load
 MAX_SUPPORT_TOKENS = 5000        # hub discipline

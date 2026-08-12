@@ -167,12 +167,14 @@ Most are pulled automatically when the situation matches. The primary-session
 ```mermaid
 graph LR
     subgraph repo["MAINFRAME repo (this)"]
-      P[adapters/claude-code/plugin/<br/>skills + agents + hooks]
-      E[adapters/claude-code/export/<br/>CLAUDE.md + settings.json + rules]
+      P[adapters/claude-code/plugin/<br/>skills + hooks]
+      A[adapters/claude-code/agents/<br/>specialist profiles]
+      E[adapters/claude-code/export/<br/>CLAUDE.md + settings.json + rules + output styles]
       S[shared/credentials/<br/>helper + template + local index]
     end
 
     P -->|one symlink<br/>~/.claude/skills/mainframe/| home[~/.claude/]
+    A -->|one symlink<br/>~/.claude/agents/mainframe/| home
     E -->|per-item symlinks| home
     S -->|shared installer| home
     home -->|Claude auto-loads<br/>as 'mainframe' plugin| any[Any project<br/>on the machine]
@@ -180,11 +182,10 @@ graph LR
 
 The hub ships through one adapter plus one shared component:
 
-- **The Claude Code plugin** (`adapters/claude-code/plugin/`) carries skills, agents, and hooks. Its manual `init` skill is available as `/mainframe:init` and is not loaded until the user invokes it.
-- **Claude Code exports** (`adapters/claude-code/export/`) carry the umbrella `CLAUDE.md`, `settings.json`, path-scoped `rules/`, and output styles.
+- **The Claude Code plugin** (`adapters/claude-code/plugin/`) carries skills and hooks. Its manual `init` skill is available as `/mainframe:init` and is not loaded until the user invokes it.
+- **Claude Code agents** (`adapters/claude-code/agents/`) are delivered directly so their full profile fields remain available.
+- **Claude Code exports** (`adapters/claude-code/export/`) carry the umbrella `CLAUDE.md`, `settings.json`, optional path-scoped rules, and output styles.
 - **Shared secrets** (`shared/credentials/`) own the `secret` helper, the tracked initialization template, and the gitignored credentials index used by every adapter.
-
-See [`docs/layers/`](docs/layers/) for full per-layer specifications.
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">
@@ -328,14 +329,15 @@ MAINFRAME/
 │
 ├── adapters/claude-code/
 │   ├── install.sh                        # Claude Code-only delivery
+│   ├── agents/                           # user-level specialist profiles and scoped hooks
 │   ├── plugin/                           # auto-loads as 'mainframe' after install
 │   │   ├── .claude-plugin/plugin.json    # plugin manifest
 │   │   ├── skills/                       # includes manual /mainframe:init
-│   │   ├── agents/                       # file-based sub-agents
 │   │   └── hooks/                        # registrations, scripts, and rules
 │   └── export/                           # Claude files outside the plugin format
 │       ├── CLAUDE.md                     # umbrella operating rules
 │       ├── settings.json                 # permissions and settings
+│       ├── rules/                        # optional path-scoped rules, installed per item
 │       └── output-styles/                # custom reply styles
 │
 ├── shared/credentials/                       # adapter-independent credentials component
@@ -350,47 +352,10 @@ MAINFRAME/
 │   ├── validate-agent.py                 # agent routing metadata contract
 │   └── agnostic-blacklist.txt.example    # copy to agnostic-blacklist.txt and add your own project names
 │
-└── docs/
-    └── layers/                           # architecture spec per layer (skills, agents, hooks, rules, ...)
+└── CONTRIBUTING.md                      # contribution workflow and validation commands
 ```
 
 Anything you do not see here lives outside the repo by design — internal ADRs, working notes, the maintainer's inbox of unprocessed candidates, and per-machine memory are all gitignored. The published artifact is the hub itself, not the maintainer's working files.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
-
-## Layer architecture
-
-Each artifact type has its own layer with explicit contract: where it lives, what frontmatter it carries, what limits apply, when it activates. New artifacts go through a decision tree to land in the correct layer.
-
-```mermaid
-graph TD
-    Start[New hub artifact<br/>needs a home] --> Q1{Triggers on<br/>file path?}
-    Q1 -->|yes| Rules[rules/<br/>paths: frontmatter]
-    Q1 -->|no| Q2{User invokes<br/>by slash?}
-    Q2 -->|yes| Commands[commands/<br/>or skills user-invocable]
-    Q2 -->|no| Q3{Domain<br/>playbook?}
-    Q3 -->|yes| Skills[skills/]
-    Q3 -->|no| Q4{Tool event<br/>trigger?}
-    Q4 -->|yes| Hooks[hooks/]
-    Q4 -->|no| Q5{Isolated<br/>subagent?}
-    Q5 -->|yes| Agents[agents/]
-    Q5 -->|no| CLAUDE[Add to umbrella<br/>CLAUDE.md]
-```
-
-| Layer | Spec |
-|---|---|
-| Umbrella `CLAUDE.md` | [`docs/layers/claude-md.md`](docs/layers/claude-md.md) |
-| Skills | [`docs/layers/skills.md`](docs/layers/skills.md) |
-| Agents | [`docs/layers/agents.md`](docs/layers/agents.md) |
-| Hooks | [`docs/layers/hooks.md`](docs/layers/hooks.md) |
-| Rules | [`docs/layers/rules.md`](docs/layers/rules.md) |
-| Commands | [`docs/layers/commands.md`](docs/layers/commands.md) |
-| Permissions | [`docs/layers/permissions.md`](docs/layers/permissions.md) |
-| Settings | [`docs/layers/settings.md`](docs/layers/settings.md) |
-| Output styles | [`docs/layers/output-styles.md`](docs/layers/output-styles.md) |
-| Decision tree | [`docs/layers/decision-tree.md`](docs/layers/decision-tree.md) |
 
 <p align="center">
   <img src="assets/divider.png" alt="" width="100%">

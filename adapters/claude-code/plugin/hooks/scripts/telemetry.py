@@ -8,7 +8,6 @@ initializes the SQLite sink once; bounded retry absorbs brief writer contention.
 A persistent sink failure exits nonzero so the common launcher can report it
 once. Privacy: only low-risk metadata is extracted — never
 `tool_input` values, prompt text, file contents, reasons, or paths.
-See `docs/layers/hooks.md` §1.7 and ADR 0073.
 """
 
 import hashlib
@@ -26,7 +25,7 @@ _TICKET_RE = re.compile(r"[/\\]docs[/\\]tickets[/\\].+\.md$")
 
 # Coarse domain buckets for code edits — only languages a profile sub-agent owns are
 # kept; everything else returns None and is not logged, so `code_edit` stays a clean
-# denominator for measuring profile-agent under-use (ADR 0073).
+# denominator for measuring profile-agent use.
 _EXT_LANG = {
     ".tsx": "frontend", ".jsx": "frontend",
     ".css": "frontend", ".scss": "frontend", ".sass": "frontend", ".less": "frontend",

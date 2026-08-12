@@ -38,9 +38,8 @@ tools/agnostic-blacklist.txt
 # User-maintained credential descriptions. The adjacent template is tracked.
 shared/credentials/credentials-index.md
 
-# Private documents (only the layer reference is published)
+# Private documents
 docs/*
-!docs/layers/
 
 # Hub-development workspace — queue (inbox), used-for-hub sources (reference),
 # rejected/kept project artifacts (archive). All local, never published.

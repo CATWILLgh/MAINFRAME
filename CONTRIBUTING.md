@@ -34,7 +34,7 @@ Each rule costs tokens and adherence. The Anthropic spec explicitly warns: longe
 ### 3. English in artifacts
 - Skills, agents, commands, hooks — **English**
 - Comments in Python hooks — **English**
-- Docs written for humans (this file, `docs/layers/*.md`) — any language
+- Docs written for humans (such as this file) — any language
 
 Reason: LLMs are tuned on English, follow English instructions more precisely, spend fewer tokens for the same content (~30-40% savings on typical instructions).
 
@@ -53,10 +53,11 @@ Always set `model` explicitly in `Agent` calls — never let it default.
 
 ## Adding a new artifact
 
-1. **Decide the layer** using [`docs/layers/decision-tree.md`](docs/layers/decision-tree.md). It walks 4 axes (activation, context isolation, kind, cross-layer triggering) plus the bloat-prevention toolkit (`when_to_use`, `disable-model-invocation`, `context: fork`, narrow `tools:`).
-2. **Read the layer spec** at [`docs/layers/<layer>.md`](docs/layers/) — every layer has its own contract.
-3. **Place the artifact** in the correct location:
-   - Skills, agents, commands, hooks → `adapters/claude-code/plugin/<layer>/`
+1. **Identify the recipient and activation point.** Keep universal instructions in the umbrella `CLAUDE.md`, primary-session workflow in `mainframe:init`, stack knowledge in specialist skills or agents, and deterministic event checks in hooks.
+2. **Confirm the current Claude Code contract** in the official Anthropic documentation for the affected artifact type. Do not infer behavior from an old repository note.
+3. **Place the artifact** in the owning location:
+   - Skills and global hooks → `adapters/claude-code/plugin/<layer>/`
+   - User-level specialist agents → `adapters/claude-code/agents/`
    - Path-scoped rules → `adapters/claude-code/export/rules/`
    - Umbrella `CLAUDE.md` and `settings.json` stay at `adapters/claude-code/export/` root
 4. **Validate**:

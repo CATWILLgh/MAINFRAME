@@ -2,8 +2,7 @@
 """
 Validator for the global CLAUDE.md of the MAINFRAME hub.
 
-Checks compliance with the Anthropic rules (R1-R5) and the agnosticism principle (R6).
-Full specification — `docs/layers/claude-md.md`.
+Checks the repository's CLAUDE.md size, import, link, and agnosticism rules.
 
 Run modes:
   python3 tools/validate-claude-md.py <path>            # CLI: validate a specific file
@@ -248,7 +247,7 @@ def check_r6_agnostic(graph: list) -> list[dict]:
                         "level": "warning",
                         "file": str(path),
                         "line": line_num,
-                        "message": f"found pattern `{pat}` — project-specific content in a global file (violates the agnostic principle, see docs/layers/claude-md.md).",
+                        "message": f"found pattern `{pat}` — project-specific content in a global file violates the repository's agnosticism rule.",
                     })
     return issues
 
