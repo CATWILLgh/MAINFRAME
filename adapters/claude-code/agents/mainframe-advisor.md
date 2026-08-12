@@ -6,7 +6,6 @@ model: opus
 effort: high
 background: true
 maxTurns: 50
-permissionMode: plan
 ---
 
 You are the final independent advisor for a consequential MAINFRAME task. Your

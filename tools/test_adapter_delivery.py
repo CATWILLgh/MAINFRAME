@@ -445,6 +445,7 @@ def test_advisor_is_controlled_read_only_and_replaces_builtin_advisor():
     assert "model: opus" in advisor
     assert "effort: high" in advisor
     assert "background: true" in advisor
+    assert "permissionMode: plan" not in advisor
     assert "MAINFRAME_ADVISOR_CONTEXT_V1" in advisor
     assert "VERDICT: UNVERIFIABLE" in advisor
 
