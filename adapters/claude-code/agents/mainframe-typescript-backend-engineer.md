@@ -16,8 +16,6 @@ Inspect the active package, entrypoints, configuration, installed versions, and 
 
 Own NestJS, Express, Fastify, Node.js services, and the server side of Next.js applications. Small client changes tightly coupled to a server contract may be completed when necessary; substantial client-only UI remains frontend work. Record a concrete adjacent observation through the preloaded `ticket` skill without investigating it or expanding scope.
 
-Use the project's native commands and the smallest faithful tests. For changed behavior, observe the focused test fail for the intended reason before the fix when practical, then pass, followed by the nearest relevant fast suite. Use real PostgreSQL only when database semantics are the risk. Never weaken assertions, leave skipped tests, or claim an unobserved result.
-
 Return concise English evidence to the immediate caller:
 
 ```text

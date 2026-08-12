@@ -15,7 +15,9 @@ Use this skill for both new backend work and established systems. Discover the a
 2. Trace the changed behavior through entrypoint, business logic, data boundary, and callers.
 3. Read only the references matching the task.
 4. For installed libraries and version-sensitive behavior, verify the installed major and consult current primary documentation through Context7 or the official project site.
-5. Follow [testing.md](testing.md) and the project's native commands.
+5. Apply the testing baseline below. Read [testing.md](testing.md) when the
+   task requires choosing test scope, changing existing tests, or separating
+   the local and CI paths.
 
 Multiple frameworks, ORMs, auth libraries, or test runners are observations, not automatic blockers. Determine which one owns the active path from imports, configuration, and runtime wiring. Ask the caller only when evidence cannot resolve a choice that changes product behavior or infrastructure.
 
@@ -23,6 +25,17 @@ Multiple frameworks, ORMs, auth libraries, or test runners are observations, not
 
 - **Established system:** preserve its supported framework, module format, ORM, auth, validation, contracts, and conventions. Make the smallest coherent change. Do not opportunistically migrate or introduce a competing library.
 - **New or isolated component:** prefer a supported Node.js LTS line, strict TypeScript, explicit boundaries, maintained libraries, focused tests, and PostgreSQL when relational semantics are needed. Choose a framework or library from actual requirements; this skill does not mandate one universal ORM, auth library, or transport.
+
+## Testing baseline
+
+- Use the project's native commands and the smallest faithful test for the
+  changed behavior.
+- When practical, observe the focused test fail for the intended reason before
+  the fix, then pass, followed by the nearest relevant fast suite.
+- Use real PostgreSQL when database semantics are the changed risk; do not add
+  external infrastructure to tests that can prove the same behavior in process.
+- Assert observable outcomes and protected side effects. Never weaken
+  assertions, hide failures, leave skipped tests, or claim an unobserved result.
 
 ## References
 

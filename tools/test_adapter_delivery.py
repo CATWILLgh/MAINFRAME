@@ -274,6 +274,9 @@ def test_testing_context_preserves_role_boundaries():
     assert "concrete adjacent observation" in typescript_agent
     assert "without investigating it" in typescript_agent
     assert "verified out-of-scope defects" not in typescript_skill
+    assert "## Testing baseline" in typescript_skill
+    assert "observe the focused test fail" in typescript_skill
+    assert "observe the focused test fail" not in typescript_agent
 
     react_agent = (AGENTS / "mainframe-react-frontend-engineer.md").read_text(
         encoding="utf-8"
