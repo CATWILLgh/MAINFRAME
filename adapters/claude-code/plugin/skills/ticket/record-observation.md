@@ -6,9 +6,10 @@ blast radius.
 
 ## 1. Search open tickets
 
-Search `docs/tickets/open/` recursively using two or three terms describing the
-observed behavior, location, or component. Read only plausible matches far
-enough to decide whether they clearly describe the same observation.
+Search `docs/tickets/open/` recursively using the most distinctive available
+behavior, location, component, identifier, or error text. Vary the query when
+one term is too broad or naming may have changed. Read only plausible matches
+far enough to decide whether they clearly describe the same observation.
 
 - When a match is clear, append only the materially different location,
   condition, symptom, or observed output.

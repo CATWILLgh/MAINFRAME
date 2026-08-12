@@ -370,6 +370,12 @@ def test_testing_context_preserves_role_boundaries():
     ):
         assert state in principles
 
+    observation = (
+        PLUGIN / "skills" / "ticket" / "record-observation.md"
+    ).read_text(encoding="utf-8")
+    assert "most distinctive available" in observation
+    assert "two or three terms" not in observation
+
 
 def test_researcher_has_private_methodology_boundary():
     researcher = (AGENTS / "mainframe-researcher.md").read_text(encoding="utf-8")
