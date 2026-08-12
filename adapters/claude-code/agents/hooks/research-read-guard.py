@@ -53,15 +53,19 @@ def append_state(payload: dict, kind: str, value: str) -> None:
     target.chmod(0o600)
 
 
-def has_profile(payload: dict) -> bool:
-    profile_state = state_file(payload, "profiles")
-    return profile_state.is_file() and bool(profile_state.read_text(encoding="utf-8").splitlines())
+def has_state(payload: dict, kind: str) -> bool:
+    state = state_file(payload, kind)
+    return state.is_file() and bool(state.read_text(encoding="utf-8").splitlines())
+
+
+def is_prepared(payload: dict) -> bool:
+    return has_state(payload, "method") and has_state(payload, "profiles")
 
 
 def record_webfetch(payload: dict) -> bool:
     if payload.get("tool_name") != "WebFetch":
         return False
-    if not has_profile(payload):
+    if not is_prepared(payload):
         return False
     tool_use_id = payload.get("tool_use_id")
     if not isinstance(tool_use_id, str) or not SAFE_ID.fullmatch(tool_use_id):
@@ -97,6 +101,8 @@ def guard_read(payload: dict) -> bool:
     requested = Path(os.path.expanduser(raw_path)).resolve(strict=True)
     root = SKILL_ROOT.resolve(strict=True)
     if os.path.commonpath((str(root), str(requested))) == str(root):
+        if requested == root / "SKILL.md":
+            append_state(payload, "method", "SKILL.md")
         references = (root / "references").resolve(strict=True)
         if os.path.commonpath((str(references), str(requested))) == str(references):
             append_state(payload, "profiles", requested.relative_to(references).as_posix())
@@ -115,8 +121,8 @@ def main() -> int:
             allowed = record_webfetch(payload)
             reason = "WebFetch registered" if allowed else "Read every applicable research profile before external research."
         elif mode == "require-profile":
-            allowed = payload.get("tool_name") in PROFILE_GATED_TOOLS and has_profile(payload)
-            reason = "Research profile loaded" if allowed else "Read every applicable research profile before external research."
+            allowed = payload.get("tool_name") in PROFILE_GATED_TOOLS and is_prepared(payload)
+            reason = "Research method and profile loaded" if allowed else "Read research-method/SKILL.md and every applicable research profile before external research."
         elif mode == "guard-read":
             allowed = guard_read(payload)
             reason = "Researcher private input" if allowed else "The researcher may read only its research-method skill directory and its own WebFetch outputs."

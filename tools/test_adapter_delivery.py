@@ -388,7 +388,7 @@ def test_researcher_has_private_methodology_boundary():
     body = (method / "SKILL.md").read_text(encoding="utf-8")
     assert "disable-model-invocation: true" in body
     assert "user-invocable: false" in body
-    assert "`WebSearch`, `WebFetch`, and Context7 calls" in body
+    assert "this common method and at least one profile" in body
     assert "Fetch it again only when" in body
     assert "Re-open each load-bearing source" not in body
     for guide in ("software-documentation.md", "economics.md", "news.md"):

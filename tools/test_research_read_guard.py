@@ -118,6 +118,7 @@ def test_allows_only_recorded_webfetch_output_for_same_session():
     allowed.write_text("full fetch", encoding="utf-8")
     denied.write_text("another result", encoding="utf-8")
 
+    assert run_guard(home, root / "SKILL.md")["permissionDecision"] == "allow"
     assert run_guard(home, root / "references" / "news.md")["permissionDecision"] == "allow"
     assert record_fetch(home, "toolu_own")["permissionDecision"] == "allow"
     assert run_guard(home, allowed)["permissionDecision"] == "allow"
@@ -154,6 +155,15 @@ def test_external_research_requires_a_domain_profile():
         "mcp__plugin_context7_context7__query-docs",
     ):
         assert context7(home, tool_name)["permissionDecision"] == "allow"
+
+    profile_only_home, profile_only_root, _ = fixture()
+    assert run_guard(
+        profile_only_home,
+        profile_only_root / "references" / "news.md",
+    )["permissionDecision"] == "allow"
+    denied_without_method = search(profile_only_home)
+    assert denied_without_method["permissionDecision"] == "deny"
+    assert "research-method/SKILL.md" in denied_without_method["permissionDecisionReason"]
 
 
 def test_fails_closed_for_bad_payload_or_missing_path():

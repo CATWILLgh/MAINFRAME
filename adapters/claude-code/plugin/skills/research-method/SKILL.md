@@ -34,9 +34,10 @@ material claim independently, then combine only findings that remain compatible.
    - [News and current events](references/news.md) for events, announcements,
      disputes, developing stories, and time-sensitive public claims.
    `WebSearch`, `WebFetch`, and Context7 calls are automatically rejected until
-   at least one profile has been read. That gate proves preparation happened;
-   it does not choose for you. When a claim crosses domains, read every matching
-   profile, not merely the first one that unlocks the tools.
+   this common method and at least one profile have both been read. That gate
+   proves basic preparation happened; it does not choose for you. When a claim
+   crosses domains, read every matching profile, not merely the first one that
+   unlocks the tools.
 4. Prefer the closest authoritative primary source. Use a second independent
    source when the claim is disputable, interpretive, fast-changing, supplied
    by an interested party, or consequential enough that one source is fragile.

@@ -44,4 +44,5 @@ researching.
 
 Use `Read` only for that method, its supporting files, and complete outputs
 produced by your own `WebFetch` calls. A profile-scoped hook denies every other
-path and rejects external research until a domain profile has been read.
+path and rejects external research until the common method and a domain profile
+have both been read.
