@@ -33,10 +33,10 @@ material claim independently, then combine only findings that remain compatible.
      prices, rates, money, ratios, forecasts, surveys, and calculated changes.
    - [News and current events](references/news.md) for events, announcements,
      disputes, developing stories, and time-sensitive public claims.
-   `WebSearch` and `WebFetch` are automatically rejected until at least one
-   profile has been read. That gate proves preparation happened; it does not
-   choose for you. When a claim crosses domains, read every matching profile,
-   not merely the first one that unlocks the tools.
+   `WebSearch`, `WebFetch`, and Context7 calls are automatically rejected until
+   at least one profile has been read. That gate proves preparation happened;
+   it does not choose for you. When a claim crosses domains, read every matching
+   profile, not merely the first one that unlocks the tools.
 4. Prefer the closest authoritative primary source. Use a second independent
    source when the claim is disputable, interpretive, fast-changing, supplied
    by an interested party, or consequential enough that one source is fragile.
@@ -51,9 +51,10 @@ material claim independently, then combine only findings that remain compatible.
 7. Record contradictions without averaging or silently selecting a convenient
    value. Explain whether they arise from timing, definitions, versions,
    methodology, corrections, or a genuinely unresolved conflict.
-8. Re-open each load-bearing source before returning. Confirm that the cited
-   page supports the exact nearby claim and that the result is current as of
-   the research date.
+8. Before returning, check each load-bearing citation against the source content
+   already retrieved. Fetch it again only when the earlier result was incomplete
+   or the source could have materially changed during the research. Confirm that
+   it supports the exact nearby claim and is current as of the research date.
 9. Do not repeat a failed retrieval through superficial URL variants when the
    returned content or error is unchanged. After two genuinely different paths
    fail to expose claim-supporting content, record the limitation and continue
