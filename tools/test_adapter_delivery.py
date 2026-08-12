@@ -271,6 +271,9 @@ def test_testing_context_preserves_role_boundaries():
     assert "Next.js App Router server code" not in typescript_agent
     assert "Pages API Routes" in typescript_skill
     assert "begin an App Router migration as incidental cleanup" in nextjs_reference
+    assert "concrete adjacent observation" in typescript_agent
+    assert "without investigating it" in typescript_agent
+    assert "verified out-of-scope defects" not in typescript_skill
 
     react_agent = (AGENTS / "mainframe-react-frontend-engineer.md").read_text(
         encoding="utf-8"

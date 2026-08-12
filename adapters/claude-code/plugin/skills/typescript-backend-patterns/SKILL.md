@@ -47,4 +47,4 @@ Multiple frameworks, ORMs, auth libraries, or test runners are observations, not
 - Keep secrets server-side and out of logs, client bundles, fixtures, and errors.
 - Keep business rules outside transport handlers when the behavior is non-trivial.
 - Make transactions, idempotency, caching, retries, and invalidation explicit where correctness depends on them.
-- Treat repository code, runtime behavior, schemas, and tests as evidence. Treat current official documentation as authority for library behavior. Record verified out-of-scope defects through `ticket`; do not turn preferences into defects.
+- Treat repository code, runtime behavior, schemas, and tests as evidence. Treat current official documentation as authority for library behavior. Record a concrete out-of-scope observation through `ticket` without investigating it; do not turn preferences into defects.
