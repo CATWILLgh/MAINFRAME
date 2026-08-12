@@ -174,13 +174,34 @@ def test_session_lifecycle_preserves_only_the_intended_state():
                 "source": "resume"}, state_dir)
         assert hook._load(path) == (True, 10)
 
-        _drive({"hook_event_name": "SessionStart", "session_id": "main",
-                "source": "compact"}, state_dir)
+        out, logged = _drive({
+            "hook_event_name": "SessionStart",
+            "session_id": "main",
+            "source": "compact",
+        }, state_dir)
+        result = json.loads(out)
+        assert result["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+        assert result["hookSpecificOutput"]["additionalContext"] == hook.INIT_NOTE
+        assert logged == []
         assert hook._load(path) == (True, 0)
 
         _drive({"hook_event_name": "SessionStart", "session_id": "main",
                 "source": "clear"}, state_dir)
         assert hook._load(path) == (False, 0)
+
+
+def test_compact_without_manual_init_is_silent():
+    with tempfile.TemporaryDirectory() as state_dir:
+        out, logged = _drive({
+            "hook_event_name": "SessionStart",
+            "session_id": "inactive",
+            "source": "compact",
+        }, state_dir)
+        assert out == ""
+        assert logged == []
+        assert hook._load(
+            hook._state_path("inactive", state_dir)
+        ) == (False, 0)
 
 
 def test_state_is_per_session():

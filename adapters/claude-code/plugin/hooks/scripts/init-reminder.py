@@ -6,10 +6,12 @@ invocation for the current session; UserPromptSubmit then counts subsequent
 primary-session prompts and injects a short reminder every N prompts (default
 64) alongside the prompt that triggered it.
 
-Claude Code reattaches invoked skills after compaction, so compact only resets
-the counter. `/clear` and a fresh startup deactivate the reminder. Resume keeps
-the prior state. Any payload carrying `agent_id` is rejected before state is
-read or written: subagents neither advance the counter nor receive the note.
+Compaction re-injects invoked skills only within a shared context budget, so an
+active session receives the same short reminder immediately after compact and
+its counter resets. `/clear` and a fresh startup deactivate the reminder.
+Resume keeps the prior state. Any payload carrying `agent_id` is rejected before
+state is read or written: subagents neither advance the counter nor receive the
+note.
 
 Fail-safe: any error -> exit 0 (no-op).
 """
@@ -194,6 +196,7 @@ def main():
     if event == "SessionStart":
         _cleanup_stale(os.path.dirname(path))
         source = payload.get("source")
+        remind_after_compact = False
         with _session_lock(path):
             if source in ("startup", "clear"):
                 _clear(path)
@@ -201,6 +204,9 @@ def main():
                 active, _ = _load(path)
                 if active:
                     _save(path, True, 0)
+                    remind_after_compact = True
+        if remind_after_compact:
+            emit_note("SessionStart", INIT_NOTE)
         return
 
     if event != "UserPromptSubmit":
