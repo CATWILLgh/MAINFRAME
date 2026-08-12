@@ -42,6 +42,10 @@ before recording a finding.
    use real local dependencies, and deployed or CI-only checks. Use native
    project commands; do not introduce a universal wrapper or naming scheme.
 3. Run existing focused or fast tests when they provide necessary evidence.
+   Before running one, inspect the exact command, lifecycle scripts,
+   configuration, and reached setup or fixtures for file writes and external
+   effects. Run a broad or expensive suite only when measuring that suite is
+   part of the assigned audit and its required environment is already prepared.
    Do not install dependencies, start services or containers, update snapshots,
    use a fix-mode command, or invoke a deployed environment unless the caller
    explicitly included that action and the environment is already prepared.
