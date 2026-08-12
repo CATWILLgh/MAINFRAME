@@ -26,6 +26,8 @@ Do not install a new validator, start infrastructure, update snapshots, deploy,
 or contact production solely to satisfy a ritual. If required evidence is not
 available within the authorized scope, report the exact unverified guarantee.
 
-After a successful topology change, re-read the affected resource, update its
-entry in `.agents/infrastructure.json`, and verify every newly added runbook
-path exists. Do not update unrelated environments' `lastVerified` dates.
+After a successful topology change, re-read the affected resource. When
+repository edits are within the active task, update its entry in
+`.agents/infrastructure.json` and verify every newly added runbook path exists;
+otherwise return the exact required map update without editing it. Do not
+update unrelated environments' `lastVerified` dates.

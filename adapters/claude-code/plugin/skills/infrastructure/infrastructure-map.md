@@ -28,6 +28,7 @@ is observed, remove replaced facts instead of appending a chronology, and let
 Git retain history. Keep long deploy, rollback, migration, recovery, or incident
 procedures in referenced runbooks.
 
-When verified reality and the map disagree, use reality for the active task and
-repair the map in the same authorized change. A stale map never grants authority
-for an operation and never justifies guessing an environment.
+When verified reality and the map disagree, use reality for the active task.
+Repair the map only when repository edits are within the task; otherwise
+return the confirmed stale fact to the immediate caller. A stale map never
+grants authority for an operation and never justifies guessing an environment.

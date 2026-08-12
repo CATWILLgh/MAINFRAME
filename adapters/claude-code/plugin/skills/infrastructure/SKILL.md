@@ -43,9 +43,10 @@ and environment-template files. For a remote operation, use the mapped access
 alias and perform the smallest read-only live check that distinguishes current
 state from stale documentation.
 
-When the map conflicts with verified reality, reality wins. Correct the map
-after the relevant fact is established. Do not update `lastVerified` for an
-environment merely because its JSON entry was read.
+When the map conflicts with verified reality, reality wins. If repository
+edits are within the active task, correct the map after the relevant fact is
+established. Otherwise return the confirmed stale fact to the immediate
+caller. Do not update `lastVerified` merely because a JSON entry was read.
 
 Use current primary documentation or Context7 for version-sensitive platform,
 CLI, configuration, or database behaviour. Project files and reproducible live
@@ -86,10 +87,11 @@ not from a universal vendor-neutral recipe.
 ## Maintain durable project context
 
 After a verified infrastructure change, update the affected map entry and its
-`lastVerified` date in the same authorized repository change. Add a runbook
-reference when the procedure cannot be represented as a concise fact; keep the
-procedure in the referenced project file rather than embedding commands or
-long prose in JSON.
+`lastVerified` date only when repository edits are within the active task. Add
+a runbook reference when the procedure cannot be represented as a concise
+fact; keep the procedure in the referenced project file rather than embedding
+commands or long prose in JSON. Otherwise return the exact map update to the
+immediate caller without changing repository files.
 
 If the map is absent and the task establishes durable infrastructure facts,
 create it when repository edits are in scope. During read-only diagnosis,

@@ -188,6 +188,14 @@ def test_infrastructure_is_primary_session_skill_not_agent():
     assert "<project-root>/.agents/infrastructure.json" in body
     assert "mainframe:secrets-handling" in body
     assert "../dokploy-api/SKILL.md" in body
+    assert "only when repository edits are within the active task" in body
+    assert "without changing repository files" in body
+    map_contract = (skill / "infrastructure-map.md").read_text(encoding="utf-8")
+    verification = (skill / "verification.md").read_text(encoding="utf-8")
+    assert (
+        "Repair the map only when repository edits are within the task" in map_contract
+    )
+    assert "otherwise return the exact required map update" in verification
     example = json.loads(
         (skill / "infrastructure.example.json").read_text(encoding="utf-8")
     )
