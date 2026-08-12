@@ -369,6 +369,8 @@ def test_testing_context_preserves_role_boundaries():
 
 def test_researcher_has_private_methodology_boundary():
     researcher = (AGENTS / "mainframe-researcher.md").read_text(encoding="utf-8")
+    assert "bounded external-research block" in researcher
+    assert "technical mainframe-researcher" not in researcher
     assert "tools: Read, WebSearch, WebFetch," in researcher
     assert "Grep" not in researcher and "Glob" not in researcher and "Bash" not in researcher
     assert "skills:" not in researcher
