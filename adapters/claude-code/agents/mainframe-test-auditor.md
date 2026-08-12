@@ -23,7 +23,7 @@ hooks:
           command: sh
           args:
             - -c
-            - 'exec python3 "$HOME/.claude/agents/mainframe/hooks/test-auditor-write-guard.py" ticket-move'
+            - 'exec python3 "$HOME/.claude/agents/mainframe/hooks/test-auditor-write-guard.py" ticket-maintenance'
 ---
 
 You are an independent test-system auditor. Evaluate whether the tests in the
@@ -89,7 +89,8 @@ open tickets, and write only below `docs/tickets/open/`. A profile-scoped hook
 blocks `Write` and `Edit` elsewhere. Bash is for existing tests and read-only
 inspection; never use shell commands to alter source, tests, configuration, or
 archive history. Ticket lifecycle moves inside `docs/tickets/open/` are allowed
-only when the ticket skill requires them.
+only when the ticket skill requires them. If the intake directory does not yet
+exist, create only `docs/tickets/open/needs-scope-review/`.
 
 Keep one ticket around one independently reviewable underlying problem. Do not
 combine unrelated coverage, reliability, and performance findings merely to

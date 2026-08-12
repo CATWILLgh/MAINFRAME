@@ -42,7 +42,7 @@ def run_bash_guard(root: pathlib.Path, command: str):
         "tool_input": {"command": command},
     }
     proc = subprocess.run(
-        ["python3", str(GUARD), "ticket-move"],
+        ["python3", str(GUARD), "ticket-maintenance"],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -102,6 +102,15 @@ def test_allows_only_open_ticket_moves_through_bash():
     assert run_bash_guard(root, f"mv {source} {root / 'outside.md'}") == "deny"
     assert run_bash_guard(root, f"mv {source} {destination} && echo moved") == "deny"
     assert run_bash_guard(root, "python3 -m pytest tests/unit") is None
+
+
+def test_allows_only_lazy_intake_directory_creation():
+    root = make_repo()
+    allowed = root / "docs" / "tickets" / "open" / "needs-scope-review"
+    assert run_bash_guard(root, f"mkdir -p {allowed}") == "allow"
+    assert run_bash_guard(root, "mkdir -p docs/tickets/open/ready") == "deny"
+    assert run_bash_guard(root, "mkdir docs/tickets/open/needs-scope-review") == "deny"
+    assert run_bash_guard(root, "mkdir -p docs/tickets/open/needs-scope-review && echo ready") == "deny"
 
 
 if __name__ == "__main__":

@@ -215,6 +215,7 @@ def test_test_auditor_is_non_implementing_and_ticket_scoped():
     assert "Do not use for routine implementation" in auditor
     assert "inspect the exact command, lifecycle scripts" in auditor
     assert "Run a broad or expensive suite only when measuring that suite" in auditor
+    assert "create only `docs/tickets/open/needs-scope-review/`" in auditor
     assert (AGENTS / "hooks" / "test-auditor-write-guard.py").is_file()
 
 

@@ -83,10 +83,7 @@ def ticket_move_paths(command: str) -> tuple[str, str] | None:
     return operands[0], operands[1]
 
 
-def is_open_ticket_move(payload: dict) -> bool | None:
-    command = payload.get("tool_input", {}).get("command")
-    if not isinstance(command, str) or not command:
-        raise ValueError("missing command")
+def is_open_ticket_move(payload: dict, command: str) -> bool | None:
     paths = ticket_move_paths(command)
     if paths is None:
         return None
@@ -99,14 +96,50 @@ def is_open_ticket_move(payload: dict) -> bool | None:
     )
 
 
+def is_intake_directory_create(payload: dict, command: str) -> bool | None:
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError as error:
+        if "mkdir" in command:
+            raise ValueError("ambiguous mkdir command") from error
+        return None
+    if not any(Path(token).name == "mkdir" for token in tokens):
+        return None
+    if any(token in {"&&", "||", ";", "|", "|&", "&", "(", ")"} for token in tokens):
+        raise ValueError("compound mkdir command")
+    if not tokens or Path(tokens[0]).name != "mkdir" or "-p" not in tokens[1:]:
+        return False
+    paths = [token for token in tokens[1:] if token != "-p" and not token.startswith("-")]
+    if len(paths) != 1:
+        return False
+    root = repository_root(Path(payload["cwd"]).expanduser().resolve(strict=True))
+    expected = (root / "docs" / "tickets" / "open" / "needs-scope-review").resolve(
+        strict=False
+    )
+    return requested_path(payload, paths[0]) == expected
+
+
+def is_ticket_maintenance(payload: dict) -> bool | None:
+    command = payload.get("tool_input", {}).get("command")
+    if not isinstance(command, str) or not command:
+        raise ValueError("missing command")
+    move = is_open_ticket_move(payload, command)
+    if move is not None:
+        return move
+    return is_intake_directory_create(payload, command)
+
+
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) == 2 else "write"
     try:
         payload = json.load(sys.stdin)
-        if mode == "ticket-move":
+        if mode == "ticket-maintenance":
             if payload.get("tool_name") != "Bash":
                 raise ValueError("wrong tool")
-            allowed = is_open_ticket_move(payload)
+            allowed = is_ticket_maintenance(payload)
             if allowed is None:
                 return 0
         elif mode == "write":
@@ -118,8 +151,8 @@ def main() -> int:
 
     if allowed:
         reason = (
-            "Test auditor may move an open project ticket."
-            if mode == "ticket-move"
+            "Test auditor may maintain open project ticket paths."
+            if mode == "ticket-maintenance"
             else "Test auditor may maintain open project tickets."
         )
         result = decision("allow", reason)

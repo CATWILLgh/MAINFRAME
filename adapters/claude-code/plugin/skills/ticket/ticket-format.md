@@ -1,7 +1,7 @@
 # Ticket format and lifecycle
 
 The ticket path is its lifecycle state. Do not duplicate that state in
-frontmatter.
+frontmatter. Create only the needed destination directory, never empty states in advance.
 
 ```text
 docs/tickets/
