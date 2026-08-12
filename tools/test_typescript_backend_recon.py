@@ -65,7 +65,11 @@ class TypeScriptBackendReconTests(unittest.TestCase):
         self.assertIn("socket.io", report["realtime"])
         self.assertIn("@nestjs/swagger", report["contracts"])
         self.assertIn("@nestjs/axios", report["http_clients"])
-        self.assertFalse(report["runtime"]["strict"])
+        self.assertFalse(report["runtime"]["strictness"]["strict"])
+        self.assertEqual(
+            report["dependency_values"],
+            "declared package.json specifiers; verify installed resolutions",
+        )
 
     def test_reports_next_server_stack_and_router(self):
         report = run_recon(
@@ -93,7 +97,66 @@ class TypeScriptBackendReconTests(unittest.TestCase):
         self.assertIn("drizzle-orm", report["data"])
         self.assertIn("next-auth", report["auth"])
         self.assertIn("pg-boss", report["background"])
-        self.assertTrue(report["runtime"]["strict"])
+        self.assertTrue(report["runtime"]["strictness"]["strict"])
+
+    def test_does_not_infer_next_router_without_next(self):
+        report = run_recon(
+            {"name": "ordinary-node-service", "devDependencies": {"typescript": "^5"}},
+            {"app/index.ts": "export {}"},
+        )
+        self.assertIsNone(report["next_router"])
+
+    def test_reports_partial_or_inherited_strictness_without_false_precision(self):
+        report = run_recon(
+            {"name": "api", "devDependencies": {"typescript": "^5"}},
+            {
+                "tsconfig.json": (
+                    '{"extends":"../tsconfig.base.json","compilerOptions":'
+                    '{"strictNullChecks":true,"noImplicitAny":true}}'
+                )
+            },
+        )
+        self.assertEqual(
+            report["runtime"]["tsconfig_extends"], "../tsconfig.base.json"
+        )
+        self.assertIsNone(report["runtime"]["strictness"]["strict"])
+        self.assertTrue(report["runtime"]["strictness"]["strictNullChecks"])
+        self.assertTrue(report["runtime"]["strictness"]["noImplicitAny"])
+
+    def test_finds_workspace_lockfile_and_limits_script_noise(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / ".git").mkdir()
+            (workspace / "package-lock.json").write_text("{}", encoding="utf-8")
+            package_root = workspace / "packages" / "api"
+            package_root.mkdir(parents=True)
+            (package_root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "scripts": {
+                            "test": "vitest run",
+                            "contracts:upstream:check": "node check.mjs",
+                            "db:seed:all": "node seed.mjs",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["node", str(RECON), str(package_root)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            report = json.loads(result.stdout)
+
+        self.assertEqual(report["package_manager"], "npm")
+        self.assertEqual(
+            report["package_manager_lockfile"], str(workspace / "package-lock.json")
+        )
+        self.assertIn("test", report["scripts"])
+        self.assertIn("contracts:upstream:check", report["scripts"])
+        self.assertNotIn("db:seed:all", report["scripts"])
 
 
 if __name__ == "__main__":

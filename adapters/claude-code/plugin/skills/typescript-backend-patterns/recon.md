@@ -6,7 +6,12 @@ Run:
 node ~/.claude/skills/mainframe/skills/typescript-backend-patterns/recon.js <package-root>
 ```
 
-The report is evidence for routing, not a decision engine. Confirm the active path from imports, framework entrypoints, configuration, workspace scripts, and the task's files.
+The report is evidence for routing, not a decision engine. Dependency values
+are declared `package.json` specifiers, not proof of the installed resolution.
+An absent TypeScript flag is reported as `null`, because it may be inherited.
+Confirm installed versions and the active path from the lockfile, imports,
+framework entrypoints, extended configuration, workspace scripts, and the
+task's files.
 
 When the script is unavailable, inspect:
 
