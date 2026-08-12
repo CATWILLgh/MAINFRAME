@@ -154,7 +154,7 @@ Most are pulled automatically when the situation matches. The primary-session
 
 | Group | Skills |
 |---|---|
-| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `ticket` (record concrete out-of-scope problems), `no-suppression-markers` (completion gate), `testing-strategy` (choose test evidence), `severity-calibration` (rank findings honestly), `decision-review` (private method used by the decision reviewer) |
+| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `ticket` (record concrete out-of-scope problems), `testing-strategy` (choose test evidence), `severity-calibration` (rank findings honestly), `decision-review` (private method used by the decision reviewer) |
 | **Backend** | `python-backend-patterns`, `typescript-backend-patterns` — version-aware stack discovery plus data, auth, contracts, jobs, runtime, observability, and testing patterns |
 | **Frontend** | `react-frontend-patterns` (Vite and Next.js client behavior, architecture, state, forms, offline/realtime, content, testing), plus compact preloaded `frontend-design` and `shadcn` routers. Detailed UX, visual, and component guidance loads only for the matching surface or local shadcn project. |
 | **Ops & misc** | `infrastructure` (primary-session infrastructure work plus the adapter-neutral `.agents/infrastructure.json` topology), `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (hidden Dokploy branch), `curl-requests` (HTTP request templates), `secrets-handling` (credential discovery and value-safe process delivery) |

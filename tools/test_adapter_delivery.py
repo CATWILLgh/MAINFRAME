@@ -375,6 +375,17 @@ def test_old_general_code_audit_is_not_delivered():
     assert "confidence" in normalized
 
 
+def test_marker_quality_is_enforced_by_hooks_not_a_discovery_skill():
+    assert not (PLUGIN / "skills" / "no-suppression-markers").exists()
+    hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())
+    post = json.dumps(hooks["hooks"]["PostToolUse"])
+    stop = json.dumps(hooks["hooks"]["Stop"])
+    subagent_stop = json.dumps(hooks["hooks"]["SubagentStop"])
+    assert "scan-suppression-markers.py" in post
+    assert "stop-gate-suppression-markers.py" in stop
+    assert "stop-gate-suppression-markers.py" in subagent_stop
+
+
 def test_server_safety_does_not_grant_or_assume_destructive_bash():
     body = (PLUGIN / "skills" / "ops-app-server-safety" / "SKILL.md").read_text(
         encoding="utf-8"
