@@ -97,6 +97,11 @@ def test_fires_on_64th_main_prompt_only():
         assert logged[-1][0][1]["reminded"] is True
 
 
+def test_note_preserves_user_decision_boundary():
+    assert "product or business-logic choice" in hook.INIT_NOTE
+    assert "material infrastructure choice" in hook.INIT_NOTE
+
+
 def test_subagent_cannot_activate_or_create_state():
     with tempfile.TemporaryDirectory() as state_dir:
         payload = {

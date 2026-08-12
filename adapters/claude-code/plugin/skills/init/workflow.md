@@ -54,8 +54,8 @@ report the missing capability before agreement; do not silently replace it.
 
 Work autonomously to the agreed goal. Resolve engineering and architecture
 choices without narrating internal routing. Investigate suspected blockers and
-continue when they are false. Return only for a proven product or infrastructure
-choice, authority boundary, or external condition that changes the goal.
+continue when they are false. Return only for a proven product or business-logic
+choice, material infrastructure choice, authority boundary, or external condition that changes the goal.
 
 Do not fix out-of-scope findings inline. Use `ticket` only to search, record a
 minimal observation, or update a clear match, then resume the goal. A finding

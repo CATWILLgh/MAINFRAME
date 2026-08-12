@@ -458,6 +458,16 @@ def test_init_separates_bounded_dod_from_complex_review():
     assert "The bounded route ends\nafter direct proof" in workflow
 
 
+def test_init_uses_one_user_decision_boundary():
+    init_dir = PLUGIN / "skills" / "init"
+    body = (init_dir / "SKILL.md").read_text(encoding="utf-8")
+    workflow = (init_dir / "workflow.md").read_text(encoding="utf-8")
+    for text in (body, workflow):
+        normalized = " ".join(text.split())
+        assert "product or business-logic" in normalized
+        assert "material infrastructure choice" in normalized
+
+
 def test_shared_secrets_have_one_runtime_index():
     assert (SHARED_CREDENTIALS / "install.sh").is_file()
     assert (SHARED_CREDENTIALS / "secret").is_file()
