@@ -46,7 +46,11 @@ def is_open_ticket(payload: dict) -> bool:
     root = repository_root(cwd)
     allowed = (root / "docs" / "tickets" / "open").resolve(strict=False)
     target = requested_path(payload)
-    return os.path.commonpath((str(allowed), str(target))) == str(allowed) and target != allowed
+    return (
+        os.path.commonpath((str(allowed), str(target))) == str(allowed)
+        and target != allowed
+        and target.suffix == ".md"
+    )
 
 
 def ticket_move_paths(command: str) -> tuple[str, str] | None:

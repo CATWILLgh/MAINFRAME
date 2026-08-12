@@ -74,6 +74,7 @@ def test_denies_product_and_archive_writes():
     assert run_guard(root, "Write", "src/app.ts") == "deny"
     assert run_guard(root, "Edit", "tests/app.test.ts") == "deny"
     assert run_guard(root, "Write", "docs/tickets/archive/resolved/abcd-gap.md") == "deny"
+    assert run_guard(root, "Write", "docs/tickets/open/needs-scope-review/raw.log") == "deny"
 
 
 def test_denies_path_escape_and_invalid_payload():
