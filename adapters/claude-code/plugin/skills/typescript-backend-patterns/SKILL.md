@@ -30,6 +30,10 @@ Multiple frameworks, ORMs, auth libraries, or test runners are observations, not
 
 - Use the project's native commands and the smallest faithful test for the
   changed behavior.
+- Inspect the exact package script before running it. A name such as `lint`,
+  `format`, or `test` does not prove that the command is non-mutating,
+  infrastructure-free, or safe for the active environment; use a check-only
+  variant when verification must not alter files.
 - When practical, observe the focused test fail for the intended reason before
   the fix, then pass, followed by the nearest relevant fast suite.
 - Use real PostgreSQL when database semantics are the changed risk; do not add

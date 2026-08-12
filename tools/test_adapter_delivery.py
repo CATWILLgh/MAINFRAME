@@ -277,6 +277,11 @@ def test_testing_context_preserves_role_boundaries():
     assert "## Testing baseline" in typescript_skill
     assert "observe the focused test fail" in typescript_skill
     assert "observe the focused test fail" not in typescript_agent
+    assert "Inspect the exact package script before running it" in typescript_skill
+    typescript_runtime = (
+        PLUGIN / "skills" / "typescript-backend-patterns" / "runtime.md"
+    ).read_text(encoding="utf-8")
+    assert "the name is not a\n  safety contract" in typescript_runtime
 
     react_agent = (AGENTS / "mainframe-react-frontend-engineer.md").read_text(
         encoding="utf-8"
