@@ -309,6 +309,8 @@ def test_testing_context_preserves_role_boundaries():
     react_agent = (AGENTS / "mainframe-react-frontend-engineer.md").read_text(
         encoding="utf-8"
     )
+    assert "React web applications and client React layers" in react_agent
+    assert "React web work in Vite applications" not in react_agent
     assert "Bash, Skill, WebSearch" in react_agent
     assert "TodoWrite" not in react_agent
     react_preloads = re.search(
