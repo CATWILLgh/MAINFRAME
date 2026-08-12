@@ -417,6 +417,8 @@ def test_umbrella_is_role_agnostic():
     assert "user communication" not in umbrella
     assert "authoritative sources" in umbrella
     assert "secret" in umbrella
+    assert "supporting evidence to your immediate caller" not in umbrella
+    assert "Return enough evidence for the caller" not in umbrella
 
 
 def test_init_skill_is_manual_only():
