@@ -455,11 +455,22 @@ def test_init_separates_bounded_dod_from_complex_review():
     assert "### Complex route" in workflow
     assert "without invoking `mainframe-decision-reviewer`," in workflow
     assert "These checkpoints are required for the complex route" in workflow
-    assert "The bounded route ends\nafter direct proof" in workflow
+    assert "The bounded route ends after direct proof" in " ".join(workflow.split())
     assert "bounded formal" not in codex
     assert "gpt-5.6-terra" not in codex
     assert "gpt-5.6-sol`, `medium`" in codex
     assert "gpt-5.6-sol`, `xhigh`" in codex
+
+
+def test_workflow_preserves_only_non_reproducible_acceptance_evidence():
+    workflow = (
+        PLUGIN / "skills" / "init" / "workflow.md"
+    ).read_text(encoding="utf-8")
+    normalized = " ".join(workflow.split())
+    assert "Prove the DoD from the final state" in normalized
+    assert "acceptance depends on it or it cannot be reproduced later" in normalized
+    assert "do not create process artifacts by default" in normalized
+    assert "Make the result and evidence durable" not in workflow
 
 
 def test_init_uses_one_user_decision_boundary():

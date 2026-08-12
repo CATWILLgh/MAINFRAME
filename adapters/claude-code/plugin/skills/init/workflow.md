@@ -64,9 +64,9 @@ new local recovery commits; never push, change branches, or perform any other hi
 
 ## Accept the result
 
-Make the result and evidence durable, then prove the DoD. The bounded route ends
-after direct proof. On the complex route, invoke the zero-argument `advisor` on
-the final state; reconcile material findings and repeat verification when needed.
+Prove the DoD from the final state. Preserve evidence only when acceptance depends
+on it or it cannot be reproduced later; do not create process artifacts by default.
+The bounded route ends after direct proof. On the complex route, invoke the zero-argument `advisor` on the final state; reconcile material findings and repeat verification when needed.
 Do not declare a complex-route goal done if `advisor` is unavailable.
 
 A goal ends only when every acceptance condition is proven or continuing is
