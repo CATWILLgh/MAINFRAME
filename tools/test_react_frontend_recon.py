@@ -64,7 +64,13 @@ class ReactFrontendReconTests(unittest.TestCase):
         self.assertIn("vite-plugin-pwa", report["offline"])
         self.assertIn("socket.io-client", report["realtime"])
         self.assertTrue(report["ui"]["components_json"])
-        self.assertFalse(report["runtime"]["strict"])
+        self.assertFalse(
+            report["runtime"]["typescript_configs"][0]["strictness"]["strict"]
+        )
+        self.assertEqual(
+            report["dependency_values"],
+            "declared package.json specifiers; verify installed resolutions",
+        )
 
     def test_reports_next_client_content_and_visualization_stack(self):
         report = run_recon(
@@ -97,8 +103,65 @@ class ReactFrontendReconTests(unittest.TestCase):
         self.assertIn("@tiptap/react", report["content"])
         self.assertIn("react-markdown", report["content"])
         self.assertIn("recharts", report["data_ui"])
-        self.assertTrue(report["runtime"]["strict"])
-        self.assertTrue(report["runtime"]["no_unchecked_indexed_access"])
+        strictness = report["runtime"]["typescript_configs"][0]["strictness"]
+        self.assertTrue(strictness["strict"])
+        self.assertTrue(strictness["noUncheckedIndexedAccess"])
+
+    def test_reports_referenced_configs_without_false_strictness(self):
+        report = run_recon(
+            {
+                "name": "client",
+                "scripts": {
+                    "pretest": "node prepare-test-db.mjs",
+                    "test": "vitest run",
+                    "db:generate": "drizzle-kit generate",
+                    "db:test:setup": "node setup-test-db.mjs",
+                    "db:seed:all": "node seed.mjs",
+                },
+                "devDependencies": {"typescript": "~5.9.3"},
+            },
+            {
+                "tsconfig.json": '{"references":[{"path":"./tsconfig.app.json"}]}',
+                "tsconfig.app.json": '{"compilerOptions":{"strict":true}}',
+            },
+        )
+
+        configs = {
+            config["file"]: config for config in report["runtime"]["typescript_configs"]
+        }
+        self.assertIsNone(configs["tsconfig.json"]["strictness"]["strict"])
+        self.assertEqual(
+            configs["tsconfig.json"]["references"], ["./tsconfig.app.json"]
+        )
+        self.assertTrue(configs["tsconfig.app.json"]["strictness"]["strict"])
+        self.assertIn("pretest", report["scripts"])
+        self.assertIn("test", report["scripts"])
+        self.assertIn("db:test:setup", report["scripts"])
+        self.assertNotIn("db:generate", report["scripts"])
+        self.assertNotIn("db:seed:all", report["scripts"])
+
+    def test_finds_workspace_lockfile(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / ".git").mkdir()
+            (workspace / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'")
+            package_root = workspace / "apps" / "web"
+            package_root.mkdir(parents=True)
+            (package_root / "package.json").write_text(
+                json.dumps({"dependencies": {"react": "^19"}}), encoding="utf-8"
+            )
+            result = subprocess.run(
+                ["node", str(RECON), str(package_root)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            report = json.loads(result.stdout)
+
+        self.assertEqual(report["package_manager"], "pnpm")
+        self.assertEqual(
+            report["package_manager_lockfile"], str(workspace / "pnpm-lock.yaml")
+        )
 
 
 if __name__ == "__main__":

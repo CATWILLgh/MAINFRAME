@@ -6,7 +6,14 @@ Run:
 node ~/.claude/skills/mainframe/skills/react-frontend-patterns/recon.js <package-root>
 ```
 
-The report is evidence for routing, not a decision engine. Confirm the active path from imports, providers, route configuration, framework file conventions, and the task's files. The script performs no network access and does not install tooling.
+The report is evidence for routing, not a decision engine. Dependency values
+are declared `package.json` specifiers, not proof of the installed resolution.
+Each root-level TypeScript config is reported separately; an absent flag is
+`null` because it may be inherited or belong to a referenced config. Confirm
+installed versions and the active path from the lockfile, imports, providers,
+route configuration, extended or referenced configuration, framework file
+conventions, and the task's files. The script performs no network access and
+does not install tooling.
 
 When the script is unavailable, inspect:
 
