@@ -52,9 +52,10 @@ observable behavior when that evidence can prove the original gap. Use
 for documentation, path moves, or other purely structural work.
 
 When a task needs a formal definition of done or is known to be complex, read
-[workflow.md](workflow.md) in full before preparing the proposal. It contains
-the conditional preparation, review, red-evidence, `/goal`, execution, and
-acceptance path. Do not load it for a small, unambiguous task.
+[workflow.md](workflow.md) in full before preparing the proposal. It separates
+a bounded formal route from the full complex or high-stakes review route, then
+defines red evidence, `/goal`, execution, and acceptance. Do not load it for a
+small, unambiguous task.
 When that workflow reaches its independent Codex checkpoint, read
 [codex-exec.md](codex-exec.md) for the Claude Code adapter's invocation method.
 

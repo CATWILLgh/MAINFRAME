@@ -442,6 +442,18 @@ def test_init_replaces_automatic_task_workflow():
     assert "session-posture" not in hooks
 
 
+def test_init_separates_bounded_dod_from_complex_review():
+    workflow = (
+        PLUGIN / "skills" / "init" / "workflow.md"
+    ).read_text(encoding="utf-8")
+    assert "A formal DoD alone does not make a task complex" in workflow
+    assert "### Bounded formal route" in workflow
+    assert "### Complex route" in workflow
+    assert "without invoking `mainframe-decision-reviewer`," in workflow
+    assert "These checkpoints are required for the complex route" in workflow
+    assert "The bounded route ends\nafter direct proof" in workflow
+
+
 def test_shared_secrets_have_one_runtime_index():
     assert (SHARED_CREDENTIALS / "install.sh").is_file()
     assert (SHARED_CREDENTIALS / "secret").is_file()
