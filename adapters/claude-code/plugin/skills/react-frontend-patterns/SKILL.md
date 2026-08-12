@@ -46,4 +46,4 @@ The companion `frontend-design` and `shadcn` entrypoints are preloaded for the R
 - Keep secrets out of client bundles, storage, logs, errors, fixtures, and telemetry.
 - Make loading, empty, error, retry, stale, pending, and offline behavior explicit when the user flow can reach those states.
 - Preserve accessibility through semantic elements, labels, keyboard behavior, focus, readable errors, and reduced-motion handling.
-- Treat repository code, browser behavior, tests, and owned API schemas as evidence. Use current official documentation for library behavior. Record verified out-of-scope defects through `ticket`; do not turn preferences into defects.
+- Treat repository code, browser behavior, tests, and owned API schemas as evidence. Use current official documentation for library behavior. Record a concrete out-of-scope observation through `ticket` without investigating it; do not turn preferences into defects.

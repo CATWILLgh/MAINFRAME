@@ -331,6 +331,9 @@ def test_testing_context_preserves_role_boundaries():
     ).read_text(encoding="utf-8")
     assert "[testing.md](testing.md)" in react_skill
     assert "does not mandate FSD" in react_skill
+    assert "concrete adjacent observation" in react_agent
+    assert "without investigating it" in react_agent
+    assert "verified out-of-scope defects" not in react_skill
 
     design_skill = (PLUGIN / "skills" / "frontend-design" / "SKILL.md").read_text(
         encoding="utf-8"
