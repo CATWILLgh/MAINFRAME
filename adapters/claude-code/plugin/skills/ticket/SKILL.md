@@ -8,8 +8,9 @@ description: "Records a concrete problem outside the active task's assigned resu
 
 Preserve a concrete problem outside the active task's assigned result or agreed
 definition of done without silently expanding scope. This skill owns ticket
-intake only. Later profile runs own scope review, implementation, and
-independent closure verification.
+intake and, only for an explicitly assigned investigation, initial confirmation
+that the problem exists. Later profile runs own scope review, implementation,
+and independent closure verification.
 
 First identify how the problem reached you:
 

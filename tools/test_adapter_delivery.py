@@ -377,6 +377,7 @@ def test_testing_context_preserves_role_boundaries():
         encoding="utf-8"
     )
     assert "assigned result or agreed definition of done" in ticket
+    assert "initial confirmation" in ticket
     assert "assigned result or agreed definition of done" in observation
     assert "most distinctive available" in observation
     assert "two or three terms" not in observation
