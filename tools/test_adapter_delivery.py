@@ -421,6 +421,8 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     assert "Triggered via agent frontmatter `skills:` preload" not in method
     assert "Preloaded into" not in method
     assert "Critical" in method and "High" in method
+    assert "dialectical inquiry outperforms" not in method
+    assert "10.1002/smj.4250010403" not in method
     assert not (PLUGIN / "skills" / "severity-calibration").exists()
 
 

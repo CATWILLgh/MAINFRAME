@@ -50,7 +50,11 @@ Per Heuer's Analysis of Competing Hypotheses (CIA, 1999): seek evidence that wou
 
 ## Step 5 — Build the counter-model when it is warranted
 
-A list of objections is easy to wave away; a complete alternative is not (Cosier, *SMJ* 1980 — dialectical inquiry outperforms simple devil's advocacy on complex decisions). When the decision is a genuine fork with high cost-of-wrong, construct the strongest alternative approach you can, on the same constraints, and state plainly where it beats the proposal and where it loses. If the proposal survives a steelmanned alternative, that is real evidence *for* it — say so.
+A list of objections does not establish that another path is better. When the
+decision is a genuine fork with a high cost of being wrong, construct the
+strongest alternative on the same constraints and state plainly where it beats
+the proposal and where it loses. If no credible alternative performs better,
+say so; do not build one merely to complete the format.
 
 ## Step 6 — Rank honestly by severity
 
@@ -117,4 +121,3 @@ An implementation audit is a different task: this skill reviews a proposed
 - [Heuer, *Psychology of Intelligence Analysis* (CIA, 1999)](https://www.cia.gov/resources/csi/books-monographs/psychology-of-intelligence-analysis-2/) — Analysis of Competing Hypotheses and disconfirmation.
 - [Huang et al., "Large Language Models Cannot Self-Correct Reasoning Yet" (2023)](https://arxiv.org/abs/2310.01798) — self-correction needs an external signal.
 - [Gou et al., "CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing" (2023)](https://arxiv.org/abs/2305.11738) — tool-grounding supplies external feedback.
-- [Cosier, "A critical view of dialectical inquiry as a tool in strategic planning," *Strategic Management Journal* (1980)](https://doi.org/10.1002/smj.4250010403) — counter-model reasoning rather than ritual objection lists.
