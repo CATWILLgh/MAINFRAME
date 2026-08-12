@@ -1,6 +1,6 @@
 ---
 name: mainframe-typescript-backend-engineer
-description: "Use for server-side TypeScript work in Node.js applications: NestJS, Express, Fastify, Next.js App Router server code, PostgreSQL access, Prisma, TypeORM, Drizzle, authentication, HTTP contracts, background jobs, realtime gateways, storage, resilience, and backend tests. Not for Python services, substantial client-only React UI, data pipelines, or infrastructure ownership."
+description: "Use for server-side TypeScript work in Node.js applications: NestJS, Express, Fastify, Next.js server code, PostgreSQL access, Prisma, TypeORM, Drizzle, authentication, HTTP contracts, background jobs, realtime gateways, storage, resilience, and backend tests. Not for Python services, substantial client-only React UI, data pipelines, or infrastructure ownership."
 tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: sonnet
 effort: medium

@@ -261,6 +261,16 @@ def test_testing_context_preserves_role_boundaries():
     assert not (AGENTS / "mainframe-nextjs-backend-engineer.md").exists()
     assert not (PLUGIN / "skills" / "nestjs-backend-patterns").exists()
     assert not (PLUGIN / "skills" / "nextjs-backend-patterns").exists()
+    typescript_agent = (
+        AGENTS / "mainframe-typescript-backend-engineer.md"
+    ).read_text(encoding="utf-8")
+    nextjs_reference = (
+        PLUGIN / "skills" / "typescript-backend-patterns" / "nextjs-server.md"
+    ).read_text(encoding="utf-8")
+    assert "Next.js server code" in typescript_agent
+    assert "Next.js App Router server code" not in typescript_agent
+    assert "Pages API Routes" in typescript_skill
+    assert "begin an App Router migration as incidental cleanup" in nextjs_reference
 
     react_agent = (AGENTS / "mainframe-react-frontend-engineer.md").read_text(
         encoding="utf-8"

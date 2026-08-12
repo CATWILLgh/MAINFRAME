@@ -2,6 +2,10 @@
 
 - Confirm the installed Next.js major and active router before using version-sensitive APIs. Do not copy caching, request, or route conventions across majors blindly.
 - Route Handlers and Server Actions are public server boundaries: validate input and authorize the specific operation inside the server path.
+- In an established Pages Router application, preserve API Routes and existing
+  server-side data-loading boundaries. Treat `pages/api/*` as public server
+  endpoints with the same validation and authorization requirements; do not
+  begin an App Router migration as incidental cleanup.
 - Keep non-trivial business behavior outside Route Handlers, Server Actions, and Server Components. Use server-only modules for data and secrets.
 - Return only fields safe for the client. Never pass raw rows, secrets, or internal errors through the React Server Component boundary.
 - Treat middleware or proxy redirects as coarse request handling, not the sole authorization gate.
@@ -11,5 +15,6 @@
 
 Sources:
 - Next.js App Router — https://nextjs.org/docs/app
+- Next.js Pages Router — https://nextjs.org/docs/pages
 - Next.js data security — https://nextjs.org/docs/app/guides/data-security
 - Next.js caching — https://nextjs.org/docs/app/guides/caching
