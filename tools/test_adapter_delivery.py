@@ -423,6 +423,8 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     assert "Critical" in method and "High" in method
     assert "dialectical inquiry outperforms" not in method
     assert "10.1002/smj.4250010403" not in method
+    assert "six months later" not in method
+    assert "realistic failure horizon" in method
     assert not (PLUGIN / "skills" / "severity-calibration").exists()
 
 

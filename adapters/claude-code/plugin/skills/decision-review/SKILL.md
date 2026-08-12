@@ -38,9 +38,11 @@ An objection you can check, you must check. Pure reasoning inherits the same bli
 
 ## Step 3 — Pre-mortem (prospective hindsight)
 
-Do not ask "what could go wrong?" — that invites vague worry. Ask the stronger question (Klein, HBR 2007 — prospective hindsight lifts correct cause-identification by ~30%):
+Do not ask "what could go wrong?" — that invites vague worry. Use prospective
+hindsight instead (Klein, HBR 2007):
 
-> **"It is six months later. This decision failed badly. What caused it?"**
+> **"At a realistic failure horizon for this decision, it has failed badly.
+> What caused it?"**
 
 Work backwards from the assumed failure to concrete, traceable causes. Each cause becomes a candidate objection — then ground it per Step 2.
 
