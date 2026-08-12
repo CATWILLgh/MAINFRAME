@@ -1,8 +1,8 @@
 # Record an incidental observation
 
 Use this path only for a concrete, plausible problem noticed outside the
-current definition of done. Do not investigate its cause, impact, priority, or
-blast radius.
+active task's assigned result or agreed definition of done. Do not investigate
+its cause, impact, priority, or blast radius.
 
 ## 1. Search open tickets
 
@@ -44,7 +44,7 @@ review.
 
 ## 3. Return to the current task
 
-Resume the current definition of done immediately after the write. Do not fix
-the observation inline, even when the apparent change looks small. If it blocks
-the current result, stop treating it as an incidental ticket and return it to
-the active workflow.
+Resume the active task immediately after the write. Do not fix the observation
+inline, even when the apparent change looks small. If it blocks the assigned
+result or agreed definition of done, stop treating it as an incidental ticket
+and return it to the active workflow.

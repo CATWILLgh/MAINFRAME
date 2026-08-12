@@ -373,6 +373,11 @@ def test_testing_context_preserves_role_boundaries():
     observation = (
         PLUGIN / "skills" / "ticket" / "record-observation.md"
     ).read_text(encoding="utf-8")
+    ticket = (PLUGIN / "skills" / "ticket" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "assigned result or agreed definition of done" in ticket
+    assert "assigned result or agreed definition of done" in observation
     assert "most distinctive available" in observation
     assert "two or three terms" not in observation
 

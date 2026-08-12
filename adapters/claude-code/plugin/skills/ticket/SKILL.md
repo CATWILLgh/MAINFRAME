@@ -1,14 +1,15 @@
 ---
 name: ticket
 user-invocable: false
-description: "Records a concrete problem outside the current definition of done without expanding the active task. Use either when work reveals an incidental observation worth preserving or when an explicitly assigned investigation confirms a problem with evidence. Does not replace unfinished in-scope work, profile scope review, implementation, or independent closure verification."
+description: "Records a concrete problem outside the active task's assigned result or agreed definition of done without expanding scope. Use when work reveals an incidental observation worth preserving or an explicitly assigned investigation confirms a problem with evidence. Does not replace unfinished in-scope work, profile scope review, implementation, or independent closure verification."
 ---
 
 # Ticket
 
-Preserve a concrete out-of-scope problem without silently expanding the current
-task. This skill owns ticket intake only. Later profile runs own scope review,
-implementation, and independent closure verification.
+Preserve a concrete problem outside the active task's assigned result or agreed
+definition of done without silently expanding scope. This skill owns ticket
+intake only. Later profile runs own scope review, implementation, and
+independent closure verification.
 
 First identify how the problem reached you:
 
@@ -22,6 +23,6 @@ First identify how the problem reached you:
 Both paths must read [ticket-format.md](ticket-format.md) before creating,
 moving, renaming, or updating a ticket.
 
-If the problem prevents achieving or verifying the current definition of done,
-it is not out of scope. Handle it through the active workflow instead of using
-this skill.
+If the problem prevents achieving or verifying the assigned result or agreed
+definition of done, it is not out of scope. Handle it through the active
+workflow instead of using this skill.
