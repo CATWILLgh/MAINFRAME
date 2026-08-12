@@ -403,7 +403,7 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     reviewer = (AGENTS / "mainframe-decision-reviewer.md").read_text(
         encoding="utf-8"
     )
-    assert "mainframe:severity-calibration" in reviewer
+    assert "mainframe:severity-calibration" not in reviewer
     assert "mainframe:decision-review" not in reviewer
     assert "skills/mainframe/skills/decision-review/SKILL.md" in reviewer
     assert "CLAUDE.md" not in reviewer
@@ -420,6 +420,8 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     assert "user-invocable: false" in method
     assert "Triggered via agent frontmatter `skills:` preload" not in method
     assert "Preloaded into" not in method
+    assert "Critical" in method and "High" in method
+    assert not (PLUGIN / "skills" / "severity-calibration").exists()
 
 
 def test_advisor_is_controlled_read_only_and_replaces_builtin_advisor():
@@ -442,15 +444,9 @@ def test_advisor_is_controlled_read_only_and_replaces_builtin_advisor():
     assert "advisorModel" not in settings
 
 
-def test_old_general_code_audit_is_not_delivered():
+def test_old_general_code_audit_and_shared_severity_skill_are_not_delivered():
     assert not (PLUGIN / "skills" / "code-audit").exists()
-
-    severity = (PLUGIN / "skills" / "severity-calibration" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    normalized = " ".join(severity.split())
-    assert "Ordinary broken functionality is not Critical" in normalized
-    assert "confidence" in normalized
+    assert not (PLUGIN / "skills" / "severity-calibration").exists()
 
 
 def test_marker_quality_is_enforced_by_hooks_not_a_discovery_skill():

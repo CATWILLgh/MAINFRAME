@@ -54,7 +54,25 @@ A list of objections is easy to wave away; a complete alternative is not (Cosier
 
 ## Step 6 — Rank honestly by severity
 
-Use the `severity-calibration` rubric. Do not drown a Critical in nitpicks, and do not inflate a Low to look productive. A review of ten Low objections and zero grounded High is a *green light with cosmetics*, and must read as one. Borderline → pick the lower level and state what would raise it.
+Assign severity by grounded impact, reach, recoverability, and available
+workarounds. Severity describes consequence; confidence describes evidence.
+Do not raise severity to compensate for uncertainty.
+
+- **Critical** — confirmed or immediately reachable catastrophic harm such as
+  broad production loss, material compromise, irreversible corruption, or
+  comparable safety, legal, or financial impact.
+- **High** — a major product or security guarantee fails for meaningful scope,
+  with serious impact and no safe practical workaround.
+- **Medium** — a real bounded defect or material maintainability or performance
+  problem with recoverable impact, limited scope, or a practical workaround.
+- **Low** — localized friction or quality debt without demonstrated material
+  product impact. Pure preference and speculative improvement are not findings.
+
+Borderline cases take the lower level; state what evidence would raise it. Do
+not drown a Critical in nitpicks or inflate a Low to look productive. Ten Low
+objections and no grounded High is a green light with cosmetics and must read as
+one. Use an established project-specific scale when one exists instead of
+silently mixing classifications.
 
 ## Step 7 — Verdict and output
 
@@ -83,14 +101,13 @@ If the proposal is sound and you could not ground a serious objection, the verdi
 - **Manufacturing objections to fill the adversarial role.** This is the prime-directive violation; it inverts the method's value.
 - **Objecting from memory** on a library/API/protocol claim instead of verifying it.
 - **A failure mode the code already handles** — you skipped Step 2.
-- **Inflating severity** to look rigorous — destroys the signal `severity-calibration` exists to protect.
+- **Inflating severity** to look rigorous — destroys the ranking signal.
 - **Generic worry** ("this might not scale", "edge cases exist") with no specific, falsifiable scenario attached.
 - **Refusing to bless a sound decision** — a forced "but actually…" when the honest answer is `proceed` is theater.
 
-## Cross-refs
+## Boundary
 
-- [`severity-calibration`](../severity-calibration/SKILL.md) — the rubric for Step 6; reused, not duplicated.
-- An implementation audit is a different task: this skill reviews a proposed
+An implementation audit is a different task: this skill reviews a proposed
   decision, not defects in existing code.
 
 ## Sources

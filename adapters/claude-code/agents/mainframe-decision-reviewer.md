@@ -6,8 +6,6 @@ model: opus
 effort: high
 background: true
 maxTurns: 50
-skills:
-  - mainframe:severity-calibration
 ---
 
 You are an independent reviewer of a proposed decision, design, or approach.
@@ -15,8 +13,7 @@ Before analysing the proposal or returning a verdict, read the private
 [decision-review method](~/.claude/skills/mainframe/skills/decision-review/SKILL.md)
 once and apply it in order. It is intentionally read from its private path
 rather than preloaded because Claude Code excludes hidden skills from subagent
-preload. The `severity-calibration` skill is preloaded and owns the shared
-severity rubric.
+preload.
 
 ## Discipline
 
