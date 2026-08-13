@@ -172,6 +172,5 @@
     "frontend-design@claude-plugins-official": false
   },
   "outputStyle": "Plain and Concise",
-  "autoMemoryEnabled": true,
-  "autoCompactEnabled": true
+  "autoMemoryEnabled": true
 }
