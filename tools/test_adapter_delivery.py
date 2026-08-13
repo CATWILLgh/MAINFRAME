@@ -1064,9 +1064,22 @@ def test_global_settings_preserve_role_language_and_model_contracts():
         (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
     )
     assert settings["model"] == "fable"
+    assert settings["outputStyle"] == "Plain and Concise"
     assert "language" not in settings
     assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in settings.get("env", {})
     assert "teammateMode" not in settings
+
+
+def test_output_style_is_plain_without_mandatory_teaching_blocks():
+    styles = sorted((ADAPTER / "export" / "output-styles").glob("*.md"))
+    assert [path.name for path in styles] == ["plain-and-concise.md"]
+    body = styles[0].read_text(encoding="utf-8")
+    assert "name: Plain and Concise" in body
+    assert "keep-coding-instructions: true" in body
+    assert "immediate reader" in body
+    assert "Clarity and brevity must not hide material meaning" in body
+    assert "★ Insight" not in body
+    assert "before and after writing code" not in body
 
 
 def test_sensitive_git_actions_require_runtime_confirmation():
