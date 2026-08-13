@@ -1120,6 +1120,14 @@ def test_global_settings_preserve_role_language_and_session_choice_contracts():
     assert "teammateMode" not in settings
 
 
+def test_global_settings_compact_main_and_subagent_contexts_at_seventy_percent():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    assert settings["env"]["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"] == "70"
+    assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW" not in settings["env"]
+
+
 def test_general_purpose_agent_is_denied_without_blocking_specialists():
     settings = json.loads(
         (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
