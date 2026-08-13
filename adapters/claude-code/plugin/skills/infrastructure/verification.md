@@ -28,6 +28,8 @@ available within the authorized scope, report the exact unverified guarantee.
 
 After a successful topology change, re-read the affected resource. When
 repository edits are within the active task, update its entry in
-`.agents/infrastructure.json` and verify every newly added runbook path exists;
-otherwise return the exact required map update without editing it. Do not
-update unrelated environments' `lastVerified` dates.
+`.agents/infrastructure.json` and verify every newly added runbook path exists.
+Update the environment's `lastVerified` date only when every material fact in
+that entry was checked; a partial verification keeps the prior date. When
+repository edits are outside the active task, return the exact required map
+update without editing it. Do not update unrelated environments' dates.

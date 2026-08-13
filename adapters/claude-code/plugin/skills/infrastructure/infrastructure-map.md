@@ -21,8 +21,10 @@ environments. It reduces repeated discovery; it never replaces live checks.
   Paths must stay inside the project root and point to an existing file.
 - Prefer access aliases and stable platform resource names over raw addresses.
   Store an address only when it is itself the durable operational identifier.
-- `lastVerified` is an ISO date for the specific environment and changes only
-  after repository or live evidence confirmed the entry.
+- `lastVerified` is an ISO date for the whole environment entry. Change it only
+  after repository or live evidence confirms every material fact represented
+  by that entry. A partial check may correct the affected fact but preserves
+  the previous date; do not imply that untouched topology was reverified.
 - `notes` holds short exceptional facts, not procedures or session history.
 
 ## Maintenance

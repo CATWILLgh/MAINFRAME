@@ -195,7 +195,8 @@ def test_infrastructure_is_primary_session_skill_not_agent():
     assert (
         "Repair the map only when repository edits are within the task" in map_contract
     )
-    assert "otherwise return the exact required map update" in verification
+    assert "return the exact required map" in verification
+    assert "update without editing it" in verification
     example = json.loads(
         (skill / "infrastructure.example.json").read_text(encoding="utf-8")
     )
@@ -210,6 +211,8 @@ def test_infrastructure_is_primary_session_skill_not_agent():
     ).read_text(encoding="utf-8")
     assert "do not ask again when it does" in infrastructure
     assert "absence from the list does not grant it" in infrastructure_map
+    assert "every material fact" in infrastructure
+    assert "every material fact" in infrastructure_map
 
 
 def test_test_auditor_is_non_implementing_and_ticket_scoped():

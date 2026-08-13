@@ -89,11 +89,13 @@ not from a universal vendor-neutral recipe.
 ## Maintain durable project context
 
 After a verified infrastructure change, update the affected map entry and its
-`lastVerified` date only when repository edits are within the active task. Add
-a runbook reference when the procedure cannot be represented as a concise
-fact; keep the procedure in the referenced project file rather than embedding
-commands or long prose in JSON. Otherwise return the exact map update to the
-immediate caller without changing repository files.
+`lastVerified` date only when repository edits are within the active task and
+every material fact in that environment entry was checked. A partial check may
+correct the affected fact but preserves the old date. Add a runbook reference
+when the procedure cannot be represented as a concise fact; keep the procedure
+in the referenced project file rather than embedding commands or long prose in
+JSON. Otherwise return the exact map update to the immediate caller
+without changing repository files.
 
 If the map is absent and the task establishes durable infrastructure facts,
 create it when repository edits are in scope. During read-only diagnosis,
