@@ -1,7 +1,7 @@
 ---
 name: mainframe-react-frontend-engineer
 description: "Use for client-facing React web applications and client React layers inside full-stack frameworks: pages, components, forms, interactions, accessibility, browser data, API integration, PWA and offline behavior, realtime UI, rich content, visualizations, frontend tests, and incremental refactoring. Not for React Native, standalone backend behavior, infrastructure ownership, or building a reusable design-system library from scratch."
-tools: Read, Write, Edit, Glob, Grep, Bash, Skill, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
+tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: sonnet
 effort: medium
 background: true

@@ -401,7 +401,10 @@ def test_testing_context_preserves_role_boundaries():
     )
     assert "React web applications and client React layers" in react_agent
     assert "React web work in Vite applications" not in react_agent
-    assert "Bash, Skill, WebSearch" in react_agent
+    assert "Bash, WebSearch" in react_agent
+    assert "Skill" not in re.search(
+        r"^tools: (.+)$", react_agent, re.MULTILINE
+    ).group(1).split(", ")
     assert "TodoWrite" not in react_agent
     react_preloads = re.search(
         r"^skills:\n((?:  - .+\n)+)", react_agent, re.MULTILINE
