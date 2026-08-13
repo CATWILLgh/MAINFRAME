@@ -1116,6 +1116,7 @@ def test_global_settings_preserve_role_language_and_session_choice_contracts():
     assert "editorMode" not in settings
     assert "verbose" not in settings
     assert "remoteControlAtStartup" not in settings
+    assert "skipWorkflowUsageWarning" not in settings
     assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in settings.get("env", {})
     assert "teammateMode" not in settings
 

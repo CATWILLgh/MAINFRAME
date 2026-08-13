@@ -173,6 +173,5 @@
   },
   "outputStyle": "Plain and Concise",
   "autoMemoryEnabled": true,
-  "skipWorkflowUsageWarning": true,
   "autoCompactEnabled": true
 }
