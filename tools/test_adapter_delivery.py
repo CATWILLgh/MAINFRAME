@@ -230,7 +230,9 @@ def test_settings_migrate_legacy_link_to_regular_user_file():
     installed, _ = _run_installer("--claude", home=home)
     assert installed.returncode == 0, installed.stderr
     assert settings.is_file() and not settings.is_symlink()
-    assert json.loads(settings.read_text(encoding="utf-8"))["model"] == "fable"
+    migrated = json.loads(settings.read_text(encoding="utf-8"))
+    assert "model" not in migrated
+    assert "effortLevel" not in migrated
     assert list(claude_dir.glob("settings.json.backup-*"))
 
 
@@ -327,6 +329,47 @@ def test_settings_reconcile_removed_owned_template_values():
     assert "model" not in merged
 
 
+def test_settings_remove_retired_owned_session_choices():
+    work = pathlib.Path(tempfile.mkdtemp())
+    source = work / "source.json"
+    target = work / "settings.json"
+    state = work / "state.json"
+    initial_template = {
+        "model": "fable",
+        "effortLevel": "xhigh",
+        "permissions": {
+            "allow": [], "ask": [], "deny": [], "defaultMode": "auto",
+        },
+        "enabledPlugins": {"context7@claude-plugins-official": True},
+    }
+    source.write_text(json.dumps(initial_template), encoding="utf-8")
+    target.write_text('{"custom":true}\n', encoding="utf-8")
+    first = _run_settings_manager(
+        "install", source, target, state, work / "first.backup"
+    )
+    assert first.returncode == 0, first.stderr
+
+    initial_template.pop("model")
+    initial_template.pop("effortLevel")
+    source.write_text(json.dumps(initial_template), encoding="utf-8")
+    second = _run_settings_manager(
+        "install", source, target, state, work / "second.backup"
+    )
+    assert second.returncode == 0, second.stderr
+    migrated = json.loads(target.read_text(encoding="utf-8"))
+    assert migrated["custom"] is True
+    assert "model" not in migrated
+    assert "effortLevel" not in migrated
+
+    user_value = dict(migrated, model="claude-opus-4-8", effortLevel="medium")
+    target.write_text(json.dumps(user_value), encoding="utf-8")
+    third = _run_settings_manager(
+        "install", source, target, state, work / "third.backup"
+    )
+    assert third.returncode == 0, third.stderr
+    assert json.loads(target.read_text(encoding="utf-8")) == user_value
+
+
 def test_invalid_user_settings_stop_before_shared_delivery():
     home = pathlib.Path(tempfile.mkdtemp())
     claude_dir = home / ".claude"
@@ -384,7 +427,9 @@ def test_missing_user_settings_does_not_leave_stale_ownership():
     reinstalled, _ = _run_installer("--claude", home=home)
     assert reinstalled.returncode == 0, reinstalled.stderr
     assert settings.is_file()
-    assert json.loads(settings.read_text(encoding="utf-8"))["model"] == "fable"
+    reinstalled_settings = json.loads(settings.read_text(encoding="utf-8"))
+    assert "model" not in reinstalled_settings
+    assert "effortLevel" not in reinstalled_settings
 
 
 def test_adapter_owns_claude_artifacts():
@@ -1059,15 +1104,33 @@ def test_claude_permissions_expose_only_helper_and_index():
     assert "Read(**/secrets/**)" in denied
 
 
-def test_global_settings_preserve_role_language_and_model_contracts():
+def test_global_settings_preserve_role_language_and_session_choice_contracts():
     settings = json.loads(
         (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
     )
-    assert settings["model"] == "fable"
     assert settings["outputStyle"] == "Plain and Concise"
+    assert "model" not in settings
+    assert "effortLevel" not in settings
     assert "language" not in settings
     assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in settings.get("env", {})
     assert "teammateMode" not in settings
+
+
+def test_general_purpose_agent_is_denied_without_blocking_specialists():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    denied = settings["permissions"]["deny"]
+    assert "Agent(general-purpose)" in denied
+    assert "Agent(Explore)" not in denied
+    assert "Agent(Plan)" not in denied
+    assert not any("mainframe-" in rule for rule in denied)
+
+    init = " ".join((
+        PLUGIN / "skills" / "init" / "SKILL.md"
+    ).read_text(encoding="utf-8").split())
+    assert "If no specialist matches, work directly" in init
+    assert "built-in general-purpose agent" in init
 
 
 def test_output_style_is_plain_without_mandatory_teaching_blocks():

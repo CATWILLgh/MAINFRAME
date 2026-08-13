@@ -21,6 +21,7 @@
       "mcp__plugin_context7_context7__query-docs"
     ],
     "deny": [
+      "Agent(general-purpose)",
       "Bash(rm -rf /)",
       "Bash(rm -rf /*)",
       "Bash(rm -rf ~)",
@@ -163,13 +164,11 @@
     "defaultMode": "auto",
     "disableBypassPermissionsMode": "disable"
   },
-  "model": "fable",
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": false
   },
   "outputStyle": "Plain and Concise",
-  "effortLevel": "xhigh",
   "autoMemoryEnabled": true,
   "skipWorkflowUsageWarning": true,
   "editorMode": "normal",

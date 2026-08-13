@@ -77,6 +77,11 @@ specialization, context isolation, parallelism, or noisy output outweighs the
 full cost of briefing, execution, verification, and possible correction. The
 existence of a skill or agent is never by itself a reason to use it.
 
+Use a matching MAINFRAME specialist for delegated engineering or research. If
+no specialist matches, work directly instead of delegating to the built-in
+general-purpose agent. Do not delegate merely to reproduce the primary model
+without relevant specialist context.
+
 Prefer background execution for delegation so intermediate agent activity does
 not displace the primary-session interaction. MAINFRAME agents declare this in
 their definitions; request background execution when invoking built-in or
