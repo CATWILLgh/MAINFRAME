@@ -539,6 +539,9 @@ def test_curl_skill_preserves_http_and_authority_boundaries():
     assert "400 or greater" in normalized
     assert "do not treat 3xx as failure" in normalized
     assert "does not authorize POST" in normalized
+    assert "Put `--disable` first" in normalized
+    assert "curl --disable -sS" in body
+    assert "it repeats other custom headers there" in normalized
     assert "--location-trusted" in normalized
     assert "Show the command before executing" not in normalized
     assert "Do not add `-X POST`" in normalized

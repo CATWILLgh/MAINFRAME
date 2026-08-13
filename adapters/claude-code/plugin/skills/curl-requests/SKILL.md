@@ -14,6 +14,10 @@ authorize POST, PUT, PATCH, DELETE, deployment, or another side effect.
 
 ## Safe defaults
 
+- Put `--disable` first so an uninspected user-level `.curlrc` cannot silently
+  add redirects, credentials, proxies, output paths, or weaker transport
+  settings. Omit it only when the assigned operation explicitly depends on a
+  known curl config.
 - Use HTTPS unless the target is a verified local plaintext service.
 - Set `--connect-timeout` and `--max-time` from the operation's expected
   latency. A health check should be short; a known upload may need longer.
@@ -31,7 +35,7 @@ authorize POST, PUT, PATCH, DELETE, deployment, or another side effect.
   response headers in output. They are not interchangeable.
 
 ```bash
-curl -sS --fail-with-body \
+curl --disable -sS --fail-with-body \
   --connect-timeout 3 --max-time 15 \
   -H "Accept: application/json" \
   --write-out "\nHTTP_CODE:%{http_code}\n" \
@@ -41,7 +45,7 @@ curl -sS --fail-with-body \
 For JSON, preserve the endpoint's documented schema:
 
 ```bash
-curl -sS --fail-with-body \
+curl --disable -sS --fail-with-body \
   --connect-timeout 3 --max-time 15 \
   -H "Content-Type: application/json" \
   --data '{"name":"example"}' \
@@ -58,7 +62,7 @@ do not assume Bearer authentication.
 Pass a registered value directly to curl, for example:
 
 ```bash
-curl -sS --fail \
+curl --disable -sS --fail \
   -H "x-api-key: $(secret get REGISTERED_NAME)" \
   "https://example.invalid/health"
 ```
@@ -78,12 +82,16 @@ specifies it; never read that backing file.
   HTTP 408, 429, 500, 502, 503, 504, 522, and 524. Bound the total with
   `--retry-max-time`. `--retry-all-errors` is not a default: it can duplicate
   sent or received data.
-- `--location` follows redirects but withholds credentials from a different
-  host. `--location-trusted` permits credentials and other secrets to cross a
-  host, scheme, or port boundary; do not use it unless every redirect target is
-  verified and that credential forwarding is explicitly required.
-- Restrict redirect protocols with `--proto-redir` when an untrusted response
-  can choose the next URL.
+- Do not follow a redirect carrying a custom secret header unless every target
+  origin is trusted. `--location` withholds command-line authentication and the
+  `Authorization` and `Cookie` headers from another origin, but it repeats other
+  custom headers there, including an `x-api-key` header. Prefer inspecting the
+  redirect first and issuing a separate bounded request.
+- `--location-trusted` additionally permits credentials and other secrets to
+  cross a hostname, scheme, or port boundary; use it only when that forwarding
+  is explicitly required and every destination is verified.
+- When redirects are required, bound their count with `--max-redirs` and allow
+  only the required protocols with `--proto-redir`.
 
 ## TLS and files
 
@@ -99,8 +107,11 @@ file when the response must be inspected before it receives its final name.
 ## Sources
 
 - [curl command-line manual](https://curl.se/docs/manpage.html)
+- [`--disable`](https://curl.se/docs/manpage.html#--disable)
 - [`--fail-with-body`](https://curl.se/docs/manpage.html#--fail-with-body)
 - [`--retry`](https://curl.se/docs/manpage.html#--retry)
+- [`--header`](https://curl.se/docs/manpage.html#--header)
+- [`--location`](https://curl.se/docs/manpage.html#--location)
 - [`--location-trusted`](https://curl.se/docs/manpage.html#--location-trusted)
 
 Before relying on a version-sensitive option, check the installed
