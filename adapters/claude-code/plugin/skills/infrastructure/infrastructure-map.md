@@ -10,6 +10,10 @@ environments. It reduces repeated discovery; it never replaces live checks.
 - Each environment records `purpose`, `platform`, `deployment`, `resources`,
   `credentialRefs`, `references`, `approvalRequired`, `lastVerified`, and
   optional `notes`.
+- `approvalRequired` names operations that must be explicitly included in the
+  current task's authority rather than inferred from the map. Existing explicit
+  authority satisfies the entry and is not requested again. An operation's
+  absence from the list does not grant it or override the active task boundary.
 - `credentialRefs` contains environment-variable names, credential-index names,
   or native access aliases only. Never store values, DSNs with passwords,
   private keys, session cookies, or authorization headers.

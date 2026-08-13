@@ -76,8 +76,10 @@ not from a universal vendor-neutral recipe.
 - Do not proceed without the required decision for a new or changed
   infrastructure choice, downtime, destructive operation, irreversible data
   change, permission expansion, or operation outside the already agreed target.
-  A recipient that cannot obtain that decision directly returns it to its
-  immediate caller.
+  For a map entry in `approvalRequired`, confirm that the current task already
+  grants that operation; do not ask again when it does. The map itself never
+  grants authority. A recipient that cannot obtain a missing decision directly
+  returns it to its immediate caller.
 - Prefer reversible and idempotent changes. Establish the rollback mechanism
   before applying a change whose failure can interrupt service or data access.
 - Do not widen credentials or permissions to make a command pass.

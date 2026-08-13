@@ -202,6 +202,15 @@ def test_infrastructure_is_primary_session_skill_not_agent():
     assert example["schemaVersion"] == 1
     assert example["environments"]["production"]["credentialRefs"]
 
+    infrastructure = (
+        PLUGIN / "skills" / "infrastructure" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    infrastructure_map = (
+        PLUGIN / "skills" / "infrastructure" / "infrastructure-map.md"
+    ).read_text(encoding="utf-8")
+    assert "do not ask again when it does" in infrastructure
+    assert "absence from the list does not grant it" in infrastructure_map
+
 
 def test_test_auditor_is_non_implementing_and_ticket_scoped():
     auditor = (AGENTS / "mainframe-test-auditor.md").read_text(encoding="utf-8")
