@@ -180,13 +180,15 @@ graph LR
     subgraph repo["MAINFRAME repo (this)"]
       P[adapters/claude-code/plugin/<br/>skills + hooks]
       A[adapters/claude-code/agents/<br/>specialist profiles]
-      E[adapters/claude-code/export/<br/>CLAUDE.md + settings.json + rules + output styles]
+      E[adapters/claude-code/export/<br/>CLAUDE.md + rules + output styles]
+      M[adapters/claude-code/export/settings.json<br/>policy + initial defaults]
       S[shared/credentials/<br/>helper + template + local index]
     end
 
     P -->|one symlink<br/>~/.claude/skills/mainframe/| home[~/.claude/]
     A -->|one symlink<br/>~/.claude/agents/mainframe/| home
-    E -->|per-item symlinks| home
+    E -->|direct + per-item symlinks| home
+    M -->|safe ownership-aware merge| home
     S -->|shared installer| home
     home -->|Claude auto-loads<br/>as 'mainframe' plugin| any[Any project<br/>on the machine]
 ```
@@ -195,7 +197,7 @@ The hub ships through one adapter plus one shared component:
 
 - **The Claude Code plugin** (`adapters/claude-code/plugin/`) carries skills and hooks. Its manual `init` skill is available as `/mainframe:init` and is not loaded until the user invokes it.
 - **Claude Code agents** (`adapters/claude-code/agents/`) are delivered directly so their full profile fields remain available.
-- **Claude Code exports** (`adapters/claude-code/export/`) carry the umbrella `CLAUDE.md`, `settings.json`, optional path-scoped rules, and output styles.
+- **Claude Code exports** (`adapters/claude-code/export/`) carry the umbrella `CLAUDE.md`, the `settings.json` policy/default template, optional path-scoped rules, and output styles. The template is merged into a regular mutable user settings file; it is not linked.
 - **Shared secrets** (`shared/credentials/`) own the `secret` helper, the tracked initialization template, and the gitignored credentials index used by every adapter.
 
 <p align="center">
@@ -235,13 +237,15 @@ graph LR
     A[git clone] --> B[./install.sh --claude]
     B --> C[adapters/claude-code/plugin/ →<br/>~/.claude/skills/mainframe/]
     B --> I[adapters/claude-code/agents/ →<br/>~/.claude/agents/mainframe/]
-    B --> D[adapters/claude-code/export/CLAUDE.md & settings.json<br/>→ ~/.claude/ symlinks]
+    B --> D[adapters/claude-code/export/CLAUDE.md<br/>→ ~/.claude/CLAUDE.md symlink]
+    B --> K[adapters/claude-code/export/settings.json<br/>→ safe merge into regular user file]
     B --> E[adapters/claude-code/export/rules/* →<br/>~/.claude/rules/ per-item]
     B --> H[shared/credentials/secret →<br/>~/.local/bin/secret]
     B --> J[shared/credentials/credentials-index.md →<br/>~/.claude/credentials-index.md]
     C --> F[Claude auto-loads<br/>'mainframe' plugin]
     I --> G
     D --> G[Umbrella + permissions<br/>active in every session]
+    K --> G
     E --> G
     F --> G
 ```
@@ -250,12 +254,13 @@ What `install.sh` does:
 
 - **One symlink for the shared plugin runtime** — `adapters/claude-code/plugin/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads its namespaced skills and global hooks.
 - **One user-agent directory symlink** — `adapters/claude-code/agents/` becomes `~/.claude/agents/mainframe/`. The profiles keep collision-safe `mainframe-*` identifiers and retain agent-scoped hooks and MCP servers.
-- **Single-file symlinks** for the umbrella `CLAUDE.md` and the permission `settings.json` (the plugin format does not provide an equivalent for these).
+- **One direct symlink** for the umbrella `CLAUDE.md` (the plugin format has no equivalent).
+- **Ownership-aware settings merge** — `export/settings.json` supplies mandatory MAINFRAME policy and initial defaults to the regular mutable `~/.claude/settings.json`. Existing user values and unknown fields survive; `/model`, `/effort`, and `/config` changes are not written back to the repository. A private state file records only what MAINFRAME added or temporarily overrode, so uninstall removes only that ownership. Every changed existing settings file is backed up first.
 - **Per-item symlinks** for `adapters/claude-code/export/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
 - **Shared credentials component** — links `shared/credentials/secret` into `~/.local/bin/`, preserves the values under `~/.config/credentials/`, and seeds the gitignored `shared/credentials/credentials-index.md` from its adjacent template only when missing. The Claude adapter exposes that same file at the stable `~/.claude/credentials-index.md` path; it does not create a second copy.
 - **Claude Code version preflight** — requires v2.1.226+, offers `claude update` in an interactive terminal, fails before changing anything in non-interactive runs, and accepts `--yes` for explicit unattended approval.
 - **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
-- **Backs up** any pre-existing real file before replacing it with a symlink.
+- **Backs up** any pre-existing real file before replacing an immutable artifact or changing user settings.
 - **Idempotent** — re-running is a no-op when state matches.
 
 Options:
@@ -289,7 +294,7 @@ cd ~/Documents/projects/MAINFRAME
 git pull
 ```
 
-That's it. Symlinks point to files in this repo — the next Claude Code session sees the latest. Re-run `./install.sh --claude` **only** when delivery wiring changes.
+That's it. Immutable artifacts remain linked to this repo, while mutable user settings stay local. The next Claude Code session sees the latest linked content. Re-run `./install.sh --claude` when delivery wiring or the settings policy/default template changes.
 
 ```mermaid
 graph LR
@@ -341,6 +346,7 @@ MAINFRAME/
 │
 ├── adapters/claude-code/
 │   ├── install.sh                        # Claude Code-only delivery
+│   ├── settings-manager.py               # safe user-settings merge and uninstall ownership
 │   ├── agents/                           # user-level specialist profiles and scoped hooks
 │   ├── plugin/                           # auto-loads as 'mainframe' after install
 │   │   ├── .claude-plugin/plugin.json    # plugin manifest
@@ -348,7 +354,7 @@ MAINFRAME/
 │   │   └── hooks/                        # registrations, scripts, and rules
 │   └── export/                           # Claude files outside the plugin format
 │       ├── CLAUDE.md                     # umbrella operating rules
-│       ├── settings.json                 # permissions and settings
+│       ├── settings.json                 # policy and initial-default template; never a live symlink
 │       ├── rules/                        # optional path-scoped rules, installed per item
 │       └── output-styles/                # custom reply styles
 │

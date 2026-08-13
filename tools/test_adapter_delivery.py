@@ -7,6 +7,9 @@ Definition of done:
 - Claude artifacts have one adapter-owned tree and no legacy root copies;
 - specialists are delivered as user-level ``mainframe-*`` agents, outside the
   plugin boundary that drops agent-scoped hooks, MCP servers, and permissions;
+- mutable Claude user settings remain a regular local file: MAINFRAME merges
+  owned policy and initial defaults, preserves user changes, and removes only
+  recorded ownership on uninstall;
 - ``/mainframe:init`` is user-only and absent from automatic model context;
 - the old automatic task workflow and its reminder hooks are not shipped;
 - the credentials index has one gitignored repository location, seeded from a
@@ -19,6 +22,7 @@ import pathlib
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -28,6 +32,7 @@ PLUGIN = ADAPTER / "plugin"
 AGENTS = ADAPTER / "agents"
 SHARED_CREDENTIALS = ROOT / "shared" / "credentials"
 ADAPTER_INSTALLER = ADAPTER / "install.sh"
+SETTINGS_MANAGER = ADAPTER / "settings-manager.py"
 MIN_CLAUDE_VERSION = re.search(
     r'^MIN_CLAUDE_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$',
     ADAPTER_INSTALLER.read_text(encoding="utf-8"),
@@ -73,6 +78,24 @@ def _run_installer(*args, home=None, claude_version=None, broken_python=False):
         env=env,
     )
     return proc, home
+
+
+def _run_settings_manager(action, source, target, state, backup, *args):
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SETTINGS_MANAGER),
+            action,
+            "--source", str(source),
+            "--target", str(target),
+            "--state", str(state),
+            "--backup", str(backup),
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
 
 
 def test_root_without_arguments_is_help_only():
@@ -157,6 +180,12 @@ def test_claude_uninstall_preserves_shared_secrets():
     assert index_link.resolve() == SHARED_CREDENTIALS / "credentials-index.md"
     assert (home / ".claude" / "skills" / "mainframe").is_symlink()
     assert (home / ".claude" / "agents" / "mainframe").is_symlink()
+    settings = home / ".claude" / "settings.json"
+    settings_state = home / ".claude" / ".mainframe-settings-state.json"
+    assert settings.is_file() and not settings.is_symlink()
+    assert settings_state.is_file()
+    assert stat.S_IMODE(settings.stat().st_mode) == 0o600
+    assert stat.S_IMODE(settings_state.stat().st_mode) == 0o600
 
     removed, _ = _run_installer("--claude", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
@@ -165,6 +194,8 @@ def test_claude_uninstall_preserves_shared_secrets():
     assert not index_link.exists() and not index_link.is_symlink()
     assert not (home / ".claude" / "skills" / "mainframe").exists()
     assert not (home / ".claude" / "agents" / "mainframe").exists()
+    assert not settings.exists()
+    assert not settings_state.exists()
 
 
 def test_clean_uninstall_creates_nothing_and_needs_no_python():
@@ -175,17 +206,185 @@ def test_clean_uninstall_creates_nothing_and_needs_no_python():
     assert not (home / ".local" / "bin" / "secret").exists()
 
 
-def test_uninstall_removes_owned_absolute_links_without_python():
+def test_installed_uninstall_fails_closed_without_python():
     installed, home = _run_installer("--claude")
     assert installed.returncode == 0, installed.stderr
 
     removed, _ = _run_installer(
         "--claude", "--uninstall", home=home, broken_python=True
     )
+    assert removed.returncode != 0
+    assert "working python3 is required" in removed.stderr
+    assert (home / ".claude" / "CLAUDE.md").is_symlink()
+    assert (home / ".claude" / "skills" / "mainframe").is_symlink()
+    assert (home / ".claude" / "agents" / "mainframe").is_symlink()
+
+
+def test_settings_migrate_legacy_link_to_regular_user_file():
+    home = pathlib.Path(tempfile.mkdtemp())
+    claude_dir = home / ".claude"
+    claude_dir.mkdir()
+    settings = claude_dir / "settings.json"
+    settings.symlink_to(ADAPTER / "export" / "settings.json")
+
+    installed, _ = _run_installer("--claude", home=home)
+    assert installed.returncode == 0, installed.stderr
+    assert settings.is_file() and not settings.is_symlink()
+    assert json.loads(settings.read_text(encoding="utf-8"))["model"] == "fable"
+    assert list(claude_dir.glob("settings.json.backup-*"))
+
+
+def test_settings_preserve_user_values_and_restore_managed_values():
+    home = pathlib.Path(tempfile.mkdtemp())
+    claude_dir = home / ".claude"
+    claude_dir.mkdir()
+    settings = claude_dir / "settings.json"
+    settings.write_text(
+        json.dumps({
+            "model": "haiku",
+            "custom": {"kept": True},
+            "permissions": {
+                "allow": ["Bash(git add *)", "Bash(custom *)"],
+            },
+            "enabledPlugins": {
+                "context7@claude-plugins-official": False,
+            },
+        }),
+        encoding="utf-8",
+    )
+    settings.chmod(0o640)
+
+    installed, _ = _run_installer("--claude", home=home)
+    assert installed.returncode == 0, installed.stderr
+    merged = json.loads(settings.read_text(encoding="utf-8"))
+    assert merged["model"] == "haiku"
+    assert merged["custom"] == {"kept": True}
+    assert merged["enabledPlugins"]["context7@claude-plugins-official"] is True
+    assert merged["permissions"]["allow"].count("Bash(git add *)") == 1
+    assert "Bash(custom *)" in merged["permissions"]["allow"]
+    assert stat.S_IMODE(settings.stat().st_mode) == 0o640
+
+    removed, _ = _run_installer("--claude", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
-    assert not (home / ".claude" / "CLAUDE.md").exists()
-    assert not (home / ".claude" / "skills" / "mainframe").exists()
-    assert not (home / ".claude" / "agents" / "mainframe").exists()
+    restored = json.loads(settings.read_text(encoding="utf-8"))
+    assert restored["model"] == "haiku"
+    assert restored["custom"] == {"kept": True}
+    assert restored["enabledPlugins"]["context7@claude-plugins-official"] is False
+    assert restored["permissions"] == {
+        "allow": ["Bash(git add *)", "Bash(custom *)"]
+    }
+
+
+def test_settings_release_a_user_changed_default_on_reinstall():
+    installed, home = _run_installer("--claude")
+    assert installed.returncode == 0, installed.stderr
+    settings = home / ".claude" / "settings.json"
+    value = json.loads(settings.read_text(encoding="utf-8"))
+    value["model"] = "haiku"
+    settings.write_text(json.dumps(value), encoding="utf-8")
+
+    reinstalled, _ = _run_installer("--claude", home=home)
+    assert reinstalled.returncode == 0, reinstalled.stderr
+    assert json.loads(settings.read_text(encoding="utf-8"))["model"] == "haiku"
+
+    removed, _ = _run_installer("--claude", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert json.loads(settings.read_text(encoding="utf-8")) == {"model": "haiku"}
+
+
+def test_settings_reconcile_removed_owned_template_values():
+    work = pathlib.Path(tempfile.mkdtemp())
+    source = work / "source.json"
+    target = work / "settings.json"
+    state = work / "state.json"
+    source.write_text(json.dumps({
+        "model": "fable",
+        "permissions": {
+            "allow": ["Bash(old *)"], "ask": [], "deny": [],
+            "defaultMode": "auto",
+        },
+        "enabledPlugins": {"context7@claude-plugins-official": True},
+    }), encoding="utf-8")
+    target.write_text('{"custom":true}\n', encoding="utf-8")
+    first = _run_settings_manager(
+        "install", source, target, state, work / "first.backup"
+    )
+    assert first.returncode == 0, first.stderr
+
+    source.write_text(json.dumps({
+        "permissions": {
+            "allow": ["Bash(new *)"], "ask": [], "deny": [],
+            "defaultMode": "auto",
+        },
+        "enabledPlugins": {"context7@claude-plugins-official": True},
+    }), encoding="utf-8")
+    second = _run_settings_manager(
+        "install", source, target, state, work / "second.backup"
+    )
+    assert second.returncode == 0, second.stderr
+    merged = json.loads(target.read_text(encoding="utf-8"))
+    assert merged["permissions"]["allow"] == ["Bash(new *)"]
+    assert "model" not in merged
+
+
+def test_invalid_user_settings_stop_before_shared_delivery():
+    home = pathlib.Path(tempfile.mkdtemp())
+    claude_dir = home / ".claude"
+    claude_dir.mkdir()
+    (claude_dir / "settings.json").write_text("not json\n", encoding="utf-8")
+
+    proc, _ = _run_installer("--claude", home=home)
+    assert proc.returncode != 0
+    assert "cannot read valid JSON" in proc.stderr
+    assert not (home / ".local" / "bin" / "secret").exists()
+
+
+def test_incompatible_user_settings_stop_during_preflight():
+    home = pathlib.Path(tempfile.mkdtemp())
+    claude_dir = home / ".claude"
+    claude_dir.mkdir()
+    settings = claude_dir / "settings.json"
+    settings.write_text('{"permissions":"invalid"}\n', encoding="utf-8")
+
+    proc, _ = _run_installer("--claude", home=home)
+    assert proc.returncode != 0
+    assert "permissions must be an object" in proc.stderr
+    assert settings.read_text(encoding="utf-8") == '{"permissions":"invalid"}\n'
+    assert not (home / ".local" / "bin" / "secret").exists()
+
+
+def test_unrelated_settings_and_state_symlinks_are_rejected():
+    for name in ("settings.json", ".mainframe-settings-state.json"):
+        home = pathlib.Path(tempfile.mkdtemp())
+        claude_dir = home / ".claude"
+        claude_dir.mkdir()
+        unrelated = home / "unrelated.json"
+        unrelated.write_text("{}\n", encoding="utf-8")
+        (claude_dir / name).symlink_to(unrelated)
+
+        proc, _ = _run_installer("--claude", home=home)
+        assert proc.returncode != 0
+        assert "refusing" in proc.stderr
+        assert (claude_dir / name).is_symlink()
+        assert not (home / ".local" / "bin" / "secret").exists()
+
+
+def test_missing_user_settings_does_not_leave_stale_ownership():
+    installed, home = _run_installer("--claude")
+    assert installed.returncode == 0, installed.stderr
+    settings = home / ".claude" / "settings.json"
+    state = home / ".claude" / ".mainframe-settings-state.json"
+    settings.unlink()
+
+    removed, _ = _run_installer("--claude", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert not settings.exists()
+    assert not state.exists()
+
+    reinstalled, _ = _run_installer("--claude", home=home)
+    assert reinstalled.returncode == 0, reinstalled.stderr
+    assert settings.is_file()
+    assert json.loads(settings.read_text(encoding="utf-8"))["model"] == "fable"
 
 
 def test_adapter_owns_claude_artifacts():

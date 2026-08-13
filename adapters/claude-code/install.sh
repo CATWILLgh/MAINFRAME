@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
 # MAINFRAME Claude Code adapter installer.
-# Safe by default: backs up any existing target before linking.
+# Safe by default: backs up mutable settings before merging and existing
+# immutable targets before linking.
 #
-# Linked:
+# Delivered:
 #   - plugin:       plugin/  →  ~/.claude/skills/mainframe/
 #                   Claude Code auto-loads it as the 'mainframe' plugin via
 #                   the skills-dir mechanism. Skills, commands, and hooks
@@ -12,8 +13,8 @@
 #                   User-level agents retain agent-scoped hooks and MCP
 #                   servers, which Claude Code ignores for plugin agents.
 #   - umbrella:     export/CLAUDE.md  →  ~/.claude/CLAUDE.md
-#                   export/settings.json  →  ~/.claude/settings.json
-#                   (Plugin format does not provide an equivalent for these.)
+#                   export/settings.json is safely merged into the mutable
+#                   ~/.claude/settings.json with local ownership state.
 #   - credentials:  shared/credentials/credentials-index.md
 #                   → ~/.claude/credentials-index.md
 #                   Stable adapter-facing link; the repository file remains
@@ -25,10 +26,10 @@
 # Migration cleanup removes stale per-item symlinks left by older layouts.
 #
 # Usage:
-#   ./install.sh              # install (with backup of existing files)
+#   ./install.sh              # install (with safe merge and backups)
 #   ./install.sh --dry-run    # show what would happen, no changes
 #   ./install.sh --yes        # approve a required Claude Code update
-#   ./install.sh --uninstall  # remove symlinks managed by this hub
+#   ./install.sh --uninstall  # remove owned settings and symlinks
 #   ./install.sh --help
 #
 # Idempotent: re-running with the same state does nothing.
@@ -75,16 +76,19 @@ Specialist profiles are installed separately at ~/.claude/agents/mainframe/ as
 user-level agents named mainframe-*. This preserves agent-scoped hooks and MCP
 servers, which Claude Code intentionally ignores on plugin-shipped agents.
 
-Single-file artifacts that the plugin format does not support stay as direct
-symlinks: CLAUDE.md (umbrella instructions) and settings.json (permissions
-and user-level config). Path-scoped rules in export/rules/ install per-item.
+The umbrella CLAUDE.md stays a direct symlink because Claude Code does not edit
+it. User settings are different: Claude Code writes /model, /effort, and
+/config choices to ~/.claude/settings.json, so MAINFRAME merges its policy and
+initial defaults into a regular local file instead of linking repository source.
+Path-scoped rules in export/rules/ install per-item.
 
 The first install after upgrading from the pre-plugin layout also cleans up
 stale per-item symlinks in ~/.claude/{skills,agents,hooks}/ left over from
 the old layout, and removes the empty directories if any.
 
 Usage:
-  $0                  Install (creates symlinks; backs up existing files).
+  $0                  Install (links immutable artifacts, safely merges user
+                      settings, and backs up changed existing files).
   $0 --dev            Install PLUS the hub-development instrumentation:
                       the 'harness-feedback' skill and the hub data
                       namespace ~/.claude/mainframe -> workspace/runtime/
@@ -95,14 +99,14 @@ Usage:
                       Ordinary users do not need this.
   $0 --dry-run        Show what would happen, no changes.
   $0 --yes            Approve a required Claude Code update without prompting.
-  $0 --uninstall      Remove symlinks created by this script (incl. --dev
-                      ones; telemetry/feedback data is left in place).
+  $0 --uninstall      Remove MAINFRAME-owned settings and symlinks (incl.
+                      --dev ones; telemetry/feedback data is left in place).
   $0 --help           Show this message.
 
-Idempotent: re-running is safe — already-correct symlinks are left alone.
+Idempotent: re-running is safe — correct links and merged settings stay intact.
 
 Backups (if any) live at:
-  ~/.claude/<file>.backup-YYYYMMDD-HHMMSS
+  ~/.claude/<file>.backup-YYYYMMDD-HHMMSS-PID
 
 EOF
 }
@@ -125,7 +129,7 @@ done
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ADAPTER_ROOT="${PROJECT_ROOT}/adapters/claude-code"
 CLAUDE_DIR="$HOME/.claude"
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)-$$"
 MIN_CLAUDE_VERSION="2.1.226"
 
 # Single-file (and single-dir) artifacts. Format: "<source-relative-to-project>:<target-absolute>"
@@ -136,19 +140,22 @@ MIN_CLAUDE_VERSION="2.1.226"
 #   - agents/ is symlinked under ~/.claude/agents/mainframe/ so Claude Code loads
 #     the profiles at user scope and honors agent-scoped fields unavailable to
 #     plugin agents.
-#   - CLAUDE.md and settings.json stay as direct symlinks because the plugin format
-#     does not provide an equivalent for the umbrella instructions or user-level
-#     permission rules.
+#   - CLAUDE.md stays a direct symlink. settings.json is handled separately by
+#     settings-manager.py because Claude Code mutates user preferences in place.
 #   - the repository-owned, gitignored credentials index is exposed through a
 #     stable Claude-facing path so moving the checkout does not break skills or
 #     permissions. The index itself remains in shared/credentials/.
 ARTIFACTS=(
     "adapters/claude-code/export/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md"
-    "adapters/claude-code/export/settings.json:${CLAUDE_DIR}/settings.json"
     "shared/credentials/credentials-index.md:${CLAUDE_DIR}/credentials-index.md"
     "adapters/claude-code/plugin:${CLAUDE_DIR}/skills/mainframe"
     "adapters/claude-code/agents:${CLAUDE_DIR}/agents/mainframe"
 )
+
+SETTINGS_SOURCE="${ADAPTER_ROOT}/export/settings.json"
+SETTINGS_TARGET="${CLAUDE_DIR}/settings.json"
+SETTINGS_STATE="${CLAUDE_DIR}/.mainframe-settings-state.json"
+SETTINGS_MANAGER="${ADAPTER_ROOT}/settings-manager.py"
 
 # Hub-development instrumentation, installed ONLY with --dev (see usage).
 # ~/.claude/mainframe is the hub-OWNED data namespace. The telemetry hook's
@@ -285,6 +292,41 @@ check_python() {
     log_error "A working python3 is required by MAINFRAME hooks but was not found on PATH."
     log_error "Install Python 3 and retry; no Claude adapter files were changed."
     return 1
+}
+
+check_settings_inputs() {
+    python3 "$SETTINGS_MANAGER" check \
+        --source "$SETTINGS_SOURCE" \
+        --target "$SETTINGS_TARGET" \
+        --state "$SETTINGS_STATE"
+}
+
+install_settings() {
+    local args=(
+        install
+        --source "$SETTINGS_SOURCE"
+        --target "$SETTINGS_TARGET"
+        --state "$SETTINGS_STATE"
+        --backup "${SETTINGS_TARGET}.backup-${TIMESTAMP}"
+    )
+    if [[ $DRY_RUN -eq 1 ]]; then
+        args+=(--dry-run)
+    fi
+    python3 "$SETTINGS_MANAGER" "${args[@]}"
+}
+
+uninstall_settings() {
+    local args=(
+        uninstall
+        --source "$SETTINGS_SOURCE"
+        --target "$SETTINGS_TARGET"
+        --state "$SETTINGS_STATE"
+        --backup "${SETTINGS_TARGET}.backup-${TIMESTAMP}"
+    )
+    if [[ $DRY_RUN -eq 1 ]]; then
+        args+=(--dry-run)
+    fi
+    python3 "$SETTINGS_MANAGER" "${args[@]}"
 }
 
 # Resolve the absolute path that a symlink points to, or empty string if not a symlink.
@@ -699,6 +741,7 @@ main() {
     if [[ $UNINSTALL -eq 0 ]]; then
         check_claude_version
         check_python
+        check_settings_inputs
     fi
     if [[ $PREFLIGHT_ONLY -eq 1 ]]; then
         return 0
@@ -708,6 +751,11 @@ main() {
         if [[ ! -d "${CLAUDE_DIR}" ]]; then
             log_ok "Nothing to uninstall: ${CLAUDE_DIR} does not exist."
             return 0
+        fi
+        if [[ -e "$SETTINGS_STATE" || -L "$SETTINGS_TARGET" ]]; then
+            check_python
+            check_settings_inputs
+            uninstall_settings
         fi
         log_info "Uninstalling MAINFRAME hub symlinks from ${CLAUDE_DIR}..."
         for entry in "${ARTIFACTS[@]}"; do
@@ -754,6 +802,8 @@ main() {
         local tgt="${entry##*:}"
         install_one "$src" "$tgt"
     done
+
+    install_settings
     if [[ $DEV -eq 1 ]]; then
         if [[ $DRY_RUN -eq 1 ]]; then
             log_action "would create workspace/runtime/claude-code/{telemetry,feedback,model-lab} (hub data, gitignored)"
