@@ -219,6 +219,30 @@ def test_infrastructure_is_primary_session_skill_not_agent():
     assert "every material fact" in infrastructure_map
 
 
+def test_dokploy_branch_is_version_aware_and_secret_safe():
+    skill_dir = PLUGIN / "skills" / "dokploy-api"
+    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    all_markdown = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted(skill_dir.glob("*.md"))
+    )
+
+    assert "disable-model-invocation: true" in skill
+    assert "target instance" in skill
+    assert "authority already supplied" in all_markdown
+    assert "docs.dokploy.com/docs/api" in skill
+    assert "43 total" not in all_markdown
+    assert "529" not in all_markdown
+    assert "850 KB" not in all_markdown
+    assert "manualBackupLibsql" not in all_markdown
+    assert "H=(" not in all_markdown
+    assert '${H[@]}' not in all_markdown
+    assert "curl -sS" not in all_markdown
+    assert "unsupported for remote servers" in all_markdown
+    assert "not supported for Compose deployments" in all_markdown
+    assert "secret get REGISTERED_DB_PASSWORD | jq" in all_markdown
+    assert "secret get REGISTERED_STORAGE_SECRET | jq" in all_markdown
+
+
 def test_test_auditor_is_non_implementing_and_ticket_scoped():
     auditor = (AGENTS / "mainframe-test-auditor.md").read_text(encoding="utf-8")
     assert "tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch," in auditor

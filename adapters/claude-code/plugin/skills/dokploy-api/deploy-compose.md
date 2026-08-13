@@ -1,17 +1,16 @@
 # Deploy a Docker Compose stack
 
-A Compose stack is one Dokploy resource (`compose`) wrapping a multi-service `docker-compose.yml`. Like applications it lives under an environment and deploys asynchronously. Prereqs: `$DOKPLOY_URL`, `$DOKPLOY_API_KEY`, and the hierarchy in [SKILL.md](SKILL.md#resource-hierarchy).
-
-```bash
-H=(-H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json")
-```
+A Compose stack is one Dokploy resource (`compose`) wrapping a multi-service
+Compose file. It lives under an environment and deploys asynchronously. Use the
+resolved URL and credential access from [SKILL.md](SKILL.md), and verify each
+mutation's schema against the target instance first.
 
 ## 1. Create the compose resource
 
 `composeType` is `docker-compose` (single host) or `stack` (Docker Swarm). You can pass the YAML inline as `composeFile`, or leave it empty and attach a Git source in step 2.
 
 ```bash
-curl -sS --fail-with-body "${H[@]}" -d '{
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d '{
   "name":"analytics","environmentId":"<environmentId>","composeType":"docker-compose",
   "composeFile":"services:\n  web:\n    image: nginx:1.27\n    ports:\n      - 8080:80"}' \
   "$DOKPLOY_URL/api/compose.create"   # -> capture composeId
@@ -26,16 +25,20 @@ curl -sS --fail-with-body "${H[@]}" -d '{
 
 ```bash
 # stack-level env (interpolated into ${VARS} in the compose file)
-curl -sS --fail-with-body "${H[@]}" -d '{"composeId":"<id>","env":"POSTGRES_PASSWORD=secret"}' \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d '{"composeId":"<id>","env":"NODE_ENV=production"}' \
   "$DOKPLOY_URL/api/compose.saveEnvironment"
 # deploy (async, returns {})
-curl -sS --fail-with-body "${H[@]}" -d '{"composeId":"<id>"}' "$DOKPLOY_URL/api/compose.deploy"
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d '{"composeId":"<id>"}' "$DOKPLOY_URL/api/compose.deploy"
 # logs — compose.readLogs needs the target container too (a stack has several)
 # list services/containers first: GET /api/compose.loadServices?composeId=<id>
-curl -sS --fail-with-body -G -H "x-api-key: $DOKPLOY_API_KEY" \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -G -H "x-api-key: $DOKPLOY_API_KEY" \
   --data-urlencode "composeId=<id>" --data-urlencode "containerId=<containerId>" \
   "$DOKPLOY_URL/api/compose.readLogs"
 ```
+
+The example uses only non-secret environment data. For a real secret, follow
+[`secrets-handling`](../secrets-handling/SKILL.md) and build the request through
+a pipe so the value is neither printed nor inserted into a command argument.
 
 ## Internal networking
 

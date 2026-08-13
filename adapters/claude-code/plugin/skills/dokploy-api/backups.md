@@ -10,29 +10,37 @@ Three distinct mechanisms — do not confuse them:
 
 Database/volume backups are written to a **destination** (remote storage, S3-compatible), so configure that first.
 
-```bash
-H=(-H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json")
-```
+Verify the destination and backup endpoint schemas against the target instance;
+storage providers and required fields vary by version.
 
 ## 1. Destination (one-time)
 
 ```bash
-curl -sS --fail-with-body "${H[@]}" -d '{
-  "name":"s3","provider":"s3","bucket":"backups","endpoint":"<url>","region":"auto",
-  "accessKey":"<id>","secretAccessKey":"<secret>","additionalFlags":[]}' \
-  "$DOKPLOY_URL/api/destination.create"
+secret get REGISTERED_STORAGE_SECRET | jq -Rs --arg accessKey "<id>" '{
+  name:"s3", provider:"s3", bucket:"backups", endpoint:"<url>", region:"auto",
+  accessKey:$accessKey, secretAccessKey:rtrimstr("\n"), additionalFlags:[]
+}' | curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 \
+  -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
+  --data-binary @- "$DOKPLOY_URL/api/destination.create"
 ```
 
-Never inline the secret access key in a command shown to the user — substitute from env (see [`secrets-handling`](../secrets-handling/SKILL.md)).
+Never inline the secret access key in a command shown to the user. Use the
+registered helper-to-stdin flow defined by
+[`secrets-handling`](../secrets-handling/SKILL.md).
 
 ## 2. Database backups
 
 - **Scheduled:** `backup.create` — required `database`, `databaseType` (`postgres`/`mysql`/`mariadb`/`mongo`/`libsql`/`web-server`), `destinationId`, `schedule` (cron), `prefix`; manage with `backup.update`, `backup.one`, `backup.remove`.
-- **Run now:** `backup.manualBackupPostgres` (and `...MySql` / `...Mongo` / `...Mariadb` / `...Libsql` / `...Compose` / `...WebServer`).
+- **Run now:** the current official reference exposes
+  `backup.manualBackupPostgres` and variants for MySQL, MongoDB, MariaDB,
+  Compose, and web-server backups. Inspect the target instance before assuming
+  another engine-specific action exists.
 - **List stored files:** `backup.listBackupFiles`.
 
 ```bash
-curl -sS --fail-with-body "${H[@]}" -d '{"backupId":"<id>"}' \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 \
+  -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
+  -d '{"backupId":"<id>"}' \
   "$DOKPLOY_URL/api/backup.manualBackupPostgres"
 ```
 
@@ -46,6 +54,9 @@ curl -sS --fail-with-body "${H[@]}" -d '{"backupId":"<id>"}' \
 
 ## Discipline
 
-- **Back up before destructive DB ops.** `postgres.remove` etc. destroy the volume with no undo ([safety.md](safety.md)).
-- `backup.remove` / `volumeBackups.delete` delete backup *configs/files* — verify you are not deleting the only copy.
+- **Back up before destructive DB ops.** Verify that the backup can actually be
+  restored before removing managed data ([safety.md](safety.md)).
+- Before `backup.remove` or `volumeBackups.delete`, inspect the current endpoint
+  semantics and stored copies; never assume a name reveals whether it removes a
+  schedule, metadata, stored data, or more than one of those.
 - `schedule.*` manages generic scheduled jobs (e.g. cron tasks); list before editing.

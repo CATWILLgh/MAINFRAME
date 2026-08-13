@@ -1,6 +1,10 @@
 # Destructive-operation safety
 
-The Dokploy API has **no dry-run and no undo** for resource deletion. `*.remove` / `*.delete` take effect immediately and irreversibly. Default to read-only; treat every call below as requiring explicit authorization before firing — especially in autonomous runs. (The official MCP server's issue #46 — *"my agent deleted my entire Dokploy app"* — is exactly this failure mode; discipline here is the mitigation.)
+Do not assume that a Dokploy resource deletion has dry-run or undo. Treat
+`*.remove` and `*.delete` as irreversible unless the target instance's current
+contract proves otherwise. Each call needs explicit authority for the exact
+resource; authority already supplied by the active task is sufficient and must
+not be requested again. The checks below prevent accidental widening.
 
 **Always safe (reads):** `*.one`, `*.all`, `*.readLogs`, `*.getServerMetrics`, `deployment.all`. Use these freely, and use `*.one` to confirm an ID resolves to the intended target **before** any destructive call.
 
@@ -16,11 +20,15 @@ The Dokploy API has **no dry-run and no undo** for resource deletion. `*.remove`
 - `settings.reloadTraefik`, `settings.reloadServer`, `settings.reloadRedis` — restart shared infra; brief outage for everything behind it.
 - `settings.cleanAllDeploymentQueue` — clears queued deployments across the instance.
 
-**3 — Data loss (irreversible, cascades):**
-- `project.remove` — **highest blast radius**: cascades to every environment, application, compose and database under it.
-- `environment.remove` — cascades to all resources in that environment.
+**3 — Potential data loss or parent-resource cascade:**
+- `project.remove` — **highest blast radius**: may remove or orphan every
+  environment and resource below it; enumerate and verify the target version's
+  behavior first.
+- `environment.remove` — may affect every resource in that environment.
 - `application.delete`, `compose.delete`.
-- `postgres.remove` / `mysql.remove` / `mongo.remove` / `mariadb.remove` / `redis.remove` / `libsql.remove` — destroys the database and its volume.
+- `postgres.remove` / `mysql.remove` / `mongo.remove` / `mariadb.remove` /
+  `redis.remove` / `libsql.remove` — can remove managed data; verify storage and
+  backup consequences from the target schema and current product behavior.
 - `backup.remove`, `volumeBackups.delete`, `mounts.remove`, `destination.remove`, `registry.remove`, `certificates.remove`.
 
 **4 — Running-service disruption (recoverable, but causes downtime / lost build state):**
@@ -31,7 +39,12 @@ The Dokploy API has **no dry-run and no undo** for resource deletion. `*.remove`
 ## Discipline
 
 1. **Read before write.** Resolve and inspect the target with `*.one` first; verify the `name`/IDs match intent.
-2. **No speculative destruction.** In autonomous/auto-mode, do not fire class 1–3 calls without prior explicit authorization for that specific resource.
-3. **Mind the cascade.** `project.remove` and `environment.remove` delete children silently — enumerate what is under them (`*.all` filtered by the id) before removing.
+2. **No speculative destruction.** Do not fire class 1–3 calls without explicit
+   authority for that exact resource. A child operation does not authorize its
+   parent, sibling resources, or an instance-wide action.
+3. **Mind the cascade.** Before `project.remove` or `environment.remove`,
+   enumerate the children and verify the installed version's cascade behavior.
 4. **`rebuild` ≠ `redeploy`.** `rebuild` discards build cache and can interrupt a running container; prefer `deploy`/`redeploy` for a routine update (see [deploy-application.md](deploy-application.md)).
-5. **Deletion has no rollback.** `rollback.*` exists for *deployments*, not for deleted resources or databases. Back up first — see [backups.md](backups.md).
+5. **Do not treat deployment rollback as data recovery.** `rollback.*` concerns
+   deployments, not deleted resources or database contents. Establish the
+   separate recovery path first — see [backups.md](backups.md).

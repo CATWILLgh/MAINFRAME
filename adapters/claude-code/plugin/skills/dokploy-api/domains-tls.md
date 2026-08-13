@@ -1,10 +1,8 @@
 # Domains, TLS, redirects, ports
 
 Dokploy routes public traffic through Traefik. A domain attaches to an application or a Compose service and can auto-issue a Let's Encrypt certificate.
-
-```bash
-H=(-H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json")
-```
+Verify `domain.create` against the target instance before mutation; certificate
+and routing fields vary across installed versions.
 
 ## Attach a domain
 
@@ -12,11 +10,11 @@ H=(-H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json")
 
 ```bash
 # application
-curl -sS --fail-with-body "${H[@]}" -d '{
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d '{
   "host":"app.example.com","applicationId":"<id>","port":3000,
   "https":true,"certificateType":"letsencrypt"}' "$DOKPLOY_URL/api/domain.create"
 # compose service: target a service inside the stack
-curl -sS --fail-with-body "${H[@]}" -d '{
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" -d '{
   "host":"app.example.com","composeId":"<id>","serviceName":"web","port":80,
   "https":true,"certificateType":"letsencrypt"}' "$DOKPLOY_URL/api/domain.create"
 ```

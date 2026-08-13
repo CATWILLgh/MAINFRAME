@@ -11,18 +11,26 @@ Dokploy manages six database engines, each with the same lifecycle and endpoint 
 | Redis | `redis.*` |
 | LibSQL | `libsql.*` |
 
-A database lives under an environment (like an app). Prereqs: `$DOKPLOY_URL`, `$DOKPLOY_API_KEY`, an `environmentId` ([SKILL.md](SKILL.md#resource-hierarchy)).
+A database lives under an environment. Use the resolved URL and credential
+access from [SKILL.md](SKILL.md), resolve the `environmentId`, and verify the
+chosen engine's create schema against the target instance.
 
 ## 1. Create & deploy
 
 ```bash
-H=(-H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json")
 # Postgres: name/databaseName/databaseUser/databasePassword/environmentId required; dockerImage defaults to postgres:18
-curl -sS --fail-with-body "${H[@]}" -d '{
-  "name":"acme-db","databaseName":"acme","databaseUser":"acme","databasePassword":"<strong>",
-  "environmentId":"<environmentId>"}' "$DOKPLOY_URL/api/postgres.create"   # -> capture postgresId
+# Feed the registered password directly into jq and then curl; it never enters
+# model output or a command argument.
+secret get REGISTERED_DB_PASSWORD | jq -Rs --arg environmentId "<environmentId>" '{
+  name:"acme-db", databaseName:"acme", databaseUser:"acme",
+  databasePassword:rtrimstr("\n"), environmentId:$environmentId
+}' | curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 \
+  -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
+  --data-binary @- "$DOKPLOY_URL/api/postgres.create"
 # provision the container (async)
-curl -sS --fail-with-body "${H[@]}" -d '{"postgresId":"<id>"}' "$DOKPLOY_URL/api/postgres.deploy"
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 \
+  -H "x-api-key: $DOKPLOY_API_KEY" -H "Content-Type: application/json" \
+  -d '{"postgresId":"<id>"}' "$DOKPLOY_URL/api/postgres.deploy"
 ```
 
 Required credential fields differ per engine (Redis has no `databaseName`/`databaseUser`, etc.) — pull the exact schema with the live-spec `jq` technique before calling.
@@ -41,4 +49,6 @@ Expose a database publicly only when required (an external port) — prefer inte
 - **Logs:** `GET /api/postgres.readLogs?postgresId=<id>`.
 - **Lifecycle:** `postgres.reload`, `postgres.rebuild`, `postgres.stop` — disrupt the running DB; see [safety.md](safety.md).
 - **Backups:** schedule and run via [backups.md](backups.md) before any destructive change.
-- **`postgres.remove` destroys the database and its volume — irreversible.** Back up first.
+- Treat `postgres.remove` and the equivalent engine operations as potential
+  data loss. Verify the target version's deletion semantics and establish a
+  tested recovery path before an authorized removal.

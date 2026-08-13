@@ -12,18 +12,27 @@ This is the hidden Dokploy branch of `mainframe:infrastructure`. The primary
 session reads it through that skill when the project map or verified recon
 identifies Dokploy.
 
-Dokploy is a self-hostable PaaS (Docker + Traefik) — a Heroku/Vercel/Netlify alternative. This skill drives a running instance through its HTTP API.
+Dokploy is a self-hostable PaaS built on Docker and Traefik. This skill drives a
+resolved running instance through its HTTP API.
 
-**Config is never hardcoded.** The base URL and API key belong to the target project/environment, not to this skill. Read them from project config or the environment (`DOKPLOY_URL`, `DOKPLOY_API_KEY`); see [`secrets-handling`](../secrets-handling/SKILL.md). Never inline the key into a command shown to the user or into logs.
+**Config is never hardcoded.** Resolve the non-secret base URL from the project
+infrastructure map or verified project configuration. Resolve the API-key name
+and its approved access pattern only through
+[`secrets-handling`](../secrets-handling/SKILL.md) and the credentials index.
+An already-exported `DOKPLOY_API_KEY` is valid only when that index names it.
+Never read arbitrary config in search of a key or expose the value in output.
 
 ## Authentication & base URL
 
 - **Base URL:** `<DOKPLOY_URL>/api` — every endpoint lives under the `/api` prefix.
 - **Auth header:** `x-api-key: <key>`.
 
-> Spec caveat: every endpoint's `security` requirement is labelled `Authorization`, but the only scheme actually defined in the OpenAPI (`components.securitySchemes`) is an API key in the `x-api-key` header. The label is a known `trpc-to-openapi` generator artifact — send `x-api-key`, not an `Authorization` header. A missing/invalid key returns `401` with body `{"message":"Authorization not provided", ...}`.
+The current official API reference defines API-key authentication in the
+`x-api-key` header. Do not substitute an `Authorization` header merely because
+an UI label says “Authorization”.
 
-Generate the key in the Dokploy dashboard (user/profile → API keys); it maps to `user.*` API-key endpoints. Store it in the project's secret source, load via env.
+Creating, rotating, or deleting an API key is credential-store administration
+and requires explicit authority outside this operational branch.
 
 ## Call convention (tRPC-over-OpenAPI)
 
@@ -32,17 +41,20 @@ The API is tRPC exposed as OpenAPI. Paths are RPC-style `/<resource>.<action>`, 
 - **GET = query.** Parameters are **flat query params** (e.g. `?applicationId=abc`), not a JSON `?input=` wrapper. Read actions: `*.one`, `*.all`, `*.readLogs`, `*.getServerMetrics`.
 - **POST = mutation.** Body is **bare JSON** matching the endpoint's `requestBody` schema. Write actions: `*.create`, `*.update`, `*.save*`, `*.deploy`, `*.remove`.
 - **Responses are bare JSON** per each endpoint's own schema — there is no `{result:{data:{json}}}` wrapper (that envelope only appears at the raw tRPC layer, not on these OpenAPI endpoints).
-- **Errors:** HTTP `400` `BAD_REQUEST`, `401` `UNAUTHORIZED`, `403` `FORBIDDEN`, `404` `NOT_FOUND`, `500` `INTERNAL_SERVER_ERROR`, each with body `{"message": string, "code": string, "issues"?: [{"message": string}]}`. Always gate on the status code with `--fail-with-body` so failures surface (see [`curl-requests`](../curl-requests/SKILL.md)).
+- **Errors:** gate on the HTTP status with `--fail-with-body`; common current
+  responses use `400`, `401`, `403`, `404`, and `500` with `code`, `message`,
+  and sometimes `issues`. Verify the exact endpoint contract instead of
+  assuming every action exposes every status.
 
 ```bash
 # GET (query): read one application
-curl -sS --fail-with-body -G \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -G \
   -H "x-api-key: $DOKPLOY_API_KEY" \
   --data-urlencode "applicationId=$APP_ID" \
   "$DOKPLOY_URL/api/application.one"
 
 # POST (mutation): create a project
-curl -sS --fail-with-body -X POST \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 \
   -H "x-api-key: $DOKPLOY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"name":"my-project"}' \
@@ -61,19 +73,21 @@ Project            (required: name)
        └─ Database      (required: name, environmentId, + db credentials)
 ```
 
-Resolve or create the `environmentId` before creating an Application/Compose/Database. (In Dokploy ≥ v0.29 the `environment` layer is mandatory; older versions attached apps directly to projects — do not assume the old shape.)
+Resolve or create the `environmentId` before creating an
+Application/Compose/Database. If an older installed instance exposes a
+different schema, its own OpenAPI document controls that instance.
 
 ## Discover existing resources
 
 Operating an existing instance starts with finding IDs. These reads return the resource tree:
 
 ```bash
-curl -sS --fail-with-body -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_URL/api/project.all"            # all projects (no params)
-curl -sS --fail-with-body -G -H "x-api-key: $DOKPLOY_API_KEY" \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -H "x-api-key: $DOKPLOY_API_KEY" "$DOKPLOY_URL/api/project.all"            # all projects (no params)
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -G -H "x-api-key: $DOKPLOY_API_KEY" \
   --data-urlencode "projectId=<id>" "$DOKPLOY_URL/api/project.one"                                     # one project + its environments/resources
-curl -sS --fail-with-body -G -H "x-api-key: $DOKPLOY_API_KEY" \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -G -H "x-api-key: $DOKPLOY_API_KEY" \
   --data-urlencode "projectId=<id>" "$DOKPLOY_URL/api/environment.byProjectId"                         # environments under a project
-curl -sS --fail-with-body -G -H "x-api-key: $DOKPLOY_API_KEY" \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -G -H "x-api-key: $DOKPLOY_API_KEY" \
   --data-urlencode "name=web" "$DOKPLOY_URL/api/application.search"                                    # find apps (also q/appName/owner/repository)
 ```
 
@@ -81,14 +95,20 @@ Create endpoints return the new resource — read its id (e.g. `projectId`) to c
 
 ## Safety first
 
-~80 endpoints are destructive (delete, data-loss, infra-level, deploy-disruption, self-lockout). Default to read-only; confirm before any destructive call, especially in autonomous runs. Before any `*.remove` / `*.delete` / `*.destroy` / `server.remove` / `*.reload` — read [`safety.md`](safety.md).
+Default to reads until the active task explicitly authorizes a mutation. Do not
+ask again for an exact operation already authorized, but never widen that
+authority to a sibling resource, parent environment, project, or instance-wide
+action. Before any removal, deletion, reload, or similarly disruptive action,
+read [`safety.md`](safety.md).
 
 ## Live-spec navigation (the long tail)
 
-The instance serves its own full OpenAPI (529 endpoints) at `GET /api/settings.getOpenApiDocument`. It is ~850 KB of single-line JSON — never load it whole. Extract one endpoint's schema with `jq`:
+The instance serves its own version-specific OpenAPI document at
+`GET /api/settings.getOpenApiDocument`. It can be large, so do not load it into
+model context whole. Extract only the required endpoint or tag with `jq`:
 
 ```bash
-curl -sS --fail-with-body -H "x-api-key: $DOKPLOY_API_KEY" \
+curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -H "x-api-key: $DOKPLOY_API_KEY" \
   "$DOKPLOY_URL/api/settings.getOpenApiDocument" \
   | jq '(.result.data.json // .).paths["/postgres.create"]'   # one endpoint's schema
 # Body may be bare {openapi,...} or tRPC-wrapped {result:{data:{json:...}}};
@@ -96,7 +116,9 @@ curl -sS --fail-with-body -H "x-api-key: $DOKPLOY_API_KEY" \
 #   ... | jq -r '(.result.data.json // .).paths | keys[] | select(startswith("/backup."))'
 ```
 
-Use this for any endpoint not covered by the cookbook below.
+Use this before every mutation whose schema has not already been verified
+against the target instance during the active task. The cookbook is operational
+guidance, not a frozen replacement for the installed instance's contract.
 
 ## Cookbook (open only what the task needs)
 
@@ -109,10 +131,19 @@ Use this for any endpoint not covered by the cookbook below.
 | Manage servers / multi-node / Docker on a node | [servers.md](servers.md) |
 | Database & volume backups | [backups.md](backups.md) |
 | Destructive-operation safety (read first) | [safety.md](safety.md) |
-| Any other domain (43 total) — find the right tag | [endpoint-map.md](endpoint-map.md) |
+| Any other domain — find the right tag | [endpoint-map.md](endpoint-map.md) |
 
 ## Cross-references
 
 - [`curl-requests`](../curl-requests/SKILL.md) — HTTP mechanics: `--fail-with-body`, timeouts, never inlining secrets.
 - [`secrets-handling`](../secrets-handling/SKILL.md) — where `DOKPLOY_API_KEY` lives and how to substitute it without leaking the value.
 - [`ticket`](../ticket/SKILL.md) — defer an out-of-scope Dokploy fix instead of silently working around it.
+
+## Sources
+
+- [Dokploy API](https://docs.dokploy.com/docs/api) — authentication, RPC-style paths, and the current API reference.
+- [Application API](https://docs.dokploy.com/docs/api/reference-application) and [Compose API](https://docs.dokploy.com/docs/api/reference-compose) — deployment resource contracts.
+- [Environment API](https://docs.dokploy.com/docs/api/reference-environment) and [Project API](https://docs.dokploy.com/docs/api/reference-project) — resource hierarchy.
+- [Domain API](https://docs.dokploy.com/docs/api/reference-domain) and [Postgres API](https://docs.dokploy.com/docs/api/reference-postgres) — ingress and managed-database contracts.
+- [Backup API](https://docs.dokploy.com/docs/api/reference-backup) — scheduled and manual backup actions.
+- [Server API](https://docs.dokploy.com/docs/api/reference-server) and [remote servers](https://docs.dokploy.com/docs/core/remote-servers) — server actions and current product limitations.
