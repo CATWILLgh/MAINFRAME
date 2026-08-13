@@ -55,6 +55,8 @@ or memory for a value, migrate a credential, or create persistent state. Return
 the exact missing credential or catalog entry to the immediate caller. Adding
 or relocating a credential requires explicit authority and a value supplied
 through a protected terminal path, never through the conversation.
+Credential-store administration (`set`, `del`, `edit`, and `list`) stays
+outside agent execution; the global permission layer denies those helper modes.
 
 ## Evidence and output
 

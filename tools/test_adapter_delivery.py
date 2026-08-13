@@ -696,7 +696,15 @@ def test_claude_permissions_expose_only_helper_and_index():
     assert "minimumVersion" not in settings
     allowed = settings["permissions"]["allow"]
     denied = settings["permissions"]["deny"]
-    assert "Bash(secret *)" in allowed
+    assert "Bash(secret get *)" in allowed
+    assert "Bash(secret *)" not in allowed
+    for rule in (
+        "Bash(secret set *)",
+        "Bash(secret del *)",
+        "Bash(secret edit)",
+        "Bash(secret list)",
+    ):
+        assert rule in denied
     assert "Read(~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md)" in allowed
     assert "Read(~/.config/credentials/**)" in denied
     assert "Read(**/secrets/**)" in denied
@@ -753,7 +761,7 @@ def test_arbitrary_execution_and_network_do_not_bypass_auto_mode_checks():
 
     bash_rules = {rule for rule in allowed if rule.startswith("Bash(")}
     assert bash_rules == {
-        "Bash(secret *)",
+        "Bash(secret get *)",
         "Bash(git add *)",
         "Bash(git commit *)",
         "Bash(git fetch *)",

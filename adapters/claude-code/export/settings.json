@@ -3,7 +3,7 @@
   "cleanupPeriodDays": 3650,
   "permissions": {
     "allow": [
-      "Bash(secret *)",
+      "Bash(secret get *)",
       "Read(~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md)",
       "Bash(git add *)",
       "Bash(git commit *)",
@@ -42,6 +42,10 @@
       "Bash(*git push --force*)",
       "Bash(*git push -f *)",
       "Bash(*git push --force-with-lease*)",
+      "Bash(secret set *)",
+      "Bash(secret del *)",
+      "Bash(secret edit)",
+      "Bash(secret list)",
       "Bash(git commit --no-verify*)",
       "Bash(git push --no-verify*)",
       "Bash(git rebase --no-verify*)",
