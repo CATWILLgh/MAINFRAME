@@ -171,7 +171,6 @@
   "outputStyle": "Plain and Concise",
   "autoMemoryEnabled": true,
   "skipWorkflowUsageWarning": true,
-  "verbose": false,
   "autoCompactEnabled": true,
   "remoteControlAtStartup": false
 }
