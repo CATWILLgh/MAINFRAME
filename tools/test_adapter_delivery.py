@@ -1095,10 +1095,12 @@ def test_claude_permissions_expose_only_helper_and_index():
     for rule in (
         "Bash(secret set *)",
         "Bash(secret del *)",
-        "Bash(secret edit)",
-        "Bash(secret list)",
+        "Bash(secret edit *)",
+        "Bash(secret list *)",
     ):
         assert rule in denied
+    assert "Bash(secret edit)" not in denied
+    assert "Bash(secret list)" not in denied
     assert "Read(~/.claude/credentials-index.md)" in allowed
     assert "Read(~/.config/credentials/**)" in denied
     assert "Read(**/secrets/**)" in denied
