@@ -25,7 +25,9 @@ Applies to: dev servers like `vite`, `next dev`, `nodemon`, `uvicorn`, `gunicorn
 
 1. **Check the port if known.**
    - macOS / Linux: `lsof -nP -iTCP:<PORT> -sTCP:LISTEN`
-   - One line per listener with PID and command name. Empty output → port free.
+   - One line per visible listener with PID and command name. Empty output means
+     no listener was visible at that instant; it is not durable ownership of
+     the port.
 2. **Check the process by command** (fallback or in addition).
    - macOS / Linux: `ps -ef | grep -E 'vite|next dev|nodemon|uvicorn|gunicorn|flask run|rails s' | grep -v grep`
    - If multiple projects on the host could host similar processes, disambiguate by working directory: `ps -o pid,command -p <PID>` and `lsof -p <PID> | grep cwd`.
@@ -42,8 +44,11 @@ Applies to any `docker compose up` invocation.
 1. **Resolve the intended Compose file, project name, and working directory.**
    Do not let an incidental current directory select the target.
 2. **Check existing containers for this compose project.**
-   - `docker compose ps --status running`
-   - Non-empty → containers already up for this project.
+   - Run the resolved project command with
+     `ps --status running --services`.
+   - One or more service-name lines means those services are running. The
+     default table output is not a valid emptiness check because it includes a
+     header even when there are no matching containers.
 3. **Choose by intended change.**
    - No restart or configuration change: use the running services.
    - Restart with unchanged Compose configuration: use
@@ -54,7 +59,9 @@ Applies to any `docker compose up` invocation.
    - Use `docker compose down` only when removal of the project's containers and
      networks is explicitly intended. It is not the default restart primitive.
 
-Do not preflight a Docker stack by host port. Compose orchestrates a network of containers; a port conflict may be unrelated to this stack. `docker compose ps` is the correct probe.
+Do not use a host port as proof that a Docker container belongs to the intended
+Compose project. Resolve ownership with `docker compose ps`; use a port check
+only as separate evidence of a possible bind conflict.
 
 ## When already running
 
@@ -78,9 +85,17 @@ Do not preflight a Docker stack by host port. Compose orchestrates a network of 
    escalation is explicitly authorized.
 5. **Launch or reconcile once.** Do not loop.
 
-The graceful-stop discipline follows twelve-factor app §IX Disposability: processes should shut down on SIGTERM. SIGKILL skips cleanup hooks and may leave state corrupted (open sockets, half-written files, dangling locks).
+The graceful-stop discipline follows twelve-factor app §IX Disposability:
+processes should finish or release current work on SIGTERM. SIGKILL bypasses
+that shutdown path and can interrupt in-flight work.
 
 ## After launch
+
+Verify readiness with the narrowest project-provided signal: a health endpoint,
+an expected listening socket, a bounded existing readiness command, or Compose
+health/status. A live PID or container alone proves only that the process
+exists. Keep the check bounded and do not invent an endpoint the project does
+not define.
 
 Keep in the active task context:
 - The exact command used and its working directory (`cwd`).
@@ -102,11 +117,16 @@ Subsequent steps (open a URL, run a test, query the API) need this context; re-d
 
 ## Known limitation
 
-Between preflight and start there is a race window: a third process can grab the port in the milliseconds between `lsof` returning empty and the dev server binding. Pure-shell defense against this is platform-specific — `flock` exists on Linux but not natively on macOS, and `open(2)` with `O_EXCL` is below the shell level. This skill does not cover that race. In practice: dev tools fail loudly with `EADDRINUSE` if the race materializes, so the failure is visible and recoverable by re-running.
+Between preflight and the server's own socket bind there is a race window: a
+different process can claim the port. A shell lock coordinates only launchers
+that voluntarily share that lock; it cannot reserve the TCP port for an
+arbitrary server. Treat `EADDRINUSE` as a visible recoverable conflict, identify
+the new listener, and do not enter an automatic restart loop.
 
 ## Sources
 
 - [The Twelve-Factor App, processes](https://12factor.net/processes) and
   [disposability](https://12factor.net/disposability)
 - [Docker Compose `up`](https://docs.docker.com/reference/cli/docker/compose/up/), [`restart`](https://docs.docker.com/reference/cli/docker/compose/restart/), and [`down`](https://docs.docker.com/reference/cli/docker/compose/down/)
+- [Docker Compose `ps`](https://docs.docker.com/reference/cli/docker/compose/ps/)
 - [`lsof(8)` manual](https://man7.org/linux/man-pages/man8/lsof.8.html)

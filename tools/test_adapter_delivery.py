@@ -516,6 +516,9 @@ def test_server_safety_does_not_grant_or_assume_destructive_bash():
     assert "Use `docker compose down` only" in body
     assert "launch it without an extra confirmation round" in body
     assert "Do not silently turn a restart into a fresh start" in body
+    assert "ps --status running --services" in body
+    assert "default table output is not a valid emptiness check" in body
+    assert "A live PID or container alone proves only" in body
 
 
 def test_secrets_skill_uses_index_without_secret_ownership_drift():
