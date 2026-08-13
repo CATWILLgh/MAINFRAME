@@ -1064,7 +1064,7 @@ def test_init_allows_only_ordinary_new_local_commits_without_request():
     )
     assert "ordinary new local commits on the branch present at session start" in body
     assert "`commit --amend`" in body
-    assert "authorizes no other branch, history, or remote operation" in body
+    assert "authorizes no other branch, history, worktree, or remote operation" in body
     assert "ordinary new local recovery commits" in workflow
     assert "any other history operation without explicit instruction" in workflow
 
@@ -1168,21 +1168,24 @@ def test_sensitive_git_actions_require_runtime_confirmation():
     )
     allowed = settings["permissions"]["allow"]
     asked = settings["permissions"]["ask"]
+    assert "Agent(isolation:*)" in asked
     assert "Bash(git add *)" in allowed
     assert "Bash(git commit *)" in allowed
     for command in (
-        "git push", "git checkout", "git switch", "git stash", "git pull",
+        "git push", "git checkout", "git switch", "git pull",
         "git merge", "git rebase", "git reset", "git cherry-pick",
-        "git revert",
+        "git revert", "git restore",
     ):
         rule = f"Bash({command} *)"
         assert rule in asked
         assert rule not in allowed
     assert "Bash(git commit *--amend*)" in asked
+    assert "Bash(git stash *)" not in asked
     assert not any("git branch" in rule for rule in asked)
     hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
     assert "git-authority.py" in hooks
     assert '"if": "Bash(git *)"' in hooks
+    assert '"if": "Bash(*/*git *)"' in hooks
     assert (PLUGIN / "hooks" / "scripts" / "git-authority.py").is_file()
 
 
