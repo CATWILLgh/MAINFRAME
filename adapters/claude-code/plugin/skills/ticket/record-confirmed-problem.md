@@ -1,8 +1,9 @@
 # Record an intentionally confirmed problem
 
-Use this path only when the immediate caller explicitly assigned an
-investigation, an audit for new problems, or confirmation of a concrete
-hypothesis. Evidence must establish that the problem exists; model memory or a
+Use this path only when the immediate caller explicitly assigned focused
+investigation or confirmation of a concrete hypothesis, including an audit
+whose contract requires confirmed findings rather than broad candidate
+discovery. Evidence must establish that the problem exists; model memory or a
 plausible explanation is not evidence.
 
 ## 1. Confirm the claim

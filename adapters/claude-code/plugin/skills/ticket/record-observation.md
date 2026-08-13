@@ -1,8 +1,9 @@
 # Record an incidental observation
 
-Use this path only for a concrete, plausible problem noticed outside the
-active task's assigned result or agreed definition of done. Do not investigate
-its cause, impact, priority, or blast radius.
+Use this path for a concrete, plausible problem noticed outside the active
+task's assigned result or found by an explicitly broad discovery run. Locate
+and describe the observation, but do not investigate its cause, actual impact,
+priority, or blast radius.
 
 ## 1. Search open tickets
 
@@ -42,9 +43,10 @@ Do not add a probable cause, impact claim, priority, proposed solution,
 acceptance criteria, or source research. Those belong to deliberate profile
 review.
 
-## 3. Return to the current task
+## 3. Continue the owning route
 
-Resume the active task immediately after the write. Do not fix the observation
-inline, even when the apparent change looks small. If it blocks the assigned
-result or agreed definition of done, stop treating it as an incidental ticket
-and return it to the active workflow.
+During ordinary work, resume the active task immediately after the write.
+During a discovery run, continue with the next unchecked part of its coverage
+map. Do not fix or confirm the observation inline, even when the apparent
+change looks small. If it blocks the assigned result or agreed definition of
+done, stop treating it as an observation and return it to the active workflow.

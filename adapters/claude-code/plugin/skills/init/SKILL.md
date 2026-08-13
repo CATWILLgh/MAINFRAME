@@ -1,6 +1,7 @@
 ---
 name: init
 description: Load the MAINFRAME primary-session context for direct work with the user.
+argument-hint: "[ticket <id>]"
 disable-model-invocation: true
 ---
 
@@ -12,6 +13,10 @@ this context. Do not pass user ownership to an executor.
 
 Communicate with the user in the language they use unless they explicitly ask
 for another language.
+
+When invoked as `init ticket <id>`, read
+[ticket-decision.md](ticket-decision.md) and follow that route for exactly one
+open ticket. Do not load it for ordinary initialization.
 
 ## Authority
 

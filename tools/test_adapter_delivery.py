@@ -471,7 +471,9 @@ def test_testing_context_preserves_role_boundaries():
     )
     assert "assigned result or agreed definition of done" in ticket
     assert "initial confirmation" in ticket
-    assert "assigned result or agreed definition of done" in observation
+    normalized_observation = " ".join(observation.split())
+    assert "active task's assigned result" in normalized_observation
+    assert "broad discovery run" in normalized_observation
     assert "most distinctive available" in observation
     assert "two or three terms" not in observation
 
@@ -663,6 +665,64 @@ def test_init_skill_is_manual_only():
     assert "name: init" in body
     assert "disable-model-invocation: true" in body
     assert "context: fork" not in body
+
+
+def test_ticket_run_skills_prepare_native_goals_in_primary_session():
+    expected = {
+        "tickets-find": "open/observations",
+        "tickets-refine": "open/needs-scope-review",
+        "tickets-implement": "open/ready",
+        "tickets-verify": "open/needs-verification",
+    }
+    for name, queue in expected.items():
+        body = (PLUGIN / "skills" / name / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        assert f"name: {name}" in body
+        assert 'argument-hint: "[scope]"' in body
+        assert "disable-model-invocation: true" in body
+        assert "context: fork" not in body
+        assert "$ARGUMENTS" in body
+        assert "/goal Follow the loaded" in body
+        assert queue in body
+        assert "Do not start" in body
+
+    shared = (
+        PLUGIN / "references" / "ticket-autonomous-runs.md"
+    ).read_text(encoding="utf-8")
+    assert "current local checkout" in shared
+    assert "Do not create or switch branches or worktrees" in shared
+    assert "do not ask the user to resolve technical choices" in shared.lower()
+    assert "explicit enough for the `/goal` evaluator" in shared
+
+    refinement = (
+        PLUGIN / "skills" / "tickets-refine" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "semantic duplicates" in refinement
+    assert "Do not run tests" in refinement
+
+    verification = (
+        PLUGIN / "skills" / "tickets-verify" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "fresh session" in verification
+    assert "do not repair code inline" in verification.lower()
+
+
+def test_init_ticket_route_handles_one_user_decision_before_goal():
+    init_dir = PLUGIN / "skills" / "init"
+    body = (init_dir / "SKILL.md").read_text(encoding="utf-8")
+    route = (init_dir / "ticket-decision.md").read_text(encoding="utf-8")
+    assert 'argument-hint: "[ticket <id>]"' in body
+    assert "[ticket-decision.md](ticket-decision.md)" in body
+    assert "exactly one" in body
+    assert "one ticket" in route
+    normalized_route = " ".join(route.split())
+    assert "before asking the user" in normalized_route
+    assert "Agree a concise definition of done" in route
+    assert "obtain focused red evidence before" in route
+    assert "Do not start implementation before the user sends the goal" in route
+    assert "/goal Implement ticket <id>" in route
+    assert "open/needs-verification" in route
 
 
 def test_init_replaces_automatic_task_workflow():

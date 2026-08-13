@@ -153,14 +153,18 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 - **`telemetry.py`** — *(dev-only.)* Fires across selected lifecycle and tool events and logs local-only metadata into SQLite. Quality hooks share one effectiveness vocabulary — `noted`, `asked`, `blocked`, `resolved` — so the hub can compare signal volume, confirmed fixes, session coverage, and context characters by hook and stable rule id. Prompts, code, todo text, paths, emitted messages, stdout, stderr, and exception text are never stored. Registrations stay in the plugin, but an early shell gate exits before Python, temporary files, and SQLite unless this Claude adapter was installed with `--dev`.
 - **Shared libraries** (not hooks themselves): `_hooklib.py` — common scaffolding (payload parsing, the emit / gate helpers, git diffing); `_markers.py` — the suppression-marker and debug-residue detector sets; `comment_extract.py` — false-positive-free comment / docstring extraction.
 
-### Skills — 15 focused playbooks
+### Skills — 19 focused playbooks
 
 Most are pulled automatically when the situation matches. The primary-session
 `init` skill is invoked manually as `/mainframe:init`.
+The ticket launchers are `/mainframe:tickets-find [scope]`,
+`/mainframe:tickets-refine [scope]`, `/mainframe:tickets-implement [scope]`, and
+`/mainframe:tickets-verify [scope]`; each returns the native `/goal` block that
+starts its autonomous run.
 
 | Group | Skills |
 |---|---|
-| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `ticket` (record concrete out-of-scope problems), `testing-strategy` (choose test evidence), `decision-review` (private method used by the decision reviewer, including its severity calibration) |
+| **Process & quality** | `init` (manual primary-session context, including `init ticket <id>` for one user-owned decision), `tickets-find`, `tickets-refine`, `tickets-implement`, and `tickets-verify` (manual primary-session launchers that prepare native `/goal` runs), `ticket` (record concrete out-of-scope problems), `testing-strategy` (choose test evidence), `decision-review` (private method used by the decision reviewer, including its severity calibration) |
 | **Backend** | `python-backend-patterns`, `typescript-backend-patterns` — version-aware stack discovery plus data, auth, contracts, jobs, runtime, observability, and testing patterns |
 | **Frontend** | `react-frontend-patterns` (Vite and Next.js client behavior, architecture, state, forms, offline/realtime, content, testing), plus compact preloaded `frontend-design` and `shadcn` routers. Detailed UX, visual, and component guidance loads only for the matching surface or local shadcn project. |
 | **Ops & misc** | `infrastructure` (primary-session infrastructure work plus the adapter-neutral `.agents/infrastructure.json` topology), `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (hidden Dokploy branch), `curl-requests` (HTTP request templates), `secrets-handling` (credential discovery and value-safe process delivery) |
