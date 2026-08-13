@@ -1,8 +1,8 @@
 ---
 name: testing-strategy
 user-invocable: false
-description: Choose or audit the smallest reliable tests for a behaviour change, bug fix, refactor, or slow / misleading test suite.
-when_to_use: Use when deciding what to test, preparing a red test, reviewing test quality or coverage gaps, or separating fast local verification from checks that need a real dependency or deployed environment.
+description: Designs or audits a cross-cutting testing strategy when test levels, suite cost, infrastructure boundaries, or regression coverage need a deliberate decision. Not for routine focused tests already governed by a profile's testing guidance.
+when_to_use: Use for a test-suite audit, a slow or misleading suite, coverage spanning several components, or deciding which guarantees belong in fast local tests versus real dependencies, CI, or a deployed environment.
 ---
 
 # Testing strategy

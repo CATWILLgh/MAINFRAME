@@ -226,6 +226,8 @@ def test_testing_context_preserves_role_boundaries():
     normalized_strategy = " ".join(strategy.split())
     assert "An implementation owner may create, change, and run tests" in normalized_strategy
     assert "An audit-only recipient evaluates the existing evidence" in normalized_strategy
+    assert "cross-cutting testing strategy" in normalized_strategy
+    assert "Not for routine focused tests" in normalized_strategy
 
     profiles = {
         "mainframe-python-backend-engineer.md": "mainframe:python-backend-patterns",
