@@ -1,7 +1,7 @@
 ---
 name: python-backend-patterns
 user-invocable: false
-description: "Version-aware engineering guidance for server-side Python in FastAPI, Django, Flask, and established services. Covers framework and runtime boundaries, validation, PostgreSQL, migrations, OAuth/OIDC, workers, realtime communication, Redis, object storage, outbound integrations, generated files, observability, and focused testing without forcing a stack migration."
+description: "Guides version-aware implementation, debugging, review, and planning for server-side Python services, including FastAPI, Django, Flask, data access, integrations, and focused backend tests."
 when_to_use: "Use for Python backend implementation, debugging, review, or planning involving HTTP APIs, services, authentication or sessions, ORM or SQL access, PostgreSQL, schema changes, queues, Socket.IO, caching, S3-compatible storage, external HTTP or push delivery, PDF or spreadsheet generation, multitenancy, observability, or backend tests. Do not use for data pipelines, ML model development, substantial client-side UI, Node.js services, or infrastructure ownership."
 ---
 

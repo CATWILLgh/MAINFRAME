@@ -1,7 +1,7 @@
 ---
 name: react-frontend-patterns
 user-invocable: false
-description: "Version-aware engineering guidance for client-facing React web applications and client React layers inside full-stack frameworks. Covers rendering boundaries, existing architecture, browser data, forms, PWA and offline state, realtime UI, rich content, tables and charts, security, accessibility, and focused frontend testing. Use when implementing, debugging, reviewing, or planning React user-facing behavior."
+description: "Guides version-aware implementation, debugging, review, and planning for client-facing React web applications and client React layers inside full-stack frameworks, including focused frontend tests."
 when_to_use: "Use for React pages, components, forms, interactions, browser-side data fetching, API integration, framework client components, PWA or offline behavior, realtime updates, editors, Markdown, tables, charts, accessibility, frontend tests, or incremental frontend refactoring. Do not use for React Native, standalone backend behavior, infrastructure ownership, or authoring a reusable design-system library."
 ---
 
