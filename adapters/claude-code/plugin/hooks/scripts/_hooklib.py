@@ -47,6 +47,7 @@ HUB_HOOK_FILES = frozenset({
     "_hooklib.py", "_markers.py", "_marker_state.py", "_notice_state.py",
     "test_hooklib.py",
     "telemetry.py", "hook-failure-report.py", "test_telemetry.py",
+    "skill-authority.py",
 })
 
 

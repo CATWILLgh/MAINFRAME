@@ -124,6 +124,11 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 - **`git-authority.py`** — *Gate (asks or blocks).* Asks before creating, deleting, renaming, or retargeting a branch. It also blocks staging and local commits inside subagents: only the primary session owns recovery commits and their final composition.
 - **`path-validation.py`** — *Gate (asks).* Parses a recursive `rm -rf`, resolves every target path, and allows it silently when all targets are inside the project — but asks for confirmation if any path is outside the project, unresolved, or built from a subshell. Anything that isn't a recursive `rm` passes straight through.
 - **`bash-pattern-reminder.py`** — *Advisory.* Catches a risky ripgrep short-option cluster where `r` consumes replacement text instead of enabling recursion. It is non-blocking and appears once per session and caller, so a parallel command batch cannot flood model context.
+
+#### Before loading a skill — `PreToolUse` on Skill
+
+- **`skill-authority.py`** — *Gate (blocks).* Keeps the primary-session `infrastructure` skill out of built-in and custom subagents. Other skills and primary-session invocations pass silently.
+
 #### Right after you edit a file — `PostToolUse` on Edit / Write / MultiEdit (all advisory — the "warn early" half)
 
 - **`scan-suppression-markers.py`** — Flags suppression markers (`TODO` / `FIXME` / `HACK`, skipped or focused tests, `@ts-ignore` / `eslint-disable` / `# noqa`) and debug residue (`debugger`, `breakpoint()`, `console.debug`, `var_dump` / `dd`) that the edit just introduced. Diff-aware: it flags only what the change added, and repeats one category only after that category has been fully resolved in the same session and writer scope.

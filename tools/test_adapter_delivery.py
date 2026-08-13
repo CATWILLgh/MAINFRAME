@@ -261,6 +261,10 @@ def test_infrastructure_is_primary_session_skill_not_agent():
     assert "absence from the list does not grant it" in infrastructure_map
     assert "every material fact" in infrastructure
     assert "every material fact" in infrastructure_map
+    hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
+    assert '"matcher": "Skill"' in hooks
+    assert "skill-authority.py" in hooks
+    assert (PLUGIN / "hooks" / "scripts" / "skill-authority.py").is_file()
 
 
 def test_dokploy_branch_is_version_aware_and_secret_safe():

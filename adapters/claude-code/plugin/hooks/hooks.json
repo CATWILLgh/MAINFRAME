@@ -130,6 +130,15 @@
             "type": "command",
             "command": "sh",
             "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/skill-authority.py"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-telemetry-hook.sh",
               "PreToolUse",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
