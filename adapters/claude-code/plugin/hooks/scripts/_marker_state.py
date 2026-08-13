@@ -137,30 +137,44 @@ def _revalidate_file(state, file_path, counter, current_counts=None):
 
 
 def update(session_id, agent_id, file_path, deltas, *, counter=marker_counts,
-           namespace="markers", current_counts=None):
-    """Record deltas and return (newly owned, active, resolved) labels."""
+           namespace="markers", current_counts=None, session_wide=False):
+    """Record one file and return (new, active, resolved) owned labels."""
     if not session_id:
         raise ValueError("marker state requires session_id")
     file_path = os.path.realpath(file_path)
     path = _path(session_id, agent_id, namespace)
     with _lock(path):
         state = _load(path)
-        previously_owned = set((state.get("files") or {}).get(file_path, {}))
+        if session_wide:
+            previously_owned = {
+                label
+                for labels in (state.get("files") or {}).values()
+                for label in labels
+            }
+        else:
+            previously_owned = set(
+                (state.get("files") or {}).get(file_path, {})
+            )
         _revalidate_file(state, file_path, counter, current_counts)
-        after_revalidation = set((state.get("files") or {}).get(file_path, {}))
-        resolved = previously_owned - after_revalidation
         current = (dict(current_counts) if current_counts is not None
                    else _current_counts(file_path, counter))
         labels = state["files"].setdefault(file_path, {})
-        added = set()
         for label, delta in deltas.items():
             if delta > 0 and label not in labels:
                 labels[label] = max(0, current.get(label, 0) - int(delta))
-                added.add(label)
         if not labels:
             state["files"].pop(file_path, None)
+        if session_wide:
+            active = {
+                label
+                for owned in state["files"].values()
+                for label in owned
+            }
+        else:
+            active = set(state["files"].get(file_path, {}))
         _save(path, state)
-        return sorted(added), sorted(labels), sorted(resolved)
+        return (sorted(active - previously_owned), sorted(active),
+                sorted(previously_owned - active))
 
 
 def unresolved(session_id, agent_id=None, include_subagents=False, *,

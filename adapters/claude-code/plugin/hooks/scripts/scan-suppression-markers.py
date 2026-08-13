@@ -53,19 +53,19 @@ def main():
         return
 
     deltas = _collect(tool_name, tool_input, file_ext)
-    _, _, resolved = update(
-        payload.get("session_id"), payload.get("agent_id"), file_path, deltas
+    newly_owned, _, resolved = update(
+        payload.get("session_id"), payload.get("agent_id"), file_path, deltas,
+        session_wide=True,
     )
     if resolved:
         log_hook_signal(
             __file__, "unfinished-residue", "resolved", len(resolved), payload
         )
-    if not deltas:
+    if not newly_owned:
         return
-    labels = sorted(deltas)
     note = (
         "This edit introduced disallowed unfinished-code or diagnostic "
-        f"residue: {', '.join(labels)}. Replace it with the complete working "
+        f"residue: {', '.join(newly_owned)}. Replace it with the complete working "
         "behavior and the tests the task requires. Deleting the marker alone "
         "does not resolve this finding. If it only annotated an unrelated "
         "observation, revert that annotation and record the observation through "
@@ -73,7 +73,7 @@ def main():
     )
     emit_note("PostToolUse", note)
     log_hook_signal(
-        __file__, "unfinished-residue", "noted", sum(deltas.values()), payload,
+        __file__, "unfinished-residue", "noted", len(newly_owned), payload,
         context=note,
     )
 

@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from _hooklib import emit_note, load_payload, log_hook_signal, run
+    from _notice_state import claim_once
 except Exception:
     sys.exit(0)
 
@@ -115,6 +116,10 @@ def main() -> None:
     command = (payload.get("tool_input") or {}).get("command") or ""
     clusters = risky_rg_clusters(command)
     if not clusters:
+        return
+    if not claim_once(
+            "rg-replace-cluster", payload.get("session_id"),
+            payload.get("agent_id")):
         return
     shown = clusters[:MAX_RENDERED_CLUSTERS]
     rendered = ", ".join(

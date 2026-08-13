@@ -31,9 +31,11 @@ def _drive(module, payload, state_dir):
     output = io.StringIO()
     saved_in, saved_out = sys.stdin, sys.stdout
     saved_state = os.environ.get("MAINFRAME_MARKER_STATE_DIR")
+    saved_notice_state = os.environ.get("MAINFRAME_NOTICE_STATE_DIR")
     saved_feedback = os.environ.get("MAINFRAME_FEEDBACK_NUDGE")
     try:
         os.environ["MAINFRAME_MARKER_STATE_DIR"] = state_dir
+        os.environ["MAINFRAME_NOTICE_STATE_DIR"] = state_dir + "-notices"
         os.environ["MAINFRAME_FEEDBACK_NUDGE"] = "0"
         sys.stdin = io.StringIO(json.dumps(payload))
         sys.stdout = output
@@ -45,6 +47,10 @@ def _drive(module, payload, state_dir):
             os.environ.pop("MAINFRAME_MARKER_STATE_DIR", None)
         else:
             os.environ["MAINFRAME_MARKER_STATE_DIR"] = saved_state
+        if saved_notice_state is None:
+            os.environ.pop("MAINFRAME_NOTICE_STATE_DIR", None)
+        else:
+            os.environ["MAINFRAME_NOTICE_STATE_DIR"] = saved_notice_state
         if saved_feedback is None:
             os.environ.pop("MAINFRAME_FEEDBACK_NUDGE", None)
         else:
@@ -78,6 +84,25 @@ def test_every_new_comment_gets_a_short_review_reminder():
         assert "Every comment must preserve durable" in note
         assert "Do not discard useful rationale" in note
         assert _stop(state) == ""
+
+
+def test_generic_reminder_is_once_per_session_and_writer():
+    with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as state:
+        first = os.path.join(root, "first.py")
+        second = os.path.join(root, "second.py")
+        comment = "# Retry once because duplicate requests are billable.\nvalue = 1\n"
+        assert "Every comment must preserve durable" in _edit(
+            first, "value = 1\n", comment, state, session="one", agent="writer"
+        )
+        assert _edit(
+            second, "value = 1\n", comment, state, session="one", agent="writer"
+        ) == ""
+        assert _edit(
+            second, "value = 1\n", comment, state, session="one", agent="other"
+        )
+        assert _edit(
+            second, "value = 1\n", comment, state, session="two", agent="writer"
+        )
 
 
 def test_suppression_marker_does_not_receive_a_duplicate_generic_reminder():

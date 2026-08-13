@@ -3,6 +3,7 @@
 
 import importlib.util
 import io
+import itertools
 import json
 import os
 import sys
@@ -10,6 +11,9 @@ import tempfile
 
 os.environ["MAINFRAME_TELEMETRY_DB"] = os.path.join(
     tempfile.mkdtemp(prefix="bpr-telemetry-"), "telemetry.db")
+os.environ["MAINFRAME_NOTICE_STATE_DIR"] = tempfile.mkdtemp(
+    prefix="bpr-notices-")
+_sessions = itertools.count()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(
@@ -19,9 +23,11 @@ hook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook)
 
 
-def _drive(command, tool="Bash"):
+def _drive(command, tool="Bash", session=None, agent=None):
     payload = {"hook_event_name": "PreToolUse", "tool_name": tool,
-               "tool_input": {"command": command}, "session_id": "t"}
+               "tool_input": {"command": command},
+               "session_id": session or f"t-{next(_sessions)}",
+               "agent_id": agent}
     output = io.StringIO()
     saved = sys.stdin, sys.stdout
     try:
@@ -42,6 +48,14 @@ def test_risky_clusters_fire():
     ):
         output = _drive(command)
         assert "replacement text" in output and "--replace" in output, command
+
+
+def test_reminder_is_once_per_session_and_writer():
+    command = "rg -rni pattern src"
+    assert _drive(command, session="shared", agent="writer")
+    assert _drive(command, session="shared", agent="writer") == ""
+    assert _drive(command, session="shared", agent="other")
+    assert _drive(command, session="other", agent="writer")
 
 
 def test_separate_or_explicit_replacement_is_silent():

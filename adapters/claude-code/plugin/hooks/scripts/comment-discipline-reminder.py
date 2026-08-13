@@ -37,6 +37,7 @@ try:
                           read_git_head, emit_note, run)
     from _markers import marker_counts
     from _marker_state import update
+    from _notice_state import claim_once
 except Exception:
     sys.exit(0)
 
@@ -153,7 +154,9 @@ def main():
     # any other comments added by the same tool call.
     n = sum(count for text, count in added_comments.items()
             if not marker_counts(text, file_ext))
-    if n == 0:
+    if n == 0 or not claim_once(
+            "generic-comment-review", payload.get("session_id"),
+            payload.get("agent_id")):
         return
     plural = "s" if n > 1 else ""
     note = (
