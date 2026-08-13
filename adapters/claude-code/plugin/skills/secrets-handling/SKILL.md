@@ -13,7 +13,7 @@ model context.
 ## Sources of truth
 
 - Read the
-  [credentials index](~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md)
+  [credentials index](~/.claude/credentials-index.md)
   for service names, credential identifiers, access commands, and non-secret
   operational notes. The index contains no values and is the only credential
   catalog the model may read.
@@ -65,8 +65,7 @@ evidence such as status, resource identity, or error class. Do not return
 request headers, environment dumps, verbose traces, URLs with embedded auth, or
 raw error bodies until they are known not to contain a value.
 
-The [path-validation hook](../../hooks/scripts/path-validation.py) blocks direct
-reads of protected stores. The
+The global permission layer blocks direct reads of protected stores. The
 [secret commit gate](../../hooks/scripts/secret-commit-gate.py) checks effective
 commit content for high-confidence credential shapes. These are safety nets,
 not permission to retrieve values into context.

@@ -139,6 +139,9 @@ def test_claude_uninstall_preserves_shared_secrets():
     helper = home / ".local" / "bin" / "secret"
     assert helper.is_symlink()
     assert (home / ".claude" / "CLAUDE.md").is_symlink()
+    index_link = home / ".claude" / "credentials-index.md"
+    assert index_link.is_symlink()
+    assert index_link.resolve() == SHARED_CREDENTIALS / "credentials-index.md"
     assert (home / ".claude" / "skills" / "mainframe").is_symlink()
     assert (home / ".claude" / "agents" / "mainframe").is_symlink()
 
@@ -146,6 +149,7 @@ def test_claude_uninstall_preserves_shared_secrets():
     assert removed.returncode == 0, removed.stderr
     assert helper.is_symlink()
     assert not (home / ".claude" / "CLAUDE.md").exists()
+    assert not index_link.exists() and not index_link.is_symlink()
     assert not (home / ".claude" / "skills" / "mainframe").exists()
     assert not (home / ".claude" / "agents" / "mainframe").exists()
 
@@ -519,7 +523,7 @@ def test_secrets_skill_uses_index_without_secret_ownership_drift():
         encoding="utf-8"
     )
     normalized = " ".join(body.split())
-    assert "shared/credentials/credentials-index.md" in normalized
+    assert "~/.claude/credentials-index.md" in normalized
     assert "Never read" in normalized
     assert "Return the exact missing credential" in normalized
     assert "Ask the user" not in normalized
@@ -689,6 +693,11 @@ def test_shared_secrets_have_one_runtime_index():
         cwd=ROOT,
     )
     assert ignored.returncode == 0
+    installer = ADAPTER_INSTALLER.read_text(encoding="utf-8")
+    assert (
+        '"shared/credentials/credentials-index.md:'
+        '${CLAUDE_DIR}/credentials-index.md"'
+    ) in installer
 
 
 def test_claude_permissions_expose_only_helper_and_index():
@@ -705,7 +714,7 @@ def test_claude_permissions_expose_only_helper_and_index():
         "Bash(secret list)",
     ):
         assert rule in denied
-    assert "Read(~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md)" in allowed
+    assert "Read(~/.claude/credentials-index.md)" in allowed
     assert "Read(~/.config/credentials/**)" in denied
     assert "Read(**/secrets/**)" in denied
 

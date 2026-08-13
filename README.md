@@ -228,6 +228,7 @@ graph LR
     B --> D[adapters/claude-code/export/CLAUDE.md & settings.json<br/>→ ~/.claude/ symlinks]
     B --> E[adapters/claude-code/export/rules/* →<br/>~/.claude/rules/ per-item]
     B --> H[shared/credentials/secret →<br/>~/.local/bin/secret]
+    B --> J[shared/credentials/credentials-index.md →<br/>~/.claude/credentials-index.md]
     C --> F[Claude auto-loads<br/>'mainframe' plugin]
     I --> G
     D --> G[Umbrella + permissions<br/>active in every session]
@@ -241,7 +242,7 @@ What `install.sh` does:
 - **One user-agent directory symlink** — `adapters/claude-code/agents/` becomes `~/.claude/agents/mainframe/`. The profiles keep collision-safe `mainframe-*` identifiers and retain agent-scoped hooks and MCP servers.
 - **Single-file symlinks** for the umbrella `CLAUDE.md` and the permission `settings.json` (the plugin format does not provide an equivalent for these).
 - **Per-item symlinks** for `adapters/claude-code/export/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
-- **Shared credentials component** — links `shared/credentials/secret` into `~/.local/bin/`, preserves the values under `~/.config/credentials/`, and seeds the gitignored `shared/credentials/credentials-index.md` from its adjacent template only when missing.
+- **Shared credentials component** — links `shared/credentials/secret` into `~/.local/bin/`, preserves the values under `~/.config/credentials/`, and seeds the gitignored `shared/credentials/credentials-index.md` from its adjacent template only when missing. The Claude adapter exposes that same file at the stable `~/.claude/credentials-index.md` path; it does not create a second copy.
 - **Claude Code version preflight** — requires v2.1.226+, offers `claude update` in an interactive terminal, fails before changing anything in non-interactive runs, and accepts `--yes` for explicit unattended approval.
 - **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
 - **Backs up** any pre-existing real file before replacing it with a symlink.

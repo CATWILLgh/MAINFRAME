@@ -4,7 +4,7 @@
   "permissions": {
     "allow": [
       "Bash(secret get *)",
-      "Read(~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md)",
+      "Read(~/.claude/credentials-index.md)",
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git fetch *)",

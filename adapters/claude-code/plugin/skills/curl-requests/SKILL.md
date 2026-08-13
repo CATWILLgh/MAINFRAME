@@ -52,7 +52,7 @@ curl -sS --fail-with-body \
 
 Read [`secrets-handling`](../secrets-handling/SKILL.md) before an authenticated
 request. Use the credential name and header scheme recorded in the
-[credentials index](~/Documents/projects/MAINFRAME/shared/credentials/credentials-index.md);
+[credentials index](~/.claude/credentials-index.md);
 do not assume Bearer authentication.
 
 Pass a registered value directly to curl, for example:

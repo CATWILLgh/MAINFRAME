@@ -14,6 +14,10 @@
 #   - umbrella:     export/CLAUDE.md  →  ~/.claude/CLAUDE.md
 #                   export/settings.json  →  ~/.claude/settings.json
 #                   (Plugin format does not provide an equivalent for these.)
+#   - credentials:  shared/credentials/credentials-index.md
+#                   → ~/.claude/credentials-index.md
+#                   Stable adapter-facing link; the repository file remains
+#                   the only editable catalog.
 #   - rules:        export/rules/* item-by-item  →  ~/.claude/rules/
 #                   (Plugin format does not support path-scoped rules with
 #                   `paths:` frontmatter; per-item keeps the layer composable.)
@@ -135,9 +139,13 @@ MIN_CLAUDE_VERSION="2.1.226"
 #   - CLAUDE.md and settings.json stay as direct symlinks because the plugin format
 #     does not provide an equivalent for the umbrella instructions or user-level
 #     permission rules.
+#   - the repository-owned, gitignored credentials index is exposed through a
+#     stable Claude-facing path so moving the checkout does not break skills or
+#     permissions. The index itself remains in shared/credentials/.
 ARTIFACTS=(
     "adapters/claude-code/export/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md"
     "adapters/claude-code/export/settings.json:${CLAUDE_DIR}/settings.json"
+    "shared/credentials/credentials-index.md:${CLAUDE_DIR}/credentials-index.md"
     "adapters/claude-code/plugin:${CLAUDE_DIR}/skills/mainframe"
     "adapters/claude-code/agents:${CLAUDE_DIR}/agents/mainframe"
 )
