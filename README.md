@@ -121,6 +121,7 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 #### Before a Bash command — `PreToolUse` on Bash
 
 - **`secret-commit-gate.py`** — *Gate (blocks).* When the command is a `git commit`, scans the staged diff for high-confidence secret shapes (vendor API tokens, private keys) and blocks the commit if one is staged. Skips repos that use SOPS or git-crypt; defers on any error rather than risk a false block.
+- **`git-authority.py`** — *Gate (asks or blocks).* Asks before creating, deleting, renaming, or retargeting a branch. It also blocks staging and local commits inside subagents: only the primary session owns recovery commits and their final composition.
 - **`path-validation.py`** — *Gate (asks).* Parses a recursive `rm -rf`, resolves every target path, and allows it silently when all targets are inside the project — but asks for confirmation if any path is outside the project, unresolved, or built from a subshell. Anything that isn't a recursive `rm` passes straight through.
 - **`bash-pattern-reminder.py`** — *Advisory.* Catches a risky ripgrep short-option cluster where `r` consumes replacement text instead of enabling recursion. It is non-blocking and appears once per session and caller, so a parallel command batch cannot flood model context.
 #### Right after you edit a file — `PostToolUse` on Edit / Write / MultiEdit (all advisory — the "warn early" half)

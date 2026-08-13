@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ask before a Git branch command mutates branch references or metadata."""
+"""Enforce primary-session Git delivery and explicit branch authority."""
 
 from __future__ import annotations
 
@@ -107,6 +107,13 @@ def _nested_command(tokens: list[str]) -> str | None:
 
 
 def _git_branch_arguments(tokens: list[str]) -> list[str] | None:
+    subcommand = _git_subcommand(tokens)
+    if subcommand is None or subcommand[0] != "branch":
+        return None
+    return subcommand[1]
+
+
+def _git_subcommand(tokens: list[str]) -> tuple[str, list[str]] | None:
     index = _command_index(tokens)
     if index >= len(tokens) or os.path.basename(tokens[index]) != "git":
         return None
@@ -121,9 +128,9 @@ def _git_branch_arguments(tokens: list[str]) -> list[str] | None:
             index += 1
             continue
         break
-    if index >= len(tokens) or tokens[index] != "branch":
+    if index >= len(tokens):
         return None
-    return tokens[index + 1:]
+    return tokens[index], tokens[index + 1:]
 
 
 def _option_name(token: str) -> str:
@@ -165,23 +172,54 @@ def branch_mutation_reason(command: str, *, depth: int = 0) -> str | None:
     return None
 
 
+def _subagent_delivery_mutation(command: str, *, depth: int = 0) -> bool:
+    if depth > 3 or "git" not in command:
+        return False
+    tokens = _tokenize(command)
+    if tokens is None:
+        return False
+    for segment in _segments(tokens):
+        nested = _nested_command(segment)
+        if nested is not None:
+            if _subagent_delivery_mutation(nested, depth=depth + 1):
+                return True
+            continue
+        subcommand = _git_subcommand(segment)
+        if subcommand is not None and subcommand[0] in {"add", "stage", "commit"}:
+            return True
+    return False
+
+
+def authority_decision(command: str, agent_id=None) -> tuple[str | None, str | None]:
+    if agent_id and _subagent_delivery_mutation(command):
+        return "deny", (
+            "Staging and local commits belong to the primary session. "
+            "Leave the working-tree changes unstaged and return the result and "
+            "verification to your immediate caller."
+        )
+    reason = branch_mutation_reason(command)
+    return ("ask", reason) if reason else (None, None)
+
+
 def main() -> None:
     payload = json.load(sys.stdin)
     if payload.get("tool_name") != "Bash":
         return
     command = (payload.get("tool_input") or {}).get("command") or ""
-    reason = branch_mutation_reason(command)
-    if not reason:
+    decision, reason = authority_decision(command, payload.get("agent_id"))
+    if not decision:
         return
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": "ask",
+            "permissionDecision": decision,
             "permissionDecisionReason": reason,
         }
     }))
     log_hook_signal(
-        __file__, "git-branch-authority", "asked", 1, payload, context=reason,
+        __file__, "git-delivery-authority",
+        "asked" if decision == "ask" else "blocked", 1, payload,
+        context=reason,
     )
 
 

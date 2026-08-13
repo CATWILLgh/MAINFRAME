@@ -822,9 +822,9 @@ def test_sensitive_git_actions_require_runtime_confirmation():
     assert "Bash(git commit *--amend*)" in asked
     assert not any("git branch" in rule for rule in asked)
     hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
-    assert "git-branch-authority.py" in hooks
+    assert "git-authority.py" in hooks
     assert '"if": "Bash(git *)"' in hooks
-    assert (PLUGIN / "hooks" / "scripts" / "git-branch-authority.py").is_file()
+    assert (PLUGIN / "hooks" / "scripts" / "git-authority.py").is_file()
 
 
 def test_arbitrary_execution_and_network_do_not_bypass_auto_mode_checks():
