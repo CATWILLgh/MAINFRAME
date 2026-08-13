@@ -274,18 +274,17 @@ check_prerequisites() {
     fi
 }
 
-# Warn (do NOT fail) if python3 is missing. The hub's hooks (CLAUDE.md/skill
-# validators and the suppression-marker scan) are written in Python and will
-# silently no-op without python3. We surface this so the user decides what to do.
+# Fail before delivery if Python is unavailable. Every shipped runtime hook uses
+# Python; installing without it would replace normal checks with repeated shell
+# fallback reports that cannot use the Python deduplication layer.
 check_python() {
-    if command -v python3 >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
         log_info "python3 found: $(command -v python3)"
-    else
-        log_warn "python3 not found on PATH."
-        log_warn "The hub's Python hooks (validators + suppression-marker scan) will"
-        log_warn "silently no-op without python3. Install python3 to enable them, or"
-        log_warn "proceed and run without those hooks. Continuing — informational only."
+        return 0
     fi
+    log_error "A working python3 is required by MAINFRAME hooks but was not found on PATH."
+    log_error "Install Python 3 and retry; no Claude adapter files were changed."
+    return 1
 }
 
 # Resolve the absolute path that a symlink points to, or empty string if not a symlink.
@@ -294,9 +293,14 @@ readlink_safe() {
     if [[ -L "$path" ]]; then
         if command -v greadlink >/dev/null 2>&1; then
             greadlink -f "$path"
-        else
+        elif command -v python3 >/dev/null 2>&1 \
+                && python3 -c 'import sys' >/dev/null 2>&1; then
             # Fallback for macOS bash without coreutils
             python3 -c "import os, sys; print(os.path.realpath(sys.argv[1]))" "$path"
+        else
+            # MAINFRAME creates absolute links. Without Python, a relative or
+            # otherwise different link remains unmatched and is preserved.
+            readlink "$path"
         fi
     else
         echo ""
@@ -449,7 +453,7 @@ check_tooling_prerequisites() {
     elif command -v brew >/dev/null 2>&1; then mgr=brew
     elif command -v dnf >/dev/null 2>&1; then mgr=dnf
     fi
-    log_warn "Some tooling prerequisites are missing — related hooks stay SILENT until installed:"
+    log_warn "Some optional analyzers are missing — their checks will report unavailable when applicable:"
     if [[ $need_py -eq 1 ]]; then
         log_warn "  - uv OR pipx (for ruff):"
         case "$mgr" in
@@ -498,7 +502,7 @@ _install_tool() {
         log_warn "'pipx install $tool' failed."
     fi
     log_warn "Could not install $tool (no working uv/pipx found)."
-    log_warn "Related hook(s) will be SILENT until installed manually."
+    log_warn "Related hook(s) will report the unavailable analyzer when applicable."
     log_warn "To enable: 'uv tool install $install_arg' OR 'pipx install $tool'."
     return 1
 }
@@ -533,7 +537,7 @@ _install_npm_global() {
     log_warn "'npm install -g $pkg' failed."
     log_warn "If this is a permissions error, set a user-writable global prefix and retry:"
     log_warn "  npm config set prefix ~/.local   (ensure ~/.local/bin is on PATH)"
-    log_warn "$pkg-related hook will be SILENT until installed manually."
+    log_warn "$pkg-related hook will report the unavailable analyzer when applicable."
     return 1
 }
 
@@ -694,15 +698,17 @@ main() {
 
     if [[ $UNINSTALL -eq 0 ]]; then
         check_claude_version
+        check_python
     fi
     if [[ $PREFLIGHT_ONLY -eq 1 ]]; then
         return 0
     fi
 
-    check_prerequisites
-    check_python
-
     if [[ $UNINSTALL -eq 1 ]]; then
+        if [[ ! -d "${CLAUDE_DIR}" ]]; then
+            log_ok "Nothing to uninstall: ${CLAUDE_DIR} does not exist."
+            return 0
+        fi
         log_info "Uninstalling MAINFRAME hub symlinks from ${CLAUDE_DIR}..."
         for entry in "${ARTIFACTS[@]}"; do
             local src="${entry%%:*}"
@@ -721,6 +727,8 @@ main() {
         list_backups
         return 0
     fi
+
+    check_prerequisites
 
     log_info "Installing the MAINFRAME Claude Code adapter into ${CLAUDE_DIR}..."
     log_info "Source: ${ADAPTER_ROOT}/{agents,export,plugin}"

@@ -35,7 +35,7 @@ MIN_CLAUDE_VERSION = re.search(
 ).group(1)
 
 
-def _run_installer(*args, home=None, claude_version=None):
+def _run_installer(*args, home=None, claude_version=None, broken_python=False):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
     fake_bin.mkdir(exist_ok=True)
@@ -53,6 +53,10 @@ def _run_installer(*args, home=None, claude_version=None):
         encoding="utf-8",
     )
     claude.chmod(claude.stat().st_mode | stat.S_IXUSR)
+    if broken_python:
+        python = fake_bin / "python3"
+        python.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        python.chmod(python.stat().st_mode | stat.S_IXUSR)
     for command in (
         "ruff", "oxlint",
         "fallow",
@@ -115,6 +119,15 @@ def test_old_claude_stops_before_any_install_in_noninteractive_mode():
     assert not (home / ".claude").exists()
 
 
+def test_missing_python_stops_before_shared_or_adapter_delivery():
+    proc, home = _run_installer("--claude", broken_python=True)
+    assert proc.returncode != 0
+    assert "working python3 is required" in proc.stderr
+    assert "no Claude adapter files were changed" in proc.stderr
+    assert not (home / ".local" / "bin" / "secret").exists()
+    assert not (home / ".claude").exists()
+
+
 def test_yes_updates_old_claude_before_installing():
     proc, home = _run_installer(
         "--claude", "--yes", claude_version="2.1.100")
@@ -154,6 +167,27 @@ def test_claude_uninstall_preserves_shared_secrets():
     assert not (home / ".claude" / "agents" / "mainframe").exists()
 
 
+def test_clean_uninstall_creates_nothing_and_needs_no_python():
+    proc, home = _run_installer("--claude", "--uninstall", broken_python=True)
+    assert proc.returncode == 0, proc.stderr
+    assert "Nothing to uninstall" in proc.stdout
+    assert not (home / ".claude").exists()
+    assert not (home / ".local" / "bin" / "secret").exists()
+
+
+def test_uninstall_removes_owned_absolute_links_without_python():
+    installed, home = _run_installer("--claude")
+    assert installed.returncode == 0, installed.stderr
+
+    removed, _ = _run_installer(
+        "--claude", "--uninstall", home=home, broken_python=True
+    )
+    assert removed.returncode == 0, removed.stderr
+    assert not (home / ".claude" / "CLAUDE.md").exists()
+    assert not (home / ".claude" / "skills" / "mainframe").exists()
+    assert not (home / ".claude" / "agents" / "mainframe").exists()
+
+
 def test_adapter_owns_claude_artifacts():
     assert (ADAPTER / "install.sh").is_file()
     assert (ADAPTER / "export" / "CLAUDE.md").is_file()
@@ -162,6 +196,16 @@ def test_adapter_owns_claude_artifacts():
     assert not (PLUGIN / "agents").exists()
     assert not (ROOT / "export").exists()
     assert not (ROOT / "plugin-dist").exists()
+
+
+def test_readme_skill_inventory_matches_product_tree():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    skill_count = len([
+        path for path in (PLUGIN / "skills").iterdir()
+        if path.is_dir() and (path / "SKILL.md").is_file()
+    ])
+    assert f"### Skills — {skill_count} focused playbooks" in readme
+    assert "`severity-calibration`" not in readme
 
 
 def test_agents_use_user_scope_names_and_plugin_skill_ids():

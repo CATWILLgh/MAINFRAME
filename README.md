@@ -147,14 +147,14 @@ Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it 
 - **`telemetry.py`** — *(dev-only.)* Fires across selected lifecycle and tool events and logs local-only metadata into SQLite. Quality hooks share one effectiveness vocabulary — `noted`, `asked`, `blocked`, `resolved` — so the hub can compare signal volume, confirmed fixes, session coverage, and context characters by hook and stable rule id. Prompts, code, todo text, paths, emitted messages, stdout, stderr, and exception text are never stored. Registrations stay in the plugin, but an early shell gate exits before Python, temporary files, and SQLite unless this Claude adapter was installed with `--dev`.
 - **Shared libraries** (not hooks themselves): `_hooklib.py` — common scaffolding (payload parsing, the emit / gate helpers, git diffing); `_markers.py` — the suppression-marker and debug-residue detector sets; `comment_extract.py` — false-positive-free comment / docstring extraction.
 
-### Skills — 18 focused playbooks
+### Skills — 15 focused playbooks
 
 Most are pulled automatically when the situation matches. The primary-session
 `init` skill is invoked manually as `/mainframe:init`.
 
 | Group | Skills |
 |---|---|
-| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `ticket` (record concrete out-of-scope problems), `testing-strategy` (choose test evidence), `severity-calibration` (rank findings honestly), `decision-review` (private method used by the decision reviewer) |
+| **Process & quality** | `init` (manual primary-session context, with the complex workflow loaded only when needed), `ticket` (record concrete out-of-scope problems), `testing-strategy` (choose test evidence), `decision-review` (private method used by the decision reviewer, including its severity calibration) |
 | **Backend** | `python-backend-patterns`, `typescript-backend-patterns` — version-aware stack discovery plus data, auth, contracts, jobs, runtime, observability, and testing patterns |
 | **Frontend** | `react-frontend-patterns` (Vite and Next.js client behavior, architecture, state, forms, offline/realtime, content, testing), plus compact preloaded `frontend-design` and `shadcn` routers. Detailed UX, visual, and component guidance loads only for the matching surface or local shadcn project. |
 | **Ops & misc** | `infrastructure` (primary-session infrastructure work plus the adapter-neutral `.agents/infrastructure.json` topology), `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (hidden Dokploy branch), `curl-requests` (HTTP request templates), `secrets-handling` (credential discovery and value-safe process delivery) |
@@ -199,7 +199,7 @@ The hub ships through one adapter plus one shared component:
 - **Claude Code v2.1.226+** — the host (CLI or IDE extension). The installer checks this before changing anything and can run the official updater after confirmation.
 - **git** — to clone the repo, and for the hooks that diff your working tree.
 - **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
-- **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the linters below, but need no Python packages of their own). Without Python 3 they silently no-op (the installer warns; it does not fail).
+- **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the analyzers below, but need no Python packages of their own). The installer stops during preflight before changing the Claude adapter when Python is unavailable.
 
 **Recommended — each unlocks a group of checks. `install.sh` prints an OS-specific install hint; if a required analyzer is still unavailable at runtime, the common hook reporter surfaces that failure once per session instead of repeating it:**
 
