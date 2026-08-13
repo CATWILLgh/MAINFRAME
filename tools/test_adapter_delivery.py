@@ -1112,6 +1112,7 @@ def test_global_settings_preserve_role_language_and_session_choice_contracts():
     assert "model" not in settings
     assert "effortLevel" not in settings
     assert "language" not in settings
+    assert "preferredNotifChannel" not in settings
     assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" not in settings.get("env", {})
     assert "teammateMode" not in settings
 

@@ -173,7 +173,6 @@
   "skipWorkflowUsageWarning": true,
   "editorMode": "normal",
   "verbose": false,
-  "preferredNotifChannel": "kitty",
   "autoCompactEnabled": true,
   "remoteControlAtStartup": false
 }
