@@ -171,7 +171,6 @@
   "outputStyle": "Plain and Concise",
   "autoMemoryEnabled": true,
   "skipWorkflowUsageWarning": true,
-  "editorMode": "normal",
   "verbose": false,
   "autoCompactEnabled": true,
   "remoteControlAtStartup": false
