@@ -55,6 +55,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-init" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe.rules" in proc.stdout
+    assert "mainframe_researcher.toml" in proc.stdout
     assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
@@ -87,6 +88,20 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     rules_state = codex_dir / ".mainframe-rules-state"
     assert rules.is_symlink() and rules.resolve() == ADAPTER / "rules" / "mainframe.rules"
     assert rules_state.is_file()
+    researcher = codex_dir / "agents" / "mainframe_researcher.toml"
+    researcher_state = codex_dir / ".mainframe-researcher-state"
+    assert researcher.is_symlink()
+    assert researcher.resolve() == ADAPTER / "agents" / "mainframe_researcher.toml"
+    assert researcher_state.is_file()
+    researcher_data = tomllib.loads(researcher.read_text(encoding="utf-8"))
+    assert researcher_data["name"] == "mainframe_researcher"
+    assert researcher_data["model"] == "gpt-5.6-terra"
+    assert researcher_data["model_reasoning_effort"] == "medium"
+    assert researcher_data["sandbox_mode"] == "read-only"
+    assert researcher_data["web_search"] == "live"
+    assert researcher_data["features"]["apps"] is False
+    assert researcher_data["features"]["shell_tool"] is False
+    assert researcher_data["features"]["unified_exec"] is False
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
     assert config.is_file() and config_state.is_file()
@@ -120,6 +135,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not index_state.exists()
     assert not rules.exists() and not rules.is_symlink()
     assert not rules_state.exists()
+    assert not researcher.exists() and not researcher.is_symlink()
+    assert not researcher_state.exists()
     assert not config.exists()
     assert not config_state.exists()
     assert helper.is_symlink()
@@ -211,6 +228,33 @@ def test_existing_mainframe_rules_require_yes_and_are_restored():
     assert target.read_text(encoding="utf-8") == "# user-owned rules\n"
 
 
+def test_existing_mainframe_researcher_requires_yes_and_is_restored():
+    home = pathlib.Path(tempfile.mkdtemp())
+    agents_dir = home / ".codex" / "agents"
+    agents_dir.mkdir(parents=True)
+    target = agents_dir / "mainframe_researcher.toml"
+    target.write_text(
+        'name = "personal"\n'
+        'description = "Personal researcher."\n'
+        'developer_instructions = "Keep me."\n',
+        encoding="utf-8",
+    )
+
+    refused, _ = _run("--codex", home=home)
+    assert refused.returncode != 0
+    assert "researcher already exists" in refused.stderr
+    assert 'name = "personal"' in target.read_text(encoding="utf-8")
+
+    installed, _ = _run("--codex", "--yes", home=home)
+    assert installed.returncode == 0, installed.stderr
+    assert target.is_symlink()
+    assert target.resolve() == ADAPTER / "agents" / "mainframe_researcher.toml"
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert target.is_file() and not target.is_symlink()
+    assert 'name = "personal"' in target.read_text(encoding="utf-8")
+
 def test_changed_mainframe_rules_stop_uninstall_before_other_removal():
     installed, home = _run("--codex")
     assert installed.returncode == 0, installed.stderr
@@ -224,6 +268,25 @@ def test_changed_mainframe_rules_stop_uninstall_before_other_removal():
     assert target.read_text(encoding="utf-8") == "# changed after install\n"
     assert (home / ".codex" / "AGENTS.md").is_file()
     assert (home / ".agents" / "skills" / "mainframe-init").is_symlink()
+
+
+def test_changed_mainframe_researcher_stops_uninstall_before_other_removal():
+    installed, home = _run("--codex")
+    assert installed.returncode == 0, installed.stderr
+    target = home / ".codex" / "agents" / "mainframe_researcher.toml"
+    target.unlink()
+    target.write_text(
+        'name = "changed"\n'
+        'description = "Changed after install."\n'
+        'developer_instructions = "Preserve this."\n',
+        encoding="utf-8",
+    )
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode != 0
+    assert "researcher installation changed" in removed.stderr
+    assert 'name = "changed"' in target.read_text(encoding="utf-8")
+    assert (home / ".codex" / "AGENTS.md").is_file()
 
 
 def test_existing_config_is_merged_and_uninstall_restores_only_displaced_settings():
@@ -368,8 +431,13 @@ def test_unsupported_dev_mode_fails_before_any_delivery():
 def test_baseline_uses_native_standalone_layers_only():
     assert not (ADAPTER / "plugin").exists()
     assert not (ADAPTER / "hooks").exists()
-    assert not (ADAPTER / "agents").exists()
     assert not (ADAPTER / "config.toml").exists()
+    researcher = ADAPTER / "agents" / "mainframe_researcher.toml"
+    assert researcher.is_file()
+    researcher_data = tomllib.loads(researcher.read_text(encoding="utf-8"))
+    assert researcher_data["description"].startswith("Use for a bounded external-research block")
+    assert "Do not use for repository exploration" in researcher_data["description"]
+    assert "Do not recommend, select, advocate, implement" in researcher_data["developer_instructions"]
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
     assert 'pattern = ["secret"]' in (
         ADAPTER / "rules" / "mainframe.rules"

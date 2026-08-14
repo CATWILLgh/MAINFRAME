@@ -16,6 +16,9 @@ INDEX_STATE="${CODEX_DIR}/.mainframe-index-state"
 RULES_SOURCE="${ADAPTER_ROOT}/rules/mainframe.rules"
 RULES_TARGET="${CODEX_DIR}/rules/mainframe.rules"
 RULES_STATE="${CODEX_DIR}/.mainframe-rules-state"
+AGENT_SOURCE="${ADAPTER_ROOT}/agents/mainframe_researcher.toml"
+AGENT_TARGET="${CODEX_DIR}/agents/mainframe_researcher.toml"
+AGENT_STATE="${CODEX_DIR}/.mainframe-researcher-state"
 CONFIG_SOURCE="${ADAPTER_ROOT}/config/mainframe-permissions.toml"
 CONFIG_TOOL="${ADAPTER_ROOT}/scripts/manage-config.py"
 CONFIG_TARGET="${CODEX_DIR}/config.toml"
@@ -36,9 +39,9 @@ Usage:
   install.sh --preflight [--dry-run] [--yes]
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
-share AGENTS.md, standalone skills, command rules, and a bounded permission
-profile. Codex plugins, hooks, agents, and development telemetry are not
-installed by this version.
+share AGENTS.md, standalone skills, command rules, a bounded permission profile,
+and native specialist agents. Codex plugins, hooks, and development telemetry
+are not installed by this version.
 EOF
 }
 
@@ -125,6 +128,10 @@ delivery_preflight() {
         error "A Codex MAINFRAME rules file already exists. Rerun with --yes to back it up before linking the adapter rules."
         return 1
     fi
+    if link_conflicts "$AGENT_TARGET" "$AGENT_SOURCE" && [[ $ASSUME_YES -ne 1 ]]; then
+        error "A Codex MAINFRAME researcher already exists. Rerun with --yes to back it up before linking the adapter agent."
+        return 1
+    fi
 
     if [[ -f "$AGENTS_STATE" ]]; then
         managed_sha="$(state_value managed_sha || true)"
@@ -154,6 +161,7 @@ check_sources() {
         "${ADAPTER_ROOT}/skills/mainframe-init/SKILL.md" \
         "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
         "$RULES_SOURCE" \
+        "$AGENT_SOURCE" \
         "$CONFIG_SOURCE" \
         "$CONFIG_TOOL"; do
         if [[ ! -f "$path" ]]; then
@@ -211,6 +219,10 @@ preflight() {
         fi
         if [[ -f "$RULES_STATE" ]] && { [[ ! -L "$RULES_TARGET" ]] || [[ "$(resolve_link "$RULES_TARGET")" != "$RULES_SOURCE" ]]; }; then
             error "The Codex MAINFRAME rules installation changed after installation. It was preserved."
+            return 1
+        fi
+        if [[ -f "$AGENT_STATE" ]] && { [[ ! -L "$AGENT_TARGET" ]] || [[ "$(resolve_link "$AGENT_TARGET")" != "$AGENT_SOURCE" ]]; }; then
+            error "The Codex MAINFRAME researcher installation changed after installation. It was preserved."
             return 1
         fi
         manage_config uninstall --dry-run >/dev/null
@@ -336,6 +348,39 @@ rules_state_value() {
     sed -n 's/^backup_path=//p' "$RULES_STATE" | head -n 1
 }
 
+agent_state_value() {
+    [[ -f "$AGENT_STATE" ]] || return 1
+    sed -n 's/^backup_path=//p' "$AGENT_STATE" | head -n 1
+}
+
+install_agent() {
+    local backup_path="-"
+    if [[ -L "$AGENT_TARGET" ]] && [[ "$(resolve_link "$AGENT_TARGET")" == "$AGENT_SOURCE" ]]; then
+        log "Codex researcher already linked: $AGENT_TARGET"
+        return
+    fi
+    if [[ -f "$AGENT_STATE" ]]; then
+        backup_path="$(agent_state_value || printf '-')"
+    fi
+    if [[ -e "$AGENT_TARGET" || -L "$AGENT_TARGET" ]]; then
+        backup_path="${AGENT_TARGET}.backup-${TIMESTAMP}"
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "would back up existing $AGENT_TARGET to $backup_path"
+        else
+            mv "$AGENT_TARGET" "$backup_path"
+        fi
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "would link $AGENT_TARGET -> $AGENT_SOURCE"
+        return
+    fi
+    mkdir -p "$(dirname "$AGENT_TARGET")"
+    ln -s "$AGENT_SOURCE" "$AGENT_TARGET"
+    printf 'backup_path=%s\n' "$backup_path" > "$AGENT_STATE"
+    chmod 600 "$AGENT_STATE"
+    log "linked Codex specialist agent: $AGENT_TARGET"
+}
+
 install_rules() {
     local backup_path="-"
     if [[ -L "$RULES_TARGET" ]] && [[ "$(resolve_link "$RULES_TARGET")" == "$RULES_SOURCE" ]]; then
@@ -378,11 +423,12 @@ install_adapter() {
     install_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
     install_index
     install_rules
+    install_agent
     install_config
     if [[ $DRY_RUN -eq 1 ]]; then
         log "Codex baseline plan verified; no files were changed."
     else
-        log "Codex baseline installed. Start a new task before relying on updated global instructions or skill discovery."
+        log "Codex baseline installed. Start a new task before relying on updated instructions, skills, or agent discovery."
     fi
 }
 
@@ -412,6 +458,34 @@ uninstall_rules() {
         log "removed Codex rules: $RULES_TARGET"
     fi
     if [[ -f "$RULES_STATE" ]]; then rm "$RULES_STATE"; fi
+}
+
+uninstall_agent() {
+    local backup_path="-"
+    if [[ ! -L "$AGENT_TARGET" ]] || [[ "$(resolve_link "$AGENT_TARGET")" != "$AGENT_SOURCE" ]]; then
+        if [[ -f "$AGENT_STATE" ]]; then
+            error "The Codex MAINFRAME researcher installation changed after installation. It was preserved."
+            return 1
+        fi
+        log "Codex researcher is not an adapter-owned link: $AGENT_TARGET"
+        return
+    fi
+    if [[ -f "$AGENT_STATE" ]]; then
+        backup_path="$(agent_state_value || printf '-')"
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "would remove $AGENT_TARGET"
+        if [[ "$backup_path" != "-" ]]; then log "would restore $backup_path"; fi
+        return
+    fi
+    rm "$AGENT_TARGET"
+    if [[ "$backup_path" != "-" && -e "$backup_path" ]]; then
+        mv "$backup_path" "$AGENT_TARGET"
+        log "restored previous Codex researcher: $AGENT_TARGET"
+    else
+        log "removed Codex researcher: $AGENT_TARGET"
+    fi
+    if [[ -f "$AGENT_STATE" ]]; then rm "$AGENT_STATE"; fi
 }
 
 remove_owned_link() {
@@ -494,6 +568,7 @@ uninstall_adapter() {
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
     uninstall_index
     uninstall_rules
+    uninstall_agent
     if [[ $DRY_RUN -eq 1 ]]; then
         manage_config uninstall --dry-run
     else
