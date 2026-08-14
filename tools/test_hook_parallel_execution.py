@@ -70,6 +70,8 @@ def _payload(event, matcher, session, index, workspace):
         )
     elif event == "SessionEnd":
         payload["reason"] = "other"
+    elif event == "PostCompact":
+        payload["trigger"] = "auto"
     return payload
 
 

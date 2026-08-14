@@ -138,21 +138,18 @@ def test_dev_state_absent_db_reports_inactive():
 
 
 def test_dev_state_reads_event_counts_and_feedback():
-    d = tempfile.mkdtemp()
-    db = os.path.join(d, "telemetry.db")
-    con = sqlite3.connect(db)
-    con.execute("CREATE TABLE events (id INTEGER PRIMARY KEY, ts TEXT, "
-                "session_id TEXT, agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
-    con.executemany("INSERT INTO events(session_id, event) VALUES (?,?)",
-                    [("s1", "session"), ("s1", "code_edit"), ("s2", "session")])
-    con.commit()
-    con.close()
+    db = _telemetry_db([
+        ("s1", "session", '{"phase":"start","source":"startup"}'),
+        ("s1", "code_edit", '{"lang":"python","ext":".py","operation":"edit"}'),
+        ("s2", "session", '{"phase":"start","source":"resume"}'),
+    ], columns="session_id, event, payload")
+    d = os.path.dirname(db)
     fb = os.path.join(d, "feedback")
     _write(os.path.join(fb, "20260101-120000-PROJ-some-friction.md"), "x")
     state = bhp.collect_dev_state(db_path=db, feedback_dir=fb)
     assert state["active"] is True
     assert state["telemetry"]["sessions"] == 2
-    counts = dict(state["telemetry"]["events"])
+    counts = dict(state["telemetry"]["event_counts"])
     assert counts["session"] == 2
     assert counts["code_edit"] == 1
     assert len(state["feedback"]) == 1
@@ -253,7 +250,9 @@ def _telemetry_db(rows, columns="ts, session_id, agent_type, event, payload"):
     db = os.path.join(d, "telemetry.db")
     con = sqlite3.connect(db)
     con.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, "
-                "session_id TEXT, agent_type TEXT, project TEXT, event TEXT, payload TEXT)")
+                "schema_version INTEGER DEFAULT 2, session_id TEXT, prompt_id TEXT, "
+                "agent_id TEXT, agent_type TEXT, tool_use_id TEXT, project TEXT, "
+                "hook_event TEXT, event TEXT, payload TEXT)")
     ph = ",".join("?" for _ in columns.split(","))
     con.executemany(f"INSERT INTO events({columns}) VALUES ({ph})", rows)
     con.commit()
@@ -263,9 +262,10 @@ def _telemetry_db(rows, columns="ts, session_id, agent_type, event, payload"):
 
 def test_dev_state_breaks_down_by_agent_and_day():
     db = _telemetry_db([
-        ("2026-06-01T10:00:00", "s1", "Explore", "subagent_start", ""),
-        ("2026-06-01T11:00:00", "s1", "Explore", "subagent_start", ""),
-        ("2026-06-02T09:00:00", "s2", "", "session", ""),
+        ("2026-06-01T10:00:00Z", "s1", "Explore", "subagent_start", "{}"),
+        ("2026-06-01T11:00:00Z", "s1", "Explore", "subagent_start", "{}"),
+        ("2026-06-02T09:00:00Z", "s2", "", "session",
+         '{"phase":"start","source":"startup"}'),
     ])
     state = bhp.collect_dev_state(db_path=db, feedback_dir="/nonexistent")
     by_agent = dict(state["telemetry"]["by_agent"])
@@ -276,25 +276,23 @@ def test_dev_state_breaks_down_by_agent_and_day():
     assert by_day["2026-06-02"] == 1
 
 
-def test_payload_breakdown_groups_by_key_and_degrades_visibly():
+def test_payload_breakdown_uses_validated_stream_and_surfaces_bad_rows():
     db = _telemetry_db([
-        ("skill_load", '{"skill":"review-flow"}'),
-        ("skill_load", '{"skill":"review-flow"}'),
-        ("skill_load", '{"skill":"surface-ticket"}'),
-        ("skill_load", '{"other":"x"}'),
-        ("skill_load", "not json"),
+        ("skill_request", '{"skill":"review-flow","invoker":"model"}'),
+        ("skill_request", '{"skill":"review-flow","invoker":"model"}'),
+        ("skill_request", '{"skill":"surface-ticket","invoker":"user"}'),
+        ("skill_request", '{"other":"x"}'),
+        ("skill_request", "not json"),
     ], columns="event, payload")
-    con = sqlite3.connect(db)
-    try:
-        b = bhp._payload_breakdown(con, "skill_load", "skill")
-    finally:
-        con.close()
-    assert b["total"] == 5
+    state = bhp.collect_dev_state(db_path=db, feedback_dir="/nonexistent")
+    b = next(item for item in state["telemetry"]["breakdowns"]
+             if item["event"] == "skill_request")
+    assert b["total"] == 3
     items = dict(b["items"])
     assert items["review-flow"] == 2
     assert items["surface-ticket"] == 1
-    # absent key and unparseable payload both degrade to the visible bucket
-    assert b["unrecognized"] == 2
+    assert "(unrecognized)" not in items
+    assert state["telemetry"]["invalid_rows"] == 2
 
 
 def test_hook_effectiveness_aggregates_outcomes_and_skips_malformed_rows():

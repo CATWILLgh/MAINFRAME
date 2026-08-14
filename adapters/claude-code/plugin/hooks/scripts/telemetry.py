@@ -6,8 +6,8 @@ Registered on several events (see `adapters/claude-code/plugin/hooks/hooks.json`
 NOTHING to stdout, so it is invisible to the agent. The adapter installer
 initializes the SQLite sink once; bounded retry absorbs brief writer contention.
 A persistent sink failure exits nonzero so the common launcher can report it
-once. Privacy: only low-risk metadata is extracted — never
-`tool_input` values, prompt text, file contents, reasons, or paths.
+once. Privacy: only typed low-risk metadata is extracted — never prompt text,
+file contents, denial reasons, tool arguments, or paths.
 """
 
 import hashlib
@@ -57,7 +57,7 @@ def _lang_bucket(file_path):
 
 def _record(event, data, payload):
     result = log_event(event, data, payload)
-    if result == "error":
+    if result not in ("written", "disabled"):
         raise RuntimeError("telemetry sink unavailable")
 
 
@@ -67,34 +67,68 @@ def main():
     tool_input = payload.get("tool_input") or {}
 
     if event == "PermissionDenied":
-        _record("permission_denied",
-                {"tool_name": payload.get("tool_name") or ""}, payload)
+        if not payload.get("tool_use_id") or not payload.get("tool_name"):
+            raise RuntimeError("PermissionDenied payload lacks tool identity")
+        _record("auto_permission_denied", {"tool_name": payload["tool_name"]}, payload)
     elif event == "SubagentStart":
-        _record("subagent_start", {"agent_type": payload.get("agent_type") or ""}, payload)
+        if not payload.get("agent_id") or not payload.get("agent_type"):
+            raise RuntimeError("SubagentStart payload lacks agent identity")
+        _record("subagent_start", {}, payload)
     elif event == "SubagentStop":
-        _record("subagent_stop", {"agent_type": payload.get("agent_type") or ""}, payload)
+        if not payload.get("agent_id") or not payload.get("agent_type"):
+            raise RuntimeError("SubagentStop payload lacks agent identity")
+        _record("subagent_stop", {}, payload)
+    elif event == "UserPromptExpansion":
+        command = str(payload.get("command_name") or "")
+        if (
+            payload.get("expansion_type") != "slash_command"
+            or payload.get("command_source") != "plugin"
+            or not command.startswith("mainframe:")
+        ):
+            raise RuntimeError("UserPromptExpansion payload is not a MAINFRAME command")
+        _record("skill_request", {
+            "skill": _norm_skill(command), "invoker": "user",
+        }, payload)
     elif event == "PreToolUse":
         tool = payload.get("tool_name") or ""
         if tool == "Skill":
             skill = tool_input.get("skill") or tool_input.get("name") or tool_input.get("command") or ""
-            _record("skill_load", {"skill": _norm_skill(skill)}, payload)
+            skill = _norm_skill(skill)
+            if not skill:
+                raise RuntimeError("Skill payload has no skill name")
+            _record("skill_request", {"skill": skill, "invoker": "model"}, payload)
     elif event == "PostToolUse":
         file_path = tool_input.get("file_path") or ""
         if file_path and _TICKET_RE.search(file_path):
-            _record("ticket_created", {"uid": _ticket_uid(file_path)}, payload)
+            _record("ticket_change", {
+                "uid": _ticket_uid(file_path),
+                "operation": (payload.get("tool_name") or "unknown").lower(),
+            }, payload)
         lang = _lang_bucket(file_path) if file_path else None
         if lang:
-            _record("code_edit",
-                    {"lang": lang, "ext": os.path.splitext(file_path)[1].lower()},
-                    payload)
+            data = {
+                "lang": lang,
+                "ext": os.path.splitext(file_path)[1].lower(),
+                "operation": (payload.get("tool_name") or "unknown").lower(),
+            }
+            duration = payload.get("duration_ms")
+            if isinstance(duration, int) and not isinstance(duration, bool) and duration >= 0:
+                data["duration_ms"] = duration
+            _record("code_edit", data, payload)
     elif event == "UserPromptSubmit":
-        _record("turn", {"prompt_len": len(payload.get("prompt") or "")}, payload)
+        _record("user_prompt", {"prompt_len": len(payload.get("prompt") or "")}, payload)
     elif event == "SessionStart":
-        _record("session", {"phase": "start", "source": payload.get("source") or ""}, payload)
+        if not payload.get("source"):
+            raise RuntimeError("SessionStart payload has no source")
+        _record("session", {"phase": "start", "source": payload["source"]}, payload)
     elif event == "SessionEnd":
-        _record("session", {"phase": "end", "end_reason": payload.get("reason") or ""}, payload)
-    elif event == "PreCompact":
-        _record("compaction", {}, payload)
+        if not payload.get("reason"):
+            raise RuntimeError("SessionEnd payload has no reason")
+        _record("session", {"phase": "end", "end_reason": payload["reason"]}, payload)
+    elif event == "PostCompact":
+        if payload.get("trigger") not in ("manual", "auto"):
+            raise RuntimeError("PostCompact payload has invalid trigger")
+        _record("compaction", {"trigger": payload["trigger"]}, payload)
 
 
 if __name__ == "__main__":

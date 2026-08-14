@@ -17,10 +17,11 @@ import datetime
 import json
 import os
 import re
-import sqlite3
 import sys
 
 import yaml
+
+from telemetry_data import build_report as build_telemetry_report
 
 _ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hub_page_assets")
 _DEFAULT_DB = os.path.expanduser(
@@ -44,13 +45,6 @@ _SETTINGS_FLAG_KEYS = ["model", "effortLevel", "outputStyle",
                        "teammateMode"]
 # (name, repo-relative path) layers that exist as reserved-but-empty directories.
 _EMPTY_LAYER_PROBES = (("rules", "adapters/claude-code/export/rules"), ("commands", "adapters/claude-code/plugin/commands"))
-# (event, payload-key) miss/usage breakdowns. The page READS payload defensively
-# but does not OWN its schema (telemetry.py does) — a renamed key degrades to the
-# visible "unrecognized" bucket rather than silently vanishing.
-_PAYLOAD_BREAKDOWNS = (("skill_load", "skill"), ("incident", "hook"),
-                       ("permission_denied", "tool_name"), ("secret_block", "types"))
-
-
 def parse_frontmatter(text):
     """Return (frontmatter dict, body). Empty dict when there is no frontmatter."""
     if not text.startswith("---"):
@@ -181,109 +175,10 @@ def build_edges(skills, agents, hooks):
     return edges
 
 
-def _payload_breakdown(con, event, key):
-    """Group an event's rows by one payload key. Unparseable or key-absent rows
-    fall into a visible 'unrecognized' count, so schema drift shows rather than
-    silently emptying the view."""
-    rows = con.execute("SELECT payload FROM events WHERE event = ?", (event,)).fetchall()
-    counts, unrecognized = {}, 0
-    for (payload,) in rows:
-        val = None
-        if payload:
-            try:
-                obj = json.loads(payload)
-                if isinstance(obj, dict):
-                    val = obj.get(key)
-            except (json.JSONDecodeError, ValueError):
-                val = None
-        if isinstance(val, list):
-            val = ", ".join(str(x) for x in val) if val else None
-        if val in (None, ""):
-            unrecognized += 1
-        else:
-            counts[str(val)] = counts.get(str(val), 0) + 1
-    items = sorted(counts.items(), key=lambda kv: -kv[1])
-    return {"event": event, "key": key, "total": len(rows),
-            "items": [list(i) for i in items], "unrecognized": unrecognized}
-
-
-def _hook_effectiveness(con):
-    """Aggregate the strict hook_signal payload without requiring SQLite JSON1."""
-    rows = con.execute(
-        "SELECT session_id, ts, payload FROM events WHERE event = 'hook_signal'"
-    ).fetchall()
-    grouped = {}
-    for session_id, ts, payload in rows:
-        try:
-            value = json.loads(payload or "")
-            hook = value["hook"]
-            rule_id = value["rule_id"]
-            outcome = value["outcome"]
-            count = int(value["count"])
-            context_chars = int(value["context_chars"])
-            if (
-                not isinstance(hook, str) or not hook
-                or not isinstance(rule_id, str) or not rule_id
-                or outcome not in {"noted", "asked", "blocked", "resolved"}
-                or count <= 0 or context_chars < 0
-            ):
-                continue
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-            continue
-        key = (hook, rule_id)
-        item = grouped.setdefault(key, {
-            "hook": hook, "rule_id": rule_id, "signals": 0,
-            "sessions": set(), "noted": 0, "asked": 0, "blocked": 0,
-            "resolved": 0, "context_chars": 0, "last_seen": "",
-        })
-        item["signals"] += 1
-        if session_id:
-            item["sessions"].add(session_id)
-        item[outcome] += count
-        item["context_chars"] += context_chars
-        item["last_seen"] = max(item["last_seen"], ts or "")
-    result = []
-    for item in grouped.values():
-        item["sessions"] = len(item["sessions"])
-        result.append(item)
-    return sorted(result, key=lambda item: (-item["signals"], item["hook"], item["rule_id"]))
-
-
 def collect_dev_state(db_path, feedback_dir):
-    """Read-only telemetry + feedback snapshot. Absence => dev not active."""
-    empty_tel = {"sessions": 0, "events": [], "by_agent": [], "by_day": [],
-                 "breakdowns": [], "hook_effectiveness": []}
-    state = {"active": False, "telemetry": dict(empty_tel), "feedback": []}
-    if os.path.isfile(db_path):
-        try:
-            con = sqlite3.connect(db_path)
-            try:
-                sessions = con.execute(
-                    "SELECT COUNT(DISTINCT session_id) FROM events").fetchone()[0]
-                events = con.execute(
-                    "SELECT event, COUNT(*) FROM events GROUP BY event ORDER BY 2 DESC").fetchall()
-                by_agent = con.execute(
-                    "SELECT COALESCE(NULLIF(agent_type, ''), '(main context)'), COUNT(*) "
-                    "FROM events GROUP BY 1 ORDER BY 2 DESC").fetchall()
-                by_day = con.execute(
-                    "SELECT substr(ts, 1, 10) AS day, COUNT(*) FROM events "
-                    "WHERE ts IS NOT NULL AND ts != '' GROUP BY day ORDER BY day").fetchall()
-                breakdowns = [b for b in (_payload_breakdown(con, ev, key)
-                                          for ev, key in _PAYLOAD_BREAKDOWNS) if b["total"]]
-                hook_effectiveness = _hook_effectiveness(con)
-            finally:
-                con.close()
-            state["telemetry"] = {
-                "sessions": sessions,
-                "events": [list(r) for r in events],
-                "by_agent": [list(r) for r in by_agent],
-                "by_day": [list(r) for r in by_day],
-                "breakdowns": breakdowns,
-                "hook_effectiveness": hook_effectiveness,
-            }
-            state["active"] = True
-        except sqlite3.Error:
-            pass
+    """Build the UI from the same validated stream exposed to machine readers."""
+    telemetry = build_telemetry_report(db_path)
+    state = {"active": telemetry["active"], "telemetry": telemetry, "feedback": []}
     if os.path.isdir(feedback_dir):
         state["feedback"] = sorted(
             f for f in os.listdir(feedback_dir) if f.endswith(".md"))

@@ -44,34 +44,76 @@ def _rows(db):
 def test_writes_row():
     db = _fresh_db()
     result = _hooklib.log_event(
-        "incident", {"hook": "h", "rule_id": "r", "file_ext": ".py"},
-        {"session_id": "abc", "agent_type": "", "cwd": "/x/proj"})
+        "code_edit", {"lang": "python", "ext": ".py", "operation": "edit"},
+        {"session_id": "abc", "prompt_id": "p1", "agent_id": "a1",
+         "agent_type": "worker", "tool_use_id": "t1", "cwd": "/x/proj",
+         "hook_event_name": "PostToolUse"})
     assert result == "written"
     rows = _rows(db)
     assert len(rows) == 1, rows
     ts, sid, at, project, event, payload = rows[0]
-    assert sid == "abc" and event == "incident"
+    assert sid == "abc" and event == "code_edit"
     assert project.startswith("proj-")            # basename + hash, not full path
     assert "/x/proj" not in project               # full path NOT stored
     body = json.loads(payload)
-    assert body["rule_id"] == "r" and body["file_ext"] == ".py"
+    assert body == {"lang": "python", "ext": ".py", "operation": "edit"}
+    with sqlite3.connect(db) as connection:
+        envelope = connection.execute(
+            "SELECT schema_version, prompt_id, agent_id, tool_use_id, hook_event "
+            "FROM events"
+        ).fetchone()
+    assert envelope == (2, "p1", "a1", "t1", "PostToolUse")
 
 
 def test_schema_and_wal():
     db = _fresh_db()
-    _hooklib.log_event("e", {}, {})
+    _hooklib.log_event("user_prompt", {"prompt_len": 0}, {})
     con = sqlite3.connect(db)
     try:
         mode = con.execute("PRAGMA journal_mode").fetchone()[0]
         assert mode.lower() == "wal", mode
         cols = [r[1] for r in con.execute("PRAGMA table_info(events)").fetchall()]
-        assert cols == ["id", "ts", "session_id", "agent_type", "project", "event", "payload"], cols
+        assert cols == [
+            "id", "ts", "schema_version", "session_id", "prompt_id", "agent_id",
+            "agent_type", "tool_use_id", "project", "hook_event", "event", "payload",
+        ], cols
         views = [row[0] for row in con.execute(
             "SELECT name FROM sqlite_master WHERE type = 'view'"
         ).fetchall()]
-        assert "hook_effectiveness" in views
+        assert "hook_effectiveness" not in views
     finally:
         con.close()
+
+
+def test_timestamp_is_utc_with_milliseconds():
+    db = _fresh_db()
+    assert _hooklib.log_event("user_prompt", {"prompt_len": 3}, {"session_id": "s"}) == "written"
+    timestamp = _rows(db)[0][0]
+    assert timestamp.endswith("Z") and "." in timestamp, timestamp
+
+
+def test_initialization_migrates_legacy_rows_without_deleting_them():
+    root = tempfile.mkdtemp()
+    db = os.path.join(root, "telemetry.db")
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, "
+            "session_id TEXT, agent_type TEXT, project TEXT, event TEXT, payload TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO events(ts, session_id, event, payload) VALUES (?,?,?,?)",
+            ("2026-01-01T00:00:00", "old", "legacy_event", "{}"),
+        )
+    _hooklib.initialize_telemetry_db(db)
+    os.environ["MAINFRAME_TELEMETRY_DB"] = db
+    assert _hooklib.log_event("user_prompt", {"prompt_len": 2}, {"session_id": "new"}) == "written"
+    with sqlite3.connect(db) as connection:
+        rows = connection.execute(
+            "SELECT schema_version, session_id, event FROM events ORDER BY id"
+        ).fetchall()
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+    assert rows == [(1, "old", "legacy_event"), (2, "new", "user_prompt")]
+    assert version == 2
 
 
 def test_fail_safe_bad_path():
@@ -81,36 +123,33 @@ def test_fail_safe_bad_path():
     with open(blocker, "w", encoding="utf-8") as handle:
         handle.write("x")
     os.environ["MAINFRAME_TELEMETRY_DB"] = os.path.join(blocker, "x.db")
-    assert _hooklib.log_event("e", {"k": 1}, {}) == "error"
+    assert _hooklib.log_event("user_prompt", {"prompt_len": 1}, {}) == "error"
 
 
-def test_privacy_strips_banned_keys():
+def test_privacy_rejects_unapproved_payload_fields():
     db = _fresh_db()
     # Caller mistake: banned keys passed in payload + a leaky hook_payload.
-    _hooklib.log_event(
-        "permission_denied",
+    result = _hooklib.log_event(
+        "auto_permission_denied",
         {"tool_name": "Bash", "reason": "denied", "tool_input": {"command": "rm -rf /"},
          "prompt": "secret prompt", "path": "/Users/x/.ssh/id_rsa", "command": "rm -rf /",
          "message": "private message", "stderr": "private failure output"},
         {"session_id": "s", "cwd": "/p", "tool_input": {"command": "leak"},
          "prompt": "leak"},
     )
-    rows = _rows(db)
-    assert len(rows) == 1
-    payload = rows[0][5]
-    body = json.loads(payload)
-    # Allowed low-risk keys survive; free-form denial reasons do not.
-    assert body.get("tool_name") == "Bash"
-    assert "reason" not in body
-    # Banned structural keys stripped from the stored payload:
-    for banned in ("tool_input", "prompt", "command", "path", "message", "stderr"):
-        assert banned not in body, f"{banned} leaked into payload"
-    # And nothing from hook_payload's tool_input/prompt anywhere in the row:
-    whole = " ".join(str(c) for c in rows[0])
-    assert "leak" not in whole and "secret prompt" not in whole and "id_rsa" not in whole
+    assert result == "error"
+    assert _rows(db) == []
+
+    assert _hooklib.log_event(
+        "auto_permission_denied", {"tool_name": "Bash"},
+        {"session_id": "s", "cwd": "/p", "tool_input": {"command": "leak"},
+         "prompt": "leak"},
+    ) == "written"
+    whole = " ".join(str(c) for c in _rows(db)[0])
+    assert "leak" not in whole
 
 
-def test_hook_signal_contract_and_effectiveness_view():
+def test_hook_signal_contract_is_raw_and_machine_aggregator_owns_the_view():
     db = _fresh_db()
     hp = {"session_id": "s", "agent_type": "mainframe-test", "cwd": "/private/proj"}
     assert _hooklib.log_hook_signal(
@@ -129,18 +168,6 @@ def test_hook_signal_contract_and_effectiveness_view():
     }
     whole = " ".join(str(value) for row in rows for value in row)
     assert "private diagnostic text" not in whole and "/private/proj" not in whole
-    con = sqlite3.connect(db)
-    try:
-        summary = con.execute(
-            "SELECT hook, rule_id, signals, sessions, noted, asked, blocked, "
-            "resolved, context_chars FROM hook_effectiveness"
-        ).fetchone()
-    finally:
-        con.close()
-    assert summary == (
-        "check.py", "unsafe-call", 2, 1, 3, 0, 0, 2,
-        len("private diagnostic text"),
-    )
 
 
 def test_hook_signal_rejects_unknown_or_empty_outcomes():
@@ -160,12 +187,12 @@ def test_default_path_requires_existing_dir():
     home = tempfile.mkdtemp()
     os.environ["HOME"] = home
     try:
-        assert _hooklib.log_event("e", {"k": 1}, {"session_id": "s"}) == "disabled"
+        assert _hooklib.log_event("user_prompt", {"prompt_len": 1}, {"session_id": "s"}) == "disabled"
         tdir = os.path.join(
             home, ".claude", "mainframe", "claude-code", "telemetry")
         assert not os.path.exists(tdir), "dir must not be created implicitly"
         os.makedirs(tdir)
-        assert _hooklib.log_event("e2", {}, {"session_id": "s"}) == "written"
+        assert _hooklib.log_event("user_prompt", {"prompt_len": 1}, {"session_id": "s"}) == "written"
         assert os.path.exists(os.path.join(tdir, "telemetry.db")), \
             "opted-in (dir exists) -> row written"
     finally:
@@ -189,7 +216,7 @@ def test_concurrency_writers_preserve_all_rows():
     n_proc, per = 16, 25
     worker = (
         "import sys; sys.path.insert(0, %r); import _hooklib;\n"
-        "[_hooklib.log_event('c', {'i': i}, {'session_id': 's'}) for i in range(%d)]"
+        "[_hooklib.log_event('user_prompt', {'prompt_len': i}, {'session_id': 's'}) for i in range(%d)]"
         % (_SCRIPTS, per)
     )
     env = dict(os.environ, MAINFRAME_TELEMETRY_DB=db)
@@ -201,7 +228,7 @@ def test_concurrency_writers_preserve_all_rows():
     print(f"  concurrency: {got}/{n_proc * per} rows landed")
     assert all(c == 0 for c in codes), f"a writer crashed under contention: {codes}"
     assert got == n_proc * per, f"expected every row under load, got {got}"
-    assert all(r[4] == "c" for r in rows), "a landed row was malformed"
+    assert all(r[4] == "user_prompt" for r in rows), "a landed row was malformed"
 
 
 def test_ticket_uid_is_hash_not_slug():
@@ -213,12 +240,12 @@ def test_ticket_uid_is_hash_not_slug():
     assert telemetry._ticket_uid("/x/docs/tickets/a7c5a653-other.md") != uid  # distinct ticket
 
 
-def test_ticket_event_stores_only_uid():
+def test_ticket_event_uses_honest_change_name_and_operation():
     db = _fresh_db()
     _drive_post_tool_use("/proj/docs/tickets/private-description.md", "s", "")
-    rows = [row for row in _rows(db) if row[4] == "ticket_created"]
+    rows = [row for row in _rows(db) if row[4] == "ticket_change"]
     assert len(rows) == 1
-    assert set(json.loads(rows[0][5])) == {"uid"}
+    assert json.loads(rows[0][5])["operation"] == "write"
     assert "private-description" not in " ".join(str(value) for value in rows[0])
 
 
@@ -227,7 +254,9 @@ def test_persistent_failure_reaches_common_launcher_contract():
     try:
         telemetry.log_event = lambda *args, **kwargs: "error"
         try:
-            _drive_main({"hook_event_name": "SessionStart", "session_id": "s"})
+            _drive_main({
+                "hook_event_name": "SessionStart", "session_id": "s", "source": "startup"
+            })
         except RuntimeError as exc:
             assert "sink unavailable" in str(exc)
         else:
@@ -249,6 +278,67 @@ def test_every_telemetry_registration_uses_early_gate():
     assert telemetry_commands
     assert all(item["args"][0].endswith("/run-telemetry-hook.sh")
                for item in telemetry_commands)
+    registered_events = {
+        event for event, groups in hooks.items() for group in groups
+        for item in group["hooks"] if item in telemetry_commands
+    }
+    assert "UserPromptSubmit" in registered_events
+    assert "UserPromptExpansion" in registered_events
+    assert "PostCompact" in registered_events
+    session_matchers = [group["matcher"] for group in hooks["SessionStart"]]
+    assert any("fork" in matcher.split("|") for matcher in session_matchers)
+
+
+def test_turn_compaction_and_subagent_identity_are_recorded():
+    db = _fresh_db()
+    _drive_main({
+        "hook_event_name": "UserPromptSubmit", "session_id": "s",
+        "prompt_id": "p", "prompt": "hello",
+    })
+    _drive_main({
+        "hook_event_name": "PostCompact", "session_id": "s", "trigger": "auto",
+    })
+    _drive_main({
+        "hook_event_name": "SubagentStart", "session_id": "s",
+        "agent_id": "a", "agent_type": "mainframe-researcher",
+    })
+    with sqlite3.connect(db) as connection:
+        rows = connection.execute(
+            "SELECT event, prompt_id, agent_id, agent_type, payload FROM events ORDER BY id"
+        ).fetchall()
+    assert rows[0][:2] == ("user_prompt", "p")
+    assert json.loads(rows[0][4]) == {"prompt_len": 5}
+    assert rows[1][0] == "compaction" and json.loads(rows[1][4]) == {"trigger": "auto"}
+    assert rows[2][1:4] == ("", "a", "mainframe-researcher")
+
+
+def test_skill_requests_distinguish_model_and_direct_user_paths():
+    db = _fresh_db()
+    _drive_main({
+        "hook_event_name": "PreToolUse", "session_id": "s", "prompt_id": "p",
+        "tool_use_id": "t", "tool_name": "Skill",
+        "tool_input": {"skill": "mainframe:testing-strategy"},
+    })
+    _drive_main({
+        "hook_event_name": "UserPromptExpansion", "session_id": "s", "prompt_id": "p2",
+        "expansion_type": "slash_command", "command_name": "mainframe:init",
+        "command_source": "plugin", "prompt": "/mainframe:init",
+    })
+    rows = [json.loads(row[5]) for row in _rows(db) if row[4] == "skill_request"]
+    assert rows == [
+        {"skill": "testing-strategy", "invoker": "model"},
+        {"skill": "init", "invoker": "user"},
+    ]
+
+
+def test_contract_rejects_invalid_enums_and_incomplete_session_pairs():
+    db = _fresh_db()
+    assert _hooklib.log_event("compaction", {"trigger": "guessed"}, {}) == "error"
+    assert _hooklib.log_event("session", {"phase": "start"}, {}) == "error"
+    assert _hooklib.log_event(
+        "session", {"phase": "end", "source": "startup", "end_reason": "other"}, {}
+    ) == "error"
+    assert _rows(db) == []
 
 
 def test_early_gate_starts_no_runtime_without_dev_marker():
@@ -288,7 +378,9 @@ def test_lang_bucket_skips_noncode():
 
 def _drive_post_tool_use(file_path, session, agent_type):
     payload = {"hook_event_name": "PostToolUse", "session_id": session,
-               "agent_type": agent_type, "cwd": "/proj",
+               "agent_id": "agent-1" if agent_type else "", "agent_type": agent_type,
+               "prompt_id": "prompt-1", "tool_use_id": "tool-1", "tool_name": "Write",
+               "duration_ms": 12, "cwd": "/proj",
                "tool_input": {"file_path": file_path}}
     old = sys.stdin
     sys.stdin = io.StringIO(json.dumps(payload))

@@ -2,7 +2,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume|clear|compact",
+        "matcher": "startup|resume|clear|compact|fork",
         "hooks": [
           {
             "type": "command",
@@ -36,6 +36,20 @@
     ],
     "UserPromptExpansion": [
       {
+        "matcher": "^mainframe:.*$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-telemetry-hook.sh",
+              "UserPromptExpansion",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
+          }
+        ]
+      },
+      {
         "matcher": "mainframe:init",
         "hooks": [
           {
@@ -61,6 +75,15 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "UserPromptSubmit",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/init-reminder.py"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-telemetry-hook.sh",
+              "UserPromptSubmit",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
             ]
           }
         ]
@@ -385,6 +408,22 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-telemetry-hook.sh",
               "SubagentStop",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-telemetry-hook.sh",
+              "PostCompact",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
             ]
           }

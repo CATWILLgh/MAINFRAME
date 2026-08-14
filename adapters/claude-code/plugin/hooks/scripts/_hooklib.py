@@ -23,6 +23,12 @@ import subprocess
 import sys
 import time
 
+try:
+    from _telemetry_contract import ROW_SCHEMA_VERSION, validate_payload
+except Exception:
+    ROW_SCHEMA_VERSION = 0
+    validate_payload = None
+
 # Source-code extensions the hooks scan. Prose/config (.md/.json/.yaml/.txt) is
 # skipped on purpose: it legitimately mentions markers (incl. the hub's own docs).
 CODE_EXTENSIONS = frozenset({
@@ -46,7 +52,8 @@ HUB_HOOK_FILES = frozenset({
     "length-quality-note.py",
     "_hooklib.py", "_markers.py", "_marker_state.py", "_notice_state.py",
     "test_hooklib.py",
-    "telemetry.py", "hook-failure-report.py", "test_telemetry.py",
+    "telemetry.py", "_telemetry_contract.py", "hook-failure-report.py",
+    "test_telemetry.py",
     "skill-authority.py",
 })
 
@@ -257,13 +264,6 @@ def added_lines_by_file(cwd, self_files=HUB_HOOK_FILES):
     return rows
 
 
-_TELEMETRY_BANNED_KEYS = frozenset({
-    "tool_input", "prompt", "command", "content", "code", "text",
-    "path", "file_path", "cwd", "transcript_path", "reason", "message",
-    "stdout", "stderr", "output", "exception",
-})
-
-
 def _telemetry_db_path():
     # ~/.claude/mainframe is the hub-OWNED --dev namespace. Keep the adapter
     # segment explicit so a future Codex adapter can opt in independently.
@@ -284,30 +284,18 @@ def _telemetry_project_key(cwd):
 
 _TELEMETRY_SCHEMA = (
     "CREATE TABLE IF NOT EXISTS events ("
-    "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, session_id TEXT, "
-    "agent_type TEXT, project TEXT, event TEXT, payload TEXT)"
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, "
+    "schema_version INTEGER NOT NULL, session_id TEXT, prompt_id TEXT, "
+    "agent_id TEXT, agent_type TEXT, tool_use_id TEXT, project TEXT, "
+    "hook_event TEXT, event TEXT NOT NULL, payload TEXT NOT NULL)"
 )
-_TELEMETRY_EFFECTIVENESS_VIEW = """
-CREATE VIEW hook_effectiveness AS
-SELECT
-  json_extract(payload, '$.hook') AS hook,
-  json_extract(payload, '$.rule_id') AS rule_id,
-  COUNT(*) AS signals,
-  COUNT(DISTINCT session_id) AS sessions,
-  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'noted'
-      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS noted,
-  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'asked'
-      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS asked,
-  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'blocked'
-      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS blocked,
-  SUM(CASE WHEN json_extract(payload, '$.outcome') = 'resolved'
-      THEN CAST(json_extract(payload, '$.count') AS INTEGER) ELSE 0 END) AS resolved,
-  SUM(CAST(json_extract(payload, '$.context_chars') AS INTEGER)) AS context_chars,
-  MAX(ts) AS last_seen
-FROM events
-WHERE event = 'hook_signal' AND json_valid(payload)
-GROUP BY hook, rule_id
-"""
+_TELEMETRY_MIGRATION_COLUMNS = (
+    ("schema_version", "INTEGER NOT NULL DEFAULT 1"),
+    ("prompt_id", "TEXT"),
+    ("agent_id", "TEXT"),
+    ("tool_use_id", "TEXT"),
+    ("hook_event", "TEXT"),
+)
 _HOOK_SIGNAL_OUTCOMES = frozenset({"noted", "asked", "blocked", "resolved"})
 _HOOK_SIGNAL_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 _HOOK_SIGNAL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -323,12 +311,18 @@ def initialize_telemetry_db(db=None):
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute(_TELEMETRY_SCHEMA)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(events)")}
+        for name, declaration in _TELEMETRY_MIGRATION_COLUMNS:
+            if name not in columns:
+                conn.execute(f"ALTER TABLE events ADD COLUMN {name} {declaration}")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_event_ts ON events(event, ts)")
-        # The view is derived state. Recreate it during explicit dev
-        # initialization so its schema can evolve without a data migration.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id, id)")
+        # Old revisions created a derived SQL view. The canonical reader now
+        # owns every aggregation for both machine and web consumers.
         conn.execute("DROP VIEW IF EXISTS hook_effectiveness")
-        conn.execute(_TELEMETRY_EFFECTIVENESS_VIEW)
+        conn.execute(f"PRAGMA user_version={ROW_SCHEMA_VERSION}")
         conn.commit()
     finally:
         conn.close()
@@ -360,17 +354,25 @@ def log_event(event, payload=None, hook_payload=None):
         if not os.path.exists(db):
             initialize_telemetry_db(db)
 
+        if validate_payload is None or ROW_SCHEMA_VERSION <= 0:
+            return "error"
         hp = hook_payload or {}
-        safe = {k: v for k, v in (payload or {}).items()
-                if k not in _TELEMETRY_BANNED_KEYS}
+        safe = validate_payload(str(event), payload or {})
+        now = datetime.datetime.now(datetime.timezone.utc)
         row = (
-            datetime.datetime.now().isoformat(timespec="seconds"),
+            now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            ROW_SCHEMA_VERSION,
             str(hp.get("session_id") or ""),
+            str(hp.get("prompt_id") or ""),
+            str(hp.get("agent_id") or ""),
             str(hp.get("agent_type") or ""),
+            str(hp.get("tool_use_id") or ""),
             _telemetry_project_key(hp.get("cwd") or ""),
+            str(hp.get("hook_event_name") or ""),
             str(event),
             json.dumps(safe, separators=(",", ":")),
         )
+        migrated = False
         for attempt, delay in enumerate(_TELEMETRY_RETRY_DELAYS):
             if delay:
                 jitter = ((os.getpid() + attempt) % 5) / 1000
@@ -381,11 +383,19 @@ def log_event(event, payload=None, hook_payload=None):
                 conn.execute("PRAGMA busy_timeout=50")
                 conn.execute("PRAGMA synchronous=NORMAL")
                 conn.execute(
-                    "INSERT INTO events(ts, session_id, agent_type, project, event, payload) "
-                    "VALUES (?,?,?,?,?,?)", row)
+                    "INSERT INTO events(ts, schema_version, session_id, prompt_id, "
+                    "agent_id, agent_type, tool_use_id, project, hook_event, event, payload) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)", row)
                 conn.commit()
                 return "written"
             except sqlite3.OperationalError as exc:
+                if not migrated and "column" in str(exc).lower():
+                    if conn is not None:
+                        conn.close()
+                        conn = None
+                    initialize_telemetry_db(db)
+                    migrated = True
+                    continue
                 if not _telemetry_busy(exc):
                     return "error"
             finally:

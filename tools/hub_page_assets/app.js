@@ -285,33 +285,68 @@
 
   function renderDev(root) {
     const ds = D.dev_state;
+    const t = ds.telemetry;
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
         "No telemetry recorded yet — either dev mode is not installed, or no "
         + "sessions have run since it was. Enable with ./install.sh --claude --dev; "
         + "data appears here after a few sessions."));
+      if (t && t.error) root.appendChild(el("div", { class: "notice" }, "Telemetry read error: " + t.error));
       return;
     }
-    root.appendChild(el("div", { class: "stat-row" }, [
-      el("div", { class: "stat" }, [el("b", null, String(ds.telemetry.sessions)), " sessions"]),
+    root.appendChild(el("p", { class: "muted" },
+      "Validated telemetry snapshot generated " + t.generated_at + ". Rebuild hub.html to refresh it; "
+      + "machine readers use tools/telemetry_data.py over the same event stream."));
+    root.appendChild(el("div", { class: "stat-row wrap" }, [
+      el("div", { class: "stat" }, [el("b", null, String(t.usable_records)), " usable events"]),
+      el("div", { class: "stat" }, [el("b", null, String(t.records)), " stored rows"]),
+      el("div", { class: "stat" }, [el("b", null, String(t.sessions)), " sessions"]),
+      el("div", { class: "stat" }, [el("b", null, String(t.agent_instances)), " agent instances"]),
+      el("div", { class: "stat" }, [el("b", null, String(t.invalid_rows)), " invalid rows"]),
       el("div", { class: "stat" }, [el("b", null, String(ds.feedback.length)), " feedback queued"]),
-      el("div", { class: "stat" }, [el("b", null, String(ds.telemetry.events.length)), " event types"]),
     ]));
-    const rows = ds.telemetry.events.map(([name, n]) => el("tr", null, [
+
+    if (t.invalid_rows || t.legacy_rows || (t.unknown_events && t.unknown_events.length)) {
+      const details = [];
+      if (t.invalid_rows) details.push(t.invalid_rows + " invalid");
+      if (t.legacy_rows) details.push(t.legacy_rows + " legacy");
+      if (t.unknown_events && t.unknown_events.length) details.push(t.unknown_events.length + " unknown event types");
+      root.appendChild(el("div", { class: "notice" },
+        "Data health needs attention: " + details.join(", ") + ". New-format rows are validated before display."));
+    } else {
+      root.appendChild(el("div", { class: "notice ok" },
+        "Data health is clean: every current-format row matches the canonical event contract."));
+    }
+
+    const rows = t.event_counts.map(([name, n]) => el("tr", null, [
       el("td", { class: "mono" }, name),
       el("td", { class: "num" }, String(n)),
     ]));
-    root.appendChild(section("Telemetry events", "events", ds.telemetry.events.length,
+    root.appendChild(section("Telemetry events", "events", t.event_counts.length,
       el("table", { class: "matrix" }, [
         el("thead", null, el("tr", null, [el("th", null, "event"), el("th", null, "count")])),
         el("tbody", null, rows)])));
 
-    const t = ds.telemetry;
     if (t.by_day && t.by_day.length) {
       root.appendChild(section("Activity by day", "events", t.by_day.length, barList(t.by_day)));
     }
     if (t.by_agent && t.by_agent.length) {
       root.appendChild(section("Events by agent", "agents", t.by_agent.length, barList(t.by_agent)));
+    }
+    if (t.agent_lifecycle && t.agent_lifecycle.length) {
+      const arows = t.agent_lifecycle.map((item) => el("tr", null, [
+        el("td", { class: "mono" }, item.agent),
+        el("td", { class: "num" }, String(item.instances)),
+        el("td", { class: "num" }, String(item.started)),
+        el("td", { class: "num" }, String(item.stopped)),
+        el("td", { class: "num" + (item.unmatched ? " dim" : "") }, String(item.unmatched)),
+      ]));
+      root.appendChild(section("Subagent lifecycle", "agents", arows.length,
+        el("table", { class: "matrix" }, [
+          el("thead", null, el("tr", null, [el("th", null, "agent"),
+            el("th", { class: "num" }, "instances"), el("th", { class: "num" }, "started"),
+            el("th", { class: "num" }, "stopped"), el("th", { class: "num" }, "unmatched")])),
+          el("tbody", null, arows)])));
     }
     if (t.hook_effectiveness && t.hook_effectiveness.length) {
       const hrows = t.hook_effectiveness.map((item) => el("tr", null, [
@@ -338,14 +373,24 @@
     (t.breakdowns || []).forEach((b) => {
       const brows = b.items.map(([v, n]) => el("tr", null, [
         el("td", { class: "mono" }, v), el("td", { class: "num" }, String(n))]));
-      if (b.unrecognized) {
-        brows.push(el("tr", null, [
-          el("td", { class: "mono dim" }, "(payload format unrecognized)"),
-          el("td", { class: "num dim" }, String(b.unrecognized))]));
-      }
       root.appendChild(section(b.event + " · by " + b.key, "dev", b.total,
         el("table", { class: "matrix" }, [el("tbody", null, brows)])));
     });
+
+    if (t.recent_events && t.recent_events.length) {
+      const rrows = t.recent_events.map((item) => el("tr", null, [
+        el("td", { class: "mono dim" }, String(item.id)),
+        el("td", { class: "mono dim" }, item.timestamp),
+        el("td", { class: "mono" }, item.event),
+        el("td", { class: "mono" }, item.agent_type || "(main context)"),
+        el("td", { class: "mono dim" }, item.project || "—"),
+      ]));
+      root.appendChild(section("Recent usable event stream", "dev", rrows.length,
+        el("table", { class: "matrix" }, [
+          el("thead", null, el("tr", null, [el("th", null, "id"), el("th", null, "UTC"),
+            el("th", null, "event"), el("th", null, "agent"), el("th", null, "project")])),
+          el("tbody", null, rrows)])));
+    }
 
     if (ds.feedback.length) {
       root.appendChild(section("Feedback queue", "dev", ds.feedback.length,
