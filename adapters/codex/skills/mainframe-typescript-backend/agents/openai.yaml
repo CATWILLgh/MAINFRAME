@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME TypeScript Backend"
+  short_description: "Build and verify Node.js backend behavior"
+  default_prompt: "Use $mainframe-typescript-backend to implement this server-side TypeScript change."

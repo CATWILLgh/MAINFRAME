@@ -7,6 +7,16 @@ REPO_ROOT="$(cd "${ADAPTER_ROOT}/../.." && pwd)"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)-$$"
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 GLOBAL_SKILLS_DIR="$HOME/.agents/skills"
+SKILL_NAMES=(
+    mainframe-init
+    mainframe-secrets
+    mainframe-ticket
+    mainframe-typescript-backend
+)
+AGENT_NAMES=(
+    mainframe_researcher
+    mainframe_typescript_backend_engineer
+)
 SOURCE_AGENTS="${ADAPTER_ROOT}/export/AGENTS.md"
 TARGET_AGENTS="${CODEX_DIR}/AGENTS.md"
 AGENTS_STATE="${CODEX_DIR}/.mainframe-agents-state"
@@ -16,9 +26,6 @@ INDEX_STATE="${CODEX_DIR}/.mainframe-index-state"
 RULES_SOURCE="${ADAPTER_ROOT}/rules/mainframe.rules"
 RULES_TARGET="${CODEX_DIR}/rules/mainframe.rules"
 RULES_STATE="${CODEX_DIR}/.mainframe-rules-state"
-AGENT_SOURCE="${ADAPTER_ROOT}/agents/mainframe_researcher.toml"
-AGENT_TARGET="${CODEX_DIR}/agents/mainframe_researcher.toml"
-AGENT_STATE="${CODEX_DIR}/.mainframe-researcher-state"
 CONFIG_SOURCE="${ADAPTER_ROOT}/config/mainframe-permissions.toml"
 CONFIG_TOOL="${ADAPTER_ROOT}/scripts/manage-config.py"
 CONFIG_TARGET="${CODEX_DIR}/config.toml"
@@ -81,6 +88,10 @@ resolve_link() {
     python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
 }
 
+agent_source() { printf '%s/agents/%s.toml\n' "$ADAPTER_ROOT" "$1"; }
+agent_target() { printf '%s/agents/%s.toml\n' "$CODEX_DIR" "$1"; }
+agent_state() { printf '%s/.mainframe-agent-%s-state\n' "$CODEX_DIR" "$1"; }
+
 state_value() {
     local key="$1"
     [[ -f "$AGENTS_STATE" ]] || return 1
@@ -112,11 +123,9 @@ link_conflicts() {
 }
 
 delivery_preflight() {
-    local target source managed_sha current_sha
-    for source in \
-        "${ADAPTER_ROOT}/skills/mainframe-init" \
-        "${ADAPTER_ROOT}/skills/mainframe-secrets" \
-        "${ADAPTER_ROOT}/skills/mainframe-ticket"; do
+    local name target source managed_sha current_sha
+    for name in "${SKILL_NAMES[@]}"; do
+        source="${ADAPTER_ROOT}/skills/${name}"
         target="${GLOBAL_SKILLS_DIR}/$(basename "$source")"
         if link_conflicts "$target" "$source"; then
             error "Refusing to replace existing skill path without a separate migration: $target"
@@ -131,10 +140,14 @@ delivery_preflight() {
         error "A Codex MAINFRAME rules file already exists. Rerun with --yes to back it up before linking the adapter rules."
         return 1
     fi
-    if link_conflicts "$AGENT_TARGET" "$AGENT_SOURCE" && [[ $ASSUME_YES -ne 1 ]]; then
-        error "A Codex MAINFRAME researcher already exists. Rerun with --yes to back it up before linking the adapter agent."
-        return 1
-    fi
+    for name in "${AGENT_NAMES[@]}"; do
+        source="$(agent_source "$name")"
+        target="$(agent_target "$name")"
+        if link_conflicts "$target" "$source" && [[ $ASSUME_YES -ne 1 ]]; then
+            error "A Codex MAINFRAME agent already exists at $target. Rerun with --yes to back it up before linking the adapter agent."
+            return 1
+        fi
+    done
 
     if [[ -f "$AGENTS_STATE" ]]; then
         managed_sha="$(state_value managed_sha || true)"
@@ -159,7 +172,7 @@ delivery_preflight() {
 }
 
 check_sources() {
-    local path
+    local name path
     for path in "$SOURCE_AGENTS" \
         "${ADAPTER_ROOT}/skills/mainframe-init/SKILL.md" \
         "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
@@ -169,11 +182,27 @@ check_sources() {
         "${ADAPTER_ROOT}/skills/mainframe-ticket/references/record-confirmed-problem.md" \
         "${ADAPTER_ROOT}/skills/mainframe-ticket/references/ticket-format.md" \
         "$RULES_SOURCE" \
-        "$AGENT_SOURCE" \
         "$CONFIG_SOURCE" \
         "$CONFIG_TOOL"; do
         if [[ ! -f "$path" ]]; then
             error "Codex adapter source is missing: $path"
+            return 1
+        fi
+    done
+    for name in "${SKILL_NAMES[@]}"; do
+        for path in \
+            "${ADAPTER_ROOT}/skills/${name}/SKILL.md" \
+            "${ADAPTER_ROOT}/skills/${name}/agents/openai.yaml"; do
+            if [[ ! -f "$path" ]]; then
+                error "Codex adapter skill source is missing: $path"
+                return 1
+            fi
+        done
+    done
+    for name in "${AGENT_NAMES[@]}"; do
+        path="$(agent_source "$name")"
+        if [[ ! -f "$path" ]]; then
+            error "Codex adapter agent source is missing: $path"
             return 1
         fi
     done
@@ -205,7 +234,7 @@ validate_rules() {
 }
 
 preflight() {
-    local managed_sha current_sha
+    local name source target state managed_sha current_sha
     require_python
     check_sources
     if [[ $UNINSTALL -eq 1 ]]; then
@@ -229,10 +258,15 @@ preflight() {
             error "The Codex MAINFRAME rules installation changed after installation. It was preserved."
             return 1
         fi
-        if [[ -f "$AGENT_STATE" ]] && { [[ ! -L "$AGENT_TARGET" ]] || [[ "$(resolve_link "$AGENT_TARGET")" != "$AGENT_SOURCE" ]]; }; then
-            error "The Codex MAINFRAME researcher installation changed after installation. It was preserved."
-            return 1
-        fi
+        for name in "${AGENT_NAMES[@]}"; do
+            source="$(agent_source "$name")"
+            target="$(agent_target "$name")"
+            state="$(agent_state "$name")"
+            if [[ -f "$state" ]] && { [[ ! -L "$target" ]] || [[ "$(resolve_link "$target")" != "$source" ]]; }; then
+                error "The Codex MAINFRAME agent installation changed at $target. It was preserved."
+                return 1
+            fi
+        done
         manage_config uninstall --dry-run >/dev/null
     else
         runtime_preflight
@@ -357,36 +391,40 @@ rules_state_value() {
 }
 
 agent_state_value() {
-    [[ -f "$AGENT_STATE" ]] || return 1
-    sed -n 's/^backup_path=//p' "$AGENT_STATE" | head -n 1
+    local state="$1"
+    [[ -f "$state" ]] || return 1
+    sed -n 's/^backup_path=//p' "$state" | head -n 1
 }
 
 install_agent() {
-    local backup_path="-"
-    if [[ -L "$AGENT_TARGET" ]] && [[ "$(resolve_link "$AGENT_TARGET")" == "$AGENT_SOURCE" ]]; then
-        log "Codex researcher already linked: $AGENT_TARGET"
+    local name="$1" source target state backup_path="-"
+    source="$(agent_source "$name")"
+    target="$(agent_target "$name")"
+    state="$(agent_state "$name")"
+    if [[ -L "$target" ]] && [[ "$(resolve_link "$target")" == "$source" ]]; then
+        log "Codex specialist agent already linked: $target"
         return
     fi
-    if [[ -f "$AGENT_STATE" ]]; then
-        backup_path="$(agent_state_value || printf '-')"
+    if [[ -f "$state" ]]; then
+        backup_path="$(agent_state_value "$state" || printf '-')"
     fi
-    if [[ -e "$AGENT_TARGET" || -L "$AGENT_TARGET" ]]; then
-        backup_path="${AGENT_TARGET}.backup-${TIMESTAMP}"
+    if [[ -e "$target" || -L "$target" ]]; then
+        backup_path="${target}.backup-${TIMESTAMP}"
         if [[ $DRY_RUN -eq 1 ]]; then
-            log "would back up existing $AGENT_TARGET to $backup_path"
+            log "would back up existing $target to $backup_path"
         else
-            mv "$AGENT_TARGET" "$backup_path"
+            mv "$target" "$backup_path"
         fi
     fi
     if [[ $DRY_RUN -eq 1 ]]; then
-        log "would link $AGENT_TARGET -> $AGENT_SOURCE"
+        log "would link $target -> $source"
         return
     fi
-    mkdir -p "$(dirname "$AGENT_TARGET")"
-    ln -s "$AGENT_SOURCE" "$AGENT_TARGET"
-    printf 'backup_path=%s\n' "$backup_path" > "$AGENT_STATE"
-    chmod 600 "$AGENT_STATE"
-    log "linked Codex specialist agent: $AGENT_TARGET"
+    mkdir -p "$(dirname "$target")"
+    ln -s "$source" "$target"
+    printf 'backup_path=%s\n' "$backup_path" > "$state"
+    chmod 600 "$state"
+    log "linked Codex specialist agent: $target"
 }
 
 install_rules() {
@@ -426,13 +464,14 @@ install_config() {
 }
 
 install_adapter() {
+    local name
     install_agents
-    install_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
-    install_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
-    install_link "${ADAPTER_ROOT}/skills/mainframe-ticket" "${GLOBAL_SKILLS_DIR}/mainframe-ticket" "ticket intake skill"
+    for name in "${SKILL_NAMES[@]}"; do
+        install_link "${ADAPTER_ROOT}/skills/${name}" "${GLOBAL_SKILLS_DIR}/${name}" "Codex skill $name"
+    done
     install_index
     install_rules
-    install_agent
+    for name in "${AGENT_NAMES[@]}"; do install_agent "$name"; done
     install_config
     if [[ $DRY_RUN -eq 1 ]]; then
         log "Codex baseline plan verified; no files were changed."
@@ -470,31 +509,34 @@ uninstall_rules() {
 }
 
 uninstall_agent() {
-    local backup_path="-"
-    if [[ ! -L "$AGENT_TARGET" ]] || [[ "$(resolve_link "$AGENT_TARGET")" != "$AGENT_SOURCE" ]]; then
-        if [[ -f "$AGENT_STATE" ]]; then
-            error "The Codex MAINFRAME researcher installation changed after installation. It was preserved."
+    local name="$1" source target state backup_path="-"
+    source="$(agent_source "$name")"
+    target="$(agent_target "$name")"
+    state="$(agent_state "$name")"
+    if [[ ! -L "$target" ]] || [[ "$(resolve_link "$target")" != "$source" ]]; then
+        if [[ -f "$state" ]]; then
+            error "The Codex MAINFRAME agent installation changed at $target. It was preserved."
             return 1
         fi
-        log "Codex researcher is not an adapter-owned link: $AGENT_TARGET"
+        log "Codex specialist agent is not an adapter-owned link: $target"
         return
     fi
-    if [[ -f "$AGENT_STATE" ]]; then
-        backup_path="$(agent_state_value || printf '-')"
+    if [[ -f "$state" ]]; then
+        backup_path="$(agent_state_value "$state" || printf '-')"
     fi
     if [[ $DRY_RUN -eq 1 ]]; then
-        log "would remove $AGENT_TARGET"
+        log "would remove $target"
         if [[ "$backup_path" != "-" ]]; then log "would restore $backup_path"; fi
         return
     fi
-    rm "$AGENT_TARGET"
+    rm "$target"
     if [[ "$backup_path" != "-" && -e "$backup_path" ]]; then
-        mv "$backup_path" "$AGENT_TARGET"
-        log "restored previous Codex researcher: $AGENT_TARGET"
+        mv "$backup_path" "$target"
+        log "restored previous Codex specialist agent: $target"
     else
-        log "removed Codex researcher: $AGENT_TARGET"
+        log "removed Codex specialist agent: $target"
     fi
-    if [[ -f "$AGENT_STATE" ]]; then rm "$AGENT_STATE"; fi
+    if [[ -f "$state" ]]; then rm "$state"; fi
 }
 
 remove_owned_link() {
@@ -572,13 +614,14 @@ uninstall_agents() {
 }
 
 uninstall_adapter() {
+    local name
     uninstall_agents
-    remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
-    remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
-    remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-ticket" "${GLOBAL_SKILLS_DIR}/mainframe-ticket" "ticket intake skill"
+    for name in "${SKILL_NAMES[@]}"; do
+        remove_owned_link "${ADAPTER_ROOT}/skills/${name}" "${GLOBAL_SKILLS_DIR}/${name}" "Codex skill $name"
+    done
     uninstall_index
     uninstall_rules
-    uninstall_agent
+    for name in "${AGENT_NAMES[@]}"; do uninstall_agent "$name"; done
     if [[ $DRY_RUN -eq 1 ]]; then
         manage_config uninstall --dry-run
     else

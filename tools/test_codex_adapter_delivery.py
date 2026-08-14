@@ -55,8 +55,10 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-init" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe-ticket" in proc.stdout
+    assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe.rules" in proc.stdout
     assert "mainframe_researcher.toml" in proc.stdout
+    assert "mainframe_typescript_backend_engineer.toml" in proc.stdout
     assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
@@ -76,7 +78,12 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert stat.S_IMODE(agents.stat().st_mode) == 0o600
     assert stat.S_IMODE(state.stat().st_mode) == 0o600
 
-    for name in ("mainframe-init", "mainframe-secrets", "mainframe-ticket"):
+    for name in (
+        "mainframe-init",
+        "mainframe-secrets",
+        "mainframe-ticket",
+        "mainframe-typescript-backend",
+    ):
         target = home / ".agents" / "skills" / name
         assert target.is_symlink()
         assert target.resolve() == ADAPTER / "skills" / name
@@ -90,7 +97,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert rules.is_symlink() and rules.resolve() == ADAPTER / "rules" / "mainframe.rules"
     assert rules_state.is_file()
     researcher = codex_dir / "agents" / "mainframe_researcher.toml"
-    researcher_state = codex_dir / ".mainframe-researcher-state"
+    researcher_state = codex_dir / ".mainframe-agent-mainframe_researcher-state"
     assert researcher.is_symlink()
     assert researcher.resolve() == ADAPTER / "agents" / "mainframe_researcher.toml"
     assert researcher_state.is_file()
@@ -103,6 +110,24 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert researcher_data["features"]["apps"] is False
     assert researcher_data["features"]["shell_tool"] is False
     assert researcher_data["features"]["unified_exec"] is False
+    typescript_engineer = (
+        codex_dir / "agents" / "mainframe_typescript_backend_engineer.toml"
+    )
+    typescript_state = (
+        codex_dir / ".mainframe-agent-mainframe_typescript_backend_engineer-state"
+    )
+    assert typescript_engineer.is_symlink()
+    assert typescript_engineer.resolve() == (
+        ADAPTER / "agents" / "mainframe_typescript_backend_engineer.toml"
+    )
+    assert typescript_state.is_file()
+    typescript_data = tomllib.loads(typescript_engineer.read_text(encoding="utf-8"))
+    assert typescript_data["name"] == "mainframe_typescript_backend_engineer"
+    assert typescript_data["model"] == "gpt-5.6-sol"
+    assert typescript_data["model_reasoning_effort"] == "medium"
+    assert typescript_data["sandbox_mode"] == "workspace-write"
+    assert typescript_data["web_search"] == "live"
+    assert typescript_data["features"]["apps"] is False
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
     assert config.is_file() and config_state.is_file()
@@ -138,10 +163,17 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not rules_state.exists()
     assert not researcher.exists() and not researcher.is_symlink()
     assert not researcher_state.exists()
+    assert not typescript_engineer.exists() and not typescript_engineer.is_symlink()
+    assert not typescript_state.exists()
     assert not config.exists()
     assert not config_state.exists()
     assert helper.is_symlink()
-    for name in ("mainframe-init", "mainframe-secrets", "mainframe-ticket"):
+    for name in (
+        "mainframe-init",
+        "mainframe-secrets",
+        "mainframe-ticket",
+        "mainframe-typescript-backend",
+    ):
         target = home / ".agents" / "skills" / name
         assert not target.exists() and not target.is_symlink()
 
@@ -243,7 +275,7 @@ def test_existing_mainframe_researcher_requires_yes_and_is_restored():
 
     refused, _ = _run("--codex", home=home)
     assert refused.returncode != 0
-    assert "researcher already exists" in refused.stderr
+    assert "agent already exists" in refused.stderr
     assert 'name = "personal"' in target.read_text(encoding="utf-8")
 
     installed, _ = _run("--codex", "--yes", home=home)
@@ -285,7 +317,7 @@ def test_changed_mainframe_researcher_stops_uninstall_before_other_removal():
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode != 0
-    assert "researcher installation changed" in removed.stderr
+    assert "agent installation changed" in removed.stderr
     assert 'name = "changed"' in target.read_text(encoding="utf-8")
     assert (home / ".codex" / "AGENTS.md").is_file()
 
@@ -439,6 +471,17 @@ def test_baseline_uses_native_standalone_layers_only():
     assert researcher_data["description"].startswith("Use for a bounded external-research block")
     assert "Do not use for repository exploration" in researcher_data["description"]
     assert "Do not recommend, select, advocate, implement" in researcher_data["developer_instructions"]
+    typescript_engineer = (
+        ADAPTER / "agents" / "mainframe_typescript_backend_engineer.toml"
+    )
+    assert typescript_engineer.is_file()
+    typescript_data = tomllib.loads(typescript_engineer.read_text(encoding="utf-8"))
+    assert typescript_data["model"] == "gpt-5.6-sol"
+    assert typescript_data["model_reasoning_effort"] == "medium"
+    assert "load and follow the `mainframe-typescript-backend` skill" in (
+        typescript_data["developer_instructions"]
+    )
+    assert "stage files, commit, push" in typescript_data["developer_instructions"]
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
     assert 'pattern = ["secret"]' in (
         ADAPTER / "rules" / "mainframe.rules"
@@ -470,6 +513,14 @@ def test_baseline_uses_native_standalone_layers_only():
         "ticket-format.md",
     ):
         assert (ticket_skill / "references" / reference).is_file()
+
+    typescript_skill = ADAPTER / "skills" / "mainframe-typescript-backend"
+    typescript_body = (typescript_skill / "SKILL.md").read_text(encoding="utf-8")
+    assert "name: mainframe-typescript-backend" in typescript_body
+    assert "scripts/recon.js" in typescript_body
+    assert "references/testing.md" in typescript_body
+    assert "mainframe-ticket" in typescript_body
+    assert (typescript_skill / "scripts" / "recon.js").is_file()
 
 
 def test_shared_judgment_and_primary_completion_are_separated():
