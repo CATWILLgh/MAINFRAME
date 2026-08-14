@@ -12,6 +12,9 @@ AGENTS_STATE="${CODEX_DIR}/.mainframe-agents-state"
 INDEX_SOURCE="${REPO_ROOT}/shared/credentials/credentials-index.md"
 INDEX_TARGET="${CODEX_DIR}/credentials-index.md"
 INDEX_STATE="${CODEX_DIR}/.mainframe-index-state"
+RULES_SOURCE="${ADAPTER_ROOT}/rules/mainframe.rules"
+RULES_TARGET="${CODEX_DIR}/rules/mainframe.rules"
+RULES_STATE="${CODEX_DIR}/.mainframe-rules-state"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)-$$"
 
 DRY_RUN=0
@@ -28,8 +31,9 @@ Usage:
   install.sh --preflight [--dry-run] [--yes]
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
-share AGENTS.md and standalone skills. Codex plugins, hooks, rules, agents,
-configuration, and development telemetry are not installed by this version.
+share AGENTS.md, standalone skills, and MAINFRAME-owned command rules. Codex
+plugins, hooks, agents, configuration, and development telemetry are not
+installed by this version.
 EOF
 }
 
@@ -112,6 +116,10 @@ delivery_preflight() {
         error "A Codex credentials index already exists. Rerun with --yes to back it up before linking the repository index."
         return 1
     fi
+    if link_conflicts "$RULES_TARGET" "$RULES_SOURCE" && [[ $ASSUME_YES -ne 1 ]]; then
+        error "A Codex MAINFRAME rules file already exists. Rerun with --yes to back it up before linking the adapter rules."
+        return 1
+    fi
 
     if [[ -f "$AGENTS_STATE" ]]; then
         managed_sha="$(state_value managed_sha || true)"
@@ -139,12 +147,26 @@ check_sources() {
     local path
     for path in "$SOURCE_AGENTS" \
         "${ADAPTER_ROOT}/skills/mainframe-init/SKILL.md" \
-        "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md"; do
+        "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
+        "$RULES_SOURCE"; do
         if [[ ! -f "$path" ]]; then
             error "Codex adapter source is missing: $path"
             return 1
         fi
     done
+}
+
+validate_rules() {
+    local runtime=""
+    if command -v codex >/dev/null 2>&1; then
+        runtime="$(command -v codex)"
+    elif [[ -x /Applications/ChatGPT.app/Contents/Resources/codex ]]; then
+        runtime="/Applications/ChatGPT.app/Contents/Resources/codex"
+    fi
+    if [[ -n "$runtime" ]] && ! "$runtime" execpolicy check --rules "$RULES_SOURCE" -- git push >/dev/null 2>&1; then
+        error "Codex rejected the MAINFRAME rules file; no adapter files were changed."
+        return 1
+    fi
 }
 
 preflight() {
@@ -168,8 +190,13 @@ preflight() {
             error "The Codex credentials index changed after installation. It was preserved."
             return 1
         fi
+        if [[ -f "$RULES_STATE" ]] && { [[ ! -L "$RULES_TARGET" ]] || [[ "$(resolve_link "$RULES_TARGET")" != "$RULES_SOURCE" ]]; }; then
+            error "The Codex MAINFRAME rules installation changed after installation. It was preserved."
+            return 1
+        fi
     else
         runtime_preflight
+        validate_rules
         delivery_preflight
     fi
 }
@@ -283,16 +310,78 @@ install_index() {
     log "linked credentials index: $INDEX_TARGET"
 }
 
+rules_state_value() {
+    [[ -f "$RULES_STATE" ]] || return 1
+    sed -n 's/^backup_path=//p' "$RULES_STATE" | head -n 1
+}
+
+install_rules() {
+    local backup_path="-"
+    if [[ -L "$RULES_TARGET" ]] && [[ "$(resolve_link "$RULES_TARGET")" == "$RULES_SOURCE" ]]; then
+        log "Codex rules already linked: $RULES_TARGET"
+        return
+    fi
+    if [[ -f "$RULES_STATE" ]]; then
+        backup_path="$(rules_state_value || printf '-')"
+    fi
+    if [[ -e "$RULES_TARGET" || -L "$RULES_TARGET" ]]; then
+        backup_path="${RULES_TARGET}.backup-${TIMESTAMP}"
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "would back up existing $RULES_TARGET to $backup_path"
+        else
+            mv "$RULES_TARGET" "$backup_path"
+        fi
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "would link $RULES_TARGET -> $RULES_SOURCE"
+        return
+    fi
+    mkdir -p "$(dirname "$RULES_TARGET")"
+    ln -s "$RULES_SOURCE" "$RULES_TARGET"
+    printf 'backup_path=%s\n' "$backup_path" > "$RULES_STATE"
+    chmod 600 "$RULES_STATE"
+    log "linked Codex command rules: $RULES_TARGET"
+}
+
 install_adapter() {
     install_agents
     install_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
     install_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
     install_index
+    install_rules
     if [[ $DRY_RUN -eq 1 ]]; then
         log "Codex baseline plan verified; no files were changed."
     else
         log "Codex baseline installed. Start a new task before relying on updated global instructions or skill discovery."
     fi
+}
+
+uninstall_rules() {
+    local backup_path="-"
+    if [[ ! -L "$RULES_TARGET" ]] || [[ "$(resolve_link "$RULES_TARGET")" != "$RULES_SOURCE" ]]; then
+        if [[ -f "$RULES_STATE" ]]; then
+            error "The Codex MAINFRAME rules installation changed after installation. It was preserved."
+            return 1
+        fi
+        log "Codex rules are not an adapter-owned link: $RULES_TARGET"
+        return
+    fi
+    if [[ -f "$RULES_STATE" ]]; then
+        backup_path="$(rules_state_value || printf '-')"
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "would remove $RULES_TARGET"
+        if [[ "$backup_path" != "-" ]]; then log "would restore $backup_path"; fi
+        return
+    fi
+    rm "$RULES_TARGET"
+    if [[ "$backup_path" != "-" && -e "$backup_path" ]]; then
+        mv "$backup_path" "$RULES_TARGET"
+        log "restored previous Codex rules: $RULES_TARGET"
+    else
+        log "removed Codex rules: $RULES_TARGET"
+    fi
+    if [[ -f "$RULES_STATE" ]]; then rm "$RULES_STATE"; fi
 }
 
 remove_owned_link() {
@@ -374,6 +463,7 @@ uninstall_adapter() {
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
     uninstall_index
+    uninstall_rules
     log "Credentials, the repository index, and unrelated Codex configuration were preserved."
 }
 

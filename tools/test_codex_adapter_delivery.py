@@ -50,6 +50,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "regular file" in proc.stdout
     assert "mainframe-init" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
+    assert "mainframe.rules" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 
@@ -77,6 +78,10 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     helper = home / ".local" / "bin" / "secret"
     assert index.is_symlink() and index.resolve() == SHARED / "credentials-index.md"
     assert index_state.is_file()
+    rules = codex_dir / "rules" / "mainframe.rules"
+    rules_state = codex_dir / ".mainframe-rules-state"
+    assert rules.is_symlink() and rules.resolve() == ADAPTER / "rules" / "mainframe.rules"
+    assert rules_state.is_file()
     assert helper.is_symlink()
     assert not (codex_dir / "config.toml").exists()
 
@@ -89,6 +94,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not state.exists()
     assert not index.exists() and not index.is_symlink()
     assert not index_state.exists()
+    assert not rules.exists() and not rules.is_symlink()
+    assert not rules_state.exists()
     assert helper.is_symlink()
     for name in ("mainframe-init", "mainframe-secrets"):
         target = home / ".agents" / "skills" / name
@@ -156,6 +163,43 @@ def test_existing_codex_index_requires_yes_and_is_restored():
     assert index.read_text(encoding="utf-8") == "old local index\n"
 
 
+def test_existing_mainframe_rules_require_yes_and_are_restored():
+    home = pathlib.Path(tempfile.mkdtemp())
+    rules_dir = home / ".codex" / "rules"
+    rules_dir.mkdir(parents=True)
+    target = rules_dir / "mainframe.rules"
+    target.write_text("# user-owned rules\n", encoding="utf-8")
+
+    refused, _ = _run("--codex", home=home)
+    assert refused.returncode != 0
+    assert "MAINFRAME rules file already exists" in refused.stderr
+    assert target.read_text(encoding="utf-8") == "# user-owned rules\n"
+
+    installed, _ = _run("--codex", "--yes", home=home)
+    assert installed.returncode == 0, installed.stderr
+    assert target.is_symlink() and target.resolve() == ADAPTER / "rules" / "mainframe.rules"
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert target.is_file() and not target.is_symlink()
+    assert target.read_text(encoding="utf-8") == "# user-owned rules\n"
+
+
+def test_changed_mainframe_rules_stop_uninstall_before_other_removal():
+    installed, home = _run("--codex")
+    assert installed.returncode == 0, installed.stderr
+    target = home / ".codex" / "rules" / "mainframe.rules"
+    target.unlink()
+    target.write_text("# changed after install\n", encoding="utf-8")
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode != 0
+    assert "rules installation changed" in removed.stderr
+    assert target.read_text(encoding="utf-8") == "# changed after install\n"
+    assert (home / ".codex" / "AGENTS.md").is_file()
+    assert (home / ".agents" / "skills" / "mainframe-init").is_symlink()
+
+
 def test_skill_collision_stops_before_shared_install():
     home = pathlib.Path(tempfile.mkdtemp())
     collision = home / ".agents" / "skills" / "mainframe-init"
@@ -182,6 +226,7 @@ def test_baseline_uses_native_standalone_layers_only():
     assert not (ADAPTER / "hooks").exists()
     assert not (ADAPTER / "agents").exists()
     assert not (ADAPTER / "config.toml").exists()
+    assert (ADAPTER / "rules" / "mainframe.rules").is_file()
 
     init_metadata = (
         ADAPTER / "skills" / "mainframe-init" / "agents" / "openai.yaml"

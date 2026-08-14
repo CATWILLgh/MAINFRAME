@@ -1,0 +1,99 @@
+# MAINFRAME Git authority guardrails.
+#
+# These rules route repository operations that require separate user authority
+# through Codex approval handling. With auto-review enabled, the reviewer can
+# approve an explicitly requested operation without interrupting the user.
+# Ordinary repository inspection, staging, and local commits remain sandboxed
+# and are intentionally not broadened by an allow rule.
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Push only when the user explicitly requested remote delivery; ordinary push authority does not include force push.",
+    match = [
+        "git push",
+        "git push origin main",
+        "git push --set-upstream origin feature/example",
+    ],
+    not_match = [
+        "git status",
+        "git remote -v",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", ["switch", "checkout", "pull", "merge", "rebase", "reset", "cherry-pick", "revert", "restore"]],
+    decision = "prompt",
+    justification = "Changing the branch, worktree, index, or history requires an explicit user request.",
+    match = [
+        "git switch feature/example",
+        "git checkout main",
+        "git pull --ff-only",
+        "git merge feature/example",
+        "git rebase main",
+        "git reset --soft HEAD~1",
+        "git cherry-pick deadbeef",
+        "git revert deadbeef",
+        "git restore src/example.ts",
+    ],
+    not_match = [
+        "git status --short --branch",
+        "git diff --check",
+        "git log -1 --oneline",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "commit", "--amend"],
+    decision = "prompt",
+    justification = "Amending history requires an explicit user request; create a new local commit otherwise.",
+    match = [
+        "git commit --amend",
+        "git commit --amend --no-edit",
+    ],
+    not_match = [
+        "git commit -m feat: example",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "stash", ["push", "pop", "apply", "drop", "clear", "branch", "save"]],
+    decision = "prompt",
+    justification = "Changing stash state requires an explicit user request; listing or showing stashes remains ordinary inspection.",
+    match = [
+        "git stash push -m checkpoint",
+        "git stash pop",
+        "git stash clear",
+    ],
+    not_match = [
+        "git stash list",
+        "git stash show stash@{0}",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "worktree", ["add", "move", "remove", "lock", "unlock", "prune", "repair"]],
+    decision = "prompt",
+    justification = "Changing worktrees requires an explicit user request; listing worktrees remains ordinary inspection.",
+    match = [
+        "git worktree add ../example feature/example",
+        "git worktree remove ../example",
+        "git worktree prune",
+    ],
+    not_match = [
+        "git worktree list",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "prompt",
+    justification = "Deleting untracked files requires an explicit user request. A dry run may be approved as inspection.",
+    match = [
+        "git clean -n",
+        "git clean -fd",
+    ],
+    not_match = [
+        "git status --short",
+    ],
+)
