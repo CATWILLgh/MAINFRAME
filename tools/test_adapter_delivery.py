@@ -1236,7 +1236,50 @@ def test_language_dependencies_use_auto_mode_not_manual_confirmation():
         assert rule not in asked
     assert "Bash(brew install *)" in asked
     assert "Bash(apt install *)" in asked
-    assert "Bash(npm publish *)" in asked
+
+
+def test_external_package_and_image_publications_require_confirmation():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    asked = settings["permissions"]["ask"]
+    for rule in (
+        "Bash(npm publish *)", "Bash(pnpm publish *)",
+        "Bash(yarn publish *)", "Bash(yarn npm publish *)",
+        "Bash(twine upload *)", "Bash(python -m twine upload *)",
+        "Bash(python3 -m twine upload *)", "Bash(uv publish *)",
+        "Bash(poetry publish *)", "Bash(hatch publish *)",
+        "Bash(cargo publish *)", "Bash(gem push *)",
+        "Bash(docker push *)", "Bash(docker image push *)",
+        "Bash(docker manifest push *)",
+    ):
+        assert rule in asked
+    assert "Bash(pip upload *)" not in asked
+
+
+def test_system_and_destructive_runtime_changes_keep_narrow_confirmation():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    asked = settings["permissions"]["ask"]
+    for rule in (
+        "Bash(brew install *)", "Bash(apt install *)",
+        "Bash(apt-get install *)", "Bash(*chmod 777*)",
+        "Bash(*chown *)", "Bash(sudo *)", "Bash(docker rm *)",
+        "Bash(docker rmi *)", "Bash(docker volume rm *)",
+        "Bash(docker compose down -v*)", "Bash(docker system prune *)",
+        "Bash(docker run *--privileged*)",
+    ):
+        assert rule in asked
+
+    # Broad prompts cannot distinguish local diagnostics from an external or
+    # material mutation. Auto mode and the caller's authority own that context.
+    for rule in (
+        "Bash(curl *)", "Bash(wget *)", "Bash(docker *)",
+        "Bash(docker compose down *)", "Bash(npm install *)",
+        "Bash(pip install *)",
+    ):
+        assert rule not in asked
 
 
 def _run_all():
