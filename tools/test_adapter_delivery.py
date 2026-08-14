@@ -1264,8 +1264,8 @@ def test_system_and_destructive_runtime_changes_keep_narrow_confirmation():
     asked = settings["permissions"]["ask"]
     for rule in (
         "Bash(brew install *)", "Bash(apt install *)",
-        "Bash(apt-get install *)", "Bash(*chmod 777*)",
-        "Bash(*chown *)", "Bash(sudo *)", "Bash(docker rm *)",
+        "Bash(apt-get install *)", "Bash(chmod 777 *)",
+        "Bash(chown *)", "Bash(sudo *)", "Bash(docker rm *)",
         "Bash(docker rmi *)", "Bash(docker volume rm *)",
         "Bash(docker compose down -v*)", "Bash(docker system prune *)",
         "Bash(docker run *--privileged*)",
@@ -1291,6 +1291,8 @@ def test_emergency_system_denies_match_commands_not_harmless_mentions():
     for stale_rule in (
         "Bash(*mkfs*)", "Bash(*dd if=*)", "Bash(*fdisk*)",
         "Bash(kill -9 1*)", "Bash(pkill -9 -1*)",
+        "Bash(*chmod -R 777*)", "Bash(*chmod 777 /*)",
+        "Bash(*chmod -R 000*)", "Bash(*chown -R root*)",
     ):
         assert stale_rule not in denied
 
@@ -1301,9 +1303,20 @@ def test_emergency_system_denies_match_commands_not_harmless_mentions():
         "Bash(fdisk *)", "Bash(/sbin/fdisk *)",
         "Bash(/usr/sbin/fdisk *)", "Bash(kill -9 1)",
         "Bash(kill -9 1 *)", "Bash(kill -9 -1)",
-        "Bash(kill -9 -1 *)",
+        "Bash(kill -9 -1 *)", "Bash(chmod -R 777 *)",
+        "Bash(chmod 777 /*)", "Bash(chmod -R 000 *)",
+        "Bash(chown -R root*)",
     ):
         assert rule in denied
+
+    asked = settings["permissions"]["ask"]
+    for stale_rule in ("Bash(*chmod 777*)", "Bash(*chown *)"):
+        assert stale_rule not in asked
+    for rule in (
+        "Bash(chmod 777 *)", "Bash(/bin/chmod 777 *)",
+        "Bash(chown *)", "Bash(/usr/sbin/chown *)",
+    ):
+        assert rule in asked
 
 
 def _run_all():
