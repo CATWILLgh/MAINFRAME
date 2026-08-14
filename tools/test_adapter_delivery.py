@@ -1282,6 +1282,25 @@ def test_system_and_destructive_runtime_changes_keep_narrow_confirmation():
         assert rule not in asked
 
 
+def test_verified_local_postgres_is_disposable_without_manual_confirmation():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    asked = settings["permissions"]["ask"]
+    for rule in (
+        "Bash(*DROP DATABASE*)",
+        "Bash(*DROP SCHEMA*)",
+        "Bash(*TRUNCATE TABLE*)",
+    ):
+        assert rule not in asked
+
+    instructions = (ADAPTER / "export" / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "verified to run entirely on this machine" in instructions
+    assert "without separate approval" in instructions
+    assert "tunnel, proxy, or remote endpoint" in instructions
+    assert "remote, shared, staging, or production endpoint" in instructions
+
+
 def test_emergency_system_denies_match_commands_not_harmless_mentions():
     settings = json.loads(
         (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")

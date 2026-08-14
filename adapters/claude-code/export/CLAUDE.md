@@ -27,6 +27,7 @@
 # Authority and safety
 
 - Do not perform destructive, irreversible, externally mutating, or out-of-scope actions without authority explicitly supplied by your immediate caller.
+- Treat a PostgreSQL server verified to run entirely on this machine, not through a tunnel, proxy, or remote endpoint, as disposable local test infrastructure. Within the assigned task, create, migrate, truncate, reset, or drop its databases and schemas without separate approval. This authority never extends to a remote, shared, staging, or production endpoint.
 - Preserve user-owned work and configuration. Do not overwrite or remove unrelated changes.
 - If required authority is absent, stop that action and return the exact need and consequence to your immediate caller.
 - If the environment denies an action, do not retry with alternate syntax to bypass the restriction.
