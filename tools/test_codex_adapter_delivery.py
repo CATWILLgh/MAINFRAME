@@ -19,6 +19,55 @@ CONFIG_MANAGER = ADAPTER / "scripts" / "manage-config.py"
 CONFIG_SOURCE = ADAPTER / "config" / "mainframe-permissions.toml"
 
 
+def _agent_template_data(name, *, home):
+    body = (ADAPTER / "agents" / f"{name}.toml.template").read_text(
+        encoding="utf-8"
+    )
+    replacements = {
+        "__MAINFRAME_RESEARCH_METHOD_SKILL__": ADAPTER
+        / "skills"
+        / "mainframe-research-method"
+        / "SKILL.md",
+        "__MAINFRAME_DECISION_REVIEW_SKILL__": ADAPTER
+        / "skills"
+        / "mainframe-decision-review"
+        / "SKILL.md",
+        "__MAINFRAME_READINESS_REVIEW_SKILL__": ADAPTER
+        / "skills"
+        / "mainframe-readiness-review"
+        / "SKILL.md",
+        "__MAINFRAME_PYTHON_BACKEND_SKILL__": home
+        / ".agents"
+        / "skills"
+        / "mainframe-python-backend"
+        / "SKILL.md",
+        "__MAINFRAME_TYPESCRIPT_BACKEND_SKILL__": home
+        / ".agents"
+        / "skills"
+        / "mainframe-typescript-backend"
+        / "SKILL.md",
+        "__MAINFRAME_FRONTEND_SKILL__": home
+        / ".agents"
+        / "skills"
+        / "mainframe-frontend"
+        / "SKILL.md",
+        "__MAINFRAME_TESTING_STRATEGY_SKILL__": home
+        / ".agents"
+        / "skills"
+        / "mainframe-testing-strategy"
+        / "SKILL.md",
+        "__MAINFRAME_TICKET_SKILL__": home
+        / ".agents"
+        / "skills"
+        / "mainframe-ticket"
+        / "SKILL.md",
+    }
+    for marker, path in replacements.items():
+        body = body.replace(marker, str(path.resolve()))
+    assert "__MAINFRAME_" not in body
+    return tomllib.loads(body)
+
+
 def _run(*args, home=None):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
@@ -60,6 +109,9 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe-frontend" in proc.stdout
     assert "mainframe-testing-strategy" in proc.stdout
+    assert "mainframe-infrastructure" in proc.stdout
+    assert "mainframe-curl-requests" in proc.stdout
+    assert "mainframe-ops-app-server-safety" in proc.stdout
     assert "mainframe.rules" in proc.stdout
     assert "mainframe_researcher.toml" in proc.stdout
     assert "mainframe_python_backend_engineer.toml" in proc.stdout
@@ -95,6 +147,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-typescript-backend",
         "mainframe-frontend",
         "mainframe-testing-strategy",
+        "mainframe-infrastructure",
+        "mainframe-curl-requests",
+        "mainframe-ops-app-server-safety",
     ):
         target = home / ".agents" / "skills" / name
         assert target.is_symlink()
@@ -110,8 +165,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert rules_state.is_file()
     researcher = codex_dir / "agents" / "mainframe_researcher.toml"
     researcher_state = codex_dir / ".mainframe-agent-mainframe_researcher-state"
-    assert researcher.is_symlink()
-    assert researcher.resolve() == ADAPTER / "agents" / "mainframe_researcher.toml"
+    assert researcher.is_file() and not researcher.is_symlink()
     assert researcher_state.is_file()
     researcher_data = tomllib.loads(researcher.read_text(encoding="utf-8"))
     assert researcher_data["name"] == "mainframe_researcher"
@@ -122,16 +176,27 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert researcher_data["features"]["apps"] is False
     assert researcher_data["features"]["shell_tool"] is False
     assert researcher_data["features"]["unified_exec"] is False
+    assert researcher_data["skills"]["config"] == [
+        {
+            "path": str(
+                ADAPTER
+                / "skills"
+                / "mainframe-research-method"
+                / "SKILL.md"
+            ),
+            "enabled": True,
+        }
+    ]
+    assert not (
+        home / ".agents" / "skills" / "mainframe-research-method"
+    ).exists()
     typescript_engineer = (
         codex_dir / "agents" / "mainframe_typescript_backend_engineer.toml"
     )
     typescript_state = (
         codex_dir / ".mainframe-agent-mainframe_typescript_backend_engineer-state"
     )
-    assert typescript_engineer.is_symlink()
-    assert typescript_engineer.resolve() == (
-        ADAPTER / "agents" / "mainframe_typescript_backend_engineer.toml"
-    )
+    assert typescript_engineer.is_file() and not typescript_engineer.is_symlink()
     assert typescript_state.is_file()
     typescript_data = tomllib.loads(typescript_engineer.read_text(encoding="utf-8"))
     assert typescript_data["name"] == "mainframe_typescript_backend_engineer"
@@ -140,12 +205,27 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert typescript_data["sandbox_mode"] == "workspace-write"
     assert typescript_data["web_search"] == "live"
     assert typescript_data["features"]["apps"] is False
+    assert typescript_data["skills"]["config"] == [
+        {
+            "path": str(
+                home
+                / ".agents"
+                / "skills"
+                / "mainframe-typescript-backend"
+                / "SKILL.md"
+            ),
+            "enabled": True,
+        },
+        {
+            "path": str(
+                home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"
+            ),
+            "enabled": True,
+        },
+    ]
     python_engineer = codex_dir / "agents" / "mainframe_python_backend_engineer.toml"
     python_state = codex_dir / ".mainframe-agent-mainframe_python_backend_engineer-state"
-    assert python_engineer.is_symlink()
-    assert python_engineer.resolve() == (
-        ADAPTER / "agents" / "mainframe_python_backend_engineer.toml"
-    )
+    assert python_engineer.is_file() and not python_engineer.is_symlink()
     assert python_state.is_file()
     python_data = tomllib.loads(python_engineer.read_text(encoding="utf-8"))
     assert python_data["name"] == "mainframe_python_backend_engineer"
@@ -154,14 +234,21 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert python_data["sandbox_mode"] == "workspace-write"
     assert python_data["web_search"] == "live"
     assert python_data["features"]["apps"] is False
+    assert [item["path"] for item in python_data["skills"]["config"]] == [
+        str(
+            home
+            / ".agents"
+            / "skills"
+            / "mainframe-python-backend"
+            / "SKILL.md"
+        ),
+        str(home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"),
+    ]
     frontend_engineer = codex_dir / "agents" / "mainframe_react_frontend_engineer.toml"
     frontend_state = (
         codex_dir / ".mainframe-agent-mainframe_react_frontend_engineer-state"
     )
-    assert frontend_engineer.is_symlink()
-    assert frontend_engineer.resolve() == (
-        ADAPTER / "agents" / "mainframe_react_frontend_engineer.toml"
-    )
+    assert frontend_engineer.is_file() and not frontend_engineer.is_symlink()
     assert frontend_state.is_file()
     frontend_data = tomllib.loads(frontend_engineer.read_text(encoding="utf-8"))
     assert frontend_data["name"] == "mainframe_react_frontend_engineer"
@@ -170,14 +257,15 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert frontend_data["sandbox_mode"] == "workspace-write"
     assert frontend_data["web_search"] == "live"
     assert frontend_data["features"]["apps"] is False
+    assert [item["path"] for item in frontend_data["skills"]["config"]] == [
+        str(home / ".agents" / "skills" / "mainframe-frontend" / "SKILL.md"),
+        str(home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"),
+    ]
     test_auditor = codex_dir / "agents" / "mainframe_test_auditor.toml"
     test_auditor_state = (
         codex_dir / ".mainframe-agent-mainframe_test_auditor-state"
     )
-    assert test_auditor.is_symlink()
-    assert test_auditor.resolve() == (
-        ADAPTER / "agents" / "mainframe_test_auditor.toml"
-    )
+    assert test_auditor.is_file() and not test_auditor.is_symlink()
     assert test_auditor_state.is_file()
     test_auditor_data = tomllib.loads(test_auditor.read_text(encoding="utf-8"))
     assert test_auditor_data["name"] == "mainframe_test_auditor"
@@ -195,6 +283,16 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     )
     assert test_auditor_data["web_search"] == "live"
     assert test_auditor_data["features"]["apps"] is False
+    assert [item["path"] for item in test_auditor_data["skills"]["config"]] == [
+        str(
+            home
+            / ".agents"
+            / "skills"
+            / "mainframe-testing-strategy"
+            / "SKILL.md"
+        ),
+        str(home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"),
+    ]
     decision_reviewer = codex_dir / "agents" / "mainframe_decision_reviewer.toml"
     decision_reviewer_state = (
         codex_dir / ".mainframe-agent-mainframe_decision_reviewer-state"
@@ -307,6 +405,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-typescript-backend",
         "mainframe-frontend",
         "mainframe-testing-strategy",
+        "mainframe-infrastructure",
+        "mainframe-curl-requests",
+        "mainframe-ops-app-server-safety",
     ):
         target = home / ".agents" / "skills" / name
         assert not target.exists() and not target.is_symlink()
@@ -414,13 +515,36 @@ def test_existing_mainframe_researcher_requires_yes_and_is_restored():
 
     installed, _ = _run("--codex", "--yes", home=home)
     assert installed.returncode == 0, installed.stderr
-    assert target.is_symlink()
-    assert target.resolve() == ADAPTER / "agents" / "mainframe_researcher.toml"
+    assert target.is_file() and not target.is_symlink()
+    assert tomllib.loads(target.read_text(encoding="utf-8"))["name"] == (
+        "mainframe_researcher"
+    )
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
     assert target.is_file() and not target.is_symlink()
     assert 'name = "personal"' in target.read_text(encoding="utf-8")
+
+
+def test_legacy_symlinked_researcher_migrates_without_user_backup():
+    home = pathlib.Path(tempfile.mkdtemp())
+    codex_dir = home / ".codex"
+    agents_dir = codex_dir / "agents"
+    agents_dir.mkdir(parents=True)
+    target = agents_dir / "mainframe_researcher.toml"
+    target.symlink_to(ADAPTER / "agents" / "mainframe_researcher.toml")
+    state = codex_dir / ".mainframe-agent-mainframe_researcher-state"
+    state.write_text("backup_path=-\n", encoding="utf-8")
+
+    installed, _ = _run("--codex", home=home)
+    assert installed.returncode == 0, installed.stderr
+    assert target.is_file() and not target.is_symlink()
+    assert "managed_sha=" in state.read_text(encoding="utf-8")
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert not target.exists() and not target.is_symlink()
+    assert not state.exists()
 
 
 def test_existing_decision_reviewer_requires_yes_and_is_restored():
@@ -630,44 +754,70 @@ def test_baseline_uses_native_standalone_layers_only():
     assert not (ADAPTER / "plugin").exists()
     assert not (ADAPTER / "hooks").exists()
     assert not (ADAPTER / "config.toml").exists()
-    researcher = ADAPTER / "agents" / "mainframe_researcher.toml"
+    template_home = pathlib.Path("/tmp/mainframe-codex-template-home")
+    researcher = ADAPTER / "agents" / "mainframe_researcher.toml.template"
     assert researcher.is_file()
-    researcher_data = tomllib.loads(researcher.read_text(encoding="utf-8"))
+    researcher_data = _agent_template_data(
+        "mainframe_researcher", home=template_home
+    )
     assert researcher_data["description"].startswith("Use for a bounded external-research block")
     assert "Do not use for repository exploration" in researcher_data["description"]
-    assert "Do not recommend, select, advocate, implement" in researcher_data["developer_instructions"]
+    assert "Do not inspect the repository" in researcher_data["developer_instructions"]
+    assert researcher_data["skills"]["config"] == [
+        {
+            "path": str(
+                ADAPTER / "skills" / "mainframe-research-method" / "SKILL.md"
+            ),
+            "enabled": True,
+        }
+    ]
     typescript_engineer = (
-        ADAPTER / "agents" / "mainframe_typescript_backend_engineer.toml"
+        ADAPTER / "agents" / "mainframe_typescript_backend_engineer.toml.template"
     )
     assert typescript_engineer.is_file()
-    typescript_data = tomllib.loads(typescript_engineer.read_text(encoding="utf-8"))
+    typescript_data = _agent_template_data(
+        "mainframe_typescript_backend_engineer", home=template_home
+    )
     assert "model" not in typescript_data
     assert "model_reasoning_effort" not in typescript_data
     assert "load and follow the `mainframe-typescript-backend` skill" in (
         typescript_data["developer_instructions"]
     )
     assert "stage files, commit, push" in typescript_data["developer_instructions"]
-    python_engineer = ADAPTER / "agents" / "mainframe_python_backend_engineer.toml"
+    assert len(typescript_data["skills"]["config"]) == 2
+    python_engineer = (
+        ADAPTER / "agents" / "mainframe_python_backend_engineer.toml.template"
+    )
     assert python_engineer.is_file()
-    python_data = tomllib.loads(python_engineer.read_text(encoding="utf-8"))
+    python_data = _agent_template_data(
+        "mainframe_python_backend_engineer", home=template_home
+    )
     assert "model" not in python_data
     assert "model_reasoning_effort" not in python_data
     assert "load and follow the `mainframe-python-backend` skill" in (
         python_data["developer_instructions"]
     )
     assert "stage files, commit, push" in python_data["developer_instructions"]
-    frontend_engineer = ADAPTER / "agents" / "mainframe_react_frontend_engineer.toml"
+    assert len(python_data["skills"]["config"]) == 2
+    frontend_engineer = (
+        ADAPTER / "agents" / "mainframe_react_frontend_engineer.toml.template"
+    )
     assert frontend_engineer.is_file()
-    frontend_data = tomllib.loads(frontend_engineer.read_text(encoding="utf-8"))
+    frontend_data = _agent_template_data(
+        "mainframe_react_frontend_engineer", home=template_home
+    )
     assert "model" not in frontend_data
     assert "model_reasoning_effort" not in frontend_data
     assert "load and follow the `mainframe-frontend` skill" in (
         frontend_data["developer_instructions"]
     )
     assert "stage files, commit, push" in frontend_data["developer_instructions"]
-    test_auditor = ADAPTER / "agents" / "mainframe_test_auditor.toml"
+    assert len(frontend_data["skills"]["config"]) == 2
+    test_auditor = ADAPTER / "agents" / "mainframe_test_auditor.toml.template"
     assert test_auditor.is_file()
-    test_auditor_data = tomllib.loads(test_auditor.read_text(encoding="utf-8"))
+    test_auditor_data = _agent_template_data(
+        "mainframe_test_auditor", home=template_home
+    )
     assert "model" not in test_auditor_data
     assert "model_reasoning_effort" not in test_auditor_data
     assert "sandbox_mode" not in test_auditor_data
@@ -676,6 +826,7 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert "Do not implement fixes" in test_auditor_data["developer_instructions"]
     assert test_auditor_data["default_permissions"] == "mainframe-test-auditor"
+    assert len(test_auditor_data["skills"]["config"]) == 2
     decision_reviewer_template = (
         ADAPTER / "agents" / "mainframe_decision_reviewer.toml.template"
     )
@@ -730,6 +881,15 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "name: mainframe-readiness-review" in private_readiness_body
     assert "VERDICT:" in private_readiness_body
     assert not (private_readiness_skill / "agents" / "openai.yaml").exists()
+    private_research_skill = ADAPTER / "skills" / "mainframe-research-method"
+    private_research_body = (private_research_skill / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-research-method" in private_research_body
+    assert "references/software-documentation.md" in private_research_body
+    assert "references/economics.md" in private_research_body
+    assert "references/news.md" in private_research_body
+    assert not (private_research_skill / "agents" / "openai.yaml").exists()
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
     assert 'pattern = ["secret"]' in (
         ADAPTER / "rules" / "mainframe.rules"
@@ -809,6 +969,28 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "real local PostgreSQL" in testing_body
     assert "mainframe-ticket" in testing_body
     assert "allow_implicit_invocation" not in testing_metadata
+
+    infrastructure_skill = ADAPTER / "skills" / "mainframe-infrastructure"
+    infrastructure_body = (infrastructure_skill / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-infrastructure" in infrastructure_body
+    assert "references/infrastructure-map.md" in infrastructure_body
+    assert "references/dokploy.md" in infrastructure_body
+    assert (infrastructure_skill / "references" / "dokploy" / "safety.md").is_file()
+    assert (infrastructure_skill / "agents" / "openai.yaml").is_file()
+
+    curl_skill = ADAPTER / "skills" / "mainframe-curl-requests"
+    curl_body = (curl_skill / "SKILL.md").read_text(encoding="utf-8")
+    assert "name: mainframe-curl-requests" in curl_body
+    assert "~/.codex/credentials-index.md" in curl_body
+    assert (curl_skill / "agents" / "openai.yaml").is_file()
+
+    server_skill = ADAPTER / "skills" / "mainframe-ops-app-server-safety"
+    server_body = (server_skill / "SKILL.md").read_text(encoding="utf-8")
+    assert "name: mainframe-ops-app-server-safety" in server_body
+    assert "docker compose ps" in server_body
+    assert (server_skill / "agents" / "openai.yaml").is_file()
 
 
 def test_frontend_recon_routes_react_and_shadcn_context():

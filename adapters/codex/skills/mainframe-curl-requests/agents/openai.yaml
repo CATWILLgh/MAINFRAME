@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME curl requests"
+  short_description: "Build bounded, credential-safe curl requests."
+  default_prompt: "Use $mainframe-curl-requests to build and run this HTTP request safely."

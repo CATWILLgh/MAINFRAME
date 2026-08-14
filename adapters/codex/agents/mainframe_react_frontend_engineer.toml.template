@@ -46,5 +46,13 @@ OPEN: <material blocker, risk, boundary, or recorded ticket; omit when empty>
 SOURCES: <current primary documentation used; omit when none>
 """
 
+[[skills.config]]
+path = "__MAINFRAME_FRONTEND_SKILL__"
+enabled = true
+
+[[skills.config]]
+path = "__MAINFRAME_TICKET_SKILL__"
+enabled = true
+
 [features]
 apps = false

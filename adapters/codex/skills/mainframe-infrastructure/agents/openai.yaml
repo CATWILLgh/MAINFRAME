@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME Infrastructure"
+  short_description: "Operate project infrastructure safely from the primary task."
+  default_prompt: "Use $mainframe-infrastructure to inspect or operate this project infrastructure safely."

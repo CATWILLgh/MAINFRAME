@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME server safety"
+  short_description: "Avoid duplicate or disruptive local server starts."
+  default_prompt: "Use $mainframe-ops-app-server-safety before starting, restarting, or stopping this server."

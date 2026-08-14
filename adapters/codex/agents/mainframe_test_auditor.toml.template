@@ -70,6 +70,14 @@ Do not paste raw logs, narrate routine exploration, prescribe implementation,
 or report unconfirmed suspicions as findings.
 """
 
+[[skills.config]]
+path = "__MAINFRAME_TESTING_STRATEGY_SKILL__"
+enabled = true
+
+[[skills.config]]
+path = "__MAINFRAME_TICKET_SKILL__"
+enabled = true
+
 [permissions.mainframe-test-auditor]
 description = "Read the active project and write confirmed open tickets only."
 

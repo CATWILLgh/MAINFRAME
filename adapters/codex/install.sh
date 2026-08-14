@@ -15,15 +15,21 @@ SKILL_NAMES=(
     mainframe-typescript-backend
     mainframe-frontend
     mainframe-testing-strategy
+    mainframe-infrastructure
+    mainframe-curl-requests
+    mainframe-ops-app-server-safety
 )
-AGENT_NAMES=(
+PRIVATE_SKILL_NAMES=(
+    mainframe-research-method
+    mainframe-decision-review
+    mainframe-readiness-review
+)
+TEMPLATED_AGENT_NAMES=(
     mainframe_researcher
     mainframe_python_backend_engineer
     mainframe_typescript_backend_engineer
     mainframe_react_frontend_engineer
     mainframe_test_auditor
-)
-TEMPLATED_AGENT_NAMES=(
     mainframe_decision_reviewer
     mainframe_advisor
 )
@@ -98,26 +104,10 @@ resolve_link() {
     python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
 }
 
-agent_source() { printf '%s/agents/%s.toml\n' "$ADAPTER_ROOT" "$1"; }
 agent_target() { printf '%s/agents/%s.toml\n' "$CODEX_DIR" "$1"; }
 agent_state() { printf '%s/.mainframe-agent-%s-state\n' "$CODEX_DIR" "$1"; }
 templated_agent_source() { printf '%s/agents/%s.toml.template\n' "$ADAPTER_ROOT" "$1"; }
-
-templated_agent_skill_name() {
-    case "$1" in
-        mainframe_decision_reviewer) printf 'mainframe-decision-review\n' ;;
-        mainframe_advisor) printf 'mainframe-readiness-review\n' ;;
-        *) error "No private skill is mapped for Codex agent: $1"; return 1 ;;
-    esac
-}
-
-templated_agent_marker() {
-    case "$1" in
-        mainframe_decision_reviewer) printf '__MAINFRAME_DECISION_REVIEW_SKILL__\n' ;;
-        mainframe_advisor) printf '__MAINFRAME_READINESS_REVIEW_SKILL__\n' ;;
-        *) error "No private skill marker is mapped for Codex agent: $1"; return 1 ;;
-    esac
-}
+legacy_agent_source() { printf '%s/agents/%s.toml\n' "$ADAPTER_ROOT" "$1"; }
 
 state_value() {
     local key="$1"
@@ -167,19 +157,14 @@ delivery_preflight() {
         error "A Codex MAINFRAME rules file already exists. Rerun with --yes to back it up before linking the adapter rules."
         return 1
     fi
-    for name in "${AGENT_NAMES[@]}"; do
-        source="$(agent_source "$name")"
-        target="$(agent_target "$name")"
-        if link_conflicts "$target" "$source" && [[ $ASSUME_YES -ne 1 ]]; then
-            error "A Codex MAINFRAME agent already exists at $target. Rerun with --yes to back it up before linking the adapter agent."
-            return 1
-        fi
-    done
     for name in "${TEMPLATED_AGENT_NAMES[@]}"; do
         target="$(agent_target "$name")"
         state="$(agent_state "$name")"
         if [[ -f "$state" ]]; then
             managed_sha="$(agent_state_field "$state" managed_sha || true)"
+            if [[ -z "$managed_sha" && -L "$target" && "$(resolve_link "$target")" == "$(legacy_agent_source "$name")" ]]; then
+                continue
+            fi
             if [[ ! -f "$target" || -L "$target" || -z "$managed_sha" ]]; then
                 if [[ $ASSUME_YES -ne 1 ]]; then
                     error "The managed Codex MAINFRAME agent installation is incomplete at $target. Rerun with --yes to back it up before replacement."
@@ -247,20 +232,15 @@ check_sources() {
             fi
         done
     done
-    for name in "${AGENT_NAMES[@]}"; do
-        path="$(agent_source "$name")"
-        if [[ ! -f "$path" ]]; then
-            error "Codex adapter agent source is missing: $path"
-            return 1
-        fi
-    done
     for name in "${TEMPLATED_AGENT_NAMES[@]}"; do
         path="$(templated_agent_source "$name")"
         if [[ ! -f "$path" ]]; then
             error "Codex adapter agent template is missing: $path"
             return 1
         fi
-        path="${ADAPTER_ROOT}/skills/$(templated_agent_skill_name "$name")/SKILL.md"
+    done
+    for name in "${PRIVATE_SKILL_NAMES[@]}"; do
+        path="${ADAPTER_ROOT}/skills/${name}/SKILL.md"
         if [[ ! -f "$path" ]]; then
             error "Codex adapter private skill source is missing: $path"
             return 1
@@ -318,20 +298,14 @@ preflight() {
             error "The Codex MAINFRAME rules installation changed after installation. It was preserved."
             return 1
         fi
-        for name in "${AGENT_NAMES[@]}"; do
-            source="$(agent_source "$name")"
-            target="$(agent_target "$name")"
-            state="$(agent_state "$name")"
-            if [[ -f "$state" ]] && { [[ ! -L "$target" ]] || [[ "$(resolve_link "$target")" != "$source" ]]; }; then
-                error "The Codex MAINFRAME agent installation changed at $target. It was preserved."
-                return 1
-            fi
-        done
         for name in "${TEMPLATED_AGENT_NAMES[@]}"; do
             target="$(agent_target "$name")"
             state="$(agent_state "$name")"
             if [[ -f "$state" ]]; then
                 managed_sha="$(agent_state_field "$state" managed_sha || true)"
+                if [[ -z "$managed_sha" && -L "$target" && "$(resolve_link "$target")" == "$(legacy_agent_source "$name")" ]]; then
+                    continue
+                fi
                 if [[ ! -f "$target" || -L "$target" || -z "$managed_sha" || "$(hash_file "$target")" != "$managed_sha" ]]; then
                     error "The Codex MAINFRAME agent installation changed at $target. It was preserved."
                     return 1
@@ -475,21 +449,37 @@ agent_state_field() {
 
 render_templated_agent() {
     local name="$1" destination="$2"
-    local source skill marker
+    local source
     source="$(templated_agent_source "$name")"
-    skill="${ADAPTER_ROOT}/skills/$(templated_agent_skill_name "$name")/SKILL.md"
-    marker="$(templated_agent_marker "$name")"
     python3 -c '
 from pathlib import Path
+import re
 import sys
 
-source, destination, skill = map(Path, sys.argv[1:4])
-marker = sys.argv[4]
+source, destination, adapter_root, global_skills = map(Path, sys.argv[1:5])
+replacements = {
+    "__MAINFRAME_RESEARCH_METHOD_SKILL__": adapter_root / "skills" / "mainframe-research-method" / "SKILL.md",
+    "__MAINFRAME_DECISION_REVIEW_SKILL__": adapter_root / "skills" / "mainframe-decision-review" / "SKILL.md",
+    "__MAINFRAME_READINESS_REVIEW_SKILL__": adapter_root / "skills" / "mainframe-readiness-review" / "SKILL.md",
+    "__MAINFRAME_PYTHON_BACKEND_SKILL__": global_skills / "mainframe-python-backend" / "SKILL.md",
+    "__MAINFRAME_TYPESCRIPT_BACKEND_SKILL__": global_skills / "mainframe-typescript-backend" / "SKILL.md",
+    "__MAINFRAME_FRONTEND_SKILL__": global_skills / "mainframe-frontend" / "SKILL.md",
+    "__MAINFRAME_TESTING_STRATEGY_SKILL__": global_skills / "mainframe-testing-strategy" / "SKILL.md",
+    "__MAINFRAME_TICKET_SKILL__": global_skills / "mainframe-ticket" / "SKILL.md",
+}
 body = source.read_text(encoding="utf-8")
-if body.count(marker) != 1:
-    raise SystemExit(f"expected exactly one {marker} marker in {source}")
-destination.write_text(body.replace(marker, str(skill.resolve())), encoding="utf-8")
-' "$source" "$destination" "$skill" "$marker"
+markers = set(re.findall(r"__MAINFRAME_[A-Z_]+_SKILL__", body))
+if not markers:
+    raise SystemExit(f"no skill marker found in {source}")
+unknown = markers - replacements.keys()
+if unknown:
+    raise SystemExit(f"unknown skill markers in {source}: {sorted(unknown)}")
+for marker in markers:
+    if body.count(marker) != 1:
+        raise SystemExit(f"expected exactly one {marker} marker in {source}")
+    body = body.replace(marker, str(replacements[marker].absolute()))
+destination.write_text(body, encoding="utf-8")
+' "$source" "$destination" "$ADAPTER_ROOT" "$GLOBAL_SKILLS_DIR"
 }
 
 install_templated_agent() {
@@ -508,7 +498,9 @@ install_templated_agent() {
     if [[ -f "$state" ]]; then
         backup_path="$(agent_state_field "$state" backup_path || printf '-')"
         old_managed="$(agent_state_field "$state" managed_sha || true)"
-        if [[ ! -f "$target" || -L "$target" || -z "$old_managed" || "$(hash_file "$target")" != "$old_managed" ]]; then
+        if [[ -z "$old_managed" && -L "$target" && "$(resolve_link "$target")" == "$(legacy_agent_source "$name")" ]]; then
+            rm "$target"
+        elif [[ ! -f "$target" || -L "$target" || -z "$old_managed" || "$(hash_file "$target")" != "$old_managed" ]]; then
             if [[ -e "$target" || -L "$target" ]]; then
                 backup_path="${target}.backup-${TIMESTAMP}"
                 mv "$target" "$backup_path"
@@ -526,37 +518,6 @@ install_templated_agent() {
     printf 'managed_sha=%s\nbackup_path=%s\n' "$managed_sha" "$backup_path" > "$state"
     chmod 600 "$state"
     log "installed generated Codex specialist agent: $target"
-}
-
-install_agent() {
-    local name="$1" source target state backup_path="-"
-    source="$(agent_source "$name")"
-    target="$(agent_target "$name")"
-    state="$(agent_state "$name")"
-    if [[ -L "$target" ]] && [[ "$(resolve_link "$target")" == "$source" ]]; then
-        log "Codex specialist agent already linked: $target"
-        return
-    fi
-    if [[ -f "$state" ]]; then
-        backup_path="$(agent_state_value "$state" || printf '-')"
-    fi
-    if [[ -e "$target" || -L "$target" ]]; then
-        backup_path="${target}.backup-${TIMESTAMP}"
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log "would back up existing $target to $backup_path"
-        else
-            mv "$target" "$backup_path"
-        fi
-    fi
-    if [[ $DRY_RUN -eq 1 ]]; then
-        log "would link $target -> $source"
-        return
-    fi
-    mkdir -p "$(dirname "$target")"
-    ln -s "$source" "$target"
-    printf 'backup_path=%s\n' "$backup_path" > "$state"
-    chmod 600 "$state"
-    log "linked Codex specialist agent: $target"
 }
 
 install_rules() {
@@ -603,7 +564,6 @@ install_adapter() {
     done
     install_index
     install_rules
-    for name in "${AGENT_NAMES[@]}"; do install_agent "$name"; done
     for name in "${TEMPLATED_AGENT_NAMES[@]}"; do install_templated_agent "$name"; done
     install_config
     if [[ $DRY_RUN -eq 1 ]]; then
@@ -641,37 +601,6 @@ uninstall_rules() {
     if [[ -f "$RULES_STATE" ]]; then rm "$RULES_STATE"; fi
 }
 
-uninstall_agent() {
-    local name="$1" source target state backup_path="-"
-    source="$(agent_source "$name")"
-    target="$(agent_target "$name")"
-    state="$(agent_state "$name")"
-    if [[ ! -L "$target" ]] || [[ "$(resolve_link "$target")" != "$source" ]]; then
-        if [[ -f "$state" ]]; then
-            error "The Codex MAINFRAME agent installation changed at $target. It was preserved."
-            return 1
-        fi
-        log "Codex specialist agent is not an adapter-owned link: $target"
-        return
-    fi
-    if [[ -f "$state" ]]; then
-        backup_path="$(agent_state_value "$state" || printf '-')"
-    fi
-    if [[ $DRY_RUN -eq 1 ]]; then
-        log "would remove $target"
-        if [[ "$backup_path" != "-" ]]; then log "would restore $backup_path"; fi
-        return
-    fi
-    rm "$target"
-    if [[ "$backup_path" != "-" && -e "$backup_path" ]]; then
-        mv "$backup_path" "$target"
-        log "restored previous Codex specialist agent: $target"
-    else
-        log "removed Codex specialist agent: $target"
-    fi
-    if [[ -f "$state" ]]; then rm "$state"; fi
-}
-
 uninstall_templated_agent() {
     local name="$1" target state backup_path="-" managed_sha
     target="$(agent_target "$name")"
@@ -681,6 +610,23 @@ uninstall_templated_agent() {
         return
     fi
     managed_sha="$(agent_state_field "$state" managed_sha || true)"
+    if [[ -z "$managed_sha" && -L "$target" && "$(resolve_link "$target")" == "$(legacy_agent_source "$name")" ]]; then
+        backup_path="$(agent_state_value "$state" || printf '-')"
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "would remove $target"
+            if [[ "$backup_path" != "-" ]]; then log "would restore $backup_path"; fi
+            return
+        fi
+        rm "$target"
+        if [[ "$backup_path" != "-" && -e "$backup_path" ]]; then
+            mv "$backup_path" "$target"
+            log "restored previous Codex specialist agent: $target"
+        else
+            log "removed legacy Codex specialist agent: $target"
+        fi
+        rm "$state"
+        return
+    fi
     if [[ ! -f "$target" || -L "$target" || -z "$managed_sha" || "$(hash_file "$target")" != "$managed_sha" ]]; then
         error "The Codex MAINFRAME agent installation changed at $target. It was preserved."
         return 1
@@ -783,7 +729,6 @@ uninstall_adapter() {
     done
     uninstall_index
     uninstall_rules
-    for name in "${AGENT_NAMES[@]}"; do uninstall_agent "$name"; done
     for name in "${TEMPLATED_AGENT_NAMES[@]}"; do uninstall_templated_agent "$name"; done
     if [[ $DRY_RUN -eq 1 ]]; then
         manage_config uninstall --dry-run
