@@ -7,8 +7,6 @@ Checks the supported skill shape and the repository's authoring budgets.
 Run with the project's local venv (which has tiktoken and pyyaml):
   .venv/bin/python3 tools/validate-skill.py <skill_dir>
   .venv/bin/python3 tools/validate-skill.py --all
-  .venv/bin/python3 tools/validate-skill.py --from-hook         # reads stdin
-  .venv/bin/python3 tools/validate-skill.py --session-start     # short summary
 
 Exit code:
   0 — no errors (warnings allowed)
@@ -336,66 +334,13 @@ def all_skill_dirs() -> list[Path]:
     return sorted(dirs)
 
 
-# ---- Modes ----
-
-def run_session_start() -> int:
-    skills = all_skill_dirs()
-    if not skills:
-        print("## Skills (adapters/claude-code/plugin/skills/ + dev/skills/) — no skills yet")
-        return 0
-    print("## Skills validation (adapters/claude-code/plugin/skills/ + dev/skills/)")
-    for s in skills:
-        iss = validate_skill(s)
-        errors = [i for i in iss if i["level"] == "error"]
-        warnings = [i for i in iss if i["level"] == "warning"]
-        rel = relpath(s)
-        if not errors and not warnings:
-            print(f"- `{rel}` — OK")
-        else:
-            print(f"- `{rel}` — errors={len(errors)}, warnings={len(warnings)}")
-            for i in (errors + warnings)[:2]:
-                line_part = f":{i['line']}" if i.get("line") else ""
-                print(f"  - [{i['rule']}]{line_part} {i['message']}")
-            if len(errors) + len(warnings) > 2:
-                print(f"  - … run `.venv/bin/python3 tools/validate-skill.py {rel}` for full report")
-    return 0
-
-
-def run_from_hook() -> int:
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        return 0
-    tool_input = data.get("tool_input") or {}
-    file_path = tool_input.get("file_path") or tool_input.get("notebook_path")
-    if not file_path:
-        return 0
-
-    skill_dir = find_skill_dir_for_file(Path(file_path))
-    if skill_dir is None:
-        return 0  # not under adapters/claude-code/plugin/skills/, exit instantly
-
-    issues = validate_skill(skill_dir)
-    if not issues:
-        return 0
-    print(format_human(skill_dir, issues), file=sys.stderr)
-    has_errors = any(i["level"] == "error" for i in issues)
-    return 1 if has_errors else 0
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validator for skills in adapters/claude-code/plugin/skills/.")
     parser.add_argument("path", nargs="?", help="Path to a skill directory or any file inside one.")
     parser.add_argument("--all", action="store_true", help="Validate every skill under adapters/claude-code/plugin/skills/.")
     parser.add_argument("--json", action="store_true", help="JSON output (CLI mode).")
-    parser.add_argument("--from-hook", action="store_true", help="PostToolUse hook mode (reads stdin).")
-    parser.add_argument("--session-start", action="store_true", help="SessionStart hook mode (short summary).")
     args = parser.parse_args()
 
-    if args.session_start:
-        return run_session_start()
-    if args.from_hook:
-        return run_from_hook()
     if args.all:
         any_error = False
         for s in all_skill_dirs():

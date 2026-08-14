@@ -7,8 +7,6 @@ Checks the repository's CLAUDE.md size, import, link, and agnosticism rules.
 Run modes:
   python3 tools/validate-claude-md.py <path>            # CLI: validate a specific file
   python3 tools/validate-claude-md.py <path> --json     # CLI: JSON output
-  python3 tools/validate-claude-md.py --from-hook       # Hook: path read from stdin (PostToolUse)
-  python3 tools/validate-claude-md.py --session-start   # Hook: summary of all target files to stdout
 
 Exit code:
   0 — no errors (warnings allowed)
@@ -27,13 +25,6 @@ from pathlib import Path
 # ---------- Configuration ----------
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-# Files we validate. Any edit outside this set
-# the hook skips instantly.
-TARGET_FILES = {
-    (PROJECT_ROOT / "export" / "CLAUDE.md").resolve(),
-    (PROJECT_ROOT / "CLAUDE.md").resolve(),
-}
 
 BLACKLIST_FILE = PROJECT_ROOT / "tools" / "agnostic-blacklist.txt"
 
@@ -315,71 +306,12 @@ def relpath(p: Path) -> str:
         return str(p)
 
 
-def run_session_start() -> int:
-    """SessionStart hook: brief summary to stdout (goes into additionalContext)."""
-    out = ["## MAINFRAME hub global-files validation"]
-    for target in sorted(TARGET_FILES):
-        issues = validate_target(target)
-        errors = [i for i in issues if i["level"] == "error"]
-        warnings = [i for i in issues if i["level"] == "warning"]
-        infos = [i for i in issues if i["level"] == "info"]
-        rel = relpath(target)
-        if infos and not errors and not warnings:
-            out.append(f"- `{rel}` — skipped: {infos[0]['message']}")
-        elif not errors and not warnings:
-            out.append(f"- `{rel}` — OK")
-        else:
-            out.append(f"- `{rel}` — errors={len(errors)}, warnings={len(warnings)}")
-            for i in (errors + warnings)[:3]:
-                line_part = f":{i['line']}" if i.get("line") else ""
-                out.append(f"  - [{i['rule']}]{line_part} {i['message']}")
-            if len(errors) + len(warnings) > 3:
-                out.append(f"  - … {len(errors) + len(warnings) - 3} more. Run `python3 tools/validate-claude-md.py {rel}` for details.")
-    print("\n".join(out))
-    return 0
-
-
-def run_from_hook() -> int:
-    """PostToolUse hook: file path read from stdin (Claude Code format)."""
-    try:
-        data = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        return 0  # no valid input — exit quietly
-
-    tool_input = data.get("tool_input") or {}
-    file_path = tool_input.get("file_path") or tool_input.get("notebook_path")
-    if not file_path:
-        return 0
-
-    target = Path(file_path).resolve()
-
-    # Early path filtering — if the edit is not our file, exit within a millisecond.
-    if target not in TARGET_FILES:
-        return 0
-
-    issues = validate_target(target)
-    if not issues:
-        return 0
-
-    # PostToolUse: stderr goes into the transcript for Claude.
-    print(format_human(target, issues), file=sys.stderr)
-
-    has_errors = any(i["level"] == "error" for i in issues)
-    return 1 if has_errors else 0
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="CLAUDE.md validator per Anthropic rules + MAINFRAME principles.")
     parser.add_argument("path", nargs="?", help="Path to the file to validate (CLI mode).")
     parser.add_argument("--json", action="store_true", help="JSON output (CLI mode).")
-    parser.add_argument("--from-hook", action="store_true", help="PostToolUse mode: path read from stdin.")
-    parser.add_argument("--session-start", action="store_true", help="SessionStart mode: summary of all TARGET_FILES.")
     args = parser.parse_args()
 
-    if args.session_start:
-        return run_session_start()
-    if args.from_hook:
-        return run_from_hook()
     if not args.path:
         parser.print_help()
         return 2

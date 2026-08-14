@@ -21,10 +21,11 @@ jobs:
           git config --global user.email "ci@mainframe.local"
           git config --global user.name "mainframe-ci"
 
-      # Most hook tests use stdlib fixtures and stubs. The Python security delta
-      # tests exercise the real local ruff binary, so pin its verified version.
-      - name: Install ruff (Python security scanner)
-        run: pip install ruff==0.15.15
+      # The hook tests exercise the real local ruff binary. Validator tests and
+      # the hub-page generator parse YAML; the skill validator also counts
+      # tokens. Install the verified test toolchain before any test discovers it.
+      - name: Install test and validator dependencies
+        run: pip install ruff==0.15.15 tiktoken pyyaml
 
       - name: Hook test suite
         run: |
@@ -38,16 +39,19 @@ jobs:
           done
           exit $fail
 
-      - name: Validator dependencies
-        run: pip install tiktoken pyyaml
-
       # The hub-page generator parses YAML frontmatter, so its test needs pyyaml
-      # (installed just above) — unlike the stdlib-only hook tests.
+      # from the shared test toolchain above.
       - name: Hub page generator tests
         run: python3 tools/test_build_hub_page.py
 
       - name: Validate skills
         run: python3 tools/validate-skill.py --all
+
+      - name: Validate agent profiles
+        run: python3 tools/validate-agent.py
+
+      - name: Validate agent-skill boundaries
+        run: python3 tools/validate-layers.py
 
       # Root CLAUDE.md is gitignored (not in the checkout); validate the shipped one.
       - name: Validate umbrella CLAUDE.md
