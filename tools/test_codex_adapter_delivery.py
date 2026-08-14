@@ -67,6 +67,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe_react_frontend_engineer.toml" in proc.stdout
     assert "mainframe_test_auditor.toml" in proc.stdout
     assert "mainframe_decision_reviewer.toml" in proc.stdout
+    assert "mainframe_advisor.toml" in proc.stdout
     assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
@@ -223,6 +224,31 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not (
         home / ".agents" / "skills" / "mainframe-decision-review"
     ).exists()
+    advisor = codex_dir / "agents" / "mainframe_advisor.toml"
+    advisor_state = codex_dir / ".mainframe-agent-mainframe_advisor-state"
+    assert advisor.is_file() and not advisor.is_symlink()
+    assert advisor_state.is_file()
+    advisor_data = tomllib.loads(advisor.read_text(encoding="utf-8"))
+    assert advisor_data["name"] == "mainframe_advisor"
+    assert "model" not in advisor_data
+    assert "model_reasoning_effort" not in advisor_data
+    assert advisor_data["sandbox_mode"] == "read-only"
+    assert advisor_data["web_search"] == "live"
+    assert advisor_data["features"]["apps"] is False
+    assert advisor_data["skills"]["config"] == [
+        {
+            "path": str(
+                ADAPTER
+                / "skills"
+                / "mainframe-readiness-review"
+                / "SKILL.md"
+            ),
+            "enabled": True,
+        }
+    ]
+    assert not (
+        home / ".agents" / "skills" / "mainframe-readiness-review"
+    ).exists()
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
     assert config.is_file() and config_state.is_file()
@@ -268,6 +294,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not test_auditor_state.exists()
     assert not decision_reviewer.exists()
     assert not decision_reviewer_state.exists()
+    assert not advisor.exists()
+    assert not advisor_state.exists()
     assert not config.exists()
     assert not config_state.exists()
     assert helper.is_symlink()
@@ -676,6 +704,32 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "name: mainframe-decision-review" in private_review_body
     assert "ASSESSMENT:" in private_review_body
     assert not (private_review_skill / "agents" / "openai.yaml").exists()
+    advisor_template = ADAPTER / "agents" / "mainframe_advisor.toml.template"
+    assert advisor_template.is_file()
+    advisor_data = tomllib.loads(
+        advisor_template.read_text(encoding="utf-8").replace(
+            "__MAINFRAME_READINESS_REVIEW_SKILL__",
+            "/tmp/mainframe-readiness-review/SKILL.md",
+        )
+    )
+    assert "model" not in advisor_data
+    assert "model_reasoning_effort" not in advisor_data
+    assert advisor_data["sandbox_mode"] == "read-only"
+    assert advisor_data["web_search"] == "live"
+    assert advisor_data["features"]["apps"] is False
+    assert advisor_data["skills"]["config"] == [
+        {
+            "path": "/tmp/mainframe-readiness-review/SKILL.md",
+            "enabled": True,
+        }
+    ]
+    private_readiness_skill = ADAPTER / "skills" / "mainframe-readiness-review"
+    private_readiness_body = (private_readiness_skill / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-readiness-review" in private_readiness_body
+    assert "VERDICT:" in private_readiness_body
+    assert not (private_readiness_skill / "agents" / "openai.yaml").exists()
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
     assert 'pattern = ["secret"]' in (
         ADAPTER / "rules" / "mainframe.rules"
@@ -906,6 +960,9 @@ def test_shared_judgment_and_primary_completion_are_separated():
     assert "safest practical path" in normalized_init
     assert "When implementing directly" in normalized_init
     assert "deferred in-scope work as a substitute" in normalized_init
+    assert "mainframe_advisor" in normalized_init
+    assert "preparation-readiness" in normalized_init
+    assert "final-state" in normalized_init
 
 
 def _run_all():

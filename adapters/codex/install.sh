@@ -25,6 +25,7 @@ AGENT_NAMES=(
 )
 TEMPLATED_AGENT_NAMES=(
     mainframe_decision_reviewer
+    mainframe_advisor
 )
 SOURCE_AGENTS="${ADAPTER_ROOT}/export/AGENTS.md"
 TARGET_AGENTS="${CODEX_DIR}/AGENTS.md"
@@ -101,6 +102,22 @@ agent_source() { printf '%s/agents/%s.toml\n' "$ADAPTER_ROOT" "$1"; }
 agent_target() { printf '%s/agents/%s.toml\n' "$CODEX_DIR" "$1"; }
 agent_state() { printf '%s/.mainframe-agent-%s-state\n' "$CODEX_DIR" "$1"; }
 templated_agent_source() { printf '%s/agents/%s.toml.template\n' "$ADAPTER_ROOT" "$1"; }
+
+templated_agent_skill_name() {
+    case "$1" in
+        mainframe_decision_reviewer) printf 'mainframe-decision-review\n' ;;
+        mainframe_advisor) printf 'mainframe-readiness-review\n' ;;
+        *) error "No private skill is mapped for Codex agent: $1"; return 1 ;;
+    esac
+}
+
+templated_agent_marker() {
+    case "$1" in
+        mainframe_decision_reviewer) printf '__MAINFRAME_DECISION_REVIEW_SKILL__\n' ;;
+        mainframe_advisor) printf '__MAINFRAME_READINESS_REVIEW_SKILL__\n' ;;
+        *) error "No private skill marker is mapped for Codex agent: $1"; return 1 ;;
+    esac
+}
 
 state_value() {
     local key="$1"
@@ -243,11 +260,12 @@ check_sources() {
             error "Codex adapter agent template is missing: $path"
             return 1
         fi
+        path="${ADAPTER_ROOT}/skills/$(templated_agent_skill_name "$name")/SKILL.md"
+        if [[ ! -f "$path" ]]; then
+            error "Codex adapter private skill source is missing: $path"
+            return 1
+        fi
     done
-    if [[ ! -f "${ADAPTER_ROOT}/skills/mainframe-decision-review/SKILL.md" ]]; then
-        error "Codex adapter private skill source is missing: ${ADAPTER_ROOT}/skills/mainframe-decision-review/SKILL.md"
-        return 1
-    fi
 }
 
 manage_config() {
@@ -457,20 +475,21 @@ agent_state_field() {
 
 render_templated_agent() {
     local name="$1" destination="$2"
-    local source skill
+    local source skill marker
     source="$(templated_agent_source "$name")"
-    skill="${ADAPTER_ROOT}/skills/mainframe-decision-review/SKILL.md"
+    skill="${ADAPTER_ROOT}/skills/$(templated_agent_skill_name "$name")/SKILL.md"
+    marker="$(templated_agent_marker "$name")"
     python3 -c '
 from pathlib import Path
 import sys
 
-source, destination, skill = map(Path, sys.argv[1:])
-marker = "__MAINFRAME_DECISION_REVIEW_SKILL__"
+source, destination, skill = map(Path, sys.argv[1:4])
+marker = sys.argv[4]
 body = source.read_text(encoding="utf-8")
 if body.count(marker) != 1:
     raise SystemExit(f"expected exactly one {marker} marker in {source}")
 destination.write_text(body.replace(marker, str(skill.resolve())), encoding="utf-8")
-' "$source" "$destination" "$skill"
+' "$source" "$destination" "$skill" "$marker"
 }
 
 install_templated_agent() {

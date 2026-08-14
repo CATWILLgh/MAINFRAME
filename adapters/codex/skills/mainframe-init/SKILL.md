@@ -33,11 +33,26 @@ finding against the repository, current sources, or a bounded experiment before
 changing the proposal. Do not invoke this review as ceremony for a routine
 low-risk choice.
 
+After reconciling the material independent findings for a complex task, invoke
+`mainframe_advisor` with the full current task history and a
+`preparation-readiness` assignment. Name the phase and any affected paths that
+remain unclear; do not rebuild the conversation as a lossy manual summary. The
+advisor's inherited context is orientation, not evidence. Verify its material
+findings before presenting the recommendation and draft definition of done. If
+the current surface cannot inherit the task history, provide a complete facts
+package; do not treat a context-starved review as a readiness check.
+
 After approval, obtain red evidence before changing observable behavior when that evidence can prove the original gap. Do not create a test as ceremony for documentation, path moves, or other structural work.
 
 When implementing directly, deliver the complete assigned behavior. Do not leave TODOs, placeholders, disabled checks, suppressions, or deferred in-scope work as a substitute for the result.
 
 For a complex or long-running task, prepare a copyable native Goal mode objective only after the definition of done and red evidence are ready. Do not activate Goal mode on the user's behalf or treat discussion as permission for implementation. Let Codex's native goal lifecycle own persistence, completion, pause, and resume rather than recreating it in a hook or custom loop.
+
+After implementing a complex task, prove the definition of done from the final
+state and then invoke `mainframe_advisor` with the inherited task history and a
+`final-state` assignment. Reconcile every material finding. If reconciliation
+changes the result or its evidence, rerun the affected verification and repeat
+the final-state review before declaring the goal complete.
 
 If a task that looked small reveals a material architecture, product, infrastructure, or risk boundary, investigate enough to explain the real choice, then return to the user before expanding the agreed work.
 
