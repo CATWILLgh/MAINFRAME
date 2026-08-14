@@ -996,7 +996,22 @@
       panes[v.id].btn.tabIndex = on ? 0 : -1;
     });
     if (search) search.hidden = id !== "catalog" && id !== "graph";
+    try { window.sessionStorage.setItem("mainframe-hub-view", id); } catch (_err) { /* unavailable over some file origins */ }
   }
 
-  show("overview");
+  let initialView = "overview";
+  try {
+    const saved = window.sessionStorage.getItem("mainframe-hub-view");
+    if (VIEWS.some((view) => view.id === saved)) initialView = saved;
+    const savedScroll = Number(window.sessionStorage.getItem("mainframe-hub-scroll"));
+    if (savedScroll > 0) window.requestAnimationFrame(() => window.scrollTo(0, savedScroll));
+  } catch (_err) { /* session state is optional */ }
+  show(initialView);
+
+  if (window.HUB_AUTO_REFRESH_MS >= 2000) {
+    window.setInterval(() => {
+      try { window.sessionStorage.setItem("mainframe-hub-scroll", String(window.scrollY)); } catch (_err) { /* optional */ }
+      window.location.reload();
+    }, window.HUB_AUTO_REFRESH_MS);
+  }
 })();

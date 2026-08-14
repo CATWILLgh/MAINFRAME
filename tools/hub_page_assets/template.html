@@ -17,12 +17,15 @@
   </div>
   <nav class="tabs" id="tabs" role="tablist" aria-label="Hub views"></nav>
   <div class="toptools">
-    <span class="snapshot-label"><i aria-hidden="true"></i>static snapshot</span>
+    <span class="snapshot-label"><i aria-hidden="true"></i>{{SNAPSHOT_MODE}}</span>
     <span class="stamp">{{BUILD_STAMP}}</span>
   </div>
 </header>
 <main id="app"></main>
-<script>window.HUB_DATA = {{DATA}};</script>
+<script>
+window.HUB_DATA = {{DATA}};
+window.HUB_AUTO_REFRESH_MS = {{AUTO_REFRESH_MS}};
+</script>
 <script>{{APP_JS}}</script>
 </body>
 </html>

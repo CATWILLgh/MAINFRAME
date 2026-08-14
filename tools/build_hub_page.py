@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+import time
 
 import yaml
 
@@ -573,7 +574,7 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
     }
 
 
-def render(manifest, build_stamp, assets_dir=_ASSETS):
+def render(manifest, build_stamp, assets_dir=_ASSETS, auto_refresh_ms=0):
     template = _read(os.path.join(assets_dir, "template.html"))
     style = _read(os.path.join(assets_dir, "style.css"))
     app_js = _read(os.path.join(assets_dir, "app.js"))
@@ -581,9 +582,35 @@ def render(manifest, build_stamp, assets_dir=_ASSETS):
     data = json.dumps(manifest, ensure_ascii=False).replace("</", "<\\/")
     return (template
             .replace("{{BUILD_STAMP}}", build_stamp)
+            .replace("{{SNAPSHOT_MODE}}", (f"auto refresh · {auto_refresh_ms // 1000}s"
+                                            if auto_refresh_ms else "static snapshot"))
+            .replace("{{AUTO_REFRESH_MS}}", str(auto_refresh_ms))
             .replace("{{STYLE}}", style)
             .replace("{{DATA}}", data)
             .replace("{{APP_JS}}", app_js))
+
+
+def write_snapshot(root, out, db_path, feedback_dir, projects_dir, usage_cache,
+                   auto_refresh_ms=0):
+    manifest = build_manifest(root, db_path=db_path, feedback_dir=feedback_dir,
+                              projects_dir=projects_dir, usage_cache=usage_cache)
+    stamp = datetime.datetime.now().isoformat(timespec="seconds")
+    html = render(manifest, build_stamp=stamp, auto_refresh_ms=auto_refresh_ms)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    temporary = f"{out}.tmp-{os.getpid()}"
+    try:
+        with open(temporary, "w") as handle:
+            handle.write(html)
+        os.replace(temporary, out)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    dev = "active" if manifest["dev_state"]["active"] else "not active"
+    usage = manifest["usage"]
+    usage_note = (f", usage {usage['sessions']} sessions / "
+                  f"{usage['tokens']['total']:,} tokens" if usage.get("active") else "")
+    print(f"wrote {out}  ({len(manifest['nodes'])} nodes, "
+          f"{len(manifest['edges'])} edges, dev {dev}{usage_note})", flush=True)
 
 
 def main():
@@ -595,23 +622,27 @@ def main():
     parser.add_argument("--feedback", default=_DEFAULT_FEEDBACK)
     parser.add_argument("--projects", default=_DEFAULT_PROJECTS)
     parser.add_argument("--usage-cache", default=_DEFAULT_USAGE_CACHE)
+    parser.add_argument("--watch", action="store_true",
+                        help="rebuild continuously and make the page reload itself")
+    parser.add_argument("--interval", type=float, default=15.0,
+                        help="watch/reload interval in seconds (default: 15)")
     args = parser.parse_args()
 
+    if args.interval < 2:
+        parser.error("--interval must be at least 2 seconds")
+
     root = os.path.abspath(args.root)
-    out = args.out or os.path.join(root, "workspace/runtime/hub.html")
-    manifest = build_manifest(root, db_path=args.db, feedback_dir=args.feedback,
-                              projects_dir=args.projects, usage_cache=args.usage_cache)
-    stamp = datetime.datetime.now().isoformat(timespec="seconds")
-    html = render(manifest, build_stamp=stamp)
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    with open(out, "w") as f:
-        f.write(html)
-    dev = "active" if manifest["dev_state"]["active"] else "not active"
-    usage = manifest["usage"]
-    usage_note = (f", usage {usage['sessions']} sessions / "
-                  f"{usage['tokens']['total']:,} tokens" if usage.get("active") else "")
-    print(f"wrote {out}  ({len(manifest['nodes'])} nodes, "
-          f"{len(manifest['edges'])} edges, dev {dev}{usage_note})")
+    out = os.path.abspath(args.out or os.path.join(root, "workspace/runtime/hub.html"))
+    refresh_ms = round(args.interval * 1000) if args.watch else 0
+    try:
+        while True:
+            write_snapshot(root, out, args.db, args.feedback, args.projects,
+                           args.usage_cache, auto_refresh_ms=refresh_ms)
+            if not args.watch:
+                break
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print("watch stopped", flush=True)
     return 0
 
 

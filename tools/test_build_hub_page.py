@@ -183,6 +183,13 @@ def test_render_inlines_data_and_is_self_contained():
     # exposed on window, which silently blanked the page until this was caught.
     assert "window.HUB_DATA =" in html
     assert "const HUB_DATA" not in html
+    assert "window.HUB_AUTO_REFRESH_MS = 0" in html
+    assert "static snapshot" in html
+
+    live = bhp.render(manifest, build_stamp="2026-06-13T10:00:00",
+                      auto_refresh_ms=15000)
+    assert "window.HUB_AUTO_REFRESH_MS = 15000" in live
+    assert "auto refresh · 15s" in live
 
 
 def _fixture_export(root):
