@@ -5,13 +5,17 @@ import os
 import pathlib
 import stat
 import subprocess
+import sys
 import tempfile
+import tomllib
 
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 INSTALLER = ROOT / "install.sh"
 ADAPTER = ROOT / "adapters" / "codex"
 SHARED = ROOT / "shared" / "credentials"
+CONFIG_MANAGER = ADAPTER / "scripts" / "manage-config.py"
+CONFIG_SOURCE = ADAPTER / "config" / "mainframe-permissions.toml"
 
 
 def _run(*args, home=None):
@@ -51,6 +55,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-init" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe.rules" in proc.stdout
+    assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 
@@ -82,8 +87,27 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     rules_state = codex_dir / ".mainframe-rules-state"
     assert rules.is_symlink() and rules.resolve() == ADAPTER / "rules" / "mainframe.rules"
     assert rules_state.is_file()
+    config = codex_dir / "config.toml"
+    config_state = codex_dir / ".mainframe-config-state.json"
+    assert config.is_file() and config_state.is_file()
+    config_data = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert config_data["default_permissions"] == "mainframe"
+    assert config_data["approval_policy"] == "on-request"
+    assert config_data["approvals_reviewer"] == "auto_review"
+    assert config_data["shell_environment_policy"]["inherit"] == "core"
+    assert config_data["permissions"]["mainframe"]["extends"] == ":workspace"
+    assert config_data["permissions"]["mainframe"]["filesystem"]["~/.config/credentials"] == "deny"
+    assert config_data["permissions"]["mainframe"]["network"]["domains"] == {
+        "localhost": "allow",
+        "127.0.0.1": "allow",
+        "::1": "allow",
+    }
+    assert config_data["permissions"]["mainframe"]["network"]["unix_sockets"] == {
+        "/tmp/.s.PGSQL.5432": "allow"
+    }
+    assert stat.S_IMODE(config.stat().st_mode) == 0o600
+    assert stat.S_IMODE(config_state.stat().st_mode) == 0o600
     assert helper.is_symlink()
-    assert not (codex_dir / "config.toml").exists()
 
     reinstalled, _ = _run("--codex", home=home)
     assert reinstalled.returncode == 0, reinstalled.stderr
@@ -96,6 +120,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not index_state.exists()
     assert not rules.exists() and not rules.is_symlink()
     assert not rules_state.exists()
+    assert not config.exists()
+    assert not config_state.exists()
     assert helper.is_symlink()
     for name in ("mainframe-init", "mainframe-secrets"):
         target = home / ".agents" / "skills" / name
@@ -200,6 +226,124 @@ def test_changed_mainframe_rules_stop_uninstall_before_other_removal():
     assert (home / ".agents" / "skills" / "mainframe-init").is_symlink()
 
 
+def test_existing_config_is_merged_and_uninstall_restores_only_displaced_settings():
+    home = pathlib.Path(tempfile.mkdtemp())
+    codex_dir = home / ".codex"
+    codex_dir.mkdir()
+    config = codex_dir / "config.toml"
+    config.write_text(
+        'model = "example"\n'
+        'approval_policy = "on-request"\n'
+        'approvals_reviewer = "auto_review"\n'
+        'sandbox_mode = "workspace-write"\n\n'
+        '[mcp_servers.example]\n'
+        'command = "example"\n\n'
+        '[shell_environment_policy.set]\n'
+        'EXAMPLE = "kept"\n',
+        encoding="utf-8",
+    )
+
+    installed, _ = _run("--codex", home=home)
+    assert installed.returncode == 0, installed.stderr
+    data = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert "sandbox_mode" not in data
+    assert data["default_permissions"] == "mainframe"
+    assert data["mcp_servers"]["example"]["command"] == "example"
+    backups = list(codex_dir.glob("config.toml.backup-*"))
+    assert len(backups) == 1
+    assert 'sandbox_mode = "workspace-write"' in backups[0].read_text(encoding="utf-8")
+
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write('\n[desktop]\ntheme = "dark"\n')
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    restored = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert restored["sandbox_mode"] == "workspace-write"
+    assert restored["approval_policy"] == "on-request"
+    assert restored["approvals_reviewer"] == "auto_review"
+    assert restored["desktop"]["theme"] == "dark"
+    assert "default_permissions" not in restored
+    assert backups[0].exists()
+
+
+def test_unmanaged_mainframe_permission_profile_stops_before_delivery():
+    home = pathlib.Path(tempfile.mkdtemp())
+    codex_dir = home / ".codex"
+    codex_dir.mkdir()
+    config = codex_dir / "config.toml"
+    config.write_text(
+        '[permissions.mainframe]\nextends = ":read-only"\n',
+        encoding="utf-8",
+    )
+
+    refused, _ = _run("--codex", home=home)
+    assert refused.returncode != 0
+    assert "unmanaged permissions.mainframe" in refused.stderr
+    assert config.read_text(encoding="utf-8") == '[permissions.mainframe]\nextends = ":read-only"\n'
+    assert not (home / ".local" / "bin" / "secret").exists()
+
+
+def test_changed_permissions_block_is_preserved_on_uninstall():
+    installed, home = _run("--codex")
+    assert installed.returncode == 0, installed.stderr
+    config = home / ".codex" / "config.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace(
+            'default_permissions = "mainframe"',
+            'default_permissions = ":danger-full-access"',
+        ),
+        encoding="utf-8",
+    )
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode != 0
+    assert "permissions block changed" in removed.stderr
+    assert ':danger-full-access' in config.read_text(encoding="utf-8")
+    assert (home / ".codex" / "AGENTS.md").is_file()
+
+
+def test_owned_permissions_block_can_evolve_without_replacing_user_config():
+    installed, home = _run("--codex")
+    assert installed.returncode == 0, installed.stderr
+    codex_dir = home / ".codex"
+    config = codex_dir / "config.toml"
+    source = home / "updated-permissions.toml"
+    source.write_text(
+        CONFIG_SOURCE.read_text(encoding="utf-8").replace(
+            "Workspace editing with protected credentials and reviewed external access.",
+            "Updated owned profile.",
+        ),
+        encoding="utf-8",
+    )
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write('\n[desktop]\ntheme = "kept"\n')
+
+    updated = subprocess.run(
+        [
+            sys.executable,
+            str(CONFIG_MANAGER),
+            "install",
+            "--config",
+            str(config),
+            "--source",
+            str(source),
+            "--repo-root",
+            str(ROOT),
+            "--state",
+            str(codex_dir / ".mainframe-config-state.json"),
+            "--backup",
+            str(codex_dir / "unused-backup"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert updated.returncode == 0, updated.stderr
+    data = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert data["permissions"]["mainframe"]["description"] == "Updated owned profile."
+    assert data["desktop"]["theme"] == "kept"
+
+
 def test_skill_collision_stops_before_shared_install():
     home = pathlib.Path(tempfile.mkdtemp())
     collision = home / ".agents" / "skills" / "mainframe-init"
@@ -227,6 +371,11 @@ def test_baseline_uses_native_standalone_layers_only():
     assert not (ADAPTER / "agents").exists()
     assert not (ADAPTER / "config.toml").exists()
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
+    assert 'pattern = ["secret"]' in (
+        ADAPTER / "rules" / "mainframe.rules"
+    ).read_text(encoding="utf-8")
+    assert (ADAPTER / "config" / "mainframe-permissions.toml").is_file()
+    assert (ADAPTER / "scripts" / "manage-config.py").is_file()
 
     init_metadata = (
         ADAPTER / "skills" / "mainframe-init" / "agents" / "openai.yaml"

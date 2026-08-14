@@ -4,6 +4,7 @@ set -euo pipefail
 
 ADAPTER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${ADAPTER_ROOT}/../.." && pwd)"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)-$$"
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 GLOBAL_SKILLS_DIR="$HOME/.agents/skills"
 SOURCE_AGENTS="${ADAPTER_ROOT}/export/AGENTS.md"
@@ -15,7 +16,11 @@ INDEX_STATE="${CODEX_DIR}/.mainframe-index-state"
 RULES_SOURCE="${ADAPTER_ROOT}/rules/mainframe.rules"
 RULES_TARGET="${CODEX_DIR}/rules/mainframe.rules"
 RULES_STATE="${CODEX_DIR}/.mainframe-rules-state"
-TIMESTAMP="$(date +%Y%m%d-%H%M%S)-$$"
+CONFIG_SOURCE="${ADAPTER_ROOT}/config/mainframe-permissions.toml"
+CONFIG_TOOL="${ADAPTER_ROOT}/scripts/manage-config.py"
+CONFIG_TARGET="${CODEX_DIR}/config.toml"
+CONFIG_STATE="${CODEX_DIR}/.mainframe-config-state.json"
+CONFIG_BACKUP="${CONFIG_TARGET}.backup-${TIMESTAMP}"
 
 DRY_RUN=0
 ASSUME_YES=0
@@ -31,8 +36,8 @@ Usage:
   install.sh --preflight [--dry-run] [--yes]
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
-share AGENTS.md, standalone skills, and MAINFRAME-owned command rules. Codex
-plugins, hooks, agents, configuration, and development telemetry are not
+share AGENTS.md, standalone skills, command rules, and a bounded permission
+profile. Codex plugins, hooks, agents, and development telemetry are not
 installed by this version.
 EOF
 }
@@ -148,12 +153,26 @@ check_sources() {
     for path in "$SOURCE_AGENTS" \
         "${ADAPTER_ROOT}/skills/mainframe-init/SKILL.md" \
         "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
-        "$RULES_SOURCE"; do
+        "$RULES_SOURCE" \
+        "$CONFIG_SOURCE" \
+        "$CONFIG_TOOL"; do
         if [[ ! -f "$path" ]]; then
             error "Codex adapter source is missing: $path"
             return 1
         fi
     done
+}
+
+manage_config() {
+    local action="$1"
+    shift
+    python3 "$CONFIG_TOOL" "$action" \
+        --config "$CONFIG_TARGET" \
+        --source "$CONFIG_SOURCE" \
+        --repo-root "$REPO_ROOT" \
+        --state "$CONFIG_STATE" \
+        --backup "$CONFIG_BACKUP" \
+        "$@"
 }
 
 validate_rules() {
@@ -194,10 +213,12 @@ preflight() {
             error "The Codex MAINFRAME rules installation changed after installation. It was preserved."
             return 1
         fi
+        manage_config uninstall --dry-run >/dev/null
     else
         runtime_preflight
         validate_rules
         delivery_preflight
+        manage_config install --dry-run >/dev/null
     fi
 }
 
@@ -343,12 +364,21 @@ install_rules() {
     log "linked Codex command rules: $RULES_TARGET"
 }
 
+install_config() {
+    if [[ $DRY_RUN -eq 1 ]]; then
+        manage_config install --dry-run
+    else
+        manage_config install
+    fi
+}
+
 install_adapter() {
     install_agents
     install_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
     install_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
     install_index
     install_rules
+    install_config
     if [[ $DRY_RUN -eq 1 ]]; then
         log "Codex baseline plan verified; no files were changed."
     else
@@ -464,6 +494,11 @@ uninstall_adapter() {
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
     uninstall_index
     uninstall_rules
+    if [[ $DRY_RUN -eq 1 ]]; then
+        manage_config uninstall --dry-run
+    else
+        manage_config uninstall
+    fi
     log "Credentials, the repository index, and unrelated Codex configuration were preserved."
 }
 

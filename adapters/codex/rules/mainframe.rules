@@ -7,6 +7,19 @@
 # and are intentionally not broadened by an allow rule.
 
 prefix_rule(
+    pattern = ["secret"],
+    decision = "prompt",
+    justification = "Credential access must pass auto-review and keep secret values out of the model context.",
+    match = [
+        "secret list",
+        "secret env service credential -- command --flag",
+    ],
+    not_match = [
+        "security find-generic-password -a example",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "push"],
     decision = "prompt",
     justification = "Push only when the user explicitly requested remote delivery; ordinary push authority does not include force push.",

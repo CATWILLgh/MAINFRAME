@@ -1,0 +1,17 @@
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+default_permissions = "mainframe"
+shell_environment_policy.inherit = "core"
+
+permissions.mainframe.description = "Workspace editing with protected credentials and reviewed external access."
+permissions.mainframe.extends = ":workspace"
+permissions.mainframe.filesystem."~/.codex/credentials-index.md" = "read"
+permissions.mainframe.filesystem."@MAINFRAME_REPO@/shared/credentials/credentials-index.md" = "read"
+permissions.mainframe.filesystem."@MAINFRAME_REPO@/shared/credentials/secret" = "read"
+permissions.mainframe.filesystem."~/.local/bin/secret" = "read"
+permissions.mainframe.filesystem."~/.config/credentials" = "deny"
+permissions.mainframe.network.enabled = true
+permissions.mainframe.network.domains."localhost" = "allow"
+permissions.mainframe.network.domains."127.0.0.1" = "allow"
+permissions.mainframe.network.domains."::1" = "allow"
+permissions.mainframe.network.unix_sockets."/tmp/.s.PGSQL.5432" = "allow"

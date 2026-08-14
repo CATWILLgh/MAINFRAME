@@ -95,7 +95,7 @@ To see the result without changing anything:
 ./install.sh --claude --dry-run
 ```
 
-Replace `--claude` with `--codex` to inspect Codex delivery. Codex currently installs a recipient-neutral global `AGENTS.md`, explicit `$mainframe-init`, `$mainframe-secrets`, the shared credentials index, and a separate MAINFRAME-owned command-rules file. It deliberately does not install Codex hooks, agents, plugins, telemetry, or modify `config.toml` yet.
+Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit `$mainframe-init`, `$mainframe-secrets`, the shared credentials index, command rules, and a least-privilege permission profile shared by Desktop, CLI, and the IDE extension. The installer merges one marked block into the existing `config.toml`, backs it up, preserves unrelated settings, and can remove only its own changes later. It deliberately does not install Codex hooks, agents, plugins, or telemetry yet.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 
