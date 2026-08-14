@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME Frontend"
+  short_description: "Build and verify complete web frontend results"
+  default_prompt: "Use $mainframe-frontend to implement this user-facing frontend change."

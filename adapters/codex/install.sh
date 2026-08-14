@@ -12,10 +12,12 @@ SKILL_NAMES=(
     mainframe-secrets
     mainframe-ticket
     mainframe-typescript-backend
+    mainframe-frontend
 )
 AGENT_NAMES=(
     mainframe_researcher
     mainframe_typescript_backend_engineer
+    mainframe_react_frontend_engineer
 )
 SOURCE_AGENTS="${ADAPTER_ROOT}/export/AGENTS.md"
 TARGET_AGENTS="${CODEX_DIR}/AGENTS.md"

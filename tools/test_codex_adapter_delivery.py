@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Contract tests for the first native Codex adapter baseline."""
 
+import json
 import os
 import pathlib
 import stat
@@ -56,9 +57,11 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe-ticket" in proc.stdout
     assert "mainframe-typescript-backend" in proc.stdout
+    assert "mainframe-frontend" in proc.stdout
     assert "mainframe.rules" in proc.stdout
     assert "mainframe_researcher.toml" in proc.stdout
     assert "mainframe_typescript_backend_engineer.toml" in proc.stdout
+    assert "mainframe_react_frontend_engineer.toml" in proc.stdout
     assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
@@ -83,6 +86,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-typescript-backend",
+        "mainframe-frontend",
     ):
         target = home / ".agents" / "skills" / name
         assert target.is_symlink()
@@ -128,6 +132,22 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert typescript_data["sandbox_mode"] == "workspace-write"
     assert typescript_data["web_search"] == "live"
     assert typescript_data["features"]["apps"] is False
+    frontend_engineer = codex_dir / "agents" / "mainframe_react_frontend_engineer.toml"
+    frontend_state = (
+        codex_dir / ".mainframe-agent-mainframe_react_frontend_engineer-state"
+    )
+    assert frontend_engineer.is_symlink()
+    assert frontend_engineer.resolve() == (
+        ADAPTER / "agents" / "mainframe_react_frontend_engineer.toml"
+    )
+    assert frontend_state.is_file()
+    frontend_data = tomllib.loads(frontend_engineer.read_text(encoding="utf-8"))
+    assert frontend_data["name"] == "mainframe_react_frontend_engineer"
+    assert "model" not in frontend_data
+    assert "model_reasoning_effort" not in frontend_data
+    assert frontend_data["sandbox_mode"] == "workspace-write"
+    assert frontend_data["web_search"] == "live"
+    assert frontend_data["features"]["apps"] is False
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
     assert config.is_file() and config_state.is_file()
@@ -165,6 +185,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not researcher_state.exists()
     assert not typescript_engineer.exists() and not typescript_engineer.is_symlink()
     assert not typescript_state.exists()
+    assert not frontend_engineer.exists() and not frontend_engineer.is_symlink()
+    assert not frontend_state.exists()
     assert not config.exists()
     assert not config_state.exists()
     assert helper.is_symlink()
@@ -173,6 +195,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-typescript-backend",
+        "mainframe-frontend",
     ):
         target = home / ".agents" / "skills" / name
         assert not target.exists() and not target.is_symlink()
@@ -482,6 +505,15 @@ def test_baseline_uses_native_standalone_layers_only():
         typescript_data["developer_instructions"]
     )
     assert "stage files, commit, push" in typescript_data["developer_instructions"]
+    frontend_engineer = ADAPTER / "agents" / "mainframe_react_frontend_engineer.toml"
+    assert frontend_engineer.is_file()
+    frontend_data = tomllib.loads(frontend_engineer.read_text(encoding="utf-8"))
+    assert "model" not in frontend_data
+    assert "model_reasoning_effort" not in frontend_data
+    assert "load and follow the `mainframe-frontend` skill" in (
+        frontend_data["developer_instructions"]
+    )
+    assert "stage files, commit, push" in frontend_data["developer_instructions"]
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
     assert 'pattern = ["secret"]' in (
         ADAPTER / "rules" / "mainframe.rules"
@@ -521,6 +553,105 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "references/testing.md" in typescript_body
     assert "mainframe-ticket" in typescript_body
     assert (typescript_skill / "scripts" / "recon.js").is_file()
+
+    frontend_skill = ADAPTER / "skills" / "mainframe-frontend"
+    frontend_body = (frontend_skill / "SKILL.md").read_text(encoding="utf-8")
+    frontend_metadata = (frontend_skill / "agents" / "openai.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-frontend" in frontend_body
+    assert "scripts/recon.js" in frontend_body
+    assert "scripts/inspect-ui.mjs" in frontend_body
+    assert "references/accessibility.md" in frontend_body
+    assert "references/testing.md" in frontend_body
+    assert "references/shadcn-composition.md" in frontend_body
+    assert "mainframe-ticket" in frontend_body
+    assert "allow_implicit_invocation" not in frontend_metadata
+    assert (frontend_skill / "scripts" / "recon.js").is_file()
+    assert (frontend_skill / "scripts" / "inspect-ui.mjs").is_file()
+
+
+def test_frontend_recon_routes_react_and_shadcn_context():
+    package = pathlib.Path(tempfile.mkdtemp())
+    ui = package / "src" / "components" / "ui"
+    ui.mkdir(parents=True)
+    (package / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "frontend-fixture",
+                "dependencies": {
+                    "react": "19.2.0",
+                    "next": "16.1.0",
+                    "@tanstack/react-query": "5.0.0",
+                },
+                "devDependencies": {
+                    "typescript": "5.9.0",
+                    "vitest": "3.0.0",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (package / "components.json").write_text(
+        json.dumps(
+            {
+                "style": "new-york",
+                "base": "radix",
+                "rsc": True,
+                "iconLibrary": "lucide",
+                "aliases": {"ui": "@/components/ui"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (ui / "button.tsx").write_text(
+        "export function Button() { return null }\n", encoding="utf-8"
+    )
+    (package / "src" / "App.tsx").write_text(
+        'import { Button } from "@/components/ui/button"\n', encoding="utf-8"
+    )
+
+    skill = ADAPTER / "skills" / "mainframe-frontend"
+    recon = subprocess.run(
+        ["node", str(skill / "scripts" / "recon.js"), str(package)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert recon.returncode == 0, recon.stderr
+    recon_data = json.loads(recon.stdout)
+    assert recon_data["runtime"]["react_declared"] == "19.2.0"
+    assert recon_data["frameworks"]["next"] == "16.1.0"
+    assert recon_data["ui"]["components_json"] is True
+    assert recon_data["tests"]["vitest"] == "3.0.0"
+
+    inspection = subprocess.run(
+        ["node", str(skill / "scripts" / "inspect-ui.mjs"), str(package)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert inspection.returncode == 0, inspection.stderr
+    inspection_data = json.loads(inspection.stdout)
+    assert inspection_data["shadcn"] is True
+    assert inspection_data["config"]["uiAlias"] == "@/components/ui"
+    assert inspection_data["components"] == [
+        {
+            "name": "button",
+            "file": "src/components/ui/button.tsx",
+            "importedBy": ["src/App.tsx"],
+        }
+    ]
+
+    unrelated = pathlib.Path(tempfile.mkdtemp())
+    absent = subprocess.run(
+        ["node", str(skill / "scripts" / "inspect-ui.mjs"), str(unrelated)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert absent.returncode == 0, absent.stderr
+    assert json.loads(absent.stdout)["shadcn"] is False
 
 
 def test_shared_judgment_and_primary_completion_are_separated():
