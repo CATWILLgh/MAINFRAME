@@ -120,7 +120,7 @@ MAINFRAME is built around a few boundaries:
 - **Enough process, not maximum process.** Small tasks stay small. Complex or high-risk tasks receive deeper preparation and independent review.
 - **User authority stays explicit.** Product meaning, infrastructure, protected data, branch changes, and external delivery are never silently redefined.
 
-The current product decisions are recorded in [docs/principles.md](docs/principles.md). It is a working design record, not a beginner's manual.
+Detailed technical reference will be added separately and linked from this page as it becomes ready.
 
 ## Origin and evolution
 
@@ -180,7 +180,6 @@ MAINFRAME/
 ├── shared/credentials/     adapter-independent secret helper and local index template
 ├── dev/                    opt-in tools used while developing MAINFRAME
 ├── tools/                  validators, tests, and local observability builders
-├── docs/principles.md      current product decisions and design boundaries
 ├── install.sh              small adapter dispatcher
 └── CONTRIBUTING.md         contribution and validation guide
 ```

@@ -442,13 +442,13 @@ def test_adapter_owns_claude_artifacts():
     assert not (ROOT / "plugin-dist").exists()
 
 
-def test_readme_skill_inventory_matches_product_tree():
+def test_readme_stays_product_focused_without_volatile_inventory():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    skill_count = len([
-        path for path in (PLUGIN / "skills").iterdir()
-        if path.is_dir() and (path / "SKILL.md").is_file()
-    ])
-    assert f"### Skills — {skill_count} focused playbooks" in readme
+    assert "## What it adds" in readme
+    assert "## Origin and evolution" in readme
+    assert "### Skills —" not in readme
+    assert "### Agents —" not in readme
+    assert "### Hooks —" not in readme
     assert "`severity-calibration`" not in readme
 
 
@@ -700,18 +700,6 @@ def test_testing_context_preserves_role_boundaries():
     )
     assert "scripts/inspect-ui.mjs" in shadcn_skill
     assert '"shadcn": false' in shadcn_skill
-
-    principles = (ROOT / "docs" / "principles.md").read_text(encoding="utf-8")
-    assert "`surface-ticket`" not in principles
-    assert "`needs-refinement`" not in principles
-    for state in (
-        "observations",
-        "needs-scope-review",
-        "needs-decision",
-        "ready",
-        "needs-verification",
-    ):
-        assert state in principles
 
     observation = (
         PLUGIN / "skills" / "ticket" / "record-observation.md"

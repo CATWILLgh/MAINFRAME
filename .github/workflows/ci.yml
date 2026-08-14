@@ -15,17 +15,23 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
       # Two hook tests build throwaway git repos; a runner has git but no identity.
       - name: Configure git identity
         run: |
           git config --global user.email "ci@mainframe.local"
           git config --global user.name "mainframe-ci"
 
-      # The hook tests exercise the real local ruff binary. Validator tests and
+      # The hook tests exercise the real Ruff and Oxlint binaries. Validator tests and
       # the hub-page generator parse YAML; the skill validator also counts
       # tokens. Install the verified test toolchain before any test discovers it.
       - name: Install test and validator dependencies
-        run: pip install ruff==0.15.15 tiktoken pyyaml
+        run: |
+          pip install ruff==0.15.15 tiktoken pyyaml
+          npm install --global oxlint@1.67.0
 
       - name: Hook test suite
         run: |
