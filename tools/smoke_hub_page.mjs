@@ -82,7 +82,8 @@ fire(search, "input");
 ok(visibleCards().length === totalCards, "clearing the query restores all cards");
 ok(visibleNodes().length === totalNodes, "clearing the query restores all graph nodes");
 
-const componentTab = q("#tabs button").find((b) => b.textContent === "Components");
+const componentTab = q("#tabs button").find((b) =>
+  b.querySelector(".tab-label")?.textContent === "Components");
 fire(componentTab, "click");
 ok(doc.querySelector("#view-catalog").classList.contains("active"), "component tab activates its view");
 ok(!search.hidden, "search appears only where it can filter content");
@@ -133,7 +134,9 @@ const dev = doc.querySelector("#view-dev");
 ok(!!dev, "dev pane rendered");
 ok(q("#view-dev .bars").length >= 2, "activity-by-day and by-agent bar charts present");
 ok(q("#view-dev .bar-row").length >= 2, "bar rows rendered (" + q("#view-dev .bar-row").length + ")");
-ok(/by skill|by hook/.test(dev.textContent), "payload breakdowns rendered");
+const breakdowns = window.HUB_DATA.dev_state.telemetry.breakdowns || [];
+ok(!breakdowns.length || breakdowns.every((b) =>
+  dev.textContent.includes(b.event + " · by " + b.key)), "available payload breakdowns rendered");
 
 const usage = doc.querySelector("#view-usage");
 ok(!!usage, "usage pane rendered");

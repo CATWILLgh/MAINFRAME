@@ -307,14 +307,14 @@
     return el("p", { class: "empty-state" }, text);
   }
 
-  function signalChart(rows) {
+  function signalChart(rows, unit) {
     const shown = (rows || []).slice(-21);
-    if (!shown.length) return emptyState("No telemetry activity is available yet.");
+    if (!shown.length) return emptyState("No activity is available yet.");
     const max = shown.reduce((m, row) => Math.max(m, row[1]), 0) || 1;
     return el("div", { class: "signal-chart", role: "img",
-      "aria-label": "Telemetry events over the latest recorded days" }, shown.map((row) => {
+      "aria-label": (unit || "Activity") + " over the latest recorded days" }, shown.map((row) => {
       const pct = Math.max(4, Math.round(100 * row[1] / max));
-      return el("div", { class: "signal-column", title: row[0] + " · " + row[1] + " events" }, [
+      return el("div", { class: "signal-column", title: row[0] + " · " + row[1] + " " + (unit || "events") }, [
         el("span", { class: "signal-value", style: "height:" + pct + "%" }),
         el("span", { class: "signal-date" }, row[0].slice(5)),
       ]);
@@ -357,19 +357,24 @@
     const statusLabel = !ds.active ? "Waiting for telemetry" : healthy ? "Signals are clean" : "Review recommended";
     const statusTone = !ds.active ? "idle" : healthy ? "good" : "warn";
 
-    root.appendChild(el("header", { class: "overview-hero" }, [
-      el("div", null, [
-        el("span", { class: "eyebrow" }, "LOCAL DEVELOPMENT OBSERVATORY"),
-        el("h1", null, "See the whole agent system at a glance."),
-        el("p", null, "Usage, telemetry, hook outcomes and delivery health — one calm view first, details when you need them."),
-      ]),
+    root.appendChild(el("header", { class: "overview-hero " + statusTone }, [
       el("div", { class: "overview-status " + statusTone }, [
         el("span", { class: "status-light", "aria-hidden": "true" }),
         el("div", null, [
+          el("span", { class: "eyebrow" }, "SYSTEM STATUS"),
           el("strong", null, statusLabel),
           el("span", null, ds.active && t.generated_at
             ? "snapshot " + t.generated_at : "no validated event snapshot yet"),
         ]),
+      ]),
+      el("div", { class: "overview-intro" }, [
+        el("h1", null, "Agent system overview"),
+        el("p", null, "Activity, cost, routing and quality signals. Start with attention; drill into evidence only when needed."),
+      ]),
+      el("div", { class: "attention-total " + statusTone }, [
+        el("span", null, "OPEN SIGNALS"),
+        el("strong", null, attentionCount.toLocaleString()),
+        el("small", null, attentionCount ? "worth reviewing" : "nothing actionable"),
       ]),
     ]));
 
@@ -382,11 +387,18 @@
       overviewMetric("Active days", (u.active_days || 0).toLocaleString(), (u.current_streak || 0) + " day current streak"),
     ]));
 
+    const telemetryDays = t.by_day || [];
+    const usageDays = u.by_day || [];
+    const activityRows = telemetryDays.length > 1 ? telemetryDays : usageDays;
+    const activityUnit = telemetryDays.length > 1 ? "events" : "assistant replies";
+    const activityTitle = telemetryDays.length > 1 ? "Telemetry signal" : "Work rhythm";
     const activityBody = el("div", null, [
-      signalChart(t.by_day || []),
+      signalChart(activityRows, activityUnit),
       el("div", { class: "panel-foot" }, [
-        el("span", null, (t.usable_records || 0).toLocaleString() + " validated events"),
-        el("span", null, (t.sessions || 0).toLocaleString() + " telemetry sessions"),
+        el("span", null, activityRows.length.toLocaleString() + " active days in view"),
+        el("span", null, telemetryDays.length > 1
+          ? (t.usable_records || 0).toLocaleString() + " validated events"
+          : (u.messages || 0).toLocaleString() + " total replies"),
       ]),
     ]);
 
@@ -395,7 +407,23 @@
     if (dataIssues) concerns.push(["Data quality", dataIssues + " invalid, legacy or unknown records", "warn"]);
     if (repoIssues) concerns.push(["Delivery health", repoIssues + " broken references or missing scripts", "warn"]);
     if (unmatched) concerns.push(["Agent lifecycle", unmatched + " unmatched start/stop signals", "warn"]);
-    if (hookGap) concerns.push(["Quality hooks", hookGap + " more block signals than confirmed resolutions", "warn"]);
+    if (hookGap) {
+      concerns.push(["Quality hooks", hookGap + " more block signals than confirmed resolutions", "warn"]);
+      hookRows.map((row) => ({
+        name: row.rule_id || row.hook || "unknown hook",
+        gap: Math.max(0, (row.blocked || 0) - (row.resolved || 0)),
+        blocked: row.blocked || 0,
+        resolved: row.resolved || 0,
+      })).filter((row) => row.gap > 0).sort((a, b) => b.gap - a.gap).slice(0, 3)
+        .forEach((row) => {
+          const plainRule = String(row.name).replace(/\.py$/, "").replace(/[-_]+/g, " ");
+          concerns.push([
+            plainRule.charAt(0).toUpperCase() + plainRule.slice(1),
+            row.blocked + " blocked · " + row.resolved + " confirmed resolved",
+            "warn",
+          ]);
+        });
+    }
     if (feedback) concerns.push(["Feedback queue", feedback + " item" + (feedback === 1 ? "" : "s") + " waiting", "idle"]);
     if (!concerns.length) concerns.push(["Current snapshot", "No actionable signal is visible", "good"]);
     const attentionBody = el("div", { class: "attention-list" }, concerns.map((item) =>
@@ -403,6 +431,16 @@
         el("span", { class: "attention-mark", "aria-hidden": "true" }),
         el("div", null, [el("strong", null, item[0]), el("span", null, item[1])]),
       ])));
+
+    const integrityBody = el("div", { class: "integrity-grid" }, [
+      overviewMetric("Skills", D.skills.length.toLocaleString(), "delivered knowledge"),
+      overviewMetric("Agents", D.agents.length.toLocaleString(), "specialized profiles", "agent-tone"),
+      overviewMetric("Hooks", D.hooks.length.toLocaleString(), "registered checks", "event-tone"),
+      overviewMetric("Broken links", repoIssues.toLocaleString(), repoIssues ? "needs attention" : "delivery resolves",
+        repoIssues ? "warn" : "good"),
+      overviewMetric("Connections", (D.edges || []).length.toLocaleString(), "mapped relationships"),
+      overviewMetric("Dev skills", D.skills.filter((skill) => skill.dev).length.toLocaleString(), "development only", "usage-tone"),
+    ]);
 
     const sp = u.split || { main: {}, sub: {} };
     const scopeRows = [
@@ -451,11 +489,12 @@
       ]))) : emptyState("No validated event stream is available yet.");
 
     root.appendChild(el("div", { class: "overview-grid" }, [
-      overviewPanel("ACTIVITY", "Telemetry signal", activityBody, "panel-wide signal-panel"),
+      overviewPanel("LATEST 21 DAYS", activityTitle, activityBody, "signal-panel"),
       overviewPanel("ATTENTION", "What deserves a look", attentionBody, "attention-panel"),
+      overviewPanel("SYSTEM", "Delivered shape", integrityBody, "integrity-panel"),
       overviewPanel("ROUTING", "Where the work happens", agentBody, "agent-panel"),
       overviewPanel("MODELS", "Token distribution", modelBody, "model-panel"),
-      overviewPanel("QUALITY HOOKS", "Outcomes, not just triggers", hookBody, "panel-wide hook-panel"),
+      overviewPanel("QUALITY HOOKS", "Outcomes, not just triggers", hookBody, "hook-panel"),
       overviewPanel("LATEST", "Recent validated events", recentBody, "panel-full stream-panel"),
     ]));
 
@@ -932,20 +971,23 @@
   }
 
   const VIEWS = [
-    { id: "overview", label: "Overview", render: renderOverview },
-    { id: "dev", label: "Telemetry", render: renderDev },
-    { id: "usage", label: "Usage", render: renderUsage },
-    { id: "catalog", label: "Components", render: renderCatalog, divider: true },
-    { id: "hooks", label: "Hooks", render: renderHooks },
-    { id: "config", label: "Configuration", render: renderConfig },
-    { id: "health", label: "Health", render: renderHealth },
-    { id: "graph", label: "Map", render: renderGraph },
+    { id: "overview", label: "Overview", short: "OV", render: renderOverview },
+    { id: "dev", label: "Telemetry", short: "TL", render: renderDev },
+    { id: "usage", label: "Usage", short: "US", render: renderUsage },
+    { id: "catalog", label: "Components", short: "CP", render: renderCatalog, divider: true },
+    { id: "hooks", label: "Hooks", short: "HK", render: renderHooks },
+    { id: "config", label: "Configuration", short: "CF", render: renderConfig },
+    { id: "health", label: "Health", short: "HL", render: renderHealth },
+    { id: "graph", label: "Map", short: "MP", render: renderGraph },
   ];
 
   const panes = {};
   VIEWS.forEach((v) => {
+    if (v.divider) tabsNav.appendChild(el("div", { class: "nav-label nav-label-inline" }, "System"));
     const btn = el("button", { type: "button", role: "tab", "aria-controls": "view-" + v.id,
-      "aria-selected": "false", class: v.divider ? "tab-divider" : "" }, v.label);
+      "aria-selected": "false", class: v.divider ? "tab-divider" : "",
+      "data-short": v.short }, [el("span", { class: "tab-code", "aria-hidden": "true" }, v.short),
+      el("span", { class: "tab-label" }, v.label)]);
     btn.addEventListener("click", () => show(v.id));
     btn.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -988,6 +1030,7 @@
   }
 
   function show(id) {
+    const activeView = VIEWS.find((v) => v.id === id);
     VIEWS.forEach((v) => {
       const on = v.id === id;
       panes[v.id].pane.classList.toggle("active", on);
@@ -995,6 +1038,9 @@
       panes[v.id].btn.setAttribute("aria-selected", on ? "true" : "false");
       panes[v.id].btn.tabIndex = on ? 0 : -1;
     });
+    const activeName = document.getElementById("active-view-name");
+    if (activeName && activeView) activeName.textContent = activeView.label;
+    if (activeView) document.title = activeView.label + " · MAINFRAME hub";
     if (search) search.hidden = id !== "catalog" && id !== "graph";
     try { window.sessionStorage.setItem("mainframe-hub-view", id); } catch (_err) { /* unavailable over some file origins */ }
   }

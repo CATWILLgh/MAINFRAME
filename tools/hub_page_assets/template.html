@@ -7,21 +7,34 @@
 <style>{{STYLE}}</style>
 </head>
 <body>
-<header class="topbar">
-  <div class="brand-lockup">
-    <span class="brand-sigil" aria-hidden="true">M</span>
-    <span class="brand-copy">
-      <span class="brand">MAINFRAME</span>
-      <span class="brand-sub">local observatory</span>
-    </span>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand-lockup">
+      <span class="brand-sigil" aria-hidden="true">M</span>
+      <span class="brand-copy">
+        <span class="brand">MAINFRAME</span>
+        <span class="brand-sub">local observatory</span>
+      </span>
+    </div>
+    <div class="nav-label">Observe</div>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Hub views"></nav>
+    <div class="sidebar-foot">
+      <span class="snapshot-label"><i aria-hidden="true"></i>{{SNAPSHOT_MODE}}</span>
+      <span class="stamp">{{BUILD_STAMP}}</span>
+      <span class="privacy-note">Local data only</span>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <div class="page-context">
+        <span class="context-path">MAINFRAME / OBSERVATORY</span>
+        <strong id="active-view-name">Overview</strong>
+      </div>
+      <div class="toptools"></div>
+    </header>
+    <main id="app"></main>
   </div>
-  <nav class="tabs" id="tabs" role="tablist" aria-label="Hub views"></nav>
-  <div class="toptools">
-    <span class="snapshot-label"><i aria-hidden="true"></i>{{SNAPSHOT_MODE}}</span>
-    <span class="stamp">{{BUILD_STAMP}}</span>
-  </div>
-</header>
-<main id="app"></main>
+</div>
 <script>
 window.HUB_DATA = {{DATA}};
 window.HUB_AUTO_REFRESH_MS = {{AUTO_REFRESH_MS}};
