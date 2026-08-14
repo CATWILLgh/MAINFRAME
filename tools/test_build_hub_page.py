@@ -361,6 +361,14 @@ def test_compute_health_all_resolved_is_empty():
     assert health == {"dangling": [], "orphans": [], "missing_scripts": []}
 
 
+def test_compute_health_resolves_namespaced_agent_skills():
+    root = tempfile.mkdtemp()
+    skills = [{"name": "ticket", "crossrefs": []}]
+    agents = [{"name": "worker", "skills": ["mainframe:ticket"]}]
+    health = bhp.compute_health(skills, agents, [], root)
+    assert health == {"dangling": [], "orphans": [], "missing_scripts": []}
+
+
 def _usage_fixture():
     """A temp projects dir with one transcript covering every correctness trap:
     streaming partials sharing one message.id, an iterations[] that restates the

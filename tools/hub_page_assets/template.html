@@ -8,9 +8,18 @@
 </head>
 <body>
 <header class="topbar">
-  <span class="brand">MAINFRAME hub</span>
-  <nav class="tabs" id="tabs"></nav>
-  <span class="stamp">built {{BUILD_STAMP}}</span>
+  <div class="brand-lockup">
+    <span class="brand-sigil" aria-hidden="true">M</span>
+    <span class="brand-copy">
+      <span class="brand">MAINFRAME</span>
+      <span class="brand-sub">local observatory</span>
+    </span>
+  </div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Hub views"></nav>
+  <div class="toptools">
+    <span class="snapshot-label"><i aria-hidden="true"></i>static snapshot</span>
+    <span class="stamp">{{BUILD_STAMP}}</span>
+  </div>
 </header>
 <main id="app"></main>
 <script>window.HUB_DATA = {{DATA}};</script>

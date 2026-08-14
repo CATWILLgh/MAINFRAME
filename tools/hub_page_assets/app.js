@@ -49,12 +49,14 @@
   // Indexed by name; the clicked node's layer disambiguates a name shared across layers.
   const skillByName = {};
   D.skills.forEach((s) => { skillByName[s.name] = s; });
+  const localSkillName = (name) => String(name || "").replace(/^mainframe:/, "");
   const agentByName = {};
   D.agents.forEach((a) => { agentByName[a.name] = a; });
   // reverse edges: who preloads (agent skills:) or references (skill cross-ref) a skill
   const referencedBy = {};
   D.agents.forEach((a) => (a.skills || []).forEach((sk) => {
-    (referencedBy[sk] || (referencedBy[sk] = [])).push({ name: a.name, layer: "agents" });
+    const local = localSkillName(sk);
+    (referencedBy[local] || (referencedBy[local] = [])).push({ name: a.name, layer: "agents" });
   }));
   D.skills.forEach((s) => (s.crossrefs || []).forEach((ref) => {
     if (skillByName[ref]) {
@@ -156,7 +158,7 @@
       dhead(a.name, a.model || "agent", "agents"),
       el("p", { class: "card-desc" }, a.description),
       a.tools ? el("p", { class: "card-when" }, [el("b", null, "tools: "), String(a.tools)]) : null,
-      dsec("preloads skills", (a.skills || []).map((sk) => linkChip(sk, "skills", sk))),
+      dsec("preloads skills", (a.skills || []).map((sk) => linkChip(sk, "skills", localSkillName(sk)))),
     ]);
   }
 
@@ -281,6 +283,187 @@
           el("span", { class: "bar-fill", style: "width:" + Math.max(2, Math.round(100 * n / max)) + "%" })),
         el("span", { class: "bar-num" }, String(n)),
       ])));
+  }
+
+  function overviewMetric(label, value, note, tone) {
+    return el("div", { class: "overview-metric " + (tone || "") }, [
+      el("span", { class: "metric-label" }, label),
+      el("strong", null, value),
+      note ? el("span", { class: "metric-note" }, note) : null,
+    ]);
+  }
+
+  function overviewPanel(kicker, title, body, cls) {
+    return el("section", { class: "overview-panel " + (cls || "") }, [
+      el("div", { class: "panel-heading" }, [
+        el("span", { class: "panel-kicker" }, kicker),
+        el("h2", null, title),
+      ]),
+      body,
+    ]);
+  }
+
+  function emptyState(text) {
+    return el("p", { class: "empty-state" }, text);
+  }
+
+  function signalChart(rows) {
+    const shown = (rows || []).slice(-21);
+    if (!shown.length) return emptyState("No telemetry activity is available yet.");
+    const max = shown.reduce((m, row) => Math.max(m, row[1]), 0) || 1;
+    return el("div", { class: "signal-chart", role: "img",
+      "aria-label": "Telemetry events over the latest recorded days" }, shown.map((row) => {
+      const pct = Math.max(4, Math.round(100 * row[1] / max));
+      return el("div", { class: "signal-column", title: row[0] + " · " + row[1] + " events" }, [
+        el("span", { class: "signal-value", style: "height:" + pct + "%" }),
+        el("span", { class: "signal-date" }, row[0].slice(5)),
+      ]);
+    }));
+  }
+
+  function shareRows(rows, total, tone) {
+    if (!rows.length) return emptyState("No split is available yet.");
+    const observed = rows.reduce((sum, row) => sum + row[1], 0);
+    if (!observed) return emptyState("No split is available yet.");
+    const base = total || observed;
+    return el("div", { class: "share-list " + (tone || "") }, rows.map(([label, value]) => {
+      const pct = Math.max(2, Math.round(100 * value / base));
+      return el("div", { class: "share-row" }, [
+        el("div", { class: "share-copy" }, [
+          el("span", { class: "mono" }, String(label)),
+          el("span", null, value.toLocaleString() + " · " + pct + "%"),
+        ]),
+        el("span", { class: "share-track" },
+          el("span", { class: "share-fill", style: "width:" + pct + "%" })),
+      ]);
+    }));
+  }
+
+  function renderOverview(root) {
+    const ds = D.dev_state || { active: false, feedback: [] };
+    const t = ds.telemetry || {};
+    const u = D.usage || {};
+    const h = D.health || { dangling: [], missing_scripts: [], orphans: [] };
+    const unknown = (t.unknown_events || []).length;
+    const dataIssues = (t.invalid_rows || 0) + (t.legacy_rows || 0) + unknown;
+    const repoIssues = (h.dangling || []).length + (h.missing_scripts || []).length;
+    const unmatched = (t.agent_lifecycle || []).reduce((sum, row) => sum + (row.unmatched || 0), 0);
+    const hookRows = t.hook_effectiveness || [];
+    const hookGap = hookRows.reduce((sum, row) =>
+      sum + Math.max(0, (row.blocked || 0) - (row.resolved || 0)), 0);
+    const feedback = (ds.feedback || []).length;
+    const attentionCount = dataIssues + repoIssues + unmatched + hookGap + feedback;
+    const healthy = ds.active && attentionCount === 0;
+    const statusLabel = !ds.active ? "Waiting for telemetry" : healthy ? "Signals are clean" : "Review recommended";
+    const statusTone = !ds.active ? "idle" : healthy ? "good" : "warn";
+
+    root.appendChild(el("header", { class: "overview-hero" }, [
+      el("div", null, [
+        el("span", { class: "eyebrow" }, "LOCAL DEVELOPMENT OBSERVATORY"),
+        el("h1", null, "See the whole agent system at a glance."),
+        el("p", null, "Usage, telemetry, hook outcomes and delivery health — one calm view first, details when you need them."),
+      ]),
+      el("div", { class: "overview-status " + statusTone }, [
+        el("span", { class: "status-light", "aria-hidden": "true" }),
+        el("div", null, [
+          el("strong", null, statusLabel),
+          el("span", null, ds.active && t.generated_at
+            ? "snapshot " + t.generated_at : "no validated event snapshot yet"),
+        ]),
+      ]),
+    ]));
+
+    root.appendChild(el("div", { class: "overview-metrics" }, [
+      overviewMetric("Claude sessions", (u.sessions || 0).toLocaleString(), "from local transcripts"),
+      overviewMetric("Assistant replies", (u.messages || 0).toLocaleString(), "deduplicated turns"),
+      overviewMetric("Tokens", fmtTok(u.tokens && u.tokens.total), "input + output", "usage-tone"),
+      overviewMetric("Telemetry events", (t.usable_records || 0).toLocaleString(), "validated only", "event-tone"),
+      overviewMetric("Agent instances", (t.agent_instances || 0).toLocaleString(), "observed subagents", "agent-tone"),
+      overviewMetric("Active days", (u.active_days || 0).toLocaleString(), (u.current_streak || 0) + " day current streak"),
+    ]));
+
+    const activityBody = el("div", null, [
+      signalChart(t.by_day || []),
+      el("div", { class: "panel-foot" }, [
+        el("span", null, (t.usable_records || 0).toLocaleString() + " validated events"),
+        el("span", null, (t.sessions || 0).toLocaleString() + " telemetry sessions"),
+      ]),
+    ]);
+
+    const concerns = [];
+    if (!ds.active) concerns.push(["Telemetry", "No validated events yet", "idle"]);
+    if (dataIssues) concerns.push(["Data quality", dataIssues + " invalid, legacy or unknown records", "warn"]);
+    if (repoIssues) concerns.push(["Delivery health", repoIssues + " broken references or missing scripts", "warn"]);
+    if (unmatched) concerns.push(["Agent lifecycle", unmatched + " unmatched start/stop signals", "warn"]);
+    if (hookGap) concerns.push(["Quality hooks", hookGap + " more block signals than confirmed resolutions", "warn"]);
+    if (feedback) concerns.push(["Feedback queue", feedback + " item" + (feedback === 1 ? "" : "s") + " waiting", "idle"]);
+    if (!concerns.length) concerns.push(["Current snapshot", "No actionable signal is visible", "good"]);
+    const attentionBody = el("div", { class: "attention-list" }, concerns.map((item) =>
+      el("div", { class: "attention-row " + item[2] }, [
+        el("span", { class: "attention-mark", "aria-hidden": "true" }),
+        el("div", null, [el("strong", null, item[0]), el("span", null, item[1])]),
+      ])));
+
+    const sp = u.split || { main: {}, sub: {} };
+    const scopeRows = [
+      ["main window", (sp.main && sp.main.messages) || 0],
+      ["subagents", (sp.sub && sp.sub.messages) || 0],
+    ];
+    const agentRows = (t.by_agent || []).slice(0, 7);
+    const agentBody = el("div", { class: "panel-stack" }, [
+      el("div", null, [
+        el("h3", null, "Reply split"),
+        shareRows(scopeRows, (u.messages || 0), "agent-share"),
+      ]),
+      el("div", null, [
+        el("h3", null, "Telemetry by agent"),
+        shareRows(agentRows, null, "agent-share"),
+      ]),
+    ]);
+
+    const models = (u.models || []).filter((m) => m.total > 0).slice(0, 6);
+    const modelBody = shareRows(models.map((m) => [m.model, m.total]),
+      u.tokens && u.tokens.total, "usage-share");
+
+    const hookTotals = hookRows.reduce((sum, row) => {
+      ["noted", "asked", "blocked", "resolved", "context_chars"].forEach((key) => {
+        sum[key] += row[key] || 0;
+      });
+      return sum;
+    }, { noted: 0, asked: 0, blocked: 0, resolved: 0, context_chars: 0 });
+    const hookBody = el("div", null, [
+      el("div", { class: "outcome-strip" }, [
+        overviewMetric("Noted", hookTotals.noted.toLocaleString(), "soft signal"),
+        overviewMetric("Asked", hookTotals.asked.toLocaleString(), "permission gate"),
+        overviewMetric("Blocked", hookTotals.blocked.toLocaleString(), "hard stop", "warn"),
+        overviewMetric("Resolved", hookTotals.resolved.toLocaleString(), "confirmed fix", "good"),
+      ]),
+      el("p", { class: "panel-foot single" }, fmtTok(hookTotals.context_chars) + " characters added to model context"),
+    ]);
+
+    const recent = (t.recent_events || []).slice(0, 8);
+    const recentBody = recent.length ? el("ol", { class: "event-stream" }, recent.map((item) =>
+      el("li", null, [
+        el("span", { class: "event-time mono" }, (item.timestamp || "").replace("T", " ").slice(5, 16)),
+        el("span", { class: "event-name mono" }, item.event),
+        el("span", { class: "event-owner" }, item.agent_type || "main context"),
+        el("span", { class: "event-project mono" }, item.project || "—"),
+      ]))) : emptyState("No validated event stream is available yet.");
+
+    root.appendChild(el("div", { class: "overview-grid" }, [
+      overviewPanel("ACTIVITY", "Telemetry signal", activityBody, "panel-wide signal-panel"),
+      overviewPanel("ATTENTION", "What deserves a look", attentionBody, "attention-panel"),
+      overviewPanel("ROUTING", "Where the work happens", agentBody, "agent-panel"),
+      overviewPanel("MODELS", "Token distribution", modelBody, "model-panel"),
+      overviewPanel("QUALITY HOOKS", "Outcomes, not just triggers", hookBody, "panel-wide hook-panel"),
+      overviewPanel("LATEST", "Recent validated events", recentBody, "panel-full stream-panel"),
+    ]));
+
+    if (u.active && u.by_day && u.by_day.length) {
+      root.appendChild(overviewPanel("365 DAY CONTEXT", "Work rhythm", usageHeatmap(u.by_day), "calendar-panel"));
+    }
+    root.appendChild(el("p", { class: "overview-caveat" },
+      "This page measures coverage, activity and context cost. It does not claim that the product itself is correct."));
   }
 
   function renderDev(root) {
@@ -749,22 +932,33 @@
   }
 
   const VIEWS = [
-    { id: "catalog", label: "Catalog", render: renderCatalog },
-    { id: "hooks", label: "Hooks", render: renderHooks },
-    { id: "config", label: "Config", render: renderConfig },
-    { id: "health", label: "Health", render: renderHealth },
-    { id: "dev", label: "Dev state", render: renderDev },
+    { id: "overview", label: "Overview", render: renderOverview },
+    { id: "dev", label: "Telemetry", render: renderDev },
     { id: "usage", label: "Usage", render: renderUsage },
-    { id: "graph", label: "Graph", render: renderGraph },
+    { id: "catalog", label: "Components", render: renderCatalog, divider: true },
+    { id: "hooks", label: "Hooks", render: renderHooks },
+    { id: "config", label: "Configuration", render: renderConfig },
+    { id: "health", label: "Health", render: renderHealth },
+    { id: "graph", label: "Map", render: renderGraph },
   ];
 
   const panes = {};
   VIEWS.forEach((v) => {
-    const btn = el("button", { type: "button" }, v.label);
+    const btn = el("button", { type: "button", role: "tab", "aria-controls": "view-" + v.id,
+      "aria-selected": "false", class: v.divider ? "tab-divider" : "" }, v.label);
     btn.addEventListener("click", () => show(v.id));
+    btn.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const current = VIEWS.indexOf(v);
+      const delta = event.key === "ArrowRight" ? 1 : -1;
+      const next = VIEWS[(current + delta + VIEWS.length) % VIEWS.length];
+      show(next.id);
+      next.btn.focus();
+    });
     v.btn = btn;
     tabsNav.appendChild(btn);
-    const pane = el("div", { class: "view", id: "view-" + v.id });
+    const pane = el("div", { class: "view", id: "view-" + v.id, role: "tabpanel" });
     // Isolate each view: a throw in one render degrades to one empty tab with a
     // notice, never a blank page (this opens with no devtools to debug a crash).
     try {
@@ -779,12 +973,14 @@
   // Search box lives in the topbar; it filters the catalog and the graph in place
   // (kept out of the per-view render so the graph keeps its pan/zoom on a keystroke).
   const topbar = document.querySelector(".topbar");
+  let search = null;
   if (topbar) {
-    const search = el("input", { class: "search", type: "search",
+    search = el("input", { class: "search", type: "search",
       placeholder: "filter skills, agents, hooks…", autocomplete: "off" });
     search.addEventListener("input", () => applyFilter(search.value));
-    const stamp = topbar.querySelector(".stamp");
-    topbar.insertBefore(search, stamp || null);
+    const tools = topbar.querySelector(".toptools") || topbar;
+    const stamp = tools.querySelector(".stamp");
+    tools.insertBefore(search, stamp || null);
     // anchor the fixed drawer just under the (sticky) topbar, measured not guessed
     const top = topbar.offsetHeight || 49;
     detail.style.top = top + "px";
@@ -796,8 +992,11 @@
       const on = v.id === id;
       panes[v.id].pane.classList.toggle("active", on);
       panes[v.id].btn.classList.toggle("active", on);
+      panes[v.id].btn.setAttribute("aria-selected", on ? "true" : "false");
+      panes[v.id].btn.tabIndex = on ? 0 : -1;
     });
+    if (search) search.hidden = id !== "catalog" && id !== "graph";
   }
 
-  show("catalog");
+  show("overview");
 })();

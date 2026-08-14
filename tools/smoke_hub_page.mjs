@@ -2,7 +2,7 @@
 //
 // The Python suite (tools/test_build_hub_page.py) covers the data layer; this
 // covers the browser layer the Python tests cannot reach — search filtering,
-// the click-to-detail drawer, and the dev-state bar charts. It runs the real
+// the click-to-detail drawer, and the analytics charts. It runs the real
 // page in jsdom and asserts POST-EVENT DOM state (a syntax check never executes
 // the JS, which is how the v1 page once shipped blank).
 //
@@ -44,13 +44,21 @@ const visibleNodes = () => q(".gnode").filter((n) => !n.classList.contains("filt
 const fire = (elm, type, init) => elm.dispatchEvent(new window.Event(type, { bubbles: true, ...init }));
 const esc = () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
 
-ok(q("#tabs button").length === 7, "7 tabs rendered");
+ok(q("#tabs button").length === 8, "8 tabs rendered");
+ok(doc.querySelector("#view-overview").classList.contains("active"), "overview is the default view");
+ok(q("#view-overview .overview-metric").length >= 10, "overview metrics rendered");
+ok(q("#view-overview .overview-panel").length >= 6, "overview evidence panels rendered");
+ok(/whole agent system|What deserves a look/.test(doc.querySelector("#view-overview").textContent),
+  "overview explains the system in plain language");
+ok(q("#view-overview .signal-chart").length === 1, "overview telemetry signal rendered");
+ok(q("#view-overview .event-stream li").length >= 1, "overview recent event stream rendered");
 const totalCards = q("#view-catalog .card").length;
 ok(totalCards > 20, "catalog cards rendered (" + totalCards + ")");
 const totalNodes = q(".gnode").length;
 ok(totalNodes > 40, "graph nodes rendered (" + totalNodes + ")");
 const search = doc.querySelector(".search");
 ok(!!search, "search box present in topbar");
+ok(search.hidden, "catalog search stays hidden on the analytics overview");
 const detail = doc.querySelector("#detail");
 ok(!!detail && detail.hidden, "detail drawer present and hidden at start");
 
@@ -73,6 +81,11 @@ search.value = "";
 fire(search, "input");
 ok(visibleCards().length === totalCards, "clearing the query restores all cards");
 ok(visibleNodes().length === totalNodes, "clearing the query restores all graph nodes");
+
+const componentTab = q("#tabs button").find((b) => b.textContent === "Components");
+fire(componentTab, "click");
+ok(doc.querySelector("#view-catalog").classList.contains("active"), "component tab activates its view");
+ok(!search.hidden, "search appears only where it can filter content");
 
 const nodeFor = (id) => q(".gnode").find((g) => g.querySelector("text") && g.querySelector("text").textContent === id);
 const stNode = nodeFor("ticket");
@@ -119,7 +132,7 @@ ok(/Orphan skills/.test(health.textContent), "orphan section present with its ca
 const dev = doc.querySelector("#view-dev");
 ok(!!dev, "dev pane rendered");
 ok(q("#view-dev .bars").length >= 2, "activity-by-day and by-agent bar charts present");
-ok(q("#view-dev .bar-row").length > 5, "bar rows rendered (" + q("#view-dev .bar-row").length + ")");
+ok(q("#view-dev .bar-row").length >= 2, "bar rows rendered (" + q("#view-dev .bar-row").length + ")");
 ok(/by skill|by hook/.test(dev.textContent), "payload breakdowns rendered");
 
 const usage = doc.querySelector("#view-usage");

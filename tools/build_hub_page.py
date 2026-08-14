@@ -488,7 +488,8 @@ def compute_health(skills, agents, hooks, root):
                 dangling.append({"kind": "skill-crossref", "source": s["name"], "target": ref})
     for a in agents:
         for sk in a["skills"]:
-            if sk not in skill_names:
+            local_name = sk.removeprefix("mainframe:")
+            if local_name not in skill_names:
                 dangling.append({"kind": "agent-skill", "source": a["name"], "target": sk})
 
     connected = set()
@@ -499,8 +500,9 @@ def compute_health(skills, agents, hooks, root):
                 connected.add(ref)
     for a in agents:
         for sk in a["skills"]:
-            if sk in skill_names:
-                connected.add(sk)
+            local_name = sk.removeprefix("mainframe:")
+            if local_name in skill_names:
+                connected.add(local_name)
     orphans = sorted(s["name"] for s in skills if s["name"] not in connected)
 
     scripts_dir = os.path.join(root, "adapters/claude-code/plugin/hooks/scripts")
