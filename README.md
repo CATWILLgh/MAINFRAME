@@ -7,13 +7,14 @@
 [![CI](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.226%2B-blueviolet)](https://code.claude.com)
+[![Codex](https://img.shields.io/badge/Codex-baseline-10a37f)](https://learn.chatgpt.com/docs/app)
 [![Status](https://img.shields.io/badge/status-personal--use-orange.svg)](#project-status)
 
 Maintained by [@CATWILLgh](https://github.com/CATWILLgh).
 
-MAINFRAME is a personal operating layer for Claude Code. Install it once to give every project the same small baseline, an optional workflow for larger work, focused skills, specialist agents, and local quality guards.
+MAINFRAME is a personal operating layer for AI coding agents. Its adapters give every project the same small baseline while preserving the native strengths and limits of each product.
 
-It is not a framework for your application and it does not replace the rules of an individual project. It changes how Claude Code approaches the work around that project.
+It is not a framework for your application and it does not replace the rules of an individual project. It changes how the selected coding agent approaches the work around that project.
 
 > **Personal-use project.** MAINFRAME is published openly under MIT, but it follows one working environment first. There are no support or backwards-compatibility guarantees.
 
@@ -35,13 +36,13 @@ The aim is simple: improve the minimum quality of agent work without turning del
 
 | Part | Plain-language purpose |
 |---|---|
-| Global baseline | A small, role-neutral `CLAUDE.md` for evidence, safety, secrets, and authority boundaries. |
-| `/mainframe:init` | A manual primary-session mode for working with the user on goals, product decisions, and larger tasks. |
+| Global baseline | Small, role-neutral instructions for evidence, safety, secrets, and authority boundaries. |
+| Primary-session init | A manual collaboration mode for goals, product decisions, and larger tasks. |
 | Skills | Focused guidance for a stack or kind of work, loaded when it is useful instead of being placed in one giant prompt. |
-| Specialist agents | Separate profiles for research, engineering, testing, decision review, and final review. |
-| Hooks | Local checks around relevant tool and session events. They catch introduced problems and avoid reporting unrelated old debt. |
-| Settings and secrets | A safe settings merge, protected permission defaults, a shared secret helper, and a local credentials index without secret values. |
-| Development mode | Local telemetry, feedback tools, and a desktop observability page for improving MAINFRAME itself. |
+| Specialist agents | Separate Claude Code profiles for research, engineering, testing, decision review, and final review. Codex profiles will be adapted separately. |
+| Hooks | Claude Code checks around relevant tool and session events. Codex hooks are not copied until their own event and concurrency contracts are handled. |
+| Settings and secrets | Adapter-owned settings where justified, plus a shared secret helper and local credentials index without secret values. |
+| Development mode | Claude Code telemetry, feedback tools, and a desktop observability page for improving MAINFRAME itself. |
 
 Hooks support engineering judgment; they do not replace tests, product checks, or a real review of risky work.
 
@@ -49,15 +50,15 @@ Hooks support engineering judgment; they do not replace tests, product checks, o
 
 ```mermaid
 flowchart LR
-    R["MAINFRAME repository"] --> I["Claude adapter installer"]
-    I --> C["Claude Code user layer"]
-    C --> P["Every local project"]
-    C --> M["/mainframe:init when requested"]
-    C --> S["Focused skills and agents when relevant"]
-    C --> H["Hooks on relevant events"]
+    R["MAINFRAME repository"] --> D["Small adapter dispatcher"]
+    D --> C["Claude Code adapter"]
+    D --> X["Codex adapter"]
+    C --> P["Claude-native skills, agents, hooks, and settings"]
+    X --> B["Cross-surface AGENTS.md and standalone skills"]
+    R --> S["Shared secret helper and local index"]
 ```
 
-The repository is the source of truth. Immutable files are linked into the Claude Code user layer, while mutable user settings are merged into the existing local settings file. Reinstalling is safe and does not replace unknown user configuration.
+The repository is the source of truth. Each adapter owns its delivery and preserves mutable user configuration. Reinstalling is designed to be repeatable and to fail before replacing an unknown file without explicit approval.
 
 Only the small global baseline is present everywhere. Primary-session orchestration lives in the manual `init` skill, and stack-specific rules stay with the specialists that need them. This avoids giving a sub-agent instructions intended only for the main conversation.
 
@@ -65,7 +66,7 @@ Only the small global baseline is present everywhere. Primary-session orchestrat
 
 ### Requirements
 
-- Claude Code `2.1.226` or newer;
+- Claude Code `2.1.226` or newer for the Claude adapter, or a current Codex Desktop/CLI installation for the Codex adapter;
 - Git;
 - Bash `3.2` or newer;
 - Python `3`.
@@ -80,6 +81,12 @@ cd ~/Documents/projects/MAINFRAME
 ./install.sh --claude
 ```
 
+For the first Codex baseline instead:
+
+```bash
+./install.sh --codex
+```
+
 The installer explains every changed path and backs up conflicting files before replacing them. Run it again at any time; the operation is idempotent.
 
 To see the result without changing anything:
@@ -88,11 +95,15 @@ To see the result without changing anything:
 ./install.sh --claude --dry-run
 ```
 
+Replace `--claude` with `--codex` to inspect Codex delivery. Codex currently installs a recipient-neutral global `AGENTS.md`, explicit `$mainframe-init`, `$mainframe-secrets`, and the shared credentials index. It deliberately does not install Codex hooks, rules, agents, plugins, telemetry, or modify `config.toml` yet.
+
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 
 ```text
 /mainframe:init
 ```
+
+In Codex, invoke `$mainframe-init` explicitly in the task.
 
 Small, obvious tasks can stay direct. `init` is for work that benefits from shared understanding, preparation, or a longer autonomous run.
 
@@ -130,7 +141,7 @@ It grew out of daily work with AI coding agents across real applications. Repeat
 
 The project later explored a general multi-adapter delivery system and a terminal interface. That direction became too large. More effort was going into distributing the system than into improving the actual agent experience. The experiment was archived, and `main` deliberately returned to a smaller Claude-first architecture.
 
-That reset is part of the project, not missing history. The current lesson is to make one adapter genuinely useful, keep shared pieces truly shared, and add future adapters independently only when their own environment is understood. The old compiler and terminal UI are not part of the current product.
+That reset is part of the project, not missing history. The current lesson is to make each adapter genuinely useful, keep shared pieces truly shared, and add adapters independently only when their own environment is understood. The first Codex baseline follows that rule; the old compiler and terminal UI are not part of the current product.
 
 The exact technical history remains available in Git. This README keeps the human reason behind it: MAINFRAME is an evolving working system, corrected by actual use rather than presented as a finished universal answer.
 
@@ -144,9 +155,11 @@ git pull
 ./install.sh --claude
 ```
 
-Most linked content is current after `git pull`. Re-running the installer also applies changes to delivery wiring and the settings policy.
+Use `--codex` instead to update the Codex baseline. Most linked content is current after `git pull`; re-running the selected installer also applies changes to regular managed files and delivery wiring.
 
 ### Development mode
+
+Development mode currently belongs to the Claude Code adapter:
 
 ```bash
 ./install.sh --claude --dev
@@ -170,13 +183,14 @@ Installing again without `--dev` disables development instrumentation while pres
 ./install.sh --claude --uninstall
 ```
 
-Uninstall removes only MAINFRAME-owned links and settings. Credentials, the local credentials index, backups, telemetry, and feedback data are preserved.
+Use `--codex --uninstall` for Codex. Uninstall removes only MAINFRAME-owned files and links. Credentials, the repository index, unrelated user configuration, backups, telemetry, and feedback data are preserved.
 
 ## Repository map
 
 ```text
 MAINFRAME/
 ├── adapters/claude-code/   Claude Code delivery, agents, skills, hooks, and settings
+├── adapters/codex/         Codex-native cross-surface baseline and delivery
 ├── shared/credentials/     adapter-independent secret helper and local index template
 ├── dev/                    opt-in tools used while developing MAINFRAME
 ├── tools/                  validators, tests, and local observability builders
@@ -184,7 +198,7 @@ MAINFRAME/
 └── CONTRIBUTING.md         contribution and validation guide
 ```
 
-The current product ships one adapter: Claude Code. Future adapters should have their own delivery logic instead of reviving a shared compiler or terminal installer.
+Each adapter has its own delivery logic. The Codex adapter intentionally starts smaller than the mature Claude Code adapter and grows only through verified Codex-native behavior; the removed shared compiler and terminal installer stay removed.
 
 ## Tested environment
 
@@ -192,6 +206,7 @@ The current product ships one adapter: Claude Code. Future adapters should have 
 - **Linux** is expected to work with the Bash installer, but receives less real-world use.
 - **Windows** is not currently supported.
 - The main sessions are tuned through actual use with Claude Opus; specialist profiles choose their own configured model and effort.
+- The initial Codex baseline was verified with Desktop `26.803.61601`, its bundled `codex-cli 0.147.0-alpha.6.5`, and standalone CLI `0.147.0`; real usage evidence is still being collected.
 
 Other combinations may work, but they should be treated as unverified until someone tests them in real sessions.
 

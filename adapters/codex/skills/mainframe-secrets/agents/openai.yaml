@@ -1,0 +1,6 @@
+interface:
+  display_name: "MAINFRAME Secrets"
+  short_description: "Use registered credentials without exposing values"
+  default_prompt: "Use $mainframe-secrets to consume a registered credential safely."
+policy:
+  allow_implicit_invocation: true

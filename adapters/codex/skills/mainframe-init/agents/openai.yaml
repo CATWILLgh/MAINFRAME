@@ -1,0 +1,6 @@
+interface:
+  display_name: "MAINFRAME Init"
+  short_description: "Start the primary-session collaboration context"
+  default_prompt: "Use $mainframe-init to begin a MAINFRAME-guided primary session."
+policy:
+  allow_implicit_invocation: false
