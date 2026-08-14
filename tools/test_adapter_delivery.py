@@ -1282,6 +1282,30 @@ def test_system_and_destructive_runtime_changes_keep_narrow_confirmation():
         assert rule not in asked
 
 
+def test_emergency_system_denies_match_commands_not_harmless_mentions():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    denied = settings["permissions"]["deny"]
+
+    for stale_rule in (
+        "Bash(*mkfs*)", "Bash(*dd if=*)", "Bash(*fdisk*)",
+        "Bash(kill -9 1*)", "Bash(pkill -9 -1*)",
+    ):
+        assert stale_rule not in denied
+
+    for rule in (
+        "Bash(mkfs *)", "Bash(mkfs.* *)", "Bash(/sbin/mkfs *)",
+        "Bash(/usr/sbin/mkfs *)", "Bash(dd *if=*)",
+        "Bash(/bin/dd *if=*)", "Bash(/usr/bin/dd *if=*)",
+        "Bash(fdisk *)", "Bash(/sbin/fdisk *)",
+        "Bash(/usr/sbin/fdisk *)", "Bash(kill -9 1)",
+        "Bash(kill -9 1 *)", "Bash(kill -9 -1)",
+        "Bash(kill -9 -1 *)",
+    ):
+        assert rule in denied
+
+
 def _run_all():
     import sys
     failures = 0
