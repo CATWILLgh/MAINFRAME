@@ -1301,6 +1301,31 @@ def test_verified_local_postgres_is_disposable_without_manual_confirmation():
     assert "remote, shared, staging, or production endpoint" in instructions
 
 
+def test_http_permissions_prompt_only_for_direct_system_path_writes():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    asked = settings["permissions"]["ask"]
+
+    for rule in (
+        "Bash(curl *> ~/*)",
+        "Bash(curl *-o ~/*)",
+        "Bash(wget *-O ~/*)",
+        "Bash(curl *-X DELETE*)",
+    ):
+        assert rule not in asked
+
+    for rule in (
+        "Bash(curl *> /etc/*)",
+        "Bash(curl *> /usr/*)",
+        "Bash(curl *-o /etc/*)",
+        "Bash(curl *-o /usr/*)",
+        "Bash(wget *-O /etc/*)",
+        "Bash(wget *-O /usr/*)",
+    ):
+        assert rule in asked
+
+
 def test_emergency_system_denies_match_commands_not_harmless_mentions():
     settings = json.loads(
         (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
