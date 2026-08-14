@@ -230,8 +230,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert advisor_state.is_file()
     advisor_data = tomllib.loads(advisor.read_text(encoding="utf-8"))
     assert advisor_data["name"] == "mainframe_advisor"
-    assert "model" not in advisor_data
-    assert "model_reasoning_effort" not in advisor_data
+    assert advisor_data["model"] == "gpt-5.6-sol"
+    assert advisor_data["model_reasoning_effort"] == "high"
     assert advisor_data["sandbox_mode"] == "read-only"
     assert advisor_data["web_search"] == "live"
     assert advisor_data["features"]["apps"] is False
@@ -712,8 +712,8 @@ def test_baseline_uses_native_standalone_layers_only():
             "/tmp/mainframe-readiness-review/SKILL.md",
         )
     )
-    assert "model" not in advisor_data
-    assert "model_reasoning_effort" not in advisor_data
+    assert advisor_data["model"] == "gpt-5.6-sol"
+    assert advisor_data["model_reasoning_effort"] == "high"
     assert advisor_data["sandbox_mode"] == "read-only"
     assert advisor_data["web_search"] == "live"
     assert advisor_data["features"]["apps"] is False

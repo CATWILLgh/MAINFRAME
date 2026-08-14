@@ -1,5 +1,7 @@
 name = "mainframe_advisor"
 description = "Use only as the last independent readiness check in a consequential MAINFRAME task: before a prepared decision is presented to the user or before an implemented result is accepted. Do not use for routine tasks, implementation, general code review, open-ended exploration, or the earlier adversarial decision challenge owned by mainframe_decision_reviewer."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
 model_verbosity = "low"
 model_reasoning_summary = "auto"
 service_tier = "default"
