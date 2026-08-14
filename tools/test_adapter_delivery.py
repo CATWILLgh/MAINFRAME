@@ -557,6 +557,23 @@ def test_test_auditor_is_non_implementing_and_ticket_scoped():
     assert (AGENTS / "hooks" / "test-auditor-write-guard.py").is_file()
 
 
+def test_only_implementation_agents_receive_project_local_memory():
+    implementation_agents = {
+        "mainframe-python-backend-engineer.md",
+        "mainframe-typescript-backend-engineer.md",
+        "mainframe-react-frontend-engineer.md",
+    }
+    for path in sorted(AGENTS.glob("*.md")):
+        body = path.read_text(encoding="utf-8")
+        normalized = " ".join(body.split())
+        if path.name in implementation_agents:
+            assert re.search(r"^memory: local$", body, re.MULTILINE)
+            assert "verified, durable facts that reduce future" in normalized
+            assert "Never store secrets, guesses, transient task state" in normalized
+        else:
+            assert not re.search(r"^memory:", body, re.MULTILINE)
+
+
 def test_testing_context_preserves_role_boundaries():
     strategy = (PLUGIN / "skills" / "testing-strategy" / "SKILL.md").read_text(
         encoding="utf-8"

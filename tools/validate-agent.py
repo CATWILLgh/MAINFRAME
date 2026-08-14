@@ -31,6 +31,7 @@ EXECUTION_PHRASES = (
     re.compile(r"\binvocation should be\b", re.IGNORECASE),
 )
 DEPRECATED_TOOLS = {"TodoWrite"}
+SUPPORTED_MEMORY_SCOPES = {"user", "project", "local"}
 
 
 def frontmatter(path: Path) -> dict:
@@ -62,6 +63,13 @@ def validate(path: Path) -> list[tuple[str, str]]:
         return issues
     if "when_to_use" in metadata:
         issues.append(("error", "file agents do not support `when_to_use`"))
+
+    memory = metadata.get("memory")
+    if memory is not None and memory not in SUPPORTED_MEMORY_SCOPES:
+        issues.append((
+            "error",
+            "`memory` must be one of: local, project, user",
+        ))
 
     tools = metadata.get("tools")
     if isinstance(tools, str):

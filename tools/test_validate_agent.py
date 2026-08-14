@@ -66,6 +66,22 @@ def test_rejects_deprecated_todo_write_tool():
     )]
 
 
+def test_accepts_supported_memory_scope_and_rejects_unknown_scope():
+    accepted = MODULE.validate(agent_file(
+        "Use for focused implementation.",
+        "memory: local\n",
+    ))
+    rejected = MODULE.validate(agent_file(
+        "Use for focused implementation.",
+        "memory: repository\n",
+    ))
+    assert accepted == []
+    assert rejected == [(
+        "error",
+        "`memory` must be one of: local, project, user",
+    )]
+
+
 if __name__ == "__main__":
     tests = sorted(name for name in globals() if name.startswith("test_"))
     for name in tests:
