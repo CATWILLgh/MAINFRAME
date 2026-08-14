@@ -123,8 +123,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert typescript_state.is_file()
     typescript_data = tomllib.loads(typescript_engineer.read_text(encoding="utf-8"))
     assert typescript_data["name"] == "mainframe_typescript_backend_engineer"
-    assert typescript_data["model"] == "gpt-5.6-sol"
-    assert typescript_data["model_reasoning_effort"] == "medium"
+    assert "model" not in typescript_data
+    assert "model_reasoning_effort" not in typescript_data
     assert typescript_data["sandbox_mode"] == "workspace-write"
     assert typescript_data["web_search"] == "live"
     assert typescript_data["features"]["apps"] is False
@@ -476,8 +476,8 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert typescript_engineer.is_file()
     typescript_data = tomllib.loads(typescript_engineer.read_text(encoding="utf-8"))
-    assert typescript_data["model"] == "gpt-5.6-sol"
-    assert typescript_data["model_reasoning_effort"] == "medium"
+    assert "model" not in typescript_data
+    assert "model_reasoning_effort" not in typescript_data
     assert "load and follow the `mainframe-typescript-backend` skill" in (
         typescript_data["developer_instructions"]
     )
