@@ -192,6 +192,26 @@ def test_baseline_uses_native_standalone_layers_only():
     ).read_text(encoding="utf-8")
 
 
+def test_shared_judgment_and_primary_completion_are_separated():
+    global_body = (ADAPTER / "export" / "AGENTS.md").read_text(encoding="utf-8")
+    normalized_global = " ".join(global_body.split())
+    assert "accurate unfavorable finding" in normalized_global
+    assert "Before a consequential action" in normalized_global
+    assert "smallest adequate check" in normalized_global
+    assert "narrow green check" in normalized_global
+    assert "TODOs" not in global_body
+    assert "plain language" not in global_body
+
+    init_body = (
+        ADAPTER / "skills" / "mainframe-init" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    normalized_init = " ".join(init_body.split())
+    assert "technical detail into practical consequences" in normalized_init
+    assert "safest practical path" in normalized_init
+    assert "When implementing directly" in normalized_init
+    assert "deferred in-scope work as a substitute" in normalized_init
+
+
 def _run_all():
     failures = 0
     tests = [
