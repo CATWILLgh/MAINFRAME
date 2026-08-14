@@ -21,6 +21,8 @@ Use this skill for both new React work and established applications. Discover th
 
 Several state libraries, routers, validators, or UI packages are observations, not automatic blockers. Determine which one owns the active path from imports, providers, configuration, and runtime wiring. Ask the caller only when evidence cannot resolve a choice that changes product behavior or infrastructure.
 
+Complete the assigned behavior. Do not use TODOs, placeholders, disabled checks, suppressions, or deferred in-scope work as a substitute for implementing it.
+
 ## Two compatible layers
 
 - **Established system:** preserve its framework, rendering model, architecture, router, state, forms, validation, styling, UI primitives, and contracts. Improve the changed path without starting an unrelated migration.

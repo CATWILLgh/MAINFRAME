@@ -21,6 +21,8 @@ Use this skill for both new backend work and established systems. Discover the a
 
 Multiple frameworks, ORMs, auth libraries, or test runners are observations, not automatic blockers. Determine which one owns the active path from imports, configuration, and runtime wiring. Ask the caller only when evidence cannot resolve a choice that changes product behavior or infrastructure.
 
+Complete the assigned behavior. Do not use TODOs, placeholders, disabled checks, suppressions, or deferred in-scope work as a substitute for implementing it.
+
 ## Two compatible layers
 
 - **Established system:** preserve its supported framework, module format, ORM, auth, validation, contracts, and conventions. Make the smallest coherent change. Do not opportunistically migrate or introduce a competing library.

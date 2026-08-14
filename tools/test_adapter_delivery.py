@@ -623,6 +623,8 @@ def test_testing_context_preserves_role_boundaries():
     )
     assert "do not prove" in python_skill
     assert "observe the focused test fail" not in python_agent
+    assert "Complete the assigned behavior" in python_skill
+    assert "deferred in-scope work as a substitute" in python_skill
 
     python_testing = (
         PLUGIN / "skills" / "python-backend-patterns" / "testing.md"
@@ -662,6 +664,8 @@ def test_testing_context_preserves_role_boundaries():
     assert "observe the focused test fail" in typescript_skill
     assert "observe the focused test fail" not in typescript_agent
     assert "Inspect the exact package script before running it" in typescript_skill
+    assert "Complete the assigned behavior" in typescript_skill
+    assert "deferred in-scope work as a substitute" in typescript_skill
     typescript_runtime = (
         PLUGIN / "skills" / "typescript-backend-patterns" / "runtime.md"
     ).read_text(encoding="utf-8")
@@ -704,6 +708,8 @@ def test_testing_context_preserves_role_boundaries():
     assert "observe the focused test fail" in react_skill
     assert "Inspect the exact package script, lifecycle scripts" in react_skill
     assert "observe the focused test fail" not in react_agent
+    assert "Complete the assigned behavior" in react_skill
+    assert "deferred in-scope work as a substitute" in react_skill
 
     design_skill = (PLUGIN / "skills" / "frontend-design" / "SKILL.md").read_text(
         encoding="utf-8"
@@ -912,6 +918,13 @@ def test_umbrella_is_role_agnostic():
     assert "Return enough evidence for the caller" not in umbrella
     assert "externally mutating" in umbrella
     assert "irreversible, external, or out-of-scope" not in umbrella
+    normalized = " ".join(umbrella.split())
+    assert "accurate unfavorable finding" in normalized
+    assert "Before a consequential action" in normalized
+    assert "smallest adequate check" in normalized
+    assert "narrow green check" in normalized
+    assert "TODOs" not in umbrella
+    assert "plain language" not in umbrella
 
 
 def test_init_skill_is_manual_only():
@@ -920,6 +933,11 @@ def test_init_skill_is_manual_only():
     assert "name: init" in body
     assert "disable-model-invocation: true" in body
     assert "context: fork" not in body
+    normalized = " ".join(body.split())
+    assert "technical detail into practical consequences" in normalized
+    assert "safest practical path" in normalized
+    assert "When implementing directly" in normalized
+    assert "deferred in-scope work as a substitute" in normalized
 
 
 def test_ticket_run_skills_prepare_native_goals_in_primary_session():

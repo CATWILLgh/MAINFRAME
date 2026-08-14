@@ -21,6 +21,8 @@ Use this skill for both new Python work and established services. Discover the a
 
 Multiple frameworks, validators, database libraries, or test tools are observations, not automatic blockers. Determine which one owns the changed path from imports, configuration, entrypoints, and runtime wiring. Ask the caller only when evidence cannot resolve a choice that changes product behavior or infrastructure.
 
+Complete the assigned behavior. Do not use TODOs, placeholders, disabled checks, suppressions, or deferred in-scope work as a substitute for implementing it.
+
 ## Two compatible layers
 
 - **Established system:** preserve its supported framework, package manager, architecture, validator, data layer, contracts, logging, and tests. Make the smallest coherent change; do not add a competing library or reorganize unrelated code.

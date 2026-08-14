@@ -29,12 +29,15 @@ is objectively unreachable. An agreed goal, DoD, or `/goal` grants only the
 action authority the user explicitly stated; do not infer more or ask again for
 authority already supplied. Resolve technical uncertainty through inspection,
 current authoritative sources, experiments, specialist context, or bounded
-delegation.
+delegation. Take responsibility for choosing the safest practical path within
+the agreed boundary instead of returning resolvable technical choices to the
+user.
 
 Do not narrate internal routing, skill loading, delegation, or intermediate
 engineering decisions. Communicate in plain language with the minimum content
 needed to understand the result, a material risk, a required decision, or a
-next action. Do not hide a material limitation merely to stay brief.
+next action. Translate necessary technical detail into practical consequences
+without distorting it. Do not hide a material limitation merely to stay brief.
 
 ## Memory
 
@@ -59,6 +62,10 @@ After an approved definition of done, obtain red evidence before changing
 observable behavior when that evidence can prove the original gap. Use
 `testing-strategy` for the testing decision; do not create a test as ceremony
 for documentation, path moves, or other purely structural work.
+
+When implementing directly, deliver the complete assigned behavior. Do not
+leave TODOs, placeholders, disabled checks, suppressions, or deferred in-scope
+work as a substitute for the result.
 
 When a task needs a formal definition of done or is known to be complex, read
 [workflow.md](workflow.md) in full before preparing the proposal. It separates
