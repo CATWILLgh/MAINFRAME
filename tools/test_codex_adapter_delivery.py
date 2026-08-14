@@ -16,6 +16,7 @@ ADAPTER = ROOT / "adapters" / "codex"
 SHARED = ROOT / "shared" / "credentials"
 CONFIG_MANAGER = ADAPTER / "scripts" / "manage-config.py"
 CONFIG_SOURCE = ADAPTER / "config" / "mainframe-permissions.toml"
+REQUIREMENTS_SOURCE = ADAPTER / "config" / "mainframe-requirements.toml"
 
 
 def _run(*args, home=None):
@@ -29,7 +30,13 @@ def _run(*args, home=None):
         encoding="utf-8",
     )
     codex.chmod(codex.stat().st_mode | stat.S_IXUSR)
-    env = dict(os.environ, HOME=str(home), PATH=f"{fake_bin}:/usr/bin:/bin")
+    requirements = home / "etc" / "codex" / "requirements.toml"
+    env = dict(
+        os.environ,
+        HOME=str(home),
+        PATH=f"{fake_bin}:/usr/bin:/bin",
+        CODEX_REQUIREMENTS_FILE=str(requirements),
+    )
     proc = subprocess.run(
         ["bash", str(INSTALLER), *args],
         capture_output=True,
@@ -56,6 +63,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe.rules" in proc.stdout
     assert "permissions" in proc.stdout
+    assert "profile allowlist" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 
@@ -107,6 +115,17 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     }
     assert stat.S_IMODE(config.stat().st_mode) == 0o600
     assert stat.S_IMODE(config_state.stat().st_mode) == 0o600
+    requirements = home / "etc" / "codex" / "requirements.toml"
+    requirements_state = requirements.parent / ".mainframe-requirements-state.json"
+    requirements_data = tomllib.loads(requirements.read_text(encoding="utf-8"))
+    assert requirements_data["allowed_permission_profiles"] == {
+        ":read-only": True,
+        ":workspace": True,
+        ":danger-full-access": True,
+        "mainframe": True,
+    }
+    assert stat.S_IMODE(requirements.stat().st_mode) == 0o644
+    assert stat.S_IMODE(requirements_state.stat().st_mode) == 0o644
     assert helper.is_symlink()
 
     reinstalled, _ = _run("--codex", home=home)
@@ -122,6 +141,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not rules_state.exists()
     assert not config.exists()
     assert not config_state.exists()
+    assert not requirements.exists()
+    assert not requirements_state.exists()
     assert helper.is_symlink()
     for name in ("mainframe-init", "mainframe-secrets"):
         target = home / ".agents" / "skills" / name
@@ -267,6 +288,58 @@ def test_existing_config_is_merged_and_uninstall_restores_only_displaced_setting
     assert backups[0].exists()
 
 
+def test_existing_unrelated_requirements_are_preserved_on_uninstall():
+    home = pathlib.Path(tempfile.mkdtemp())
+    requirements = home / "etc" / "codex" / "requirements.toml"
+    requirements.parent.mkdir(parents=True)
+    requirements.write_text(
+        'allowed_approval_policies = ["on-request"]\n',
+        encoding="utf-8",
+    )
+
+    installed, _ = _run("--codex", home=home)
+    assert installed.returncode == 0, installed.stderr
+    data = tomllib.loads(requirements.read_text(encoding="utf-8"))
+    assert data["allowed_approval_policies"] == ["on-request"]
+    assert data["allowed_permission_profiles"]["mainframe"] is True
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert requirements.read_text(encoding="utf-8") == 'allowed_approval_policies = ["on-request"]\n'
+
+
+def test_existing_permission_profile_allowlist_stops_before_delivery():
+    home = pathlib.Path(tempfile.mkdtemp())
+    requirements = home / "etc" / "codex" / "requirements.toml"
+    requirements.parent.mkdir(parents=True)
+    original = '[allowed_permission_profiles]\n":workspace" = true\n'
+    requirements.write_text(original, encoding="utf-8")
+
+    refused, _ = _run("--codex", home=home)
+    assert refused.returncode != 0
+    assert "unmanaged allowed_permission_profiles" in refused.stderr
+    assert requirements.read_text(encoding="utf-8") == original
+    assert not (home / ".codex").exists()
+
+
+def test_changed_profile_allowlist_stops_uninstall_before_other_removal():
+    installed, home = _run("--codex")
+    assert installed.returncode == 0, installed.stderr
+    requirements = home / "etc" / "codex" / "requirements.toml"
+    requirements.write_text(
+        requirements.read_text(encoding="utf-8").replace(
+            "mainframe = true",
+            "mainframe = false",
+        ),
+        encoding="utf-8",
+    )
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode != 0
+    assert "allowlist changed" in removed.stderr
+    assert (home / ".codex" / "AGENTS.md").is_file()
+
+
 def test_unmanaged_mainframe_permission_profile_stops_before_delivery():
     home = pathlib.Path(tempfile.mkdtemp())
     codex_dir = home / ".codex"
@@ -375,7 +448,9 @@ def test_baseline_uses_native_standalone_layers_only():
         ADAPTER / "rules" / "mainframe.rules"
     ).read_text(encoding="utf-8")
     assert (ADAPTER / "config" / "mainframe-permissions.toml").is_file()
+    assert REQUIREMENTS_SOURCE.is_file()
     assert (ADAPTER / "scripts" / "manage-config.py").is_file()
+    assert (ADAPTER / "scripts" / "manage-requirements.py").is_file()
 
     init_metadata = (
         ADAPTER / "skills" / "mainframe-init" / "agents" / "openai.yaml"
