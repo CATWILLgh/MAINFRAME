@@ -6,225 +6,73 @@
 
 [![CI](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-v2.1.226%2B-blueviolet)](https://code.claude.com)
-[![Status](https://img.shields.io/badge/status-personal--use-orange.svg)]()
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#platforms)
-[![Tuned for](https://img.shields.io/badge/tuned%20for-Opus%204.7%2B-blueviolet.svg)](#tested-configuration)
-[![Last commit](https://img.shields.io/github/last-commit/CATWILLgh/MAINFRAME?label=last%20commit)](https://github.com/CATWILLgh/MAINFRAME/commits)
-[![Skills](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/adapters/claude-code/plugin/skills?type=dir&label=skills&color=blue)](adapters/claude-code/plugin/skills)
-[![Agents](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/adapters/claude-code/agents?type=file&extension=md&label=agents&color=blue)](adapters/claude-code/agents)
-[![Hooks](https://img.shields.io/github/directory-file-count/CATWILLgh/MAINFRAME/adapters/claude-code/plugin/hooks/scripts?type=file&extension=py&label=hooks&color=blue)](adapters/claude-code/plugin/hooks/scripts)
-[![Style](https://img.shields.io/badge/principles-agnostic%20%7C%20evidence--based%20%7C%20English-blue.svg)](#principles)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.226%2B-blueviolet)](https://code.claude.com)
+[![Status](https://img.shields.io/badge/status-personal--use-orange.svg)](#project-status)
 
-<img src="assets/badge.png" align="right" width="80"> Maintained by [@CATWILLgh](https://github.com/CATWILLgh)
+Maintained by [@CATWILLgh](https://github.com/CATWILLgh).
 
-A baseline of operating rules, focused sub-agents, and small automatic checks I want to apply in **every** Claude Code session on my machine. Set up once — every project, every session, inherits the same discipline.
+MAINFRAME is a personal operating layer for Claude Code. Install it once to give every project the same small baseline, an optional workflow for larger work, focused skills, specialist agents, and local quality guards.
 
-It's shaped for one workflow in particular: long **auto-mode** runs — hours, sometimes days, where Claude and I plan a larger feature up front, then it executes on its own with no one watching each step. Every rule, hook, and permission tier here is built to hold quality through exactly that: an unattended run where a missed check turns into a bug nobody catches until later.
+It is not a framework for your application and it does not replace the rules of an individual project. It changes how Claude Code approaches the work around that project.
 
-## Engineering at a glance
+> **Personal-use project.** MAINFRAME is published openly under MIT, but it follows one working environment first. There are no support or backwards-compatibility guarantees.
 
-For the technically curious — the concrete engineering this repo demonstrates, not the motivation behind it:
+## Why it exists
 
-- **Fail-open hooks.** Every check exits cleanly when its tool is missing or it errors, so the hook layer can never break a session — safety that degrades to silence, never to a stall.
-- **A git-level secret gate.** A `PreToolUse` hook scans the staged diff and blocks `git commit` when a high-confidence credential is present — caught before it ever reaches history, not after.
-- **Size budgets against lost-in-the-middle.** Skills, agents, and hooks are capped at ≤5K tokens — a limit calibrated to the runtime's compaction behaviour so the content survives a context compaction intact instead of being truncated.
-- **Covered by tests and CI.** ~90 stdlib-Python tests, zero third-party runtime dependencies, run on every push (the CI badge above) alongside the format/size validators.
+AI coding agents can be useful across many projects, but the same problems tend to return:
 
-> **Personal-use.** No support, no compatibility guarantees, no backwards-compatibility promises. Forks are welcome under MIT, but this hub is shaped to one engineer's workflow.
+- useful instructions must be explained again in every repository;
+- one large instruction file becomes noisy and its important parts are easier to miss;
+- a long run can drift away from the agreed result;
+- specialist knowledge is often loaded when it is not needed, or not loaded when it is;
+- small safety checks are easy to forget until a mistake has already become expensive.
 
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+MAINFRAME keeps that reusable layer outside individual projects. The automatic part stays deliberately small. Heavier process and specialist knowledge are loaded only when the task calls for them.
 
-## Why this exists
+The aim is simple: improve the minimum quality of agent work without turning delivery machinery into the product.
 
-Working with Claude Code (or any AI coding agent) on multiple projects, you keep running into the same friction:
+## What it adds
 
-- **Same baseline, every time.** You re-deploy the same useful sub-agents, the same operating rules, the same little safety checks for every new project. Manually. Forever.
-- **Project-level config doesn't scale.** Putting it all into the project's own `CLAUDE.md` works — until that file grows. Then attention scatters, the well-known **lost-in-the-middle** problem kicks in, and important rules quietly stop being followed mid-session.
-- **The agent itself bloats its own config.** Left to its habits, Claude keeps appending new instructions to `CLAUDE.md`. The file grows, focus thins, the rules crumble. And so it grows, slowly, until you notice the discipline you started with is gone.
-
-This repo is my attempt to do that baseline layer **separately** from any specific project, with deliberate size limits and small reminders so things don't drift:
-
-- Strict file-size budgets on skills, agents, hooks. A file gets too big — a hook nudges me.
-- Skills and agents stay granular and narrowly focused — at any moment, only the most relevant context is loaded, not a soup of "a little bit of everything".
-- Constantly iterating: try a new approach, see what stabilizes Claude's behavior, keep what works, drop what doesn't.
-- Every decision cross-checked against authoritative sources (Anthropic docs, RFCs, well-known engineering material) — not "feels right".
-
-**Honest disclaimer.** I'm not claiming this hub closes every pain. Some friction with AI agents is just current-generation model limits — the best a hub can do is smooth them, not fix them. What I am aiming for: a higher minimum quality of output code by default. On long-running development that pays back many times over — problems caught and prevented up front instead of bugs to chase later, by you or by the agent.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
-
-## Where this comes from
-
-This isn't a weekend project or a copied template. It's distilled from thousands of hours of working with AI coding agents, day after day — what consistently helped, what quietly broke, what was worth keeping. Every rule here earned its place by surviving real use.
-
-Three things shape it:
-
-- **Hard-won experience.** The rules come from patterns I hit over and over on real projects — not from theory.
-- **Authoritative sources.** I don't ship a rule on a hunch. Each non-trivial decision is checked against primary sources — Anthropic's own docs, RFCs, established engineering material — and validated with a small experiment where I can.
-- **Constant feedback.** I work on this almost every day, together with the agent. When something underperforms in real use, it gets refined or dropped. The hub is never "finished" — it's continuously corrected against what actually happens.
-
-And here's the part that's easy to miss. It looks like just a folder of Markdown files — some skills, a few agents. It isn't. Steering a language model reliably, across many projects and long autonomous runs, is one of the genuinely hard parts of working with agentic systems. The model's inference — how it generates each step — is a kind of *ordered chaos*: powerful, but hard to keep pointed in the right direction at scale. This hub is my standing attempt to put just enough structure around that chaos to make the output dependable, without strangling what the model is good at.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
-
-## What you actually get
-
-In plain words — what each piece is for:
-
-- **Umbrella `CLAUDE.md`** — a minimal role-agnostic contract shared by the primary agent and sub-agents: stay inside the caller's scope, ground important claims, protect secrets, and respect authority boundaries. It contains no user orchestration or stack-specific engineering process.
-- **Manual `/mainframe:init`** — the primary-session context for partnership, user decisions, definitions of done, execution routing, Git authority, and final delivery. Its heavier complex-task workflow and external Codex review instructions load only when needed.
-- **Skills** — small focused playbooks Claude pulls when they're relevant. Things like code review, test selection, secret handling, or stack-specific implementation guidance — instead of one giant document trying to cover everything.
-- **Agents (sub-agents)** — pre-configured specialists with their own model and effort level wired in. Backend engineers for Python and server-side TypeScript, a React frontend engineer for Vite and Next.js client work, a decision reviewer for high-stakes design calls, a final readiness advisor, a test auditor, and a researcher for evidence-grounded investigations. Infrastructure stays in the primary session through a focused skill because it commonly crosses environment choice, credentials, downtime, and user authority.
-- **Hooks** — small automatic checks that run on tool events. Catch leftover `TODO`/`FIXME` markers before commit. Warn on risky bash patterns. Scan current code changes for newly introduced security issues with `ruff`/`oxlint`. Block a finished turn when an attributed blocking problem is still unresolved. Things that fire without you having to remember to fire them — the full list with what each one does is in [Inventory](#inventory--whats-actually-inside) below.
-- **Rules** — small path-scoped guidance files that load on demand when Claude reads a matching path. Doesn't bloat the global context.
-- **Permissions** — three-tier model (deny / ask / allow) that's strict by default. Some things must never run; some need confirmation; the rest run quietly with logging.
-
-End result the hub aims for: **the same baseline of quality and discipline applied to every project on your machine — without re-configuring Claude each time or babysitting it through a long unattended run.** When the baseline is high, day-to-day output is more predictable and bug rate drops.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
-
-## Inventory — what's actually inside
-
-The concrete list of everything the hub ships, in plain words. Three groups: **agents** (specialist sub-agents you delegate to), **hooks** (automatic checks on tool events), **skills** (focused playbooks Claude pulls when relevant).
-
-### Agents — 7 specialist sub-agents
-
-Each ships with its model and effort already wired in, calibrated separately so you don't pick at call time. Agent identifiers use the collision-safe `mainframe-<name>` prefix.
-
-| Agent | What it's for | Model |
-|---|---|---|
-| `mainframe-python-backend-engineer` | Server-side Python across FastAPI, Django, Flask, and established services: contracts, data, authentication, workers and realtime, storage and integrations, observability, and tests | Sonnet |
-| `mainframe-typescript-backend-engineer` | Server-side TypeScript — NestJS / Express / Fastify, Next.js server code, PostgreSQL libraries, auth, jobs, realtime, storage, resilience | Sonnet |
-| `mainframe-react-frontend-engineer` | Client-facing React across Vite and Next.js — components, forms, browser data, PWA/offline, realtime, rich content, accessibility, and frontend tests | Sonnet |
-| `mainframe-decision-reviewer` | Adversarial, evidence-grounded second look at a high-stakes design or approach before you commit | Opus |
-| `mainframe-advisor` | Final read-only readiness check for a prepared complex decision or implemented result, using a filtered copy of the parent conversation | Opus (high) |
-| `mainframe-test-auditor` | Independent audit of regression coverage, test reliability, and execution cost; verifies external contracts through Context7 or primary web sources and can maintain confirmed open tickets, but cannot edit code or tests | Sonnet (medium) |
-| `mainframe-researcher` | External research from caller-supplied context through Context7 and authoritative web sources | Sonnet (medium) |
-
-### Hooks — what each one checks, and when
-
-Hooks fire on tool-lifecycle events. Two kinds: a **gate** can block or ask (it stops the action or the turn until something is fixed); an **advisory** only injects a note and never blocks. The core design is **warn early, block at the end** — when you edit a file the advisory scanners flag a problem immediately, and if it's still unresolved when Claude tries to finish, the matching **Stop-gate** blocks the finish. So a real issue can't quietly slip through to the end of an unattended run. A broken hook is reported once to the current model for relay to its immediate caller instead of silently disabling protection or repeatedly spamming the session.
-
-#### At session start — `SessionStart` (fresh start, resume, `/clear`, and after every compaction)
-
-- **`hooklib-smoke-check.py`** — Self-test that the shared hook library imports cleanly. Every other hook silently no-ops if that library is broken, so this one announces the failure loudly at session start instead of letting the whole hook layer go dark unnoticed.
-
-#### Before a Bash command — `PreToolUse` on Bash
-
-- **`secret-commit-gate.py`** — *Gate (blocks).* When the command is a `git commit`, scans the staged diff for high-confidence secret shapes (vendor API tokens, private keys) and blocks the commit if one is staged. Skips repos that use SOPS or git-crypt; defers on any error rather than risk a false block.
-- **`git-authority.py`** — *Gate (asks or blocks).* Asks before creating, deleting, renaming, or retargeting a branch. It also blocks staging and local commits inside subagents: only the primary session owns recovery commits and their final composition.
-- **`path-validation.py`** — *Gate (asks).* Parses a recursive `rm -rf`, resolves every target path, and allows it silently when all targets are inside the project — but asks for confirmation if any path is outside the project, unresolved, or built from a subshell. Anything that isn't a recursive `rm` passes straight through.
-- **`bash-pattern-reminder.py`** — *Advisory.* Catches a risky ripgrep short-option cluster where `r` consumes replacement text instead of enabling recursion. It is non-blocking and appears once per session and caller, so a parallel command batch cannot flood model context.
-
-#### Before loading a skill — `PreToolUse` on Skill
-
-- **`skill-authority.py`** — *Gate (blocks).* Keeps the primary-session `infrastructure` skill out of built-in and custom subagents. Other skills and primary-session invocations pass silently.
-
-#### Right after you edit a file — `PostToolUse` on Edit / Write / MultiEdit (all advisory — the "warn early" half)
-
-- **`scan-suppression-markers.py`** — Flags suppression markers (`TODO` / `FIXME` / `HACK`, skipped or focused tests, `@ts-ignore` / `eslint-disable` / `# noqa`) and debug residue (`debugger`, `breakpoint()`, `console.debug`, `var_dump` / `dd`) that the edit just introduced. Diff-aware: it flags only what the change added, and repeats one category only after that category has been fully resolved in the same session and writer scope.
-- **`comment-discipline-reminder.py`** — Flags newly added comments that depend on temporary work context: plan/discussion references, position or phase markers, and decorative dividers. Precise findings remain file-specific; the low-stakes "comment the WHY, not the WHAT" reminder appears once per session and writer.
-- **`ticket-id-format-reminder.py`** — After writing a ticket, checks the compact filename contract: a new ticket uses an unused random 4-hex id (`openssl rand -hex 2`), a descriptive kebab-case slug, and the same frontmatter `id`. The note asks for a rename and a small frontmatter edit rather than regenerating the ticket body; existing ids stay stable when their slug is clarified.
-- **`python-security-scan.py`** — Compares complete before/after Python snapshots with the existing curated Ruff S + B rule set. It reports only a finding introduced by the current work, once. Pre-existing findings stay silent. State is isolated by session and subagent.
-- **`nodejs-security-scan.py`** — Runs Oxlint's curated subset and reports only findings on lines written by the current Edit, MultiEdit, or Write call. Findings elsewhere in the file stay silent; ambiguous repeated replacements are skipped rather than guessed.
-- **`fallow-quality-note.py`** — Silently records the TS / JS lines owned by each successful edit using path, line number, and a short digest. Source text is not persisted by the hook; the recorded scope is consumed by its `Stop` audit below.
-- **`length-quality-note.py`** — Captures file length and Python function spans before an edit, then confirms the baseline only after the tool succeeds. This produces no model-facing text; it only prepares the session-owned comparison used at `Stop`.
-
-#### Before the turn ends — `Stop` (the final gates, plus a few advisory notes)
-
-- **`stop-gate-suppression-markers.py`** — *Gate (blocks).* Blocks the turn from finishing while suppression markers or debug residue added this session remain unresolved — the hard backstop to the advisory scanner above.
-- **`stop-gate-comment-discipline.py`** — *Gate (blocks).* Blocks finishing while banned narration comments (measured against `git HEAD`) remain.
-- **`python-security-stop-gate.py`** — *Gate (blocks).* Blocks only on unresolved Ruff findings introduced by the current session or subagent. The main session also aggregates its subagents; pre-existing findings, other sessions, and unrelated dirty work do not participate.
-- **`fallow-quality-note.py`** — *Advisory.* Runs `fallow audit` against an in-memory diff containing only still-live TS / JS lines attributed to this session and its subagents. Reports only `introduced: true` dead files, import cycles, boundary violations, complexity, and duplication; inherited debt, unrelated dirty work, and repeated unchanged `Stop` events stay silent.
-- **`length-quality-note.py`** — *Advisory.* Reports only a file that this session moved from at most 400 lines to over 400, or a Python function it moved from at most 60 lines to over 60. Existing oversized code, failed edits, other sessions, and repeated unchanged `Stop` events stay silent. JS / TS structural growth remains covered by Fallow; deeper language-specific rules belong to project testing.
-- **`memory-reminder.py`** — *Advisory.* A main-session-only nudge to save a durable cross-session fact to Claude's native auto-memory after a substantive session. Throttled independently per session (~30 min), skips trivial sessions and subagents, and is framed so "nothing worth saving" is a fine answer.
-
-#### Always-on, and the plumbing
-
-- **`telemetry.py`** — *(dev-only.)* Fires across selected lifecycle and tool events and logs local-only metadata into SQLite. Quality hooks share one effectiveness vocabulary — `noted`, `asked`, `blocked`, `resolved` — so the hub can compare signal volume, confirmed fixes, session coverage, and context characters by hook and stable rule id. Prompts, code, todo text, paths, emitted messages, stdout, stderr, and exception text are never stored. Registrations stay in the plugin, but an early shell gate exits before Python, temporary files, and SQLite unless this Claude adapter was installed with `--dev`.
-- **Shared libraries** (not hooks themselves): `_hooklib.py` — common scaffolding (payload parsing, the emit / gate helpers, git diffing); `_markers.py` — the suppression-marker and debug-residue detector sets; `comment_extract.py` — false-positive-free comment / docstring extraction.
-
-### Skills — 19 focused playbooks
-
-Most are pulled automatically when the situation matches. The primary-session
-`init` skill is invoked manually as `/mainframe:init`.
-The ticket launchers are `/mainframe:tickets-find [scope]`,
-`/mainframe:tickets-refine [scope]`, `/mainframe:tickets-implement [scope]`, and
-`/mainframe:tickets-verify [scope]`; each returns the native `/goal` block that
-starts its autonomous run.
-
-| Group | Skills |
+| Part | Plain-language purpose |
 |---|---|
-| **Process & quality** | `init` (manual primary-session context, including `init ticket <id>` for one user-owned decision), `tickets-find`, `tickets-refine`, `tickets-implement`, and `tickets-verify` (manual primary-session launchers that prepare native `/goal` runs), `ticket` (record concrete out-of-scope problems), `testing-strategy` (choose test evidence), `decision-review` (private method used by the decision reviewer, including its severity calibration) |
-| **Backend** | `python-backend-patterns`, `typescript-backend-patterns` — version-aware stack discovery plus data, auth, contracts, jobs, runtime, observability, and testing patterns |
-| **Frontend** | `react-frontend-patterns` (Vite and Next.js client behavior, architecture, state, forms, offline/realtime, content, testing), plus compact preloaded `frontend-design` and `shadcn` routers. Detailed UX, visual, and component guidance loads only for the matching surface or local shadcn project. |
-| **Ops & misc** | `infrastructure` (primary-session infrastructure work plus the adapter-neutral `.agents/infrastructure.json` topology), `ops-app-server-safety` (no duplicate servers, safe stops), `dokploy-api` (hidden Dokploy branch), `curl-requests` (HTTP request templates), `secrets-handling` (credential discovery and value-safe process delivery) |
+| Global baseline | A small, role-neutral `CLAUDE.md` for evidence, safety, secrets, and authority boundaries. |
+| `/mainframe:init` | A manual primary-session mode for working with the user on goals, product decisions, and larger tasks. |
+| Skills | Focused guidance for a stack or kind of work, loaded when it is useful instead of being placed in one giant prompt. |
+| Specialist agents | Separate profiles for research, engineering, testing, decision review, and final review. |
+| Hooks | Local checks around relevant tool and session events. They catch introduced problems and avoid reporting unrelated old debt. |
+| Settings and secrets | A safe settings merge, protected permission defaults, a shared secret helper, and a local credentials index without secret values. |
+| Development mode | Local telemetry, feedback tools, and a desktop observability page for improving MAINFRAME itself. |
 
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+Hooks support engineering judgment; they do not replace tests, product checks, or a real review of risky work.
 
-## Architecture
+## How it works
 
 ```mermaid
-graph LR
-    subgraph repo["MAINFRAME repo (this)"]
-      P[adapters/claude-code/plugin/<br/>skills + hooks]
-      A[adapters/claude-code/agents/<br/>specialist profiles]
-      E[adapters/claude-code/export/<br/>CLAUDE.md + rules + output styles]
-      M[adapters/claude-code/export/settings.json<br/>policy + initial defaults]
-      S[shared/credentials/<br/>helper + template + local index]
-    end
-
-    P -->|one symlink<br/>~/.claude/skills/mainframe/| home[~/.claude/]
-    A -->|one symlink<br/>~/.claude/agents/mainframe/| home
-    E -->|direct + per-item symlinks| home
-    M -->|safe ownership-aware merge| home
-    S -->|shared installer| home
-    home -->|Claude auto-loads<br/>as 'mainframe' plugin| any[Any project<br/>on the machine]
+flowchart LR
+    R["MAINFRAME repository"] --> I["Claude adapter installer"]
+    I --> C["Claude Code user layer"]
+    C --> P["Every local project"]
+    C --> M["/mainframe:init when requested"]
+    C --> S["Focused skills and agents when relevant"]
+    C --> H["Hooks on relevant events"]
 ```
 
-The hub ships through one adapter plus one shared component:
+The repository is the source of truth. Immutable files are linked into the Claude Code user layer, while mutable user settings are merged into the existing local settings file. Reinstalling is safe and does not replace unknown user configuration.
 
-- **The Claude Code plugin** (`adapters/claude-code/plugin/`) carries skills and hooks. Its manual `init` skill is available as `/mainframe:init` and is not loaded until the user invokes it.
-- **Claude Code agents** (`adapters/claude-code/agents/`) are delivered directly so their full profile fields remain available.
-- **Claude Code exports** (`adapters/claude-code/export/`) carry the umbrella `CLAUDE.md`, the `settings.json` policy/default template, optional path-scoped rules, and output styles. The template is merged into a regular mutable user settings file; it is not linked.
-- **Shared secrets** (`shared/credentials/`) own the `secret` helper, the tracked initialization template, and the gitignored credentials index used by every adapter.
+Only the small global baseline is present everywhere. Primary-session orchestration lives in the manual `init` skill, and stack-specific rules stay with the specialists that need them. This avoids giving a sub-agent instructions intended only for the main conversation.
 
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+## Quick start
 
-## Requirements
+### Requirements
 
-**Required:**
+- Claude Code `2.1.226` or newer;
+- Git;
+- Bash `3.2` or newer;
+- Python `3`.
 
-- **Claude Code v2.1.226+** — the host (CLI or IDE extension). The installer checks this before changing anything and can run the official updater after confirmation.
-- **git** — to clone the repo, and for the hooks that diff your working tree.
-- **Bash 3.2+** — to run `install.sh` (macOS system Bash is fine; no GNU-only extensions used).
-- **Python 3** — every shipped hook is stdlib Python 3 (they shell out to the analyzers below, but need no Python packages of their own). The installer stops during preflight before changing the Claude adapter when Python is unavailable.
+Some quality checks use optional tools when they are available, including Node.js, Ruff, Oxlint, and Fallow.
 
-**Recommended — each unlocks a group of checks. `install.sh` prints an OS-specific install hint; if a required analyzer is still unavailable at runtime, the common hook reporter surfaces that failure once per session instead of repeating it:**
-
-- **Node.js / npm** — the React and Node.js agents, the shadcn CLI (`npx`), the frontend recon script, and the JS hooks (`oxlint`, `fallow`). `install.sh` installs both hook tools as npm globals for you.
-- **uv or pipx** — installs the Python-packaged linter the hooks call: `ruff`.
-
-A missing tool affects only its own hook. Run `./install.sh --claude --dry-run` to preview installation without changing the machine.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
-
-## Install
+### Install
 
 ```bash
 git clone https://github.com/CATWILLgh/MAINFRAME ~/Documents/projects/MAINFRAME
@@ -232,189 +80,140 @@ cd ~/Documents/projects/MAINFRAME
 ./install.sh --claude
 ```
 
-```mermaid
-graph LR
-    A[git clone] --> B[./install.sh --claude]
-    B --> C[adapters/claude-code/plugin/ →<br/>~/.claude/skills/mainframe/]
-    B --> I[adapters/claude-code/agents/ →<br/>~/.claude/agents/mainframe/]
-    B --> D[adapters/claude-code/export/CLAUDE.md<br/>→ ~/.claude/CLAUDE.md symlink]
-    B --> K[adapters/claude-code/export/settings.json<br/>→ safe merge into regular user file]
-    B --> E[adapters/claude-code/export/rules/* →<br/>~/.claude/rules/ per-item]
-    B --> H[shared/credentials/secret →<br/>~/.local/bin/secret]
-    B --> J[shared/credentials/credentials-index.md →<br/>~/.claude/credentials-index.md]
-    C --> F[Claude auto-loads<br/>'mainframe' plugin]
-    I --> G
-    D --> G[Umbrella + permissions<br/>active in every session]
-    K --> G
-    E --> G
-    F --> G
+The installer explains every changed path and backs up conflicting files before replacing them. Run it again at any time; the operation is idempotent.
+
+To see the result without changing anything:
+
+```bash
+./install.sh --claude --dry-run
 ```
 
-What `install.sh` does:
+Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 
-- **One symlink for the shared plugin runtime** — `adapters/claude-code/plugin/` becomes `~/.claude/skills/mainframe/`. Claude Code auto-loads its namespaced skills and global hooks.
-- **One user-agent directory symlink** — `adapters/claude-code/agents/` becomes `~/.claude/agents/mainframe/`. The profiles keep collision-safe `mainframe-*` identifiers and retain agent-scoped hooks and MCP servers.
-- **One direct symlink** for the umbrella `CLAUDE.md` (the plugin format has no equivalent).
-- **Ownership-aware settings merge** — `export/settings.json` supplies mandatory MAINFRAME policy and initial defaults to the regular mutable `~/.claude/settings.json`. Existing user values and unknown fields survive; `/model`, `/effort`, and `/config` changes are not written back to the repository. A private state file records only what MAINFRAME added or temporarily overrode, so uninstall removes only that ownership. Every changed existing settings file is backed up first.
-- **Per-item symlinks** for `adapters/claude-code/export/rules/*` into `~/.claude/rules/`, so the hub composes with any rules you already have without replacing the whole directory.
-- **Shared credentials component** — links `shared/credentials/secret` into `~/.local/bin/`, preserves the values under `~/.config/credentials/`, and seeds the gitignored `shared/credentials/credentials-index.md` from its adjacent template only when missing. The Claude adapter exposes that same file at the stable `~/.claude/credentials-index.md` path; it does not create a second copy.
-- **Claude Code version preflight** — requires v2.1.226+, offers `claude update` in an interactive terminal, fails before changing anything in non-interactive runs, and accepts `--yes` for explicit unattended approval.
-- **Stale-symlink cleanup** — on first run after upgrading from the older per-item layout, removes leftover hub symlinks under `~/.claude/{skills,agents,hooks}/`.
-- **Backs up** any pre-existing real file before replacing an immutable artifact or changing user settings.
-- **Idempotent** — re-running is a no-op when state matches.
-
-Options:
-
-```
-./install.sh                         # show help; make no changes
-./install.sh --claude                # install shared secrets + Claude Code
-./install.sh --claude --yes          # approve a required Claude Code update
-./install.sh --claude --dev          # also install hub-development instrumentation
-./install.sh --claude --dry-run      # preview, no changes
-./install.sh --claude --uninstall    # remove only the Claude Code adapter
-./install.sh --help
+```text
+/mainframe:init
 ```
 
-**`--dev` — hub-development instrumentation (most users don't need this).** A plain install ships none of it. The flag adds three opt-in pieces, all strictly local; their data lives inside the repo at `workspace/runtime/` (gitignored), reached via the hub-owned symlink `~/.claude/mainframe`:
+Small, obvious tasks can stay direct. `init` is for work that benefits from shared understanding, preparation, or a longer autonomous run.
 
-- **`harness-feedback` skill** (`dev/skills/`) — agents file structured friction reports about the hub's own rules/hooks into `~/.claude/mainframe/claude-code/feedback/` for later triage. Once a report is safely written, a detached best-effort Spark `medium` pass may turn it into a narrow regression-test candidate under `~/.claude/mainframe/claude-code/model-lab/`. The report never waits for that pass, and unavailable model access stays silent. Without the skill installed, neither this analysis nor the related nudges are active.
-- **Usage and hook-effectiveness telemetry** — an early shell gate starts the telemetry runtime only while the Claude adapter's dev marker exists. Hooks log lifecycle counts, the compact quality cycle `noted` / `asked` / `blocked` / `resolved`, and privacy-safe model-lab lifecycle statuses into a local SQLite DB under `~/.claude/mainframe/claude-code/telemetry/`. The data identifies a hook and stable rule, not the affected source: no prompts, code, paths, emitted messages, stdout, stderr, model output, or exception text are retained. A feedback-triggered model-lab pass sends that one report and the repository files it chooses to inspect to OpenAI through the locally authenticated Codex CLI; ordinary telemetry itself sends nothing. A plain `--claude` reinstall disables dev instrumentation without deleting its data.
-- **Local hub map** — a self-contained `workspace/runtime/hub.html` page. Its overview combines usage, telemetry, agent routing, hook outcomes, recent events, and data health; detailed component, configuration, permission, health, and relationship views remain one click away. Generated on `--dev` install; regenerate once with `.venv/bin/python3 tools/build_hub_page.py`, or temporarily keep it current with `.venv/bin/python3 tools/build_hub_page.py --watch --interval 15`. Watch mode atomically rebuilds the file and makes the open page reload itself while preserving its selected view and scroll position. Open the generated `workspace/runtime/hub.html`, not the source template under `tools/hub_page_assets/`; no server or remote read is involved.
+## A normal session
 
-To temporarily disable the plugin without uninstalling, use `claude plugin disable mainframe` (and `claude plugin enable mainframe` to re-enable).
+1. Claude receives the small global safety and evidence baseline.
+2. For collaborative or complex work, the user starts `/mainframe:init`.
+3. Claude discusses the actual outcome in plain language. If the task needs a formal definition of done, it is agreed before implementation.
+4. When a red test can prove the original problem, it is prepared after the definition of done and before implementation.
+5. The user starts the approved complex run through Claude Code's native `/goal` mechanism.
+6. The primary agent chooses specialist help when it is useful. Hooks check the changes that the current work actually introduced.
+7. The result is verified and reported in the user's language without requiring the user to inspect the code.
 
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+Business behavior, infrastructure choices, destructive operations, branch changes, and pushes remain user decisions. Technical implementation inside the agreed boundary belongs to the agent. During a long run, small conventional commits may be used as recovery points; a push still requires an explicit request.
 
-## Update
+## Design principles
+
+MAINFRAME is built around a few boundaries:
+
+- **Small global context.** A rule is global only when every recipient benefits from it.
+- **Context follows the role.** Main-session workflow, research methods, and stack-specific engineering rules live in different layers.
+- **Evidence over habit.** Important claims come from the repository, a reproducible check, Context7, or a current primary source.
+- **One source of truth.** Each delivered artifact has one editable home in this repository.
+- **Agent-first, not agent-dependent.** Agents do the technical work, but the result remains normal code, standard tests, and ordinary project documentation that another engineer or agent can continue.
+- **Enough process, not maximum process.** Small tasks stay small. Complex or high-risk tasks receive deeper preparation and independent review.
+- **User authority stays explicit.** Product meaning, infrastructure, protected data, branch changes, and external delivery are never silently redefined.
+
+The current product decisions are recorded in [docs/principles.md](docs/principles.md). It is a working design record, not a beginner's manual.
+
+## Origin and evolution
+
+MAINFRAME began in May 2026 as a small personal collection of global Claude Code instructions, agents, skills, and hooks. The first goal was practical: stop rebuilding the same useful baseline in every project.
+
+It grew out of daily work with AI coding agents across real applications. Repeated failures became rules or checks; ideas that sounded good but did not help in practice were removed. Documentation and small experiments became important because model knowledge and product behavior can change faster than memory does.
+
+The project later explored a general multi-adapter delivery system and a terminal interface. That direction became too large. More effort was going into distributing the system than into improving the actual agent experience. The experiment was archived, and `main` deliberately returned to a smaller Claude-first architecture.
+
+That reset is part of the project, not missing history. The current lesson is to make one adapter genuinely useful, keep shared pieces truly shared, and add future adapters independently only when their own environment is understood. The old compiler and terminal UI are not part of the current product.
+
+The exact technical history remains available in Git. This README keeps the human reason behind it: MAINFRAME is an evolving working system, corrected by actual use rather than presented as a finished universal answer.
+
+## Managing the installation
+
+### Update
 
 ```bash
 cd ~/Documents/projects/MAINFRAME
 git pull
+./install.sh --claude
 ```
 
-That's it. Immutable artifacts remain linked to this repo, while mutable user settings stay local. The next Claude Code session sees the latest linked content. Re-run `./install.sh --claude` when delivery wiring or the settings policy/default template changes.
+Most linked content is current after `git pull`. Re-running the installer also applies changes to delivery wiring and the settings policy.
 
-```mermaid
-graph LR
-    A[git pull] --> B[Files updated<br/>in repo]
-    B --> C[Symlinks already<br/>point to repo]
-    C --> D[Next Claude session:<br/>latest active]
+### Development mode
+
+```bash
+./install.sh --claude --dev
 ```
 
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+Development mode adds local instrumentation for maintaining this repository. Its normal telemetry stays on the machine and records operational metadata rather than prompts, code, file paths, or hook messages.
 
-## Tested configuration
+It also generates the local desktop page at `workspace/runtime/hub.html`. To keep that file refreshed temporarily while developing MAINFRAME:
 
-What I have actually verified this hub on:
-
-- **Claude Code CLI** — the primary surface I use daily.
-- **Claude Code IDE extension** — also in active use.
-- **Main thread model**: Claude **Opus 4.7+** at `high` or `xhigh` effort (currently **Opus 4.8** day to day). This is what I run every day and what all the discipline is tuned against.
-- **Sub-agents** — each one calibrated separately via a small empirical tournament so the right model + effort sits inside the agent file itself. You don't have to think about it at call time.
-
-Other model / effort combinations may work but I haven't verified them. When an agent's prompt body changes in a meaningful way, I re-run its tournament.
-
-**Trying the hub on other models or effort levels is very welcome** — Sonnet, Haiku, lower or higher effort, different IDEs. Share what you observe (open an issue or a PR with notes); empirical results on configurations I don't run daily are exactly the kind of feedback the hub gets better from.
-
-**OpenAI Codex** support is in the future-list, not in scope yet.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
-
-## Platforms
-
-- **macOS** — primary, tested daily.
-- **Linux** — should work; `install.sh` is plain Bash 3.2+ compatible, no macOS-specific paths.
-- **Windows** — not supported yet, no timeline for it.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
-
-## Directory map
-
+```bash
+.venv/bin/python3 tools/build_hub_page.py --watch --interval 15
 ```
+
+Open the generated file, not `tools/hub_page_assets/template.html`; the latter is only the source template.
+
+Installing again without `--dev` disables development instrumentation while preserving already collected local data.
+
+### Uninstall
+
+```bash
+./install.sh --claude --uninstall
+```
+
+Uninstall removes only MAINFRAME-owned links and settings. Credentials, the local credentials index, backups, telemetry, and feedback data are preserved.
+
+## Repository map
+
+```text
 MAINFRAME/
-├── README.md, LICENSE, CONTRIBUTING.md   # project meta
-├── install.sh                            # target dispatcher; no arguments show help
-├── assets/                               # README images (banner, divider, badge)
-│
-├── adapters/claude-code/
-│   ├── install.sh                        # Claude Code-only delivery
-│   ├── settings-manager.py               # safe user-settings merge and uninstall ownership
-│   ├── agents/                           # user-level specialist profiles and scoped hooks
-│   ├── plugin/                           # auto-loads as 'mainframe' after install
-│   │   ├── .claude-plugin/plugin.json    # plugin manifest
-│   │   ├── skills/                       # includes manual /mainframe:init
-│   │   └── hooks/                        # registrations, scripts, and rules
-│   └── export/                           # Claude files outside the plugin format
-│       ├── CLAUDE.md                     # umbrella operating rules
-│       ├── settings.json                 # policy and initial-default template; never a live symlink
-│       ├── rules/                        # optional path-scoped rules, installed per item
-│       └── output-styles/                # custom reply styles
-│
-├── shared/credentials/                       # adapter-independent credentials component
-│   ├── install.sh                        # installs only this shared component
-│   ├── secret                            # credentials helper
-│   ├── credentials-index.template.md     # initialization template
-│   └── credentials-index.md              # local working index, gitignored
-│
-├── tools/                                # Python validators (used by hooks; runnable manually)
-│   ├── validate-claude-md.py             # umbrella spec + project-agnosticism check
-│   ├── validate-skill.py                 # skill format + size limits
-│   ├── validate-agent.py                 # agent routing metadata contract
-│   └── agnostic-blacklist.txt.example    # copy to agnostic-blacklist.txt and add your own project names
-│
-└── CONTRIBUTING.md                      # contribution workflow and validation commands
+├── adapters/claude-code/   Claude Code delivery, agents, skills, hooks, and settings
+├── shared/credentials/     adapter-independent secret helper and local index template
+├── dev/                    opt-in tools used while developing MAINFRAME
+├── tools/                  validators, tests, and local observability builders
+├── docs/principles.md      current product decisions and design boundaries
+├── install.sh              small adapter dispatcher
+└── CONTRIBUTING.md         contribution and validation guide
 ```
 
-Anything you do not see here lives outside the repo by design — internal ADRs, working notes, the maintainer's inbox of unprocessed candidates, and per-machine memory are all gitignored. The published artifact is the hub itself, not the maintainer's working files.
+The current product ships one adapter: Claude Code. Future adapters should have their own delivery logic instead of reviving a shared compiler or terminal installer.
 
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+## Tested environment
 
-## Principles
+- **macOS** is the primary daily environment.
+- **Linux** is expected to work with the Bash installer, but receives less real-world use.
+- **Windows** is not currently supported.
+- The main sessions are tuned through actual use with Claude Opus; specialist profiles choose their own configured model and effort.
 
-Every artifact shipped by this hub (whether in `adapters/claude-code/plugin/` or `adapters/claude-code/export/`) holds these:
+Other combinations may work, but they should be treated as unverified until someone tests them in real sessions.
 
-1. **Project-agnostic** — no hardcoded project names, stacks, paths, or domains.
-2. **Evidence-based** — new rules need real experience, an authoritative source, or a measured experiment. Not "feels right".
-3. **English in artifacts** — skills, agents, commands, hooks all in English (LLM adherence).
-4. **Single source of truth** — each artifact exists in exactly one location in the repo.
-5. **Sub-agent economy** — pick the right model per task (Haiku for trivial, Sonnet for most research, Opus only for genuine reasoning needs).
+## Project status
 
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+This is a personal tool under active development. Interfaces, names, and behavior may change when real use shows a better design. The repository is public so other people can study it, fork it, or reuse the pieces that fit their own work.
 
 ## A personal note
 
-I'm not a scientist or a credentialed engineer. I'm just someone who genuinely enjoys working with AI agents and models — and who has put a *lot* of hours into it over the past couple of years. To put it plainly: this year alone my Git history already shows over 2,300 private commits across 3+ production projects and counting; about 300 the year before; and before that, nothing — I worked entirely on my own machine and didn't even know how Git worked.
+I am not a credentialed engineer or researcher. I started building with AI agents because I enjoyed it, then kept going until those experiments became real projects used in practice. Git came later; before that, everything lived only on my machine.
 
-I started sharing this for people just getting into all of this, or looking for something new — because I hadn't come across repos quite like it. Maybe they're out there, somewhere at the bottom of GitHub; maybe some are even better than mine. But this one is mine, and I enjoy making it.
+MAINFRAME is the reusable part of what I learned along the way. It exists because I could not find another public repository that quite matched this problem and working style. There may be better systems, and this one will not fit everyone. It is simply the one I use and keep improving.
 
-So if you want to try it, try it. If not, that's fine too — I'm not insisting on anything. Take what's useful, leave the rest.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+If it helps, use it. If only one idea is useful, take that idea. There is no need to adopt the whole system.
 
 ## Contributing
 
-This is a personal hub but friends, acquaintances, and curious strangers are welcome to fork, adapt, and share what works. The repo gets better when more people poke at it from different angles — new approaches, sharper rules, things I haven't tried.
+Forks, experiments, and evidence from other models or environments are welcome. Please keep changes narrow, explain the real problem they solve, and avoid adding permanent global context "just in case."
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for fork conventions, principles, validators, and commit format.
-
-<p align="center">
-  <img src="assets/divider.png" alt="" width="100%">
-</p>
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the repository workflow and validation commands.
 
 ## License
 
-[MIT](LICENSE) — use, fork, modify freely, no warranty.
+[MIT](LICENSE) — use, fork, and modify freely; no warranty.
