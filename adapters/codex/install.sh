@@ -113,7 +113,10 @@ link_conflicts() {
 
 delivery_preflight() {
     local target source managed_sha current_sha
-    for source in "${ADAPTER_ROOT}/skills/mainframe-init" "${ADAPTER_ROOT}/skills/mainframe-secrets"; do
+    for source in \
+        "${ADAPTER_ROOT}/skills/mainframe-init" \
+        "${ADAPTER_ROOT}/skills/mainframe-secrets" \
+        "${ADAPTER_ROOT}/skills/mainframe-ticket"; do
         target="${GLOBAL_SKILLS_DIR}/$(basename "$source")"
         if link_conflicts "$target" "$source"; then
             error "Refusing to replace existing skill path without a separate migration: $target"
@@ -160,6 +163,11 @@ check_sources() {
     for path in "$SOURCE_AGENTS" \
         "${ADAPTER_ROOT}/skills/mainframe-init/SKILL.md" \
         "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-ticket/SKILL.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-ticket/agents/openai.yaml" \
+        "${ADAPTER_ROOT}/skills/mainframe-ticket/references/record-observation.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-ticket/references/record-confirmed-problem.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-ticket/references/ticket-format.md" \
         "$RULES_SOURCE" \
         "$AGENT_SOURCE" \
         "$CONFIG_SOURCE" \
@@ -421,6 +429,7 @@ install_adapter() {
     install_agents
     install_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
     install_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
+    install_link "${ADAPTER_ROOT}/skills/mainframe-ticket" "${GLOBAL_SKILLS_DIR}/mainframe-ticket" "ticket intake skill"
     install_index
     install_rules
     install_agent
@@ -566,6 +575,7 @@ uninstall_adapter() {
     uninstall_agents
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
+    remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-ticket" "${GLOBAL_SKILLS_DIR}/mainframe-ticket" "ticket intake skill"
     uninstall_index
     uninstall_rules
     uninstall_agent

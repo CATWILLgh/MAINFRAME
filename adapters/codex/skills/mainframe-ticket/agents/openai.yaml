@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME Ticket"
+  short_description: "Record problems without expanding current scope"
+  default_prompt: "Use $mainframe-ticket to record this concrete problem without expanding the active task."

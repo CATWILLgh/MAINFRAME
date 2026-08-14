@@ -54,6 +54,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "regular file" in proc.stdout
     assert "mainframe-init" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
+    assert "mainframe-ticket" in proc.stdout
     assert "mainframe.rules" in proc.stdout
     assert "mainframe_researcher.toml" in proc.stdout
     assert "permissions" in proc.stdout
@@ -75,7 +76,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert stat.S_IMODE(agents.stat().st_mode) == 0o600
     assert stat.S_IMODE(state.stat().st_mode) == 0o600
 
-    for name in ("mainframe-init", "mainframe-secrets"):
+    for name in ("mainframe-init", "mainframe-secrets", "mainframe-ticket"):
         target = home / ".agents" / "skills" / name
         assert target.is_symlink()
         assert target.resolve() == ADAPTER / "skills" / name
@@ -140,7 +141,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not config.exists()
     assert not config_state.exists()
     assert helper.is_symlink()
-    for name in ("mainframe-init", "mainframe-secrets"):
+    for name in ("mainframe-init", "mainframe-secrets", "mainframe-ticket"):
         target = home / ".agents" / "skills" / name
         assert not target.exists() and not target.is_symlink()
 
@@ -452,6 +453,23 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "/goal" not in (
         ADAPTER / "skills" / "mainframe-init" / "SKILL.md"
     ).read_text(encoding="utf-8")
+
+    ticket_skill = ADAPTER / "skills" / "mainframe-ticket"
+    ticket_body = (ticket_skill / "SKILL.md").read_text(encoding="utf-8")
+    ticket_metadata = (ticket_skill / "agents" / "openai.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-ticket" in ticket_body
+    assert "record-observation.md" in ticket_body
+    assert "record-confirmed-problem.md" in ticket_body
+    assert "ticket-format.md" in ticket_body
+    assert "allow_implicit_invocation" not in ticket_metadata
+    for reference in (
+        "record-observation.md",
+        "record-confirmed-problem.md",
+        "ticket-format.md",
+    ):
+        assert (ticket_skill / "references" / reference).is_file()
 
 
 def test_shared_judgment_and_primary_completion_are_separated():
