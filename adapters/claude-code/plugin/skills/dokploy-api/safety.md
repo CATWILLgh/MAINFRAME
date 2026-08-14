@@ -6,6 +6,12 @@ contract proves otherwise. Each call needs explicit authority for the exact
 resource; authority already supplied by the active task is sufficient and must
 not be requested again. The checks below prevent accidental widening.
 
+Do not replace this target-aware check with a global permission pattern for
+`curl`. A method or endpoint fragment cannot identify the Dokploy instance,
+resource, existing authority, or current target schema, and would stop an
+already authorized operation while remaining bypassable through another HTTP
+client.
+
 **Always safe (reads):** `*.one`, `*.all`, `*.readLogs`, `*.getServerMetrics`, `deployment.all`. Use these freely, and use `*.one` to confirm an ID resolves to the intended target **before** any destructive call.
 
 ## By blast radius

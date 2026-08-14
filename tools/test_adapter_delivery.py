@@ -517,10 +517,16 @@ def test_dokploy_branch_is_version_aware_and_secret_safe():
     all_markdown = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(skill_dir.glob("*.md"))
     )
+    normalized = " ".join(all_markdown.split())
 
     assert "disable-model-invocation: true" in skill
     assert "target instance" in skill
     assert "authority already supplied" in all_markdown
+    assert "global permission pattern for `curl`" in normalized
+    assert "project.remove" in all_markdown
+    assert "postgres.remove" in all_markdown
+    assert "settings.reloadTraefik" in all_markdown
+    assert "must not be requested again" in normalized
     assert "docs.dokploy.com/docs/api" in skill
     assert "43 total" not in all_markdown
     assert "529" not in all_markdown
@@ -1251,7 +1257,8 @@ def test_external_package_and_image_publications_require_confirmation():
         "Bash(poetry publish *)", "Bash(hatch publish *)",
         "Bash(cargo publish *)", "Bash(gem push *)",
         "Bash(docker push *)", "Bash(docker image push *)",
-        "Bash(docker manifest push *)",
+        "Bash(docker manifest push *)", "Bash(container image push *)",
+        "Bash(container i push *)",
     ):
         assert rule in asked
     assert "Bash(pip upload *)" not in asked
@@ -1265,8 +1272,7 @@ def test_system_and_destructive_runtime_changes_keep_narrow_confirmation():
     for rule in (
         "Bash(brew install *)", "Bash(apt install *)",
         "Bash(apt-get install *)", "Bash(chmod 777 *)",
-        "Bash(chown *)", "Bash(sudo *)", "Bash(docker rm *)",
-        "Bash(docker rmi *)", "Bash(docker volume rm *)",
+        "Bash(chown *)", "Bash(sudo *)", "Bash(docker volume rm *)",
         "Bash(docker compose down -v*)", "Bash(docker system prune *)",
         "Bash(docker run *--privileged*)",
     ):
@@ -1277,9 +1283,49 @@ def test_system_and_destructive_runtime_changes_keep_narrow_confirmation():
     for rule in (
         "Bash(curl *)", "Bash(wget *)", "Bash(docker *)",
         "Bash(docker compose down *)", "Bash(npm install *)",
-        "Bash(pip install *)",
+        "Bash(pip install *)", "Bash(docker rm *)", "Bash(docker rmi *)",
     ):
         assert rule not in asked
+
+
+def test_apple_container_prompts_only_at_data_machine_and_external_boundaries():
+    settings = json.loads(
+        (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
+    )
+    asked = settings["permissions"]["ask"]
+
+    for rule in (
+        "Bash(container volume delete *)",
+        "Bash(container volume rm *)",
+        "Bash(container volume prune*)",
+        "Bash(container v delete *)",
+        "Bash(container v rm *)",
+        "Bash(container v prune*)",
+        "Bash(container machine delete *)",
+        "Bash(container machine rm *)",
+        "Bash(container m delete *)",
+        "Bash(container m rm *)",
+        "Bash(/usr/local/bin/uninstall-container.sh -d*)",
+        "Bash(uninstall-container.sh -d*)",
+    ):
+        assert rule in asked
+
+    for rule in (
+        "Bash(container delete *)",
+        "Bash(container rm *)",
+        "Bash(container prune*)",
+        "Bash(container image delete *)",
+        "Bash(container image rm *)",
+        "Bash(container image prune*)",
+        "Bash(container system stop*)",
+    ):
+        assert rule not in asked
+
+    containers = (
+        PLUGIN / "skills" / "infrastructure" / "containers.md"
+    ).read_text(encoding="utf-8")
+    assert "Apple's `container`" in containers
+    assert "does not itself delete user data" in containers
 
 
 def test_verified_local_postgres_is_disposable_without_manual_confirmation():
