@@ -66,6 +66,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe_typescript_backend_engineer.toml" in proc.stdout
     assert "mainframe_react_frontend_engineer.toml" in proc.stdout
     assert "mainframe_test_auditor.toml" in proc.stdout
+    assert "mainframe_decision_reviewer.toml" in proc.stdout
     assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
@@ -193,6 +194,35 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     )
     assert test_auditor_data["web_search"] == "live"
     assert test_auditor_data["features"]["apps"] is False
+    decision_reviewer = codex_dir / "agents" / "mainframe_decision_reviewer.toml"
+    decision_reviewer_state = (
+        codex_dir / ".mainframe-agent-mainframe_decision_reviewer-state"
+    )
+    assert decision_reviewer.is_file() and not decision_reviewer.is_symlink()
+    assert decision_reviewer_state.is_file()
+    decision_reviewer_data = tomllib.loads(
+        decision_reviewer.read_text(encoding="utf-8")
+    )
+    assert decision_reviewer_data["name"] == "mainframe_decision_reviewer"
+    assert "model" not in decision_reviewer_data
+    assert "model_reasoning_effort" not in decision_reviewer_data
+    assert decision_reviewer_data["sandbox_mode"] == "read-only"
+    assert decision_reviewer_data["web_search"] == "live"
+    assert decision_reviewer_data["features"]["apps"] is False
+    assert decision_reviewer_data["skills"]["config"] == [
+        {
+            "path": str(
+                ADAPTER
+                / "skills"
+                / "mainframe-decision-review"
+                / "SKILL.md"
+            ),
+            "enabled": True,
+        }
+    ]
+    assert not (
+        home / ".agents" / "skills" / "mainframe-decision-review"
+    ).exists()
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
     assert config.is_file() and config_state.is_file()
@@ -236,6 +266,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not frontend_state.exists()
     assert not test_auditor.exists() and not test_auditor.is_symlink()
     assert not test_auditor_state.exists()
+    assert not decision_reviewer.exists()
+    assert not decision_reviewer_state.exists()
     assert not config.exists()
     assert not config_state.exists()
     assert helper.is_symlink()
@@ -361,6 +393,37 @@ def test_existing_mainframe_researcher_requires_yes_and_is_restored():
     assert removed.returncode == 0, removed.stderr
     assert target.is_file() and not target.is_symlink()
     assert 'name = "personal"' in target.read_text(encoding="utf-8")
+
+
+def test_existing_decision_reviewer_requires_yes_and_is_restored():
+    home = pathlib.Path(tempfile.mkdtemp())
+    agents_dir = home / ".codex" / "agents"
+    agents_dir.mkdir(parents=True)
+    target = agents_dir / "mainframe_decision_reviewer.toml"
+    target.write_text(
+        'name = "personal_reviewer"\n'
+        'description = "Personal reviewer."\n'
+        'developer_instructions = "Keep me."\n',
+        encoding="utf-8",
+    )
+
+    refused, _ = _run("--codex", home=home)
+    assert refused.returncode != 0
+    assert "agent already exists" in refused.stderr
+    assert 'name = "personal_reviewer"' in target.read_text(encoding="utf-8")
+
+    installed, _ = _run("--codex", "--yes", home=home)
+    assert installed.returncode == 0, installed.stderr
+    assert target.is_file() and not target.is_symlink()
+    assert tomllib.loads(target.read_text(encoding="utf-8"))["name"] == (
+        "mainframe_decision_reviewer"
+    )
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert target.is_file() and not target.is_symlink()
+    assert 'name = "personal_reviewer"' in target.read_text(encoding="utf-8")
+
 
 def test_changed_mainframe_rules_stop_uninstall_before_other_removal():
     installed, home = _run("--codex")
@@ -585,6 +648,34 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert "Do not implement fixes" in test_auditor_data["developer_instructions"]
     assert test_auditor_data["default_permissions"] == "mainframe-test-auditor"
+    decision_reviewer_template = (
+        ADAPTER / "agents" / "mainframe_decision_reviewer.toml.template"
+    )
+    assert decision_reviewer_template.is_file()
+    decision_reviewer_data = tomllib.loads(
+        decision_reviewer_template.read_text(encoding="utf-8").replace(
+            "__MAINFRAME_DECISION_REVIEW_SKILL__",
+            "/tmp/mainframe-decision-review/SKILL.md",
+        )
+    )
+    assert "model" not in decision_reviewer_data
+    assert "model_reasoning_effort" not in decision_reviewer_data
+    assert decision_reviewer_data["sandbox_mode"] == "read-only"
+    assert decision_reviewer_data["web_search"] == "live"
+    assert decision_reviewer_data["features"]["apps"] is False
+    assert decision_reviewer_data["skills"]["config"] == [
+        {
+            "path": "/tmp/mainframe-decision-review/SKILL.md",
+            "enabled": True,
+        }
+    ]
+    private_review_skill = ADAPTER / "skills" / "mainframe-decision-review"
+    private_review_body = (private_review_skill / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-decision-review" in private_review_body
+    assert "ASSESSMENT:" in private_review_body
+    assert not (private_review_skill / "agents" / "openai.yaml").exists()
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
     assert 'pattern = ["secret"]' in (
         ADAPTER / "rules" / "mainframe.rules"

@@ -25,6 +25,14 @@ Take responsibility for choosing the safest practical path within the agreed bou
 
 Use a user-approved definition of done when reasonable people could interpret completion differently. Keep it observable and concise. A small unambiguous task needs only enough discussion and verification to remove material doubt.
 
+Before presenting a consequential architecture, design, or implementation
+approach whose cost of being wrong is material, give the prepared proposal,
+constraints, alternatives, load-bearing assumptions, evidence, affected paths,
+and failure cost to `mainframe_decision_reviewer`. Recheck every material
+finding against the repository, current sources, or a bounded experiment before
+changing the proposal. Do not invoke this review as ceremony for a routine
+low-risk choice.
+
 After approval, obtain red evidence before changing observable behavior when that evidence can prove the original gap. Do not create a test as ceremony for documentation, path moves, or other structural work.
 
 When implementing directly, deliver the complete assigned behavior. Do not leave TODOs, placeholders, disabled checks, suppressions, or deferred in-scope work as a substitute for the result.
