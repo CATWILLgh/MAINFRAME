@@ -21,12 +21,6 @@ CONFIG_TOOL="${ADAPTER_ROOT}/scripts/manage-config.py"
 CONFIG_TARGET="${CODEX_DIR}/config.toml"
 CONFIG_STATE="${CODEX_DIR}/.mainframe-config-state.json"
 CONFIG_BACKUP="${CONFIG_TARGET}.backup-${TIMESTAMP}"
-REQUIREMENTS_SOURCE="${ADAPTER_ROOT}/config/mainframe-requirements.toml"
-REQUIREMENTS_TOOL="${ADAPTER_ROOT}/scripts/manage-requirements.py"
-REQUIREMENTS_TARGET="${CODEX_REQUIREMENTS_FILE:-/etc/codex/requirements.toml}"
-REQUIREMENTS_DIR="$(dirname "$REQUIREMENTS_TARGET")"
-REQUIREMENTS_STATE="${REQUIREMENTS_DIR}/.mainframe-requirements-state.json"
-REQUIREMENTS_BACKUP="${REQUIREMENTS_TARGET}.backup-${TIMESTAMP}"
 
 DRY_RUN=0
 ASSUME_YES=0
@@ -43,9 +37,8 @@ Usage:
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
 share AGENTS.md, standalone skills, command rules, and a bounded permission
-profile. The system profile allowlist requires administrator access and keeps
-the three built-in modes plus mainframe. Codex plugins, hooks, agents, and
-development telemetry are not installed by this version.
+profile. Codex plugins, hooks, agents, and development telemetry are not
+installed by this version.
 EOF
 }
 
@@ -162,9 +155,7 @@ check_sources() {
         "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
         "$RULES_SOURCE" \
         "$CONFIG_SOURCE" \
-        "$CONFIG_TOOL" \
-        "$REQUIREMENTS_SOURCE" \
-        "$REQUIREMENTS_TOOL"; do
+        "$CONFIG_TOOL"; do
         if [[ ! -f "$path" ]]; then
             error "Codex adapter source is missing: $path"
             return 1
@@ -182,56 +173,6 @@ manage_config() {
         --state "$CONFIG_STATE" \
         --backup "$CONFIG_BACKUP" \
         "$@"
-}
-
-requirements_command() {
-    local action="$1"
-    shift
-    python3 "$REQUIREMENTS_TOOL" "$action" \
-        --requirements "$REQUIREMENTS_TARGET" \
-        --source "$REQUIREMENTS_SOURCE" \
-        --state "$REQUIREMENTS_STATE" \
-        --backup "$REQUIREMENTS_BACKUP" \
-        "$@"
-}
-
-manage_requirements() {
-    local action="$1"
-    local probe privileged_dir result
-    shift
-    if [[ $DRY_RUN -eq 1 ]]; then
-        requirements_command "$action" --dry-run "$@"
-        return
-    fi
-    probe="$(requirements_command "$action" --dry-run "$@")"
-    if [[ "$action" == "install" && "$probe" == "would keep existing profile allowlist" ]]; then
-        log "profile allowlist already installed"
-        return
-    fi
-    if [[ "$action" == "uninstall" && "$probe" == "profile allowlist is not managed by MAINFRAME" ]]; then
-        log "$probe"
-        return
-    fi
-    if [[ "$REQUIREMENTS_TARGET" != /etc/* || $EUID -eq 0 ]]; then
-        requirements_command "$action" "$@"
-        return
-    fi
-    if ! command -v sudo >/dev/null 2>&1; then
-        error "Administrator access is required to manage $REQUIREMENTS_TARGET."
-        return 1
-    fi
-    privileged_dir="$(mktemp -d "${TMPDIR:-/tmp}/mainframe-codex-requirements.XXXXXX")"
-    cp "$REQUIREMENTS_TOOL" "${privileged_dir}/manage-requirements.py"
-    cp "$REQUIREMENTS_SOURCE" "${privileged_dir}/mainframe-requirements.toml"
-    result=0
-    sudo python3 "${privileged_dir}/manage-requirements.py" "$action" \
-        --requirements "$REQUIREMENTS_TARGET" \
-        --source "${privileged_dir}/mainframe-requirements.toml" \
-        --state "$REQUIREMENTS_STATE" \
-        --backup "$REQUIREMENTS_BACKUP" \
-        "$@" || result=$?
-    rm -r "$privileged_dir"
-    return "$result"
 }
 
 validate_rules() {
@@ -273,13 +214,11 @@ preflight() {
             return 1
         fi
         manage_config uninstall --dry-run >/dev/null
-        requirements_command uninstall --dry-run >/dev/null
     else
         runtime_preflight
         validate_rules
         delivery_preflight
         manage_config install --dry-run >/dev/null
-        requirements_command install --dry-run >/dev/null
     fi
 }
 
@@ -434,7 +373,6 @@ install_config() {
 }
 
 install_adapter() {
-    manage_requirements install
     install_agents
     install_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
     install_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"
@@ -551,7 +489,6 @@ uninstall_agents() {
 }
 
 uninstall_adapter() {
-    manage_requirements uninstall
     uninstall_agents
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-init" "${GLOBAL_SKILLS_DIR}/mainframe-init" "manual init skill"
     remove_owned_link "${ADAPTER_ROOT}/skills/mainframe-secrets" "${GLOBAL_SKILLS_DIR}/mainframe-secrets" "secrets skill"

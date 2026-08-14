@@ -95,7 +95,7 @@ To see the result without changing anything:
 ./install.sh --claude --dry-run
 ```
 
-Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit `$mainframe-init`, `$mainframe-secrets`, the shared credentials index, command rules, and a least-privilege permission profile shared by Desktop, CLI, and the IDE extension. It also adds a system allowlist that keeps the three built-in permission modes and `mainframe` while hiding the raw `config.toml` mode; this step requests administrator access. The installer backs up and merges marked blocks into existing files, preserves unrelated settings, and can remove only its own changes later. It deliberately does not install Codex hooks, agents, plugins, or telemetry yet.
+Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit `$mainframe-init`, `$mainframe-secrets`, the shared credentials index, command rules, and a least-privilege permission profile shared by Desktop, CLI, and the IDE extension. The installer merges one marked block into the existing `config.toml`, backs it up, preserves unrelated settings, and can remove only its own changes later. It deliberately does not install Codex hooks, agents, plugins, or telemetry yet.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 
@@ -183,7 +183,7 @@ Installing again without `--dev` disables development instrumentation while pres
 ./install.sh --claude --uninstall
 ```
 
-Use `--codex --uninstall` for Codex. Uninstall removes only MAINFRAME-owned files, links, and the managed system profile allowlist. Credentials, the repository index, unrelated user or system configuration, backups, telemetry, and feedback data are preserved. Removing the system allowlist also requests administrator access.
+Use `--codex --uninstall` for Codex. Uninstall removes only MAINFRAME-owned files and links. Credentials, the repository index, unrelated user configuration, backups, telemetry, and feedback data are preserved.
 
 ## Repository map
 
