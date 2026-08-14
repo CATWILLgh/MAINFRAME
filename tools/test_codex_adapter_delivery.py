@@ -56,10 +56,12 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-init" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe-ticket" in proc.stdout
+    assert "mainframe-python-backend" in proc.stdout
     assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe-frontend" in proc.stdout
     assert "mainframe.rules" in proc.stdout
     assert "mainframe_researcher.toml" in proc.stdout
+    assert "mainframe_python_backend_engineer.toml" in proc.stdout
     assert "mainframe_typescript_backend_engineer.toml" in proc.stdout
     assert "mainframe_react_frontend_engineer.toml" in proc.stdout
     assert "permissions" in proc.stdout
@@ -85,6 +87,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-init",
         "mainframe-secrets",
         "mainframe-ticket",
+        "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
     ):
@@ -132,6 +135,20 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert typescript_data["sandbox_mode"] == "workspace-write"
     assert typescript_data["web_search"] == "live"
     assert typescript_data["features"]["apps"] is False
+    python_engineer = codex_dir / "agents" / "mainframe_python_backend_engineer.toml"
+    python_state = codex_dir / ".mainframe-agent-mainframe_python_backend_engineer-state"
+    assert python_engineer.is_symlink()
+    assert python_engineer.resolve() == (
+        ADAPTER / "agents" / "mainframe_python_backend_engineer.toml"
+    )
+    assert python_state.is_file()
+    python_data = tomllib.loads(python_engineer.read_text(encoding="utf-8"))
+    assert python_data["name"] == "mainframe_python_backend_engineer"
+    assert "model" not in python_data
+    assert "model_reasoning_effort" not in python_data
+    assert python_data["sandbox_mode"] == "workspace-write"
+    assert python_data["web_search"] == "live"
+    assert python_data["features"]["apps"] is False
     frontend_engineer = codex_dir / "agents" / "mainframe_react_frontend_engineer.toml"
     frontend_state = (
         codex_dir / ".mainframe-agent-mainframe_react_frontend_engineer-state"
@@ -185,6 +202,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not researcher_state.exists()
     assert not typescript_engineer.exists() and not typescript_engineer.is_symlink()
     assert not typescript_state.exists()
+    assert not python_engineer.exists() and not python_engineer.is_symlink()
+    assert not python_state.exists()
     assert not frontend_engineer.exists() and not frontend_engineer.is_symlink()
     assert not frontend_state.exists()
     assert not config.exists()
@@ -194,6 +213,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-init",
         "mainframe-secrets",
         "mainframe-ticket",
+        "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
     ):
@@ -505,6 +525,15 @@ def test_baseline_uses_native_standalone_layers_only():
         typescript_data["developer_instructions"]
     )
     assert "stage files, commit, push" in typescript_data["developer_instructions"]
+    python_engineer = ADAPTER / "agents" / "mainframe_python_backend_engineer.toml"
+    assert python_engineer.is_file()
+    python_data = tomllib.loads(python_engineer.read_text(encoding="utf-8"))
+    assert "model" not in python_data
+    assert "model_reasoning_effort" not in python_data
+    assert "load and follow the `mainframe-python-backend` skill" in (
+        python_data["developer_instructions"]
+    )
+    assert "stage files, commit, push" in python_data["developer_instructions"]
     frontend_engineer = ADAPTER / "agents" / "mainframe_react_frontend_engineer.toml"
     assert frontend_engineer.is_file()
     frontend_data = tomllib.loads(frontend_engineer.read_text(encoding="utf-8"))
@@ -553,6 +582,19 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "references/testing.md" in typescript_body
     assert "mainframe-ticket" in typescript_body
     assert (typescript_skill / "scripts" / "recon.js").is_file()
+
+    python_skill = ADAPTER / "skills" / "mainframe-python-backend"
+    python_body = (python_skill / "SKILL.md").read_text(encoding="utf-8")
+    python_metadata = (python_skill / "agents" / "openai.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-python-backend" in python_body
+    assert "scripts/recon.py" in python_body
+    assert "references/testing.md" in python_body
+    assert "references/postgres-concurrency.md" in python_body
+    assert "mainframe-ticket" in python_body
+    assert "allow_implicit_invocation" not in python_metadata
+    assert (python_skill / "scripts" / "recon.py").is_file()
 
     frontend_skill = ADAPTER / "skills" / "mainframe-frontend"
     frontend_body = (frontend_skill / "SKILL.md").read_text(encoding="utf-8")
@@ -652,6 +694,54 @@ def test_frontend_recon_routes_react_and_shadcn_context():
     )
     assert absent.returncode == 0, absent.stderr
     assert json.loads(absent.stdout)["shadcn"] is False
+
+
+def test_python_recon_reports_declared_stack_without_importing_it():
+    package = pathlib.Path(tempfile.mkdtemp())
+    (package / "pyproject.toml").write_text(
+        """[project]
+requires-python = ">=3.12"
+dependencies = [
+  "FastAPI==0.116.0",
+  "SQLAlchemy>=2.0",
+  "psycopg[binary]>=3.2",
+  "pydantic>=2.11",
+  "pytest>=8.4",
+]
+
+[tool.uv]
+
+[tool.mypy]
+strict = true
+""",
+        encoding="utf-8",
+    )
+    (package / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+
+    recon = subprocess.run(
+        [
+            sys.executable,
+            str(
+                ADAPTER
+                / "skills"
+                / "mainframe-python-backend"
+                / "scripts"
+                / "recon.py"
+            ),
+            str(package),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert recon.returncode == 0, recon.stderr
+    assert "python_requirement: >=3.12" in recon.stdout
+    assert "package_manager: uv" in recon.stdout
+    assert "frameworks: fastapi" in recon.stdout
+    assert "data_access: psycopg+sqlalchemy" in recon.stdout
+    assert "validation: pydantic" in recon.stdout
+    assert "testing: pytest" in recon.stdout
+    assert "type_checker: mypy" in recon.stdout
 
 
 def test_shared_judgment_and_primary_completion_are_separated():

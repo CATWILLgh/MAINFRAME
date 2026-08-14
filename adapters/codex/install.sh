@@ -11,11 +11,13 @@ SKILL_NAMES=(
     mainframe-init
     mainframe-secrets
     mainframe-ticket
+    mainframe-python-backend
     mainframe-typescript-backend
     mainframe-frontend
 )
 AGENT_NAMES=(
     mainframe_researcher
+    mainframe_python_backend_engineer
     mainframe_typescript_backend_engineer
     mainframe_react_frontend_engineer
 )

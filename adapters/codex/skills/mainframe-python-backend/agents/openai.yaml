@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME Python Backend"
+  short_description: "Build and verify Python backend behavior"
+  default_prompt: "Use $mainframe-python-backend to implement this server-side Python change."
