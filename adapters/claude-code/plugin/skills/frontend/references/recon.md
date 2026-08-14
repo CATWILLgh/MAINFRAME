@@ -3,7 +3,7 @@
 Run:
 
 ```bash
-node ~/.claude/skills/mainframe/skills/react-frontend-patterns/recon.js <package-root>
+node "${CLAUDE_SKILL_DIR}/scripts/recon.js" <package-root>
 ```
 
 The report is evidence for routing, not a decision engine. Dependency values

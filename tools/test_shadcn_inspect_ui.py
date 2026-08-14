@@ -13,7 +13,7 @@ INSPECTOR = (
     / "claude-code"
     / "plugin"
     / "skills"
-    / "shadcn"
+    / "frontend"
     / "scripts"
     / "inspect-ui.mjs"
 )

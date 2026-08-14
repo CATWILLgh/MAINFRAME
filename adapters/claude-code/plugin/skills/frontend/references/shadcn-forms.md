@@ -1,6 +1,7 @@
 # Forms
 
-This file governs shadcn markup. Form state, schema validation, server contracts, and tests remain in `react-frontend-patterns`.
+This file governs shadcn markup. Form state, schema validation, server
+contracts, and tests remain in the core `frontend` route.
 
 - Prefer the installed Field, FieldGroup, FieldSet, and FieldLegend primitives over layout-only wrappers.
 - A visible label should identify each control. Instructions and errors must be programmatically associated with it.

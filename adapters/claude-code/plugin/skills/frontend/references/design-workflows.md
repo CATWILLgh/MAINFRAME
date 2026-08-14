@@ -22,6 +22,6 @@ Record the current user goal, content, constraints, and failure states before ch
 
 ## Audit
 
-Observe rather than restyle by preference. Report a concrete mismatch between user purpose and evidence: blocked task, missing state, inaccessible interaction, inconsistent primitive, broken hierarchy, responsive failure, or needless cognitive load. Do not convert taste into a defect or combine unlike findings into a pseudo-precise score. Use [review and evidence](quality/review-and-evidence.md).
+Observe rather than restyle by preference. Report a concrete mismatch between user purpose and evidence: blocked task, missing state, inaccessible interaction, inconsistent primitive, broken hierarchy, responsive failure, or needless cognitive load. Do not convert taste into a defect or combine unlike findings into a pseudo-precise score. Use [review and evidence](review-and-evidence.md).
 
 For every branch, verify the changed journey rather than only the default screenshot. Keep the iteration bounded: inspect representative states, fix one coherent batch, and verify the affected path again. If project evidence and an external convention conflict, preserve the product contract unless it is unsafe, inaccessible, or the task includes changing it.

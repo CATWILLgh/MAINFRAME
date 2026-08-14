@@ -33,7 +33,11 @@ Intentional moves may include an oversized typographic headline, an asymmetric s
 
 ## Reuse — one component per role
 
-Don't ship a second implementation of a component that already exists — two near-identical buttons are a slop tell and a maintenance cost. The operative rule and mechanism (reuse the owned component or extend its variants) live in [shadcn](../shadcn/SKILL.md); placement follows the project's existing [architecture](../react-frontend-patterns/architecture.md). Here it is a consistency concern.
+Don't ship a second implementation of a component that already exists — two
+near-identical buttons are a slop tell and a maintenance cost. The operative
+reuse and variant rules live in the [shadcn composition](shadcn-composition.md)
+route; placement follows the project's existing [architecture](architecture.md).
+Here it is a consistency concern.
 
 ## Sources
 

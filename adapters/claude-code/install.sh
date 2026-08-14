@@ -656,7 +656,7 @@ cleanup_stale_post_migration() {
         code-audit curl-requests git-conventional-commits-ru nestjs-backend-patterns
         nextjs-backend-patterns
         no-suppression-markers ops-app-server-safety python-backend-patterns
-        react-frontend-patterns secrets-handling severity-calibration shadcn
+        frontend-design react-frontend-patterns secrets-handling severity-calibration shadcn
         surface-ticket ticket task-workflow testing-strategy
     )
     local stale_agents=(

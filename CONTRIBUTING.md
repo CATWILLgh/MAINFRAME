@@ -22,7 +22,7 @@ You now have an independent hub. Shape it freely. Pull from upstream selectively
 Every artifact the hub ships (whether under `adapters/claude-code/plugin/` or `adapters/claude-code/export/`) must hold these:
 
 ### 1. Project-agnostic
-No hardcoded project names, stacks, paths, or domains in any artifact. Stack-specific patterns live in stack-specific skills (e.g. `react-frontend-patterns`), NOT in the umbrella `CLAUDE.md`.
+No hardcoded project names, stacks, paths, or domains in any artifact. Stack-specific patterns live in stack-specific skills (e.g. `frontend`), NOT in the umbrella `CLAUDE.md`.
 
 **Check before contributing**: would this be useful, neutral, or harmful in a random project that doesn't use the named stack? Useful or neutral — ship. Harmful or noise — cut, or move into a stack-specific skill.
 

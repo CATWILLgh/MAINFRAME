@@ -13,7 +13,8 @@ RECON = (
     / "claude-code"
     / "plugin"
     / "skills"
-    / "react-frontend-patterns"
+    / "frontend"
+    / "scripts"
     / "recon.js"
 )
 

@@ -587,7 +587,7 @@ def test_testing_context_preserves_role_boundaries():
     profiles = {
         "mainframe-python-backend-engineer.md": "mainframe:python-backend-patterns",
         "mainframe-typescript-backend-engineer.md": "mainframe:typescript-backend-patterns",
-        "mainframe-react-frontend-engineer.md": "mainframe:react-frontend-patterns",
+        "mainframe-react-frontend-engineer.md": "mainframe:frontend",
     }
     for filename, profile_skill in profiles.items():
         body = (AGENTS / filename).read_text(encoding="utf-8")
@@ -685,21 +685,17 @@ def test_testing_context_preserves_role_boundaries():
         r"^skills:\n((?:  - .+\n)+)", react_agent, re.MULTILINE
     ).group(1)
     for expected in (
-        "mainframe:react-frontend-patterns",
-        "mainframe:frontend-design",
-        "mainframe:shadcn",
+        "mainframe:frontend",
         "mainframe:ticket",
     ):
         assert expected in react_preloads
-    for skill_name in ("react-frontend-patterns", "shadcn", "frontend-design"):
-        skill_body = (PLUGIN / "skills" / skill_name / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        assert "disable-model-invocation: true" not in skill_body
-    react_skill = (
-        PLUGIN / "skills" / "react-frontend-patterns" / "SKILL.md"
-    ).read_text(encoding="utf-8")
-    assert "[testing.md](testing.md)" in react_skill
+    for removed in ("react-frontend-patterns", "shadcn", "frontend-design"):
+        assert not (PLUGIN / "skills" / removed).exists()
+    react_skill = (PLUGIN / "skills" / "frontend" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    assert "disable-model-invocation: true" not in react_skill
+    assert "[testing](references/testing.md)" in react_skill
     assert "does not mandate FSD" in react_skill
     assert "concrete adjacent observation" in react_agent
     assert "without investigating it" in react_agent
@@ -711,18 +707,16 @@ def test_testing_context_preserves_role_boundaries():
     assert "Complete the assigned behavior" in react_skill
     assert "deferred in-scope work as a substitute" in react_skill
 
-    design_skill = (PLUGIN / "skills" / "frontend-design" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    for route in ("modes/operate.md", "modes/persuade.md", "modes/read.md", "modes/experience.md"):
-        assert route in design_skill
-    assert "quality/flows-and-feedback.md" in design_skill
-
-    shadcn_skill = (PLUGIN / "skills" / "shadcn" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    assert "scripts/inspect-ui.mjs" in shadcn_skill
-    assert '"shadcn": false' in shadcn_skill
+    for route in (
+        "references/mode-operate.md",
+        "references/mode-persuade.md",
+        "references/mode-read.md",
+        "references/mode-experience.md",
+    ):
+        assert route in react_skill
+    assert "references/flows-and-feedback.md" in react_skill
+    assert "scripts/inspect-ui.mjs" in react_skill
+    assert '"shadcn": false' in react_skill
 
     observation = (
         PLUGIN / "skills" / "ticket" / "record-observation.md"
