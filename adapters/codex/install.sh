@@ -14,12 +14,14 @@ SKILL_NAMES=(
     mainframe-python-backend
     mainframe-typescript-backend
     mainframe-frontend
+    mainframe-testing-strategy
 )
 AGENT_NAMES=(
     mainframe_researcher
     mainframe_python_backend_engineer
     mainframe_typescript_backend_engineer
     mainframe_react_frontend_engineer
+    mainframe_test_auditor
 )
 SOURCE_AGENTS="${ADAPTER_ROOT}/export/AGENTS.md"
 TARGET_AGENTS="${CODEX_DIR}/AGENTS.md"

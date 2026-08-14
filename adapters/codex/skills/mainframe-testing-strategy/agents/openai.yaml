@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME Testing Strategy"
+  short_description: "Design or audit economical regression evidence"
+  default_prompt: "Use $mainframe-testing-strategy to audit this test suite and its regression evidence."

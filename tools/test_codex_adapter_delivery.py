@@ -59,11 +59,13 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-python-backend" in proc.stdout
     assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe-frontend" in proc.stdout
+    assert "mainframe-testing-strategy" in proc.stdout
     assert "mainframe.rules" in proc.stdout
     assert "mainframe_researcher.toml" in proc.stdout
     assert "mainframe_python_backend_engineer.toml" in proc.stdout
     assert "mainframe_typescript_backend_engineer.toml" in proc.stdout
     assert "mainframe_react_frontend_engineer.toml" in proc.stdout
+    assert "mainframe_test_auditor.toml" in proc.stdout
     assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
@@ -90,6 +92,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
+        "mainframe-testing-strategy",
     ):
         target = home / ".agents" / "skills" / name
         assert target.is_symlink()
@@ -165,6 +168,31 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert frontend_data["sandbox_mode"] == "workspace-write"
     assert frontend_data["web_search"] == "live"
     assert frontend_data["features"]["apps"] is False
+    test_auditor = codex_dir / "agents" / "mainframe_test_auditor.toml"
+    test_auditor_state = (
+        codex_dir / ".mainframe-agent-mainframe_test_auditor-state"
+    )
+    assert test_auditor.is_symlink()
+    assert test_auditor.resolve() == (
+        ADAPTER / "agents" / "mainframe_test_auditor.toml"
+    )
+    assert test_auditor_state.is_file()
+    test_auditor_data = tomllib.loads(test_auditor.read_text(encoding="utf-8"))
+    assert test_auditor_data["name"] == "mainframe_test_auditor"
+    assert "model" not in test_auditor_data
+    assert "model_reasoning_effort" not in test_auditor_data
+    assert "sandbox_mode" not in test_auditor_data
+    assert test_auditor_data["default_permissions"] == "mainframe-test-auditor"
+    auditor_permissions = test_auditor_data["permissions"]["mainframe-test-auditor"]
+    assert auditor_permissions["filesystem"][":workspace_roots"]["."] == "read"
+    assert (
+        auditor_permissions["filesystem"][":workspace_roots"][
+            "docs/tickets/open"
+        ]
+        == "write"
+    )
+    assert test_auditor_data["web_search"] == "live"
+    assert test_auditor_data["features"]["apps"] is False
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
     assert config.is_file() and config_state.is_file()
@@ -206,6 +234,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not python_state.exists()
     assert not frontend_engineer.exists() and not frontend_engineer.is_symlink()
     assert not frontend_state.exists()
+    assert not test_auditor.exists() and not test_auditor.is_symlink()
+    assert not test_auditor_state.exists()
     assert not config.exists()
     assert not config_state.exists()
     assert helper.is_symlink()
@@ -216,6 +246,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
+        "mainframe-testing-strategy",
     ):
         target = home / ".agents" / "skills" / name
         assert not target.exists() and not target.is_symlink()
@@ -543,6 +574,17 @@ def test_baseline_uses_native_standalone_layers_only():
         frontend_data["developer_instructions"]
     )
     assert "stage files, commit, push" in frontend_data["developer_instructions"]
+    test_auditor = ADAPTER / "agents" / "mainframe_test_auditor.toml"
+    assert test_auditor.is_file()
+    test_auditor_data = tomllib.loads(test_auditor.read_text(encoding="utf-8"))
+    assert "model" not in test_auditor_data
+    assert "model_reasoning_effort" not in test_auditor_data
+    assert "sandbox_mode" not in test_auditor_data
+    assert "load and follow the `mainframe-testing-strategy` skill" in (
+        test_auditor_data["developer_instructions"]
+    )
+    assert "Do not implement fixes" in test_auditor_data["developer_instructions"]
+    assert test_auditor_data["default_permissions"] == "mainframe-test-auditor"
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
     assert 'pattern = ["secret"]' in (
         ADAPTER / "rules" / "mainframe.rules"
@@ -611,6 +653,17 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "allow_implicit_invocation" not in frontend_metadata
     assert (frontend_skill / "scripts" / "recon.js").is_file()
     assert (frontend_skill / "scripts" / "inspect-ui.mjs").is_file()
+
+    testing_skill = ADAPTER / "skills" / "mainframe-testing-strategy"
+    testing_body = (testing_skill / "SKILL.md").read_text(encoding="utf-8")
+    testing_metadata = (testing_skill / "agents" / "openai.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-testing-strategy" in testing_body
+    assert "cheapest faithful observation" in testing_body
+    assert "real local PostgreSQL" in testing_body
+    assert "mainframe-ticket" in testing_body
+    assert "allow_implicit_invocation" not in testing_metadata
 
 
 def test_frontend_recon_routes_react_and_shadcn_context():
