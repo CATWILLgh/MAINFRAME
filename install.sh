@@ -21,7 +21,8 @@ Targets:
 
 Adapter options are forwarded unchanged to its installer.
 Use --yes to approve a required Claude Code update without an interactive prompt.
-For Codex, --yes permits a backed-up replacement of an existing global AGENTS.md.
+For Codex, --yes permits backed-up replacement of conflicting managed delivery
+targets such as global instructions, agents, rules, and the credentials-index link.
 EOF
 }
 

@@ -104,6 +104,8 @@ Start a new Claude Code session after installation. For a MAINFRAME-guided prima
 ```
 
 In Codex, invoke `$mainframe-init` explicitly in the task.
+To resolve one ticket that needs a product or infrastructure decision, invoke
+`$mainframe-init` and name that ticket's four-character id.
 For a ticket pipeline run, start native Goal mode and explicitly invoke
 `$mainframe-tickets-find`, `$mainframe-tickets-refine`,
 `$mainframe-tickets-implement`, or `$mainframe-tickets-verify` with an optional
@@ -210,7 +212,7 @@ Each adapter has its own delivery logic. The Codex adapter intentionally starts 
 - **Linux** is expected to work with the Bash installer, but receives less real-world use.
 - **Windows** is not currently supported.
 - The main sessions are tuned through actual use with Claude Opus; specialist profiles choose their own configured model and effort.
-- The initial Codex baseline was verified with Desktop `26.803.61601`, its bundled `codex-cli 0.147.0-alpha.6.5`, and standalone CLI `0.147.0`; real usage evidence is still being collected.
+- The Codex baseline was verified with Desktop `26.810.52044`, its bundled `codex-cli 0.148.0-alpha.9`, and standalone CLI `0.147.0`; real usage evidence is still being collected.
 
 Other combinations may work, but they should be treated as unverified until someone tests them in real sessions.
 
