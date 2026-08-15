@@ -236,6 +236,7 @@ check_sources() {
     local name path
     for path in "$SOURCE_AGENTS" \
         "${ADAPTER_ROOT}/skills/mainframe-init/SKILL.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-init/references/ticket-decision.md" \
         "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
         "${ADAPTER_ROOT}/skills/mainframe-ticket/SKILL.md" \
         "${ADAPTER_ROOT}/skills/mainframe-ticket/agents/openai.yaml" \

@@ -1216,6 +1216,18 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "allow_implicit_invocation" not in python_metadata
     assert (python_skill / "scripts" / "recon.py").is_file()
 
+    init_skill = ADAPTER / "skills" / "mainframe-init"
+    init_body = (init_skill / "SKILL.md").read_text(encoding="utf-8")
+    ticket_decision = (
+        init_skill / "references" / "ticket-decision.md"
+    ).read_text(encoding="utf-8")
+    assert "one named ticket" in init_body
+    assert "references/ticket-decision.md" in init_body
+    assert "docs/tickets/open/needs-decision/" in ticket_decision
+    assert "mainframe-testing-strategy" in ticket_decision
+    assert "/goal Implement ticket <id>" in ticket_decision
+    assert "docs/tickets/open/needs-verification/" in ticket_decision
+
     frontend_skill = ADAPTER / "skills" / "mainframe-frontend"
     frontend_body = (frontend_skill / "SKILL.md").read_text(encoding="utf-8")
     frontend_metadata = (frontend_skill / "agents" / "openai.yaml").read_text(

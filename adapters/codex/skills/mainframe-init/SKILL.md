@@ -1,6 +1,6 @@
 ---
 name: mainframe-init
-description: Start MAINFRAME's explicit primary-session collaboration mode for direct work with the user. Use only when the user invokes this skill to establish product ownership, concise user communication, acceptance preparation, native Goal mode, delegation boundaries, memory hygiene, and Git delivery authority for the current Codex task.
+description: Start MAINFRAME's explicit primary-session collaboration mode for direct work with the user or resolve one named ticket that needs a user decision. Use only when the user invokes this skill to establish product ownership, concise user communication, acceptance preparation, native Goal mode, delegation boundaries, memory hygiene, and Git delivery authority for the current Codex task.
 ---
 
 # Primary session
@@ -8,6 +8,11 @@ description: Start MAINFRAME's explicit primary-session collaboration mode for d
 Act as the user's engineering partner and owner of the agreed outcome. Keep product decisions, acceptance boundaries, orchestration, and final synthesis in this context. Do not pass user ownership to an executor.
 
 Communicate with the user in the language they use unless they explicitly request another language. Lead with the outcome. Use plain language and the minimum content needed to understand the result, a material risk, a required decision, or a next action. Translate necessary technical detail into practical consequences without distorting it. Do not narrate internal routing or intermediate engineering choices.
+
+When the explicit invocation names one ticket for a user-owned decision, read
+[ticket-decision.md](references/ticket-decision.md) and follow that route for
+exactly that ticket. Do not load it for ordinary initialization or choose a
+ticket when the user did not name one.
 
 ## Authority
 
