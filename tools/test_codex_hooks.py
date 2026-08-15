@@ -513,7 +513,8 @@ def test_current_edit_is_reported_once_and_unresolved_residue_blocks_stop():
     assert proc.returncode == 0
     context = result["hookSpecificOutput"]["additionalContext"]
     assert context.count("unfinished-code or diagnostic residue") == 1
-    assert "temporary plan, phase, step" in context
+    assert "example.go" in context
+    assert "TODO phase 1" not in context
     assert len(context) < 4000
 
     stop = {
@@ -524,6 +525,9 @@ def test_current_edit_is_reported_once_and_unresolved_residue_blocks_stop():
     _, blocked = _run_hook(stop, state)
     assert blocked["decision"] == "block"
     assert "TODO/FIXME/HACK/XXX" in blocked["reason"]
+    assert "example.go" in blocked["reason"]
+    assert "1 unfinished-code or diagnostic finding" in blocked["reason"]
+    assert "TODO phase 1" not in blocked["reason"]
 
     stop["stop_hook_active"] = True
     _, loop_guard = _run_hook(stop, state)
@@ -559,6 +563,62 @@ def test_later_edit_resolves_owned_residue_without_scanning_old_project_debt():
     }
     _, result = _run_hook(stop, state)
     assert result is None
+
+
+def test_suppression_gate_counts_identical_findings_in_multiple_files():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    sources = [root / "one.go", root / "two.go"]
+    for index, source in enumerate(sources):
+        source.write_text("package example\n", encoding="utf-8")
+        _run_hook(
+            _patch_payload(
+                root, source.name, event="PreToolUse", tool_use=f"pre-{index}"
+            ),
+            state,
+        )
+        source.write_text("package example\n// TODO same text\n", encoding="utf-8")
+        _run_hook(
+            _patch_payload(
+                root, source.name, event="PostToolUse", tool_use=f"pre-{index}"
+            ),
+            state,
+        )
+
+    stop = {
+        "session_id": "session", "turn_id": "turn", "agent_id": "",
+        "hook_event_name": "Stop", "cwd": str(root),
+        "stop_hook_active": False,
+    }
+    _, blocked = _run_hook(stop, state)
+    reason = blocked["reason"]
+    assert "2 unfinished-code or diagnostic findings" in reason
+    assert "one.go" in reason and "two.go" in reason
+    assert "TODO same text" not in reason
+
+
+def test_comment_markers_inside_source_strings_do_not_block_stop():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "labels.ts"
+    source.write_text("export const labels = [];\n", encoding="utf-8")
+    _run_hook(_patch_payload(root, source.name, event="PreToolUse"), state)
+    source.write_text(
+        'export const labels = ["TODO", "eslint-disable", "# noqa"];\n',
+        encoding="utf-8",
+    )
+    _, noted = _run_hook(
+        _patch_payload(root, source.name, event="PostToolUse"), state
+    )
+    assert noted is None
+
+    stop = {
+        "session_id": "session", "turn_id": "turn", "agent_id": "",
+        "hook_event_name": "SubagentStop", "cwd": str(root),
+        "stop_hook_active": False,
+    }
+    _, blocked = _run_hook(stop, state)
+    assert blocked is None
 
 
 def test_deleting_a_current_session_file_clears_its_findings():

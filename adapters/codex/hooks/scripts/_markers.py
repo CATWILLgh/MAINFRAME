@@ -9,6 +9,8 @@ Stdlib only.
 
 import re
 
+import comment_extract as ce
+
 # (label, compiled regex). Suppression / placeholder markers — language-agnostic.
 MARKERS = [
     ("TODO/FIXME/HACK/XXX comment", re.compile(r"\b(?:TODO|FIXME|HACK|XXX)\b", re.IGNORECASE)),
@@ -21,6 +23,12 @@ MARKERS = [
      re.compile(r"(?:\.(?:skip|only)\s*\(|\b(?:xit|fit|xdescribe|fdescribe)\s*\()")),
     ("pytest/unittest skip", re.compile(r"@(?:pytest\.mark\.skip|unittest\.skip)")),
 ]
+
+# These forms only have meaning inside comments/docstrings. Searching the raw
+# file would turn ordinary strings such as `"TODO"` or `"# noqa"` into a
+# completion-blocking false positive.
+COMMENT_MARKERS = MARKERS[:6]
+CODE_MARKERS = MARKERS[6:]
 
 # Debug residue: (label, compiled regex, extensions). Always-residue subset only;
 # console.log / print() are excluded (the global rule exempts CLI output and
@@ -42,7 +50,11 @@ DEBUG_RESIDUE = [
 
 def marker_counts(text, file_ext, file_path=None):
     """Count each disallowed marker label in one source text."""
-    counts = {label: len(rx.findall(text)) for label, rx in MARKERS}
+    comments = "\n".join(value for _, value, _ in ce.extract(text, file_ext))
+    counts = {
+        label: len(rx.findall(comments)) for label, rx in COMMENT_MARKERS
+    }
+    counts.update({label: len(rx.findall(text)) for label, rx in CODE_MARKERS})
     counts.update({
         label: len(rx.findall(text))
         for label, rx, extensions in DEBUG_RESIDUE

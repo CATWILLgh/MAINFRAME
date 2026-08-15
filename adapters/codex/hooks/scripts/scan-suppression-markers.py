@@ -42,6 +42,17 @@ def _collect(tool_name, tool_input, file_ext):
     return {}
 
 
+def _display_path(file_path, cwd):
+    path = os.path.realpath(file_path)
+    base = os.path.realpath(cwd or ".")
+    try:
+        if os.path.commonpath((base, path)) == base:
+            return os.path.relpath(path, base)
+    except (OSError, ValueError):
+        pass
+    return os.path.basename(path)
+
+
 def main():
     payload = load_payload()
     tool_name = payload.get("tool_name", "")
@@ -63,11 +74,12 @@ def main():
         )
     if not newly_owned:
         return
+    location = _display_path(file_path, payload.get("cwd"))
     note = (
-        "This edit introduced disallowed unfinished-code or diagnostic "
-        f"residue: {', '.join(newly_owned)}. Replace it with the complete working "
-        "behavior and the tests the task requires. Deleting the marker alone "
-        "does not resolve this finding. If it only annotated an unrelated "
+        f"This edit added unfinished-code or diagnostic residue in {location}: "
+        f"{', '.join(newly_owned)}. Complete the underlying behavior and its "
+        "relevant verification. Do not merely remove a marker when it identifies "
+        "work required by the current task. If it annotated an unrelated "
         "observation, revert that annotation and record the observation through "
         "the repository ticket workflow without expanding the current scope."
     )
