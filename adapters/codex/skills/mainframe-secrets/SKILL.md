@@ -9,7 +9,7 @@ Use the installed credential mechanism without bringing secret values into model
 
 ## Sources of truth
 
-- Read the [credentials index](~/.codex/credentials-index.md) for service names, credential identifiers, access commands, and non-secret operational notes.
+- Read the [credentials index](../../../../shared/credentials/credentials-index.md) for service names, credential identifiers, access commands, and non-secret operational notes.
 - Treat the index as the only readable credential catalog.
 - Never read, search, print, summarize, or copy the protected store under `~/.config/credentials/`.
 - Use the `secret` helper as the generic value-delivery interface. A native

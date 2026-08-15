@@ -54,7 +54,7 @@ curl --disable -sS --fail-with-body \
 
 Read [`mainframe-secrets`](../mainframe-secrets/SKILL.md) before an authenticated
 request. Use the credential name and header scheme recorded in the
-[credentials index](~/.codex/credentials-index.md);
+[credentials index](../../../../shared/credentials/credentials-index.md);
 do not assume Bearer authentication.
 
 Pass a registered value directly to curl, for example:

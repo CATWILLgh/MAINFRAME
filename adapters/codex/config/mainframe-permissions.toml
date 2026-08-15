@@ -5,7 +5,6 @@ shell_environment_policy.inherit = "core"
 
 permissions.mainframe.description = "Workspace editing with protected credentials and reviewed Git delivery and external access."
 permissions.mainframe.extends = ":workspace"
-permissions.mainframe.filesystem."~/.codex/credentials-index.md" = "read"
 permissions.mainframe.filesystem."@MAINFRAME_REPO@/shared/credentials/credentials-index.md" = "read"
 permissions.mainframe.filesystem."@MAINFRAME_REPO@/shared/credentials/secret" = "read"
 permissions.mainframe.filesystem."~/.local/bin/secret" = "read"

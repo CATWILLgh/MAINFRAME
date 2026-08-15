@@ -438,6 +438,12 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert config_data["features"]["network_proxy"] is True
     assert config_data["shell_environment_policy"]["inherit"] == "core"
     assert config_data["permissions"]["mainframe"]["extends"] == ":workspace"
+    assert config_data["permissions"]["mainframe"]["filesystem"][
+        str((SHARED / "credentials-index.md").resolve())
+    ] == "read"
+    assert "~/.codex/credentials-index.md" not in config_data["permissions"]["mainframe"][
+        "filesystem"
+    ]
     assert config_data["permissions"]["mainframe"]["filesystem"]["~/.config/credentials"] == "deny"
     assert config_data["permissions"]["mainframe"]["network"]["domains"] == {
         "localhost": "allow",
@@ -1250,7 +1256,11 @@ def test_baseline_uses_native_standalone_layers_only():
     curl_skill = ADAPTER / "skills" / "mainframe-curl-requests"
     curl_body = (curl_skill / "SKILL.md").read_text(encoding="utf-8")
     assert "name: mainframe-curl-requests" in curl_body
-    assert "~/.codex/credentials-index.md" in curl_body
+    assert "../../../../shared/credentials/credentials-index.md" in curl_body
+    for skill in (ADAPTER / "skills" / "mainframe-secrets", curl_skill):
+        assert (
+            skill / "../../../../shared/credentials/credentials-index.md"
+        ).resolve() == (SHARED / "credentials-index.md").resolve()
     assert (curl_skill / "agents" / "openai.yaml").is_file()
 
     server_skill = ADAPTER / "skills" / "mainframe-ops-app-server-safety"
