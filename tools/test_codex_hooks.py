@@ -22,6 +22,8 @@ ADAPTER = ROOT / "adapters" / "codex"
 HOOK = ADAPTER / "hooks" / "scripts" / "mainframe-hook.py"
 HOOKS_SOURCE = ADAPTER / "hooks" / "hooks.json"
 MANAGER = ADAPTER / "scripts" / "manage-hooks.py"
+PYTHON_SCAN = ADAPTER / "hooks" / "scripts" / "python-security-scan.py"
+PYTHON_STOP = ADAPTER / "hooks" / "scripts" / "python-security-stop-gate.py"
 
 
 def _state_env(root: Path) -> dict[str, str]:
@@ -51,6 +53,53 @@ def _run_hook(
     )
     output = json.loads(proc.stdout) if proc.stdout.strip() else None
     return proc, output
+
+
+def _run_python_hook(payload: dict, state: Path) -> tuple[subprocess.CompletedProcess, dict | None]:
+    script = PYTHON_STOP if payload["hook_event_name"] == "SubagentStop" else PYTHON_SCAN
+    proc = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env=_state_env(state),
+    )
+    output = json.loads(proc.stdout) if proc.stdout.strip() else None
+    return proc, output
+
+
+def _python_edit_payload(
+    root: Path, source: Path, old: str, new: str, *, session: str = "python",
+    agent: str = "python-child",
+) -> dict:
+    source.write_text(new, encoding="utf-8")
+    return {
+        "session_id": session,
+        "turn_id": "turn",
+        "agent_id": agent,
+        "agent_type": "mainframe_python_backend_engineer",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "cwd": str(root),
+        "tool_input": {
+            "file_path": str(source),
+            "old_string": old,
+            "new_string": new,
+        },
+    }
+
+
+def _python_stop_payload(root: Path, *, session: str = "python", agent: str = "python-child") -> dict:
+    return {
+        "session_id": session,
+        "turn_id": "turn",
+        "agent_id": agent,
+        "agent_type": "mainframe_python_backend_engineer",
+        "hook_event_name": "SubagentStop",
+        "cwd": str(root),
+        "stop_hook_active": False,
+    }
 
 
 def _tool_payload(
@@ -666,6 +715,124 @@ def test_high_confidence_code_residue_still_blocks_stop():
     }
     _, blocked = _run_hook(stop, state)
     assert "skipped/focused test" in blocked["reason"]
+
+
+def test_python_security_gate_blocks_owned_finding_and_clears_after_fix():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "unsafe.py"
+    safe = "def parse(value):\n    return value\n"
+    unsafe = "def parse(value):\n    return eval(value)\n"
+    source.write_text(safe, encoding="utf-8")
+
+    proc, noted = _run_python_hook(
+        _python_edit_payload(root, source, safe, unsafe), state
+    )
+    assert proc.returncode == 0
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "1 new issue" in context
+    assert "unsafe.py:2" in context and "S307" in context
+    assert "return eval(value)" not in context
+
+    _, blocked = _run_python_hook(_python_stop_payload(root), state)
+    assert blocked["decision"] == "block"
+    assert "1 unresolved issue" in blocked["reason"]
+    assert "unsafe.py:2" in blocked["reason"]
+    assert "return eval(value)" not in blocked["reason"]
+
+    _, resolved = _run_python_hook(
+        _python_edit_payload(root, source, unsafe, safe), state
+    )
+    assert resolved is None
+    _, clear = _run_python_hook(_python_stop_payload(root), state)
+    assert clear is None
+
+
+def test_python_security_gate_does_not_claim_preexisting_identical_finding():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "duplicates.py"
+    old = "def first(value):\n    return eval(value)\n"
+    new = old + "\ndef second(value):\n    return eval(value)\n"
+    source.write_text(old, encoding="utf-8")
+
+    _, noted = _run_python_hook(
+        _python_edit_payload(root, source, old, new), state
+    )
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "1 new issue" in context
+    assert "1 additional matching finding" in context
+    assert "duplicates.py:2" not in context
+
+    _, blocked = _run_python_hook(_python_stop_payload(root), state)
+    reason = blocked["reason"]
+    assert "1 unresolved issue" in reason
+    assert "1 additional matching finding" in reason
+    assert "duplicates.py:2" not in reason
+
+
+def test_python_global_gate_ignores_profile_quality_and_test_literals():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "ordinary.py"
+    old = "value = 1\n"
+    new = (
+        "import random\n"
+        "import pickle\n"
+        "import subprocess\n"
+        "from fastapi import Depends\n\n"
+        "def endpoint(user=Depends(get_user), values=[]):\n"
+        "    password = 'test-password'\n"
+        "    subprocess.run('echo ok', shell=True)\n"
+        "    cached = pickle.loads(blob)\n"
+        "    return user, values, password, cached, random.randint(1, 10)\n"
+    )
+    source.write_text(old, encoding="utf-8")
+
+    proc, noted = _run_python_hook(
+        _python_edit_payload(root, source, old, new), state
+    )
+    assert proc.returncode == 0 and noted is None
+    _, blocked = _run_python_hook(_python_stop_payload(root), state)
+    assert blocked is None
+
+
+def test_python_global_gate_is_not_disabled_by_project_ruff_excludes():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "excluded.py"
+    (root / "pyproject.toml").write_text(
+        '[tool.ruff]\nexclude = ["excluded.py"]\n', encoding="utf-8"
+    )
+    safe = "def parse(value):\n    return value\n"
+    unsafe = "def parse(value):\n    return eval(value)\n"
+    source.write_text(safe, encoding="utf-8")
+
+    _, noted = _run_python_hook(
+        _python_edit_payload(root, source, safe, unsafe), state
+    )
+    assert "S307" in noted["hookSpecificOutput"]["additionalContext"]
+
+
+def test_python_global_gate_blocks_dynamic_shell_commands_only():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "shells.py"
+    old = "value = 1\n"
+    unsafe = (
+        "import os\n"
+        "import subprocess\n\n"
+        "subprocess.run(command, shell=True)\n"
+        "os.system(other_command)\n"
+    )
+    source.write_text(old, encoding="utf-8")
+
+    _, noted = _run_python_hook(
+        _python_edit_payload(root, source, old, unsafe), state
+    )
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "2 new issue" in context
+    assert "S602" in context and "S605" in context
 
 
 def test_deleting_a_current_session_file_clears_its_findings():

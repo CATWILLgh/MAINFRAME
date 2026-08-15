@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report newly introduced or first-observed Python safety findings once."""
+"""Report newly introduced high-confidence Python safety findings once."""
 
 import os
 import sys
@@ -43,15 +43,45 @@ def _before_after(tool_name, tool_input, file_path):
     return read_git_head(file_path) or "", after
 
 
-def _format(path, rows, cwd):
-    display_path = os.path.relpath(path, cwd)
-    lines = [
-        f"  {display_path}:{row['row']} — {row['code']}: {row['message']}"
-        for row in rows[:_MAX_ROWS]
-    ]
-    if len(rows) > _MAX_ROWS:
-        lines.append(f"  …and {len(rows) - _MAX_ROWS} more")
-    return "\n".join(lines)
+def _display_path(path, cwd):
+    real_path = os.path.realpath(path)
+    base = os.path.realpath(cwd or ".")
+    try:
+        if os.path.commonpath((base, real_path)) == base:
+            return os.path.relpath(real_path, base)
+    except (OSError, ValueError):
+        pass
+    return os.path.basename(real_path)
+
+
+def _format(path, rows, before_counts, delta_counts, cwd):
+    display_path = _display_path(path, cwd)
+    by_key = {}
+    for row in rows:
+        by_key.setdefault(row["key"], []).append(row)
+    lines = []
+    for key, added_count in delta_counts.items():
+        matching = by_key.get(key, [])
+        if not matching or added_count <= 0:
+            continue
+        representative = matching[0]
+        if before_counts.get(key, 0) == 0:
+            lines.extend(
+                f"  {display_path}:{row['row']} — "
+                f"{row['code']}: {row['message']}"
+                for row in matching[:added_count]
+            )
+        else:
+            suffix = "s" if added_count != 1 else ""
+            lines.append(
+                f"  {display_path} — {representative['code']}: "
+                f"{added_count} additional matching finding{suffix}"
+            )
+    if len(lines) > _MAX_ROWS:
+        omitted = len(lines) - _MAX_ROWS
+        lines = lines[:_MAX_ROWS]
+        lines.append(f"  …and {omitted} more locations")
+    return "\n".join(lines[:_MAX_ROWS + 1])
 
 
 def main():
@@ -89,15 +119,19 @@ def main():
     if delta_added:
         wanted = set(delta_added)
         rows = [row for row in after_rows if row["key"] in wanted]
+        reported_deltas = {
+            key: count for key, count in delta_counts.items() if key in wanted
+        }
+        count = sum(reported_deltas.values())
         note = (
-            f"Python safety check found {len(delta_added)} new issue(s):\n" +
-            _format(file_path, rows, cwd) +
+            f"Python safety check found {count} new issue(s):\n" +
+            _format(file_path, rows, before_counts, reported_deltas, cwd) +
             "\nReview and resolve the underlying code before completion; "
             "suppressing the diagnostic does not resolve it."
         )
         emit_note("PostToolUse", note)
         log_hook_signal(
-            __file__, "python-safety", "noted", len(delta_added), payload,
+            __file__, "python-safety", "noted", count, payload,
             context=note,
         )
 

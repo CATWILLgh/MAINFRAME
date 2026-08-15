@@ -8,11 +8,9 @@ import subprocess
 from collections import Counter
 
 
-CURATED_RULES = (
-    "S102,S307,S301,S506,S602,S604,S501,S324,S311,S105,S106,S107,"
-    "B006,B008,B011,B904"
-)
+CURATED_RULES = "S102,S307,S506,S602,S605,S501,S324"
 CURATED_CODES = frozenset(CURATED_RULES.split(","))
+SHELL_RULES = frozenset({"S602", "S605"})
 PY_EXTS = (".py", ".pyi")
 
 
@@ -46,8 +44,8 @@ def findings(text, file_ext, file_path=None):
         return []
     path = os.path.realpath(file_path or f"stdin{file_ext}")
     proc = subprocess.run(
-        [_ruff(), "check", "--select", CURATED_RULES, "--output-format", "json",
-         "--no-cache", "--ignore-noqa", "--force-exclude",
+        [_ruff(), "check", "--isolated", "--select", CURATED_RULES,
+         "--output-format", "json", "--no-cache", "--ignore-noqa",
          "--stdin-filename", path, "-"],
         input=text, capture_output=True, text=True, timeout=10,
         cwd=os.path.dirname(path) or ".",
@@ -68,6 +66,8 @@ def findings(text, file_ext, file_path=None):
         row = int((item.get("location") or {}).get("row") or 0)
         end_row = int((item.get("end_location") or {}).get("row") or row)
         message = (item.get("message") or "").strip()
+        if code in SHELL_RULES and "seems safe" in message:
+            continue
         key = _key(code, message, _source_excerpt(text, row, end_row))
         rows.append({"key": key, "code": code, "row": row,
                      "end_row": end_row, "message": message})

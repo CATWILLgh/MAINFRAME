@@ -32,29 +32,56 @@ def _finding_counts(text, file_ext, file_path=None):
     return counts
 
 
-def _rows(files, keys):
-    rows = []
-    for path in files:
+def _display_path(path, cwd):
+    real_path = os.path.realpath(path)
+    base = os.path.realpath(cwd or ".")
+    try:
+        if os.path.commonpath((base, real_path)) == base:
+            return os.path.relpath(real_path, base)
+    except (OSError, ValueError):
+        pass
+    return os.path.basename(real_path)
+
+
+def _current_findings(details, cwd):
+    locations = []
+    total = 0
+    for path, baselines in details.items():
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
                 text = handle.read()
         except (FileNotFoundError, OSError):
             continue
+        by_key = {}
         for row in _cached_findings(text, ext(path), path):
-            if row["key"] not in keys:
+            by_key.setdefault(row["key"], []).append(row)
+        display_path = _display_path(path, cwd)
+        for key, baseline in baselines.items():
+            rows = by_key.get(key, [])
+            owned = max(0, len(rows) - int(baseline))
+            if not owned:
                 continue
-            rows.append((path, row))
-    return rows
+            total += owned
+            if int(baseline) == 0:
+                locations.extend(
+                    f"{display_path}:{row['row']} — "
+                    f"{row['code']}: {row['message']}"
+                    for row in rows
+                )
+            else:
+                representative = rows[0]
+                suffix = "s" if owned != 1 else ""
+                locations.append(
+                    f"{display_path} — {representative['code']}: "
+                    f"{owned} additional matching finding{suffix}"
+                )
+    return locations, total
 
 
-def _format(rows, cwd):
-    lines = [
-        f"  {os.path.relpath(path, cwd)}:{row['row']} — "
-        f"{row['code']}: {row['message']}"
-        for path, row in rows[:_MAX_ROWS]
-    ]
-    if len(rows) > _MAX_ROWS:
-        lines.append(f"  …and {len(rows) - _MAX_ROWS} more")
+def _format(locations):
+    lines = [f"  {location}" for location in locations[:_MAX_ROWS]]
+    if len(locations) > _MAX_ROWS:
+        lines.append(f"  …and {len(locations) - _MAX_ROWS} more locations")
     return "\n".join(lines)
 
 
@@ -69,22 +96,24 @@ def main():
     agent_id = payload.get("agent_id")
     include_subagents = not bool(agent_id)
 
-    delta_keys, delta_files = unresolved(
+    details = unresolved(
         session_id, agent_id, include_subagents=include_subagents,
-        counter=_finding_counts, namespace="python-delta", include_files=True,
+        counter=_finding_counts, namespace="python-delta", include_details=True,
     )
-    if not delta_keys:
+    if not details:
         return
 
-    delta_rows = _rows(delta_files, delta_keys)
+    locations, count = _current_findings(details, cwd)
+    if not count:
+        return
     reason = (
-        f"Python safety gate: {len(delta_rows)} unresolved issue(s) introduced "
-        "by this session:\n" + _format(delta_rows, cwd) +
+        f"Python safety gate: {count} unresolved issue(s) introduced by this "
+        "session:\n" + _format(locations) +
         "\nResolve the underlying code before completion."
     )
     emitted_reason = emit_block(reason)
     log_hook_signal(
-        __file__, "python-safety", "blocked", len(delta_rows), payload,
+        __file__, "python-safety", "blocked", count, payload,
         context=emitted_reason,
     )
 
