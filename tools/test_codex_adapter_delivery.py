@@ -69,7 +69,8 @@ def _agent_template_data(name, *, home):
 
 
 def _write_fake_codex(
-    path, *, hooks_supported=True, network_proxy_supported=True, feature_rows=0
+    path, *, hooks_supported=True, network_proxy_supported=True, feature_rows=0,
+    require_existing_codex_home=False,
 ):
     hooks_value = "true" if hooks_supported else "false"
     network_proxy_row = (
@@ -79,6 +80,12 @@ def _write_fake_codex(
     )
     path.write_text(
         "#!/bin/sh\n"
+        + (
+            "if [ ! -d \"${CODEX_HOME:-$HOME/.codex}\" ]; then exit 42; fi\n"
+            if require_existing_codex_home
+            else ""
+        )
+        +
         "if [ \"${1:-}\" = --version ]; then echo 'codex-cli 0.147.0'; exit 0; fi\n"
         "if [ \"${1:-}\" = features ] && [ \"${2:-}\" = list ]; then\n"
         "  awk 'BEGIN {\n"
@@ -101,18 +108,24 @@ def _run(
     desktop_hooks_supported=True,
     desktop_network_proxy_supported=True,
     feature_rows=0,
+    require_existing_codex_home=False,
 ):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
     fake_bin.mkdir(exist_ok=True)
     codex = fake_bin / "codex"
     desktop_codex = fake_bin / "codex-desktop"
-    _write_fake_codex(codex, feature_rows=feature_rows)
+    _write_fake_codex(
+        codex,
+        feature_rows=feature_rows,
+        require_existing_codex_home=require_existing_codex_home,
+    )
     _write_fake_codex(
         desktop_codex,
         hooks_supported=desktop_hooks_supported,
         network_proxy_supported=desktop_network_proxy_supported,
         feature_rows=feature_rows,
+        require_existing_codex_home=require_existing_codex_home,
     )
     env = dict(
         os.environ,
@@ -172,6 +185,16 @@ def test_dry_run_reports_direct_cross_surface_delivery():
 
 def test_preflight_consumes_the_complete_feature_list():
     proc, home = _run("--codex", "--dry-run", feature_rows=4096)
+    assert proc.returncode == 0, proc.stderr
+    assert "Codex adapter preflight passed" in proc.stdout
+    assert not (home / ".codex").exists()
+    assert not (home / ".agents").exists()
+
+
+def test_clean_install_probes_runtime_without_precreating_codex_home():
+    proc, home = _run(
+        "--codex", "--dry-run", require_existing_codex_home=True
+    )
     assert proc.returncode == 0, proc.stderr
     assert "Codex adapter preflight passed" in proc.stdout
     assert not (home / ".codex").exists()

@@ -125,11 +125,28 @@ state_value() {
     sed -n "s/^${key}=//p" "$AGENTS_STATE" | head -n 1
 }
 
+run_runtime() {
+    local runtime="$1" probe result=0
+    shift
+    if [[ -d "$CODEX_DIR" ]]; then
+        "$runtime" "$@"
+        return
+    fi
+    probe="$(mktemp -d "${TMPDIR:-/tmp}/mainframe-codex-preflight.XXXXXX")"
+    if CODEX_HOME="$probe" "$runtime" "$@"; then
+        result=0
+    else
+        result=$?
+    fi
+    rmdir "$probe" 2>/dev/null || true
+    return "$result"
+}
+
 runtime_preflight() {
     local found=0 features
     if command -v codex >/dev/null 2>&1; then
-        log "Codex CLI: $(codex --version 2>/dev/null || printf 'detected')"
-        features="$(codex features list 2>/dev/null)"
+        log "Codex CLI: $(run_runtime codex --version 2>/dev/null || printf 'detected')"
+        features="$(run_runtime codex features list 2>/dev/null)"
         if ! grep -E '^hooks[[:space:]]+stable[[:space:]]+true$' <<<"$features" >/dev/null; then
             error "The installed Codex CLI does not expose stable native hooks. Update Codex before installation."
             return 1
@@ -141,8 +158,8 @@ runtime_preflight() {
         found=1
     fi
     if [[ -x "$CODEX_DESKTOP_RUNTIME" ]]; then
-        log "Codex Desktop runtime: $("$CODEX_DESKTOP_RUNTIME" --version 2>/dev/null || printf 'detected')"
-        features="$("$CODEX_DESKTOP_RUNTIME" features list 2>/dev/null)"
+        log "Codex Desktop runtime: $(run_runtime "$CODEX_DESKTOP_RUNTIME" --version 2>/dev/null || printf 'detected')"
+        features="$(run_runtime "$CODEX_DESKTOP_RUNTIME" features list 2>/dev/null)"
         if ! grep -E '^hooks[[:space:]]+stable[[:space:]]+true$' <<<"$features" >/dev/null; then
             error "The installed Codex Desktop runtime does not expose stable native hooks. Update the app before installation."
             return 1
@@ -311,7 +328,7 @@ validate_rules() {
         runtime="$CODEX_DESKTOP_RUNTIME"
     fi
     if [[ -n "$runtime" ]]; then
-        if ! "$runtime" execpolicy check --rules "$RULES_SOURCE" -- git push >/dev/null 2>&1; then
+        if ! run_runtime "$runtime" execpolicy check --rules "$RULES_SOURCE" -- git push >/dev/null 2>&1; then
             error "Codex rejected the MAINFRAME rules file; no adapter files were changed."
             return 1
         fi
@@ -326,7 +343,7 @@ validate_rules() {
 rule_decision_is_prompt() {
     local runtime="$1" output
     shift
-    output="$("$runtime" execpolicy check --rules "$RULES_SOURCE" -- "$@" 2>/dev/null)" || return 1
+    output="$(run_runtime "$runtime" execpolicy check --rules "$RULES_SOURCE" -- "$@" 2>/dev/null)" || return 1
     RULE_DECISION_OUTPUT="$output" python3 -c \
         'import json, os, sys; sys.exit(0 if json.loads(os.environ["RULE_DECISION_OUTPUT"]).get("decision") == "prompt" else 1)'
 }
