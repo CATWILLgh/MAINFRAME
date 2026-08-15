@@ -126,6 +126,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-ticket" in proc.stdout
     assert "mainframe-tickets-find" in proc.stdout
     assert "mainframe-tickets-refine" in proc.stdout
+    assert "mainframe-tickets-implement" in proc.stdout
     assert "mainframe-python-backend" in proc.stdout
     assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe-frontend" in proc.stdout
@@ -179,6 +180,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-ticket",
         "mainframe-tickets-find",
         "mainframe-tickets-refine",
+        "mainframe-tickets-implement",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -461,6 +463,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-ticket",
         "mainframe-tickets-find",
         "mainframe-tickets-refine",
+        "mainframe-tickets-implement",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -1062,6 +1065,25 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "open/ready/" in refine_body
     assert "archive/rejected/" in refine_body
     assert "allow_implicit_invocation: false" in refine_metadata
+
+    implement_skill = ADAPTER / "skills" / "mainframe-tickets-implement"
+    implement_body = (implement_skill / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    implement_metadata = (
+        implement_skill / "agents" / "openai.yaml"
+    ).read_text(encoding="utf-8")
+    assert "name: mainframe-tickets-implement" in implement_body
+    assert "ticket-format.md" in implement_body
+    assert "mainframe-testing-strategy" in implement_body
+    assert "native Goal" in implement_body
+    assert "open/ready/" in implement_body
+    assert "open/needs-verification/" in implement_body
+    assert "open/needs-scope-review/" in implement_body
+    assert "open/needs-decision/" in implement_body
+    assert "Do not independently close" in implement_body
+    assert "Conventional Commit" in implement_body
+    assert "allow_implicit_invocation: false" in implement_metadata
 
     typescript_skill = ADAPTER / "skills" / "mainframe-typescript-backend"
     typescript_body = (typescript_skill / "SKILL.md").read_text(encoding="utf-8")

@@ -13,6 +13,7 @@ SKILL_NAMES=(
     mainframe-ticket
     mainframe-tickets-find
     mainframe-tickets-refine
+    mainframe-tickets-implement
     mainframe-python-backend
     mainframe-typescript-backend
     mainframe-frontend
