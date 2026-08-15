@@ -11,26 +11,51 @@ import subprocess
 import sys
 import tempfile
 
-import test_secret_commit_gate as shared
 import test_codex_hooks as hook_contract
 
 
+TOOLS = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..", "adapters", "codex", "hooks", "scripts",
+    TOOLS, "..", "adapters", "codex", "hooks", "scripts",
 )
 SCRIPT = os.path.join(SCRIPTS, "_secret_commit.py")
-sys.path.insert(0, SCRIPTS)
+
+
+def _load_shared_contract():
+    path = os.path.join(TOOLS, "test_secret_commit_gate.py")
+    saved_path = list(sys.path)
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "codex_secret_shared_contract", path,
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = saved_path
 
 
 def _load_gate():
-    spec = importlib.util.spec_from_file_location("codex_secret_commit_gate", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    saved_hooklib = sys.modules.pop("_hooklib", None)
+    saved_path = list(sys.path)
+    try:
+        sys.path.insert(0, SCRIPTS)
+        spec = importlib.util.spec_from_file_location(
+            "codex_secret_commit_gate", SCRIPT,
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = saved_path
+        sys.modules.pop("_hooklib", None)
+        if saved_hooklib is not None:
+            sys.modules["_hooklib"] = saved_hooklib
 
 
+shared = _load_shared_contract()
 shared.SCRIPTS = SCRIPTS
 shared.SCRIPT = SCRIPT
 shared.gate = _load_gate()

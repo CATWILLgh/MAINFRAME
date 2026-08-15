@@ -17,15 +17,29 @@ ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "adapters" / "codex" / "hooks" / "scripts"
 SCRIPT = SCRIPTS / "_bash_patterns.py"
 DISPATCHER = SCRIPTS / "mainframe-hook.py"
-sys.path.insert(0, str(SCRIPTS))
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("codex_bash_patterns", SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    dependencies = ("_hooklib", "_notice_state")
+    saved_modules = {name: sys.modules.get(name) for name in dependencies}
+    saved_path = list(sys.path)
+    try:
+        for name in dependencies:
+            sys.modules.pop(name, None)
+        sys.path.insert(0, str(SCRIPTS))
+        spec = importlib.util.spec_from_file_location(
+            "codex_bash_patterns", SCRIPT,
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = saved_path
+        for name in dependencies:
+            sys.modules.pop(name, None)
+            if saved_modules[name] is not None:
+                sys.modules[name] = saved_modules[name]
 
 
 patterns = _load_module()
