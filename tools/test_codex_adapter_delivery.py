@@ -127,6 +127,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-tickets-find" in proc.stdout
     assert "mainframe-tickets-refine" in proc.stdout
     assert "mainframe-tickets-implement" in proc.stdout
+    assert "mainframe-tickets-verify" in proc.stdout
     assert "mainframe-python-backend" in proc.stdout
     assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe-frontend" in proc.stdout
@@ -181,6 +182,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-tickets-find",
         "mainframe-tickets-refine",
         "mainframe-tickets-implement",
+        "mainframe-tickets-verify",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -464,6 +466,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-tickets-find",
         "mainframe-tickets-refine",
         "mainframe-tickets-implement",
+        "mainframe-tickets-verify",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -1084,6 +1087,26 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "Do not independently close" in implement_body
     assert "Conventional Commit" in implement_body
     assert "allow_implicit_invocation: false" in implement_metadata
+
+    verify_skill = ADAPTER / "skills" / "mainframe-tickets-verify"
+    verify_body = (verify_skill / "SKILL.md").read_text(encoding="utf-8")
+    verify_metadata = (
+        verify_skill / "agents" / "openai.yaml"
+    ).read_text(encoding="utf-8")
+    assert "name: mainframe-tickets-verify" in verify_body
+    assert "ticket-format.md" in verify_body
+    assert "mainframe-testing-strategy" in verify_body
+    assert "native Goal" in verify_body
+    assert "fresh task" in verify_body
+    assert "Do not repair implementation code" in verify_body
+    assert "open/needs-verification/" in verify_body
+    assert "archive/resolved/" in verify_body
+    assert "open/ready/" in verify_body
+    assert "open/needs-scope-review/" in verify_body
+    assert "open/needs-decision/" in verify_body
+    assert "archive/rejected/" in verify_body
+    assert "Conventional Commit" in verify_body
+    assert "allow_implicit_invocation: false" in verify_metadata
 
     typescript_skill = ADAPTER / "skills" / "mainframe-typescript-backend"
     typescript_body = (typescript_skill / "SKILL.md").read_text(encoding="utf-8")

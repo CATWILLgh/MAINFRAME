@@ -1,0 +1,6 @@
+interface:
+  display_name: "MAINFRAME Ticket Verification"
+  short_description: "Independently verify implemented tickets"
+  default_prompt: "Use $mainframe-tickets-verify to independently verify every implemented ticket and route each evidence-backed verdict."
+policy:
+  allow_implicit_invocation: false
