@@ -1,6 +1,7 @@
 """High-confidence candidates for transient work narration in comments."""
 
 import hashlib
+import os
 from collections import Counter
 
 import comment_extract as ce
@@ -37,3 +38,15 @@ def added(before, after, file_ext):
             rows.append(row)
             remaining[key] -= 1
     return rows
+
+
+def display_path(file_path, cwd=None):
+    """Return a repository-local location without exposing an absolute path."""
+    path = os.path.realpath(file_path)
+    base = os.path.realpath(cwd or ".")
+    try:
+        if os.path.commonpath((base, path)) == base:
+            return os.path.relpath(path, base)
+    except (OSError, ValueError):
+        pass
+    return os.path.basename(path)

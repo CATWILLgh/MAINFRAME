@@ -6,7 +6,8 @@ rationale. A targeted callout fires when an ADDED comment matches a
    high-precision marker shape: an ordinal phase/stage/step marker, a decorative
    section divider, or a reference to an ephemeral plan/todo. This is the
    common failure mode where a temporary work plan leaks into permanent code.
-   The callout quotes the candidate while the original information still exists.
+   The callout identifies its source location without repeating source text in
+   hook output.
 
 Two distinct false positives are avoided:
 - Extraction-FP (calling non-comment text a comment) — handled by
@@ -32,7 +33,7 @@ from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import comment_extract as ce  # noqa: E402
 try:
-    from _comment_findings import added, finding_counts
+    from _comment_findings import added, display_path, finding_counts
     from _hooklib import (CODE_EXTENSIONS, ext, load_payload, log_hook_signal,
                           read_git_head, emit_note, run)
     from _markers import marker_counts
@@ -88,11 +89,6 @@ def _before_after(tool_name, tool_input, file_path):
     return "", ""
 
 
-def _first_line(text):
-    body = text.strip()
-    return body.splitlines()[0].strip()[:100] if body else ""
-
-
 def main():
     payload = load_payload()
     tool_name = payload.get("tool_name", "")
@@ -123,13 +119,17 @@ def main():
     # Targeted layer — precise candidates, with the original text still present.
     flagged = added(before, after, file_ext)
     if flagged:
-        quoted = "".join(f"  - {_first_line(text)}\n" for _, _, text, _ in flagged[:3])
+        name = display_path(file_path, payload.get("cwd"))
+        locations = "".join(
+            f"  - {name}:{line} ({kind})\n"
+            for _, line, _, kind in flagged[:3]
+        )
         if len(flagged) > 3:
-            quoted += f"  - … {len(flagged) - 3} more\n"
+            locations += f"  - … {len(flagged) - 3} more\n"
         note = (
             "Review these newly added comments/docstrings; they look dependent "
             "on temporary plan, phase, step, or discussion context:\n"
-            + quoted +
+            + locations +
             "A correct comment must remain understandable from the repository "
             "alone and preserve durable, code-relevant rationale. Rewrite each "
             "candidate to retain that rationale without transient work context, "

@@ -178,7 +178,8 @@ def update(session_id, agent_id, file_path, deltas, *, counter=marker_counts,
 
 
 def unresolved(session_id, agent_id=None, include_subagents=False, *,
-               counter=marker_counts, namespace="markers", include_files=False):
+               counter=marker_counts, namespace="markers", include_files=False,
+               include_details=False):
     """Return unresolved labels after re-reading files; persist resolutions."""
     root = _root()
     prefix = _namespace_prefix(namespace) + _key(session_id) + "-"
@@ -192,6 +193,7 @@ def unresolved(session_id, agent_id=None, include_subagents=False, *,
         paths = [_path(session_id, agent_id, namespace)]
     labels = set()
     files = set()
+    details = {}
     for path in paths:
         with _lock(path):
             state = _load(path)
@@ -199,8 +201,14 @@ def unresolved(session_id, agent_id=None, include_subagents=False, *,
             for file_path, entries in state.get("files", {}).items():
                 labels.update(entries)
                 files.add(file_path)
+                merged = details.setdefault(file_path, {})
+                for label, baseline in entries.items():
+                    baseline = int(baseline)
+                    merged[label] = min(merged.get(label, baseline), baseline)
             _save(path, state)
     _cleanup_stale()
+    if include_details:
+        return details
     result = sorted(labels)
     return (result, sorted(files)) if include_files else result
 
