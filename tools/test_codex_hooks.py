@@ -34,7 +34,6 @@ def _state_env(root: Path) -> dict[str, str]:
         "MAINFRAME_CODEX_SNAPSHOT_DIR": str(root / "snapshots"),
         "MAINFRAME_MARKER_STATE_DIR": str(root / "markers"),
         "MAINFRAME_LENGTH_STATE_DIR": str(root / "length"),
-        "MAINFRAME_FALLOW_STATE_DIR": str(root / "fallow"),
         "MAINFRAME_NOTICE_STATE_DIR": str(root / "notices"),
     })
     return env
@@ -217,6 +216,10 @@ def test_startup_health_covers_every_runtime_module():
         if path.name != HOOK.name
     }
     assert set(module.HEALTH_MODULES) == expected
+    dispatcher = HOOK.read_text(encoding="utf-8")
+    assert "fallow-quality-note.py" not in dispatcher
+    assert not (HOOK.parent / "fallow-quality-note.py").exists()
+    assert not (HOOK.parent / "_fallow_state.py").exists()
 
     root = Path(tempfile.mkdtemp())
     proc, result = _run_hook(

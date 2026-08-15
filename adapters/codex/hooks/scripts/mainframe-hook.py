@@ -23,7 +23,6 @@ HEALTH_MODULES = (
     "_bash_patterns.py",
     "_comment_findings.py",
     "_edit_snapshot.py",
-    "_fallow_state.py",
     "_git_authority.py",
     "_hooklib.py",
     "_length_check.py",
@@ -37,7 +36,6 @@ HEALTH_MODULES = (
     "_secret_commit.py",
     "comment-discipline-reminder.py",
     "comment_extract.py",
-    "fallow-quality-note.py",
     "length-quality-note.py",
     "nodejs-security-scan.py",
     "nodejs-security-stop-gate.py",
@@ -198,7 +196,6 @@ def _quality(payload: dict) -> None:
                 if notice:
                     failures.append(notice)
         outputs.extend(_checked_module("nodejs-security-scan.py", diff_payload, failures))
-        outputs.extend(_checked_module("fallow-quality-note.py", diff_payload, failures))
         outputs.extend(_checked_module("length-quality-note.py", exact, failures))
         if not saved.get("existed"):
             outputs.extend(_checked_module("ticket-id-format-reminder.py", exact, failures))
@@ -318,7 +315,7 @@ def _stop(payload: dict) -> None:
         "nodejs-security-stop-gate.py",
     ]
     if payload.get("hook_event_name") == "Stop":
-        filenames.extend(("fallow-quality-note.py", "length-quality-note.py"))
+        filenames.append("length-quality-note.py")
     rows: list[dict] = []
     failures: list[str] = []
     for filename in filenames:

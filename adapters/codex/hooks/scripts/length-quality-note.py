@@ -7,9 +7,9 @@ compares the earliest confirmed baseline from the main session and its
 subagents with current content, then consumes the state.
 
 The generic file check applies to every hand-authored code extension except
-SQL. Python function length uses the stdlib AST. JS/TS structural quality is
-covered separately by the delta-aware Fallow audit; other language-specific
-function parsers belong in future profile/project testing layers.
+SQL. Python function length uses the stdlib AST. Other language-specific
+structural checks belong in profile or project testing layers, where an agent
+can verify an analyzer's heuristic findings before acting on them.
 """
 
 import os

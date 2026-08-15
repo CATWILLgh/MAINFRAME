@@ -23,8 +23,7 @@ HUB_HOOK_FILES = frozenset({
     "_bash_patterns.py", "comment-discipline-reminder.py",
     "stop-gate-comment-discipline.py", "comment_extract.py",
     "_comment_findings.py", "_python_findings.py", "_node_findings.py",
-    "_fallow_state.py",
-    "_length_check.py", "_length_state.py", "fallow-quality-note.py",
+    "_length_check.py", "_length_state.py",
     "length-quality-note.py", "_hooklib.py", "_markers.py",
     "_marker_state.py", "_notice_state.py",
 })
