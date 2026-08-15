@@ -280,6 +280,16 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
     assert child_commit["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "primary session" in child_commit["hookSpecificOutput"]["permissionDecisionReason"]
 
+    _, primary_add = _run_hook(
+        _tool_payload(root, event="PreToolUse", command="git add example.py"), state
+    )
+    assert primary_add is None
+
+    _, primary_commit = _run_hook(
+        _tool_payload(root, event="PreToolUse", command="git commit -m test"), state
+    )
+    assert primary_commit is None
+
 
 def test_ripgrep_reminder_is_context_only_and_once_per_recipient():
     root = Path(tempfile.mkdtemp())

@@ -74,7 +74,9 @@ def _write_fake_codex(path, *, hooks_supported=True):
         "#!/bin/sh\n"
         "if [ \"${1:-}\" = --version ]; then echo 'codex-cli 0.147.0'; exit 0; fi\n"
         "if [ \"${1:-}\" = features ] && [ \"${2:-}\" = list ]; then "
-        f"echo 'hooks stable {hooks_value}'; exit 0; fi\n",
+        f"echo 'hooks stable {hooks_value}'; exit 0; fi\n"
+        "if [ \"${1:-}\" = execpolicy ] && [ \"${2:-}\" = check ]; then "
+        "echo '{\"decision\":\"prompt\"}'; exit 0; fi\n",
         encoding="utf-8",
     )
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
@@ -799,7 +801,7 @@ def test_owned_permissions_block_can_evolve_without_replacing_user_config():
     source = home / "updated-permissions.toml"
     source.write_text(
         CONFIG_SOURCE.read_text(encoding="utf-8").replace(
-            "Workspace editing with protected credentials and reviewed external access.",
+            "Workspace editing with protected credentials and reviewed Git delivery and external access.",
             "Updated owned profile.",
         ),
         encoding="utf-8",
@@ -995,9 +997,12 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "references/news.md" in private_research_body
     assert not (private_research_skill / "agents" / "openai.yaml").exists()
     assert (ADAPTER / "rules" / "mainframe.rules").is_file()
-    assert 'pattern = ["secret"]' in (
+    rules_body = (
         ADAPTER / "rules" / "mainframe.rules"
     ).read_text(encoding="utf-8")
+    assert 'pattern = ["secret"]' in rules_body
+    assert 'pattern = ["git", ["add", "stage", "commit", "rm", "mv"]]' in rules_body
+    assert "protected Git metadata" in rules_body
     assert (ADAPTER / "config" / "mainframe-permissions.toml").is_file()
     assert (ADAPTER / "scripts" / "manage-config.py").is_file()
     assert (ADAPTER / "scripts" / "manage-hooks.py").is_file()

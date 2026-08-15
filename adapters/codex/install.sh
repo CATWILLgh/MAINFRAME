@@ -297,10 +297,25 @@ validate_rules() {
     elif [[ -x "$CODEX_DESKTOP_RUNTIME" ]]; then
         runtime="$CODEX_DESKTOP_RUNTIME"
     fi
-    if [[ -n "$runtime" ]] && ! "$runtime" execpolicy check --rules "$RULES_SOURCE" -- git push >/dev/null 2>&1; then
-        error "Codex rejected the MAINFRAME rules file; no adapter files were changed."
-        return 1
+    if [[ -n "$runtime" ]]; then
+        if ! "$runtime" execpolicy check --rules "$RULES_SOURCE" -- git push >/dev/null 2>&1; then
+            error "Codex rejected the MAINFRAME rules file; no adapter files were changed."
+            return 1
+        fi
+        if ! rule_decision_is_prompt "$runtime" git add README.md \
+            || ! rule_decision_is_prompt "$runtime" git commit -m mainframe-validation; then
+            error "MAINFRAME rules do not route ordinary Git delivery through approval; no adapter files were changed."
+            return 1
+        fi
     fi
+}
+
+rule_decision_is_prompt() {
+    local runtime="$1" output
+    shift
+    output="$("$runtime" execpolicy check --rules "$RULES_SOURCE" -- "$@" 2>/dev/null)" || return 1
+    RULE_DECISION_OUTPUT="$output" python3 -c \
+        'import json, os, sys; sys.exit(0 if json.loads(os.environ["RULE_DECISION_OUTPUT"]).get("decision") == "prompt" else 1)'
 }
 
 preflight() {

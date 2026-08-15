@@ -3,8 +3,26 @@
 # These rules route repository operations that require separate user authority
 # through Codex approval handling. With auto-review enabled, the reviewer can
 # approve an explicitly requested operation without interrupting the user.
-# Ordinary repository inspection, staging, and local commits remain sandboxed
-# and are intentionally not broadened by an allow rule.
+# The built-in :workspace profile deliberately keeps .git read-only. Ordinary
+# primary-session delivery therefore uses prompt rules: auto-review can grant
+# the narrow command escalation without making all Git metadata writable.
+
+prefix_rule(
+    pattern = ["git", ["add", "stage", "commit", "rm", "mv"]],
+    decision = "prompt",
+    justification = "Primary-session staging and ordinary local commits need reviewed access to protected Git metadata; hooks still block subagent delivery, verification bypasses, and history-changing variants.",
+    match = [
+        "git add README.md",
+        "git stage adapters/codex",
+        "git commit -m feat: example",
+        "git rm obsolete.txt",
+        "git mv old.txt new.txt",
+    ],
+    not_match = [
+        "git status --short",
+        "git push origin main",
+    ],
+)
 
 prefix_rule(
     pattern = ["secret"],
