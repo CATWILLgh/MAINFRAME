@@ -160,6 +160,7 @@ def _parse_commit_args(args: list[str], cwd: str) -> CommitInvocation:
     stages_all = False
     include = False
     only = False
+    dry_run = False
     pathspecs: list[str] = []
     value_options = {
         "-m", "--message", "-F", "--file", "--author", "--date",
@@ -193,6 +194,8 @@ def _parse_commit_args(args: list[str], cwd: str) -> CommitInvocation:
             include = True
         if token in {"-o", "--only"}:
             only = True
+        if token == "--dry-run":
+            dry_run = True
         if option in value_options:
             if "=" not in token:
                 index += 1
@@ -218,8 +221,9 @@ def _parse_commit_args(args: list[str], cwd: str) -> CommitInvocation:
         raise VerificationError("dynamic_pathspec")
     if only and not pathspecs:
         raise VerificationError("only_without_pathspec")
-    mode = "include" if include and pathspecs else (
+    mode = "dry-run" if dry_run else ("include" if include and pathspecs else (
         "only" if pathspecs else ("all" if stages_all else "index"))
+    )
     return CommitInvocation(cwd=cwd, mode=mode, pathspecs=tuple(pathspecs))
 
 
@@ -383,6 +387,8 @@ def _diff(root: str, args: list[str]) -> str:
 
 
 def _scan_invocation(invocation: CommitInvocation) -> list[tuple[str, str]] | None:
+    if invocation.mode == "dry-run":
+        return []
     root = _repo_root(invocation.cwd)
     if root is None:
         return None  # git commit itself will fail: this is not a gate outage.

@@ -185,6 +185,23 @@ def _numbered_lines(count: int) -> str:
     return "".join(f"value_{index} = {index}\n" for index in range(count))
 
 
+def _synthetic_github_token() -> str:
+    return "ghp_" + "0123456789abcdefghijklmnopqrstuvwxyz"[:36]
+
+
+def _git_repo() -> Path:
+    root = Path(tempfile.mkdtemp())
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.invalid"],
+        cwd=root, check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"], cwd=root, check=True
+    )
+    return root
+
+
 def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
     source = json.loads(HOOKS_SOURCE.read_text(encoding="utf-8"))
     assert set(source["hooks"]) == {
@@ -589,6 +606,50 @@ def test_recursive_delete_allows_only_the_symlink_entry_inside_project():
         state,
     )
     assert followed_link["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_secret_commit_gate_checks_real_index_without_exposing_the_value():
+    root = _git_repo()
+    state = root / "state"
+    token = _synthetic_github_token()
+    source = root / ".env"
+    source.write_text(f"TOKEN={token}\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".env"], cwd=root, check=True)
+
+    _, blocked = _run_hook(
+        _tool_payload(root, event="PreToolUse", command="git commit -m secret"),
+        state,
+    )
+    reason = blocked["hookSpecificOutput"]["permissionDecisionReason"]
+    assert blocked["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "github_pat" in reason and ".env" in reason
+    assert token not in reason
+
+
+def test_secret_commit_gate_leaves_clean_commit_and_dry_run_alone():
+    root = _git_repo()
+    state = root / "state"
+    clean = root / "clean.txt"
+    clean.write_text("clean\n", encoding="utf-8")
+    subprocess.run(["git", "add", "clean.txt"], cwd=root, check=True)
+    _, ordinary = _run_hook(
+        _tool_payload(root, event="PreToolUse", command="git commit -m clean"),
+        state,
+    )
+    assert ordinary is None
+
+    secret = root / ".env"
+    secret.write_text(
+        f"TOKEN={_synthetic_github_token()}\n", encoding="utf-8"
+    )
+    subprocess.run(["git", "add", ".env"], cwd=root, check=True)
+    _, dry_run = _run_hook(
+        _tool_payload(
+            root, event="PreToolUse", command="git commit --dry-run"
+        ),
+        state,
+    )
+    assert dry_run is None
 
 
 def test_ripgrep_reminder_is_context_only_and_once_per_recipient():
@@ -1148,6 +1209,59 @@ def test_parallel_sessions_keep_snapshots_and_findings_separate():
         results = list(pool.map(post, range(len(files))))
     assert all(proc.returncode == 0 for proc, _ in results)
     assert [index for index, (_, output) in enumerate(results) if output is not None] == [7]
+
+
+def test_parallel_edits_share_one_bounded_notice_without_losing_stop_state():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    files = []
+    for index in range(16):
+        path = root / f"parallel-{index}.go"
+        path.write_text("package example\n", encoding="utf-8")
+        files.append(path)
+
+    def invoke(index: int, event: str):
+        return _run_hook(
+            _patch_payload(
+                root, files[index].name, event=event,
+                session="shared-session", agent="shared-agent",
+                tool_use=f"tool-{index}",
+            ),
+            state,
+        )
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        prepared = list(pool.map(lambda index: invoke(index, "PreToolUse"), range(16)))
+    assert all(proc.returncode == 0 and output is None for proc, output in prepared)
+
+    for path in files:
+        path.write_text(
+            "package example\n// TODO finish implementation\n", encoding="utf-8"
+        )
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        completed = list(
+            pool.map(lambda index: invoke(index, "PostToolUse"), range(16))
+        )
+    assert all(proc.returncode == 0 for proc, _output in completed)
+    visible = [output for _proc, output in completed if output is not None]
+    assert len(visible) == 1
+    context = visible[0]["hookSpecificOutput"]["additionalContext"]
+    assert "unfinished-code or diagnostic residue" in context
+    assert len(context) <= 1200
+
+    _, blocked = _run_hook(
+        {
+            "session_id": "shared-session", "turn_id": "turn",
+            "agent_id": "shared-agent", "hook_event_name": "SubagentStop",
+            "cwd": str(root), "stop_hook_active": False,
+        },
+        state,
+    )
+    assert blocked["decision"] == "block"
+    assert "16 unfinished-code or diagnostic findings" in blocked["reason"]
+    assert "more locations" in blocked["reason"]
+    assert len(blocked["reason"]) <= 8000
 
 
 def test_length_crossing_is_immediate_advice_and_never_a_stop_block():
