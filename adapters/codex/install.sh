@@ -11,6 +11,7 @@ SKILL_NAMES=(
     mainframe-init
     mainframe-secrets
     mainframe-ticket
+    mainframe-tickets-find
     mainframe-python-backend
     mainframe-typescript-backend
     mainframe-frontend

@@ -122,6 +122,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-init" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe-ticket" in proc.stdout
+    assert "mainframe-tickets-find" in proc.stdout
     assert "mainframe-python-backend" in proc.stdout
     assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe-frontend" in proc.stdout
@@ -173,6 +174,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-init",
         "mainframe-secrets",
         "mainframe-ticket",
+        "mainframe-tickets-find",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -453,6 +455,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-init",
         "mainframe-secrets",
         "mainframe-ticket",
+        "mainframe-tickets-find",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -1020,6 +1023,21 @@ def test_baseline_uses_native_standalone_layers_only():
         "ticket-format.md",
     ):
         assert (ticket_skill / "references" / reference).is_file()
+
+    find_skill = ADAPTER / "skills" / "mainframe-tickets-find"
+    find_body = (find_skill / "SKILL.md").read_text(encoding="utf-8")
+    find_metadata = (find_skill / "agents" / "openai.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-tickets-find" in find_body
+    assert "record-observation.md" in find_body
+    assert "ticket-format.md" in find_body
+    assert "native Goal" in find_body
+    assert "Do not run project code" in find_body
+    assert (
+        "Do not claim that the repository has no remaining defects" in find_body
+    )
+    assert "allow_implicit_invocation: false" in find_metadata
 
     typescript_skill = ADAPTER / "skills" / "mainframe-typescript-backend"
     typescript_body = (typescript_skill / "SKILL.md").read_text(encoding="utf-8")

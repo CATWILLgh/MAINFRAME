@@ -104,6 +104,8 @@ Start a new Claude Code session after installation. For a MAINFRAME-guided prima
 ```
 
 In Codex, invoke `$mainframe-init` explicitly in the task.
+For a broad ticket-discovery run, start native Goal mode and explicitly invoke
+`$mainframe-tickets-find` with an optional plain-language scope.
 
 Small, obvious tasks can stay direct. `init` is for work that benefits from shared understanding, preparation, or a longer autonomous run.
 
