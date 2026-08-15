@@ -247,18 +247,8 @@ def _rule_handles(command: str, reason: str) -> bool:
 
 
 def _rm_rule_handles(command: str) -> bool:
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False
-    return (
-        len(tokens) >= 2
-        and tokens[0] in {"rm", "/bin/rm"}
-        and tokens[1] in {
-            "-r", "-R", "-rf", "-rF", "-fr", "-fR", "-Rf", "-RF",
-            "--recursive",
-        }
-    )
+    path_module = _load_module("_path_validation.py")
+    return path_module.rule_handles_recursive_rm(command)
 
 
 def _command(payload: dict) -> None:

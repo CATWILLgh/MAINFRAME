@@ -15,11 +15,14 @@ import shlex
 
 
 OPERATORS = {"&&", "||", ";", "|", "|&", "&", "(", ")"}
+RULE_SAFE_OPERATORS = {"&&", "||", ";", "|"}
 CWD_COMMANDS = {"cd", "pushd", "popd"}
 SHELL_COMMANDS = {"sh", "bash", "zsh", "dash", "ksh"}
 SIMPLE_WRAPPERS = {"command", "builtin", "exec", "nohup", "time"}
 RUNTIME_WRAPPERS = {"sudo", "doas", "env", "timeout", "nice", "stdbuf"}
+NON_EXECUTING_COMMANDS = {"echo", "printf"}
 SHELL_META_RE = re.compile(r"\$|`|[?*\[]|[{}]|<\(|>\(")
+RULE_UNSAFE_SYNTAX_RE = re.compile(r"[\r\n<>$`?*\[\]{}]")
 RM_HINT_RE = re.compile(r"(?<![A-Za-z0-9_])(?:[^\s;&|()]*/)?rm(?=\s|$)")
 
 
@@ -151,12 +154,70 @@ def _dynamic_rm(tokens: list[str]) -> bool:
     return False
 
 
+def _recursive_rm_indices(tokens: list[str]) -> list[int]:
+    return [
+        index for index in range(len(tokens))
+        if _recursive_rm_at(tokens, index)
+    ]
+
+
+def _rule_safe_syntax(command: str, tokens: list[str]) -> bool:
+    """Whether Codex rules can split this shell text into argv prefixes."""
+    if RULE_UNSAFE_SYNTAX_RE.search(command):
+        return False
+    if any(token in OPERATORS - RULE_SAFE_OPERATORS for token in tokens):
+        return False
+    return not any(_is_assignment(token) for token in tokens)
+
+
+def rule_handles_recursive_rm(command: str) -> bool:
+    """True when native rules cover every executable recursive rm segment."""
+    tokens = tokenize(command)
+    if tokens is None or not _rule_safe_syntax(command, tokens):
+        return False
+    segments = split_subcommands(tokens)
+    # The published contract says simple shell chains are split before rule
+    # evaluation, but execpolicy checks on the supported local runtimes do not
+    # expose that behavior. Only trust the directly testable argv prefix.
+    if len(segments) != 1 or any(token in OPERATORS for token in tokens):
+        return False
+    found = False
+    accepted_options = {
+        "-r", "-R", "-rf", "-rF", "-fr", "-fR", "-Rf", "-RF",
+        "--recursive",
+    }
+    for segment in segments:
+        recursive = _recursive_rm_indices(segment)
+        if not recursive:
+            continue
+        if _basename(segment[0]) in NON_EXECUTING_COMMANDS:
+            continue
+        found = True
+        if recursive != [0]:
+            return False
+        if segment[0] not in {"rm", "/bin/rm"}:
+            return False
+        if len(segment) < 2 or segment[1] not in accepted_options:
+            return False
+    return found
+
+
 def _target_reason(path: str, cwd: str, project_dir: str) -> str | None:
     if SHELL_META_RE.search(path):
         return f"recursive rm target requires shell expansion: {path[:100]}"
     absolute = path if os.path.isabs(path) else os.path.join(cwd, path)
-    resolved = os.path.realpath(os.path.expanduser(absolute))
+    expanded = os.path.expanduser(absolute)
     project = os.path.realpath(project_dir)
+    # rm does not follow a symlink supplied as the final argument. Preserve
+    # that useful narrow deletion while still resolving symlinked parents and
+    # a trailing slash, both of which can reach a tree outside the project.
+    if not path.endswith(os.sep) and os.path.islink(expanded):
+        resolved = os.path.join(
+            os.path.realpath(os.path.dirname(expanded)),
+            os.path.basename(os.path.normpath(expanded)),
+        )
+    else:
+        resolved = os.path.realpath(expanded)
     if resolved == project:
         return f"recursive rm targets the project root: {project}"
     try:
@@ -182,6 +243,14 @@ def decision_reason(
     if tokens is None:
         return "recursive rm command could not be parsed safely"
 
+    executable_recursive_rm = any(
+        _recursive_rm_indices(segment)
+        and _basename(segment[0]) not in NON_EXECUTING_COMMANDS
+        for segment in split_subcommands(tokens)
+    )
+    if executable_recursive_rm and not _rule_safe_syntax(command, tokens):
+        return "recursive rm uses shell syntax that command rules cannot classify"
+
     cwd_may_have_changed = False
     for segment in split_subcommands(tokens):
         nested = _nested_shell_command(segment)
@@ -203,6 +272,14 @@ def decision_reason(
                 reason = _target_reason(path, cwd, project_dir)
                 if reason:
                     return reason
+
+        recursive_indices = _recursive_rm_indices(segment)
+        if (
+            recursive_indices
+            and _basename(segment[0]) not in NON_EXECUTING_COMMANDS
+            and index not in recursive_indices
+        ):
+            return "recursive rm is not a direct classifiable command"
 
         if segment and _basename(segment[0]) in CWD_COMMANDS:
             cwd_may_have_changed = True

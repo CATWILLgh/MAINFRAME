@@ -301,21 +301,76 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
     )
     assert ordinary_delete is None
 
-    _, reviewed_recursive = _run_hook(
-        _tool_payload(root, event="PreToolUse", command="rm -rf generated"), state
-    )
-    assert reviewed_recursive is None
+    for command in (
+        "rm -rf generated",
+        "/bin/rm -R generated",
+        "rm --recursive generated",
+        "rm -rf -- generated",
+        "rm -rf 'generated directory'",
+        "rm -rf generated-one generated-two",
+    ):
+        _, reviewed_recursive = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert reviewed_recursive is None, command
 
     _, ambiguous_recursive = _run_hook(
         _tool_payload(root, event="PreToolUse", command="rm -f -r generated"), state
     )
     assert ambiguous_recursive["hookSpecificOutput"]["permissionDecision"] == "deny"
 
-    _, broad_recursive = _run_hook(
-        _tool_payload(root, event="PreToolUse", command="rm -rf /"), state
-    )
-    assert broad_recursive["hookSpecificOutput"]["permissionDecision"] == "deny"
+    for command in (
+        "rm -rf /",
+        "rm -rf .",
+        "rm -rf ..",
+        "rm -rf ../outside-project",
+        "rm -rf '$HOME/generated'",
+        "rm -rf generated/*",
+        "cd generated && rm -rf nested",
+    ):
+        _, broad_recursive = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert broad_recursive["hookSpecificOutput"]["permissionDecision"] == "deny", command
 
+    for command in (
+        "rm -rf generated >/dev/null",
+        "rm -rf generated 2>/dev/null",
+        "rm -rf generated & echo done",
+        "if true; then rm -rf generated; fi",
+        "command rm -rf generated",
+        "/usr/bin/rm -rf generated",
+        "find generated -exec rm -rf {} +",
+        "xargs rm -rf",
+    ):
+        _, blocked = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert blocked["hookSpecificOutput"]["permissionDecision"] == "deny", command
+
+    for command in (
+        "rm -rf generated && echo done",
+        "rm -rf generated || echo missing",
+        "rm -rf generated; echo done",
+        "rm -rf generated | cat",
+    ):
+        _, indirect = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert indirect["hookSpecificOutput"]["permissionDecision"] == "deny", command
+
+    for command in (
+        "echo rm -rf /",
+        "printf '%s\\n' 'rm -rf /'",
+        "rg 'rm -rf' .",
+        "rm -f one-file.txt",
+        "unlink one-file.txt",
+        "rmdir empty-directory",
+    ):
+        _, ordinary = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert ordinary is None, command
     _, normal_push = _run_hook(
         _tool_payload(root, event="PreToolUse", command="git push"), state
     )
@@ -410,6 +465,26 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
             _tool_payload(root, event="PreToolUse", command=command), state
         )
         assert inspection is None, command
+
+
+def test_recursive_delete_allows_only_the_symlink_entry_inside_project():
+    root = Path(tempfile.mkdtemp())
+    outside = Path(tempfile.mkdtemp())
+    link = root / "external-link"
+    link.symlink_to(outside, target_is_directory=True)
+    state = root / "state"
+
+    _, link_only = _run_hook(
+        _tool_payload(root, event="PreToolUse", command="rm -rf external-link"),
+        state,
+    )
+    assert link_only is None
+
+    _, followed_link = _run_hook(
+        _tool_payload(root, event="PreToolUse", command="rm -rf external-link/"),
+        state,
+    )
+    assert followed_link["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_ripgrep_reminder_is_context_only_and_once_per_recipient():
