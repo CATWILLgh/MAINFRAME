@@ -8,7 +8,7 @@
 # the narrow command escalation without making all Git metadata writable.
 
 prefix_rule(
-    pattern = ["git", ["add", "stage", "commit", "rm", "mv"]],
+    pattern = ["git", ["add", "stage", "commit", "rm", "mv", "update-index"]],
     decision = "prompt",
     justification = "Primary-session staging and ordinary local commits need reviewed access to protected Git metadata; hooks still block subagent delivery, verification bypasses, and history-changing variants.",
     match = [
@@ -17,9 +17,54 @@ prefix_rule(
         "git commit -m feat: example",
         "git rm obsolete.txt",
         "git mv old.txt new.txt",
+        "git update-index --refresh",
     ],
     not_match = [
         "git status --short",
+        "git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "apply", ["--cached", "--index", "--3way", "-3", "--intent-to-add", "-N"]],
+    decision = "prompt",
+    justification = "Applying a patch to the index is a primary-session staging operation and needs reviewed access to protected Git metadata.",
+    match = [
+        "git apply --cached change.patch",
+        "git apply --index change.patch",
+        "git apply --3way change.patch",
+        "git apply -N change.patch",
+    ],
+    not_match = [
+        "git apply change.patch",
+        "git apply --check --cached change.patch",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", ["update-ref", "read-tree"]],
+    decision = "prompt",
+    justification = "Direct ref or index-tree changes can replace branch or index state and require explicit user authorization.",
+    match = [
+        "git update-ref refs/heads/example HEAD",
+        "git read-tree HEAD~1",
+    ],
+    not_match = [
+        "git show-ref --heads",
+        "git ls-tree HEAD",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", ["commit-tree", "send-pack"]],
+    decision = "forbidden",
+    justification = "Use the reviewed high-level `git commit` or non-force `git push` path; these plumbing commands bypass its verification and authority checks.",
+    match = [
+        "git commit-tree deadbeef -m example",
+        "git send-pack origin refs/heads/main",
+    ],
+    not_match = [
+        "git commit -m example",
         "git push origin main",
     ],
 )

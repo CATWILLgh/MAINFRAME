@@ -1021,7 +1021,12 @@ def test_baseline_uses_native_standalone_layers_only():
         ADAPTER / "rules" / "mainframe.rules"
     ).read_text(encoding="utf-8")
     assert 'pattern = ["secret"]' in rules_body
-    assert 'pattern = ["git", ["add", "stage", "commit", "rm", "mv"]]' in rules_body
+    assert (
+        'pattern = ["git", ["add", "stage", "commit", "rm", "mv", "update-index"]]'
+        in rules_body
+    )
+    assert 'pattern = ["git", ["update-ref", "read-tree"]]' in rules_body
+    assert 'pattern = ["git", ["commit-tree", "send-pack"]]' in rules_body
     assert "protected Git metadata" in rules_body
     assert (ADAPTER / "config" / "mainframe-permissions.toml").is_file()
     assert (ADAPTER / "scripts" / "manage-config.py").is_file()

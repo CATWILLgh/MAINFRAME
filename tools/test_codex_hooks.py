@@ -355,6 +355,62 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
     )
     assert primary_commit is None
 
+    for command in (
+        "git update-index --refresh",
+        "git apply --cached change.patch",
+        "git update-ref refs/heads/example HEAD",
+        "git read-tree HEAD~1",
+    ):
+        _, reviewed = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert reviewed is None, command
+
+    for command in (
+        "git update-index file.py",
+        "git apply --index change.patch",
+        "git read-tree HEAD~1",
+        "git commit-tree deadbeef -m test",
+    ):
+        _, child_delivery = _run_hook(
+            _tool_payload(
+                root, event="PreToolUse", command=command, agent="child"
+            ),
+            state,
+        )
+        assert child_delivery["hookSpecificOutput"]["permissionDecision"] == "deny", command
+        assert "primary session" in child_delivery["hookSpecificOutput"]["permissionDecisionReason"], command
+
+    for command in (
+        "command git update-index file.py",
+        "git apply --verbose --cached change.patch",
+        "git -C repo update-ref refs/heads/example HEAD",
+    ):
+        _, indirect = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert indirect["hookSpecificOutput"]["permissionDecision"] == "deny", command
+        assert "simple direct Git form" in indirect["hookSpecificOutput"]["permissionDecisionReason"], command
+
+    for command in (
+        "git commit-tree deadbeef -m test",
+        "git send-pack origin refs/heads/main",
+        "git symbolic-ref HEAD refs/heads/other",
+    ):
+        _, bypass = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert bypass["hookSpecificOutput"]["permissionDecision"] == "deny", command
+
+    for command in (
+        "git symbolic-ref HEAD",
+        "git apply --check --cached change.patch",
+    ):
+        _, inspection = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert inspection is None, command
+
 
 def test_ripgrep_reminder_is_context_only_and_once_per_recipient():
     root = Path(tempfile.mkdtemp())

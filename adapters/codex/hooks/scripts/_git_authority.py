@@ -36,6 +36,8 @@ ASK_SUBCOMMANDS = {
     "checkout", "switch", "pull", "merge", "rebase", "reset",
     "cherry-pick", "revert", "restore",
 }
+INDEX_SUBCOMMANDS = {"add", "stage", "update-index", "read-tree"}
+APPLY_INDEX_OPTIONS = {"--cached", "--index", "--3way", "-3", "--intent-to-add", "-N"}
 COMMIT_OPTIONS_WITH_VALUE = {
     "-m", "--message", "-F", "--file", "-C", "--reuse-message",
     "-c", "--reedit-message", "-t", "--template", "--fixup", "--squash",
@@ -339,6 +341,20 @@ def _bypasses_verification(subcommand: str, arguments: list[str]) -> bool:
     )
 
 
+def _apply_mutates_index(arguments: list[str]) -> bool:
+    if _has_long_option(arguments, "--check"):
+        return False
+    return any(token in APPLY_INDEX_OPTIONS for token in arguments)
+
+
+def _symbolic_ref_mutates(arguments: list[str]) -> bool:
+    if not arguments:
+        return False
+    if any(_option_name(token) in {"-d", "--delete"} for token in arguments):
+        return True
+    return len(_positionals(arguments)) > 1
+
+
 def _stash_mutates(arguments: list[str]) -> bool:
     if not arguments:
         return True
@@ -384,6 +400,16 @@ def repository_mutation_reason(command: str, *, depth: int = 0) -> tuple[str, st
         if parsed is None:
             continue
         subcommand, arguments = parsed
+        if subcommand == "commit-tree":
+            return "deny", (
+                "Creating commits through git commit-tree bypasses the normal "
+                "commit verification path. Use git commit instead."
+            )
+        if subcommand == "send-pack":
+            return "deny", (
+                "Remote delivery through git send-pack bypasses the reviewed "
+                "push path. Use a non-force git push after explicit authorization."
+            )
         if _bypasses_verification(subcommand, arguments):
             return "deny", "Git verification checks may not be bypassed."
         if subcommand == "push":
@@ -399,6 +425,23 @@ def repository_mutation_reason(command: str, *, depth: int = 0) -> tuple[str, st
             if _has_long_option(arguments, "--amend"):
                 return "ask", "Amending Git history requires explicit authorization from the immediate caller."
             continue
+        if subcommand == "update-index" or (
+            subcommand == "apply" and _apply_mutates_index(arguments)
+        ):
+            return "ask", (
+                "Index changes must use the reviewed primary-session Git "
+                "delivery path."
+            )
+        if subcommand in {"update-ref", "read-tree"}:
+            return "ask", (
+                f"Running git {subcommand} requires explicit authorization "
+                "from the immediate caller."
+            )
+        if subcommand == "symbolic-ref" and _symbolic_ref_mutates(arguments):
+            return "deny", (
+                "Changing symbolic refs directly bypasses the reviewed branch "
+                "path. Use git switch or another explicit high-level Git command."
+            )
         if subcommand == "branch" and _branch_arguments_mutate(arguments):
             return "ask", (
                 "Creating, deleting, renaming, or retargeting a Git branch "
@@ -447,7 +490,13 @@ def _subagent_delivery_mutation(command: str, *, depth: int = 0) -> bool:
         subcommand = _git_subcommand(segment)
         if (
             subcommand is not None
-            and subcommand[0] in {"add", "stage", "commit", "rm", "mv"}
+            and (
+                subcommand[0] in INDEX_SUBCOMMANDS | {"commit", "commit-tree", "rm", "mv"}
+                or (
+                    subcommand[0] == "apply"
+                    and _apply_mutates_index(subcommand[1])
+                )
+            )
             and not (
                 subcommand[0] in {"rm", "mv"}
                 and (

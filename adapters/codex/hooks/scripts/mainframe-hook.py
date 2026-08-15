@@ -219,9 +219,14 @@ def _rule_handles(command: str, reason: str) -> bool:
     subcommand = tokens[1]
     if subcommand in {
         "push", "switch", "checkout", "pull", "merge", "rebase", "reset",
-        "cherry-pick", "revert", "restore", "clean",
+        "cherry-pick", "revert", "restore", "clean", "update-index",
+        "update-ref", "read-tree",
     }:
         return True
+    if subcommand == "apply":
+        return len(tokens) > 2 and tokens[2] in {
+            "--cached", "--index", "--3way", "-3", "--intent-to-add", "-N",
+        }
     if subcommand == "commit":
         return len(tokens) > 2 and tokens[2] == "--amend"
     if subcommand == "stash":
