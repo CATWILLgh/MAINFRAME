@@ -115,6 +115,16 @@ def _is_assignment(token: str) -> bool:
     return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token))
 
 
+def _assignment_name(token: str) -> str | None:
+    return token.split("=", 1)[0] if _is_assignment(token) else None
+
+
+def _reject_git_assignment(token: str) -> None:
+    name = _assignment_name(token)
+    if name is not None and name.startswith("GIT_"):
+        raise VerificationError("git_environment_override")
+
+
 def _command_index(tokens: list[str]) -> int:
     index = 0
     while index < len(tokens) and _is_assignment(tokens[index]):
@@ -230,12 +240,19 @@ def _parse_git_segment(tokens: list[str], cwd: str) -> CommitInvocation | None:
             effective_cwd = _resolve_literal_dir(effective_cwd, tokens[index])
             index += 1
             continue
-        if token.startswith("--git-dir") or token.startswith("--work-tree"):
+        if (
+            token.startswith("--git-dir")
+            or token.startswith("--work-tree")
+            or token == "--bare"
+        ):
             raise VerificationError("custom_git_directory")
-        if token in {"-c", "--config-env"}:
-            index += 2
-            continue
-        if token in {"--no-pager", "--paginate", "-P", "-p", "--bare"}:
+        if (
+            token == "-c"
+            or token.startswith("-c")
+            or token.startswith("--config-env")
+        ):
+            raise VerificationError("git_config_override")
+        if token in {"--no-pager", "--paginate", "-P", "-p"}:
             index += 1
             continue
         if token == "commit":
@@ -251,13 +268,31 @@ def _unwrap_env(tokens: list[str]) -> list[str] | None:
     if index >= len(tokens) or os.path.basename(tokens[index]) != "env":
         return None
     index += 1
-    value_options = {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}
     while index < len(tokens) and tokens[index].startswith("-"):
-        option = tokens[index].split("=", 1)[0]
-        index += 1
-        if option in value_options and "=" not in tokens[index - 1]:
+        token = tokens[index]
+        option = token.split("=", 1)[0]
+        if token == "--":
             index += 1
+            break
+        if option in {"-i", "--ignore-environment"}:
+            raise VerificationError("env_ignore_environment")
+        if option in {"-C", "--chdir", "-S", "--split-string"}:
+            raise VerificationError("env_scope_override")
+        if option in {"-u", "--unset"}:
+            if "=" in token:
+                value = token.split("=", 1)[1]
+            else:
+                index += 1
+                if index >= len(tokens):
+                    raise VerificationError("env_option_missing_value")
+                value = tokens[index]
+            if value.startswith("GIT_"):
+                raise VerificationError("git_environment_override")
+            index += 1
+            continue
+        raise VerificationError("unsupported_env_option")
     while index < len(tokens) and _is_assignment(tokens[index]):
+        _reject_git_assignment(tokens[index])
         index += 1
     return tokens[index:] if index < len(tokens) else []
 
@@ -279,6 +314,10 @@ def parse_commit_invocations(command: str, cwd: str, *, depth: int = 0) -> list[
     invocations: list[CommitInvocation] = []
     effective_cwd = os.path.realpath(cwd)
     for segment in segments:
+        for token in segment:
+            if not _is_assignment(token):
+                break
+            _reject_git_assignment(token)
         index = _command_index(segment)
         if index >= len(segment):
             continue
