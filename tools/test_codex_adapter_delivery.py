@@ -460,7 +460,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert hooks.is_file() and hooks_state.is_file()
     hooks_data = json.loads(hooks.read_text(encoding="utf-8"))
     assert set(hooks_data["hooks"]) == {
-        "SessionStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStop"
+        "SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse",
+        "Stop", "SubagentStop",
     }
     assert stat.S_IMODE(hooks.stat().st_mode) == 0o600
     assert stat.S_IMODE(hooks_state.stat().st_mode) == 0o600
@@ -1095,6 +1096,9 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert 'pattern = ["git", ["update-ref", "read-tree"]]' in rules_body
     assert 'pattern = ["git", ["commit-tree", "send-pack"]]' in rules_body
+    assert 'pattern = ["git", "clean"]' in rules_body
+    assert '"git clean --dry-run"' in rules_body
+    assert '"git worktree prune --dry-run"' in rules_body
     assert "protected Git metadata" in rules_body
     assert (ADAPTER / "config" / "mainframe-permissions.toml").is_file()
     assert (ADAPTER / "scripts" / "manage-config.py").is_file()

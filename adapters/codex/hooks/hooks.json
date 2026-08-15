@@ -26,6 +26,18 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "^(Edit|Write|apply_patch)$",

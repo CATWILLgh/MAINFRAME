@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import sys
 
@@ -271,6 +272,43 @@ def _rm_rule_handles(command: str) -> bool:
     return path_module.rule_handles_recursive_rm(command)
 
 
+def _safe_git_diagnostic(command: str) -> bool:
+    """Recognize direct Git dry runs that rules route through approval."""
+    if re.search(r"[;&|`$<>()\r\n]", command):
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if len(tokens) < 3 or tokens[0] != "git":
+        return False
+    arguments = tokens[2:]
+    if tokens[1] == "clean":
+        return any(
+            token in {"-n", "--dry-run"}
+            or (
+                token.startswith("-")
+                and not token.startswith("--")
+                and "n" in token[1:]
+            )
+            for token in arguments
+        )
+    if tokens[1:3] == ["worktree", "prune"]:
+        return any(token in {"-n", "--dry-run"} for token in tokens[3:])
+    return False
+
+
+def _permission_request(payload: dict) -> None:
+    command = (payload.get("tool_input") or {}).get("command") or ""
+    if _safe_git_diagnostic(command):
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": "allow"},
+            }
+        }))
+
+
 def _command(payload: dict) -> None:
     snapshot = _snapshot_module()
     command = (payload.get("tool_input") or {}).get("command") or ""
@@ -432,6 +470,14 @@ def _failure(payload: dict, exc: Exception) -> None:
         text = notice
     if event == "PreToolUse" and payload.get("tool_name") == "Bash":
         _emit_deny(text, system_message=text)
+    elif event == "PermissionRequest":
+        print(json.dumps({
+            "systemMessage": text,
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": "deny", "message": text},
+            },
+        }))
     elif event in {"Stop", "SubagentStop"}:
         print(json.dumps({
             "decision": "block",
@@ -454,6 +500,8 @@ def main() -> None:
                 _command(payload)
             else:
                 _capture(payload)
+        elif event == "PermissionRequest" and payload.get("tool_name") == "Bash":
+            _permission_request(payload)
         elif event == "PostToolUse":
             _quality(payload)
         elif event in {"Stop", "SubagentStop"}:

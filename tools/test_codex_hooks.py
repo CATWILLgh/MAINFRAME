@@ -205,7 +205,8 @@ def _git_repo() -> Path:
 def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
     source = json.loads(HOOKS_SOURCE.read_text(encoding="utf-8"))
     assert set(source["hooks"]) == {
-        "SessionStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStop"
+        "SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse",
+        "Stop", "SubagentStop",
     }
     for event, groups in source["hooks"].items():
         assert len(groups) == 1
@@ -218,7 +219,7 @@ def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
         if "additionalContextLimit" in handler:
             assert 0 < handler["additionalContextLimit"] <= 1600
         else:
-            assert event in {"Stop", "SubagentStop"}
+            assert event in {"PermissionRequest", "Stop", "SubagentStop"}
         assert "async" not in handler
     assert source["hooks"]["SessionStart"][0]["matcher"] == (
         "^(startup|resume|clear|compact)$"
@@ -496,6 +497,43 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
         _tool_payload(root, event="PreToolUse", command="git push"), state
     )
     assert normal_push is None
+
+    for command in (
+        "git clean -n",
+        "git clean --dry-run",
+        "git clean -f",
+        "git clean -fd",
+        "git clean --interactive",
+        "git worktree prune --dry-run",
+        "git worktree prune -n",
+    ):
+        _, classified = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert classified is None, command
+
+    for command in (
+        "git clean -n",
+        "git clean -ndx",
+        "git clean --dry-run -d",
+        "git worktree prune -n",
+        "git worktree prune --dry-run --expire now",
+    ):
+        _, approval = _run_hook(
+            _tool_payload(root, event="PermissionRequest", command=command), state
+        )
+        assert approval["hookSpecificOutput"]["decision"]["behavior"] == "allow"
+
+    for command in (
+        "git clean -fd",
+        "git worktree prune",
+        "git -C ../outside clean -n",
+        "git clean -n; echo unsafe",
+    ):
+        _, undecided = _run_hook(
+            _tool_payload(root, event="PermissionRequest", command=command), state
+        )
+        assert undecided is None, command
 
     _, rule_branch = _run_hook(
         _tool_payload(root, event="PreToolUse", command="git branch -d old"), state
