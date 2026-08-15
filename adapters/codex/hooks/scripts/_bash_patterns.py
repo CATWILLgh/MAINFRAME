@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Warn when an actual ripgrep command contains a risky short ``-r`` cluster.
+"""Warn when an actual ripgrep command uses the ambiguous short ``-r`` form.
 
 In ripgrep, ``-r`` takes replacement text; it is not grep's recursive flag.
-The hook is advisory and silent for every other Bash pattern. It tokenizes
-shell commands so quoted examples and arguments to commands such as ``echo``
-do not trigger the reminder.
+The hook is advisory and accepts explicit ``--replace`` without a reminder. It
+tokenizes shell commands and follows ripgrep's value-taking option rules so
+quoted examples and option values such as ``-g -r`` do not trigger it.
 """
 
 from __future__ import annotations
@@ -25,9 +25,20 @@ except Exception:
 OPERATORS = {"&&", "||", ";", "|", "|&", "&", "(", ")"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "eval"}
 SIMPLE_WRAPPERS = {"command", "builtin", "exec", "nohup", "time"}
-SHORT_CLUSTER_RE = re.compile(r"-[A-Za-z]{2,}")
-MAX_RENDERED_CLUSTERS = 5
-MAX_CLUSTER_CHARS = 24
+SHORT_VALUE_OPTIONS = frozenset("efEmjgdtTABCMr")
+LONG_VALUE_OPTIONS = frozenset({
+    "--after-context", "--before-context", "--color", "--colors",
+    "--context", "--context-separator", "--dfa-size-limit", "--encoding",
+    "--engine", "--field-context-separator", "--field-match-separator",
+    "--file", "--generate", "--glob", "--hostname-bin",
+    "--hyperlink-format", "--iglob", "--ignore-file", "--max-columns",
+    "--max-count", "--max-depth", "--max-filesize", "--path-separator",
+    "--pre", "--pre-glob", "--regex-size-limit", "--regexp", "--replace",
+    "--sort", "--sortr", "--threads", "--type", "--type-add",
+    "--type-clear", "--type-not",
+})
+MAX_RENDERED_OPTIONS = 5
+MAX_OPTION_CHARS = 24
 
 
 def _tokenize(command: str) -> list[str] | None:
@@ -80,20 +91,44 @@ def _nested_command(tokens: list[str]) -> str | None:
     return None
 
 
-def _risky_clusters_in_rg(tokens: list[str]) -> list[str]:
+def _short_option_role(token: str) -> tuple[bool, bool]:
+    """Return whether token uses short -r and whether it consumes next argv."""
+    if token == "-" or not token.startswith("-") or token.startswith("--"):
+        return False, False
+    cluster = token[1:]
+    for index, option in enumerate(cluster):
+        if option not in SHORT_VALUE_OPTIONS:
+            continue
+        consumes_next = index == len(cluster) - 1
+        return option == "r", consumes_next
+    return False, False
+
+
+def _short_replace_options_in_rg(tokens: list[str]) -> list[str]:
     index = _command_index(tokens)
     if index >= len(tokens) or os.path.basename(tokens[index]) != "rg":
         return []
     risky: list[str] = []
-    for token in tokens[index + 1:]:
+    index += 1
+    while index < len(tokens):
+        token = tokens[index]
         if token == "--":
             break
-        if SHORT_CLUSTER_RE.fullmatch(token) and "r" in token[1:]:
+        if token.startswith("--"):
+            option = token.split("=", 1)[0]
+            if option in LONG_VALUE_OPTIONS and "=" not in token:
+                index += 2
+            else:
+                index += 1
+            continue
+        uses_replace, consumes_next = _short_option_role(token)
+        if uses_replace:
             risky.append(token)
+        index += 2 if consumes_next else 1
     return risky
 
 
-def risky_rg_clusters(command: str, *, depth: int = 0) -> list[str]:
+def short_rg_replace_options(command: str, *, depth: int = 0) -> list[str]:
     if depth > 3:
         return []
     tokens = _tokenize(command)
@@ -103,9 +138,9 @@ def risky_rg_clusters(command: str, *, depth: int = 0) -> list[str]:
     for segment in _segments(tokens):
         nested = _nested_command(segment)
         if nested is not None:
-            findings.extend(risky_rg_clusters(nested, depth=depth + 1))
+            findings.extend(short_rg_replace_options(nested, depth=depth + 1))
         else:
-            findings.extend(_risky_clusters_in_rg(segment))
+            findings.extend(_short_replace_options_in_rg(segment))
     return list(dict.fromkeys(findings))
 
 
@@ -114,30 +149,28 @@ def main() -> None:
     if payload.get("tool_name") != "Bash":
         return
     command = (payload.get("tool_input") or {}).get("command") or ""
-    clusters = risky_rg_clusters(command)
-    if not clusters:
+    options = short_rg_replace_options(command)
+    if not options:
         return
     if not claim_once(
-            "rg-replace-cluster", payload.get("session_id"),
+            "rg-short-replace", payload.get("session_id"),
             payload.get("agent_id")):
         return
-    shown = clusters[:MAX_RENDERED_CLUSTERS]
+    shown = options[:MAX_RENDERED_OPTIONS]
     rendered = ", ".join(
-        f"`{cluster[:MAX_CLUSTER_CHARS]}`" for cluster in shown
+        f"`{option[:MAX_OPTION_CHARS]}`" for option in shown
     )
-    if len(clusters) > MAX_RENDERED_CLUSTERS:
-        rendered += f", …and {len(clusters) - MAX_RENDERED_CLUSTERS} more"
+    if len(options) > MAX_RENDERED_OPTIONS:
+        rendered += f", …and {len(options) - MAX_RENDERED_OPTIONS} more"
     note = (
-        "ripgrep option check: " + rendered + " contains `r` in a short "
-        "option cluster. In ripgrep, `-r` consumes replacement text and "
-        "changes printed matches; it does not enable recursive search and "
-        "does not modify files. If replacement is intended, use explicit "
-        "`--replace=...`; otherwise remove `r` and write the intended flags "
-        "separately."
+        "ripgrep option check: " + rendered + " uses the short `-r` form. "
+        "In ripgrep it changes matched text in the output; recursion is "
+        "already the default. Use explicit `--replace=...` when replacement "
+        "is intended, otherwise remove `r`. The command was not blocked."
     )
     emit_note("PreToolUse", note)
     log_hook_signal(
-        __file__, "rg-replace-cluster", "noted", len(clusters), payload,
+        __file__, "rg-short-replace", "noted", len(options), payload,
         context=note,
     )
 

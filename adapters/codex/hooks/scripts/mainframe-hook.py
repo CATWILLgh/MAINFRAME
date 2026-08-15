@@ -298,11 +298,12 @@ def _command(payload: dict) -> None:
             if isinstance(reason, str):
                 reasons.append(reason)
 
-    notes.extend(_notes(_run_module("_bash_patterns.py", payload)))
     if reasons:
         _emit_deny("\n\n".join(dict.fromkeys(reasons))[:5000])
-    elif notes:
-        _emit_context("PreToolUse", "\n\n".join(dict.fromkeys(notes)))
+    else:
+        notes.extend(_notes(_run_module("_bash_patterns.py", payload)))
+        if notes:
+            _emit_context("PreToolUse", "\n\n".join(dict.fromkeys(notes)))
 
 
 def _stop(payload: dict) -> None:
