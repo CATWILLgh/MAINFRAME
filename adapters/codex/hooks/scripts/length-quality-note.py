@@ -1,32 +1,29 @@
 #!/usr/bin/env python3
-"""Advisory note for file/function length introduced by the current session.
+"""Immediate advisory for file/function length introduced by one edit.
 
-PreToolUse captures line counts and Python function spans before a file tool
-runs. PostToolUse confirms that baseline only after a successful edit. Stop
-compares the earliest confirmed baseline from the main session and its
-subagents with current content, then consumes the state.
+Codex already gives the dispatcher exact before/after snapshots for a
+successful file tool call. Comparing those snapshots in PostToolUse avoids
+persistent session state and gives the author one bounded note at the point
+where it can still help. Inherited oversized code stays silent.
 
 The generic file check applies to every hand-authored code extension except
 SQL. Python function length uses the stdlib AST. Other language-specific
-structural checks belong in profile or project testing layers, where an agent
-can verify an analyzer's heuristic findings before acting on them.
+structural checks belong in profile or project testing layers.
 """
 
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-try:
-    from _hooklib import (
-        emit_note, ext, load_payload, log_hook_signal, run, stop_guard_cwd,
-    )
-    from _length_check import (
-        FILE_LENGTH_EXTENSIONS, FILE_LENGTH_THRESHOLD,
-        FUNCTION_LENGTH_THRESHOLD, count_lines, over_threshold_functions,
-    )
-    from _length_state import baselines, capture, clear, confirm
-except Exception:
-    sys.exit(0)
+from _hooklib import ext, log_hook_signal
+from _length_check import (
+    FILE_LENGTH_EXTENSIONS,
+    FILE_LENGTH_THRESHOLD,
+    FUNCTION_LENGTH_THRESHOLD,
+    count_lines,
+    over_threshold_functions,
+    python_function_spans,
+)
 
 
 PYTHON_EXTENSIONS = frozenset({".py", ".pyi"})
@@ -42,40 +39,6 @@ def _inside(cwd, file_path):
         return False
 
 
-def _scan(cwd, snapshots):
-    """Return only threshold crossings introduced after stored baselines."""
-    file_over = []
-    function_over = []
-    for file_path, baseline in sorted(snapshots.items()):
-        if not _inside(cwd, file_path) or not os.path.isfile(file_path):
-            continue
-        if ext(file_path) not in FILE_LENGTH_EXTENSIONS:
-            continue
-        try:
-            with open(file_path, encoding="utf-8", errors="replace") as handle:
-                text = handle.read()
-        except OSError:
-            continue
-        current_lines = count_lines(text)
-        baseline_lines = int(baseline.get("lines") or 0)
-        if baseline_lines <= FILE_LENGTH_THRESHOLD < current_lines:
-            file_over.append((file_path, baseline_lines, current_lines))
-        if ext(file_path) not in PYTHON_EXTENSIONS:
-            continue
-        baseline_functions = baseline.get("functions")
-        if not isinstance(baseline_functions, dict):
-            continue
-        try:
-            current_functions = over_threshold_functions(text)
-        except SyntaxError:
-            continue
-        for name, start, _end, length in current_functions:
-            before = int(baseline_functions.get(name) or 0)
-            if before <= FUNCTION_LENGTH_THRESHOLD < length:
-                function_over.append((file_path, name, start, before, length))
-    return file_over, function_over
-
-
 def _relative(cwd, path):
     try:
         return os.path.relpath(path, cwd)
@@ -83,60 +46,69 @@ def _relative(cwd, path):
         return path
 
 
-def _format_note(cwd, file_over, function_over):
+def _function_lengths(text):
+    return {
+        name: end - start + 1
+        for name, start, end in python_function_spans(text)
+    }
+
+
+def _crossings(cwd, change):
+    path = str(change.get("path") or "")
+    before = change.get("before")
+    after = change.get("after")
+    if not path or not isinstance(before, str) or not isinstance(after, str):
+        return []
+    if not _inside(cwd, path) or ext(path) not in FILE_LENGTH_EXTENSIONS:
+        return []
+
     rows = []
-    for path, before, after in file_over:
+    before_lines = count_lines(before)
+    after_lines = count_lines(after)
+    if before_lines <= FILE_LENGTH_THRESHOLD < after_lines:
         rows.append(
             f"file: {_relative(cwd, path)} crossed {FILE_LENGTH_THRESHOLD} "
-            f"lines ({before} -> {after})"
+            f"lines ({before_lines} -> {after_lines})"
         )
-    for path, name, start, before, after in function_over:
-        rows.append(
-            f"Python function: {_relative(cwd, path)}:{start} `{name}` crossed "
-            f"{FUNCTION_LENGTH_THRESHOLD} lines ({before} -> {after})"
-        )
+
+    if ext(path) not in PYTHON_EXTENSIONS:
+        return rows
+    try:
+        before_functions = _function_lengths(before)
+        after_functions = over_threshold_functions(after)
+    except SyntaxError:
+        return rows
+    for name, start, _end, length in after_functions:
+        previous = int(before_functions.get(name) or 0)
+        if previous <= FUNCTION_LENGTH_THRESHOLD < length:
+            rows.append(
+                f"Python function: {_relative(cwd, path)}:{start} `{name}` "
+                f"crossed {FUNCTION_LENGTH_THRESHOLD} lines "
+                f"({previous} -> {length})"
+            )
+    return rows
+
+
+def note_for_changes(cwd, changes):
+    rows = []
+    for change in changes:
+        if isinstance(change, dict):
+            rows.extend(_crossings(cwd, change))
+    if not rows:
+        return None, 0
     shown = rows[:MAX_LISTED]
     more = f"\n  …and {len(rows) - MAX_LISTED} more" if len(rows) > MAX_LISTED else ""
-    return (
-        f"Length quality check found {len(rows)} threshold crossing(s) introduced "
-        "by this session:\n  - " + "\n  - ".join(shown) + more
+    note = (
+        f"Length quality check found {len(rows)} threshold crossing(s) in the "
+        "current edit:\n  - " + "\n  - ".join(shown) + more
         + "\nKeep the implementation cohesive by splitting the newly oversized "
         "file or extracting the newly oversized function when appropriate. "
         "This is advisory, not a block."
     )
+    return note, len(rows)
 
 
-def _stop(payload):
-    cwd = stop_guard_cwd(payload)
-    if cwd is None:
-        return
-    session_id = payload.get("session_id")
-    if not session_id:
-        raise ValueError("length quality check requires session_id")
-    snapshots = baselines(session_id, include_subagents=True)
-    if not snapshots:
-        return
-    file_over, function_over = _scan(cwd, snapshots)
-    clear(session_id, include_subagents=True)
-    if file_over or function_over:
-        note = _format_note(cwd, file_over, function_over)
-        emit_note("Stop", note)
-        log_hook_signal(
-            __file__, "length-threshold", "noted",
-            len(file_over) + len(function_over), payload, context=note,
-        )
-
-
-def main():
-    payload = load_payload()
-    event = payload.get("hook_event_name")
-    if event == "PreToolUse":
-        capture(payload)
-    elif event == "PostToolUse":
-        confirm(payload)
-    else:
-        _stop(payload)
-
-
-if __name__ == "__main__":
-    run(main)
+def record_note(payload, note, count):
+    log_hook_signal(
+        __file__, "length-threshold", "noted", count, payload, context=note
+    )

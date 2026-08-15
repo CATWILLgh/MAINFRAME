@@ -33,7 +33,6 @@ def _state_env(root: Path) -> dict[str, str]:
     env.update({
         "MAINFRAME_CODEX_SNAPSHOT_DIR": str(root / "snapshots"),
         "MAINFRAME_MARKER_STATE_DIR": str(root / "markers"),
-        "MAINFRAME_LENGTH_STATE_DIR": str(root / "length"),
         "MAINFRAME_NOTICE_STATE_DIR": str(root / "notices"),
     })
     return env
@@ -180,6 +179,10 @@ def _patch_payload(
         root, event=event, session=session, agent=agent, tool_use=tool_use,
         command=command, tool_name="apply_patch",
     )
+
+
+def _numbered_lines(count: int) -> str:
+    return "".join(f"value_{index} = {index}\n" for index in range(count))
 
 
 def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
@@ -1145,6 +1148,111 @@ def test_parallel_sessions_keep_snapshots_and_findings_separate():
         results = list(pool.map(post, range(len(files))))
     assert all(proc.returncode == 0 for proc, _ in results)
     assert [index for index, (_, output) in enumerate(results) if output is not None] == [7]
+
+
+def test_length_crossing_is_immediate_advice_and_never_a_stop_block():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "service.go"
+    source.write_text(_numbered_lines(399), encoding="utf-8")
+
+    _run_hook(_patch_payload(root, source.name, event="PreToolUse"), state)
+    source.write_text(_numbered_lines(402), encoding="utf-8")
+    _, noted = _run_hook(
+        _patch_payload(root, source.name, event="PostToolUse"), state
+    )
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "service.go" in context and "399 -> 402" in context
+    assert "advisory, not a block" in context
+
+    stop = {
+        "session_id": "session", "turn_id": "turn", "agent_id": "",
+        "hook_event_name": "Stop", "cwd": str(root),
+        "stop_hook_active": False,
+    }
+    _, result = _run_hook(stop, state)
+    assert result is None
+
+
+def test_length_advice_ignores_an_inherited_oversized_file():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "legacy.go"
+    source.write_text(_numbered_lines(405), encoding="utf-8")
+
+    _run_hook(_patch_payload(root, source.name, event="PreToolUse"), state)
+    source.write_text(_numbered_lines(406), encoding="utf-8")
+    _, result = _run_hook(
+        _patch_payload(root, source.name, event="PostToolUse"), state
+    )
+    assert result is None
+
+
+def test_python_function_length_crossing_is_immediate_for_subagent():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "service.py"
+    before = "def run():\n" + "    value = 1\n" * 58
+    after = "def run():\n" + "    value = 1\n" * 61
+    source.write_text(before, encoding="utf-8")
+
+    pre = _patch_payload(
+        root, source.name, event="PreToolUse", agent="python-child"
+    )
+    _run_hook(pre, state)
+    source.write_text(after, encoding="utf-8")
+    post = _patch_payload(
+        root, source.name, event="PostToolUse", agent="python-child"
+    )
+    _, noted = _run_hook(post, state)
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "Python function" in context and "`run`" in context
+    assert "59 -> 62" in context
+
+
+def test_new_ticket_format_is_checked_from_a_repository_subdirectory():
+    root = Path(tempfile.mkdtemp())
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    nested = root / "packages" / "app"
+    tickets = root / "docs" / "tickets" / "open" / "observations"
+    nested.mkdir(parents=True)
+    tickets.mkdir(parents=True)
+    existing = tickets / "abcd-existing-problem.md"
+    existing.write_text("---\nid: abcd\n---\n", encoding="utf-8")
+    created = tickets / "abcd-new-problem.md"
+    state = root / "state"
+    patch = (
+        "*** Begin Patch\n"
+        f"*** Add File: {created}\n"
+        "*** End Patch"
+    )
+    pre = _tool_payload(
+        nested, event="PreToolUse", command=patch, tool_name="apply_patch"
+    )
+    _run_hook(pre, state)
+    created.write_text("---\nid: abcd\n---\n", encoding="utf-8")
+    post = _tool_payload(
+        nested, event="PostToolUse", command=patch, tool_name="apply_patch"
+    )
+    _, noted = _run_hook(post, state)
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "already belongs to another ticket" in context
+
+
+def test_existing_ticket_update_does_not_repeat_filename_advice():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    tickets = root / "docs" / "tickets" / "open" / "observations"
+    tickets.mkdir(parents=True)
+    ticket = tickets / "bad-name.md"
+    ticket.write_text("---\nid: bad\n---\nold\n", encoding="utf-8")
+
+    _run_hook(_patch_payload(root, str(ticket), event="PreToolUse"), state)
+    ticket.write_text("---\nid: bad\n---\nupdated\n", encoding="utf-8")
+    _, result = _run_hook(
+        _patch_payload(root, str(ticket), event="PostToolUse"), state
+    )
+    assert result is None
 
 
 def test_missing_snapshot_is_a_visible_role_neutral_failure():

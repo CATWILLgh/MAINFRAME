@@ -26,7 +26,6 @@ HEALTH_MODULES = (
     "_git_authority.py",
     "_hooklib.py",
     "_length_check.py",
-    "_length_state.py",
     "_marker_state.py",
     "_markers.py",
     "_node_findings.py",
@@ -68,10 +67,6 @@ def _capture(payload: dict) -> None:
         if content is None:
             continue
         rows.append({"path": str(path), "existed": existed, "text": content})
-        _run_module(
-            "length-quality-note.py",
-            _synthetic_payload(payload, path, "Write", content=content),
-        )
     if rows:
         snapshot.atomic_write(payload, rows)
     snapshot.cleanup()
@@ -171,12 +166,14 @@ def _quality(payload: dict) -> None:
     snapshot = _snapshot_module()
     outputs: list[dict] = []
     failures: list[str] = []
+    changes: list[dict[str, str]] = []
     for saved in _load_snapshot(payload):
         path = Path(saved["path"])
         before = saved.get("text") or ""
         after = snapshot.read_text(path)
         if after is None:
             continue
+        changes.append({"path": str(path), "before": before, "after": after})
         exact = _synthetic_payload(payload, path, "Write", content=after)
         diff_payload = _synthetic_payload(
             payload, path, "MultiEdit", edits=snapshot.edits(before, after)
@@ -196,9 +193,33 @@ def _quality(payload: dict) -> None:
                 if notice:
                     failures.append(notice)
         outputs.extend(_checked_module("nodejs-security-scan.py", diff_payload, failures))
-        outputs.extend(_checked_module("length-quality-note.py", exact, failures))
         if not saved.get("existed"):
-            outputs.extend(_checked_module("ticket-id-format-reminder.py", exact, failures))
+            ticket_payload = dict(exact)
+            ticket_payload["cwd"] = str(
+                snapshot.project_root(
+                    Path(payload.get("cwd") or os.getcwd()).resolve()
+                )
+            )
+            outputs.extend(_checked_module(
+                "ticket-id-format-reminder.py", ticket_payload, failures
+            ))
+    try:
+        length = _load_module("length-quality-note.py")
+        note, count = length.note_for_changes(
+            payload.get("cwd") or os.getcwd(), changes
+        )
+        if note:
+            outputs.append({
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": note,
+                }
+            })
+            length.record_note(payload, note, count)
+    except Exception as exc:
+        notice = _failure_notice(payload, "length-quality-note.py", exc)
+        if notice:
+            failures.append(notice)
     notes = list(dict.fromkeys(_notes(outputs) + failures))
     if notes:
         _emit_context(
@@ -314,8 +335,6 @@ def _stop(payload: dict) -> None:
         "python-security-stop-gate.py",
         "nodejs-security-stop-gate.py",
     ]
-    if payload.get("hook_event_name") == "Stop":
-        filenames.append("length-quality-note.py")
     rows: list[dict] = []
     failures: list[str] = []
     for filename in filenames:

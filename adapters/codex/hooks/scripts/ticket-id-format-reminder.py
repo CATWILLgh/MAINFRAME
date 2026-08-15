@@ -6,10 +6,10 @@ descriptive kebab-case slug. Four characters avoid the color-token treatment
 observed with eight-character hex strings; checking the directory before use
 handles ordinary local collisions without a shared sequential counter.
 
-Fires on Write only. It is deliberately advisory because the ticket body has
-already been generated: correction should rename the file and edit frontmatter,
-not spend tokens generating the body again. Existing ticket ids remain stable;
-their slug is reviewed by the ticket workflow when they are updated.
+The Codex dispatcher calls this only for a newly created file and supplies the
+repository root even when the task started in a subdirectory. It is deliberately
+advisory because the ticket body has already been generated: correction should
+rename the file and edit frontmatter, not generate the body again.
 """
 
 import os
@@ -94,10 +94,7 @@ def main():
         "concise descriptive kebab-case slug; its frontmatter `id:` must match. "
         f"{collision_note} "
         "Do not regenerate the ticket body: rename the file and edit only the "
-        "id or slug that is wrong. If this Write updated an open ticket, "
-        "preserve its stable id and only make the slug accurately describe the "
-        "record, updating repository references when it changes. Archived "
-        "tickets are immutable."
+        "id or slug that is wrong."
     )
     emit_note("PostToolUse", note)
     log_hook_signal(
