@@ -47,6 +47,12 @@ CONFIG_TOOL="${ADAPTER_ROOT}/scripts/manage-config.py"
 CONFIG_TARGET="${CODEX_DIR}/config.toml"
 CONFIG_STATE="${CODEX_DIR}/.mainframe-config-state.json"
 CONFIG_BACKUP="${CONFIG_TARGET}.backup-${TIMESTAMP}"
+HOOKS_SOURCE="${ADAPTER_ROOT}/hooks/hooks.json"
+HOOKS_SCRIPT="${ADAPTER_ROOT}/hooks/scripts/mainframe-hook.py"
+HOOKS_TOOL="${ADAPTER_ROOT}/scripts/manage-hooks.py"
+HOOKS_TARGET="${CODEX_DIR}/hooks.json"
+HOOKS_STATE="${CODEX_DIR}/.mainframe-hooks-state.json"
+CODEX_DESKTOP_RUNTIME="${MAINFRAME_CODEX_DESKTOP_RUNTIME:-/Applications/ChatGPT.app/Contents/Resources/codex}"
 
 DRY_RUN=0
 ASSUME_YES=0
@@ -63,8 +69,8 @@ Usage:
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
 share AGENTS.md, standalone skills, command rules, a bounded permission profile,
-and native specialist agents. Codex plugins, hooks, and development telemetry
-are not installed by this version.
+native specialist agents, and reviewed native hooks. Codex plugins and
+development telemetry are not installed by this version.
 EOF
 }
 
@@ -119,10 +125,18 @@ runtime_preflight() {
     local found=0
     if command -v codex >/dev/null 2>&1; then
         log "Codex CLI: $(codex --version 2>/dev/null || printf 'detected')"
+        if ! codex features list 2>/dev/null | grep -Eq '^hooks[[:space:]]+stable[[:space:]]+true$'; then
+            error "The installed Codex CLI does not expose stable native hooks. Update Codex before installation."
+            return 1
+        fi
         found=1
     fi
-    if [[ -x /Applications/ChatGPT.app/Contents/Resources/codex ]]; then
-        log "Codex Desktop runtime: $(/Applications/ChatGPT.app/Contents/Resources/codex --version 2>/dev/null || printf 'detected')"
+    if [[ -x "$CODEX_DESKTOP_RUNTIME" ]]; then
+        log "Codex Desktop runtime: $("$CODEX_DESKTOP_RUNTIME" --version 2>/dev/null || printf 'detected')"
+        if ! "$CODEX_DESKTOP_RUNTIME" features list 2>/dev/null | grep -Eq '^hooks[[:space:]]+stable[[:space:]]+true$'; then
+            error "The installed Codex Desktop runtime does not expose stable native hooks. Update the app before installation."
+            return 1
+        fi
         found=1
     fi
     if [[ $found -eq 0 ]]; then
@@ -216,7 +230,10 @@ check_sources() {
         "${ADAPTER_ROOT}/skills/mainframe-ticket/references/ticket-format.md" \
         "$RULES_SOURCE" \
         "$CONFIG_SOURCE" \
-        "$CONFIG_TOOL"; do
+        "$CONFIG_TOOL" \
+        "$HOOKS_SOURCE" \
+        "$HOOKS_SCRIPT" \
+        "$HOOKS_TOOL"; do
         if [[ ! -f "$path" ]]; then
             error "Codex adapter source is missing: $path"
             return 1
@@ -260,12 +277,23 @@ manage_config() {
         "$@"
 }
 
+manage_hooks() {
+    local action="$1"
+    shift
+    python3 "$HOOKS_TOOL" "$action" \
+        --target "$HOOKS_TARGET" \
+        --source "$HOOKS_SOURCE" \
+        --script "$HOOKS_SCRIPT" \
+        --state "$HOOKS_STATE" \
+        "$@"
+}
+
 validate_rules() {
     local runtime=""
     if command -v codex >/dev/null 2>&1; then
         runtime="$(command -v codex)"
-    elif [[ -x /Applications/ChatGPT.app/Contents/Resources/codex ]]; then
-        runtime="/Applications/ChatGPT.app/Contents/Resources/codex"
+    elif [[ -x "$CODEX_DESKTOP_RUNTIME" ]]; then
+        runtime="$CODEX_DESKTOP_RUNTIME"
     fi
     if [[ -n "$runtime" ]] && ! "$runtime" execpolicy check --rules "$RULES_SOURCE" -- git push >/dev/null 2>&1; then
         error "Codex rejected the MAINFRAME rules file; no adapter files were changed."
@@ -313,11 +341,13 @@ preflight() {
             fi
         done
         manage_config uninstall --dry-run >/dev/null
+        manage_hooks uninstall --dry-run >/dev/null
     else
         runtime_preflight
         validate_rules
         delivery_preflight
         manage_config install --dry-run >/dev/null
+        manage_hooks install --dry-run >/dev/null
     fi
 }
 
@@ -556,6 +586,14 @@ install_config() {
     fi
 }
 
+install_hooks() {
+    if [[ $DRY_RUN -eq 1 ]]; then
+        manage_hooks install --dry-run
+    else
+        manage_hooks install
+    fi
+}
+
 install_adapter() {
     local name
     install_agents
@@ -566,10 +604,11 @@ install_adapter() {
     install_rules
     for name in "${TEMPLATED_AGENT_NAMES[@]}"; do install_templated_agent "$name"; done
     install_config
+    install_hooks
     if [[ $DRY_RUN -eq 1 ]]; then
         log "Codex baseline plan verified; no files were changed."
     else
-        log "Codex baseline installed. Start a new task before relying on updated instructions, skills, or agent discovery."
+        log "Codex baseline installed. Review new or changed hook definitions with /hooks, then start a new task before relying on updated instructions, skills, agents, or hooks."
     fi
 }
 
@@ -723,6 +762,11 @@ uninstall_agents() {
 
 uninstall_adapter() {
     local name
+    if [[ $DRY_RUN -eq 1 ]]; then
+        manage_hooks uninstall --dry-run
+    else
+        manage_hooks uninstall
+    fi
     uninstall_agents
     for name in "${SKILL_NAMES[@]}"; do
         remove_owned_link "${ADAPTER_ROOT}/skills/${name}" "${GLOBAL_SKILLS_DIR}/${name}" "Codex skill $name"

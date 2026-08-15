@@ -39,8 +39,8 @@ The aim is simple: improve the minimum quality of agent work without turning del
 | Global baseline | Small, role-neutral instructions for evidence, safety, secrets, and authority boundaries. |
 | Primary-session init | A manual collaboration mode for goals, product decisions, and larger tasks. |
 | Skills | Focused guidance for a stack or kind of work, loaded when it is useful instead of being placed in one giant prompt. |
-| Specialist agents | Separate Claude Code profiles for research, engineering, testing, decision review, and final review. Codex profiles will be adapted separately. |
-| Hooks | Claude Code checks around relevant tool and session events. Codex hooks are not copied until their own event and concurrency contracts are handled. |
+| Specialist agents | Adapter-native profiles for research, engineering, testing, decision review, and final review. |
+| Hooks | Adapter-native checks around relevant tool and session events, with current-change attribution and bounded feedback. |
 | Settings and secrets | Adapter-owned settings where justified, plus a shared secret helper and local credentials index without secret values. |
 | Development mode | Claude Code telemetry, feedback tools, and a desktop observability page for improving MAINFRAME itself. |
 
@@ -54,7 +54,7 @@ flowchart LR
     D --> C["Claude Code adapter"]
     D --> X["Codex adapter"]
     C --> P["Claude-native skills, agents, hooks, and settings"]
-    X --> B["Cross-surface AGENTS.md and standalone skills"]
+    X --> B["Codex-native instructions, skills, agents, rules, and hooks"]
     R --> S["Shared secret helper and local index"]
 ```
 
@@ -95,7 +95,7 @@ To see the result without changing anything:
 ./install.sh --claude --dry-run
 ```
 
-Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit `$mainframe-init`, `$mainframe-secrets`, the shared credentials index, command rules, and a least-privilege permission profile shared by Desktop, CLI, and the IDE extension. The installer merges one marked block into the existing `config.toml`, backs it up, preserves unrelated settings, and can remove only its own changes later. It deliberately does not install Codex hooks, agents, plugins, or telemetry yet.
+Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit skills, native specialist agents, command rules, reviewed native hooks, the shared credentials index, and a least-privilege permission profile for Desktop, CLI, and the IDE extension. The installer merges only its owned configuration and hook groups, preserves unrelated settings, and can remove only its own changes later. New or changed hooks still require review through `/hooks`; Codex plugins and development telemetry are not installed yet.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 

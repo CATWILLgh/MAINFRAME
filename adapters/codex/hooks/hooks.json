@@ -1,0 +1,65 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear|compact|fork)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 5,
+            "additionalContextLimit": 700
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|Edit|Write|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 15,
+            "additionalContextLimit": 900
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Edit|Write|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 30,
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 210
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

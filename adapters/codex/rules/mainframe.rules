@@ -110,3 +110,33 @@ prefix_rule(
         "git status --short",
     ],
 )
+
+prefix_rule(
+    pattern = ["git", "branch", ["-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move", "--copy", "--force", "--edit-description", "--set-upstream-to", "--unset-upstream", "--create-reflog", "--track", "--no-track"]],
+    decision = "prompt",
+    justification = "Creating, deleting, renaming, or retargeting a branch requires an explicit user request.",
+    match = [
+        "git branch -d old-branch",
+        "git branch -m new-name",
+        "git branch --set-upstream-to origin/main",
+    ],
+    not_match = [
+        "git branch --show-current",
+        "git branch --list",
+        "git branch -a",
+    ],
+)
+
+prefix_rule(
+    pattern = [["rm", "/bin/rm"], ["-r", "-R", "-rf", "-rF", "-fr", "-fR", "-Rf", "-RF", "--recursive"]],
+    decision = "prompt",
+    justification = "Recursive deletion requires review of the resolved target; ordinary non-recursive file deletion remains available.",
+    match = [
+        "rm -rf build/cache",
+        "/bin/rm -R generated",
+    ],
+    not_match = [
+        "rm one-file.txt",
+        "rmdir empty-directory",
+    ],
+)

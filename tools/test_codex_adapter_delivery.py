@@ -68,18 +68,35 @@ def _agent_template_data(name, *, home):
     return tomllib.loads(body)
 
 
-def _run(*args, home=None):
+def _write_fake_codex(path, *, hooks_supported=True):
+    hooks_value = "true" if hooks_supported else "false"
+    path.write_text(
+        "#!/bin/sh\n"
+        "if [ \"${1:-}\" = --version ]; then echo 'codex-cli 0.147.0'; exit 0; fi\n"
+        "if [ \"${1:-}\" = features ] && [ \"${2:-}\" = list ]; then "
+        f"echo 'hooks stable {hooks_value}'; exit 0; fi\n",
+        encoding="utf-8",
+    )
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _run(*args, home=None, desktop_hooks_supported=True):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
     fake_bin.mkdir(exist_ok=True)
     codex = fake_bin / "codex"
-    codex.write_text(
-        "#!/bin/sh\n"
-        "if [ \"${1:-}\" = --version ]; then echo 'codex-cli 0.147.0'; fi\n",
-        encoding="utf-8",
+    desktop_codex = fake_bin / "codex-desktop"
+    _write_fake_codex(codex)
+    _write_fake_codex(
+        desktop_codex,
+        hooks_supported=desktop_hooks_supported,
     )
-    codex.chmod(codex.stat().st_mode | stat.S_IXUSR)
-    env = dict(os.environ, HOME=str(home), PATH=f"{fake_bin}:/usr/bin:/bin")
+    env = dict(
+        os.environ,
+        HOME=str(home),
+        PATH=f"{fake_bin}:/usr/bin:/bin",
+        MAINFRAME_CODEX_DESKTOP_RUNTIME=str(desktop_codex),
+    )
     proc = subprocess.run(
         ["bash", str(INSTALLER), *args],
         capture_output=True,
@@ -113,6 +130,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-curl-requests" in proc.stdout
     assert "mainframe-ops-app-server-safety" in proc.stdout
     assert "mainframe.rules" in proc.stdout
+    assert "hook groups" in proc.stdout
     assert "mainframe_researcher.toml" in proc.stdout
     assert "mainframe_python_backend_engineer.toml" in proc.stdout
     assert "mainframe_typescript_backend_engineer.toml" in proc.stdout
@@ -121,6 +139,18 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe_decision_reviewer.toml" in proc.stdout
     assert "mainframe_advisor.toml" in proc.stdout
     assert "permissions" in proc.stdout
+    assert not (home / ".codex").exists()
+    assert not (home / ".agents").exists()
+
+
+def test_install_stops_when_desktop_runtime_lacks_native_hooks():
+    proc, home = _run(
+        "--codex",
+        "--dry-run",
+        desktop_hooks_supported=False,
+    )
+    assert proc.returncode != 0
+    assert "Desktop runtime does not expose stable native hooks" in proc.stderr
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 
@@ -367,6 +397,26 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     }
     assert stat.S_IMODE(config.stat().st_mode) == 0o600
     assert stat.S_IMODE(config_state.stat().st_mode) == 0o600
+    hooks = codex_dir / "hooks.json"
+    hooks_state = codex_dir / ".mainframe-hooks-state.json"
+    assert hooks.is_file() and hooks_state.is_file()
+    hooks_data = json.loads(hooks.read_text(encoding="utf-8"))
+    assert set(hooks_data["hooks"]) == {
+        "SessionStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStop"
+    }
+    assert stat.S_IMODE(hooks.stat().st_mode) == 0o600
+    assert stat.S_IMODE(hooks_state.stat().st_mode) == 0o600
+    commands = [
+        handler["command"]
+        for groups in hooks_data["hooks"].values()
+        for group in groups
+        for handler in group["hooks"]
+    ]
+    assert commands and all(
+        str((ADAPTER / "hooks" / "scripts" / "mainframe-hook.py").resolve())
+        in command
+        for command in commands
+    )
     assert helper.is_symlink()
 
     reinstalled, _ = _run("--codex", home=home)
@@ -396,6 +446,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not advisor_state.exists()
     assert not config.exists()
     assert not config_state.exists()
+    assert not hooks.exists()
+    assert not hooks_state.exists()
     assert helper.is_symlink()
     for name in (
         "mainframe-init",
@@ -494,6 +546,51 @@ def test_existing_mainframe_rules_require_yes_and_are_restored():
     assert removed.returncode == 0, removed.stderr
     assert target.is_file() and not target.is_symlink()
     assert target.read_text(encoding="utf-8") == "# user-owned rules\n"
+
+
+def test_existing_user_hooks_are_merged_and_restored_on_uninstall():
+    home = pathlib.Path(tempfile.mkdtemp())
+    codex_dir = home / ".codex"
+    codex_dir.mkdir()
+    target = codex_dir / "hooks.json"
+    user_group = {
+        "matcher": "^Bash$",
+        "hooks": [{"type": "command", "command": "python3 user-hook.py"}],
+    }
+    target.write_text(
+        json.dumps({"description": "kept", "hooks": {"PreToolUse": [user_group]}}),
+        encoding="utf-8",
+    )
+
+    installed, _ = _run("--codex", home=home)
+    assert installed.returncode == 0, installed.stderr
+    current = json.loads(target.read_text(encoding="utf-8"))
+    assert current["description"] == "kept"
+    assert user_group in current["hooks"]["PreToolUse"]
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    restored = json.loads(target.read_text(encoding="utf-8"))
+    assert restored == {
+        "description": "kept",
+        "hooks": {"PreToolUse": [user_group]},
+    }
+
+
+def test_changed_managed_hook_stops_uninstall_before_other_removal():
+    installed, home = _run("--codex")
+    assert installed.returncode == 0, installed.stderr
+    target = home / ".codex" / "hooks.json"
+    document = json.loads(target.read_text(encoding="utf-8"))
+    document["hooks"]["Stop"][0]["hooks"][0]["timeout"] = 1
+    target.write_text(json.dumps(document), encoding="utf-8")
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode != 0
+    assert "changed or is duplicated" in removed.stderr
+    assert target.exists()
+    assert (home / ".codex" / "AGENTS.md").is_file()
+    assert (home / ".agents" / "skills" / "mainframe-init").is_symlink()
 
 
 def test_existing_mainframe_researcher_requires_yes_and_is_restored():
@@ -752,7 +849,8 @@ def test_unsupported_dev_mode_fails_before_any_delivery():
 
 def test_baseline_uses_native_standalone_layers_only():
     assert not (ADAPTER / "plugin").exists()
-    assert not (ADAPTER / "hooks").exists()
+    assert (ADAPTER / "hooks" / "hooks.json").is_file()
+    assert (ADAPTER / "hooks" / "scripts" / "mainframe-hook.py").is_file()
     assert not (ADAPTER / "config.toml").exists()
     template_home = pathlib.Path("/tmp/mainframe-codex-template-home")
     researcher = ADAPTER / "agents" / "mainframe_researcher.toml.template"
@@ -896,6 +994,7 @@ def test_baseline_uses_native_standalone_layers_only():
     ).read_text(encoding="utf-8")
     assert (ADAPTER / "config" / "mainframe-permissions.toml").is_file()
     assert (ADAPTER / "scripts" / "manage-config.py").is_file()
+    assert (ADAPTER / "scripts" / "manage-hooks.py").is_file()
 
     init_metadata = (
         ADAPTER / "skills" / "mainframe-init" / "agents" / "openai.yaml"
