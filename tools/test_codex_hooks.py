@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stdout
+import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -99,6 +102,50 @@ def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
         else:
             assert event in {"Stop", "SubagentStop"}
         assert "async" not in handler
+    assert source["hooks"]["SessionStart"][0]["matcher"] == (
+        "^(startup|resume|clear|compact)$"
+    )
+
+
+def test_startup_health_covers_every_runtime_module():
+    spec = importlib.util.spec_from_file_location("mainframe_hook_test", HOOK)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    expected = {
+        path.name
+        for path in HOOK.parent.glob("*.py")
+        if path.name != HOOK.name
+    }
+    assert set(module.HEALTH_MODULES) == expected
+
+    root = Path(tempfile.mkdtemp())
+    proc, result = _run_hook(
+        {
+            "session_id": "health",
+            "hook_event_name": "SessionStart",
+            "cwd": str(root),
+            "source": "startup",
+        },
+        root / "state",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert result is None
+
+    original_load = module._load_module
+    module._load_module = lambda filename: (
+        (_ for _ in ()).throw(ImportError("probe"))
+        if filename == module.HEALTH_MODULES[0]
+        else original_load(filename)
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        module._health({})
+    failure = json.loads(output.getvalue())
+    assert module.HEALTH_MODULES[0] in failure["systemMessage"]
+    assert module.HEALTH_MODULES[0] in (
+        failure["hookSpecificOutput"]["additionalContext"]
+    )
 
 
 def test_manager_merges_user_groups_and_uninstall_removes_only_owned_groups():

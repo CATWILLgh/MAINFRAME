@@ -15,10 +15,37 @@ import sys
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-snapshot = importlib.import_module("_edit_snapshot")
 
 MAX_SECTIONS = 8
 MAX_STOP_CHARS = 8_000
+
+HEALTH_MODULES = (
+    "_bash_patterns.py",
+    "_comment_findings.py",
+    "_edit_snapshot.py",
+    "_fallow_state.py",
+    "_git_authority.py",
+    "_hooklib.py",
+    "_length_check.py",
+    "_length_state.py",
+    "_marker_state.py",
+    "_markers.py",
+    "_notice_state.py",
+    "_path_validation.py",
+    "_python_findings.py",
+    "_secret_commit.py",
+    "comment-discipline-reminder.py",
+    "comment_extract.py",
+    "fallow-quality-note.py",
+    "length-quality-note.py",
+    "nodejs-security-scan.py",
+    "python-security-scan.py",
+    "python-security-stop-gate.py",
+    "scan-suppression-markers.py",
+    "stop-gate-comment-discipline.py",
+    "stop-gate-suppression-markers.py",
+    "ticket-id-format-reminder.py",
+)
 
 
 def _payload() -> dict:
@@ -28,7 +55,12 @@ def _payload() -> dict:
     return value
 
 
+def _snapshot_module():
+    return importlib.import_module("_edit_snapshot")
+
+
 def _capture(payload: dict) -> None:
+    snapshot = _snapshot_module()
     rows = []
     for path in snapshot.paths(payload):
         existed = path.exists()
@@ -46,6 +78,7 @@ def _capture(payload: dict) -> None:
 
 
 def _load_snapshot(payload: dict) -> list[dict]:
+    snapshot = _snapshot_module()
     return snapshot.consume(payload)
 
 
@@ -135,6 +168,7 @@ def _checked_module(
 
 
 def _quality(payload: dict) -> None:
+    snapshot = _snapshot_module()
     outputs: list[dict] = []
     failures: list[str] = []
     for saved in _load_snapshot(payload):
@@ -168,7 +202,11 @@ def _quality(payload: dict) -> None:
             outputs.extend(_checked_module("ticket-id-format-reminder.py", exact, failures))
     notes = list(dict.fromkeys(_notes(outputs) + failures))
     if notes:
-        _emit_context(payload["hook_event_name"], "\n\n".join(notes[:MAX_SECTIONS]))
+        _emit_context(
+            payload["hook_event_name"],
+            "\n\n".join(notes[:MAX_SECTIONS]),
+            system_message="\n\n".join(failures) if failures else None,
+        )
 
 
 def _rule_handles(command: str, reason: str) -> bool:
@@ -219,6 +257,7 @@ def _rm_rule_handles(command: str) -> bool:
 
 
 def _command(payload: dict) -> None:
+    snapshot = _snapshot_module()
     command = (payload.get("tool_input") or {}).get("command") or ""
     notes: list[str] = []
     reasons: list[str] = []
@@ -295,21 +334,21 @@ def _stop(payload: dict) -> None:
     if reasons:
         unique_reasons = list(dict.fromkeys(reasons))[:MAX_SECTIONS]
         reason_text = "\n\n".join(unique_reasons)
-        print(json.dumps({
+        output = {
             "decision": "block",
             "reason": reason_text[:MAX_STOP_CHARS],
-        }))
+        }
+        if failures:
+            output["systemMessage"] = "\n\n".join(failures)
+        print(json.dumps(output))
 
 
 def _health(_payload_value: dict) -> None:
     failures = []
-    for filename in (
-        "_hooklib.py", "_markers.py", "_comment_findings.py",
-        "_python_findings.py", "_length_check.py",
-    ):
+    for filename in HEALTH_MODULES:
         try:
             _load_module(filename)
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:
             failures.append(f"{filename}: {type(exc).__name__}")
     if failures:
         _emit_context(
@@ -318,26 +357,38 @@ def _health(_payload_value: dict) -> None:
             + "; ".join(failures)
             + ". Return this fact to the immediate caller before claiming "
             "hook-backed verification.",
+            system_message=(
+                "MAINFRAME hook checks are partially unavailable: "
+                + "; ".join(failures)
+            ),
         )
 
 
-def _emit_context(event: str, text: str) -> None:
-    print(json.dumps({
+def _emit_context(
+    event: str, text: str, *, system_message: str | None = None
+) -> None:
+    output = {
         "hookSpecificOutput": {
             "hookEventName": event,
             "additionalContext": text,
         }
-    }))
+    }
+    if system_message:
+        output["systemMessage"] = system_message
+    print(json.dumps(output))
 
 
-def _emit_deny(reason: str) -> None:
-    print(json.dumps({
+def _emit_deny(reason: str, *, system_message: str | None = None) -> None:
+    output = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         }
-    }))
+    }
+    if system_message:
+        output["systemMessage"] = system_message
+    print(json.dumps(output))
 
 
 def _failure(payload: dict, exc: Exception) -> None:
@@ -354,11 +405,15 @@ def _failure(payload: dict, exc: Exception) -> None:
             return
         text = notice
     if event == "PreToolUse" and payload.get("tool_name") == "Bash":
-        _emit_deny(text)
+        _emit_deny(text, system_message=text)
     elif event in {"Stop", "SubagentStop"}:
-        print(json.dumps({"decision": "block", "reason": text}))
+        print(json.dumps({
+            "decision": "block",
+            "reason": text,
+            "systemMessage": text,
+        }))
     else:
-        _emit_context(event, text)
+        _emit_context(event, text, system_message=text)
 
 
 def main() -> None:
