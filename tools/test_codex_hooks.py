@@ -24,6 +24,8 @@ HOOKS_SOURCE = ADAPTER / "hooks" / "hooks.json"
 MANAGER = ADAPTER / "scripts" / "manage-hooks.py"
 PYTHON_SCAN = ADAPTER / "hooks" / "scripts" / "python-security-scan.py"
 PYTHON_STOP = ADAPTER / "hooks" / "scripts" / "python-security-stop-gate.py"
+NODE_SCAN = ADAPTER / "hooks" / "scripts" / "nodejs-security-scan.py"
+NODE_STOP = ADAPTER / "hooks" / "scripts" / "nodejs-security-stop-gate.py"
 
 
 def _state_env(root: Path) -> dict[str, str]:
@@ -69,6 +71,20 @@ def _run_python_hook(payload: dict, state: Path) -> tuple[subprocess.CompletedPr
     return proc, output
 
 
+def _run_node_hook(payload: dict, state: Path) -> tuple[subprocess.CompletedProcess, dict | None]:
+    script = NODE_STOP if payload["hook_event_name"] == "SubagentStop" else NODE_SCAN
+    proc = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env=_state_env(state),
+    )
+    output = json.loads(proc.stdout) if proc.stdout.strip() else None
+    return proc, output
+
+
 def _python_edit_payload(
     root: Path, source: Path, old: str, new: str, *, session: str = "python",
     agent: str = "python-child",
@@ -96,6 +112,39 @@ def _python_stop_payload(root: Path, *, session: str = "python", agent: str = "p
         "turn_id": "turn",
         "agent_id": agent,
         "agent_type": "mainframe_python_backend_engineer",
+        "hook_event_name": "SubagentStop",
+        "cwd": str(root),
+        "stop_hook_active": False,
+    }
+
+
+def _node_edit_payload(
+    root: Path, source: Path, old: str, new: str, *, session: str = "node",
+    agent: str = "node-child",
+) -> dict:
+    source.write_text(new, encoding="utf-8")
+    return {
+        "session_id": session,
+        "turn_id": "turn",
+        "agent_id": agent,
+        "agent_type": "mainframe_typescript_backend_engineer",
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Edit",
+        "cwd": str(root),
+        "tool_input": {
+            "file_path": str(source),
+            "old_string": old,
+            "new_string": new,
+        },
+    }
+
+
+def _node_stop_payload(root: Path, *, session: str = "node", agent: str = "node-child") -> dict:
+    return {
+        "session_id": session,
+        "turn_id": "turn",
+        "agent_id": agent,
+        "agent_type": "mainframe_typescript_backend_engineer",
         "hook_event_name": "SubagentStop",
         "cwd": str(root),
         "stop_hook_active": False,
@@ -833,6 +882,186 @@ def test_python_global_gate_blocks_dynamic_shell_commands_only():
     context = noted["hookSpecificOutput"]["additionalContext"]
     assert "2 new issue" in context
     assert "S602" in context and "S605" in context
+
+
+def test_node_security_gate_blocks_owned_finding_and_clears_after_fix():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "unsafe.ts"
+    safe = "export const parse = (value: string) => value;\n"
+    unsafe = "export const parse = (value: string) => eval(value);\n"
+    source.write_text(safe, encoding="utf-8")
+
+    proc, noted = _run_node_hook(
+        _node_edit_payload(root, source, safe, unsafe), state
+    )
+    assert proc.returncode == 0
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "1 new issue" in context
+    assert "unsafe.ts:1" in context and "no-eval" in context
+    assert "eval(value)" not in context
+
+    _, blocked = _run_node_hook(_node_stop_payload(root), state)
+    assert blocked["decision"] == "block"
+    assert "1 unresolved issue" in blocked["reason"]
+    assert "unsafe.ts:1" in blocked["reason"]
+    assert "eval(value)" not in blocked["reason"]
+
+    _, resolved = _run_node_hook(
+        _node_edit_payload(root, source, unsafe, safe), state
+    )
+    assert resolved is None
+    _, clear = _run_node_hook(_node_stop_payload(root), state)
+    assert clear is None
+
+
+def test_node_security_gate_does_not_claim_preexisting_identical_finding():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "duplicates.js"
+    old = "eval(value);\n"
+    new = old + "eval(value);\n"
+    source.write_text(old, encoding="utf-8")
+
+    _, noted = _run_node_hook(
+        _node_edit_payload(root, source, old, new), state
+    )
+    context = noted["hookSpecificOutput"]["additionalContext"]
+    assert "1 new issue" in context
+    assert "1 additional matching finding" in context
+    assert "duplicates.js:1" not in context
+
+    _, blocked = _run_node_hook(_node_stop_payload(root), state)
+    reason = blocked["reason"]
+    assert "1 unresolved issue" in reason
+    assert "1 additional matching finding" in reason
+    assert "duplicates.js:1" not in reason
+
+
+def test_node_global_gate_ignores_frontend_profile_quality_rules():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "component.tsx"
+    old = "export const View = () => <div />;\n"
+    new = (
+        "export const View = () => (\n"
+        "  <div dangerouslySetInnerHTML={{ __html: markup }}>\n"
+        "    <img src=\"/logo.png\" />\n"
+        "    <a target=\"_blank\" href=\"https://example.com\">open</a>\n"
+        "    <span role=\"made-up\">label</span>\n"
+        "  </div>\n"
+        ");\n"
+    )
+    source.write_text(old, encoding="utf-8")
+
+    proc, noted = _run_node_hook(
+        _node_edit_payload(root, source, old, new), state
+    )
+    assert proc.returncode == 0 and noted is None
+    _, blocked = _run_node_hook(_node_stop_payload(root), state)
+    assert blocked is None
+
+
+def test_node_global_gate_is_not_disabled_by_project_oxlint_config_or_ignore():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "ignored.js"
+    (root / ".oxlintrc.json").write_text(
+        '{"rules":{"no-eval":"off"}}\n', encoding="utf-8"
+    )
+    (root / ".eslintignore").write_text("ignored.js\n", encoding="utf-8")
+    safe = "export const parse = (value) => value;\n"
+    unsafe = "export const parse = (value) => eval(value);\n"
+    source.write_text(safe, encoding="utf-8")
+
+    _, noted = _run_node_hook(
+        _node_edit_payload(root, source, safe, unsafe), state
+    )
+    assert "no-eval" in noted["hookSpecificOutput"]["additionalContext"]
+
+
+def test_node_global_gate_catches_javascript_urls_without_react_plugins():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "redirect.ts"
+    safe = 'location.href = "/home";\n'
+    unsafe = 'location.href = "javascript:void(0)";\n'
+    source.write_text(safe, encoding="utf-8")
+
+    _, noted = _run_node_hook(
+        _node_edit_payload(root, source, safe, unsafe), state
+    )
+    assert "no-script-url" in noted["hookSpecificOutput"]["additionalContext"]
+
+
+def test_dispatcher_blocks_current_session_node_finding_and_clears_after_fix():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "unsafe.ts"
+    safe = "export const parse = (value: string) => value;\n"
+    unsafe = "export const parse = (value: string) => eval(value);\n"
+    source.write_text(safe, encoding="utf-8")
+
+    _run_hook(_patch_payload(root, source.name, event="PreToolUse"), state)
+    source.write_text(unsafe, encoding="utf-8")
+    _, noted = _run_hook(
+        _patch_payload(root, source.name, event="PostToolUse"), state
+    )
+    assert "no-eval" in noted["hookSpecificOutput"]["additionalContext"]
+
+    stop = {
+        "session_id": "session", "turn_id": "turn", "agent_id": "",
+        "hook_event_name": "Stop", "cwd": str(root),
+        "stop_hook_active": False,
+    }
+    _, blocked = _run_hook(stop, state)
+    assert "Node safety gate" in blocked["reason"]
+    assert "unsafe.ts:1" in blocked["reason"]
+
+    _run_hook(
+        _patch_payload(
+            root, source.name, event="PreToolUse", tool_use="fixed"
+        ),
+        state,
+    )
+    source.write_text(safe, encoding="utf-8")
+    _, resolved = _run_hook(
+        _patch_payload(
+            root, source.name, event="PostToolUse", tool_use="fixed"
+        ),
+        state,
+    )
+    assert resolved is None
+    _, clear = _run_hook(stop, state)
+    assert clear is None
+
+
+def test_missing_oxlint_is_reported_once_without_disabling_other_checks():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    empty_path = root / "empty-path"
+    empty_path.mkdir()
+    source = root / "example.ts"
+    source.write_text("export const value = 1;\n", encoding="utf-8")
+
+    for tool_use, value in (("one", 2), ("two", 3)):
+        pre = _patch_payload(
+            root, source.name, event="PreToolUse", tool_use=tool_use
+        )
+        _run_hook(pre, state, extra_env={"PATH": str(empty_path)})
+        source.write_text(
+            f"export const value = {value};\n", encoding="utf-8"
+        )
+        post = _patch_payload(
+            root, source.name, event="PostToolUse", tool_use=tool_use
+        )
+        _, result = _run_hook(post, state, extra_env={"PATH": str(empty_path)})
+        if tool_use == "one":
+            context = result["hookSpecificOutput"]["additionalContext"]
+            assert "nodejs-security-scan.py" in context
+            assert "Other hook checks remain active" in context
+        else:
+            assert result is None
 
 
 def test_deleting_a_current_session_file_clears_its_findings():

@@ -30,6 +30,7 @@ HEALTH_MODULES = (
     "_length_state.py",
     "_marker_state.py",
     "_markers.py",
+    "_node_findings.py",
     "_notice_state.py",
     "_path_validation.py",
     "_python_findings.py",
@@ -39,6 +40,7 @@ HEALTH_MODULES = (
     "fallow-quality-note.py",
     "length-quality-note.py",
     "nodejs-security-scan.py",
+    "nodejs-security-stop-gate.py",
     "python-security-scan.py",
     "python-security-stop-gate.py",
     "scan-suppression-markers.py",
@@ -313,6 +315,7 @@ def _stop(payload: dict) -> None:
         "stop-gate-suppression-markers.py",
         "stop-gate-comment-discipline.py",
         "python-security-stop-gate.py",
+        "nodejs-security-stop-gate.py",
     ]
     if payload.get("hook_event_name") == "Stop":
         filenames.extend(("fallow-quality-note.py", "length-quality-note.py"))
