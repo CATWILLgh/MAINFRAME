@@ -343,7 +343,7 @@ def _stop(payload: dict) -> None:
         print(json.dumps(output))
 
 
-def _health(_payload_value: dict) -> None:
+def _health(payload: dict) -> None:
     failures = []
     for filename in HEALTH_MODULES:
         try:
@@ -351,6 +351,17 @@ def _health(_payload_value: dict) -> None:
         except (Exception, SystemExit) as exc:
             failures.append(f"{filename}: {type(exc).__name__}")
     if failures:
+        try:
+            notice = _load_module("_notice_state.py")
+            topic = "startup-health\0" + "\0".join(failures)
+            if payload.get("session_id") and not notice.claim_once(
+                topic, payload.get("session_id"), payload.get("agent_id")
+            ):
+                return
+        except (Exception, SystemExit):
+            # A broken notice helper must not hide the runtime failure it was
+            # supposed to deduplicate.
+            pass
         _emit_context(
             "SessionStart",
             "MAINFRAME hook checks are partially unavailable: "

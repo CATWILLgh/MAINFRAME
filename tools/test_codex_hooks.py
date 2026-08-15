@@ -10,6 +10,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import subprocess
 import sys
@@ -133,18 +134,82 @@ def test_startup_health_covers_every_runtime_module():
     assert result is None
 
     original_load = module._load_module
+    failed_module = [module.HEALTH_MODULES[0]]
     module._load_module = lambda filename: (
         (_ for _ in ()).throw(ImportError("probe"))
-        if filename == module.HEALTH_MODULES[0]
+        if filename == failed_module[0]
         else original_load(filename)
     )
-    output = io.StringIO()
-    with redirect_stdout(output):
-        module._health({})
-    failure = json.loads(output.getvalue())
-    assert module.HEALTH_MODULES[0] in failure["systemMessage"]
-    assert module.HEALTH_MODULES[0] in (
-        failure["hookSpecificOutput"]["additionalContext"]
+    old_notice_root = os.environ.get("MAINFRAME_NOTICE_STATE_DIR")
+    os.environ["MAINFRAME_NOTICE_STATE_DIR"] = str(root / "notices")
+    try:
+        payload = {"session_id": "health", "agent_id": ""}
+        first = io.StringIO()
+        with redirect_stdout(first):
+            module._health(payload)
+        failure = json.loads(first.getvalue())
+        assert failed_module[0] in failure["systemMessage"]
+        assert failed_module[0] in (
+            failure["hookSpecificOutput"]["additionalContext"]
+        )
+
+        repeated = io.StringIO()
+        with redirect_stdout(repeated):
+            module._health(payload)
+        assert repeated.getvalue() == ""
+
+        failed_module[0] = module.HEALTH_MODULES[1]
+        changed = io.StringIO()
+        with redirect_stdout(changed):
+            module._health(payload)
+        changed_failure = json.loads(changed.getvalue())
+        assert failed_module[0] in changed_failure["systemMessage"]
+    finally:
+        module._load_module = original_load
+        if old_notice_root is None:
+            os.environ.pop("MAINFRAME_NOTICE_STATE_DIR", None)
+        else:
+            os.environ["MAINFRAME_NOTICE_STATE_DIR"] = old_notice_root
+
+
+def test_parallel_startup_health_failure_is_reported_once():
+    root = Path(tempfile.mkdtemp())
+    runtime = root / "runtime"
+    shutil.copytree(
+        HOOK.parent, runtime, ignore=shutil.ignore_patterns("__pycache__")
+    )
+    (runtime / "_bash_patterns.py").write_text(
+        "raise ImportError('parallel startup probe')\n", encoding="utf-8"
+    )
+    hook = runtime / HOOK.name
+    state = root / "state"
+    payload = {
+        "session_id": "parallel-health",
+        "hook_event_name": "SessionStart",
+        "cwd": str(root),
+        "source": "compact",
+    }
+
+    def invoke(_index: int) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(hook)],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env=_state_env(state),
+        )
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        results = list(pool.map(invoke, range(16)))
+
+    assert all(result.returncode == 0 for result in results)
+    visible = [result.stdout for result in results if result.stdout.strip()]
+    assert len(visible) == 1
+    output = json.loads(visible[0])
+    assert "_bash_patterns.py" in output["systemMessage"]
+    assert "_bash_patterns.py" in (
+        output["hookSpecificOutput"]["additionalContext"]
     )
 
 

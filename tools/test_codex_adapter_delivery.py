@@ -68,13 +68,18 @@ def _agent_template_data(name, *, home):
     return tomllib.loads(body)
 
 
-def _write_fake_codex(path, *, hooks_supported=True):
+def _write_fake_codex(path, *, hooks_supported=True, feature_rows=0):
     hooks_value = "true" if hooks_supported else "false"
     path.write_text(
         "#!/bin/sh\n"
         "if [ \"${1:-}\" = --version ]; then echo 'codex-cli 0.147.0'; exit 0; fi\n"
-        "if [ \"${1:-}\" = features ] && [ \"${2:-}\" = list ]; then "
-        f"echo 'hooks stable {hooks_value}'; exit 0; fi\n"
+        "if [ \"${1:-}\" = features ] && [ \"${2:-}\" = list ]; then\n"
+        "  awk 'BEGIN {\n"
+        f"    print \"hooks stable {hooks_value}\";\n"
+        f"    for (i = 0; i < {feature_rows}; i++) print \"feature_\" i \" stable false\";\n"
+        "  }'\n"
+        "  exit $?\n"
+        "fi\n"
         "if [ \"${1:-}\" = execpolicy ] && [ \"${2:-}\" = check ]; then "
         "echo '{\"decision\":\"prompt\"}'; exit 0; fi\n",
         encoding="utf-8",
@@ -82,16 +87,17 @@ def _write_fake_codex(path, *, hooks_supported=True):
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _run(*args, home=None, desktop_hooks_supported=True):
+def _run(*args, home=None, desktop_hooks_supported=True, feature_rows=0):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
     fake_bin.mkdir(exist_ok=True)
     codex = fake_bin / "codex"
     desktop_codex = fake_bin / "codex-desktop"
-    _write_fake_codex(codex)
+    _write_fake_codex(codex, feature_rows=feature_rows)
     _write_fake_codex(
         desktop_codex,
         hooks_supported=desktop_hooks_supported,
+        feature_rows=feature_rows,
     )
     env = dict(
         os.environ,
@@ -145,6 +151,14 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe_decision_reviewer.toml" in proc.stdout
     assert "mainframe_advisor.toml" in proc.stdout
     assert "permissions" in proc.stdout
+    assert not (home / ".codex").exists()
+    assert not (home / ".agents").exists()
+
+
+def test_preflight_consumes_the_complete_feature_list():
+    proc, home = _run("--codex", "--dry-run", feature_rows=4096)
+    assert proc.returncode == 0, proc.stderr
+    assert "Codex adapter preflight passed" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 

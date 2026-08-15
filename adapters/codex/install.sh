@@ -129,7 +129,7 @@ runtime_preflight() {
     local found=0
     if command -v codex >/dev/null 2>&1; then
         log "Codex CLI: $(codex --version 2>/dev/null || printf 'detected')"
-        if ! codex features list 2>/dev/null | grep -Eq '^hooks[[:space:]]+stable[[:space:]]+true$'; then
+        if ! codex features list 2>/dev/null | grep -E '^hooks[[:space:]]+stable[[:space:]]+true$' >/dev/null; then
             error "The installed Codex CLI does not expose stable native hooks. Update Codex before installation."
             return 1
         fi
@@ -137,7 +137,7 @@ runtime_preflight() {
     fi
     if [[ -x "$CODEX_DESKTOP_RUNTIME" ]]; then
         log "Codex Desktop runtime: $("$CODEX_DESKTOP_RUNTIME" --version 2>/dev/null || printf 'detected')"
-        if ! "$CODEX_DESKTOP_RUNTIME" features list 2>/dev/null | grep -Eq '^hooks[[:space:]]+stable[[:space:]]+true$'; then
+        if ! "$CODEX_DESKTOP_RUNTIME" features list 2>/dev/null | grep -E '^hooks[[:space:]]+stable[[:space:]]+true$' >/dev/null; then
             error "The installed Codex Desktop runtime does not expose stable native hooks. Update the app before installation."
             return 1
         fi
