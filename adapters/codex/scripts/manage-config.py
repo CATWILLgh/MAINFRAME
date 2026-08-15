@@ -25,6 +25,8 @@ else:
 
 START = "# >>> MAINFRAME CODEX PERMISSIONS >>>"
 END = "# <<< MAINFRAME CODEX PERMISSIONS <<<"
+FEATURE_START = "# >>> MAINFRAME CODEX NETWORK PROXY >>>"
+FEATURE_END = "# <<< MAINFRAME CODEX NETWORK PROXY <<<"
 TOP_KEYS = {"approval_policy", "approvals_reviewer", "default_permissions", "sandbox_mode"}
 TABLE_RE = re.compile(r"^\s*(\[+[^]]+\]+)\s*(?:#.*)?$")
 ASSIGN_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s*=")
@@ -38,6 +40,10 @@ def managed_block(fragment: str) -> str:
     return f"{START}\n{fragment.rstrip()}\n{END}\n\n"
 
 
+def feature_block() -> str:
+    return f"{FEATURE_START}\nnetwork_proxy = true\n{FEATURE_END}\n"
+
+
 def split_managed(text: str) -> tuple[str | None, str]:
     start = text.find(START)
     end = text.find(END)
@@ -48,6 +54,24 @@ def split_managed(text: str) -> tuple[str | None, str]:
     tail = end + len(END)
     if tail < len(text) and text[tail] == "\n":
         tail += 1
+    if tail < len(text) and text[tail] == "\n":
+        tail += 1
+    return text[start:tail], text[:start] + text[tail:]
+
+
+def split_feature_managed(text: str) -> tuple[str | None, str]:
+    start = text.find(FEATURE_START)
+    end = text.find(FEATURE_END)
+    if start < 0 and end < 0:
+        return None, text
+    if (
+        start < 0
+        or end < start
+        or text.find(FEATURE_START, start + 1) >= 0
+        or text.find(FEATURE_END, end + 1) >= 0
+    ):
+        raise ValueError("the MAINFRAME network-proxy markers are incomplete or duplicated")
+    tail = end + len(FEATURE_END)
     if tail < len(text) and text[tail] == "\n":
         tail += 1
     return text[start:tail], text[:start] + text[tail:]
@@ -84,8 +108,12 @@ def remove_legacy(text: str) -> tuple[str, list[dict[str, str]]]:
             removed.append({"kind": "top", "text": line})
         elif section == "" and key == "shell_environment_policy.inherit":
             removed.append({"kind": "top", "text": line})
+        elif section == "" and key == "features.network_proxy":
+            removed.append({"kind": "feature_top", "text": line})
         elif section == "[shell_environment_policy]" and key == "inherit":
             removed.append({"kind": "shell", "text": line})
+        elif section == "[features]" and key == "network_proxy":
+            removed.append({"kind": "feature", "text": line})
         else:
             kept.append(line)
         index += 1
@@ -93,8 +121,9 @@ def remove_legacy(text: str) -> tuple[str, list[dict[str, str]]]:
 
 
 def restore_legacy(text: str, removed: list[dict[str, str]]) -> str:
-    top = "".join(item["text"] for item in removed if item["kind"] == "top")
+    top = "".join(item["text"] for item in removed if item["kind"] in {"top", "feature_top"})
     shell = "".join(item["text"] for item in removed if item["kind"] == "shell")
+    feature = "".join(item["text"] for item in removed if item["kind"] == "feature")
     tables = "".join(item["text"] for item in removed if item["kind"] == "table")
     if shell:
         lines = text.splitlines(keepends=True)
@@ -107,8 +136,35 @@ def restore_legacy(text: str, removed: list[dict[str, str]]) -> str:
             top += "shell_environment_policy.inherit = " + shell.split("=", 1)[1]
     if top:
         text = top + ("\n" if text and not top.endswith("\n\n") else "") + text
+    if feature:
+        text, _ = insert_in_table(text, "[features]", feature)
     if tables:
         text = text.rstrip() + "\n\n" + tables.lstrip("\n")
+    return text
+
+
+def insert_in_table(text: str, table: str, content: str) -> tuple[str, bool]:
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if table_name(line) == table:
+            lines.insert(index + 1, content)
+            return "".join(lines), False
+    separator = "" if not text or text.endswith("\n\n") else "\n"
+    return f"{text}{separator}{table}\n{content}", True
+
+
+def remove_empty_created_features_table(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if table_name(line) != "[features]":
+            continue
+        end = index + 1
+        while end < len(lines) and table_name(lines[end]) is None:
+            if lines[end].strip():
+                return text
+            end += 1
+        del lines[index:end]
+        return "".join(lines)
     return text
 
 
@@ -129,6 +185,8 @@ def parse_config(text: str) -> dict:
                 data["sandbox_workspace_write"] = {}
             elif header == "[shell_environment_policy]":
                 data.setdefault("shell_environment_policy", {})
+            elif header == "[features]":
+                data.setdefault("features", {})
             continue
         match = ASSIGN_RE.match(line)
         if not match:
@@ -143,6 +201,8 @@ def parse_config(text: str) -> dict:
                 data.setdefault("shell_environment_policy", {})["inherit"] = True
         elif section == "[shell_environment_policy]" and key == "inherit":
             data.setdefault("shell_environment_policy", {})["inherit"] = True
+        elif section == "[features]" and key == "network_proxy":
+            data.setdefault("features", {})["network_proxy"] = True
     return data
 
 
@@ -179,6 +239,13 @@ def verify_managed(text: str, state: dict) -> tuple[str, str]:
     return current, remainder
 
 
+def verify_feature_managed(text: str, state: dict) -> tuple[str, str]:
+    current, remainder = split_feature_managed(text)
+    if current is None or state.get("feature_managed_sha") != sha(current):
+        raise ValueError("the MAINFRAME network-proxy block changed after installation")
+    return current, remainder
+
+
 def render_fragment(source: Path, repo_root: Path) -> str:
     escaped_root = str(repo_root.resolve()).replace("\\", "\\\\").replace('"', '\\"')
     return source.read_text(encoding="utf-8").replace("@MAINFRAME_REPO@", escaped_root)
@@ -191,14 +258,28 @@ def install(config: Path, source: Path, repo_root: Path, state_path: Path, backu
     state = read_state(state_path)
     if state:
         current_block, remainder = verify_managed(current, state)
+        feature_migrated = False
+        if "feature_managed_sha" in state:
+            current_feature, _ = verify_feature_managed(remainder, state)
+            if current_feature != feature_block():
+                raise ValueError("the MAINFRAME network-proxy block changed after installation")
+        else:
+            # Migrate installations made before the proxy became an owned setting.
+            remainder, additionally_removed = remove_legacy(remainder)
+            state["removed"].extend(additionally_removed)
+            remainder, created = insert_in_table(remainder, "[features]", feature_block())
+            state["feature_table_created"] = created
+            state["feature_managed_sha"] = sha(feature_block())
+            feature_migrated = True
         expected = managed_block(fragment)
         candidate = expected + remainder
         parse_config(candidate)
-        if current_block == expected:
+        if current_block == expected and not feature_migrated:
             return "permissions already installed" if not dry_run else "would keep existing permissions block"
         if dry_run:
             return "would update the owned MAINFRAME permissions block"
         state["managed_sha"] = sha(expected)
+        state["feature_managed_sha"] = sha(feature_block())
         atomic_write(config, candidate)
         atomic_write(state_path, json.dumps(state, ensure_ascii=True, indent=2) + "\n")
         return "updated MAINFRAME permissions"
@@ -209,6 +290,7 @@ def install(config: Path, source: Path, repo_root: Path, state_path: Path, backu
     if has_profile_collision(data):
         raise ValueError("an unmanaged permissions.mainframe profile already exists")
     cleaned, removed = remove_legacy(current)
+    cleaned, feature_table_created = insert_in_table(cleaned, "[features]", feature_block())
     candidate = managed_block(fragment) + cleaned.lstrip("\n")
     parse_config(candidate)
     if dry_run:
@@ -221,6 +303,8 @@ def install(config: Path, source: Path, repo_root: Path, state_path: Path, backu
         "backup_path": str(backup) if config.exists() else "-",
         "config_was_missing": was_missing,
         "managed_sha": sha(managed_block(fragment)),
+        "feature_managed_sha": sha(feature_block()),
+        "feature_table_created": feature_table_created,
         "removed": removed,
     }
     atomic_write(config, candidate)
@@ -237,12 +321,22 @@ def uninstall(config: Path, source: Path, repo_root: Path, state_path: Path, dry
     _ = source, repo_root
     current = config.read_text(encoding="utf-8")
     _, remainder = verify_managed(current, state)
+    _, remainder = verify_feature_managed(remainder, state)
+    if state.get("feature_table_created"):
+        remainder = remove_empty_created_features_table(remainder)
     data = parse_config(remainder)
     if any(key in data for key in TOP_KEYS):
         raise ValueError("a restored top-level permission key now conflicts with user configuration")
     shell = data.get("shell_environment_policy")
     if isinstance(shell, dict) and "inherit" in shell and any(i["kind"] == "shell" for i in state["removed"]):
         raise ValueError("shell_environment_policy.inherit now conflicts with user configuration")
+    features = data.get("features")
+    if (
+        isinstance(features, dict)
+        and "network_proxy" in features
+        and any(i["kind"] in {"feature", "feature_top"} for i in state["removed"])
+    ):
+        raise ValueError("features.network_proxy now conflicts with user configuration")
     if "sandbox_workspace_write" in data and any(i["kind"] == "table" for i in state["removed"]):
         raise ValueError("sandbox_workspace_write now conflicts with user configuration")
     restored = restore_legacy(remainder, state["removed"])

@@ -44,7 +44,7 @@ def _run_hook(
     env = _state_env(state)
     env.update(extra_env or {})
     proc = subprocess.run(
-        [sys.executable, str(HOOK)],
+        [sys.executable, "-B", str(HOOK)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,

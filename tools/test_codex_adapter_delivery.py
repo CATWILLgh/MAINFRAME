@@ -68,14 +68,22 @@ def _agent_template_data(name, *, home):
     return tomllib.loads(body)
 
 
-def _write_fake_codex(path, *, hooks_supported=True, feature_rows=0):
+def _write_fake_codex(
+    path, *, hooks_supported=True, network_proxy_supported=True, feature_rows=0
+):
     hooks_value = "true" if hooks_supported else "false"
+    network_proxy_row = (
+        '    print "network_proxy experimental false";\n'
+        if network_proxy_supported
+        else ""
+    )
     path.write_text(
         "#!/bin/sh\n"
         "if [ \"${1:-}\" = --version ]; then echo 'codex-cli 0.147.0'; exit 0; fi\n"
         "if [ \"${1:-}\" = features ] && [ \"${2:-}\" = list ]; then\n"
         "  awk 'BEGIN {\n"
         f"    print \"hooks stable {hooks_value}\";\n"
+        f"{network_proxy_row}"
         f"    for (i = 0; i < {feature_rows}; i++) print \"feature_\" i \" stable false\";\n"
         "  }'\n"
         "  exit $?\n"
@@ -87,7 +95,13 @@ def _write_fake_codex(path, *, hooks_supported=True, feature_rows=0):
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _run(*args, home=None, desktop_hooks_supported=True, feature_rows=0):
+def _run(
+    *args,
+    home=None,
+    desktop_hooks_supported=True,
+    desktop_network_proxy_supported=True,
+    feature_rows=0,
+):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
     fake_bin.mkdir(exist_ok=True)
@@ -97,6 +111,7 @@ def _run(*args, home=None, desktop_hooks_supported=True, feature_rows=0):
     _write_fake_codex(
         desktop_codex,
         hooks_supported=desktop_hooks_supported,
+        network_proxy_supported=desktop_network_proxy_supported,
         feature_rows=feature_rows,
     )
     env = dict(
@@ -171,6 +186,18 @@ def test_install_stops_when_desktop_runtime_lacks_native_hooks():
     )
     assert proc.returncode != 0
     assert "Desktop runtime does not expose stable native hooks" in proc.stderr
+    assert not (home / ".codex").exists()
+    assert not (home / ".agents").exists()
+
+
+def test_install_stops_when_desktop_runtime_lacks_network_proxy():
+    proc, home = _run(
+        "--codex",
+        "--dry-run",
+        desktop_network_proxy_supported=False,
+    )
+    assert proc.returncode != 0
+    assert "does not expose the network proxy" in proc.stderr
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 
@@ -408,6 +435,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert config_data["default_permissions"] == "mainframe"
     assert config_data["approval_policy"] == "on-request"
     assert config_data["approvals_reviewer"] == "auto_review"
+    assert config_data["features"]["network_proxy"] is True
     assert config_data["shell_environment_policy"]["inherit"] == "core"
     assert config_data["permissions"]["mainframe"]["extends"] == ":workspace"
     assert config_data["permissions"]["mainframe"]["filesystem"]["~/.config/credentials"] == "deny"
@@ -437,7 +465,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         for handler in group["hooks"]
     ]
     assert commands and all(
-        str((ADAPTER / "hooks" / "scripts" / "mainframe-hook.py").resolve())
+        command.startswith("python3 -B ")
+        and str((ADAPTER / "hooks" / "scripts" / "mainframe-hook.py").resolve())
         in command
         for command in commands
     )
@@ -748,6 +777,9 @@ def test_existing_config_is_merged_and_uninstall_restores_only_displaced_setting
         'sandbox_mode = "workspace-write"\n\n'
         '[mcp_servers.example]\n'
         'command = "example"\n\n'
+        '[features]\n'
+        'apps = true\n'
+        'network_proxy = false\n\n'
         '[shell_environment_policy.set]\n'
         'EXAMPLE = "kept"\n',
         encoding="utf-8",
@@ -758,6 +790,7 @@ def test_existing_config_is_merged_and_uninstall_restores_only_displaced_setting
     data = tomllib.loads(config.read_text(encoding="utf-8"))
     assert "sandbox_mode" not in data
     assert data["default_permissions"] == "mainframe"
+    assert data["features"] == {"apps": True, "network_proxy": True}
     assert data["mcp_servers"]["example"]["command"] == "example"
     backups = list(codex_dir.glob("config.toml.backup-*"))
     assert len(backups) == 1
@@ -773,8 +806,37 @@ def test_existing_config_is_merged_and_uninstall_restores_only_displaced_setting
     assert restored["approval_policy"] == "on-request"
     assert restored["approvals_reviewer"] == "auto_review"
     assert restored["desktop"]["theme"] == "dark"
+    assert restored["features"] == {"apps": True, "network_proxy": False}
     assert "default_permissions" not in restored
     assert backups[0].exists()
+
+
+def test_existing_install_migrates_to_owned_network_proxy_setting():
+    installed, home = _run("--codex")
+    assert installed.returncode == 0, installed.stderr
+    codex_dir = home / ".codex"
+    config = codex_dir / "config.toml"
+    state_path = codex_dir / ".mainframe-config-state.json"
+
+    text = config.read_text(encoding="utf-8")
+    feature_start = text.index("# >>> MAINFRAME CODEX NETWORK PROXY >>>")
+    feature_end = text.index("# <<< MAINFRAME CODEX NETWORK PROXY <<<")
+    feature_end = text.index("\n", feature_end) + 1
+    text = text[:feature_start] + text[feature_end:]
+    text = text.replace("[features]\n", "", 1)
+    config.write_text(text, encoding="utf-8")
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state.pop("feature_managed_sha")
+    state.pop("feature_table_created")
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    migrated, _ = _run("--codex", home=home)
+    assert migrated.returncode == 0, migrated.stderr
+    assert tomllib.loads(config.read_text(encoding="utf-8"))["features"]["network_proxy"] is True
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert not config.exists()
 
 
 def test_unmanaged_mainframe_permission_profile_stops_before_delivery():

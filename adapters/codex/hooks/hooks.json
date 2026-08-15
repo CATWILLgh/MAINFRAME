@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
             "timeout": 5,
             "additionalContextLimit": 700
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
             "timeout": 15,
             "additionalContextLimit": 900
           }
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
             "timeout": 30,
             "additionalContextLimit": 1200
           }
@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
             "timeout": 210
           }
         ]
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 @MAINFRAME_HOOK_SCRIPT@",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
             "timeout": 30
           }
         ]
