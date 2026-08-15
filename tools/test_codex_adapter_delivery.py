@@ -123,6 +123,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe-ticket" in proc.stdout
     assert "mainframe-tickets-find" in proc.stdout
+    assert "mainframe-tickets-refine" in proc.stdout
     assert "mainframe-python-backend" in proc.stdout
     assert "mainframe-typescript-backend" in proc.stdout
     assert "mainframe-frontend" in proc.stdout
@@ -175,6 +176,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-tickets-find",
+        "mainframe-tickets-refine",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -456,6 +458,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-tickets-find",
+        "mainframe-tickets-refine",
         "mainframe-python-backend",
         "mainframe-typescript-backend",
         "mainframe-frontend",
@@ -1038,6 +1041,22 @@ def test_baseline_uses_native_standalone_layers_only():
         "Do not claim that the repository has no remaining defects" in find_body
     )
     assert "allow_implicit_invocation: false" in find_metadata
+
+    refine_skill = ADAPTER / "skills" / "mainframe-tickets-refine"
+    refine_body = (refine_skill / "SKILL.md").read_text(encoding="utf-8")
+    refine_metadata = (refine_skill / "agents" / "openai.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "name: mainframe-tickets-refine" in refine_body
+    assert "ticket-format.md" in refine_body
+    assert "native Goal" in refine_body
+    assert "Do not run project code" in refine_body
+    assert "semantic duplicates" in refine_body
+    assert "open/needs-scope-review/" in refine_body
+    assert "open/needs-decision/" in refine_body
+    assert "open/ready/" in refine_body
+    assert "archive/rejected/" in refine_body
+    assert "allow_implicit_invocation: false" in refine_metadata
 
     typescript_skill = ADAPTER / "skills" / "mainframe-typescript-backend"
     typescript_body = (typescript_skill / "SKILL.md").read_text(encoding="utf-8")
