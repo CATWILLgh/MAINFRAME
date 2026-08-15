@@ -19,9 +19,11 @@ MARKERS = [
     ("# type: ignore", re.compile(r"#\s*type:\s*ignore\b")),
     ("# noqa", re.compile(r"#\s*noqa\b")),
     ("pylint: disable", re.compile(r"pylint:\s*disable\b")),
-    ("skipped/focused test (.skip/.only/xit/fit)",
-     re.compile(r"(?:\.(?:skip|only)\s*\(|\b(?:xit|fit|xdescribe|fdescribe)\s*\()")),
-    ("pytest/unittest skip", re.compile(r"@(?:pytest\.mark\.skip|unittest\.skip)")),
+    ("skipped/focused test (.skip/.only/xit/fit)", re.compile(
+        r"(?m)^[ \t]*(?:(?:it|test|describe|suite|context)\.(?:skip|only)"
+        r"|(?:xit|fit|xdescribe|fdescribe))\s*\(")),
+    ("pytest/unittest skip", re.compile(
+        r"(?m)^[ \t]*@(?:pytest\.mark\.skip|unittest\.skip)")),
 ]
 
 # These forms only have meaning inside comments/docstrings. Searching the raw
@@ -39,12 +41,18 @@ JS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"}
 PY = {".py", ".pyi"}
 PHP = {".php"}
 DEBUG_RESIDUE = [
-    ("debugger statement", re.compile(r"\bdebugger\b"), JS),
-    ("console.debug", re.compile(r"\bconsole\.debug\s*\("), JS),
-    ("breakpoint()", re.compile(r"\bbreakpoint\s*\("), PY),
-    ("pdb.set_trace()", re.compile(r"\bpdb\.set_trace\s*\("), PY),
-    ("var_dump()", re.compile(r"\bvar_dump\s*\("), PHP),
-    ("dd()", re.compile(r"\bdd\s*\("), PHP),
+    ("debugger statement", re.compile(
+        r"(?m)^[ \t]*debugger\s*;?[ \t]*(?://.*)?$"), JS),
+    ("console.debug", re.compile(
+        r"(?m)^[ \t]*console\.debug\s*\("), JS),
+    ("breakpoint()", re.compile(
+        r"(?m)^[ \t]*breakpoint\s*\("), PY),
+    ("pdb.set_trace()", re.compile(
+        r"(?m)^[ \t]*pdb\.set_trace\s*\("), PY),
+    ("var_dump()", re.compile(
+        r"(?m)^[ \t]*var_dump\s*\("), PHP),
+    ("dd()", re.compile(
+        r"(?m)^[ \t]*(?:\$[A-Za-z_]\w*->)?dd\s*\("), PHP),
 ]
 
 

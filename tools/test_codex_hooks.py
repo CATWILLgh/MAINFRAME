@@ -621,6 +621,53 @@ def test_comment_markers_inside_source_strings_do_not_block_stop():
     assert blocked is None
 
 
+def test_code_residue_words_inside_source_strings_do_not_block_stop():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "examples.ts"
+    source.write_text("export const examples = [];\n", encoding="utf-8")
+    _run_hook(_patch_payload(root, source.name, event="PreToolUse"), state)
+    source.write_text(
+        'export const examples = [".skip(", "debugger", "console.debug("];\n',
+        encoding="utf-8",
+    )
+    _, noted = _run_hook(
+        _patch_payload(root, source.name, event="PostToolUse"), state
+    )
+    assert noted is None
+
+    stop = {
+        "session_id": "session", "turn_id": "turn", "agent_id": "",
+        "hook_event_name": "SubagentStop", "cwd": str(root),
+        "stop_hook_active": False,
+    }
+    _, blocked = _run_hook(stop, state)
+    assert blocked is None
+
+
+def test_high_confidence_code_residue_still_blocks_stop():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    source = root / "focused.ts"
+    source.write_text("test('works', () => {});\n", encoding="utf-8")
+    _run_hook(_patch_payload(root, source.name, event="PreToolUse"), state)
+    source.write_text("test.skip('works', () => {});\n", encoding="utf-8")
+    _, noted = _run_hook(
+        _patch_payload(root, source.name, event="PostToolUse"), state
+    )
+    assert "skipped/focused test" in (
+        noted["hookSpecificOutput"]["additionalContext"]
+    )
+
+    stop = {
+        "session_id": "session", "turn_id": "turn", "agent_id": "",
+        "hook_event_name": "SubagentStop", "cwd": str(root),
+        "stop_hook_active": False,
+    }
+    _, blocked = _run_hook(stop, state)
+    assert "skipped/focused test" in blocked["reason"]
+
+
 def test_deleting_a_current_session_file_clears_its_findings():
     root = Path(tempfile.mkdtemp())
     state = root / "state"
