@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "evidence_quality",
+    "hook_findings",
+    "capability_signals",
+    "telemetry_gaps",
+    "recommended_next_actions"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "evidence_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rating", "reasons"],
+      "properties": {
+        "rating": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {"type": "string", "maxLength": 600}
+        }
+      }
+    },
+    "hook_findings": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hook", "severity", "finding", "evidence", "next_test"],
+        "properties": {
+          "hook": {"type": "string", "minLength": 1, "maxLength": 200},
+          "severity": {
+            "type": "string",
+            "enum": ["info", "watch", "material"]
+          },
+          "finding": {"type": "string", "minLength": 1, "maxLength": 800},
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 6,
+            "items": {"type": "string", "maxLength": 400}
+          },
+          "next_test": {"type": "string", "minLength": 1, "maxLength": 700}
+        }
+      }
+    },
+    "capability_signals": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capability_id", "support", "reason"],
+        "properties": {
+          "capability_id": {"type": "string", "minLength": 1, "maxLength": 200},
+          "support": {
+            "type": "string",
+            "enum": ["none", "partial", "strong"]
+          },
+          "reason": {"type": "string", "minLength": 1, "maxLength": 700}
+        }
+      }
+    },
+    "telemetry_gaps": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {"type": "string", "maxLength": 700}
+    },
+    "recommended_next_actions": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {"type": "string", "maxLength": 700}
+    }
+  }
+}

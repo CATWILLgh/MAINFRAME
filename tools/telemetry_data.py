@@ -7,6 +7,7 @@ import argparse
 import collections
 import datetime
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -31,6 +32,21 @@ BREAKDOWN_FIELDS = {
     "init_reminder": ("reminded",),
     "model_lab": ("status",),
 }
+
+_SESSION_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+def _effective_origin(origin, session_id):
+    """Keep stored provenance honest while recovering old runtime rows."""
+    origin = str(origin or "unclassified")
+    if origin != "unclassified":
+        return origin
+    if _SESSION_UUID_RE.fullmatch(str(session_id or "")):
+        return "runtime-inferred"
+    return origin
 
 
 def default_db_path():
@@ -63,6 +79,7 @@ def _select_columns(connection):
         selected("tool_use_id", "''"),
         "project",
         selected("hook_event", "''"),
+        selected("origin", "'unclassified'"),
         "event",
         "payload",
     ))
@@ -80,7 +97,8 @@ def iter_events(path, after_id=0, limit=None):
             params.append(int(limit))
         for row in connection.execute(sql, params):
             (row_id, timestamp, schema_version, session_id, prompt_id, agent_id,
-             agent_type, tool_use_id, project, hook_event, event, raw_payload) = row
+             agent_type, tool_use_id, project, hook_event, origin, event,
+             raw_payload) = row
             errors = []
             try:
                 payload = json.loads(raw_payload or "")
@@ -98,6 +116,7 @@ def iter_events(path, after_id=0, limit=None):
                     payload = {}
                     errors.append(str(error))
 
+            effective_origin = _effective_origin(origin, session_id)
             yield {
                 "schema_version": version,
                 "id": int(row_id),
@@ -109,6 +128,7 @@ def iter_events(path, after_id=0, limit=None):
                 "tool_use_id": str(tool_use_id or ""),
                 "project": str(project or ""),
                 "source_event": str(hook_event or ""),
+                "origin": effective_origin,
                 "event": str(event or ""),
                 "data": payload,
                 "valid": not errors,
@@ -118,7 +138,7 @@ def iter_events(path, after_id=0, limit=None):
         connection.close()
 
 
-def _empty_report(active=False, error=""):
+def _empty_report(active=False, error="", included_origins=None):
     return {
         "active": active,
         "format_version": 1,
@@ -126,12 +146,15 @@ def _empty_report(active=False, error=""):
         .isoformat(timespec="seconds").replace("+00:00", "Z"),
         "records": 0,
         "usable_records": 0,
+        "excluded_records": 0,
         "sessions": 0,
         "agent_instances": 0,
         "first_timestamp": "",
         "last_timestamp": "",
         "last_id": 0,
         "schema_versions": [],
+        "origins": [],
+        "included_origins": sorted(included_origins or []),
         "legacy_rows": 0,
         "invalid_rows": 0,
         "invalid_examples": [],
@@ -147,16 +170,22 @@ def _empty_report(active=False, error=""):
     }
 
 
-def build_report(path, recent_limit=40):
+def build_report(path, recent_limit=40, included_origins=None):
     """Aggregate the same validated stream consumed by the machine CLI and UI."""
+    allowed_origins = set(
+        included_origins
+        if included_origins is not None
+        else {"runtime", "runtime-inferred", "model-lab"}
+    )
     path = Path(path)
     if not path.is_file():
-        return _empty_report()
+        return _empty_report(included_origins=allowed_origins)
 
-    report = _empty_report(active=True)
+    report = _empty_report(active=True, included_origins=allowed_origins)
     sessions = set()
     agents = set()
     schema_versions = collections.Counter()
+    origins = collections.Counter()
     event_counts = collections.Counter()
     days = collections.Counter()
     by_agent = collections.Counter()
@@ -173,10 +202,8 @@ def build_report(path, recent_limit=40):
         rows = iter_events(path)
         for row in rows:
             report["records"] += 1
-            report["last_id"] = row["id"]
-            report["first_timestamp"] = report["first_timestamp"] or row["timestamp"]
-            report["last_timestamp"] = row["timestamp"] or report["last_timestamp"]
             schema_versions[row["schema_version"]] += 1
+            origins[row["origin"]] += 1
             if row["schema_version"] < ROW_SCHEMA_VERSION:
                 report["legacy_rows"] += 1
             if row["event"] not in EVENT_FIELDS:
@@ -193,10 +220,15 @@ def build_report(path, recent_limit=40):
             usable = (
                 row["schema_version"] >= ROW_SCHEMA_VERSION
                 and row["valid"] and row["event"] in EVENT_FIELDS
+                and row["origin"] in allowed_origins
             )
             if not usable:
+                report["excluded_records"] += 1
                 continue
             report["usable_records"] += 1
+            report["last_id"] = row["id"]
+            report["first_timestamp"] = report["first_timestamp"] or row["timestamp"]
+            report["last_timestamp"] = row["timestamp"] or report["last_timestamp"]
             if row["session_id"]:
                 sessions.add(row["session_id"])
             if row["agent_id"]:
@@ -239,14 +271,15 @@ def build_report(path, recent_limit=40):
             if recent.maxlen:
                 recent.append({key: row[key] for key in (
                     "id", "timestamp", "project", "event", "agent_type", "agent_id",
-                    "tool_use_id", "valid", "data",
+                    "tool_use_id", "origin", "valid", "data",
                 )})
     except (OSError, sqlite3.Error, ValueError) as error:
-        return _empty_report(error=str(error))
+        return _empty_report(error=str(error), included_origins=allowed_origins)
 
     report["sessions"] = len(sessions)
     report["agent_instances"] = len(agents)
     report["schema_versions"] = [[key, value] for key, value in sorted(schema_versions.items())]
+    report["origins"] = [[key, value] for key, value in sorted(origins.items())]
     report["unknown_events"] = [[key, value] for key, value in unknown.most_common()]
     report["event_counts"] = [[key, value] for key, value in event_counts.most_common()]
     report["by_day"] = [[key, value] for key, value in sorted(days.items())]

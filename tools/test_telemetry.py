@@ -25,6 +25,7 @@ def _fresh_db():
     d = tempfile.mkdtemp()
     db = os.path.join(d, "telemetry.db")
     os.environ["MAINFRAME_TELEMETRY_DB"] = db
+    os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = "runtime"
     _hooklib.initialize_telemetry_db(db)
     return db
 
@@ -59,10 +60,30 @@ def test_writes_row():
     assert body == {"lang": "python", "ext": ".py", "operation": "edit"}
     with sqlite3.connect(db) as connection:
         envelope = connection.execute(
-            "SELECT schema_version, prompt_id, agent_id, tool_use_id, hook_event "
+            "SELECT schema_version, prompt_id, agent_id, tool_use_id, hook_event, origin "
             "FROM events"
         ).fetchone()
-    assert envelope == (2, "p1", "a1", "t1", "PostToolUse")
+    assert envelope == (2, "p1", "a1", "t1", "PostToolUse", "runtime")
+
+
+def test_origin_separates_runtime_test_and_model_lab_calls():
+    old_db = os.environ.pop("MAINFRAME_TELEMETRY_DB", None)
+    old_origin = os.environ.pop("MAINFRAME_TELEMETRY_ORIGIN", None)
+    try:
+        assert _hooklib._telemetry_origin({"transcript_path": "/private/session.jsonl"}) == "runtime"
+        assert _hooklib._telemetry_origin({}) == "unclassified"
+        os.environ["MAINFRAME_TELEMETRY_DB"] = "/tmp/test-telemetry.db"
+        assert _hooklib._telemetry_origin({}) == "synthetic"
+        assert _hooklib._telemetry_origin({"_telemetry_origin": "model-lab"}) == "model-lab"
+    finally:
+        if old_db is None:
+            os.environ.pop("MAINFRAME_TELEMETRY_DB", None)
+        else:
+            os.environ["MAINFRAME_TELEMETRY_DB"] = old_db
+        if old_origin is None:
+            os.environ.pop("MAINFRAME_TELEMETRY_ORIGIN", None)
+        else:
+            os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = old_origin
 
 
 def test_schema_and_wal():
@@ -75,7 +96,7 @@ def test_schema_and_wal():
         cols = [r[1] for r in con.execute("PRAGMA table_info(events)").fetchall()]
         assert cols == [
             "id", "ts", "schema_version", "session_id", "prompt_id", "agent_id",
-            "agent_type", "tool_use_id", "project", "hook_event", "event", "payload",
+            "agent_type", "tool_use_id", "project", "hook_event", "origin", "event", "payload",
         ], cols
         views = [row[0] for row in con.execute(
             "SELECT name FROM sqlite_master WHERE type = 'view'"

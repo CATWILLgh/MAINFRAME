@@ -1447,6 +1447,10 @@ def test_shared_judgment_and_primary_completion_are_separated():
     assert "Before a consequential action" in normalized_global
     assert "smallest adequate check" in normalized_global
     assert "narrow green check" in normalized_global
+    assert "verified to run entirely on this machine" in normalized_global
+    assert "without separate approval" in normalized_global
+    assert "tunnel, proxy, or remote endpoint" in normalized_global
+    assert "remote, shared, staging, or production endpoint" in normalized_global
     assert "TODOs" not in global_body
     assert "plain language" not in global_body
 

@@ -72,7 +72,7 @@ def _telemetry(root, status, session="", cwd="", elapsed=0):
                 "status": status,
                 "elapsed_bucket_s": min(300, int(elapsed // 10) * 10),
             },
-            {"session_id": session, "cwd": cwd},
+            {"session_id": session, "cwd": cwd, "_telemetry_origin": "model-lab"},
         )
     except Exception:
         pass

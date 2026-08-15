@@ -287,7 +287,8 @@ _TELEMETRY_SCHEMA = (
     "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, "
     "schema_version INTEGER NOT NULL, session_id TEXT, prompt_id TEXT, "
     "agent_id TEXT, agent_type TEXT, tool_use_id TEXT, project TEXT, "
-    "hook_event TEXT, event TEXT NOT NULL, payload TEXT NOT NULL)"
+    "hook_event TEXT, origin TEXT NOT NULL DEFAULT 'unclassified', "
+    "event TEXT NOT NULL, payload TEXT NOT NULL)"
 )
 _TELEMETRY_MIGRATION_COLUMNS = (
     ("schema_version", "INTEGER NOT NULL DEFAULT 1"),
@@ -295,7 +296,9 @@ _TELEMETRY_MIGRATION_COLUMNS = (
     ("agent_id", "TEXT"),
     ("tool_use_id", "TEXT"),
     ("hook_event", "TEXT"),
+    ("origin", "TEXT NOT NULL DEFAULT 'unclassified'"),
 )
+_TELEMETRY_ORIGINS = frozenset({"runtime", "model-lab", "synthetic", "unclassified"})
 _HOOK_SIGNAL_OUTCOMES = frozenset({"noted", "asked", "blocked", "resolved"})
 _HOOK_SIGNAL_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 _HOOK_SIGNAL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
@@ -334,6 +337,24 @@ def _telemetry_busy(exc):
     return "locked" in text or "busy" in text
 
 
+def _telemetry_origin(hook_payload):
+    """Classify provenance without storing transcript paths or test details."""
+    explicit = os.environ.get("MAINFRAME_TELEMETRY_ORIGIN")
+    if explicit in _TELEMETRY_ORIGINS:
+        return explicit
+    requested = str((hook_payload or {}).get("_telemetry_origin") or "")
+    if requested in _TELEMETRY_ORIGINS:
+        return requested
+    # An explicit DB is the supported test/debug override. Production hook
+    # events use the default dev sink and carry Claude's documented common
+    # transcript_path field. Anything else stays visible but unclassified.
+    if os.environ.get("MAINFRAME_TELEMETRY_DB"):
+        return "synthetic"
+    if (hook_payload or {}).get("transcript_path"):
+        return "runtime"
+    return "unclassified"
+
+
 def log_event(event, payload=None, hook_payload=None):
     """Append one telemetry row and return written/disabled/busy/error.
 
@@ -359,6 +380,12 @@ def log_event(event, payload=None, hook_payload=None):
         hp = hook_payload or {}
         safe = validate_payload(str(event), payload or {})
         now = datetime.datetime.now(datetime.timezone.utc)
+        origin = _telemetry_origin(hp)
+        # The documented hook envelope always contains transcript_path. A
+        # default-sink call without it is a direct test/helper invocation, not
+        # observable Claude runtime behavior, and must not pollute the live DB.
+        if origin == "unclassified" and not os.environ.get("MAINFRAME_TELEMETRY_DB"):
+            return "disabled"
         row = (
             now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             ROW_SCHEMA_VERSION,
@@ -369,6 +396,7 @@ def log_event(event, payload=None, hook_payload=None):
             str(hp.get("tool_use_id") or ""),
             _telemetry_project_key(hp.get("cwd") or ""),
             str(hp.get("hook_event_name") or ""),
+            origin,
             str(event),
             json.dumps(safe, separators=(",", ":")),
         )
@@ -384,8 +412,8 @@ def log_event(event, payload=None, hook_payload=None):
                 conn.execute("PRAGMA synchronous=NORMAL")
                 conn.execute(
                     "INSERT INTO events(ts, schema_version, session_id, prompt_id, "
-                    "agent_id, agent_type, tool_use_id, project, hook_event, event, payload) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)", row)
+                    "agent_id, agent_type, tool_use_id, project, hook_event, origin, "
+                    "event, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", row)
                 conn.commit()
                 return "written"
             except sqlite3.OperationalError as exc:

@@ -259,7 +259,8 @@ def _telemetry_db(rows, columns="ts, session_id, agent_type, event, payload"):
     con.execute("CREATE TABLE events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, "
                 "schema_version INTEGER DEFAULT 2, session_id TEXT, prompt_id TEXT, "
                 "agent_id TEXT, agent_type TEXT, tool_use_id TEXT, project TEXT, "
-                "hook_event TEXT, event TEXT, payload TEXT)")
+                "hook_event TEXT, origin TEXT NOT NULL DEFAULT 'runtime', "
+                "event TEXT, payload TEXT)")
     ph = ",".join("?" for _ in columns.split(","))
     con.executemany(f"INSERT INTO events({columns}) VALUES ({ph})", rows)
     con.commit()

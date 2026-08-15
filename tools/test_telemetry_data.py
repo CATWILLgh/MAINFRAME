@@ -22,6 +22,7 @@ import telemetry_data  # noqa: E402
 def fresh_db():
     db = pathlib.Path(tempfile.mkdtemp()) / "telemetry.db"
     os.environ["MAINFRAME_TELEMETRY_DB"] = str(db)
+    os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = "runtime"
     _hooklib.initialize_telemetry_db(str(db))
     return db
 
@@ -124,6 +125,46 @@ def test_missing_database_is_an_inactive_clean_state():
     report = telemetry_data.build_report("/definitely/missing/telemetry.db")
     assert report["active"] is False and report["records"] == 0
     assert report["error"] == ""
+
+
+def test_old_uuid_sessions_are_inferred_without_rewriting_provenance():
+    assert telemetry_data._effective_origin(
+        "unclassified", "00893aaf-19fa-41d2-8238-13269b9b3ca0"
+    ) == "runtime-inferred"
+    assert telemetry_data._effective_origin("unclassified", "parallel") == "unclassified"
+    assert telemetry_data._effective_origin(
+        "synthetic", "00893aaf-19fa-41d2-8238-13269b9b3ca0"
+    ) == "synthetic"
+
+
+def test_report_can_isolate_runtime_from_model_lab_rows():
+    db = fresh_db()
+    assert _hooklib.log_event(
+        "user_prompt", {"prompt_len": 5},
+        {"session_id": "runtime", "_telemetry_origin": "runtime"},
+    ) == "written"
+    os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = "model-lab"
+    assert _hooklib.log_event(
+        "model_lab",
+        {
+            "provider": "google-antigravity", "model": "gemini-3.7-flash-high",
+            "effort": "high", "task": "telemetry-audit", "status": "completed",
+            "elapsed_bucket_s": 10,
+        },
+        {"session_id": "lab", "_telemetry_origin": "model-lab"},
+    ) == "written"
+    os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = "runtime"
+
+    default = telemetry_data.build_report(db)
+    runtime = telemetry_data.build_report(
+        db, included_origins={"runtime", "runtime-inferred"}
+    )
+    assert default["usable_records"] == 2
+    assert default["included_origins"] == ["model-lab", "runtime", "runtime-inferred"]
+    assert runtime["records"] == 2 and runtime["usable_records"] == 1
+    assert runtime["excluded_records"] == 1
+    assert runtime["included_origins"] == ["runtime", "runtime-inferred"]
+    assert dict(runtime["event_counts"]) == {"user_prompt": 1}
 
 
 def test_cli_exposes_summary_and_incremental_jsonl():

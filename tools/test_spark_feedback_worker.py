@@ -63,14 +63,15 @@ def _fake_codex(directory, response=CANDIDATE, code=0):
 
 
 def _run(feedback, model_root, codex, telemetry_db=None):
+    telemetry_db = telemetry_db or (pathlib.Path(model_root) / "test-telemetry.db")
     env = dict(
         os.environ,
         MAINFRAME_PROJECT_ROOT=str(ROOT),
         MAINFRAME_MODEL_LAB_ROOT=str(model_root),
         MAINFRAME_CODEX_BIN=str(codex),
+        MAINFRAME_TELEMETRY_ORIGIN="model-lab",
+        MAINFRAME_TELEMETRY_DB=str(telemetry_db),
     )
-    if telemetry_db:
-        env["MAINFRAME_TELEMETRY_DB"] = str(telemetry_db)
     return subprocess.run(
         [sys.executable, str(WORKER), str(feedback)],
         capture_output=True, text=True, timeout=10, env=env,
