@@ -2,86 +2,95 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "summary",
-    "evidence_quality",
-    "hook_findings",
-    "capability_signals",
-    "telemetry_gaps",
-    "recommended_next_actions"
-  ],
+  "required": ["evidence_quality", "measurement_boundaries", "observations", "hypotheses", "capability_signals", "gap_ids", "probes"],
   "properties": {
-    "summary": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 1000
-    },
     "evidence_quality": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["rating", "reasons"],
+      "type": "object", "additionalProperties": false,
+      "required": ["rating", "limitation_ids"],
       "properties": {
-        "rating": {
-          "type": "string",
-          "enum": ["low", "medium", "high"]
-        },
-        "reasons": {
-          "type": "array",
-          "maxItems": 8,
-          "items": {"type": "string", "maxLength": 600}
+        "rating": {"type": "string", "enum": ["low", "medium", "high"]},
+        "limitation_ids": {
+          "type": "array", "maxItems": 8,
+          "items": {"type": "string", "enum": ["aggregate-only", "mixed-runtime-provenance", "event-order-unavailable", "surface-unattributed", "session-overlap-unknown", "cross-session-unproven", "hook-invocation-count-unavailable", "finding-denominator-unavailable", "user-visible-outcome-unproven"]}
         }
       }
     },
-    "hook_findings": {
-      "type": "array",
-      "maxItems": 20,
+    "measurement_boundaries": {
+      "type": "object", "additionalProperties": false,
+      "required": ["finding_counts", "retry_behavior", "session_overlap", "cross_session_safety", "causal_effectiveness"],
+      "properties": {
+        "finding_counts": {"const": "finding-sums-not-invocations"},
+        "retry_behavior": {"const": "unknown"},
+        "session_overlap": {"const": "unknown"},
+        "cross_session_safety": {"const": "unproven"},
+        "causal_effectiveness": {"const": "unproven"}
+      }
+    },
+    "observations": {
+      "type": "array", "minItems": 1, "maxItems": 24,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["hook", "severity", "finding", "evidence", "next_test"],
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "evidence"],
         "properties": {
-          "hook": {"type": "string", "minLength": 1, "maxLength": 200},
-          "severity": {
-            "type": "string",
-            "enum": ["info", "watch", "material"]
-          },
-          "finding": {"type": "string", "minLength": 1, "maxLength": 800},
+          "id": {"type": "string", "minLength": 1, "maxLength": 80},
           "evidence": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 6,
-            "items": {"type": "string", "maxLength": 400}
-          },
-          "next_test": {"type": "string", "minLength": 1, "maxLength": 700}
+            "type": "array", "minItems": 1, "maxItems": 8,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["path", "value"],
+              "properties": {
+                "path": {"type": "string", "pattern": "^/"},
+                "value": {"type": ["string", "number", "integer", "boolean", "null"]}
+              }
+            }
+          }
+        }
+      }
+    },
+    "hypotheses": {
+      "type": "array", "maxItems": 16,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "statement", "observation_ids", "confidence", "probe_id"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 80},
+          "statement": {"type": "string", "minLength": 1, "maxLength": 700},
+          "observation_ids": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string"}},
+          "confidence": {"type": "string", "enum": ["low", "medium"]},
+          "probe_id": {"type": "string", "minLength": 1, "maxLength": 80}
         }
       }
     },
     "capability_signals": {
-      "type": "array",
-      "maxItems": 20,
+      "type": "array", "maxItems": 20,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["capability_id", "support", "reason"],
+        "type": "object", "additionalProperties": false,
+        "required": ["capability_id", "support", "observation_ids"],
         "properties": {
           "capability_id": {"type": "string", "minLength": 1, "maxLength": 200},
-          "support": {
-            "type": "string",
-            "enum": ["none", "partial", "strong"]
-          },
-          "reason": {"type": "string", "minLength": 1, "maxLength": 700}
+          "support": {"type": "string", "enum": ["none", "partial", "strong"]},
+          "observation_ids": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string"}}
         }
       }
     },
-    "telemetry_gaps": {
-      "type": "array",
-      "maxItems": 16,
-      "items": {"type": "string", "maxLength": 700}
+    "gap_ids": {
+      "type": "array", "minItems": 1, "maxItems": 16,
+      "items": {"type": "string", "enum": ["aggregate-only", "mixed-runtime-provenance", "event-order-unavailable", "surface-unattributed", "session-overlap-unknown", "cross-session-unproven", "hook-invocation-count-unavailable", "finding-denominator-unavailable", "user-visible-outcome-unproven"]}
     },
-    "recommended_next_actions": {
-      "type": "array",
-      "maxItems": 12,
-      "items": {"type": "string", "maxLength": 700}
+    "probes": {
+      "type": "array", "maxItems": 16,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "capability_id", "question", "method", "success_condition", "failure_condition"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 80},
+          "capability_id": {"type": "string", "minLength": 1, "maxLength": 200},
+          "question": {"type": "string", "minLength": 1, "maxLength": 500},
+          "method": {"type": "string", "minLength": 1, "maxLength": 900},
+          "success_condition": {"type": "string", "minLength": 1, "maxLength": 600},
+          "failure_condition": {"type": "string", "minLength": 1, "maxLength": 600}
+        }
+      }
     }
   }
 }

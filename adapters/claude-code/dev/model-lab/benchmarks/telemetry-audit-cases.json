@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "frozen_on": "2026-08-16",
+  "purpose": "Detect unsupported interpretations in optional Gemini analysis of privacy-safe Claude Code telemetry.",
+  "cases": [
+    {
+      "id": "real-redacted-single-signal-session",
+      "origin": "real-redacted",
+      "capability_ids": ["observability.dev-only-telemetry", "quality.changed-code-comments", "secrets.staged-content-gate", "hooks.concurrent-session-safety"],
+      "input": {
+        "telemetry": {
+          "active": true,
+          "format_version": 1,
+          "usable_records": 598,
+          "sessions": 22,
+          "agent_instances": 16,
+          "event_counts": [["code_edit", 374], ["session", 77], ["hook_signal", 66], ["user_prompt", 39], ["subagent_stop", 20], ["subagent_start", 19], ["compaction", 2], ["auto_permission_denied", 1]],
+          "hook_effectiveness": [
+            {"hook": "comment-discipline-reminder.py", "rule_id": "process-leakage", "signals": 11, "sessions": 1, "noted": 31, "asked": 0, "blocked": 0, "resolved": 8, "context_chars": 3882},
+            {"hook": "stop-gate-comment-discipline.py", "rule_id": "process-leakage", "signals": 4, "sessions": 1, "noted": 0, "asked": 0, "blocked": 32, "resolved": 0, "context_chars": 4351},
+            {"hook": "secret-commit-gate.py", "rule_id": "unverified-commit-scope", "signals": 8, "sessions": 1, "noted": 0, "asked": 0, "blocked": 8, "resolved": 0, "context_chars": 2817},
+            {"hook": "git-authority.py", "rule_id": "git-delivery-authority", "signals": 9, "sessions": 1, "noted": 0, "asked": 8, "blocked": 1, "resolved": 0, "context_chars": 808},
+            {"hook": "comment-discipline-reminder.py", "rule_id": "new-comment-review", "signals": 8, "sessions": 1, "noted": 22, "asked": 0, "blocked": 0, "resolved": 0, "context_chars": 2486},
+            {"hook": "length-quality-note.py", "rule_id": "length-threshold", "signals": 6, "sessions": 1, "noted": 9, "asked": 0, "blocked": 0, "resolved": 0, "context_chars": 2552},
+            {"hook": "memory-reminder.py", "rule_id": "memory-checkpoint", "signals": 6, "sessions": 1, "noted": 6, "asked": 0, "blocked": 0, "resolved": 0, "context_chars": 1596},
+            {"hook": "scan-suppression-markers.py", "rule_id": "unfinished-residue", "signals": 5, "sessions": 1, "noted": 3, "asked": 0, "blocked": 0, "resolved": 3, "context_chars": 826},
+            {"hook": "python-security-scan.py", "rule_id": "python-safety", "signals": 4, "sessions": 1, "noted": 2, "asked": 0, "blocked": 0, "resolved": 2, "context_chars": 659},
+            {"hook": "fallow-quality-note.py", "rule_id": "fallow-delta", "signals": 2, "sessions": 1, "noted": 2, "asked": 0, "blocked": 0, "resolved": 0, "context_chars": 629},
+            {"hook": "bash-pattern-reminder.py", "rule_id": "rg-replace-cluster", "signals": 1, "sessions": 1, "noted": 2, "asked": 0, "blocked": 0, "resolved": 0, "context_chars": 330},
+            {"hook": "nodejs-security-scan.py", "rule_id": "node-safety", "signals": 1, "sessions": 1, "noted": 1, "asked": 0, "blocked": 0, "resolved": 0, "context_chars": 311},
+            {"hook": "stop-gate-suppression-markers.py", "rule_id": "unfinished-residue", "signals": 1, "sessions": 1, "noted": 0, "asked": 0, "blocked": 1, "resolved": 0, "context_chars": 610}
+          ],
+          "error": ""
+        }
+      },
+      "expect": {
+        "maximum_evidence_quality": "low",
+        "required_evidence_paths": ["/telemetry/usable_records", "/telemetry/sessions", "/telemetry/hook_effectiveness/0/signals", "/telemetry/hook_effectiveness/0/sessions", "/telemetry/hook_effectiveness/1/blocked"],
+        "required_capability_support": {"observability.dev-only-telemetry": "partial", "hooks.concurrent-session-safety": "none"},
+        "required_probe_capabilities": ["hooks.concurrent-session-safety"],
+        "required_probe_terms": {"hooks.concurrent-session-safety": ["parallel", "session"]},
+        "required_gap_ids": ["hook-invocation-count-unavailable", "session-overlap-unknown", "cross-session-unproven"]
+      }
+    },
+    {
+      "id": "synthetic-finding-counts-not-retries",
+      "origin": "synthetic",
+      "capability_ids": ["observability.dev-only-telemetry", "hooks.concurrent-session-safety"],
+      "input": {
+        "telemetry": {
+          "active": true,
+          "format_version": 1,
+          "usable_records": 2,
+          "sessions": 2,
+          "agent_instances": 0,
+          "event_counts": [["hook_signal", 2]],
+          "hook_effectiveness": [
+            {"hook": "example-stop.py", "rule_id": "example", "signals": 2, "sessions": 2, "noted": 0, "asked": 0, "blocked": 25, "resolved": 0, "context_chars": 400}
+          ],
+          "error": ""
+        }
+      },
+      "expect": {
+        "maximum_evidence_quality": "low",
+        "required_evidence_paths": ["/telemetry/usable_records", "/telemetry/hook_effectiveness/0/signals", "/telemetry/hook_effectiveness/0/blocked"],
+        "required_capability_support": {"observability.dev-only-telemetry": "partial", "hooks.concurrent-session-safety": "none"},
+        "required_probe_capabilities": ["observability.dev-only-telemetry"],
+        "required_probe_terms": {"observability.dev-only-telemetry": ["signals", "blocked"]},
+        "required_gap_ids": ["hook-invocation-count-unavailable"]
+      }
+    },
+    {
+      "id": "synthetic-session-count-not-concurrency",
+      "origin": "synthetic",
+      "capability_ids": ["observability.dev-only-telemetry", "hooks.concurrent-session-safety"],
+      "input": {
+        "telemetry": {
+          "active": true,
+          "format_version": 1,
+          "usable_records": 69,
+          "sessions": 3,
+          "agent_instances": 3,
+          "event_counts": [["hook_signal", 9], ["code_edit", 60]],
+          "hook_effectiveness": [
+            {"hook": "example-edit.py", "rule_id": "example", "signals": 9, "sessions": 3, "noted": 9, "asked": 0, "blocked": 0, "resolved": 3, "context_chars": 900}
+          ],
+          "error": ""
+        }
+      },
+      "expect": {
+        "maximum_evidence_quality": "low",
+        "required_evidence_paths": ["/telemetry/sessions", "/telemetry/hook_effectiveness/0/signals", "/telemetry/hook_effectiveness/0/sessions"],
+        "required_capability_support": {"observability.dev-only-telemetry": "partial", "hooks.concurrent-session-safety": "none"},
+        "required_probe_capabilities": ["hooks.concurrent-session-safety"],
+        "required_probe_terms": {"hooks.concurrent-session-safety": ["parallel", "session"]},
+        "required_gap_ids": ["session-overlap-unknown", "cross-session-unproven"]
+      }
+    }
+  ]
+}
