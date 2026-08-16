@@ -137,6 +137,24 @@ def test_dev_state_absent_db_reports_inactive():
     assert state["feedback"] == []
 
 
+def test_dev_state_combines_separate_adapter_databases():
+    claude_db = _telemetry_db([
+        ("s1", "session", '{"phase":"start","source":"startup"}'),
+    ], columns="session_id, event, payload")
+    codex_db = _telemetry_db([
+        ("s2", "session", '{"phase":"start","source":"resume"}'),
+    ], columns="session_id, event, payload")
+    state = bhp.collect_dev_state(
+        db_path=claude_db,
+        codex_db_path=codex_db,
+        feedback_dir="/nonexistent",
+    )
+    assert state["telemetry"]["records"] == 2
+    assert [item["adapter_id"] for item in state["telemetry"]["adapters"]] == [
+        "claude-code", "codex",
+    ]
+
+
 def test_dev_state_reads_event_counts_and_feedback():
     db = _telemetry_db([
         ("s1", "session", '{"phase":"start","source":"startup"}'),
@@ -301,6 +319,13 @@ def test_payload_breakdown_uses_validated_stream_and_surfaces_bad_rows():
     assert items["surface-ticket"] == 1
     assert "(unrecognized)" not in items
     assert state["telemetry"]["invalid_rows"] == 2
+
+
+def test_page_counts_excluded_rows_as_data_quality_signal():
+    source = os.path.join(_TOOLS, "hub_page_assets", "app.js")
+    body = open(source, encoding="utf-8").read()
+    assert "excluded_records" in body
+    assert "missing_start" in body and "missing_stop" in body
 
 
 def test_hook_effectiveness_aggregates_outcomes_and_skips_malformed_rows():

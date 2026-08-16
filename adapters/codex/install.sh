@@ -57,24 +57,30 @@ HOOKS_TOOL="${ADAPTER_ROOT}/scripts/manage-hooks.py"
 HOOKS_TARGET="${CODEX_DIR}/hooks.json"
 HOOKS_STATE="${CODEX_DIR}/.mainframe-hooks-state.json"
 CODEX_DESKTOP_RUNTIME="${MAINFRAME_CODEX_DESKTOP_RUNTIME:-/Applications/ChatGPT.app/Contents/Resources/codex}"
+TELEMETRY_SCRIPT="${ADAPTER_ROOT}/hooks/scripts/telemetry.py"
+TELEMETRY_CONTRACT="${ADAPTER_ROOT}/hooks/scripts/_telemetry_contract.py"
+TELEMETRY_DIR="${CODEX_DIR}/mainframe/codex/telemetry"
+TELEMETRY_DB="${TELEMETRY_DIR}/telemetry.db"
+TELEMETRY_MARKER="${TELEMETRY_DIR}/enabled"
 
 DRY_RUN=0
 ASSUME_YES=0
 UNINSTALL=0
 PREFLIGHT=0
+DEV_MODE=0
 
 usage() {
     cat <<'EOF'
 MAINFRAME Codex adapter installer
 
 Usage:
-  install.sh [--dry-run] [--yes] [--uninstall]
+  install.sh [--dry-run] [--dev] [--yes] [--uninstall]
   install.sh --preflight [--dry-run] [--yes]
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
 share AGENTS.md, standalone skills, command rules, a bounded permission profile,
-native specialist agents, and reviewed native hooks. Codex plugins and
-development telemetry are not installed by this version.
+native specialist agents, and reviewed native hooks. --dev additionally enables
+the adapter-owned local telemetry sink; normal installation keeps it inactive.
 EOF
 }
 
@@ -89,10 +95,7 @@ parse_args() {
             --uninstall) UNINSTALL=1 ;;
             --preflight) PREFLIGHT=1 ;;
             -h|--help) usage; exit 0 ;;
-            --dev)
-                error "Codex development delivery is not implemented yet."
-                exit 2
-                ;;
+            --dev) DEV_MODE=1 ;;
             *) error "Unknown Codex adapter option: $1"; exit 2 ;;
         esac
         shift
@@ -265,6 +268,8 @@ check_sources() {
         "$CONFIG_TOOL" \
         "$HOOKS_SOURCE" \
         "$HOOKS_SCRIPT" \
+        "$TELEMETRY_SCRIPT" \
+        "$TELEMETRY_CONTRACT" \
         "$HOOKS_TOOL"; do
         if [[ ! -f "$path" ]]; then
             error "Codex adapter source is missing: $path"
@@ -641,6 +646,38 @@ install_hooks() {
     fi
 }
 
+configure_dev_telemetry() {
+    if [[ $DEV_MODE -eq 1 ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "would initialize Codex development telemetry: $TELEMETRY_DB"
+            return
+        fi
+        python3 -B "$TELEMETRY_SCRIPT" --initialize "$TELEMETRY_DB"
+        : > "$TELEMETRY_MARKER"
+        chmod 600 "$TELEMETRY_DB" "$TELEMETRY_MARKER"
+        log "enabled Codex development telemetry: $TELEMETRY_DB"
+        if [[ -x "${REPO_ROOT}/.venv/bin/python3" ]]; then
+            if "${REPO_ROOT}/.venv/bin/python3" \
+                    "${REPO_ROOT}/tools/build_hub_page.py" \
+                    --root "$REPO_ROOT" \
+                    --codex-db "$TELEMETRY_DB" >/dev/null 2>&1; then
+                log "generated local hub page: ${REPO_ROOT}/workspace/runtime/hub.html"
+            else
+                log "Codex telemetry is active; hub page generation was skipped after a non-critical build failure."
+            fi
+        else
+            log "Codex telemetry is active; hub page generation requires the repository .venv."
+        fi
+    elif [[ -f "$TELEMETRY_MARKER" ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "would disable Codex development telemetry and preserve its database"
+        else
+            rm "$TELEMETRY_MARKER"
+            log "disabled Codex development telemetry; preserved $TELEMETRY_DB"
+        fi
+    fi
+}
+
 install_adapter() {
     local name
     install_agents
@@ -652,6 +689,7 @@ install_adapter() {
     for name in "${TEMPLATED_AGENT_NAMES[@]}"; do install_templated_agent "$name"; done
     install_config
     install_hooks
+    configure_dev_telemetry
     if [[ $DRY_RUN -eq 1 ]]; then
         log "Codex baseline plan verified; no files were changed."
     else
@@ -813,6 +851,14 @@ uninstall_adapter() {
         manage_hooks uninstall --dry-run
     else
         manage_hooks uninstall
+    fi
+    if [[ -f "$TELEMETRY_MARKER" ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log "would disable Codex development telemetry and preserve its database"
+        else
+            rm "$TELEMETRY_MARKER"
+            log "disabled Codex development telemetry; preserved $TELEMETRY_DB"
+        fi
     fi
     uninstall_agents
     for name in "${SKILL_NAMES[@]}"; do

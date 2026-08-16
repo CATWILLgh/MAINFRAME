@@ -22,11 +22,16 @@ import time
 
 import yaml
 
-from telemetry_data import build_report as build_telemetry_report
+from telemetry_data import (
+    build_multi_report as build_multi_telemetry_report,
+    build_report as build_telemetry_report,
+)
 
 _ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hub_page_assets")
 _DEFAULT_DB = os.path.expanduser(
     "~/.claude/mainframe/claude-code/telemetry/telemetry.db")
+_DEFAULT_CODEX_DB = os.path.expanduser(
+    "~/.codex/mainframe/codex/telemetry/telemetry.db")
 _DEFAULT_FEEDBACK = os.path.expanduser(
     "~/.claude/mainframe/claude-code/feedback")
 _DEFAULT_PROJECTS = os.path.expanduser("~/.claude/projects")
@@ -176,9 +181,16 @@ def build_edges(skills, agents, hooks):
     return edges
 
 
-def collect_dev_state(db_path, feedback_dir):
+def collect_dev_state(db_path, feedback_dir, codex_db_path=None):
     """Build the UI from the same validated stream exposed to machine readers."""
-    telemetry = build_telemetry_report(db_path)
+    telemetry = (
+        build_multi_telemetry_report({
+            "claude-code": db_path,
+            "codex": codex_db_path,
+        })
+        if codex_db_path is not None
+        else build_telemetry_report(db_path, adapter_id="claude-code")
+    )
     state = {"active": telemetry["active"], "telemetry": telemetry, "feedback": []}
     if os.path.isdir(feedback_dir):
         state["feedback"] = sorted(
@@ -553,7 +565,8 @@ def compute_layout(nodes, layer_order):
 
 
 def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
-                   projects_dir=_DEFAULT_PROJECTS, usage_cache=_DEFAULT_USAGE_CACHE):
+                   projects_dir=_DEFAULT_PROJECTS, usage_cache=_DEFAULT_USAGE_CACHE,
+                   codex_db_path=None):
     skills = collect_skills(root)
     agents = collect_agents(root)
     hooks = collect_hooks(root)
@@ -563,7 +576,11 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
         "agents": agents,
         "hooks": hooks,
         "edges": build_edges(skills, agents, hooks),
-        "dev_state": collect_dev_state(db_path, feedback_dir),
+        "dev_state": collect_dev_state(
+            db_path, feedback_dir,
+            _DEFAULT_CODEX_DB if codex_db_path is None and db_path == _DEFAULT_DB
+            else codex_db_path,
+        ),
         "usage": collect_usage(projects_dir, usage_cache),
         "settings": collect_settings(root),
         "misc": collect_misc(root),
@@ -591,9 +608,10 @@ def render(manifest, build_stamp, assets_dir=_ASSETS, auto_refresh_ms=0):
 
 
 def write_snapshot(root, out, db_path, feedback_dir, projects_dir, usage_cache,
-                   auto_refresh_ms=0):
+                   auto_refresh_ms=0, codex_db_path=None):
     manifest = build_manifest(root, db_path=db_path, feedback_dir=feedback_dir,
-                              projects_dir=projects_dir, usage_cache=usage_cache)
+                              projects_dir=projects_dir, usage_cache=usage_cache,
+                              codex_db_path=codex_db_path)
     stamp = datetime.datetime.now().isoformat(timespec="seconds")
     html = render(manifest, build_stamp=stamp, auto_refresh_ms=auto_refresh_ms)
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -619,6 +637,7 @@ def main():
     parser.add_argument("--out", default=None,
                         help="output path (default: <root>/workspace/runtime/hub.html)")
     parser.add_argument("--db", default=_DEFAULT_DB)
+    parser.add_argument("--codex-db", default=_DEFAULT_CODEX_DB)
     parser.add_argument("--feedback", default=_DEFAULT_FEEDBACK)
     parser.add_argument("--projects", default=_DEFAULT_PROJECTS)
     parser.add_argument("--usage-cache", default=_DEFAULT_USAGE_CACHE)
@@ -637,7 +656,8 @@ def main():
     try:
         while True:
             write_snapshot(root, out, args.db, args.feedback, args.projects,
-                           args.usage_cache, auto_refresh_ms=refresh_ms)
+                           args.usage_cache, auto_refresh_ms=refresh_ms,
+                           codex_db_path=args.codex_db)
             if not args.watch:
                 break
             time.sleep(args.interval)

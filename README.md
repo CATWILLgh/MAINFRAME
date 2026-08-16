@@ -95,7 +95,7 @@ To see the result without changing anything:
 ./install.sh --claude --dry-run
 ```
 
-Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit skills, native specialist agents, command rules, reviewed native hooks, the shared credentials index, and a least-privilege permission profile for Desktop, CLI, and the IDE extension. The installer merges only its owned configuration and hook groups, preserves unrelated settings, and can remove only its own changes later. New or changed hooks still require review through `/hooks`; Codex plugins and development telemetry are not installed yet.
+Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit skills, native specialist agents, command rules, reviewed native hooks, the shared credentials index, and a least-privilege permission profile for Desktop, CLI, and the IDE extension. The installer merges only its owned configuration and hook groups, preserves unrelated settings, and can remove only its own changes later. New or changed hooks still require review through `/hooks`.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 
@@ -165,13 +165,14 @@ Use `--codex` instead to update the Codex baseline. Most linked content is curre
 
 ### Development mode
 
-Development mode currently belongs to the Claude Code adapter:
+Development mode is enabled independently for each adapter:
 
 ```bash
 ./install.sh --claude --dev
+./install.sh --codex --dev
 ```
 
-Development mode adds local instrumentation for maintaining this repository. Its normal telemetry stays on the machine and records operational metadata rather than prompts, code, file paths, or hook messages.
+Development mode adds local instrumentation for maintaining this repository. Claude Code and Codex keep separate adapter-owned SQLite databases. Their normal telemetry stays on the machine and records operational metadata rather than prompts, code, file paths, tool input or output, findings, or hook messages.
 
 It also generates the local desktop page at `workspace/runtime/hub.html`. To keep that file refreshed temporarily while developing MAINFRAME:
 
@@ -181,7 +182,13 @@ It also generates the local desktop page at `workspace/runtime/hub.html`. To kee
 
 Open the generated file, not `tools/hub_page_assets/template.html`; the latter is only the source template.
 
-Installing again without `--dev` disables development instrumentation while preserving already collected local data.
+The same validated report is available to machine readers:
+
+```bash
+python3 tools/telemetry_data.py --all --pretty
+```
+
+Installing an adapter again without `--dev` disables only that adapter's development instrumentation while preserving already collected local data.
 
 ### Uninstall
 

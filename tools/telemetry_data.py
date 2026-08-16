@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read MAINFRAME Claude telemetry as one validated summary or JSONL stream."""
+"""Read adapter-owned MAINFRAME telemetry as validated summaries or JSONL."""
 
 from __future__ import annotations
 
@@ -7,20 +7,53 @@ import argparse
 import collections
 import datetime
 import json
+import importlib.util
+import os
 import re
 import sqlite3
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS = ROOT / "adapters" / "claude-code" / "plugin" / "hooks" / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+CLAUDE_INSTALLED_DB = Path(
+    "~/.claude/mainframe/claude-code/telemetry/telemetry.db"
+).expanduser()
+CODEX_INSTALLED_DB = (
+    Path(os.environ.get("CODEX_HOME", "~/.codex")).expanduser()
+    / "mainframe" / "codex" / "telemetry" / "telemetry.db"
+)
+CLAUDE_REPOSITORY_DB = (
+    ROOT / "workspace" / "runtime" / "claude-code" / "telemetry" / "telemetry.db"
+)
+CODEX_REPOSITORY_DB = (
+    ROOT / "workspace" / "runtime" / "codex" / "telemetry" / "telemetry.db"
+)
 
-from _telemetry_contract import EVENT_FIELDS, ROW_SCHEMA_VERSION, validate_payload  # noqa: E402
 
-INSTALLED_DB = Path("~/.claude/mainframe/claude-code/telemetry/telemetry.db").expanduser()
-REPOSITORY_DB = ROOT / "workspace" / "runtime" / "claude-code" / "telemetry" / "telemetry.db"
+def _load_contract(adapter_id, path):
+    spec = importlib.util.spec_from_file_location(
+        "mainframe_telemetry_contract_" + adapter_id.replace("-", "_"), path
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load {adapter_id} telemetry contract")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+CONTRACTS = {
+    "claude-code": _load_contract(
+        "claude-code",
+        ROOT / "adapters" / "claude-code" / "plugin" / "hooks" / "scripts"
+        / "_telemetry_contract.py",
+    ),
+    "codex": _load_contract(
+        "codex",
+        ROOT / "adapters" / "codex" / "hooks" / "scripts"
+        / "_telemetry_contract.py",
+    ),
+}
+ADAPTER_LABELS = {"claude-code": "Claude Code", "codex": "Codex"}
 
 BREAKDOWN_FIELDS = {
     "session": ("phase",),
@@ -31,6 +64,8 @@ BREAKDOWN_FIELDS = {
     "code_edit": ("lang", "operation"),
     "init_reminder": ("reminded",),
     "model_lab": ("status",),
+    "permission_request": ("tool_name", "permission_mode"),
+    "hook_run": ("status", "recipient"),
 }
 
 _SESSION_UUID_RE = re.compile(
@@ -49,8 +84,16 @@ def _effective_origin(origin, session_id):
     return origin
 
 
-def default_db_path():
-    return INSTALLED_DB if INSTALLED_DB.is_file() else REPOSITORY_DB
+def default_db_path(adapter_id="claude-code"):
+    installed, repository = {
+        "claude-code": (CLAUDE_INSTALLED_DB, CLAUDE_REPOSITORY_DB),
+        "codex": (CODEX_INSTALLED_DB, CODEX_REPOSITORY_DB),
+    }[adapter_id]
+    return installed if installed.is_file() else repository
+
+
+def default_db_paths():
+    return {adapter_id: default_db_path(adapter_id) for adapter_id in CONTRACTS}
 
 
 def _read_connection(path):
@@ -73,19 +116,21 @@ def _select_columns(connection):
         "ts",
         selected("schema_version", "1"),
         "session_id",
+        selected("turn_id", "''"),
         selected("prompt_id", "''"),
         selected("agent_id", "''"),
         "agent_type",
         selected("tool_use_id", "''"),
         "project",
         selected("hook_event", "''"),
+        selected("model", "''"),
         selected("origin", "'unclassified'"),
         "event",
         "payload",
     ))
 
 
-def iter_events(path, after_id=0, limit=None):
+def iter_events(path, after_id=0, limit=None, adapter_id="claude-code"):
     """Yield privacy-safe normalized rows in durable id order."""
     connection = _read_connection(path)
     try:
@@ -96,8 +141,8 @@ def iter_events(path, after_id=0, limit=None):
             sql += " LIMIT ?"
             params.append(int(limit))
         for row in connection.execute(sql, params):
-            (row_id, timestamp, schema_version, session_id, prompt_id, agent_id,
-             agent_type, tool_use_id, project, hook_event, origin, event,
+            (row_id, timestamp, schema_version, session_id, turn_id, prompt_id,
+             agent_id, agent_type, tool_use_id, project, hook_event, model, origin, event,
              raw_payload) = row
             errors = []
             try:
@@ -109,25 +154,29 @@ def iter_events(path, after_id=0, limit=None):
                 errors.append(str(error))
 
             version = int(schema_version or 1)
-            if not errors and version >= ROW_SCHEMA_VERSION:
+            contract = CONTRACTS[adapter_id]
+            if not errors and version >= contract.ROW_SCHEMA_VERSION:
                 try:
-                    payload = validate_payload(str(event), payload)
+                    payload = contract.validate_payload(str(event), payload)
                 except ValueError as error:
                     payload = {}
                     errors.append(str(error))
 
             effective_origin = _effective_origin(origin, session_id)
             yield {
+                "adapter_id": adapter_id,
                 "schema_version": version,
                 "id": int(row_id),
                 "timestamp": str(timestamp or ""),
                 "session_id": str(session_id or ""),
+                "turn_id": str(turn_id or ""),
                 "prompt_id": str(prompt_id or ""),
                 "agent_id": str(agent_id or ""),
                 "agent_type": str(agent_type or ""),
                 "tool_use_id": str(tool_use_id or ""),
                 "project": str(project or ""),
                 "source_event": str(hook_event or ""),
+                "model": str(model or ""),
                 "origin": effective_origin,
                 "event": str(event or ""),
                 "data": payload,
@@ -138,8 +187,12 @@ def iter_events(path, after_id=0, limit=None):
         connection.close()
 
 
-def _empty_report(active=False, error="", included_origins=None):
+def _empty_report(
+    active=False, error="", included_origins=None, adapter_id="claude-code"
+):
     return {
+        "adapter_id": adapter_id,
+        "adapter_label": ADAPTER_LABELS.get(adapter_id, adapter_id),
         "active": active,
         "format_version": 1,
         "generated_at": datetime.datetime.now(datetime.timezone.utc)
@@ -162,6 +215,7 @@ def _empty_report(active=False, error="", included_origins=None):
         "event_counts": [],
         "by_day": [],
         "by_agent": [],
+        "by_model": [],
         "agent_lifecycle": [],
         "breakdowns": [],
         "hook_effectiveness": [],
@@ -170,7 +224,9 @@ def _empty_report(active=False, error="", included_origins=None):
     }
 
 
-def build_report(path, recent_limit=40, included_origins=None):
+def build_report(
+    path, recent_limit=40, included_origins=None, adapter_id="claude-code"
+):
     """Aggregate the same validated stream consumed by the machine CLI and UI."""
     allowed_origins = set(
         included_origins
@@ -179,9 +235,14 @@ def build_report(path, recent_limit=40, included_origins=None):
     )
     path = Path(path)
     if not path.is_file():
-        return _empty_report(included_origins=allowed_origins)
+        return _empty_report(
+            included_origins=allowed_origins, adapter_id=adapter_id
+        )
 
-    report = _empty_report(active=True, included_origins=allowed_origins)
+    report = _empty_report(
+        active=True, included_origins=allowed_origins, adapter_id=adapter_id
+    )
+    contract = CONTRACTS[adapter_id]
     sessions = set()
     agents = set()
     schema_versions = collections.Counter()
@@ -189,6 +250,7 @@ def build_report(path, recent_limit=40, included_origins=None):
     event_counts = collections.Counter()
     days = collections.Counter()
     by_agent = collections.Counter()
+    by_model = collections.Counter()
     unknown = collections.Counter()
     lifecycle = {}
     breakdowns = {
@@ -199,14 +261,14 @@ def build_report(path, recent_limit=40, included_origins=None):
     recent = collections.deque(maxlen=max(0, int(recent_limit)))
 
     try:
-        rows = iter_events(path)
+        rows = iter_events(path, adapter_id=adapter_id)
         for row in rows:
             report["records"] += 1
             schema_versions[row["schema_version"]] += 1
             origins[row["origin"]] += 1
-            if row["schema_version"] < ROW_SCHEMA_VERSION:
+            if row["schema_version"] < contract.ROW_SCHEMA_VERSION:
                 report["legacy_rows"] += 1
-            if row["event"] not in EVENT_FIELDS:
+            if row["event"] not in contract.EVENT_FIELDS:
                 unknown[row["event"] or "(empty)"] += 1
 
             if not row["valid"]:
@@ -218,8 +280,8 @@ def build_report(path, recent_limit=40, included_origins=None):
                     })
 
             usable = (
-                row["schema_version"] >= ROW_SCHEMA_VERSION
-                and row["valid"] and row["event"] in EVENT_FIELDS
+                row["schema_version"] >= contract.ROW_SCHEMA_VERSION
+                and row["valid"] and row["event"] in contract.EVENT_FIELDS
                 and row["origin"] in allowed_origins
             )
             if not usable:
@@ -238,6 +300,8 @@ def build_report(path, recent_limit=40, included_origins=None):
                 days[row["timestamp"][:10]] += 1
             role = row["agent_type"] or "(main context)"
             by_agent[role] += 1
+            if row["model"]:
+                by_model[row["model"]] += 1
 
             if row["event"] in ("subagent_start", "subagent_stop"):
                 item = lifecycle.setdefault(role, {
@@ -271,10 +335,12 @@ def build_report(path, recent_limit=40, included_origins=None):
             if recent.maxlen:
                 recent.append({key: row[key] for key in (
                     "id", "timestamp", "project", "event", "agent_type", "agent_id",
-                    "tool_use_id", "origin", "valid", "data",
+                    "tool_use_id", "model", "origin", "valid", "data",
                 )})
     except (OSError, sqlite3.Error, ValueError) as error:
-        return _empty_report(error=str(error), included_origins=allowed_origins)
+        return _empty_report(
+            error=str(error), included_origins=allowed_origins, adapter_id=adapter_id
+        )
 
     report["sessions"] = len(sessions)
     report["agent_instances"] = len(agents)
@@ -284,10 +350,13 @@ def build_report(path, recent_limit=40, included_origins=None):
     report["event_counts"] = [[key, value] for key, value in event_counts.most_common()]
     report["by_day"] = [[key, value] for key, value in sorted(days.items())]
     report["by_agent"] = [[key, value] for key, value in by_agent.most_common()]
+    report["by_model"] = [[key, value] for key, value in by_model.most_common()]
     report["agent_lifecycle"] = []
     for item in sorted(lifecycle.values(), key=lambda value: value["agent"]):
         item["instances"] = len(item["instances"])
-        item["unmatched"] = item["started"] - item["stopped"]
+        item["missing_start"] = max(0, item["stopped"] - item["started"])
+        item["missing_stop"] = max(0, item["started"] - item["stopped"])
+        item["unmatched"] = item["missing_start"] + item["missing_stop"]
         report["agent_lifecycle"].append(item)
     report["breakdowns"] = [
         {
@@ -309,9 +378,86 @@ def build_report(path, recent_limit=40, included_origins=None):
     return report
 
 
+def build_multi_report(paths=None, recent_limit=40):
+    """Combine adapter summaries without combining their runtime storage."""
+    paths = paths or default_db_paths()
+    adapters = [
+        build_report(path, recent_limit=recent_limit, adapter_id=adapter_id)
+        for adapter_id, path in sorted(paths.items())
+    ]
+    result = _empty_report(adapter_id="all")
+    result["adapter_label"] = "All adapters"
+    result["format_version"] = 2
+    result["adapters"] = adapters
+    result["active"] = any(item["active"] for item in adapters)
+    for key in (
+        "records", "usable_records", "excluded_records", "sessions",
+        "agent_instances", "legacy_rows", "invalid_rows",
+    ):
+        result[key] = sum(item[key] for item in adapters)
+
+    counters = {
+        "event_counts": collections.Counter(),
+        "by_day": collections.Counter(),
+        "by_agent": collections.Counter(),
+        "by_model": collections.Counter(),
+    }
+    for item in adapters:
+        for key, counter in counters.items():
+            counter.update(dict(item[key]))
+    result["event_counts"] = [
+        [key, value] for key, value in counters["event_counts"].most_common()
+    ]
+    result["by_day"] = [
+        [key, value] for key, value in sorted(counters["by_day"].items())
+    ]
+    result["by_agent"] = [
+        [key, value] for key, value in counters["by_agent"].most_common()
+    ]
+
+    for key in ("agent_lifecycle", "breakdowns", "hook_effectiveness"):
+        result[key] = []
+        for item in adapters:
+            result[key].extend([
+                {**row, "adapter_id": item["adapter_id"]} for row in item[key]
+            ])
+    recent = []
+    for item in adapters:
+        recent.extend([
+            {**row, "adapter_id": item["adapter_id"]}
+            for row in item["recent_events"]
+        ])
+    result["recent_events"] = sorted(
+        recent, key=lambda row: (row.get("timestamp", ""), row.get("id", 0)),
+        reverse=True,
+    )[:max(0, int(recent_limit))]
+    result["first_timestamp"] = min(
+        (item["first_timestamp"] for item in adapters if item["first_timestamp"]),
+        default="",
+    )
+    result["last_timestamp"] = max(
+        (item["last_timestamp"] for item in adapters if item["last_timestamp"]),
+        default="",
+    )
+    result["invalid_examples"] = [
+        {**row, "adapter_id": item["adapter_id"]}
+        for item in adapters for row in item["invalid_examples"]
+    ][:10]
+    result["unknown_events"] = [
+        [f"{item['adapter_id']}:{name}", count]
+        for item in adapters for name, count in item["unknown_events"]
+    ]
+    result["error"] = "; ".join(
+        f"{item['adapter_id']}: {item['error']}" for item in adapters if item["error"]
+    )
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", default=str(default_db_path()))
+    parser.add_argument("--db", default=None)
+    parser.add_argument("--adapter", choices=tuple(CONTRACTS), default="claude-code")
+    parser.add_argument("--all", action="store_true", help="read every adapter-owned DB")
     parser.add_argument("--format", choices=("summary", "jsonl"), default="summary")
     parser.add_argument("--after-id", type=int, default=0)
     parser.add_argument("--limit", type=int, default=200)
@@ -319,14 +465,21 @@ def main():
     args = parser.parse_args()
 
     if args.format == "summary":
-        report = build_report(args.db)
+        report = (
+            build_multi_report()
+            if args.all or args.db is None
+            else build_report(args.db, adapter_id=args.adapter)
+        )
         print(json.dumps(report, ensure_ascii=False, indent=2 if args.pretty else None))
         return 0 if report["active"] or not report["error"] else 1
 
-    if not Path(args.db).is_file():
+    db = args.db or str(default_db_path(args.adapter))
+    if not Path(db).is_file():
         return 0
     try:
-        for row in iter_events(args.db, after_id=args.after_id, limit=args.limit):
+        for row in iter_events(
+            db, after_id=args.after_id, limit=args.limit, adapter_id=args.adapter
+        ):
             print(json.dumps(row, ensure_ascii=False, separators=(",", ":")))
     except (OSError, sqlite3.Error, ValueError) as error:
         print(f"telemetry stream unavailable: {error}", file=sys.stderr)

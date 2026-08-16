@@ -13,6 +13,28 @@
         ]
       }
     ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "^(Bash|Edit|Write|apply_patch)$",
@@ -47,6 +69,29 @@
             "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
             "timeout": 30,
             "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "^(manual|auto)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 5
           }
         ]
       }

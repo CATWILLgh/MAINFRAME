@@ -344,15 +344,21 @@
     const t = ds.telemetry || {};
     const u = D.usage || {};
     const h = D.health || { dangling: [], missing_scripts: [], orphans: [] };
-    const unknown = (t.unknown_events || []).length;
-    const dataIssues = (t.invalid_rows || 0) + (t.legacy_rows || 0) + unknown;
+    const unknownKinds = (t.unknown_events || []).length;
+    const unknownRecords = (t.unknown_events || []).reduce(
+      (sum, row) => sum + Number(row[1] || 0), 0);
+    const dataIssueRecords = (t.invalid_rows || 0) + (t.legacy_rows || 0)
+      + (t.excluded_records || 0) + unknownRecords;
+    const dataIssueKinds = Number(Boolean(t.invalid_rows))
+      + Number(Boolean(t.legacy_rows)) + Number(Boolean(t.excluded_records))
+      + Number(Boolean(unknownKinds));
     const repoIssues = (h.dangling || []).length + (h.missing_scripts || []).length;
     const unmatched = (t.agent_lifecycle || []).reduce((sum, row) => sum + (row.unmatched || 0), 0);
     const hookRows = t.hook_effectiveness || [];
     const hookGap = hookRows.reduce((sum, row) =>
       sum + Math.max(0, (row.blocked || 0) - (row.resolved || 0)), 0);
     const feedback = (ds.feedback || []).length;
-    const attentionCount = dataIssues + repoIssues + unmatched + hookGap + feedback;
+    const attentionCount = dataIssueKinds + repoIssues + unmatched + hookGap + feedback;
     const healthy = ds.active && attentionCount === 0;
     const statusLabel = !ds.active ? "Waiting for telemetry" : healthy ? "Signals are clean" : "Review recommended";
     const statusTone = !ds.active ? "idle" : healthy ? "good" : "warn";
@@ -404,7 +410,7 @@
 
     const concerns = [];
     if (!ds.active) concerns.push(["Telemetry", "No validated events yet", "idle"]);
-    if (dataIssues) concerns.push(["Data quality", dataIssues + " invalid, legacy or unknown records", "warn"]);
+    if (dataIssueRecords) concerns.push(["Data quality", dataIssueRecords + " excluded, invalid, legacy or unknown records", "warn"]);
     if (repoIssues) concerns.push(["Delivery health", repoIssues + " broken references or missing scripts", "warn"]);
     if (unmatched) concerns.push(["Agent lifecycle", unmatched + " unmatched start/stop signals", "warn"]);
     if (hookGap) {
@@ -511,7 +517,8 @@
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
         "No telemetry recorded yet — either dev mode is not installed, or no "
-        + "sessions have run since it was. Enable with ./install.sh --claude --dev; "
+        + "sessions have run since it was. Enable the intended adapter with "
+        + "./install.sh --claude --dev or ./install.sh --codex --dev; "
         + "data appears here after a few sessions."));
       if (t && t.error) root.appendChild(el("div", { class: "notice" }, "Telemetry read error: " + t.error));
       return;
@@ -528,10 +535,30 @@
       el("div", { class: "stat" }, [el("b", null, String(ds.feedback.length)), " feedback queued"]),
     ]));
 
-    if (t.invalid_rows || t.legacy_rows || (t.unknown_events && t.unknown_events.length)) {
+    if (t.adapters && t.adapters.length) {
+      const adapterRows = t.adapters.map((item) => el("tr", null, [
+        el("td", { class: "mono" }, item.adapter_label || item.adapter_id),
+        el("td", { class: "num" }, String(item.usable_records || 0)),
+        el("td", { class: "num" }, String(item.excluded_records || 0)),
+        el("td", { class: "num" }, String(item.sessions || 0)),
+        el("td", { class: "num" }, item.active ? "active" : "inactive"),
+      ]));
+      root.appendChild(section("Adapter telemetry", "dev", adapterRows.length,
+        el("table", { class: "matrix" }, [
+          el("thead", null, el("tr", null, [el("th", null, "adapter"),
+            el("th", { class: "num" }, "usable"),
+            el("th", { class: "num" }, "excluded"),
+            el("th", { class: "num" }, "sessions"),
+            el("th", { class: "num" }, "state")])),
+          el("tbody", null, adapterRows)])));
+    }
+
+    if (t.invalid_rows || t.legacy_rows || t.excluded_records
+        || (t.unknown_events && t.unknown_events.length)) {
       const details = [];
       if (t.invalid_rows) details.push(t.invalid_rows + " invalid");
       if (t.legacy_rows) details.push(t.legacy_rows + " legacy");
+      if (t.excluded_records) details.push(t.excluded_records + " excluded");
       if (t.unknown_events && t.unknown_events.length) details.push(t.unknown_events.length + " unknown event types");
       root.appendChild(el("div", { class: "notice" },
         "Data health needs attention: " + details.join(", ") + ". New-format rows are validated before display."));
@@ -555,23 +582,32 @@
     if (t.by_agent && t.by_agent.length) {
       root.appendChild(section("Events by agent", "agents", t.by_agent.length, barList(t.by_agent)));
     }
+    if (t.by_model && t.by_model.length) {
+      root.appendChild(section("Runtime model signals", "dev", t.by_model.length, barList(t.by_model)));
+    }
     if (t.agent_lifecycle && t.agent_lifecycle.length) {
       const arows = t.agent_lifecycle.map((item) => el("tr", null, [
+        el("td", { class: "mono" }, item.adapter_id || t.adapter_id || "—"),
         el("td", { class: "mono" }, item.agent),
         el("td", { class: "num" }, String(item.instances)),
         el("td", { class: "num" }, String(item.started)),
         el("td", { class: "num" }, String(item.stopped)),
-        el("td", { class: "num" + (item.unmatched ? " dim" : "") }, String(item.unmatched)),
+        el("td", { class: "num" }, String(item.missing_start || 0)),
+        el("td", { class: "num" }, String(item.missing_stop || 0)),
       ]));
       root.appendChild(section("Subagent lifecycle", "agents", arows.length,
         el("table", { class: "matrix" }, [
-          el("thead", null, el("tr", null, [el("th", null, "agent"),
+          el("thead", null, el("tr", null, [el("th", null, "adapter"),
+            el("th", null, "agent"),
             el("th", { class: "num" }, "instances"), el("th", { class: "num" }, "started"),
-            el("th", { class: "num" }, "stopped"), el("th", { class: "num" }, "unmatched")])),
+            el("th", { class: "num" }, "stopped"),
+            el("th", { class: "num" }, "missing start"),
+            el("th", { class: "num" }, "missing stop")])),
           el("tbody", null, arows)])));
     }
     if (t.hook_effectiveness && t.hook_effectiveness.length) {
       const hrows = t.hook_effectiveness.map((item) => el("tr", null, [
+        el("td", { class: "mono" }, item.adapter_id || t.adapter_id || "—"),
         el("td", { class: "mono" }, item.hook),
         el("td", { class: "mono" }, item.rule_id),
         el("td", { class: "num" }, String(item.noted)),
@@ -584,7 +620,7 @@
       root.appendChild(section("Hook effectiveness", "hooks", hrows.length,
         el("table", { class: "matrix" }, [
           el("thead", null, el("tr", null, [
-            el("th", null, "hook"), el("th", null, "rule"),
+            el("th", null, "adapter"), el("th", null, "hook"), el("th", null, "rule"),
             el("th", null, "noted"), el("th", null, "asked"),
             el("th", null, "blocked"), el("th", null, "resolved"),
             el("th", null, "context chars"), el("th", null, "sessions"),
@@ -601,6 +637,7 @@
 
     if (t.recent_events && t.recent_events.length) {
       const rrows = t.recent_events.map((item) => el("tr", null, [
+        el("td", { class: "mono" }, item.adapter_id || t.adapter_id || "—"),
         el("td", { class: "mono dim" }, String(item.id)),
         el("td", { class: "mono dim" }, item.timestamp),
         el("td", { class: "mono" }, item.event),
@@ -609,7 +646,8 @@
       ]));
       root.appendChild(section("Recent usable event stream", "dev", rrows.length,
         el("table", { class: "matrix" }, [
-          el("thead", null, el("tr", null, [el("th", null, "id"), el("th", null, "UTC"),
+          el("thead", null, el("tr", null, [el("th", null, "adapter"),
+            el("th", null, "id"), el("th", null, "UTC"),
             el("th", null, "event"), el("th", null, "agent"), el("th", null, "project")])),
           el("tbody", null, rrows)])));
     }

@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import shlex
 import sys
+import time
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -34,6 +35,7 @@ HEALTH_MODULES = (
     "_path_validation.py",
     "_python_findings.py",
     "_secret_commit.py",
+    "_telemetry_contract.py",
     "comment-discipline-reminder.py",
     "comment_extract.py",
     "length-quality-note.py",
@@ -45,6 +47,7 @@ HEALTH_MODULES = (
     "stop-gate-comment-discipline.py",
     "stop-gate-suppression-markers.py",
     "ticket-id-format-reminder.py",
+    "telemetry.py",
 )
 
 
@@ -488,10 +491,41 @@ def _failure(payload: dict, exc: Exception) -> None:
         _emit_context(event, text, system_message=text)
 
 
+def _record_runtime_event(payload: dict) -> None:
+    hooklib = importlib.import_module("_hooklib")
+    event = payload.get("hook_event_name")
+    if event == "SessionStart":
+        source = str(payload.get("source") or "")
+        if source in {"startup", "resume", "clear", "compact"}:
+            hooklib.log_event("session", {"phase": "start", "source": source}, payload)
+    elif event == "SessionEnd":
+        hooklib.log_event("session", {"phase": "end", "source": "ended"}, payload)
+    elif event == "UserPromptSubmit":
+        hooklib.log_event(
+            "user_prompt", {"prompt_len": len(str(payload.get("prompt") or ""))}, payload
+        )
+    elif event == "PostCompact":
+        trigger = str(payload.get("trigger") or "")
+        if trigger in {"manual", "auto"}:
+            hooklib.log_event("compaction", {"trigger": trigger}, payload)
+    elif event == "SubagentStart":
+        hooklib.log_event("subagent_start", {}, payload)
+    elif event == "SubagentStop":
+        hooklib.log_event("subagent_stop", {}, payload)
+    elif event == "PermissionRequest":
+        hooklib.log_event("permission_request", {
+            "tool_name": str(payload.get("tool_name") or "unknown"),
+            "permission_mode": str(payload.get("permission_mode") or "unknown"),
+        }, payload)
+
+
 def main() -> None:
     payload: dict = {}
+    started = time.monotonic()
+    status = "completed"
     try:
         payload = _payload()
+        _record_runtime_event(payload)
         event = payload.get("hook_event_name")
         if event == "SessionStart":
             _health(payload)
@@ -507,7 +541,18 @@ def main() -> None:
         elif event in {"Stop", "SubagentStop"}:
             _stop(payload)
     except Exception as exc:
+        status = "failed"
         _failure(payload, exc)
+    finally:
+        try:
+            hooklib = importlib.import_module("_hooklib")
+            hooklib.log_event("hook_run", {
+                "status": status,
+                "duration_ms": max(0, round((time.monotonic() - started) * 1000)),
+                "recipient": "subagent" if payload.get("agent_id") else "root",
+            }, payload)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

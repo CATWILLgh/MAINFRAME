@@ -205,8 +205,9 @@ def _git_repo() -> Path:
 def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
     source = json.loads(HOOKS_SOURCE.read_text(encoding="utf-8"))
     assert set(source["hooks"]) == {
-        "SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse",
-        "Stop", "SubagentStop",
+        "SessionStart", "SessionEnd", "SubagentStart", "PreToolUse",
+        "PermissionRequest", "PostToolUse", "PostCompact",
+        "UserPromptSubmit", "Stop", "SubagentStop",
     }
     for event, groups in source["hooks"].items():
         assert len(groups) == 1
@@ -219,11 +220,42 @@ def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
         if "additionalContextLimit" in handler:
             assert 0 < handler["additionalContextLimit"] <= 1600
         else:
-            assert event in {"PermissionRequest", "Stop", "SubagentStop"}
+            assert event in {
+                "SessionEnd", "SubagentStart", "PermissionRequest",
+                "PostCompact", "UserPromptSubmit", "Stop", "SubagentStop",
+            }
         assert "async" not in handler
     assert source["hooks"]["SessionStart"][0]["matcher"] == (
         "^(startup|resume|clear|compact)$"
     )
+
+
+def test_dispatcher_records_privacy_safe_dev_telemetry():
+    root = Path(tempfile.mkdtemp())
+    db = root / "telemetry" / "telemetry.db"
+    payload = {
+        "session_id": "session",
+        "turn_id": "turn",
+        "hook_event_name": "UserPromptSubmit",
+        "permission_mode": "auto",
+        "model": "gpt-test",
+        "cwd": str(root / "private-project"),
+        "prompt": "secret-looking prompt text that must not be stored",
+    }
+    proc, result = _run_hook(
+        payload, root / "state",
+        extra_env={"MAINFRAME_CODEX_TELEMETRY_DB": str(db)},
+    )
+    assert proc.returncode == 0 and result is None
+    import sqlite3
+    with sqlite3.connect(db) as connection:
+        row = connection.execute(
+            "SELECT model, event, payload, project FROM events ORDER BY id LIMIT 1"
+        ).fetchone()
+    assert row is not None
+    assert row[0] == "gpt-test"
+    assert "secret-looking" not in " ".join(str(value) for value in row)
+    assert str(root) not in " ".join(str(value) for value in row)
 
 
 def test_startup_health_covers_every_runtime_module():
@@ -1442,3 +1474,11 @@ def test_missing_optional_analyzer_is_reported_once_without_disabling_other_chec
             assert "Other hook checks remain active" in context
         else:
             assert result is None
+
+
+if __name__ == "__main__":
+    tests = sorted(name for name in globals() if name.startswith("test_"))
+    for name in tests:
+        globals()[name]()
+        print(f"  ok  {name}")
+    print(f"\n{len(tests)}/{len(tests)} passed")

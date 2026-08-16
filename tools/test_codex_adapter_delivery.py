@@ -483,8 +483,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert hooks.is_file() and hooks_state.is_file()
     hooks_data = json.loads(hooks.read_text(encoding="utf-8"))
     assert set(hooks_data["hooks"]) == {
-        "SessionStart", "PreToolUse", "PermissionRequest", "PostToolUse",
-        "Stop", "SubagentStop",
+        "SessionStart", "SessionEnd", "SubagentStart", "PreToolUse",
+        "PermissionRequest", "PostToolUse", "PostCompact",
+        "UserPromptSubmit", "Stop", "SubagentStop",
     }
     assert stat.S_IMODE(hooks.stat().st_mode) == 0o600
     assert stat.S_IMODE(hooks_state.stat().st_mode) == 0o600
@@ -959,12 +960,25 @@ def test_skill_collision_stops_before_shared_install():
     assert (collision / "SKILL.md").read_text(encoding="utf-8") == "unrelated\n"
 
 
-def test_unsupported_dev_mode_fails_before_any_delivery():
+def test_dev_mode_initializes_only_codex_owned_telemetry():
     proc, home = _run("--codex", "--dev")
-    assert proc.returncode == 2
-    assert "not implemented yet" in proc.stderr
-    assert not (home / ".codex").exists()
-    assert not (home / ".local" / "bin" / "secret").exists()
+    assert proc.returncode == 0, proc.stderr
+    telemetry = home / ".codex" / "mainframe" / "codex" / "telemetry"
+    db = telemetry / "telemetry.db"
+    assert db.is_file()
+    assert (telemetry / "enabled").is_file()
+    assert not (home / ".claude" / "mainframe").exists()
+
+    normal, _ = _run("--codex", home=home)
+    assert normal.returncode == 0, normal.stderr
+    assert db.is_file()
+    assert not (telemetry / "enabled").exists()
+
+
+def test_normal_install_leaves_codex_telemetry_inactive():
+    proc, home = _run("--codex")
+    assert proc.returncode == 0, proc.stderr
+    assert not (home / ".codex" / "mainframe" / "codex" / "telemetry").exists()
 
 
 def test_baseline_uses_native_standalone_layers_only():

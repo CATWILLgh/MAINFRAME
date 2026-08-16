@@ -49,7 +49,8 @@ def test_report_and_stream_share_the_same_rows():
     assert report["invalid_rows"] == 0 and report["legacy_rows"] == 0
     assert report["agent_lifecycle"] == [{
         "agent": "mainframe-researcher", "started": 1, "stopped": 1,
-        "instances": 1, "unmatched": 0,
+        "instances": 1, "missing_start": 0, "missing_stop": 0,
+        "unmatched": 0,
     }]
     assert report["hook_effectiveness"][0]["noted"] == 2
     assert report["recent_events"][0]["id"] == 4
@@ -189,6 +190,79 @@ def test_cli_exposes_summary_and_incremental_jsonl():
     rows = [json.loads(line) for line in stream.stdout.splitlines()]
     assert len(rows) == 1 and rows[0]["id"] == 2
     assert rows[0]["data"] == {"prompt_len": 8}
+
+
+def test_lifecycle_discrepancies_do_not_cancel_each_other():
+    db = fresh_db()
+    base = {"session_id": "s", "hook_event_name": "SubagentStart"}
+    assert _hooklib.log_event(
+        "subagent_start", {}, {**base, "agent_id": "a", "agent_type": "alpha"}
+    ) == "written"
+    for agent_id in ("b", "c"):
+        assert _hooklib.log_event(
+            "subagent_stop", {}, {
+                **base, "hook_event_name": "SubagentStop",
+                "agent_id": agent_id, "agent_type": "beta",
+            },
+        ) == "written"
+    report = telemetry_data.build_report(db)
+    lifecycle = {item["agent"]: item for item in report["agent_lifecycle"]}
+    assert lifecycle["alpha"]["missing_stop"] == 1
+    assert lifecycle["alpha"]["missing_start"] == 0
+    assert lifecycle["beta"]["missing_start"] == 2
+    assert lifecycle["beta"]["missing_stop"] == 0
+    assert sum(item["unmatched"] for item in lifecycle.values()) == 3
+
+
+def test_multi_adapter_report_keeps_storage_and_evidence_separate():
+    claude_db = fresh_db()
+    assert _hooklib.log_event(
+        "user_prompt", {"prompt_len": 4}, {"session_id": "claude"}
+    ) == "written"
+
+    codex_scripts = ROOT / "adapters" / "codex" / "hooks" / "scripts"
+    sys.path.insert(0, str(codex_scripts))
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "mainframe_codex_telemetry_hooklib", codex_scripts / "_hooklib.py"
+        )
+        assert spec is not None and spec.loader is not None
+        codex_hooklib = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(codex_hooklib)
+        codex_db = pathlib.Path(tempfile.mkdtemp()) / "telemetry.db"
+        os.environ["MAINFRAME_CODEX_TELEMETRY_DB"] = str(codex_db)
+        os.environ["MAINFRAME_CODEX_TELEMETRY_ORIGIN"] = "runtime"
+        codex_hooklib.initialize_telemetry_db(str(codex_db))
+        assert codex_hooklib.log_event(
+            "session", {"phase": "start", "source": "startup"},
+            {
+                "session_id": "codex", "hook_event_name": "SessionStart",
+                "model": "gpt-test",
+            },
+        ) == "written"
+    finally:
+        sys.path.remove(str(codex_scripts))
+        os.environ.pop("MAINFRAME_CODEX_TELEMETRY_DB", None)
+        os.environ.pop("MAINFRAME_CODEX_TELEMETRY_ORIGIN", None)
+
+    report = telemetry_data.build_multi_report({
+        "claude-code": claude_db,
+        "codex": codex_db,
+    })
+    assert report["active"] is True
+    assert report["records"] == report["usable_records"] == 2
+    assert [item["adapter_id"] for item in report["adapters"]] == [
+        "claude-code", "codex",
+    ]
+    assert [item["records"] for item in report["adapters"]] == [1, 1]
+    codex_report = next(
+        item for item in report["adapters"] if item["adapter_id"] == "codex"
+    )
+    assert codex_report["by_model"] == [["gpt-test", 1]]
+    assert {item["adapter_id"] for item in report["recent_events"]} == {
+        "claude-code", "codex",
+    }
 
 
 if __name__ == "__main__":
