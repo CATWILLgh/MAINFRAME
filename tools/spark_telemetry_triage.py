@@ -131,13 +131,24 @@ def main(argv=None):
     parser.add_argument("--adapter", required=True, choices=("claude-code", "codex"))
     parser.add_argument("--db", type=Path)
     parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--status-file", type=Path)
     args = parser.parse_args(argv)
+    def finish(status, detail, artifact=""):
+        if args.status_file:
+            args.status_file.parent.mkdir(parents=True, exist_ok=True)
+            temporary_status = args.status_file.with_suffix(".tmp")
+            temporary_status.write_text(json.dumps({
+                "status": status, "detail": detail, "artifact": str(artifact),
+            }) + "\n", encoding="utf-8")
+            os.chmod(temporary_status, 0o600)
+            os.replace(temporary_status, args.status_file)
+        return 0
     payload = _source(args.adapter, args.db)
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
     output_root = args.output_root or ROOT / "workspace/runtime"
     destination = output_root / args.adapter / "model-lab/spark/telemetry-triage" / f"triage-{digest[:16]}.json"
     if destination.exists():
-        return 0
+        return finish("completed", "matching telemetry was already analyzed", destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     prompt = """Analyze this privacy-safe MAINFRAME telemetry summary for cheap triage only.
 Return exact evidence paths and bounded hypotheses. Do not claim causal overhead,
@@ -157,10 +168,10 @@ Do not inspect prompts, code, paths, transcripts, or credentials.\n\n""" + json.
            timeout=180, check=False)
         usage = _usage(proc.stdout)
         if proc.returncode != 0:
-            return 0
+            return finish("retryable", f"Spark worker exit {proc.returncode}")
         candidate = json.loads(Path(response_name).read_text(encoding="utf-8"))
         if not _valid_candidate(candidate):
-            return 0
+            return finish("retryable", "Spark returned an invalid review candidate")
         envelope = {
             "schema": 1, "adapter": args.adapter, "producer": "spark-telemetry-triage",
             "model": MODEL, "effort": EFFORT,
@@ -172,9 +183,9 @@ Do not inspect prompts, code, paths, transcripts, or credentials.\n\n""" + json.
         temporary.write_text(json.dumps(envelope, indent=2) + "\n", encoding="utf-8")
         os.chmod(temporary, 0o600)
         os.replace(temporary, destination)
-        return 0
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
-        return 0
+        return finish("completed", "review candidate stored", destination)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as error:
+        return finish("retryable", f"Spark unavailable: {type(error).__name__}")
     finally:
         _record_usage(args.adapter, usage, digest, args.db)
         try:

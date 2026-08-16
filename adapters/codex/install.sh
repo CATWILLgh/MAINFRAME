@@ -661,7 +661,7 @@ configure_dev_telemetry() {
         chmod 600 "$TELEMETRY_DB" "$TELEMETRY_MARKER"
         log "enabled Codex development telemetry: $TELEMETRY_DB"
         if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
-            if "${REPO_ROOT}/tools/mainframe-observatory.sh" start; then
+            if "${REPO_ROOT}/tools/mainframe-observatory.sh" enable codex; then
                 log "started the local MAINFRAME observatory"
             else
                 log "native usage collection is inactive; hook telemetry remains available"
@@ -679,12 +679,20 @@ configure_dev_telemetry() {
         else
             log "Codex telemetry is active; hub page generation requires the repository .venv."
         fi
-    elif [[ -f "$TELEMETRY_MARKER" ]]; then
+    else
+        if [[ -f "$TELEMETRY_MARKER" ]]; then
+            if [[ $DRY_RUN -eq 1 ]]; then
+                log "would disable Codex development telemetry and preserve its database"
+            else
+                rm "$TELEMETRY_MARKER"
+                log "disabled Codex development telemetry; preserved $TELEMETRY_DB"
+            fi
+        fi
         if [[ $DRY_RUN -eq 1 ]]; then
-            log "would disable Codex development telemetry and preserve its database"
-        else
-            rm "$TELEMETRY_MARKER"
-            log "disabled Codex development telemetry; preserved $TELEMETRY_DB"
+            log "would disable the Codex observatory input"
+        elif [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
+            "${REPO_ROOT}/tools/mainframe-observatory.sh" disable codex || \
+                log "could not disable the Codex observatory input"
         fi
     fi
 }
@@ -870,6 +878,12 @@ uninstall_adapter() {
             rm "$TELEMETRY_MARKER"
             log "disabled Codex development telemetry; preserved $TELEMETRY_DB"
         fi
+    fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "would disable the Codex observatory input"
+    elif [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
+        "${REPO_ROOT}/tools/mainframe-observatory.sh" disable codex || \
+            log "could not disable the Codex observatory input"
     fi
     uninstall_agents
     for name in "${SKILL_NAMES[@]}"; do

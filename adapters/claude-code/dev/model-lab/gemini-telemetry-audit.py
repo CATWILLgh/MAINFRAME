@@ -470,7 +470,15 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default="")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--status-file", type=pathlib.Path)
     args = parser.parse_args(argv)
+
+    def finish(status: str, detail: str, artifact: pathlib.Path | str = "") -> int:
+        if args.status_file:
+            _atomic_json(args.status_file, {
+                "status": status, "detail": detail, "artifact": str(artifact),
+            })
+        return 0
 
     root = _repo_root()
     telemetry_data = _load_tools(root)
@@ -482,7 +490,7 @@ def main(argv=None) -> int:
     payload = _source_payload(root, db)
     report = payload["telemetry"]
     if not report["active"] or report["error"] or report["usable_records"] == 0:
-        return 0
+        return finish("completed", "no usable Claude telemetry to analyze")
 
     model = os.environ.get("MAINFRAME_GEMINI_MODEL", MODEL)
     source_digest = hashlib.sha256(
@@ -493,7 +501,7 @@ def main(argv=None) -> int:
     pending = output_dir / f"pending-{source_digest[:16]}.json"
     if destination.exists() and not args.force:
         _telemetry(root, "deduplicated")
-        return 0
+        return finish("completed", "matching telemetry was already analyzed", destination)
 
     schema = (
         root
@@ -555,7 +563,7 @@ def main(argv=None) -> int:
             },
         )
         _telemetry(root, "unavailable", elapsed)
-        return 0
+        return finish("retryable", "Antigravity is unavailable; pending record stored", pending)
 
     elapsed = int(
         (datetime.datetime.now(datetime.timezone.utc) - started).total_seconds()
@@ -577,13 +585,13 @@ def main(argv=None) -> int:
             },
         )
         _telemetry(root, "unavailable", elapsed)
-        return 0
+        return finish("retryable", "Antigravity request failed; pending record stored", pending)
 
     try:
         result, cli_meta = _parse_wrapper(proc.stdout)
     except (json.JSONDecodeError, ValueError):
         _telemetry(root, "invalid", elapsed)
-        return 0
+        return finish("retryable", "Antigravity returned an unreadable result")
     capability_ids = {
         item["id"] for item in payload["known_capabilities"] if item["id"]
     }
@@ -591,7 +599,7 @@ def main(argv=None) -> int:
         _telemetry(
             root, "invalid", elapsed, _normalized_usage(cli_meta.get("usage"))
         )
-        return 0
+        return finish("retryable", "Antigravity returned an invalid audit")
 
     envelope = {
         "schema": OUTPUT_SCHEMA,
@@ -626,7 +634,7 @@ def main(argv=None) -> int:
     _telemetry(
         root, "completed", elapsed, _normalized_usage(cli_meta.get("usage"))
     )
-    return 0
+    return finish("completed", "review candidate stored", destination)
 
 
 if __name__ == "__main__":

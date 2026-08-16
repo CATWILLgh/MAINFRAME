@@ -139,7 +139,8 @@ def _run(db: pathlib.Path, lab: pathlib.Path, agy: pathlib.Path):
         MAINFRAME_TELEMETRY_ORIGIN="model-lab",
     )
     return subprocess.run(
-        [sys.executable, str(WORKER), "--db", str(db)],
+        [sys.executable, str(WORKER), "--db", str(db),
+         "--status-file", str(lab / "worker-status.json")],
         capture_output=True,
         text=True,
         timeout=15,
@@ -160,6 +161,9 @@ def test_valid_audit_is_bounded_and_provenanced():
     assert result.returncode == 0 and not result.stdout and not result.stderr
     artifacts = _artifacts(lab)
     assert len(artifacts) == 1
+    worker_status = json.loads((lab / "worker-status.json").read_text(encoding="utf-8"))
+    assert worker_status["status"] == "completed"
+    assert pathlib.Path(worker_status["artifact"]).resolve() == artifacts[0].resolve()
     value = json.loads(artifacts[0].read_text(encoding="utf-8"))
     assert value["review_required"] is True and value["audit"] == AUDIT
     assert value["cli"]["version"] == "1.1.12-test"
@@ -206,6 +210,8 @@ def test_model_failure_leaves_private_retry_metadata_only():
     value = json.loads(pending[0].read_text(encoding="utf-8"))
     assert value["status"] == "pending" and "source_sha256" in value
     assert "stderr" not in value and "stdout" not in value
+    worker_status = json.loads((lab / "worker-status.json").read_text(encoding="utf-8"))
+    assert worker_status["status"] == "retryable"
 
 
 def test_unknown_capability_is_rejected():

@@ -4,6 +4,35 @@
 // descriptions containing < > or quotes cannot break or inject markup.
 (function () {
   const D = window.HUB_DATA;
+  const LANGUAGES = ["en", "ru"];
+  const RU = {
+    "Overview": "Обзор", "Telemetry": "Телеметрия", "Usage": "Расход",
+    "Analysis": "Анализ", "Components": "Компоненты", "Hooks": "Хуки",
+    "Configuration": "Настройки", "Health": "Состояние", "Map": "Карта",
+    "Observe": "Наблюдение", "System": "Система", "local observatory": "локальная обсерватория",
+    "Local data only": "Только локальные данные", "Analysis queue": "Очередь анализа",
+    "Providers": "Провайдеры", "Recent jobs": "Последние задания",
+    "Provider": "Провайдер", "Adapter": "Адаптор", "Status": "Статус",
+    "Attempts": "Попытки", "Updated": "Обновлено", "Detail": "Детали", "Actions": "Действия",
+    "Run Spark": "Запустить Spark", "Run Antigravity": "Запустить Antigravity",
+    "Enabled": "Включён", "Paused": "На паузе", "Pause": "Пауза",
+    "Resume": "Продолжить", "Retry": "Повторить", "Cancel": "Отменить",
+    "Queued": "В очереди", "Running": "В работе", "Completed": "Обработано",
+    "Needs retry": "Нужен повтор", "queued": "в очереди", "running": "в работе",
+    "completed": "обработано", "retryable": "нужен повтор", "failed": "ошибка",
+    "cancelled": "отменено",
+    "No analysis jobs yet.": "Заданий анализа пока нет.",
+    "Queue operations are local, bounded, and review-only.": "Операции очереди локальны, ограничены и требуют проверки.",
+    "English": "English", "Русский": "Русский",
+  };
+  let language = "en";
+  try {
+    const saved = window.localStorage.getItem("mainframe-language");
+    language = LANGUAGES.includes(saved)
+      ? saved
+      : ((navigator.language || "").toLowerCase().startsWith("ru") ? "ru" : "en");
+  } catch (_err) { /* optional browser storage */ }
+  const tr = (text) => language === "ru" ? (RU[text] || text) : text;
   const app = document.getElementById("app");
   const tabsNav = document.getElementById("tabs");
   if (!app) return;
@@ -26,7 +55,7 @@
     if (kids != null) {
       (Array.isArray(kids) ? kids : [kids]).forEach((c) => {
         if (c == null || c === false) return;
-        n.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+        n.appendChild(typeof c === "string" ? document.createTextNode(tr(c)) : c);
       });
     }
     return n;
@@ -1058,10 +1087,85 @@
     }
   }
 
+  async function controlPost(path, payload) {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Mainframe-Token": window.HUB_CONTROL_TOKEN || "" },
+      body: JSON.stringify(payload || {}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "request failed");
+    window.location.reload();
+  }
+
+  function actionButton(label, action, tone) {
+    const button = el("button", { type: "button", class: "control-button " + (tone || "") }, label);
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try { await action(); }
+      catch (error) { button.disabled = false; button.title = String(error); }
+    });
+    return button;
+  }
+
+  function renderControl(root) {
+    const control = D.control || { providers: {}, jobs: [] };
+    const jobs = control.jobs || [];
+    const countStatus = (name) => (control.counts || {})[name]
+      || jobs.filter((job) => job.status === name).length;
+    root.appendChild(el("p", { class: "muted" }, "Queue operations are local, bounded, and review-only."));
+    root.appendChild(el("div", { class: "stat-row wrap" }, [
+      el("div", { class: "stat" }, [el("b", null, String(countStatus("queued"))), "Queued"]),
+      el("div", { class: "stat" }, [el("b", null, String(countStatus("running"))), "Running"]),
+      el("div", { class: "stat" }, [el("b", null, String(countStatus("completed"))), "Completed"]),
+      el("div", { class: "stat" }, [el("b", null, String(countStatus("retryable"))), "Needs retry"]),
+    ]));
+    const launch = el("div", { class: "control-launch" }, [
+      actionButton("Run Spark", () => controlPost("/api/jobs", { provider: "spark", adapter: "claude-code" })),
+      actionButton("Run Spark", () => controlPost("/api/jobs", { provider: "spark", adapter: "codex" })),
+      actionButton("Run Antigravity", () => controlPost("/api/jobs", { provider: "antigravity", adapter: "claude-code" }), "accent"),
+    ]);
+    launch.children[0].appendChild(el("span", { class: "button-detail" }, "Claude Code"));
+    launch.children[1].appendChild(el("span", { class: "button-detail" }, "Codex"));
+    launch.children[2].appendChild(el("span", { class: "button-detail" }, "Claude Code"));
+    root.appendChild(section("Analysis queue", "dev", 3, launch));
+
+    const providerCards = Object.entries(control.providers || {}).map(([provider, enabled]) =>
+      el("article", { class: "provider-card" }, [
+        el("div", null, [el("strong", { class: "mono" }, provider), badge(enabled ? "Enabled" : "Paused", enabled ? "user" : "muted")]),
+        actionButton(enabled ? "Pause" : "Resume", () => controlPost("/api/providers/" + provider, { enabled: !enabled })),
+      ]));
+    root.appendChild(section("Providers", "config", providerCards.length, el("div", { class: "provider-grid" }, providerCards)));
+
+    if (!jobs.length) {
+      root.appendChild(el("div", { class: "notice" }, "No analysis jobs yet."));
+      return;
+    }
+    const rows = jobs.map((job) => {
+      const actions = [];
+      if (["retryable", "failed", "cancelled"].includes(job.status)) {
+        actions.push(actionButton("Retry", () => controlPost("/api/jobs/" + job.id + "/retry", {})));
+      } else if (job.status === "queued") {
+        actions.push(actionButton("Cancel", () => controlPost("/api/jobs/" + job.id + "/cancel", {}), "danger"));
+      }
+      return el("tr", null, [
+        el("td", { class: "mono" }, job.provider), el("td", null, job.adapter),
+        el("td", null, badge(job.status, job.status)), el("td", { class: "num" }, String(job.attempts)),
+        el("td", { class: "mono dim" }, job.updated_at || ""),
+        el("td", { class: "job-detail" }, job.detail || ""), el("td", { class: "job-actions" }, actions),
+      ]);
+    });
+    root.appendChild(section("Recent jobs", "dev", jobs.length, el("div", { class: "table-scroll" }, el("table", { class: "matrix" }, [
+      el("thead", null, el("tr", null, ["Provider", "Adapter", "Status", "Attempts", "Updated", "Detail", "Actions"].map((name) => el("th", null, name)))),
+      el("tbody", null, rows),
+    ]))));
+  }
+
   const VIEWS = [
     { id: "overview", label: "Overview", short: "OV", render: renderOverview },
     { id: "dev", label: "Telemetry", short: "TL", render: renderDev },
     { id: "usage", label: "Usage", short: "US", render: renderUsage },
+    { id: "analysis", label: "Analysis", short: "AN", render: renderControl },
     { id: "catalog", label: "Components", short: "CP", render: renderCatalog, divider: true },
     { id: "hooks", label: "Hooks", short: "HK", render: renderHooks },
     { id: "config", label: "Configuration", short: "CF", render: renderConfig },
@@ -1106,9 +1210,19 @@
   let search = null;
   if (topbar) {
     search = el("input", { class: "search", type: "search",
-      placeholder: "filter skills, agents, hooks…", autocomplete: "off" });
+      placeholder: language === "ru" ? "фильтр skills, агентов, hooks…" : "filter skills, agents, hooks…",
+      autocomplete: "off" });
     search.addEventListener("input", () => applyFilter(search.value));
     const tools = topbar.querySelector(".toptools") || topbar;
+    const languageSelect = el("select", { class: "language-select", "aria-label": "Language" }, [
+      el("option", { value: "en" }, "English"), el("option", { value: "ru" }, "Русский"),
+    ]);
+    languageSelect.value = language;
+    languageSelect.addEventListener("change", () => {
+      try { window.localStorage.setItem("mainframe-language", languageSelect.value); } catch (_err) { /* optional */ }
+      window.location.reload();
+    });
+    tools.appendChild(languageSelect);
     const stamp = tools.querySelector(".stamp");
     tools.insertBefore(search, stamp || null);
     // anchor the fixed drawer just under the (sticky) topbar, measured not guessed
@@ -1127,8 +1241,8 @@
       panes[v.id].btn.tabIndex = on ? 0 : -1;
     });
     const activeName = document.getElementById("active-view-name");
-    if (activeName && activeView) activeName.textContent = activeView.label;
-    if (activeView) document.title = activeView.label + " · MAINFRAME hub";
+    if (activeName && activeView) activeName.textContent = tr(activeView.label);
+    if (activeView) document.title = tr(activeView.label) + " · MAINFRAME hub";
     if (search) search.hidden = id !== "catalog" && id !== "graph";
     try { window.sessionStorage.setItem("mainframe-hub-view", id); } catch (_err) { /* unavailable over some file origins */ }
   }
@@ -1141,6 +1255,14 @@
     if (savedScroll > 0) window.requestAnimationFrame(() => window.scrollTo(0, savedScroll));
   } catch (_err) { /* session state is optional */ }
   show(initialView);
+
+  document.documentElement.lang = language;
+  const navLabel = document.querySelector(".sidebar > .nav-label");
+  const brandSub = document.querySelector(".brand-sub");
+  const privacy = document.querySelector(".privacy-note");
+  if (navLabel) navLabel.textContent = tr("Observe");
+  if (brandSub) brandSub.textContent = tr("local observatory");
+  if (privacy) privacy.textContent = tr("Local data only");
 
   if (window.HUB_AUTO_REFRESH_MS >= 2000) {
     window.setInterval(() => {

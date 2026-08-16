@@ -752,6 +752,12 @@ main() {
     fi
 
     if [[ $UNINSTALL -eq 1 ]]; then
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would disable the claude-code observatory input"
+        elif [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
+            "${PROJECT_ROOT}/tools/mainframe-observatory.sh" disable claude-code || \
+                log_warn "Could not disable the claude-code observatory input."
+        fi
         if [[ ! -d "${CLAUDE_DIR}" ]]; then
             log_ok "Nothing to uninstall: ${CLAUDE_DIR} does not exist."
             return 0
@@ -822,7 +828,7 @@ main() {
                 log_warn "Could not initialize Claude telemetry; dev telemetry will report the failure when invoked."
             fi
             if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
-                if "${PROJECT_ROOT}/tools/mainframe-observatory.sh" start; then
+                if "${PROJECT_ROOT}/tools/mainframe-observatory.sh" enable claude-code; then
                     log_ok "Started the local MAINFRAME observatory."
                 else
                     log_warn "Native usage collection is inactive; hook telemetry remains available."
@@ -856,6 +862,12 @@ main() {
                 uninstall_one "${entry%%:*}" "$dev_target"
             fi
         done
+        if [[ $DRY_RUN -eq 1 ]]; then
+            log_action "would disable the claude-code observatory input"
+        elif [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
+            "${PROJECT_ROOT}/tools/mainframe-observatory.sh" disable claude-code || \
+                log_warn "Could not disable the claude-code observatory input."
+        fi
     fi
     for entry in "${MANAGED_DIRS[@]}"; do
         install_dir_contents "${entry%%:*}" "${entry##*:}"

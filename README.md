@@ -181,9 +181,19 @@ For native model-usage counters, prepare the repository development environment 
 tools/mainframe-observatory.sh start
 ```
 
-The `--dev` installers also start this local receiver when its dependencies are available. It accepts only localhost OTLP logs and persists an allowlist of numeric token counters, model, and opaque session identifiers. Check or stop it with `tools/mainframe-observatory.sh status` and `tools/mainframe-observatory.sh stop`.
+The `--dev` installers register a lightweight user LaunchAgent on macOS and start the local observatory when its dependencies are available. It binds only to `127.0.0.1`, accepts privacy-bounded OTLP usage logs, and serves the live control panel at [http://127.0.0.1:4318/](http://127.0.0.1:4318/). The panel keeps its English or Russian display choice in the browser, shows the durable local analysis queue, and can run or pause the optional Spark and Antigravity review workers. Their output remains review-only; it never changes adapter policy or project code.
 
-It also generates the local desktop page at `workspace/runtime/hub.html`. To keep that file refreshed temporarily while developing MAINFRAME:
+Check, stop, or remove only the background service with:
+
+```bash
+tools/mainframe-observatory.sh status
+tools/mainframe-observatory.sh stop
+tools/mainframe-observatory.sh uninstall
+```
+
+Stopping or uninstalling the LaunchAgent preserves telemetry, queue state, and model-lab artifacts. Reinstalling one adapter without `--dev` disables only that adapter's input; the shared service remains active while another dev adapter still uses it.
+
+It also generates the offline fallback page at `workspace/runtime/hub.html`. To keep that file refreshed temporarily without the service:
 
 ```bash
 .venv/bin/python3 tools/build_hub_page.py --watch --interval 15

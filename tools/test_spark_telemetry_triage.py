@@ -29,10 +29,11 @@ def test_adapter_owned_candidate_and_usage():
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     db = work / "telemetry.db"
     output = work / "runtime"
+    status_file = work / "status.json"
     env = dict(os.environ, MAINFRAME_CODEX_BIN=str(fake))
     proc = subprocess.run([
         sys.executable, str(SCRIPT), "--adapter", "codex", "--db", str(db),
-        "--output-root", str(output),
+        "--output-root", str(output), "--status-file", str(status_file),
     ], env=env, capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     artifacts = list((output / "codex/model-lab/spark/telemetry-triage").glob("*.json"))
@@ -46,6 +47,9 @@ def test_adapter_owned_candidate_and_usage():
         ).fetchone()[0])
     assert payload["source"] == "model-lab"
     assert payload["input_tokens"] == 100
+    status_value = json.loads(status_file.read_text(encoding="utf-8"))
+    assert status_value["status"] == "completed"
+    assert status_value["artifact"] == str(artifacts[0])
 
 
 if __name__ == "__main__":

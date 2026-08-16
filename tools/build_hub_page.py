@@ -591,7 +591,8 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
     }
 
 
-def render(manifest, build_stamp, assets_dir=_ASSETS, auto_refresh_ms=0):
+def render(manifest, build_stamp, assets_dir=_ASSETS, auto_refresh_ms=0,
+           live=False, control_token=""):
     template = _read(os.path.join(assets_dir, "template.html"))
     style = _read(os.path.join(assets_dir, "style.css"))
     app_js = _read(os.path.join(assets_dir, "app.js"))
@@ -602,6 +603,8 @@ def render(manifest, build_stamp, assets_dir=_ASSETS, auto_refresh_ms=0):
             .replace("{{SNAPSHOT_MODE}}", (f"auto refresh · {auto_refresh_ms // 1000}s"
                                             if auto_refresh_ms else "static snapshot"))
             .replace("{{AUTO_REFRESH_MS}}", str(auto_refresh_ms))
+            .replace("{{LIVE_MODE}}", "true" if live else "false")
+            .replace("{{CONTROL_TOKEN}}", json.dumps(control_token))
             .replace("{{STYLE}}", style)
             .replace("{{DATA}}", data)
             .replace("{{APP_JS}}", app_js))
