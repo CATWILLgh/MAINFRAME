@@ -66,7 +66,12 @@ def _run_installer(*args, home=None, claude_version=None, broken_python=False):
         executable = fake_bin / command
         executable.write_text("#!/bin/sh\necho test-version\n", encoding="utf-8")
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
-    env = dict(os.environ, HOME=str(home), PATH=f"{fake_bin}:/usr/bin:/bin")
+    env = dict(
+        os.environ,
+        HOME=str(home),
+        PATH=f"{fake_bin}:/usr/bin:/bin",
+        MAINFRAME_INSTALL_TESTING="1",
+    )
     proc = subprocess.run(
         ["bash", str(ROOT_INSTALLER), *args],
         capture_output=True,
@@ -113,6 +118,27 @@ def test_claude_dev_dry_run_is_adapter_scoped():
     proc, _ = _run_installer("--claude", "--dev", "--dry-run")
     assert proc.returncode == 0, proc.stderr
     assert "claude-code/{telemetry,feedback,model-lab}" in proc.stdout
+
+
+def test_claude_dev_telemetry_settings_are_owned_and_reversible():
+    installed, home = _run_installer("--claude", "--dev")
+    assert installed.returncode == 0, installed.stderr
+    settings = home / ".claude" / "settings.json"
+    value = json.loads(settings.read_text(encoding="utf-8"))
+    assert value["env"]["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
+    assert value["env"]["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] == "http/json"
+    assert value["env"]["OTEL_LOG_USER_PROMPTS"] == "0"
+    assert value["env"]["OTEL_LOG_TOOL_CONTENT"] == "0"
+
+    value["env"]["USER_SETTING"] = "kept"
+    settings.write_text(json.dumps(value), encoding="utf-8")
+    reinstalled, _ = _run_installer("--claude", home=home)
+    assert reinstalled.returncode == 0, reinstalled.stderr
+    value = json.loads(settings.read_text(encoding="utf-8"))
+    assert value["env"] == {
+        "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
+        "USER_SETTING": "kept",
+    }
 
 
 def test_plain_reinstall_disables_owned_dev_links():

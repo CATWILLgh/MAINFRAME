@@ -167,6 +167,11 @@ def initialize_telemetry_db(db=None):
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id, id)"
         )
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_model_usage_sample "
+            "ON events(json_extract(payload, '$.sample_id')) "
+            "WHERE event = 'model_usage'"
+        )
         connection.execute(f"PRAGMA user_version={ROW_SCHEMA_VERSION}")
         connection.commit()
     finally:
@@ -236,6 +241,8 @@ def log_event(event, payload=None, hook_payload=None):
                 )
                 connection.commit()
                 return "written"
+            except sqlite3.IntegrityError:
+                return "deduplicated"
             except sqlite3.OperationalError as error:
                 if not _telemetry_busy(error):
                     return "error"

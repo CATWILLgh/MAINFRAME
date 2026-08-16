@@ -18,6 +18,17 @@ EVENT_FIELDS = {
         "count": int,
         "context_chars": int,
     },
+    "model_usage": {
+        "sample_id": str,
+        "source": str,
+        "input_tokens": int,
+        "cached_input_tokens": int,
+        "cache_write_tokens": int,
+        "output_tokens": int,
+        "reasoning_output_tokens": int,
+        "total_tokens": int,
+        "request_count": int,
+    },
 }
 
 REQUIRED_FIELDS = {
@@ -27,6 +38,10 @@ REQUIRED_FIELDS = {
     "permission_request": {"tool_name", "permission_mode"},
     "hook_run": {"status", "duration_ms", "recipient"},
     "hook_signal": {"hook", "rule_id", "outcome", "count", "context_chars"},
+    "model_usage": {
+        "sample_id", "source", "input_tokens", "cached_input_tokens", "cache_write_tokens",
+        "output_tokens", "reasoning_output_tokens", "total_tokens", "request_count",
+    },
 }
 
 FIELD_VALUES = {
@@ -36,6 +51,9 @@ FIELD_VALUES = {
     ("hook_run", "status"): {"completed", "failed"},
     ("hook_run", "recipient"): {"root", "subagent"},
     ("hook_signal", "outcome"): {"noted", "asked", "blocked", "resolved"},
+    ("model_usage", "source"): {
+        "native-otel", "native-app-server", "transcript", "model-lab",
+    },
 }
 
 
@@ -72,4 +90,6 @@ def validate_payload(event, payload):
         if accepted is not None and value not in accepted:
             raise ValueError(f"telemetry field {key} must be one of {sorted(accepted)}")
         normalized[key] = value
+    if event == "model_usage" and normalized["request_count"] <= 0:
+        raise ValueError("model_usage request_count must be positive")
     return normalized

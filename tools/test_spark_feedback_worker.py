@@ -55,6 +55,10 @@ def _fake_codex(directory, response=CANDIDATE, code=0):
         "args = sys.argv[1:]\n"
         "if '--output-last-message' in args:\n"
         f"    pathlib.Path(args[args.index('--output-last-message') + 1]).write_text({payload!r}, encoding='utf-8')\n"
+        "if '--json' in args:\n"
+        "    print(json.dumps({'type':'turn.completed','usage':{"
+        "'input_tokens':120,'cached_input_tokens':80,'cache_write_input_tokens':0,"
+        "'output_tokens':20,'reasoning_output_tokens':5}}))\n"
         f"sys.exit({code})\n",
         encoding="utf-8",
     )
@@ -96,22 +100,32 @@ def test_valid_result_has_trusted_envelope_and_exact_invocation():
     assert value["model"] == "gpt-5.3-codex-spark"
     assert value["effort"] == "medium"
     assert value["candidate"] == CANDIDATE
+    assert value["usage"] == {
+        "input_tokens": 120,
+        "cached_input_tokens": 80,
+        "cache_write_tokens": 0,
+        "output_tokens": 20,
+        "reasoning_output_tokens": 5,
+        "total_tokens": 140,
+    }
     assert len(value["source"]["sha256"]) == 64
     call = json.loads(calls.read_text(encoding="utf-8").splitlines()[0])
     argv = call["argv"]
-    for token in ("exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "read-only", "--output-schema"):
+    for token in ("exec", "--ephemeral", "--ignore-user-config", "--ignore-rules", "read-only", "--output-schema", "--json"):
         assert token in argv, argv
     assert 'model_reasoning_effort="medium"' in argv
     assert str(feedback) in call["stdin"]
     con = sqlite3.connect(db)
     try:
-        event, payload = con.execute(
-            "SELECT event, payload FROM events ORDER BY id DESC LIMIT 1"
-        ).fetchone()
+        rows = con.execute(
+            "SELECT event, payload FROM events ORDER BY id"
+        ).fetchall()
     finally:
         con.close()
-    assert event == "model_lab"
-    assert json.loads(payload)["status"] == "completed"
+    assert [row[0] for row in rows] == ["model_usage", "model_lab"]
+    usage = json.loads(rows[0][1])
+    assert usage["source"] == "model-lab" and usage["total_tokens"] == 140
+    assert json.loads(rows[1][1])["status"] == "completed"
 
 
 def test_same_feedback_is_deduplicated():

@@ -156,6 +156,7 @@ SETTINGS_SOURCE="${ADAPTER_ROOT}/export/settings.json"
 SETTINGS_TARGET="${CLAUDE_DIR}/settings.json"
 SETTINGS_STATE="${CLAUDE_DIR}/.mainframe-settings-state.json"
 SETTINGS_MANAGER="${ADAPTER_ROOT}/settings-manager.py"
+SETTINGS_DEV_OVERLAY="${ADAPTER_ROOT}/dev/settings-telemetry.json"
 
 # Hub-development instrumentation, installed ONLY with --dev (see usage).
 # ~/.claude/mainframe is the hub-OWNED data namespace. The telemetry hook's
@@ -295,10 +296,14 @@ check_python() {
 }
 
 check_settings_inputs() {
-    python3 "$SETTINGS_MANAGER" check \
+    local args=(check \
         --source "$SETTINGS_SOURCE" \
         --target "$SETTINGS_TARGET" \
-        --state "$SETTINGS_STATE"
+        --state "$SETTINGS_STATE")
+    if [[ $DEV -eq 1 ]]; then
+        args+=(--overlay "$SETTINGS_DEV_OVERLAY")
+    fi
+    python3 "$SETTINGS_MANAGER" "${args[@]}"
 }
 
 install_settings() {
@@ -311,6 +316,9 @@ install_settings() {
     )
     if [[ $DRY_RUN -eq 1 ]]; then
         args+=(--dry-run)
+    fi
+    if [[ $DEV -eq 1 ]]; then
+        args+=(--overlay "$SETTINGS_DEV_OVERLAY")
     fi
     python3 "$SETTINGS_MANAGER" "${args[@]}"
 }
@@ -812,6 +820,13 @@ main() {
                 log_ok "Initialized Claude telemetry database in WAL mode."
             else
                 log_warn "Could not initialize Claude telemetry; dev telemetry will report the failure when invoked."
+            fi
+            if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
+                if "${PROJECT_ROOT}/tools/mainframe-observatory.sh" start; then
+                    log_ok "Started the local MAINFRAME observatory."
+                else
+                    log_warn "Native usage collection is inactive; hook telemetry remains available."
+                fi
             fi
         fi
         for entry in "${DEV_ARTIFACTS[@]}"; do

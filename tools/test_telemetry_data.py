@@ -265,6 +265,97 @@ def test_multi_adapter_report_keeps_storage_and_evidence_separate():
     }
 
 
+def test_usage_costs_keep_exact_and_estimated_evidence_separate():
+    db = fresh_db()
+    base = {"session_id": "s", "prompt_id": "p", "model": "claude-test"}
+    assert _hooklib.log_event(
+        "model_usage",
+        {
+            "sample_id": "a" * 64,
+            "source": "native-otel",
+            "input_tokens": 1200,
+            "cached_input_tokens": 800,
+            "cache_write_tokens": 100,
+            "output_tokens": 240,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 1440,
+            "request_count": 1,
+        },
+        base,
+    ) == "written"
+    assert _hooklib.log_hook_signal(
+        "quality.py", "comment-quality", "noted", 1, base,
+        context="x" * 120,
+    ) == "written"
+
+    report = telemetry_data.build_report(db)
+    assert report["token_usage"] == {
+        "evidence": "exact",
+        "requests": 1,
+        "input_tokens": 1200,
+        "cached_input_tokens": 800,
+        "cache_write_tokens": 100,
+        "output_tokens": 240,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 1440,
+        "by_source": [{
+            "source": "native-otel",
+            "requests": 1,
+            "input_tokens": 1200,
+            "cached_input_tokens": 800,
+            "cache_write_tokens": 100,
+            "output_tokens": 240,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 1440,
+        }],
+    }
+    assert report["harness_context_cost"] == {
+        "evidence": "estimated",
+        "characters": 120,
+        "estimated_tokens_low": 20,
+        "estimated_tokens_high": 60,
+        "method": "character-range-2-to-6",
+        "causal_overhead": "unproven",
+    }
+    assert "tokens_saved" not in report["harness_context_cost"]
+
+
+def test_usage_contract_rejects_content_and_negative_counts():
+    db = fresh_db()
+    assert _hooklib.log_event(
+        "model_usage",
+        {
+            "sample_id": "b" * 64,
+            "source": "native-otel",
+            "input_tokens": 1,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 1,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 2,
+            "request_count": 1,
+            "prompt": "must not enter telemetry",
+        },
+        {"session_id": "s"},
+    ) == "error"
+    assert _hooklib.log_event(
+        "model_usage",
+        {
+            "sample_id": "c" * 64,
+            "source": "native-otel",
+            "input_tokens": -1,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 1,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0,
+            "request_count": 1,
+        },
+        {"session_id": "s"},
+    ) == "error"
+    assert telemetry_data.build_report(db)["records"] == 0
+
+
 if __name__ == "__main__":
     tests = sorted(name for name in globals() if name.startswith("test_"))
     for name in tests:

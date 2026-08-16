@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -171,6 +172,15 @@ def test_valid_audit_is_bounded_and_provenanced():
     prompt = argv[argv.index("--print") + 1]
     assert '"included_origins":["runtime","runtime-inferred"]' in prompt
     assert "Return concise English" in prompt
+    assert '"causal_overhead":"unproven"' in prompt
+    assert "controlled comparable A/B" in prompt
+    with sqlite3.connect(db) as connection:
+        model_rows = connection.execute(
+            "SELECT payload FROM events WHERE event='model_usage'"
+        ).fetchall()
+    assert len(model_rows) == 1
+    usage = json.loads(model_rows[0][0])
+    assert usage["source"] == "model-lab" and usage["total_tokens"] == 42
 
 
 def test_same_snapshot_is_deduplicated():

@@ -305,13 +305,17 @@ check_sources() {
 manage_config() {
     local action="$1"
     shift
-    python3 "$CONFIG_TOOL" "$action" \
+    local args=("$action" \
         --config "$CONFIG_TARGET" \
         --source "$CONFIG_SOURCE" \
         --repo-root "$REPO_ROOT" \
         --state "$CONFIG_STATE" \
-        --backup "$CONFIG_BACKUP" \
-        "$@"
+        --backup "$CONFIG_BACKUP")
+    if [[ "$action" == "install" && $DEV_MODE -eq 1 ]]; then
+        args+=(--dev-telemetry-endpoint "http://127.0.0.1:4318/v1/logs")
+    fi
+    args+=("$@")
+    python3 "$CONFIG_TOOL" "${args[@]}"
 }
 
 manage_hooks() {
@@ -656,6 +660,13 @@ configure_dev_telemetry() {
         : > "$TELEMETRY_MARKER"
         chmod 600 "$TELEMETRY_DB" "$TELEMETRY_MARKER"
         log "enabled Codex development telemetry: $TELEMETRY_DB"
+        if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
+            if "${REPO_ROOT}/tools/mainframe-observatory.sh" start; then
+                log "started the local MAINFRAME observatory"
+            else
+                log "native usage collection is inactive; hook telemetry remains available"
+            fi
+        fi
         if [[ -x "${REPO_ROOT}/.venv/bin/python3" ]]; then
             if "${REPO_ROOT}/.venv/bin/python3" \
                     "${REPO_ROOT}/tools/build_hub_page.py" \

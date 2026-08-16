@@ -119,6 +119,23 @@ def _validate_template(template: dict[str, Any]) -> None:
             )
 
 
+def _template(source: pathlib.Path, overlay: pathlib.Path | None) -> dict[str, Any]:
+    value = _load_object(source, required=True)
+    if overlay is None:
+        return value
+    extra = _load_object(overlay, required=True)
+
+    def merge(target: dict[str, Any], additions: dict[str, Any]) -> None:
+        for key, child in additions.items():
+            if isinstance(child, dict) and isinstance(target.get(key), dict):
+                merge(target[key], child)
+            else:
+                target[key] = copy.deepcopy(child)
+
+    merge(value, extra)
+    return value
+
+
 def _empty_state(*, target_existed: bool) -> dict[str, Any]:
     return {
         "version": STATE_VERSION,
@@ -342,8 +359,9 @@ def _backup(target: pathlib.Path, backup: pathlib.Path) -> None:
     shutil.copy2(target, backup, follow_symlinks=True)
 
 
-def check(source: pathlib.Path, target: pathlib.Path, state_path: pathlib.Path) -> None:
-    template = _load_object(source, required=True)
+def check(source: pathlib.Path, target: pathlib.Path, state_path: pathlib.Path,
+          overlay: pathlib.Path | None = None) -> None:
+    template = _template(source, overlay)
     _validate_template(template)
     legacy_link = _is_legacy_link(target, source)
     if target.is_symlink() and not legacy_link:
@@ -366,8 +384,9 @@ def install(
     backup: pathlib.Path,
     *,
     dry_run: bool,
+    overlay: pathlib.Path | None = None,
 ) -> bool:
-    template = _load_object(source, required=True)
+    template = _template(source, overlay)
     _validate_template(template)
     legacy_link = _is_legacy_link(target, source)
     if target.is_symlink() and not legacy_link:
@@ -493,6 +512,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state", type=pathlib.Path, required=True)
     parser.add_argument("--backup", type=pathlib.Path)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--overlay", type=pathlib.Path)
     return parser.parse_args()
 
 
@@ -500,7 +520,7 @@ def main() -> int:
     args = parse_args()
     try:
         if args.action == "check":
-            check(args.source, args.target, args.state)
+            check(args.source, args.target, args.state, args.overlay)
         elif args.action == "install":
             if args.backup is None:
                 raise SettingsError("--backup is required for install")
@@ -510,6 +530,7 @@ def main() -> int:
                 args.state,
                 args.backup,
                 dry_run=args.dry_run,
+                overlay=args.overlay,
             )
         else:
             if args.backup is None:

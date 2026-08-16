@@ -114,6 +114,8 @@ def _source_payload(root: pathlib.Path, db: pathlib.Path) -> dict:
             "agent_lifecycle",
             "breakdowns",
             "hook_effectiveness",
+            "token_usage",
+            "harness_context_cost",
             "error",
         )
     }
@@ -133,6 +135,11 @@ def _source_payload(root: pathlib.Path, db: pathlib.Path) -> dict:
                 "blocked": "Sum of blocked finding counts, not hook calls or retries.",
                 "resolved": "Sum of resolved finding counts, not hook calls or retries.",
                 "context_chars": "Sum of model-visible context characters recorded by the rows.",
+            },
+            "cost_metric_semantics": {
+                "token_usage": "Exact provider or runtime counters grouped by their recorded source.",
+                "harness_context_cost": "A broad character-based estimate, not a tokenizer result or causal overhead measurement.",
+                "causal_claims": "Only a controlled comparable A/B run may attribute downstream token changes to MAINFRAME.",
             },
             "session_boundary": "A distinct-session count does not reveal temporal overlap or prove concurrency safety.",
         },
@@ -164,6 +171,9 @@ Rules:
   supplied.
 - A signal from one session cannot prove cross-session or concurrency safety.
 - A hook firing does not prove that the desired user-visible outcome occurred.
+- Never compare estimated harness tokens with exact runtime tokens as if they
+  shared the same evidence class. Do not claim savings, waste, or causation
+  without a controlled comparable A/B result.
 - Model-lab and synthetic events are excluded and must not support runtime claims.
 - Capability signals may name only IDs present in known_capabilities.
 - Every hypothesis must reference observations and a smallest deterministic
@@ -373,12 +383,46 @@ def _failure_kind(returncode: int, text: str) -> str:
     return "unavailable"
 
 
-def _telemetry(root: pathlib.Path, status: str, elapsed: int = 0) -> None:
+def _normalized_usage(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        normalized = {
+            "input_tokens": int(value.get("input_tokens", 0)),
+            "cached_input_tokens": int(value.get("cache_read_tokens", 0)),
+            "cache_write_tokens": int(value.get("cache_write_tokens", 0)),
+            "output_tokens": int(value.get("output_tokens", 0)),
+            "reasoning_output_tokens": int(value.get("thinking_tokens", 0)),
+            "total_tokens": int(value.get("total_tokens", 0)),
+        }
+    except (TypeError, ValueError):
+        return None
+    return normalized if not any(item < 0 for item in normalized.values()) else None
+
+
+def _telemetry(
+    root: pathlib.Path, status: str, elapsed: int = 0, usage: dict | None = None
+) -> None:
     scripts = root / "adapters" / "claude-code" / "plugin" / "hooks" / "scripts"
     try:
         sys.path.insert(0, str(scripts))
         import _hooklib
 
+        envelope = {"model": os.environ.get("MAINFRAME_GEMINI_MODEL", MODEL),
+                    "_telemetry_origin": "model-lab"}
+        if usage is not None:
+            _hooklib.log_event(
+                "model_usage",
+                {
+                    "sample_id": hashlib.sha256(
+                        f"gemini:{TASK}:{usage}".encode()
+                    ).hexdigest(),
+                    "source": "model-lab",
+                    "request_count": 1,
+                    **usage,
+                },
+                envelope,
+            )
         _hooklib.log_event(
             "model_lab",
             {
@@ -389,7 +433,7 @@ def _telemetry(root: pathlib.Path, status: str, elapsed: int = 0) -> None:
                 "status": status,
                 "elapsed_bucket_s": min(600, max(0, int(elapsed // 10) * 10)),
             },
-            {"_telemetry_origin": "model-lab"},
+            envelope,
         )
     except Exception:
         pass
@@ -544,7 +588,9 @@ def main(argv=None) -> int:
         item["id"] for item in payload["known_capabilities"] if item["id"]
     }
     if not _valid_result(result, capability_ids, payload):
-        _telemetry(root, "invalid", elapsed)
+        _telemetry(
+            root, "invalid", elapsed, _normalized_usage(cli_meta.get("usage"))
+        )
         return 0
 
     envelope = {
@@ -577,7 +623,9 @@ def main(argv=None) -> int:
         pending.unlink()
     except FileNotFoundError:
         pass
-    _telemetry(root, "completed", elapsed)
+    _telemetry(
+        root, "completed", elapsed, _normalized_usage(cli_meta.get("usage"))
+    )
     return 0
 
 

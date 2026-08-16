@@ -246,13 +246,25 @@ def verify_feature_managed(text: str, state: dict) -> tuple[str, str]:
     return current, remainder
 
 
-def render_fragment(source: Path, repo_root: Path) -> str:
+def render_fragment(
+    source: Path, repo_root: Path, telemetry_endpoint: str | None = None
+) -> str:
     escaped_root = str(repo_root.resolve()).replace("\\", "\\\\").replace('"', '\\"')
-    return source.read_text(encoding="utf-8").replace("@MAINFRAME_REPO@", escaped_root)
+    fragment = source.read_text(encoding="utf-8").replace("@MAINFRAME_REPO@", escaped_root)
+    if telemetry_endpoint:
+        endpoint = telemetry_endpoint.replace("\\", "\\\\").replace('"', '\\"')
+        fragment = fragment.rstrip() + f'''\n\n[otel]
+environment = "mainframe-dev"
+exporter = {{ otlp-http = {{ endpoint = "{endpoint}", protocol = "binary" }} }}
+log_user_prompt = false
+'''
+    return fragment
 
 
-def install(config: Path, source: Path, repo_root: Path, state_path: Path, backup: Path, dry_run: bool) -> str:
-    fragment = render_fragment(source, repo_root)
+def install(config: Path, source: Path, repo_root: Path, state_path: Path,
+            backup: Path, dry_run: bool,
+            telemetry_endpoint: str | None = None) -> str:
+    fragment = render_fragment(source, repo_root, telemetry_endpoint)
     parse_config(fragment)
     current = config.read_text(encoding="utf-8") if config.exists() else ""
     state = read_state(state_path)
@@ -360,10 +372,14 @@ def main() -> None:
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--backup", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--dev-telemetry-endpoint")
     args = parser.parse_args()
     def run() -> str:
         if args.action == "install":
-            return install(args.config, args.source, args.repo_root, args.state, args.backup, args.dry_run)
+            return install(
+                args.config, args.source, args.repo_root, args.state, args.backup,
+                args.dry_run, args.dev_telemetry_endpoint,
+            )
         return uninstall(args.config, args.source, args.repo_root, args.state, args.dry_run)
 
     try:

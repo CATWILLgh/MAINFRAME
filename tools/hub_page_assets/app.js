@@ -535,6 +535,56 @@
       el("div", { class: "stat" }, [el("b", null, String(ds.feedback.length)), " feedback queued"]),
     ]));
 
+    const usage = t.token_usage || {};
+    const harnessCost = t.harness_context_cost || {};
+    root.appendChild(section("Context cost ledger", "usage", 2,
+      el("div", { class: "panel-stack" }, [
+        el("div", { class: "stat-row wrap" }, [
+          el("div", { class: "stat" }, [
+            el("b", null, fmtTok(usage.total_tokens || 0)), " exact runtime tokens",
+          ]),
+          el("div", { class: "stat" }, [
+            el("b", null, fmtTok(usage.cached_input_tokens || 0)), " cached input tokens",
+          ]),
+          el("div", { class: "stat" }, [
+            el("b", null, fmtTok(harnessCost.characters || 0)), " injected characters",
+          ]),
+          el("div", { class: "stat" }, [
+            el("b", null,
+              fmtTok(harnessCost.estimated_tokens_low || 0) + "–"
+              + fmtTok(harnessCost.estimated_tokens_high || 0)),
+            " estimated injected tokens",
+          ]),
+        ]),
+        el("div", { class: "notice small" },
+          "Runtime counters are exact when native usage is available. Injection tokens are a broad "
+          + "2–6 characters-per-token estimate. Causal overhead remains unproven until a comparable A/B run."),
+      ])));
+
+    if (usage.by_source && usage.by_source.length) {
+      const usageRows = usage.by_source.map((item) => el("tr", null, [
+        el("td", { class: "mono" }, item.adapter_id || t.adapter_id || "—"),
+        el("td", { class: "mono" }, item.source),
+        el("td", { class: "num" }, fmtTok(item.input_tokens)),
+        el("td", { class: "num" }, fmtTok(item.cached_input_tokens)),
+        el("td", { class: "num" }, fmtTok(item.output_tokens)),
+        el("td", { class: "num" }, fmtTok(item.reasoning_output_tokens)),
+        el("td", { class: "num" }, fmtTok(item.total_tokens)),
+      ]));
+      root.appendChild(section("Exact usage by source", "usage", usageRows.length,
+        el("table", { class: "matrix" }, [
+          el("thead", null, el("tr", null, [
+            el("th", null, "adapter"), el("th", null, "source"),
+            el("th", { class: "num" }, "input"),
+            el("th", { class: "num" }, "cached"),
+            el("th", { class: "num" }, "output"),
+            el("th", { class: "num" }, "reasoning"),
+            el("th", { class: "num" }, "total"),
+          ])),
+          el("tbody", null, usageRows),
+        ])));
+    }
+
     if (t.adapters && t.adapters.length) {
       const adapterRows = t.adapters.map((item) => el("tr", null, [
         el("td", { class: "mono" }, item.adapter_label || item.adapter_id),

@@ -174,6 +174,15 @@ Development mode is enabled independently for each adapter:
 
 Development mode adds local instrumentation for maintaining this repository. Claude Code and Codex keep separate adapter-owned SQLite databases. Their normal telemetry stays on the machine and records operational metadata rather than prompts, code, file paths, tool input or output, findings, or hook messages.
 
+For native model-usage counters, prepare the repository development environment once:
+
+```bash
+.venv/bin/pip install -r tools/telemetry-requirements.txt
+tools/mainframe-observatory.sh start
+```
+
+The `--dev` installers also start this local receiver when its dependencies are available. It accepts only localhost OTLP logs and persists an allowlist of numeric token counters, model, and opaque session identifiers. Check or stop it with `tools/mainframe-observatory.sh status` and `tools/mainframe-observatory.sh stop`.
+
 It also generates the local desktop page at `workspace/runtime/hub.html`. To keep that file refreshed temporarily while developing MAINFRAME:
 
 ```bash
@@ -187,6 +196,8 @@ The same validated report is available to machine readers:
 ```bash
 python3 tools/telemetry_data.py --all --pretty
 ```
+
+The report deliberately separates three kinds of evidence: exact token counters reported by the runtime, a broad character-based estimate for MAINFRAME-injected context, and causal overhead. Causal overhead remains `unproven` until comparable A/B runs exist; model-lab analysis cannot promote an estimate into a measured fact.
 
 Installing an adapter again without `--dev` disables only that adapter's development instrumentation while preserving already collected local data.
 

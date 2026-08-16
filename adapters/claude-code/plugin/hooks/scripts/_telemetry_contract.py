@@ -37,6 +37,17 @@ EVENT_FIELDS = {
         "status": str,
         "elapsed_bucket_s": int,
     },
+    "model_usage": {
+        "sample_id": str,
+        "source": str,
+        "input_tokens": int,
+        "cached_input_tokens": int,
+        "cache_write_tokens": int,
+        "output_tokens": int,
+        "reasoning_output_tokens": int,
+        "total_tokens": int,
+        "request_count": int,
+    },
 }
 
 REQUIRED_FIELDS = {
@@ -50,6 +61,10 @@ REQUIRED_FIELDS = {
     "hook_signal": {"hook", "rule_id", "outcome", "count", "context_chars"},
     "init_reminder": {"turn", "reminded", "every"},
     "model_lab": {"provider", "model", "effort", "task", "status", "elapsed_bucket_s"},
+    "model_usage": {
+        "sample_id", "source", "input_tokens", "cached_input_tokens", "cache_write_tokens",
+        "output_tokens", "reasoning_output_tokens", "total_tokens", "request_count",
+    },
 }
 
 FIELD_VALUES = {
@@ -66,6 +81,9 @@ FIELD_VALUES = {
     ("code_edit", "operation"): {"edit", "write", "multiedit"},
     ("hook_signal", "outcome"): {"noted", "asked", "blocked", "resolved"},
     ("model_lab", "status"): {"completed", "deduplicated", "invalid", "unavailable"},
+    ("model_usage", "source"): {
+        "native-otel", "native-app-server", "transcript", "model-lab",
+    },
 }
 
 
@@ -114,4 +132,6 @@ def validate_payload(event, payload):
         forbidden = "end_reason" if phase == "start" else "source"
         if expected not in normalized or forbidden in normalized:
             raise ValueError(f"session {phase} requires only {expected}")
+    if event == "model_usage" and normalized["request_count"] <= 0:
+        raise ValueError("model_usage request_count must be positive")
     return normalized

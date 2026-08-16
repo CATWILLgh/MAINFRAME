@@ -57,11 +57,30 @@ def _eligible(meta):
     )
 
 
-def _telemetry(root, status, session="", cwd="", elapsed=0):
+def _telemetry(root, status, session="", cwd="", elapsed=0, usage=None):
     scripts = root / "adapters" / "claude-code" / "plugin" / "hooks" / "scripts"
     try:
         sys.path.insert(0, str(scripts))
         import _hooklib
+        envelope = {
+            "session_id": session,
+            "cwd": cwd,
+            "model": MODEL,
+            "_telemetry_origin": "model-lab",
+        }
+        if usage is not None:
+            _hooklib.log_event(
+                "model_usage",
+                {
+                    "sample_id": hashlib.sha256(
+                        f"spark:{session}:{TASK}:{usage}".encode()
+                    ).hexdigest(),
+                    "source": "model-lab",
+                    "request_count": 1,
+                    **usage,
+                },
+                envelope,
+            )
         _hooklib.log_event(
             "model_lab",
             {
@@ -72,7 +91,7 @@ def _telemetry(root, status, session="", cwd="", elapsed=0):
                 "status": status,
                 "elapsed_bucket_s": min(300, int(elapsed // 10) * 10),
             },
-            {"session_id": session, "cwd": cwd, "_telemetry_origin": "model-lab"},
+            envelope,
         )
     except Exception:
         pass
@@ -110,6 +129,38 @@ def _valid_candidate(value):
         and value.get("confidence") in {"low", "medium", "high"}
         and isinstance(value.get("limitations"), list)
     )
+
+
+def _codex_usage(stdout):
+    """Keep only numeric usage from Codex JSONL; discard all model text."""
+    latest = None
+    for line in stdout.splitlines():
+        try:
+            row = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(row, dict) or row.get("type") != "turn.completed":
+            continue
+        usage = row.get("usage")
+        if not isinstance(usage, dict):
+            continue
+        try:
+            normalized = {
+                "input_tokens": int(usage.get("input_tokens", 0)),
+                "cached_input_tokens": int(usage.get("cached_input_tokens", 0)),
+                "cache_write_tokens": int(usage.get("cache_write_input_tokens", 0)),
+                "output_tokens": int(usage.get("output_tokens", 0)),
+                "reasoning_output_tokens": int(usage.get("reasoning_output_tokens", 0)),
+            }
+        except (TypeError, ValueError):
+            continue
+        if any(value < 0 for value in normalized.values()):
+            continue
+        normalized["total_tokens"] = (
+            normalized["input_tokens"] + normalized["output_tokens"]
+        )
+        latest = normalized
+    return latest
 
 
 def _atomic_json(path, value):
@@ -166,6 +217,7 @@ def main(argv=None):
 
     started = time.monotonic()
     status = "unavailable"
+    usage = None
     try:
         schema = root / "adapters" / "claude-code" / "dev" / "model-lab" / "schemas" / "hook-regression-candidate.json"
         codex = os.environ.get("MAINFRAME_CODEX_BIN", "codex")
@@ -178,19 +230,20 @@ def main(argv=None):
                 "--ephemeral", "--ignore-user-config", "--ignore-rules",
                 "--sandbox", "read-only", "--cd", str(root),
                 "--output-schema", str(schema),
-                "--output-last-message", response_path, "-",
+                "--output-last-message", response_path, "--json", "-",
             ]
             proc = subprocess.run(
                 command,
                 input=_prompt(source),
                 text=True,
-                stdout=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 timeout=TIMEOUT_SECONDS,
                 check=False,
             )
             if proc.returncode != 0:
                 return 0
+            usage = _codex_usage(proc.stdout)
             try:
                 candidate = json.loads(pathlib.Path(response_path).read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
@@ -209,6 +262,7 @@ def main(argv=None):
                 "task": TASK,
                 "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                 "source": {"name": source.name, "sha256": digest},
+                "usage": usage,
                 "candidate": candidate,
             }
             _atomic_json(destination, envelope)
@@ -225,6 +279,7 @@ def main(argv=None):
         _telemetry(
             root, status, meta.get("session", ""),
             os.environ.get("PWD", ""), time.monotonic() - started,
+            usage,
         )
         try:
             lock.unlink()

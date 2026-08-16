@@ -132,6 +132,7 @@ def _run(
         HOME=str(home),
         PATH=f"{fake_bin}:/usr/bin:/bin",
         MAINFRAME_CODEX_DESKTOP_RUNTIME=str(desktop_codex),
+        MAINFRAME_INSTALL_TESTING="1",
     )
     proc = subprocess.run(
         ["bash", str(INSTALLER), *args],
@@ -968,11 +969,24 @@ def test_dev_mode_initializes_only_codex_owned_telemetry():
     assert db.is_file()
     assert (telemetry / "enabled").is_file()
     assert not (home / ".claude" / "mainframe").exists()
+    config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert config["otel"] == {
+        "environment": "mainframe-dev",
+        "exporter": {
+            "otlp-http": {
+                "endpoint": "http://127.0.0.1:4318/v1/logs",
+                "protocol": "binary",
+            }
+        },
+        "log_user_prompt": False,
+    }
 
     normal, _ = _run("--codex", home=home)
     assert normal.returncode == 0, normal.stderr
     assert db.is_file()
     assert not (telemetry / "enabled").exists()
+    config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    assert "otel" not in config
 
 
 def test_normal_install_leaves_codex_telemetry_inactive():

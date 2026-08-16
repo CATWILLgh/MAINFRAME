@@ -8,6 +8,7 @@ import collections
 import datetime
 import json
 import importlib.util
+import math
 import os
 import re
 import sqlite3
@@ -219,6 +220,25 @@ def _empty_report(
         "agent_lifecycle": [],
         "breakdowns": [],
         "hook_effectiveness": [],
+        "token_usage": {
+            "evidence": "unavailable",
+            "requests": 0,
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 0,
+            "by_source": [],
+        },
+        "harness_context_cost": {
+            "evidence": "estimated",
+            "characters": 0,
+            "estimated_tokens_low": 0,
+            "estimated_tokens_high": 0,
+            "method": "character-range-2-to-6",
+            "causal_overhead": "unproven",
+        },
         "recent_events": [],
         "error": error,
     }
@@ -258,6 +278,8 @@ def build_report(
         for event, fields in BREAKDOWN_FIELDS.items() for field in fields
     }
     effectiveness = {}
+    usage = collections.Counter()
+    usage_by_source = {}
     recent = collections.deque(maxlen=max(0, int(recent_limit)))
 
     try:
@@ -332,6 +354,23 @@ def build_report(
                 item["context_chars"] += data["context_chars"]
                 item["last_seen"] = max(item["last_seen"], row["timestamp"])
 
+            if row["event"] == "model_usage" and row["valid"]:
+                data = row["data"]
+                source = data["source"]
+                source_usage = usage_by_source.setdefault(source, collections.Counter())
+                for source_key, payload_key in (
+                    ("requests", "request_count"),
+                    ("input_tokens", "input_tokens"),
+                    ("cached_input_tokens", "cached_input_tokens"),
+                    ("cache_write_tokens", "cache_write_tokens"),
+                    ("output_tokens", "output_tokens"),
+                    ("reasoning_output_tokens", "reasoning_output_tokens"),
+                    ("total_tokens", "total_tokens"),
+                ):
+                    value = data[payload_key]
+                    usage[source_key] += value
+                    source_usage[source_key] += value
+
             if recent.maxlen:
                 recent.append({key: row[key] for key in (
                     "id", "timestamp", "project", "event", "agent_type", "agent_id",
@@ -374,6 +413,28 @@ def build_report(
     report["hook_effectiveness"].sort(
         key=lambda item: (-item["signals"], item["hook"], item["rule_id"])
     )
+    usage_keys = (
+        "requests", "input_tokens", "cached_input_tokens", "cache_write_tokens",
+        "output_tokens", "reasoning_output_tokens",
+        "total_tokens",
+    )
+    report["token_usage"] = {
+        "evidence": "exact" if usage["requests"] else "unavailable",
+        **{key: usage[key] for key in usage_keys},
+        "by_source": [
+            {"source": source, **{key: values[key] for key in usage_keys}}
+            for source, values in sorted(usage_by_source.items())
+        ],
+    }
+    context_chars = sum(item["context_chars"] for item in effectiveness.values())
+    report["harness_context_cost"] = {
+        "evidence": "estimated",
+        "characters": context_chars,
+        "estimated_tokens_low": math.ceil(context_chars / 6),
+        "estimated_tokens_high": math.ceil(context_chars / 2),
+        "method": "character-range-2-to-6",
+        "causal_overhead": "unproven",
+    }
     report["recent_events"] = list(reversed(recent))
     return report
 
@@ -414,6 +475,45 @@ def build_multi_report(paths=None, recent_limit=40):
     result["by_agent"] = [
         [key, value] for key, value in counters["by_agent"].most_common()
     ]
+    usage_keys = (
+        "requests", "input_tokens", "cached_input_tokens", "cache_write_tokens",
+        "output_tokens", "reasoning_output_tokens",
+        "total_tokens",
+    )
+    combined_usage = collections.Counter()
+    combined_sources = {}
+    for item in adapters:
+        for key in usage_keys:
+            combined_usage[key] += item["token_usage"][key]
+        for source in item["token_usage"]["by_source"]:
+            bucket = combined_sources.setdefault(
+                (item["adapter_id"], source["source"]), collections.Counter()
+            )
+            for key in usage_keys:
+                bucket[key] += source[key]
+    result["token_usage"] = {
+        "evidence": "exact" if combined_usage["requests"] else "unavailable",
+        **{key: combined_usage[key] for key in usage_keys},
+        "by_source": [
+            {
+                "adapter_id": adapter_id,
+                "source": source,
+                **{key: values[key] for key in usage_keys},
+            }
+            for (adapter_id, source), values in sorted(combined_sources.items())
+        ],
+    }
+    context_chars = sum(
+        item["harness_context_cost"]["characters"] for item in adapters
+    )
+    result["harness_context_cost"] = {
+        "evidence": "estimated",
+        "characters": context_chars,
+        "estimated_tokens_low": math.ceil(context_chars / 6),
+        "estimated_tokens_high": math.ceil(context_chars / 2),
+        "method": "character-range-2-to-6",
+        "causal_overhead": "unproven",
+    }
 
     for key in ("agent_lifecycle", "breakdowns", "hook_effectiveness"):
         result[key] = []

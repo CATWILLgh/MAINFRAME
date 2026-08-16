@@ -322,6 +322,11 @@ def initialize_telemetry_db(db=None):
             "CREATE INDEX IF NOT EXISTS idx_events_event_ts ON events(event, ts)")
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id, id)")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_model_usage_sample "
+            "ON events(json_extract(payload, '$.sample_id')) "
+            "WHERE event = 'model_usage'"
+        )
         # Old revisions created a derived SQL view. The canonical reader now
         # owns every aggregation for both machine and web consumers.
         conn.execute("DROP VIEW IF EXISTS hook_effectiveness")
@@ -416,6 +421,8 @@ def log_event(event, payload=None, hook_payload=None):
                     "event, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", row)
                 conn.commit()
                 return "written"
+            except sqlite3.IntegrityError:
+                return "deduplicated"
             except sqlite3.OperationalError as exc:
                 if not migrated and "column" in str(exc).lower():
                     if conn is not None:
