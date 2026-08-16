@@ -207,6 +207,14 @@ class ObservatoryApp:
                 self._snapshot_at = time.monotonic()
             return self._snapshot
 
+    def live_snapshot(self):
+        value = self.snapshot()
+        return {
+            key: value.get(key)
+            for key in ("dev_state", "usage", "health", "control")
+            if key in value
+        }
+
     def invalidate(self):
         with self._snapshot_lock:
             self._snapshot_at = 0
@@ -295,6 +303,8 @@ class ObservatoryApp:
         path = urlparse(raw_path).path
         if method == "GET" and path == "/api/snapshot":
             return self._json(self.snapshot())
+        if method == "GET" and path == "/api/live":
+            return self._json(self.live_snapshot())
         if method == "GET" and path == "/api/jobs":
             return self._json({
                 "providers": self.store.providers(), "jobs": self.store.list_jobs(),
@@ -331,7 +341,7 @@ class ObservatoryApp:
 
     def html(self):
         return build_hub_page.render(
-            self.snapshot(), _now(), auto_refresh_ms=5000,
+            self.snapshot(), _now(), auto_refresh_ms=10000,
             live=True, control_token=self.token,
         ).encode()
 

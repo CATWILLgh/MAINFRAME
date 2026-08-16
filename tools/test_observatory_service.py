@@ -66,6 +66,8 @@ def test_service_rejects_non_loopback_bind_and_has_csrf_boundary():
     )
     status, _headers, body = app.handle("GET", "/api/snapshot", {}, b"")
     assert status == 200 and json.loads(body) == {"safe": True}
+    status, _headers, body = app.handle("GET", "/api/live", {}, b"")
+    assert status == 200 and json.loads(body) == {}
     status, _headers, _body = app.handle(
         "POST", "/api/jobs", {"Content-Type": "application/json"},
         b'{"provider":"spark","adapter":"codex"}',
@@ -90,6 +92,9 @@ def test_panel_keeps_language_locally_and_exposes_both_catalogs():
     assert "mainframe-language" in app
     assert "localStorage" in app
     assert '"en"' in app and '"ru"' in app
+    assert 'fetch("/api/live"' in app
+    assert 'window.scrollY > 0' in app
+    assert app.count("window.location.reload()") == 1
 
 
 def test_live_server_serves_panel_and_health_on_loopback():

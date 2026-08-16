@@ -3,7 +3,7 @@
 // build the DOM from data via textContent — never innerHTML — so artifact
 // descriptions containing < > or quotes cannot break or inject markup.
 (function () {
-  const D = window.HUB_DATA;
+  let D = window.HUB_DATA;
   const LANGUAGES = ["en", "ru"];
   const RU = {
     "Overview": "Обзор", "Telemetry": "Телеметрия", "Usage": "Расход",
@@ -1095,7 +1095,7 @@
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "request failed");
-    window.location.reload();
+    await refreshData(true);
   }
 
   function actionButton(label, action, tone) {
@@ -1103,7 +1103,8 @@
     button.addEventListener("click", async () => {
       button.disabled = true;
       try { await action(); }
-      catch (error) { button.disabled = false; button.title = String(error); }
+      catch (error) { button.title = String(error); }
+      finally { if (button.isConnected) button.disabled = false; }
     });
     return button;
   }
@@ -1174,6 +1175,23 @@
   ];
 
   const panes = {};
+  const dynamicViewIds = new Set(["overview", "dev", "usage", "analysis"]);
+  const dirtyViews = new Set();
+  let currentViewId = null;
+  let refreshInFlight = false;
+  let lastInteractionAt = 0;
+
+  function renderPane(view) {
+    const pane = panes[view.id] && panes[view.id].pane;
+    if (!pane) return;
+    pane.replaceChildren();
+    try {
+      view.render(pane);
+    } catch (err) {
+      pane.appendChild(el("div", { class: "notice" }, "This view failed to render: " + err));
+    }
+  }
+
   VIEWS.forEach((v) => {
     if (v.divider) tabsNav.appendChild(el("div", { class: "nav-label nav-label-inline" }, "System"));
     const btn = el("button", { type: "button", role: "tab", "aria-controls": "view-" + v.id,
@@ -1193,15 +1211,9 @@
     v.btn = btn;
     tabsNav.appendChild(btn);
     const pane = el("div", { class: "view", id: "view-" + v.id, role: "tabpanel" });
-    // Isolate each view: a throw in one render degrades to one empty tab with a
-    // notice, never a blank page (this opens with no devtools to debug a crash).
-    try {
-      v.render(pane);
-    } catch (err) {
-      pane.appendChild(el("div", { class: "notice" }, "This view failed to render: " + err));
-    }
     app.appendChild(pane);
     panes[v.id] = { pane, btn };
+    renderPane(v);
   });
 
   // Search box lives in the topbar; it filters the catalog and the graph in place
@@ -1233,6 +1245,11 @@
 
   function show(id) {
     const activeView = VIEWS.find((v) => v.id === id);
+    if (activeView && dirtyViews.has(id)) {
+      renderPane(activeView);
+      dirtyViews.delete(id);
+    }
+    currentViewId = id;
     VIEWS.forEach((v) => {
       const on = v.id === id;
       panes[v.id].pane.classList.toggle("active", on);
@@ -1251,8 +1268,7 @@
   try {
     const saved = window.sessionStorage.getItem("mainframe-hub-view");
     if (VIEWS.some((view) => view.id === saved)) initialView = saved;
-    const savedScroll = Number(window.sessionStorage.getItem("mainframe-hub-scroll"));
-    if (savedScroll > 0) window.requestAnimationFrame(() => window.scrollTo(0, savedScroll));
+    window.sessionStorage.removeItem("mainframe-hub-scroll");
   } catch (_err) { /* session state is optional */ }
   show(initialView);
 
@@ -1264,10 +1280,46 @@
   if (brandSub) brandSub.textContent = tr("local observatory");
   if (privacy) privacy.textContent = tr("Local data only");
 
-  if (window.HUB_AUTO_REFRESH_MS >= 2000) {
-    window.setInterval(() => {
-      try { window.sessionStorage.setItem("mainframe-hub-scroll", String(window.scrollY)); } catch (_err) { /* optional */ }
-      window.location.reload();
-    }, window.HUB_AUTO_REFRESH_MS);
+  function userIsBusy() {
+    const active = document.activeElement;
+    const editing = active && ["INPUT", "SELECT", "BUTTON"].includes(active.tagName);
+    return editing || !detail.hidden || window.scrollY > 0 || Date.now() - lastInteractionAt < 1500;
+  }
+
+  function applyCurrentData(force) {
+    if (!currentViewId || !dirtyViews.has(currentViewId)) return;
+    if (!force && userIsBusy()) return;
+    const view = VIEWS.find((item) => item.id === currentViewId);
+    if (!view) return;
+    const scrollTop = window.scrollY;
+    renderPane(view);
+    dirtyViews.delete(currentViewId);
+    if (scrollTop > 0) window.requestAnimationFrame(() => window.scrollTo(0, scrollTop));
+  }
+
+  async function refreshData(forceApply) {
+    if (!window.HUB_LIVE || refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      const response = await fetch("/api/live", { cache: "no-store" });
+      if (!response.ok) throw new Error("live refresh failed");
+      const update = await response.json();
+      D = Object.assign({}, D, update);
+      dynamicViewIds.forEach((id) => dirtyViews.add(id));
+      applyCurrentData(Boolean(forceApply));
+    } catch (_error) {
+      // The current snapshot stays usable. A later poll retries without
+      // injecting errors into the page or interrupting navigation.
+    } finally {
+      refreshInFlight = false;
+    }
+  }
+
+  ["scroll", "pointerdown", "keydown", "input"].forEach((eventName) => {
+    window.addEventListener(eventName, () => { lastInteractionAt = Date.now(); }, { passive: true });
+  });
+
+  if (window.HUB_AUTO_REFRESH_MS >= 2000 && window.HUB_LIVE) {
+    window.setInterval(() => { refreshData(false); }, window.HUB_AUTO_REFRESH_MS);
   }
 })();
