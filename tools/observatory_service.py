@@ -192,11 +192,17 @@ class ObservatoryApp:
 
     def _build_snapshot(self):
         value = build_hub_page.build_manifest(str(self.root))
+        enabled_dir = self.runtime / "enabled"
+        active_adapters = sorted(
+            adapter for adapter in ADAPTERS
+            if (enabled_dir / adapter).is_file()
+        )
         value["control"] = {
             "providers": self.store.providers(),
             "jobs": self.store.list_jobs(),
             "counts": self.store.counts(),
             "refresh_seconds": 5,
+            "active_adapters": active_adapters,
         }
         return value
 

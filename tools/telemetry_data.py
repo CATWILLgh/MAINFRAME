@@ -230,6 +230,7 @@ def _empty_report(
             "reasoning_output_tokens": 0,
             "total_tokens": 0,
             "by_source": [],
+            "by_model": [],
         },
         "harness_context_cost": {
             "evidence": "estimated",
@@ -280,6 +281,7 @@ def build_report(
     effectiveness = {}
     usage = collections.Counter()
     usage_by_source = {}
+    usage_by_model = {}
     recent = collections.deque(maxlen=max(0, int(recent_limit)))
 
     try:
@@ -358,6 +360,8 @@ def build_report(
                 data = row["data"]
                 source = data["source"]
                 source_usage = usage_by_source.setdefault(source, collections.Counter())
+                model = row["model"] or "(unknown)"
+                model_usage = usage_by_model.setdefault(model, collections.Counter())
                 for source_key, payload_key in (
                     ("requests", "request_count"),
                     ("input_tokens", "input_tokens"),
@@ -370,6 +374,7 @@ def build_report(
                     value = data[payload_key]
                     usage[source_key] += value
                     source_usage[source_key] += value
+                    model_usage[source_key] += value
 
             if recent.maxlen:
                 recent.append({key: row[key] for key in (
@@ -425,6 +430,10 @@ def build_report(
             {"source": source, **{key: values[key] for key in usage_keys}}
             for source, values in sorted(usage_by_source.items())
         ],
+        "by_model": [
+            {"model": model, **{key: values[key] for key in usage_keys}}
+            for model, values in sorted(usage_by_model.items())
+        ],
     }
     context_chars = sum(item["context_chars"] for item in effectiveness.values())
     report["harness_context_cost"] = {
@@ -475,6 +484,9 @@ def build_multi_report(paths=None, recent_limit=40):
     result["by_agent"] = [
         [key, value] for key, value in counters["by_agent"].most_common()
     ]
+    result["by_model"] = [
+        [key, value] for key, value in counters["by_model"].most_common()
+    ]
     usage_keys = (
         "requests", "input_tokens", "cached_input_tokens", "cache_write_tokens",
         "output_tokens", "reasoning_output_tokens",
@@ -482,6 +494,7 @@ def build_multi_report(paths=None, recent_limit=40):
     )
     combined_usage = collections.Counter()
     combined_sources = {}
+    combined_models = {}
     for item in adapters:
         for key in usage_keys:
             combined_usage[key] += item["token_usage"][key]
@@ -491,6 +504,12 @@ def build_multi_report(paths=None, recent_limit=40):
             )
             for key in usage_keys:
                 bucket[key] += source[key]
+        for model in item["token_usage"]["by_model"]:
+            bucket = combined_models.setdefault(
+                (item["adapter_id"], model["model"]), collections.Counter()
+            )
+            for key in usage_keys:
+                bucket[key] += model[key]
     result["token_usage"] = {
         "evidence": "exact" if combined_usage["requests"] else "unavailable",
         **{key: combined_usage[key] for key in usage_keys},
@@ -501,6 +520,14 @@ def build_multi_report(paths=None, recent_limit=40):
                 **{key: values[key] for key in usage_keys},
             }
             for (adapter_id, source), values in sorted(combined_sources.items())
+        ],
+        "by_model": [
+            {
+                "adapter_id": adapter_id,
+                "model": model,
+                **{key: values[key] for key in usage_keys},
+            }
+            for (adapter_id, model), values in sorted(combined_models.items())
         ],
     }
     context_chars = sum(

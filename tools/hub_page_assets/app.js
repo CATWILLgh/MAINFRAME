@@ -23,6 +23,13 @@
     "cancelled": "отменено",
     "No analysis jobs yet.": "Заданий анализа пока нет.",
     "Queue operations are local, bounded, and review-only.": "Операции очереди локальны, ограничены и требуют проверки.",
+    "Observed sessions": "Наблюдаемые сессии", "Exact runtime tokens": "Точные токены среды",
+    "Telemetry events": "События телеметрии", "Agent instances": "Экземпляры агентов",
+    "Observed days": "Дней наблюдения", "Active adapters": "Активные адапторы",
+    "Consolidated runtime usage": "Общий расход среды",
+    "Adapter coverage": "Покрытие адапторов", "Exact usage by model": "Точный расход по моделям",
+    "Exact usage by source": "Точный расход по источникам",
+    "Claude transcript history": "История транскриптов Claude",
     "English": "English", "Русский": "Русский",
   };
   let language = "en";
@@ -371,7 +378,6 @@
   function renderOverview(root) {
     const ds = D.dev_state || { active: false, feedback: [] };
     const t = ds.telemetry || {};
-    const u = D.usage || {};
     const h = D.health || { dangling: [], missing_scripts: [], orphans: [] };
     const unknownKinds = (t.unknown_events || []).length;
     const unknownRecords = (t.unknown_events || []).reduce(
@@ -387,6 +393,13 @@
     const hookGap = hookRows.reduce((sum, row) =>
       sum + Math.max(0, (row.blocked || 0) - (row.resolved || 0)), 0);
     const feedback = (ds.feedback || []).length;
+    const configured = (D.control || {}).active_adapters;
+    const configuredAdapters = new Set(Array.isArray(configured) ? configured : []);
+    const adapters = (t.adapters || []).filter((item) => Array.isArray(configured)
+      ? configuredAdapters.has(item.adapter_id) : item.active);
+    const usage = t.token_usage || {};
+    const usageAdapters = adapters.filter((item) =>
+      item.token_usage && item.token_usage.evidence === "exact");
     const attentionCount = dataIssueKinds + repoIssues + unmatched + hookGap + feedback;
     const healthy = ds.active && attentionCount === 0;
     const statusLabel = !ds.active ? "Waiting for telemetry" : healthy ? "Signals are clean" : "Review recommended";
@@ -414,26 +427,25 @@
     ]));
 
     root.appendChild(el("div", { class: "overview-metrics" }, [
-      overviewMetric("Claude sessions", (u.sessions || 0).toLocaleString(), "from local transcripts"),
-      overviewMetric("Assistant replies", (u.messages || 0).toLocaleString(), "deduplicated turns"),
-      overviewMetric("Tokens", fmtTok(u.tokens && u.tokens.total), "input + output", "usage-tone"),
+      overviewMetric("Observed sessions", (t.sessions || 0).toLocaleString(), "adapter telemetry"),
+      overviewMetric("Exact runtime tokens", usage.evidence === "exact"
+        ? fmtTok(usage.total_tokens || 0) : "—",
+      usageAdapters.length + "/" + adapters.length + " adapters reporting", "usage-tone"),
       overviewMetric("Telemetry events", (t.usable_records || 0).toLocaleString(), "validated only", "event-tone"),
       overviewMetric("Agent instances", (t.agent_instances || 0).toLocaleString(), "observed subagents", "agent-tone"),
-      overviewMetric("Active days", (u.active_days || 0).toLocaleString(), (u.current_streak || 0) + " day current streak"),
+      overviewMetric("Observed days", (t.by_day || []).length.toLocaleString(), "combined activity"),
+      overviewMetric("Active adapters", adapters.length.toLocaleString(), "Claude Code + Codex"),
     ]));
 
     const telemetryDays = t.by_day || [];
-    const usageDays = u.by_day || [];
-    const activityRows = telemetryDays.length > 1 ? telemetryDays : usageDays;
-    const activityUnit = telemetryDays.length > 1 ? "events" : "assistant replies";
-    const activityTitle = telemetryDays.length > 1 ? "Telemetry signal" : "Work rhythm";
+    const activityRows = telemetryDays;
+    const activityUnit = "events";
+    const activityTitle = "Telemetry signal";
     const activityBody = el("div", null, [
       signalChart(activityRows, activityUnit),
       el("div", { class: "panel-foot" }, [
         el("span", null, activityRows.length.toLocaleString() + " active days in view"),
-        el("span", null, telemetryDays.length > 1
-          ? (t.usable_records || 0).toLocaleString() + " validated events"
-          : (u.messages || 0).toLocaleString() + " total replies"),
+        el("span", null, (t.usable_records || 0).toLocaleString() + " validated events"),
       ]),
     ]);
 
@@ -477,16 +489,14 @@
       overviewMetric("Dev skills", D.skills.filter((skill) => skill.dev).length.toLocaleString(), "development only", "usage-tone"),
     ]);
 
-    const sp = u.split || { main: {}, sub: {} };
-    const scopeRows = [
-      ["main window", (sp.main && sp.main.messages) || 0],
-      ["subagents", (sp.sub && sp.sub.messages) || 0],
-    ];
+    const adapterActivity = adapters.map((item) => [
+      item.adapter_label || item.adapter_id, item.usable_records || 0,
+    ]);
     const agentRows = (t.by_agent || []).slice(0, 7);
     const agentBody = el("div", { class: "panel-stack" }, [
       el("div", null, [
-        el("h3", null, "Reply split"),
-        shareRows(scopeRows, (u.messages || 0), "agent-share"),
+        el("h3", null, "Activity by adapter"),
+        shareRows(adapterActivity, t.usable_records || 0, "agent-share"),
       ]),
       el("div", null, [
         el("h3", null, "Telemetry by agent"),
@@ -494,9 +504,11 @@
       ]),
     ]);
 
-    const models = (u.models || []).filter((m) => m.total > 0).slice(0, 6);
-    const modelBody = shareRows(models.map((m) => [m.model, m.total]),
-      u.tokens && u.tokens.total, "usage-share");
+    const models = (usage.by_model || []).filter((item) => item.total_tokens > 0).slice(0, 6);
+    const modelBody = shareRows(models.map((item) => [
+      (item.adapter_id ? item.adapter_id + " · " : "") + item.model,
+      item.total_tokens,
+    ]), usage.total_tokens || 0, "usage-share");
 
     const hookTotals = hookRows.reduce((sum, row) => {
       ["noted", "asked", "blocked", "resolved", "context_chars"].forEach((key) => {
@@ -533,9 +545,6 @@
       overviewPanel("LATEST", "Recent validated events", recentBody, "panel-full stream-panel"),
     ]));
 
-    if (u.active && u.by_day && u.by_day.length) {
-      root.appendChild(overviewPanel("365 DAY CONTEXT", "Work rhythm", usageHeatmap(u.by_day), "calendar-panel"));
-    }
     root.appendChild(el("p", { class: "overview-caveat" },
       "This page measures coverage, activity and context cost. It does not claim that the product itself is correct."));
   }
@@ -788,19 +797,118 @@
     ]);
   }
 
-  function renderUsage(root) {
+  function renderTelemetryUsage(root) {
+    const ds = D.dev_state || { active: false, telemetry: {} };
+    const t = ds.telemetry || {};
+    const usage = t.token_usage || {};
+    const configured = (D.control || {}).active_adapters;
+    const configuredAdapters = new Set(Array.isArray(configured) ? configured : []);
+    const adapters = (t.adapters || []).filter((item) => Array.isArray(configured)
+      ? configuredAdapters.has(item.adapter_id) : item.active);
+    const reporting = adapters.filter((item) =>
+      item.token_usage && item.token_usage.evidence === "exact");
+
+    root.appendChild(el("p", { class: "muted" },
+      "Consolidated from separate adapter-owned telemetry databases. Only exact native "
+      + "runtime counters are added together; estimates and transcript history stay separate."));
+
+    if (!ds.active) {
+      root.appendChild(el("div", { class: "notice" },
+        "No adapter telemetry is active yet. Install Claude Code or Codex in dev mode and start a fresh session."));
+      return;
+    }
+
+    root.appendChild(section("Consolidated runtime usage", "usage", reporting.length,
+      el("div", { class: "panel-stack" }, [
+        el("div", { class: "stat-row wrap" }, [
+          el("div", { class: "stat" }, [el("b", null, String(usage.requests || 0)), " requests"]),
+          el("div", { class: "stat" }, [el("b", null, fmtTok(usage.input_tokens || 0)), " input"]),
+          el("div", { class: "stat" }, [el("b", null, fmtTok(usage.cached_input_tokens || 0)), " cached input"]),
+          el("div", { class: "stat" }, [el("b", null, fmtTok(usage.output_tokens || 0)), " output"]),
+          el("div", { class: "stat" }, [el("b", null, fmtTok(usage.reasoning_output_tokens || 0)), " reasoning"]),
+          el("div", { class: "stat" }, [el("b", null, usage.evidence === "exact"
+            ? fmtTok(usage.total_tokens || 0) : "—"), " exact total"]),
+        ]),
+        el("div", { class: "notice small" },
+          reporting.length + " of " + adapters.length + " active adapters currently provide exact token counters. "
+          + "A missing adapter remains visible and is never treated as zero usage."),
+      ])));
+
+    const adapterRows = adapters.map((item) => {
+      const value = item.token_usage || {};
+      return el("tr", null, [
+        el("td", { class: "mono" }, item.adapter_label || item.adapter_id),
+        el("td", { class: "num" }, value.evidence === "exact" ? "exact" : "unavailable"),
+        el("td", { class: "num" }, String(value.requests || 0)),
+        el("td", { class: "num" }, fmtTok(value.input_tokens || 0)),
+        el("td", { class: "num" }, fmtTok(value.cached_input_tokens || 0)),
+        el("td", { class: "num" }, fmtTok(value.output_tokens || 0)),
+        el("td", { class: "num" }, value.evidence === "exact" ? fmtTok(value.total_tokens || 0) : "—"),
+      ]);
+    });
+    root.appendChild(section("Adapter coverage", "dev", adapterRows.length,
+      el("table", { class: "matrix" }, [
+        el("thead", null, el("tr", null, [el("th", null, "adapter"),
+          el("th", { class: "num" }, "evidence"), el("th", { class: "num" }, "requests"),
+          el("th", { class: "num" }, "input"), el("th", { class: "num" }, "cached"),
+          el("th", { class: "num" }, "output"), el("th", { class: "num" }, "total")])),
+        el("tbody", null, adapterRows),
+      ])));
+
+    const modelRows = (usage.by_model || []).map((item) => el("tr", null, [
+      el("td", { class: "mono" }, item.adapter_id || "—"),
+      el("td", { class: "mono" }, item.model || "(unknown)"),
+      el("td", { class: "num" }, String(item.requests || 0)),
+      el("td", { class: "num" }, fmtTok(item.input_tokens || 0)),
+      el("td", { class: "num" }, fmtTok(item.cached_input_tokens || 0)),
+      el("td", { class: "num" }, fmtTok(item.output_tokens || 0)),
+      el("td", { class: "num" }, fmtTok(item.reasoning_output_tokens || 0)),
+      el("td", { class: "num" }, fmtTok(item.total_tokens || 0)),
+    ]));
+    if (modelRows.length) {
+      root.appendChild(section("Exact usage by model", "usage", modelRows.length,
+        el("table", { class: "matrix" }, [
+          el("thead", null, el("tr", null, [el("th", null, "adapter"), el("th", null, "model"),
+            el("th", { class: "num" }, "requests"), el("th", { class: "num" }, "input"),
+            el("th", { class: "num" }, "cached"), el("th", { class: "num" }, "output"),
+            el("th", { class: "num" }, "reasoning"), el("th", { class: "num" }, "total")])),
+          el("tbody", null, modelRows),
+        ])));
+    }
+
+    const sourceRows = (usage.by_source || []).map((item) => el("tr", null, [
+      el("td", { class: "mono" }, item.adapter_id || "—"),
+      el("td", { class: "mono" }, item.source),
+      el("td", { class: "num" }, String(item.requests || 0)),
+      el("td", { class: "num" }, fmtTok(item.total_tokens || 0)),
+    ]));
+    if (sourceRows.length) {
+      root.appendChild(section("Exact usage by source", "usage", sourceRows.length,
+        el("table", { class: "matrix" }, [
+          el("thead", null, el("tr", null, [el("th", null, "adapter"), el("th", null, "source"),
+            el("th", { class: "num" }, "requests"), el("th", { class: "num" }, "total")])),
+          el("tbody", null, sourceRows),
+        ])));
+    }
+
+    if (t.by_day && t.by_day.length) {
+      root.appendChild(section("Combined activity calendar", "events", t.by_day.length,
+        usageHeatmap(t.by_day)));
+    }
+  }
+
+  function renderClaudeTranscriptHistory(root) {
     const u = D.usage;
     if (!u || !u.active) {
-      root.appendChild(el("div", { class: "notice" },
-        "No local session transcripts found at ~/.claude/projects — usage stats "
-        + "are computed from those (independent of --dev telemetry)."));
       return;
     }
     if (!u.messages) {
-      root.appendChild(el("div", { class: "notice" },
-        "Transcripts found, but no assistant messages with token usage yet."));
       return;
     }
+    root.appendChild(section("Claude transcript history", "usage", u.sessions || 0,
+      el("div", { class: "notice small" },
+        "Additional Claude-only history from local transcripts. It is useful for trends, but is not "
+        + "added to the exact cross-adapter runtime totals above because Codex has no equivalent transcript contract.")));
     root.appendChild(el("p", { class: "muted" },
       "Aggregated from " + u.files + " local session transcripts (~/.claude/projects). "
       + "Counts only — no prompt content is read. Streaming snapshots are de-duplicated "
@@ -873,6 +981,11 @@
       root.appendChild(el("p", { class: "muted small" },
         u.no_usage.toLocaleString() + " replies had no usage record (counted, no token data)."));
     }
+  }
+
+  function renderUsage(root) {
+    renderTelemetryUsage(root);
+    renderClaudeTranscriptHistory(root);
   }
 
   const LAYERS = ["events", "hooks", "agents", "skills", "dev"];

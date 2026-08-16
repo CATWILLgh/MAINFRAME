@@ -308,6 +308,16 @@ def test_usage_costs_keep_exact_and_estimated_evidence_separate():
             "reasoning_output_tokens": 0,
             "total_tokens": 1440,
         }],
+        "by_model": [{
+            "model": "claude-test",
+            "requests": 1,
+            "input_tokens": 1200,
+            "cached_input_tokens": 800,
+            "cache_write_tokens": 100,
+            "output_tokens": 240,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 1440,
+        }],
     }
     assert report["harness_context_cost"] == {
         "evidence": "estimated",

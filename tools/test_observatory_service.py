@@ -97,9 +97,22 @@ def test_panel_keeps_language_locally_and_exposes_both_catalogs():
     assert app.count("window.location.reload()") == 1
 
 
+def test_panel_uses_adapter_telemetry_for_shared_overview_and_usage():
+    app = (ROOT / "tools/hub_page_assets/app.js").read_text(encoding="utf-8")
+    assert 'overviewMetric("Observed sessions"' in app
+    assert 'overviewMetric("Exact runtime tokens"' in app
+    assert '"Claude sessions"' not in app
+    assert 'function renderTelemetryUsage' in app
+    assert 'function renderClaudeTranscriptHistory' in app
+    assert 'Claude transcript history' in app
+    assert 'usage.by_model' in app
+
+
 def test_live_server_serves_panel_and_health_on_loopback():
     module = _load()
     runtime = Path(tempfile.mkdtemp())
+    (runtime / "enabled").mkdir()
+    (runtime / "enabled" / "codex").touch()
     server = module.create_server("127.0.0.1", 0, root=ROOT, runtime=runtime, token="probe")
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -114,6 +127,9 @@ def test_live_server_serves_panel_and_health_on_loopback():
             assert "window.HUB_LIVE = true" in page
             assert "mainframe-language" in page
             assert "Analysis queue" in page
+        with urllib.request.urlopen(f"http://{host}:{port}/api/live", timeout=2) as response:
+            live = json.loads(response.read())
+            assert live["control"]["active_adapters"] == ["codex"]
     finally:
         server.shutdown()
         server.server_close()

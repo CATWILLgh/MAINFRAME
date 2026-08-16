@@ -48,7 +48,7 @@ def test_writes_row():
         "code_edit", {"lang": "python", "ext": ".py", "operation": "edit"},
         {"session_id": "abc", "prompt_id": "p1", "agent_id": "a1",
          "agent_type": "worker", "tool_use_id": "t1", "cwd": "/x/proj",
-         "hook_event_name": "PostToolUse"})
+         "hook_event_name": "PostToolUse", "model": "claude-test"})
     assert result == "written"
     rows = _rows(db)
     assert len(rows) == 1, rows
@@ -60,10 +60,10 @@ def test_writes_row():
     assert body == {"lang": "python", "ext": ".py", "operation": "edit"}
     with sqlite3.connect(db) as connection:
         envelope = connection.execute(
-            "SELECT schema_version, prompt_id, agent_id, tool_use_id, hook_event, origin "
+            "SELECT schema_version, prompt_id, agent_id, tool_use_id, hook_event, model, origin "
             "FROM events"
         ).fetchone()
-    assert envelope == (2, "p1", "a1", "t1", "PostToolUse", "runtime")
+    assert envelope == (2, "p1", "a1", "t1", "PostToolUse", "claude-test", "runtime")
 
 
 def test_origin_separates_runtime_test_and_model_lab_calls():
@@ -96,7 +96,7 @@ def test_schema_and_wal():
         cols = [r[1] for r in con.execute("PRAGMA table_info(events)").fetchall()]
         assert cols == [
             "id", "ts", "schema_version", "session_id", "prompt_id", "agent_id",
-            "agent_type", "tool_use_id", "project", "hook_event", "origin", "event", "payload",
+            "agent_type", "tool_use_id", "project", "hook_event", "model", "origin", "event", "payload",
         ], cols
         views = [row[0] for row in con.execute(
             "SELECT name FROM sqlite_master WHERE type = 'view'"

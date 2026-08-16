@@ -287,7 +287,7 @@ _TELEMETRY_SCHEMA = (
     "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, "
     "schema_version INTEGER NOT NULL, session_id TEXT, prompt_id TEXT, "
     "agent_id TEXT, agent_type TEXT, tool_use_id TEXT, project TEXT, "
-    "hook_event TEXT, origin TEXT NOT NULL DEFAULT 'unclassified', "
+    "hook_event TEXT, model TEXT, origin TEXT NOT NULL DEFAULT 'unclassified', "
     "event TEXT NOT NULL, payload TEXT NOT NULL)"
 )
 _TELEMETRY_MIGRATION_COLUMNS = (
@@ -296,6 +296,7 @@ _TELEMETRY_MIGRATION_COLUMNS = (
     ("agent_id", "TEXT"),
     ("tool_use_id", "TEXT"),
     ("hook_event", "TEXT"),
+    ("model", "TEXT"),
     ("origin", "TEXT NOT NULL DEFAULT 'unclassified'"),
 )
 _TELEMETRY_ORIGINS = frozenset({"runtime", "model-lab", "synthetic", "unclassified"})
@@ -401,6 +402,7 @@ def log_event(event, payload=None, hook_payload=None):
             str(hp.get("tool_use_id") or ""),
             _telemetry_project_key(hp.get("cwd") or ""),
             str(hp.get("hook_event_name") or ""),
+            str(hp.get("model") or ""),
             origin,
             str(event),
             json.dumps(safe, separators=(",", ":")),
@@ -417,8 +419,8 @@ def log_event(event, payload=None, hook_payload=None):
                 conn.execute("PRAGMA synchronous=NORMAL")
                 conn.execute(
                     "INSERT INTO events(ts, schema_version, session_id, prompt_id, "
-                    "agent_id, agent_type, tool_use_id, project, hook_event, origin, "
-                    "event, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", row)
+                    "agent_id, agent_type, tool_use_id, project, hook_event, model, "
+                    "origin, event, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
                 conn.commit()
                 return "written"
             except sqlite3.IntegrityError:
