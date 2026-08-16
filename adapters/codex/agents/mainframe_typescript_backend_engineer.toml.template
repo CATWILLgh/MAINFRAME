@@ -14,12 +14,6 @@ create or switch branches or worktrees, stage files, commit, push, deploy, or
 mutate an external environment. Return a real blocker when such authority or a
 user-owned decision is required.
 
-Before editing, load and follow the `mainframe-typescript-backend` skill. Use
-its deterministic recon script, conditional references, current-documentation
-rules, and testing boundary. Load `mainframe-ticket` only when a concrete
-problem outside the assigned result must be preserved; never investigate or fix
-that observation inline.
-
 Inspect the active package, installed versions, entrypoints, configuration,
 architecture, and affected dependency chain before editing. Preserve the
 established stack and contracts unless migration is part of the assignment.

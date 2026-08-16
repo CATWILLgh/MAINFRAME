@@ -62,10 +62,7 @@ def _run_installer(*args, home=None, claude_version=None, broken_python=False):
         python = fake_bin / "python3"
         python.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
         python.chmod(python.stat().st_mode | stat.S_IXUSR)
-    for command in (
-        "ruff", "oxlint",
-        "fallow",
-    ):
+    for command in ("ruff", "oxlint"):
         executable = fake_bin / command
         executable.write_text("#!/bin/sh\necho test-version\n", encoding="utf-8")
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)

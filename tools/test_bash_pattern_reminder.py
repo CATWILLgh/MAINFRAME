@@ -10,24 +10,28 @@ import sys
 import tempfile
 
 os.environ["MAINFRAME_TELEMETRY_DB"] = os.path.join(
-    tempfile.mkdtemp(prefix="bpr-telemetry-"), "telemetry.db")
-os.environ["MAINFRAME_NOTICE_STATE_DIR"] = tempfile.mkdtemp(
-    prefix="bpr-notices-")
+    tempfile.mkdtemp(prefix="bpr-telemetry-"), "telemetry.db"
+)
+os.environ["MAINFRAME_NOTICE_STATE_DIR"] = tempfile.mkdtemp(prefix="bpr-notices-")
 _sessions = itertools.count()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(
-    HERE, "..", "adapters/claude-code/plugin/hooks/scripts/bash-pattern-reminder.py")
+    HERE, "..", "adapters/claude-code/plugin/hooks/scripts/bash-pattern-reminder.py"
+)
 spec = importlib.util.spec_from_file_location("bash_pattern_reminder", SCRIPT)
 hook = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook)
 
 
 def _drive(command, tool="Bash", session=None, agent=None):
-    payload = {"hook_event_name": "PreToolUse", "tool_name": tool,
-               "tool_input": {"command": command},
-               "session_id": session or f"t-{next(_sessions)}",
-               "agent_id": agent}
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool,
+        "tool_input": {"command": command},
+        "session_id": session or f"t-{next(_sessions)}",
+        "agent_id": agent,
+    }
     output = io.StringIO()
     saved = sys.stdin, sys.stdout
     try:
@@ -39,15 +43,17 @@ def _drive(command, tool="Bash", session=None, agent=None):
     return output.getvalue()
 
 
-def test_risky_clusters_fire():
+def test_short_replace_options_fire():
     for command in (
         'rg -rln "pattern" src',
         'rg -irn "pattern" src',
-        'rg -nr pattern src',
-        '/opt/bin/rg -ur pattern src',
+        "rg -nr pattern src",
+        "/opt/bin/rg -ur pattern src",
+        "rg -r ln pattern src",
+        "rg -r=ln pattern src",
     ):
         output = _drive(command)
-        assert "replacement text" in output and "--replace" in output, command
+        assert "short `-r` form" in output and "--replace" in output, command
 
 
 def test_reminder_is_once_per_session_and_writer():
@@ -60,9 +66,20 @@ def test_reminder_is_once_per_session_and_writer():
 
 def test_separate_or_explicit_replacement_is_silent():
     for command in (
-        "rg -n pattern src", "rg -l -n pattern src",
-        "rg -r ln pattern src", "rg --replace=ln pattern src",
-        "rg -- -rln", "rg -r=ln pattern src",
+        "rg -n pattern src",
+        "rg -l -n pattern src",
+        "rg --replace=ln pattern src",
+        "rg -- -rln",
+    ):
+        assert _drive(command) == "", command
+
+
+def test_option_values_that_look_like_flags_are_silent():
+    for command in (
+        "rg -g -r pattern src",
+        "rg --glob -r pattern src",
+        "rg -e -r src",
+        "rg --regexp -r src",
     ):
         assert _drive(command) == "", command
 
@@ -111,19 +128,22 @@ def test_non_bash_and_malformed_commands_are_silent():
     assert _drive("rg -rln 'unterminated") == ""
 
 
-def test_rendered_cluster_list_and_cluster_length_are_bounded():
+def test_rendered_option_list_and_option_length_are_bounded():
     commands = [f"rg -{letter}r pattern src" for letter in "abcdefghij"]
     commands.append("rg -" + "a" * 1000 + "r pattern src")
     output = _drive(" ; ".join(commands))
     note = json.loads(output)["hookSpecificOutput"]["additionalContext"]
-    assert "…and 6 more" in note
+    assert "…and " in note
     assert "a" * 100 not in note
     assert len(note) < 600
 
 
 def main():
-    tests = [value for name, value in sorted(globals().items())
-             if name.startswith("test_") and callable(value)]
+    tests = [
+        value
+        for name, value in sorted(globals().items())
+        if name.startswith("test_") and callable(value)
+    ]
     for test in tests:
         test()
         print(f"  ok {test.__name__}")

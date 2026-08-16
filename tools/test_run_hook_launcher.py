@@ -22,8 +22,12 @@ def _run(event, script, tmpdir, session="session-a", extra_env=None):
         env.update(extra_env)
     payload = json.dumps({"hook_event_name": event, "session_id": session})
     return subprocess.run(
-        ["sh", LAUNCHER, event, script], input=payload,
-        capture_output=True, text=True, env=env, timeout=30,
+        ["sh", LAUNCHER, event, script],
+        input=payload,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
     )
 
 
@@ -65,8 +69,10 @@ def test_distinct_hook_failures_are_not_collapsed():
 
 def test_parallel_same_failure_emits_exactly_once():
     with tempfile.TemporaryDirectory() as tmp:
+
         def invoke(_):
             return _run("SubagentStop", "/nonexistent/hook.py", tmp, "parallel")
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
             results = list(pool.map(invoke, range(32)))
         assert all(item.returncode == 0 for item in results)
@@ -92,8 +98,11 @@ def test_missing_reporter_uses_loud_role_neutral_fallback():
         shutil.copy2(LAUNCHER, copied)
         payload = json.dumps({"hook_event_name": "Stop", "session_id": "s"})
         proc = subprocess.run(
-            ["sh", copied, "Stop", "/nonexistent/hook.py"], input=payload,
-            capture_output=True, text=True, env=dict(os.environ, TMPDIR=tmp),
+            ["sh", copied, "Stop", "/nonexistent/hook.py"],
+            input=payload,
+            capture_output=True,
+            text=True,
+            env=dict(os.environ, TMPDIR=tmp),
             timeout=30,
         )
         obj = json.loads(proc.stdout)
@@ -103,10 +112,67 @@ def test_missing_reporter_uses_loud_role_neutral_fallback():
         assert "immediate caller" in note and "Tell the user" not in note
 
 
+def test_missing_tmpdir_reports_launcher_failure():
+    missing = os.path.join(tempfile.gettempdir(), "missing-mainframe-hook-dir")
+    shutil.rmtree(missing, ignore_errors=True)
+    with tempfile.TemporaryDirectory() as fallback:
+        proc = _run(
+            "PreToolUse",
+            GOOD,
+            missing,
+            "missing-tmpdir",
+            {"MAINFRAME_HOOK_FALLBACK_TMPDIR": fallback},
+        )
+        assert proc.returncode == 0
+        obj = json.loads(proc.stdout)
+        note = obj["hookSpecificOutput"]["additionalContext"]
+        assert "run-hook.sh did not complete" in note
+        assert "immediate caller" in note
+        assert obj["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+
+
+def test_second_buffer_failure_reports_launcher_failure():
+    with tempfile.TemporaryDirectory() as tmp:
+        real_mktemp = shutil.which("mktemp")
+        fake_bin = os.path.join(tmp, "bin")
+        os.mkdir(fake_bin)
+        counter = os.path.join(tmp, "mktemp-count")
+        fake_mktemp = os.path.join(fake_bin, "mktemp")
+        with open(fake_mktemp, "w", encoding="utf-8") as handle:
+            handle.write(
+                "#!/bin/sh\n"
+                'count=$(cat "$MAINFRAME_TEST_MKTEMP_COUNT" 2>/dev/null || '
+                "printf 0)\n"
+                "count=$((count + 1))\n"
+                'printf "%s" "$count" >"$MAINFRAME_TEST_MKTEMP_COUNT"\n'
+                'if [ "$count" -eq 2 ]; then exit 1; fi\n'
+                f'exec "{real_mktemp}" "$@"\n'
+            )
+        os.chmod(fake_mktemp, 0o700)
+        proc = _run(
+            "PreToolUse",
+            GOOD,
+            tmp,
+            "second-buffer",
+            {
+                "PATH": fake_bin + os.pathsep + os.environ.get("PATH", ""),
+                "MAINFRAME_TEST_MKTEMP_COUNT": counter,
+            },
+        )
+        assert proc.returncode == 0
+        obj = json.loads(proc.stdout)
+        note = obj["hookSpecificOutput"]["additionalContext"]
+        assert "run-hook.sh did not complete" in note
+        assert "immediate caller" in note
+
+
 def _run_all():
     failures = 0
-    tests = [(name, fn) for name, fn in sorted(globals().items())
-             if name.startswith("test_") and callable(fn)]
+    tests = [
+        (name, fn)
+        for name, fn in sorted(globals().items())
+        if name.startswith("test_") and callable(fn)
+    ]
     for name, fn in tests:
         try:
             fn()

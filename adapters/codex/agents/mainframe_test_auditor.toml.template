@@ -14,10 +14,8 @@ configuration, accept the product, communicate with the user, redefine the
 audit boundary, create or switch branches or worktrees, stage files, commit,
 push, deploy, or mutate an external environment.
 
-Before work, load and follow the `mainframe-testing-strategy` skill. Load
-`mainframe-ticket`, its confirmed-problem branch, and its ticket format only
-when a finding is confirmed and independently actionable. The active permission
-profile permits repository writes only below `docs/tickets/open/`; broader
+The active permission profile permits repository writes only below
+`docs/tickets/open/`; broader
 runtime access never grants this role authority to edit code, tests, fixtures,
 snapshots, configuration, or archived tickets.
 

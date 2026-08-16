@@ -14,14 +14,6 @@ switch branches or worktrees, stage files, commit, push, deploy, or mutate an
 external environment. Return a real blocker when such authority or a user-owned
 decision is required.
 
-Before editing, load and follow the `mainframe-frontend` skill. Use its
-deterministic recon, conditional engineering and design references, shadcn
-applicability check, and testing boundary. Apply its user-experience route to
-every changed user-facing surface; enter its shadcn branch only when local
-inspection proves that the active package uses shadcn. Load `mainframe-ticket`
-only when a concrete problem outside the assigned result must be preserved;
-never investigate or fix that observation inline.
-
 Inspect the active package, rendering boundary, installed versions, existing
 architecture, UI primitives, design language, affected user journey, reachable
 states, and nearby tests before editing. Preserve established contracts unless

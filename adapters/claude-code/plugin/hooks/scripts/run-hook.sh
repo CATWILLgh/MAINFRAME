@@ -9,8 +9,31 @@ EVENT="$1"
 SCRIPT="$2"
 DIR=$(dirname "$0")
 umask 077
-INPUT=$(mktemp "${TMPDIR:-/tmp}/mainframe-hook-input.XXXXXX") || exit 0
+
+report_launcher_failure() {
+    STATUS="$1"
+    INPUT_PATH="${2:-}"
+    FALLBACK_TMPDIR="${MAINFRAME_HOOK_FALLBACK_TMPDIR:-/tmp}"
+    if [ -n "$INPUT_PATH" ]; then
+        TMPDIR="$FALLBACK_TMPDIR" python3 "$DIR/hook-failure-report.py" \
+            "$EVENT" "$0" "$STATUS" "$PPID" <"$INPUT_PATH" && return 0
+    else
+        # stdin is still the original hook payload when the first buffer fails.
+        TMPDIR="$FALLBACK_TMPDIR" python3 "$DIR/hook-failure-report.py" \
+            "$EVENT" "$0" "$STATUS" "$PPID" && return 0
+    fi
+
+    # No temporary storage is needed for this last-resort, bounded warning.
+    printf '{"hookSpecificOutput":{"hookEventName":"%s","additionalContext":"MAINFRAME hook failure: run-hook.sh could not create its private buffers during %s. The requested check is unavailable. Return this exact failure to your immediate caller before claiming the affected operation or task is verified. Do not retry or repair MAINFRAME unless assigned."},"systemMessage":"MAINFRAME hook failure: run-hook.sh could not create its private buffers during %s."}\n' \
+        "$EVENT" "$EVENT" "$EVENT"
+}
+
+INPUT=$(mktemp "${TMPDIR:-/tmp}/mainframe-hook-input.XXXXXX") || {
+    report_launcher_failure 73
+    exit 0
+}
 OUTPUT=$(mktemp "${TMPDIR:-/tmp}/mainframe-hook-output.XXXXXX") || {
+    report_launcher_failure 73 "$INPUT"
     rm -f "$INPUT"
     exit 0
 }

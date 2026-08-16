@@ -226,15 +226,6 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "PostToolUse",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/fallow-quality-note.py"
-            ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "PostToolUse",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/length-quality-note.py"
             ]
           },
@@ -293,15 +284,6 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "Stop",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/python-security-stop-gate.py"
-            ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "Stop",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/fallow-quality-note.py"
             ]
           },
           {

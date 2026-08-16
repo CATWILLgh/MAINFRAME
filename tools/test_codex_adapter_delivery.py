@@ -998,8 +998,8 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert "model" not in typescript_data
     assert "model_reasoning_effort" not in typescript_data
-    assert "load and follow the `mainframe-typescript-backend` skill" in (
-        typescript_data["developer_instructions"]
+    assert "load and follow" not in (
+        typescript_data["developer_instructions"].lower()
     )
     assert "stage files, commit, push" in typescript_data["developer_instructions"]
     assert len(typescript_data["skills"]["config"]) == 2
@@ -1012,9 +1012,7 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert "model" not in python_data
     assert "model_reasoning_effort" not in python_data
-    assert "load and follow the `mainframe-python-backend` skill" in (
-        python_data["developer_instructions"]
-    )
+    assert "load and follow" not in python_data["developer_instructions"].lower()
     assert "stage files, commit, push" in python_data["developer_instructions"]
     assert len(python_data["skills"]["config"]) == 2
     frontend_engineer = (
@@ -1026,9 +1024,7 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert "model" not in frontend_data
     assert "model_reasoning_effort" not in frontend_data
-    assert "load and follow the `mainframe-frontend` skill" in (
-        frontend_data["developer_instructions"]
-    )
+    assert "load and follow" not in frontend_data["developer_instructions"].lower()
     assert "stage files, commit, push" in frontend_data["developer_instructions"]
     assert len(frontend_data["skills"]["config"]) == 2
     test_auditor = ADAPTER / "agents" / "mainframe_test_auditor.toml.template"
@@ -1039,8 +1035,8 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "model" not in test_auditor_data
     assert "model_reasoning_effort" not in test_auditor_data
     assert "sandbox_mode" not in test_auditor_data
-    assert "load and follow the `mainframe-testing-strategy` skill" in (
-        test_auditor_data["developer_instructions"]
+    assert "load and follow" not in (
+        test_auditor_data["developer_instructions"].lower()
     )
     assert "Do not implement fixes" in test_auditor_data["developer_instructions"]
     assert test_auditor_data["default_permissions"] == "mainframe-test-auditor"

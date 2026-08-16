@@ -506,7 +506,7 @@ check_tooling_prerequisites() {
         esac
     fi
     if [[ $need_npm -eq 1 ]]; then
-        log_warn "  - npm / Node.js (for oxlint / fallow):"
+        log_warn "  - npm / Node.js (for oxlint):"
         case "$mgr" in
             apt)  log_warn "      sudo apt install -y nodejs npm" ;;
             brew) log_warn "      brew install node" ;;
@@ -585,10 +585,6 @@ _install_npm_global() {
 
 bootstrap_nodejs_security_tools() {
     _install_npm_global oxlint || true
-}
-
-bootstrap_frontend_quality_tools() {
-    _install_npm_global fallow || true
 }
 
 # Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
@@ -863,9 +859,6 @@ main() {
 
     echo
     bootstrap_nodejs_security_tools
-
-    echo
-    bootstrap_frontend_quality_tools
 
     echo
     log_ok "Install complete."
