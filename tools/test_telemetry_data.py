@@ -298,6 +298,7 @@ def test_usage_costs_keep_exact_and_estimated_evidence_separate():
         "output_tokens": 240,
         "reasoning_output_tokens": 0,
         "total_tokens": 1440,
+        "all_tokens": 2340,
         "by_source": [{
             "source": "native-otel",
             "requests": 1,
@@ -307,6 +308,7 @@ def test_usage_costs_keep_exact_and_estimated_evidence_separate():
             "output_tokens": 240,
             "reasoning_output_tokens": 0,
             "total_tokens": 1440,
+            "all_tokens": 2340,
         }],
         "by_model": [{
             "model": "claude-test",
@@ -317,6 +319,7 @@ def test_usage_costs_keep_exact_and_estimated_evidence_separate():
             "output_tokens": 240,
             "reasoning_output_tokens": 0,
             "total_tokens": 1440,
+            "all_tokens": 2340,
         }],
     }
     assert report["harness_context_cost"] == {
@@ -364,6 +367,146 @@ def test_usage_contract_rejects_content_and_negative_counts():
         {"session_id": "s"},
     ) == "error"
     assert telemetry_data.build_report(db)["records"] == 0
+
+
+def _usage_row(sample, **overrides):
+    payload = {
+        "sample_id": sample, "source": "native-otel",
+        "input_tokens": 100, "cached_input_tokens": 900, "cache_write_tokens": 10,
+        "output_tokens": 50, "reasoning_output_tokens": 0, "total_tokens": 150,
+        "request_count": 1,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_all_tokens_counts_cache_that_the_billed_total_leaves_out():
+    db = fresh_db()
+    base = {"session_id": "s", "model": "claude-test"}
+    assert _hooklib.log_event("model_usage", _usage_row("a" * 64), base) == "written"
+    usage = telemetry_data.build_report(db)["token_usage"]
+    # The billed total is what a vendor console shows; the cache it excludes is
+    # the bulk of what actually moved through the model.
+    assert usage["total_tokens"] == 150
+    assert usage["all_tokens"] == 100 + 900 + 10 + 50
+
+
+def test_cost_evidence_tracks_how_many_requests_reported_a_price():
+    db = fresh_db()
+    base = {"session_id": "s", "model": "claude-test"}
+    assert _hooklib.log_event("model_usage", _usage_row("a" * 64), base) == "written"
+    report = telemetry_data.build_report(db)
+    assert report["cost"]["evidence"] == "unavailable"
+    assert report["cost"]["micro_usd"] == 0
+
+    assert _hooklib.log_event(
+        "model_usage", _usage_row("b" * 64, cost_micro_usd=2500), base) == "written"
+    report = telemetry_data.build_report(db)
+    # One of two requests priced: reporting it as a complete bill would overstate
+    # coverage, so the evidence flag says partial and both counts are exposed.
+    assert report["cost"]["evidence"] == "partial"
+    assert report["cost"]["micro_usd"] == 2500
+    assert report["cost"]["reporting_requests"] == 1
+    assert report["cost"]["total_requests"] == 2
+
+    db = fresh_db()
+    assert _hooklib.log_event(
+        "model_usage", _usage_row("c" * 64, cost_micro_usd=100), base) == "written"
+    assert telemetry_data.build_report(db)["cost"]["evidence"] == "exact"
+
+
+def test_latency_percentiles_come_from_reported_durations_only():
+    db = fresh_db()
+    base = {"session_id": "s", "model": "claude-test"}
+    for index, duration in enumerate([10, 20, 30, 40, 1000]):
+        assert _hooklib.log_event(
+            "model_usage",
+            _usage_row(str(index) * 64, duration_ms=duration), base) == "written"
+    assert _hooklib.log_event("model_usage", _usage_row("z" * 64), base) == "written"
+    latency = telemetry_data.build_report(db)["latency"]
+    assert latency["samples"] == 5, "a row without a duration must not count as 0 ms"
+    assert latency["median_ms"] == 30
+    assert latency["p95_ms"] == 1000
+    assert latency["max_ms"] == 1000
+
+
+def test_tool_and_hook_signals_become_reliability_summaries():
+    db = fresh_db()
+    base = {"session_id": "s"}
+    for index, success in enumerate([True, True, False]):
+        assert _hooklib.log_event("tool_result", {
+            "sample_id": f"t{index}", "tool_name": "Bash",
+            "success": success, "duration_ms": 10 * (index + 1),
+        }, base) == "written"
+    assert _hooklib.log_event("tool_decision", {
+        "sample_id": "d1", "tool_name": "Bash", "decision": "accept",
+        "source": "config",
+    }, base) == "written"
+    assert _hooklib.log_event("hook_execution", {
+        "sample_id": "h1", "hook_event": "PreToolUse", "hooks": 9, "succeeded": 8,
+        "blocking": 1, "errors": 2, "cancelled": 0, "duration_ms": 72,
+    }, base) == "written"
+
+    report = telemetry_data.build_report(db)
+    tools = report["tool_reliability"]
+    assert tools == [{
+        "tool_name": "Bash", "calls": 3, "failures": 1, "output_bytes": 0,
+        "samples": 3, "median_ms": 20, "p95_ms": 30, "max_ms": 30,
+    }]
+    assert report["tool_decisions"] == [{
+        "tool_name": "Bash", "decision": "accept", "source": "config", "count": 1,
+    }]
+    assert report["hook_health"] == [{
+        "hook_event": "PreToolUse", "runs": 9, "errors": 2, "blocking": 1,
+        "cancelled": 0, "samples": 1, "median_ms": 72, "p95_ms": 72, "max_ms": 72,
+    }]
+
+
+def test_uncounted_rows_name_their_reason():
+    db = fresh_db()
+    base = {"session_id": "s"}
+    assert _hooklib.log_event("user_prompt", {"prompt_len": 5}, base) == "written"
+    connection = sqlite3.connect(db)
+    with connection:
+        connection.execute(
+            "INSERT INTO events(ts, schema_version, session_id, project, origin, "
+            "event, payload) VALUES(?,?,?,?,?,?,?)",
+            ("2026-01-01T00:00:00Z", 1, "s", "p", "runtime", "user_prompt", "{}"))
+        connection.execute(
+            "INSERT INTO events(ts, schema_version, session_id, project, origin, "
+            "event, payload) VALUES(?,?,?,?,?,?,?)",
+            ("2026-01-01T00:00:00Z", 2, "s", "p", "runtime", "not_an_event", "{}"))
+        connection.execute(
+            "INSERT INTO events(ts, schema_version, session_id, project, origin, "
+            "event, payload) VALUES(?,?,?,?,?,?,?)",
+            ("2026-01-01T00:00:00Z", 2, "s", "p", "synthetic", "user_prompt",
+             json.dumps({"prompt_len": 1})))
+    connection.close()
+
+    report = telemetry_data.build_report(db)
+    # "Excluded" on its own reads as data loss; each reason has a different fix.
+    assert report["exclusions"]["legacy_schema"] == 1
+    assert report["exclusions"]["unknown_event"] == 1
+    assert report["exclusions"]["other_origin"] == 1
+    assert report["excluded_records"] == 3
+    assert report["stored_first_timestamp"] and report["stored_last_timestamp"]
+
+
+def test_lifecycle_ignores_rows_without_an_agent_identity():
+    db = fresh_db()
+    base = {"session_id": "s"}
+    # Codex fires SubagentStop at the end of a root turn with no agent attached.
+    assert _hooklib.log_event("subagent_stop", {}, base) == "written"
+    agent = {**base, "agent_id": "a1", "agent_type": "researcher"}
+    assert _hooklib.log_event("subagent_start", {}, agent) == "written"
+    assert _hooklib.log_event("subagent_stop", {}, agent) == "written"
+
+    report = telemetry_data.build_report(db)
+    assert [item["agent"] for item in report["agent_lifecycle"]] == ["researcher"]
+    assert report["agent_lifecycle"][0]["unmatched"] == 0
+    # The row is still stored and still counted as an event; it is only excluded
+    # from a summary it cannot honestly contribute to.
+    assert dict(report["event_counts"])["subagent_stop"] == 2
 
 
 if __name__ == "__main__":

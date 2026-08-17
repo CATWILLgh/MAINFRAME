@@ -258,6 +258,44 @@ def test_dispatcher_records_privacy_safe_dev_telemetry():
     assert str(root) not in " ".join(str(value) for value in row)
 
 
+def test_dispatcher_records_code_edits_like_the_claude_adapter():
+    root = Path(tempfile.mkdtemp())
+    project = root / "project"
+    (project / ".git").mkdir(parents=True)
+    edited = project / "module.py"
+    edited.write_text("VALUE = 1\n", encoding="utf-8")
+    ignored = project / "notes.md"
+    ignored.write_text("# notes\n", encoding="utf-8")
+    db = root / "telemetry" / "telemetry.db"
+
+    def edit(path):
+        return {
+            "session_id": "session",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {"file_path": str(path)},
+            "cwd": str(project),
+        }
+
+    for target in (edited, ignored):
+        proc, _result = _run_hook(
+            edit(target), root / "state",
+            extra_env={"MAINFRAME_CODEX_TELEMETRY_DB": str(db)},
+        )
+        assert proc.returncode == 0
+
+    import sqlite3
+    with sqlite3.connect(db) as connection:
+        rows = connection.execute(
+            "SELECT payload FROM events WHERE event = 'code_edit' ORDER BY id"
+        ).fetchall()
+    # Only languages a profile sub-agent owns are bucketed, so `code_edit` stays
+    # a comparable denominator across both adapters; markdown is not one.
+    assert len(rows) == 1
+    payload = json.loads(rows[0][0])
+    assert payload == {"lang": "python", "ext": ".py", "operation": "apply_patch"}
+
+
 def test_startup_health_covers_every_runtime_module():
     spec = importlib.util.spec_from_file_location("mainframe_hook_test", HOOK)
     assert spec is not None and spec.loader is not None

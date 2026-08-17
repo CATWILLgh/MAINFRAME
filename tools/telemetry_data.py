@@ -67,7 +67,32 @@ BREAKDOWN_FIELDS = {
     "model_lab": ("status",),
     "permission_request": ("tool_name", "permission_mode"),
     "hook_run": ("status", "recipient"),
+    "tool_decision": ("decision", "source"),
 }
+
+# Why a row never reached a metric. "Excluded" alone reads as data loss; naming
+# the reason separates an old storage format from a real collection failure.
+EXCLUSION_REASONS = (
+    "legacy_schema", "invalid_payload", "unknown_event", "other_origin",
+)
+
+
+def _percentile(values, fraction):
+    """Nearest-rank percentile; 0 for an empty sample so callers stay total."""
+    if not values:
+        return 0
+    ordered = sorted(values)
+    index = max(0, math.ceil(fraction * len(ordered)) - 1)
+    return int(ordered[min(index, len(ordered) - 1)])
+
+
+def _duration_summary(values):
+    return {
+        "samples": len(values),
+        "median_ms": _percentile(values, 0.5),
+        "p95_ms": _percentile(values, 0.95),
+        "max_ms": max(values) if values else 0,
+    }
 
 _SESSION_UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
@@ -209,6 +234,12 @@ def _empty_report(
         "schema_versions": [],
         "origins": [],
         "included_origins": sorted(included_origins or []),
+        "stored_first_timestamp": "",
+        "stored_last_timestamp": "",
+        "exclusions": {reason: 0 for reason in EXCLUSION_REASONS},
+        "tool_reliability": [],
+        "tool_decisions": [],
+        "hook_health": [],
         "legacy_rows": 0,
         "invalid_rows": 0,
         "invalid_examples": [],
@@ -228,10 +259,23 @@ def _empty_report(
             "cache_write_tokens": 0,
             "output_tokens": 0,
             "reasoning_output_tokens": 0,
+            # total_tokens counts only freshly billed input plus output, the way
+            # the vendor consoles report it. all_tokens adds cache reads and
+            # writes — the real volume moved through the model, and normally
+            # orders of magnitude larger.
             "total_tokens": 0,
+            "all_tokens": 0,
             "by_source": [],
             "by_model": [],
         },
+        "cost": {
+            "evidence": "unavailable",
+            "micro_usd": 0,
+            "reporting_requests": 0,
+            "total_requests": 0,
+            "by_model": [],
+        },
+        "latency": {"evidence": "unavailable", **_duration_summary([])},
         "harness_context_cost": {
             "evidence": "estimated",
             "characters": 0,
@@ -282,6 +326,11 @@ def build_report(
     usage = collections.Counter()
     usage_by_source = {}
     usage_by_model = {}
+    cost_by_model = {}
+    request_latencies = []
+    tools = {}
+    decisions = collections.Counter()
+    hook_health = {}
     recent = collections.deque(maxlen=max(0, int(recent_limit)))
 
     try:
@@ -290,6 +339,10 @@ def build_report(
             report["records"] += 1
             schema_versions[row["schema_version"]] += 1
             origins[row["origin"]] += 1
+            if row["timestamp"]:
+                report["stored_first_timestamp"] = (
+                    report["stored_first_timestamp"] or row["timestamp"])
+                report["stored_last_timestamp"] = row["timestamp"]
             if row["schema_version"] < contract.ROW_SCHEMA_VERSION:
                 report["legacy_rows"] += 1
             if row["event"] not in contract.EVENT_FIELDS:
@@ -310,6 +363,17 @@ def build_report(
             )
             if not usable:
                 report["excluded_records"] += 1
+                if row["schema_version"] < contract.ROW_SCHEMA_VERSION:
+                    report["exclusions"]["legacy_schema"] += 1
+                elif row["event"] not in contract.EVENT_FIELDS:
+                    # An unknown event also fails validation, so it is classified
+                    # first — otherwise every retired event name would be filed
+                    # as a corrupt payload.
+                    report["exclusions"]["unknown_event"] += 1
+                elif not row["valid"]:
+                    report["exclusions"]["invalid_payload"] += 1
+                else:
+                    report["exclusions"]["other_origin"] += 1
                 continue
             report["usable_records"] += 1
             report["last_id"] = row["id"]
@@ -327,7 +391,11 @@ def build_report(
             if row["model"]:
                 by_model[row["model"]] += 1
 
-            if row["event"] in ("subagent_start", "subagent_stop"):
+            # A lifecycle row without an agent identity cannot describe an
+            # agent's lifetime; counting it produced stops with no matching start
+            # and a permanent phantom gap.
+            if (row["event"] in ("subagent_start", "subagent_stop")
+                    and (row["agent_id"] or row["agent_type"])):
                 item = lifecycle.setdefault(role, {
                     "agent": role, "started": 0, "stopped": 0, "instances": set(),
                 })
@@ -375,6 +443,61 @@ def build_report(
                     usage[source_key] += value
                     source_usage[source_key] += value
                     model_usage[source_key] += value
+                everything = (
+                    data["input_tokens"] + data["cached_input_tokens"]
+                    + data["cache_write_tokens"] + data["output_tokens"]
+                )
+                usage["all_tokens"] += everything
+                source_usage["all_tokens"] += everything
+                model_usage["all_tokens"] += everything
+                # An absent cost field means the source does not publish one, so
+                # the reporting request count — not the row count — is the base.
+                if "cost_micro_usd" in data:
+                    usage["cost_micro_usd"] += data["cost_micro_usd"]
+                    usage["cost_requests"] += data["request_count"]
+                    bucket = cost_by_model.setdefault(model, collections.Counter())
+                    bucket["micro_usd"] += data["cost_micro_usd"]
+                    bucket["requests"] += data["request_count"]
+                if "duration_ms" in data:
+                    request_latencies.append(data["duration_ms"])
+
+            if row["event"] == "tool_result" and row["valid"]:
+                data = row["data"]
+                item = tools.setdefault(data["tool_name"], {
+                    "tool_name": data["tool_name"], "calls": 0, "failures": 0,
+                    "durations": [], "output_bytes": 0,
+                })
+                item["calls"] += 1
+                if not data["success"]:
+                    item["failures"] += 1
+                item["durations"].append(data["duration_ms"])
+                item["output_bytes"] += data.get("output_bytes", 0)
+
+            if row["event"] == "tool_decision" and row["valid"]:
+                data = row["data"]
+                decisions[(
+                    data["tool_name"], data["decision"], data.get("source", ""),
+                )] += 1
+
+            if row["event"] in ("hook_execution", "hook_run") and row["valid"]:
+                data = row["data"]
+                key = (
+                    data["hook_event"] if row["event"] == "hook_execution"
+                    else row["source_event"] or "(unreported)"
+                )
+                item = hook_health.setdefault(key, {
+                    "hook_event": key, "runs": 0, "errors": 0, "blocking": 0,
+                    "cancelled": 0, "durations": [],
+                })
+                if row["event"] == "hook_execution":
+                    item["runs"] += data["hooks"]
+                    item["errors"] += data["errors"]
+                    item["blocking"] += data["blocking"]
+                    item["cancelled"] += data["cancelled"]
+                else:
+                    item["runs"] += 1
+                    item["errors"] += int(data["status"] == "failed")
+                item["durations"].append(data["duration_ms"])
 
             if recent.maxlen:
                 recent.append({key: row[key] for key in (
@@ -418,10 +541,62 @@ def build_report(
     report["hook_effectiveness"].sort(
         key=lambda item: (-item["signals"], item["hook"], item["rule_id"])
     )
+    report["tool_reliability"] = sorted(
+        (
+            {
+                "tool_name": item["tool_name"], "calls": item["calls"],
+                "failures": item["failures"],
+                "output_bytes": item["output_bytes"],
+                **_duration_summary(item["durations"]),
+            }
+            for item in tools.values()
+        ),
+        key=lambda item: (-item["calls"], item["tool_name"]),
+    )
+    report["tool_decisions"] = [
+        {"tool_name": tool, "decision": decision, "source": source, "count": count}
+        for (tool, decision, source), count in decisions.most_common()
+    ]
+    report["hook_health"] = sorted(
+        (
+            {
+                "hook_event": item["hook_event"], "runs": item["runs"],
+                "errors": item["errors"], "blocking": item["blocking"],
+                "cancelled": item["cancelled"],
+                **_duration_summary(item["durations"]),
+            }
+            for item in hook_health.values()
+        ),
+        key=lambda item: (-item["errors"], -item["runs"], item["hook_event"]),
+    )
+    report["latency"] = {
+        "evidence": "exact" if request_latencies else "unavailable",
+        **_duration_summary(request_latencies),
+    }
+    report["cost"] = {
+        "evidence": (
+            "unavailable" if not usage["cost_requests"]
+            else "exact" if usage["cost_requests"] >= usage["requests"]
+            else "partial"
+        ),
+        "micro_usd": usage["cost_micro_usd"],
+        "reporting_requests": usage["cost_requests"],
+        "total_requests": usage["requests"],
+        "by_model": sorted(
+            (
+                {
+                    "model": model, "micro_usd": values["micro_usd"],
+                    "requests": values["requests"],
+                }
+                for model, values in cost_by_model.items()
+            ),
+            key=lambda item: -item["micro_usd"],
+        ),
+    }
     usage_keys = (
         "requests", "input_tokens", "cached_input_tokens", "cache_write_tokens",
         "output_tokens", "reasoning_output_tokens",
-        "total_tokens",
+        "total_tokens", "all_tokens",
     )
     report["token_usage"] = {
         "evidence": "exact" if usage["requests"] else "unavailable",
@@ -465,6 +640,16 @@ def build_multi_report(paths=None, recent_limit=40):
         "agent_instances", "legacy_rows", "invalid_rows",
     ):
         result[key] = sum(item[key] for item in adapters)
+    result["exclusions"] = {
+        reason: sum(item["exclusions"][reason] for item in adapters)
+        for reason in EXCLUSION_REASONS
+    }
+    result["stored_first_timestamp"] = min(
+        (item["stored_first_timestamp"] for item in adapters
+         if item["stored_first_timestamp"]), default="")
+    result["stored_last_timestamp"] = max(
+        (item["stored_last_timestamp"] for item in adapters
+         if item["stored_last_timestamp"]), default="")
 
     counters = {
         "event_counts": collections.Counter(),
@@ -490,7 +675,7 @@ def build_multi_report(paths=None, recent_limit=40):
     usage_keys = (
         "requests", "input_tokens", "cached_input_tokens", "cache_write_tokens",
         "output_tokens", "reasoning_output_tokens",
-        "total_tokens",
+        "total_tokens", "all_tokens",
     )
     combined_usage = collections.Counter()
     combined_sources = {}
@@ -542,7 +727,35 @@ def build_multi_report(paths=None, recent_limit=40):
         "causal_overhead": "unproven",
     }
 
-    for key in ("agent_lifecycle", "breakdowns", "hook_effectiveness"):
+    cost_reporting = sum(item["cost"]["reporting_requests"] for item in adapters)
+    result["cost"] = {
+        "evidence": (
+            "unavailable" if not cost_reporting
+            else "exact" if cost_reporting >= combined_usage["requests"]
+            else "partial"
+        ),
+        "micro_usd": sum(item["cost"]["micro_usd"] for item in adapters),
+        "reporting_requests": cost_reporting,
+        "total_requests": combined_usage["requests"],
+        "by_model": [
+            {**row, "adapter_id": item["adapter_id"]}
+            for item in adapters for row in item["cost"]["by_model"]
+        ],
+    }
+    # Latency percentiles cannot be averaged across adapters, so the combined
+    # view keeps each adapter's own summary instead of inventing a merged one.
+    result["latency"] = {
+        "evidence": "per-adapter",
+        "by_adapter": [
+            {"adapter_id": item["adapter_id"], **item["latency"]}
+            for item in adapters if item["latency"]["samples"]
+        ],
+        **_duration_summary([]),
+    }
+    for key in (
+        "agent_lifecycle", "breakdowns", "hook_effectiveness",
+        "tool_reliability", "tool_decisions", "hook_health",
+    ):
         result[key] = []
         for item in adapters:
             result[key].extend([

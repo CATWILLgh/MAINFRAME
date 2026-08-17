@@ -192,25 +192,47 @@ start_service() {
     fi
     stop_legacy_receiver
     stop_manual
+    local managed=0
     if [[ "$(uname -s)" == "Darwin" && -x "$(command -v launchctl || true)" ]]; then
         write_plist
         launchctl bootout "$(launch_domain)" "$PLIST" >/dev/null 2>&1 || true
-        if ! launchctl bootstrap "$(launch_domain)" "$PLIST"; then
+        if launchctl bootstrap "$(launch_domain)" "$PLIST"; then
+            managed=1
+        else
             printf 'LaunchAgent registration was unavailable; using a manual background process for this login.\n' >&2
             start_manual
         fi
     else
         start_manual
     fi
-    local attempt
-    for attempt in {1..40}; do
-        if health_ok; then
-            printf 'MAINFRAME observatory started at http://127.0.0.1:4318/.\n'
+    if wait_healthy; then
+        printf 'MAINFRAME observatory started at http://127.0.0.1:4318/.\n'
+        return 0
+    fi
+    # A registered agent can still never run — under a TCC-protected home
+    # directory launchd rejects the job with EX_CONFIG and writes nothing to the
+    # log. Silent non-collection is the worst outcome, so fall back rather than
+    # leave the receiver down.
+    if (( managed )); then
+        printf 'LaunchAgent did not become healthy; falling back to a manual background process.\n' >&2
+        launchctl bootout "$(launch_domain)" "$PLIST" >/dev/null 2>&1 || true
+        rm -f "$PLIST"
+        start_manual
+        if wait_healthy; then
+            printf 'MAINFRAME observatory started at http://127.0.0.1:4318/ (manual, this login only).\n'
             return 0
         fi
-        sleep 0.1
-    done
+    fi
     printf 'MAINFRAME observatory failed to start; see %s.\n' "$LOG_FILE" >&2
+    return 1
+}
+
+wait_healthy() {
+    local attempt
+    for attempt in {1..40}; do
+        health_ok && return 0
+        sleep 0.25
+    done
     return 1
 }
 

@@ -491,6 +491,32 @@ def _failure(payload: dict, exc: Exception) -> None:
         _emit_context(event, text, system_message=text)
 
 
+# Only languages a profile sub-agent owns are bucketed, matching the Claude
+# adapter, so `code_edit` stays a comparable denominator across both harnesses.
+_EDIT_LANGS = {
+    ".tsx": "frontend", ".jsx": "frontend", ".css": "frontend",
+    ".scss": "frontend", ".sass": "frontend", ".less": "frontend",
+    ".vue": "frontend", ".svelte": "frontend",
+    ".ts": "ts",
+    ".py": "python",
+}
+_EDIT_OPERATIONS = {"edit": "edit", "write": "write", "apply_patch": "apply_patch"}
+
+
+def _record_code_edits(hooklib, payload: dict) -> None:
+    operation = _EDIT_OPERATIONS.get(str(payload.get("tool_name") or "").lower())
+    if operation is None:
+        return
+    for path in _snapshot_module().paths(payload):
+        extension = path.suffix.lower()
+        language = _EDIT_LANGS.get(extension)
+        if language is None:
+            continue
+        hooklib.log_event("code_edit", {
+            "lang": language, "ext": extension, "operation": operation,
+        }, payload)
+
+
 def _record_runtime_event(payload: dict) -> None:
     hooklib = importlib.import_module("_hooklib")
     event = payload.get("hook_event_name")
@@ -508,15 +534,22 @@ def _record_runtime_event(payload: dict) -> None:
         trigger = str(payload.get("trigger") or "")
         if trigger in {"manual", "auto"}:
             hooklib.log_event("compaction", {"trigger": trigger}, payload)
-    elif event == "SubagentStart":
-        hooklib.log_event("subagent_start", {}, payload)
-    elif event == "SubagentStop":
-        hooklib.log_event("subagent_stop", {}, payload)
+    elif event in {"SubagentStart", "SubagentStop"}:
+        # Codex also fires SubagentStop at the end of a root turn, with no agent
+        # identity attached. Recording those produced stops without matching
+        # starts and a lifecycle gap that never existed.
+        if payload.get("agent_id"):
+            hooklib.log_event(
+                "subagent_start" if event == "SubagentStart" else "subagent_stop",
+                {}, payload,
+            )
     elif event == "PermissionRequest":
         hooklib.log_event("permission_request", {
             "tool_name": str(payload.get("tool_name") or "unknown"),
             "permission_mode": str(payload.get("permission_mode") or "unknown"),
         }, payload)
+    elif event == "PostToolUse":
+        _record_code_edits(hooklib, payload)
 
 
 def main() -> None:

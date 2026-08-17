@@ -42,6 +42,8 @@ def _batch(adapter_id):
         _attribute(record.attributes, "output_tokens", 20)
         _attribute(record.attributes, "cache_read_tokens", 60)
         _attribute(record.attributes, "cache_creation_tokens", 5)
+        _attribute(record.attributes, "cost_usd_micros", 4200)
+        _attribute(record.attributes, "duration_ms", 1500)
         _attribute(record.attributes, "prompt", "must never persist")
     else:
         _attribute(record.attributes, "event.name", "codex.sse_event")
@@ -109,6 +111,142 @@ def test_recording_is_adapter_owned_and_idempotent():
         raw = path.read_bytes()
         assert b"must never persist" not in raw
         assert b"private@example.com" not in raw
+
+
+def _harness_batch(adapter_id, event_name, attributes):
+    from opentelemetry.proto.collector.logs.v1.logs_service_pb2 import (
+        ExportLogsServiceRequest,
+    )
+
+    request = ExportLogsServiceRequest()
+    resource = request.resource_logs.add()
+    _attribute(resource.resource.attributes, "service.name", adapter_id)
+    record = resource.scope_logs.add().log_records.add()
+    record.time_unix_nano = 987654
+    _attribute(record.attributes, "event.name", event_name)
+    for key, value in attributes.items():
+        _attribute(record.attributes, key, value)
+    return request
+
+
+def test_claude_usage_keeps_exact_cost_and_duration():
+    samples = receiver.decode_logs(
+        _batch("claude-code").SerializeToString(), "application/x-protobuf")
+    payload = samples[0]["payload"]
+    assert payload["cost_micro_usd"] == 4200
+    assert payload["duration_ms"] == 1500
+
+
+def test_codex_usage_omits_cost_instead_of_reporting_zero():
+    samples = receiver.decode_logs(
+        _batch("codex").SerializeToString(), "application/x-protobuf")
+    # Codex publishes no cost attribute. An absent field is the honest encoding;
+    # a zero would be indistinguishable from a genuinely free request.
+    assert "cost_micro_usd" not in samples[0]["payload"]
+
+
+def test_tool_and_hook_signals_are_captured_without_content():
+    request = _harness_batch("claude-code", "claude_code.tool_result", {
+        "tool_name": "Bash", "success": "true", "duration_ms": "42",
+        "tool_input_size_bytes": "100", "tool_result_size_bytes": "200",
+        "user.email": "private@example.com",
+    })
+    result = receiver.decode_logs(request.SerializeToString(), "application/x-protobuf")
+    assert len(result) == 1 and result[0]["event"] == "tool_result"
+    assert result[0]["payload"]["success"] is True
+    assert result[0]["payload"]["duration_ms"] == 42
+    assert "private@example.com" not in json.dumps(result)
+
+    request = _harness_batch("codex", "codex.tool_decision", {
+        "tool_name": "exec", "decision": "Approved", "source": "Config",
+    })
+    decision = receiver.decode_logs(request.SerializeToString(), "application/x-protobuf")
+    assert decision[0]["event"] == "tool_decision"
+    assert decision[0]["payload"]["decision"] == "approved"
+
+    request = _harness_batch("claude-code", "claude_code.hook_execution_complete", {
+        "hook_event": "PreToolUse", "hook_name": "PreToolUse:Edit", "num_hooks": "9",
+        "num_success": "8", "num_blocking": "1", "num_non_blocking_error": "2",
+        "num_cancelled": "0", "total_duration_ms": "72",
+    })
+    hooks = receiver.decode_logs(request.SerializeToString(), "application/x-protobuf")
+    assert hooks[0]["event"] == "hook_execution"
+    assert hooks[0]["payload"]["errors"] == 2
+    assert hooks[0]["payload"]["hooks"] == 9
+
+
+def test_codex_tool_result_never_stores_arguments_or_output():
+    request = _harness_batch("codex", "codex.tool_result", {
+        "tool_name": "exec", "success": "true", "duration_ms": "10",
+        "arguments": "must never persist", "output": "must never persist",
+    })
+    result = receiver.decode_logs(request.SerializeToString(), "application/x-protobuf")
+    assert "must never persist" not in json.dumps(result)
+
+
+def test_ingest_health_separates_a_broken_collector_from_an_idle_one():
+    directory = Path(tempfile.mkdtemp())
+    paths = {
+        "claude-code": directory / "claude/telemetry.db",
+        "codex": directory / "codex/telemetry.db",
+    }
+    health = receiver.IngestHealth(directory / "ingest.json")
+    assert health.snapshot()["batches"] == 0
+
+    receiver.ingest_batch(
+        health, _batch("claude-code").SerializeToString(),
+        "application/x-protobuf", paths)
+    state = health.snapshot()
+    assert state["batches_decoded"] == 1 and state["batches_failed"] == 0
+    assert state["rows_written"] == 1
+
+    receiver.ingest_batch(health, b"not-a-batch", "application/json", paths)
+    state = health.snapshot()
+    assert state["batches_failed"] == 1
+    assert state["last_reason"] == "malformed-batch"
+    assert state["by_protocol"]["json"]["failed"] == 1
+
+    stored = receiver.read_ingest_health(directory / "ingest.json")
+    assert stored["evidence"] == "observed" and stored["healthy"] is False
+    assert receiver.read_ingest_health(directory / "absent.json") == {
+        "evidence": "unknown", "healthy": None,
+    }
+
+
+def test_a_missing_decoder_dependency_is_reported_not_swallowed():
+    # The failure that hid every Codex batch for a day: an interpreter without
+    # the protobuf decoder raised, and the exception was discarded whole.
+    health = receiver.IngestHealth()
+    original = receiver.decode_logs
+
+    def explode(_body, _content_type):
+        raise ModuleNotFoundError("No module named 'opentelemetry'")
+
+    receiver.decode_logs = explode
+    try:
+        receiver.ingest_batch(health, b"payload", "application/x-protobuf", {})
+    finally:
+        receiver.decode_logs = original
+    state = health.snapshot()
+    assert state["batches_failed"] == 1
+    assert state["last_reason"] == "dependency-missing"
+    assert state["last_error_kind"] == "ModuleNotFoundError"
+
+
+def test_replayed_harness_batches_are_deduplicated():
+    directory = Path(tempfile.mkdtemp())
+    paths = {
+        "claude-code": directory / "claude/telemetry.db",
+        "codex": directory / "codex/telemetry.db",
+    }
+    request = _harness_batch("claude-code", "claude_code.tool_result", {
+        "tool_name": "Bash", "success": "true", "duration_ms": "42",
+        "tool_use_id": "toolu_1",
+    })
+    body = request.SerializeToString()
+    samples = receiver.decode_logs(body, "application/x-protobuf")
+    assert receiver.record_samples(samples, paths)["written"] == 1
+    assert receiver.record_samples(samples, paths)["deduplicated"] == 1
 
 
 def main():

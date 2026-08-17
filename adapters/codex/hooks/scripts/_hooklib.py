@@ -172,6 +172,13 @@ def initialize_telemetry_db(db=None):
             "ON events(json_extract(payload, '$.sample_id')) "
             "WHERE event = 'model_usage'"
         )
+        # Every native-OTel-derived row carries a sample_id. The exporter may
+        # replay a batch, so uniqueness — not arrival — decides what is stored.
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_events_sample "
+            "ON events(json_extract(payload, '$.sample_id')) "
+            "WHERE json_extract(payload, '$.sample_id') IS NOT NULL"
+        )
         connection.execute(f"PRAGMA user_version={ROW_SCHEMA_VERSION}")
         connection.commit()
     finally:

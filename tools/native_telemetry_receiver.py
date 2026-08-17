@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import importlib.util
 import json
 import os
 from pathlib import Path
 import sys
+import threading
 
 ROOT = Path(__file__).resolve().parent.parent
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
@@ -110,7 +112,61 @@ def _count(attrs, *keys):
     return 0
 
 
-def _sample(adapter_id, event_name, attrs, record):
+def _present(attrs, *keys):
+    """None when the harness did not report the counter, so absence stays absent."""
+    for key in keys:
+        if key not in attrs:
+            continue
+        try:
+            return max(0, int(attrs[key]))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _flag(attrs, key):
+    """OTLP attributes arrive as 'true'/'false' strings as often as booleans."""
+    value = attrs.get(key)
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes"):
+        return True
+    if text in ("false", "0", "no"):
+        return False
+    return None
+
+
+def _text(attrs, *keys, limit=120):
+    for key in keys:
+        value = attrs.get(key)
+        text = str(value or "").strip()
+        if text:
+            return text[:limit]
+    return ""
+
+
+def _sample_id(adapter_id, event_name, native_id, record, extra):
+    identity = {
+        "adapter": adapter_id,
+        "event": event_name,
+        "native_id": native_id,
+        "time": record.get("timeUnixNano", record.get("time_unix_nano", "")),
+        "extra": extra,
+    }
+    return hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
+
+
+def _session_of(adapter_id, attrs):
+    return str((
+        attrs.get("session.id") if adapter_id == "claude-code"
+        else attrs.get("conversation.id")
+    ) or "")
+
+
+def _usage_sample(adapter_id, event_name, attrs, record):
     if adapter_id == "claude-code":
         if event_name != "claude_code.api_request":
             return None
@@ -124,10 +180,13 @@ def _sample(adapter_id, event_name, attrs, record):
             "reasoning_output_tokens": 0,
             "total_tokens": input_tokens + output_tokens,
         }
-        session = str(attrs.get("session.id") or "")
         native_id = str(
             attrs.get("request_id") or attrs.get("client_request_id") or ""
         )
+        # Claude Code reports exact billing in integer micro-dollars; the float
+        # cost_usd beside it is the same number and is not stored.
+        cost = _present(attrs, "cost_usd_micros")
+        duration = _present(attrs, "duration_ms")
     else:
         if event_name != "codex.sse_event" or str(attrs.get("event.kind")) != "response.completed":
             return None
@@ -141,32 +200,111 @@ def _sample(adapter_id, event_name, attrs, record):
             "reasoning_output_tokens": _count(attrs, "reasoning_token_count"),
             "total_tokens": _count(attrs, "tool_token_count") or input_tokens + output_tokens,
         }
-        session = str(attrs.get("conversation.id") or "")
         native_id = str(attrs.get("response.id") or "")
+        # Codex publishes no cost attribute; the field stays absent rather than 0.
+        cost = None
+        duration = _present(attrs, "ttft_ms")
     if not any(usage.values()):
         return None
-    identity = {
-        "adapter": adapter_id,
-        "event": event_name,
-        "session": session,
-        "native_id": native_id,
-        "time": record.get("timeUnixNano", record.get("time_unix_nano", "")),
-        "model": str(attrs.get("model") or attrs.get("gen_ai.request.model") or ""),
-        "usage": usage,
+    session = _session_of(adapter_id, attrs)
+    model = _text(attrs, "model", "gen_ai.request.model")
+    payload = {
+        "sample_id": _sample_id(
+            adapter_id, event_name, native_id, record,
+            {"session": session, "model": model, "usage": usage},
+        ),
+        "source": "native-otel",
+        "request_count": 1,
+        **usage,
     }
+    if cost is not None:
+        payload["cost_micro_usd"] = cost
+    if duration is not None:
+        payload["duration_ms"] = duration
     return {
-        "adapter_id": adapter_id,
-        "session_id": session,
-        "model": identity["model"],
-        "payload": {
-            "sample_id": hashlib.sha256(
-                json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest(),
-            "source": "native-otel",
-            "request_count": 1,
-            **usage,
-        },
+        "adapter_id": adapter_id, "event": "model_usage",
+        "session_id": session, "model": model, "payload": payload,
     }
+
+
+def _harness_sample(adapter_id, event_name, attrs, record):
+    """Tool and hook execution facts — names, outcomes and sizes, never content."""
+    short = event_name.split(".", 1)[-1]
+    session = _session_of(adapter_id, attrs)
+    model = _text(attrs, "model")
+    common = {"adapter_id": adapter_id, "session_id": session, "model": model}
+
+    if short == "tool_result":
+        tool = _text(attrs, "tool_name")
+        success = _flag(attrs, "success")
+        duration = _present(attrs, "duration_ms")
+        if not tool or success is None or duration is None:
+            return None
+        payload = {
+            "sample_id": _sample_id(
+                adapter_id, event_name,
+                _text(attrs, "tool_use_id", "call_id"), record,
+                {"tool": tool, "success": success},
+            ),
+            "tool_name": tool, "success": success, "duration_ms": duration,
+        }
+        for field, keys in (
+            ("input_bytes", ("tool_input_size_bytes",)),
+            ("output_bytes", ("tool_result_size_bytes",)),
+        ):
+            value = _present(attrs, *keys)
+            if value is not None:
+                payload[field] = value
+        return {**common, "event": "tool_result", "payload": payload}
+
+    if short == "tool_decision":
+        tool = _text(attrs, "tool_name")
+        decision = _text(attrs, "decision", limit=48).lower()
+        if not tool or not decision:
+            return None
+        payload = {
+            "sample_id": _sample_id(
+                adapter_id, event_name,
+                _text(attrs, "tool_use_id", "call_id"), record,
+                {"tool": tool, "decision": decision},
+            ),
+            "tool_name": tool, "decision": decision,
+        }
+        source = _text(attrs, "source", limit=48)
+        if source:
+            payload["source"] = source
+        return {**common, "event": "tool_decision", "payload": payload}
+
+    if adapter_id == "claude-code" and short == "hook_execution_complete":
+        hook_event = _text(attrs, "hook_event", limit=48)
+        counts = {
+            "hooks": _present(attrs, "num_hooks"),
+            "succeeded": _present(attrs, "num_success"),
+            "blocking": _present(attrs, "num_blocking"),
+            "errors": _present(attrs, "num_non_blocking_error"),
+            "cancelled": _present(attrs, "num_cancelled"),
+            "duration_ms": _present(attrs, "total_duration_ms"),
+        }
+        if not hook_event or any(value is None for value in counts.values()):
+            return None
+        payload = {
+            "sample_id": _sample_id(
+                adapter_id, event_name,
+                _text(attrs, "hook_name", limit=64), record,
+                {"sequence": attrs.get("event.sequence"), **counts},
+            ),
+            "hook_event": hook_event, **counts,
+        }
+        return {**common, "event": "hook_execution", "payload": payload}
+    return None
+
+
+def _samples(adapter_id, event_name, attrs, record):
+    usage = _usage_sample(adapter_id, event_name, attrs, record)
+    if usage is not None:
+        return [usage]
+    harness = _harness_sample(adapter_id, event_name, attrs, record)
+    return [harness] if harness is not None else []
 
 
 def decode_logs(body: bytes, content_type: str) -> list[dict]:
@@ -198,9 +336,7 @@ def decode_logs(body: bytes, content_type: str) -> list[dict]:
                     else ""
                 )
                 if adapter_id:
-                    sample = _sample(adapter_id, event_name, attrs, record)
-                    if sample is not None:
-                        samples.append(sample)
+                    samples.extend(_samples(adapter_id, event_name, attrs, record))
     return samples
 
 
@@ -222,7 +358,7 @@ def record_samples(samples: list[dict], db_paths: dict[str, Path]) -> dict[str, 
                 os.environ["MAINFRAME_CODEX_TELEMETRY_DB"] = str(db_paths[adapter_id])
                 os.environ["MAINFRAME_CODEX_TELEMETRY_ORIGIN"] = "runtime"
             status = HOOKLIBS[adapter_id].log_event(
-                "model_usage",
+                sample.get("event", "model_usage"),
                 sample["payload"],
                 {"session_id": sample["session_id"], "model": sample["model"]},
             )
@@ -236,9 +372,136 @@ def record_samples(samples: list[dict], db_paths: dict[str, Path]) -> dict[str, 
     return results
 
 
+def ingest_batch(health, body, content_type, db_paths):
+    """Decode and store one batch, recording the outcome either way.
+
+    The exporter is asynchronous, so a failure must never propagate back to the
+    harness or trigger an unbounded retry loop — but it must still be counted.
+    """
+    try:
+        samples = decode_logs(body, content_type)
+    except Exception as error:
+        health.batch(content_type, error=error)
+        return {"written": 0, "deduplicated": 0, "failed": 0}
+    try:
+        results = record_samples(samples, db_paths)
+    except Exception as error:
+        health.batch(content_type, error=error)
+        return {"written": 0, "deduplicated": 0, "failed": len(samples)}
+    health.batch(content_type, rows=len(samples), results=results)
+    return results
+
+
+class IngestHealth:
+    """Counts OTLP batch outcomes so an empty panel can name its own cause.
+
+    A decode failure used to be swallowed whole: a serving interpreter without
+    the protobuf dependency dropped every binary batch — all Codex traffic —
+    while JSON batches kept working, and the page reported zero usage as if the
+    harness had simply been idle. Only exception classes and a fixed reason code
+    are retained; batch bytes never reach this record.
+    """
+
+    REASONS = {"dependency-missing", "malformed-batch", "sink-unavailable"}
+
+    def __init__(self, path=None):
+        self.path = Path(path) if path else None
+        self._lock = threading.Lock()
+        self._state = {
+            # Counters live in memory, so they describe the current collector
+            # process rather than all time; started_at says which window it is.
+            "started_at": self._now(),
+            "batches": 0, "batches_decoded": 0, "batches_failed": 0,
+            "rows_written": 0, "rows_deduplicated": 0, "rows_failed": 0,
+            "by_protocol": {},
+            "last_batch_at": "", "last_failure_at": "",
+            "last_error_kind": "", "last_reason": "",
+        }
+
+    @staticmethod
+    def _now():
+        return datetime.datetime.now(datetime.timezone.utc).isoformat(
+            timespec="seconds").replace("+00:00", "Z")
+
+    @staticmethod
+    def _protocol(content_type):
+        return "json" if "json" in (content_type or "") else "protobuf"
+
+    def _protocol_bucket(self, protocol):
+        return self._state["by_protocol"].setdefault(
+            protocol, {"batches": 0, "decoded": 0, "failed": 0, "rows": 0})
+
+    def batch(self, content_type, *, rows=0, results=None, error=None):
+        protocol = self._protocol(content_type)
+        with self._lock:
+            state = self._state
+            bucket = self._protocol_bucket(protocol)
+            state["batches"] += 1
+            bucket["batches"] += 1
+            state["last_batch_at"] = self._now()
+            if error is not None:
+                state["batches_failed"] += 1
+                bucket["failed"] += 1
+                state["last_failure_at"] = state["last_batch_at"]
+                state["last_error_kind"] = type(error).__name__
+                state["last_reason"] = (
+                    "dependency-missing"
+                    if isinstance(error, (ImportError, ModuleNotFoundError))
+                    else "malformed-batch"
+                )
+            else:
+                state["batches_decoded"] += 1
+                bucket["decoded"] += 1
+                bucket["rows"] += rows
+                for key, name in (
+                    ("written", "rows_written"),
+                    ("deduplicated", "rows_deduplicated"),
+                    ("failed", "rows_failed"),
+                ):
+                    state[name] += (results or {}).get(key, 0)
+                if (results or {}).get("failed"):
+                    state["last_failure_at"] = state["last_batch_at"]
+                    state["last_reason"] = "sink-unavailable"
+        self._persist()
+
+    def snapshot(self):
+        with self._lock:
+            return json.loads(json.dumps(self._state))
+
+    def _persist(self):
+        if self.path is None:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.path.with_suffix(f".tmp-{os.getpid()}")
+            temporary.write_text(
+                json.dumps(self.snapshot(), ensure_ascii=False), encoding="utf-8")
+            os.replace(temporary, self.path)
+        except OSError:
+            pass
+
+
+def read_ingest_health(path):
+    """Report the collector's own state; 'unknown' when it never ran."""
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError("ingest health is not an object")
+    except (OSError, ValueError):
+        return {"evidence": "unknown", "healthy": None}
+    failed = int(value.get("batches_failed") or 0)
+    batches = int(value.get("batches") or 0)
+    return {
+        "evidence": "observed",
+        "healthy": batches > 0 and failed == 0,
+        **value,
+    }
+
+
 class Receiver(BaseHTTPRequestHandler):
     db_paths: dict[str, Path] = {}
     health_token = ""
+    ingest = IngestHealth()
 
     def log_message(self, _format, *_args):
         return
@@ -265,15 +528,10 @@ class Receiver(BaseHTTPRequestHandler):
         if length <= 0 or length > MAX_REQUEST_BYTES:
             self._reply(200)
             return
-        try:
-            samples = decode_logs(
-                self.rfile.read(length), self.headers.get("Content-Type", "")
-            )
-            record_samples(samples, self.db_paths)
-        except Exception:
-            # The exporter is asynchronous. Analytics must never interrupt work
-            # or trigger an unbounded retry loop because one batch was malformed.
-            pass
+        ingest_batch(
+            self.ingest, self.rfile.read(length),
+            self.headers.get("Content-Type", ""), self.db_paths,
+        )
         self._reply(200)
 
 

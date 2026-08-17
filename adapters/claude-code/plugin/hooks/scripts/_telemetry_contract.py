@@ -47,6 +47,33 @@ EVENT_FIELDS = {
         "reasoning_output_tokens": int,
         "total_tokens": int,
         "request_count": int,
+        # Optional: only a source that reports exact billing carries them, so an
+        # absent field means "not reported", never "zero".
+        "cost_micro_usd": int,
+        "duration_ms": int,
+    },
+    # Native harness signals. They describe the harness's own execution, never
+    # tool arguments, results, prompts, or paths.
+    "tool_result": {
+        "sample_id": str,
+        "tool_name": str,
+        "success": bool,
+        "duration_ms": int,
+        "input_bytes": int,
+        "output_bytes": int,
+    },
+    "tool_decision": {
+        "sample_id": str, "tool_name": str, "decision": str, "source": str,
+    },
+    "hook_execution": {
+        "sample_id": str,
+        "hook_event": str,
+        "hooks": int,
+        "succeeded": int,
+        "blocking": int,
+        "errors": int,
+        "cancelled": int,
+        "duration_ms": int,
     },
 }
 
@@ -64,6 +91,12 @@ REQUIRED_FIELDS = {
     "model_usage": {
         "sample_id", "source", "input_tokens", "cached_input_tokens", "cache_write_tokens",
         "output_tokens", "reasoning_output_tokens", "total_tokens", "request_count",
+    },
+    "tool_result": {"sample_id", "tool_name", "success", "duration_ms"},
+    "tool_decision": {"sample_id", "tool_name", "decision"},
+    "hook_execution": {
+        "sample_id", "hook_event", "hooks", "succeeded", "blocking",
+        "errors", "cancelled", "duration_ms",
     },
 }
 

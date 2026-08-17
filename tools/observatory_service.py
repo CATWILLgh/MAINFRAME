@@ -6,18 +6,21 @@ from __future__ import annotations
 import argparse
 import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import importlib
 import json
 import os
 from pathlib import Path
 import secrets
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 from urllib.parse import urlparse
 
 import build_hub_page
 import native_telemetry_receiver
+import telemetry_data
 
 ROOT = Path(__file__).resolve().parent.parent
 PROVIDERS = {"spark", "antigravity"}
@@ -180,6 +183,8 @@ class ObservatoryApp:
         self.runtime = Path(runtime).resolve()
         self.runtime.mkdir(parents=True, exist_ok=True)
         self.token = token or secrets.token_urlsafe(32)
+        self.ingest = native_telemetry_receiver.IngestHealth(
+            self.runtime / "ingest.json")
         self.store = JobStore(self.runtime / "control.db")
         self.store.recover_interrupted()
         self.snapshot_builder = snapshot_builder or self._build_snapshot
@@ -204,6 +209,12 @@ class ObservatoryApp:
             "refresh_seconds": 5,
             "active_adapters": active_adapters,
         }
+        ingest = self.ingest.snapshot()
+        value["ingest"] = {
+            "evidence": "observed",
+            "healthy": ingest["batches"] > 0 and ingest["batches_failed"] == 0,
+            **ingest,
+        }
         return value
 
     def snapshot(self, force=False):
@@ -217,7 +228,7 @@ class ObservatoryApp:
         value = self.snapshot()
         return {
             key: value.get(key)
-            for key in ("dev_state", "usage", "health", "control")
+            for key in ("dev_state", "usage", "health", "control", "ingest")
             if key in value
         }
 
@@ -385,8 +396,10 @@ def _handler(app: ObservatoryApp):
                     size = int(self.headers.get("Content-Length", "0"))
                     raw = self.rfile.read(size) if 0 < size <= native_telemetry_receiver.MAX_REQUEST_BYTES else b""
                     if raw:
-                        samples = native_telemetry_receiver.decode_logs(raw, self.headers.get("Content-Type", ""))
-                        native_telemetry_receiver.record_samples(samples, native_telemetry_receiver.Receiver.db_paths)
+                        native_telemetry_receiver.ingest_batch(
+                            app.ingest, raw, self.headers.get("Content-Type", ""),
+                            native_telemetry_receiver.Receiver.db_paths,
+                        )
                 except Exception:
                     pass
                 self._send(200, {}, b"")
@@ -407,10 +420,13 @@ def create_server(host, port, *, root=ROOT, runtime=None, token=None):
         raise ValueError("observatory may bind only to loopback")
     runtime = Path(runtime or Path(root) / "workspace/runtime/observatory")
     app = ObservatoryApp(Path(root), runtime, token=token)
+    # The collector must write exactly where the reader looks; resolving both
+    # through one helper keeps a sink from filling a database nobody reads.
     native_telemetry_receiver.Receiver.db_paths = {
-        "claude-code": Path(root) / "workspace/runtime/claude-code/telemetry/telemetry.db",
-        "codex": Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "mainframe/codex/telemetry/telemetry.db",
+        adapter_id: Path(path)
+        for adapter_id, path in telemetry_data.default_db_paths().items()
     }
+    native_telemetry_receiver.Receiver.ingest = app.ingest
     server = ThreadingHTTPServer((host, port), _handler(app))
     server.app = app
     return server
@@ -427,6 +443,19 @@ def main(argv=None):
     token = args.health_token
     if args.health_token_file:
         token = args.health_token_file.read_text(encoding="utf-8").strip()
+    # A hand-started process bypasses the launcher's prerequisite check. Without
+    # the protobuf decoder every binary batch — all Codex traffic — is dropped,
+    # and the panel would report zero usage as if the harness had been idle.
+    try:
+        importlib.import_module(
+            "opentelemetry.proto.collector.logs.v1.logs_service_pb2")
+    except ImportError:
+        print(
+            "MAINFRAME observatory: OTLP protobuf decoding is unavailable; "
+            "binary batches will be rejected and reported as a collector fault. "
+            "Install tools/telemetry-requirements.txt into this interpreter.",
+            file=sys.stderr, flush=True,
+        )
     server = create_server(
         args.host, args.port, root=ROOT, runtime=args.runtime,
         token=token or None,
