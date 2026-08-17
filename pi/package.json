@@ -1,0 +1,25 @@
+{
+  "name": "@mainframe/pi-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "pilot": "tsx src/pilot.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "0.84.2",
+    "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "typebox": "1.3.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  }
+}

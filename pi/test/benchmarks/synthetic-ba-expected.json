@@ -1,0 +1,28 @@
+{
+  "traps": [
+    {
+      "id": "premature-ready-state",
+      "summary": "Current code marks the shipment ready before ERP acknowledgement."
+    },
+    {
+      "id": "duplicate-erp-order",
+      "summary": "At-least-once delivery has no defined idempotency mechanism."
+    },
+    {
+      "id": "unknown-timeout-outcome",
+      "summary": "A timeout may be an accepted request, but retry behavior is not defined for that ambiguity."
+    },
+    {
+      "id": "exhausted-retry-ownership",
+      "summary": "The process after the third failed attempt and its business owner are missing."
+    },
+    {
+      "id": "partial-acceptance",
+      "summary": "The business outcome for partially accepted orders is missing."
+    },
+    {
+      "id": "cancellation-race",
+      "summary": "Cancellation while an ERP request is in flight has no reconciliation rule."
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 3,
+  "models": {
+    "final-analysis": {
+      "provider": "zai",
+      "model": "glm-5.3"
+    },
+    "process-scout": {
+      "provider": "minimax",
+      "model": "MiniMax-M3"
+    },
+    "adversarial-scout": {
+      "provider": "zai",
+      "model": "glm-5-turbo"
+    }
+  },
+  "profiles": {
+    "business-analysis": {
+      "scouts": {
+        "independent-a": {
+          "model": "process-scout",
+          "thinking": "off"
+        },
+        "independent-b": {
+          "model": "adversarial-scout",
+          "thinking": "off"
+        }
+      },
+      "critic": {
+        "model": "process-scout",
+        "thinking": "high"
+      },
+      "consolidator": {
+        "model": "final-analysis",
+        "thinking": "max"
+      }
+    }
+  }
+}

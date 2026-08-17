@@ -13,12 +13,21 @@
 .claude/
 .claude/settings.local.json
 
+# MAINFRAME Pi runtime state (sessions, project maps, and local telemetry)
+.agents/runtime/pi/
+
+# Machine-local Pi profile routing; the reproducible example is tracked.
+pi/config/profiles.local.json
+
 # Python venv (local toolchain — tiktoken, pyyaml)
 .venv/
 __pycache__/
 *.pyc
 .ruff_cache/
 .mypy_cache/
+
+# Node dependencies and generated output
+node_modules/
 
 # OS temp
 *~

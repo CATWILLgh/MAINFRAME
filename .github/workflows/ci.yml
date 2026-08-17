@@ -27,10 +27,13 @@ jobs:
 
       # The hook tests exercise the real Ruff and Oxlint binaries. Validator tests and
       # the hub-page generator parse YAML; the skill validator also counts
-      # tokens. Install the verified test toolchain before any test discovers it.
+      # tokens. The OTLP receiver tests decode real protobuf batches, so the
+      # observatory's own requirements are installed here too. Install the
+      # verified test toolchain before any test discovers it.
       - name: Install test and validator dependencies
         run: |
           pip install ruff==0.15.15 tiktoken pyyaml
+          pip install -r tools/telemetry-requirements.txt
           npm install --global oxlint@1.67.0
 
       - name: Hook test suite
@@ -62,3 +65,10 @@ jobs:
       # Root CLAUDE.md is gitignored (not in the checkout); validate the shipped one.
       - name: Validate umbrella CLAUDE.md
         run: python3 tools/validate-claude-md.py adapters/claude-code/export/CLAUDE.md
+
+      - name: Pi pilot tests
+        working-directory: pi
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm test
