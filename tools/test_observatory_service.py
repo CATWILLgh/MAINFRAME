@@ -93,17 +93,23 @@ def test_panel_keeps_language_locally_and_exposes_both_catalogs():
     assert "localStorage" in app
     assert '"en"' in app and '"ru"' in app
     assert 'fetch("/api/live"' in app
-    assert 'window.scrollY > 0' in app
+    # Scroll position must not gate the refresh: treating any scroll as "busy"
+    # froze a scrolled page forever. It is saved and restored around the
+    # re-render instead, and an active filter is what defers the update.
+    assert 'window.scrollY > 0' not in app
+    assert "const scrollTop = window.scrollY;" in app
+    assert "window.scrollTo(0, scrollTop)" in app
+    assert "Boolean(filterQuery)" in app
     assert app.count("window.location.reload()") == 1
 
 
 def test_panel_uses_adapter_telemetry_for_shared_overview_and_usage():
     app = (ROOT / "tools/hub_page_assets/app.js").read_text(encoding="utf-8")
-    assert 'overviewMetric("Observed sessions"' in app
-    assert 'overviewMetric("Exact runtime tokens"' in app
+    assert 'overviewMetric(t("Observed sessions")' in app
+    assert 'overviewMetric(t("Spend")' in app
     assert '"Claude sessions"' not in app
-    assert 'function renderTelemetryUsage' in app
-    assert 'function renderClaudeTranscriptHistory' in app
+    assert 'function renderUsage' in app
+    assert 'function renderTranscriptHistory' in app
     assert 'Claude transcript history' in app
     assert 'usage.by_model' in app
 

@@ -22,6 +22,8 @@ import time
 
 import yaml
 
+import native_telemetry_receiver
+
 from telemetry_data import (
     build_multi_report as build_multi_telemetry_report,
     build_report as build_telemetry_report,
@@ -36,6 +38,11 @@ _DEFAULT_FEEDBACK = os.path.expanduser(
     "~/.claude/mainframe/claude-code/feedback")
 _DEFAULT_PROJECTS = os.path.expanduser("~/.claude/projects")
 _DEFAULT_USAGE_CACHE = os.path.expanduser("~/.claude/mainframe/usage-cache/usage-cache.json")
+# Written by the observatory's OTLP receiver. A static build reads it so an
+# offline snapshot can still say whether collection was working.
+_DEFAULT_INGEST = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..",
+    "workspace", "runtime", "observatory", "ingest.json")
 
 # Layer columns, left to right, in the grouped graph layout.
 LAYER_ORDER = ["events", "hooks", "agents", "skills", "dev"]
@@ -576,6 +583,7 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
         "agents": agents,
         "hooks": hooks,
         "edges": build_edges(skills, agents, hooks),
+        "ingest": native_telemetry_receiver.read_ingest_health(_DEFAULT_INGEST),
         "dev_state": collect_dev_state(
             db_path, feedback_dir,
             _DEFAULT_CODEX_DB if codex_db_path is None and db_path == _DEFAULT_DB
@@ -596,6 +604,7 @@ def render(manifest, build_stamp, assets_dir=_ASSETS, auto_refresh_ms=0,
     template = _read(os.path.join(assets_dir, "template.html"))
     style = _read(os.path.join(assets_dir, "style.css"))
     app_js = _read(os.path.join(assets_dir, "app.js"))
+    i18n_js = _read(os.path.join(assets_dir, "i18n.js"))
     # `<\/` keeps an accidental "</script>" inside the JSON from closing the tag.
     data = json.dumps(manifest, ensure_ascii=False).replace("</", "<\\/")
     return (template
@@ -607,6 +616,7 @@ def render(manifest, build_stamp, assets_dir=_ASSETS, auto_refresh_ms=0,
             .replace("{{CONTROL_TOKEN}}", json.dumps(control_token))
             .replace("{{STYLE}}", style)
             .replace("{{DATA}}", data)
+            .replace("{{I18N_JS}}", i18n_js)
             .replace("{{APP_JS}}", app_js))
 
 

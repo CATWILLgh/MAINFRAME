@@ -577,3 +577,37 @@ svg.graph.dimmed .gnode.hot text { fill: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* Plain-language notes that sit under a section heading and explain what the
+   numbers below mean. Deliberately quieter than .notice, which flags a state. */
+.explain {
+  margin: 0 0 14px;
+  max-width: 78ch;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+}
+.panel-stack .explain { margin-bottom: 0; }
+
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.breakdown-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+}
+.breakdown-card h3 {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+/* A failure count must read as a failure, not as another neutral figure. */
+.stat.warn b, table.matrix td.num.warn { color: var(--warn); }
+.table-scroll { overflow-x: auto; }
