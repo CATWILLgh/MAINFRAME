@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 import build_hub_page
 import native_telemetry_receiver
+import otlp_ingest_health
 import telemetry_data
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -212,7 +213,7 @@ class ObservatoryApp:
         ingest = self.ingest.snapshot()
         value["ingest"] = {
             "evidence": "observed",
-            "healthy": ingest["batches"] > 0 and ingest["batches_failed"] == 0,
+            "healthy": otlp_ingest_health.is_healthy(ingest),
             **ingest,
         }
         return value

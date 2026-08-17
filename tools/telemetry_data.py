@@ -213,6 +213,46 @@ def iter_events(path, after_id=0, limit=None, adapter_id="claude-code"):
         connection.close()
 
 
+def _empty_token_usage():
+    return {
+        "evidence": "unavailable",
+        "requests": 0,
+        "input_tokens": 0,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_output_tokens": 0,
+        # total_tokens counts only freshly billed input plus output, the way the
+        # vendor consoles report it. all_tokens adds cache reads and writes — the
+        # real volume moved through the model, normally orders of magnitude larger.
+        "total_tokens": 0,
+        "all_tokens": 0,
+        "by_source": [],
+        "by_model": [],
+    }
+
+
+def _empty_cost():
+    return {
+        "evidence": "unavailable",
+        "micro_usd": 0,
+        "reporting_requests": 0,
+        "total_requests": 0,
+        "by_model": [],
+    }
+
+
+def _empty_context_cost():
+    return {
+        "evidence": "estimated",
+        "characters": 0,
+        "estimated_tokens_low": 0,
+        "estimated_tokens_high": 0,
+        "method": "character-range-2-to-6",
+        "causal_overhead": "unproven",
+    }
+
+
 def _empty_report(
     active=False, error="", included_origins=None, adapter_id="claude-code"
 ):
@@ -251,39 +291,10 @@ def _empty_report(
         "agent_lifecycle": [],
         "breakdowns": [],
         "hook_effectiveness": [],
-        "token_usage": {
-            "evidence": "unavailable",
-            "requests": 0,
-            "input_tokens": 0,
-            "cached_input_tokens": 0,
-            "cache_write_tokens": 0,
-            "output_tokens": 0,
-            "reasoning_output_tokens": 0,
-            # total_tokens counts only freshly billed input plus output, the way
-            # the vendor consoles report it. all_tokens adds cache reads and
-            # writes — the real volume moved through the model, and normally
-            # orders of magnitude larger.
-            "total_tokens": 0,
-            "all_tokens": 0,
-            "by_source": [],
-            "by_model": [],
-        },
-        "cost": {
-            "evidence": "unavailable",
-            "micro_usd": 0,
-            "reporting_requests": 0,
-            "total_requests": 0,
-            "by_model": [],
-        },
+        "token_usage": _empty_token_usage(),
+        "cost": _empty_cost(),
         "latency": {"evidence": "unavailable", **_duration_summary([])},
-        "harness_context_cost": {
-            "evidence": "estimated",
-            "characters": 0,
-            "estimated_tokens_low": 0,
-            "estimated_tokens_high": 0,
-            "method": "character-range-2-to-6",
-            "causal_overhead": "unproven",
-        },
+        "harness_context_cost": _empty_context_cost(),
         "recent_events": [],
         "error": error,
     }

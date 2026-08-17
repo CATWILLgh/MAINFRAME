@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
 import native_telemetry_receiver as receiver  # noqa: E402
+import otlp_ingest_health  # noqa: E402
 import telemetry_data  # noqa: E402
 
 
@@ -208,6 +209,9 @@ def test_ingest_health_separates_a_broken_collector_from_an_idle_one():
 
     stored = receiver.read_ingest_health(directory / "ingest.json")
     assert stored["evidence"] == "observed" and stored["healthy"] is False
+    # An untouched collector is idle, not broken; a restart must not alarm.
+    assert receiver.IngestHealth().snapshot()["batches"] == 0
+    assert otlp_ingest_health.is_healthy({"batches": 0, "batches_failed": 0}) is None
     assert receiver.read_ingest_health(directory / "absent.json") == {
         "evidence": "unknown", "healthy": None,
     }
