@@ -158,6 +158,19 @@ def test_claude_dev_dry_run_is_adapter_scoped():
     assert "claude-code/{telemetry,feedback,model-lab}" in proc.stdout
 
 
+def test_claude_dev_migrates_legacy_feedback_link():
+    home = pathlib.Path(tempfile.mkdtemp())
+    target = home / ".claude" / "skills" / "harness-feedback"
+    target.parent.mkdir(parents=True)
+    target.symlink_to(ROOT / "dev" / "skills" / "harness-feedback")
+
+    installed, _ = _run_installer("--claude", "--dev", home=home)
+
+    assert installed.returncode == 0, installed.stderr
+    assert target.is_dir() and not target.is_symlink()
+    assert (target / "SKILL.md").is_file()
+
+
 def test_claude_dev_telemetry_settings_are_owned_and_reversible():
     installed, home = _run_installer("--claude", "--dev")
     assert installed.returncode == 0, installed.stderr

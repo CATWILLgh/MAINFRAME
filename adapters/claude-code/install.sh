@@ -394,6 +394,7 @@ uninstall_settings() {
 managed_delivery() {
     local action="$1" src_rel="$2" target="$3" state_id="$4"
     local source="$src_rel"
+    local legacy_link_source=""
     if [[ "$source" != /* ]]; then source="${PROJECT_ROOT}/${source}"; fi
     local args=(
         "$action"
@@ -407,6 +408,10 @@ managed_delivery() {
     fi
     if [[ $REPLACE_MODIFIED -eq 1 ]]; then
         args+=(--replace-modified)
+    fi
+    if [[ "$state_id" == "dev-harness-feedback" ]]; then
+        legacy_link_source="${PROJECT_ROOT}/dev/skills/harness-feedback"
+        args+=(--legacy-link-source "$legacy_link_source")
     fi
     if [[ -t 0 && -t 1 ]]; then
         args+=(--interactive)

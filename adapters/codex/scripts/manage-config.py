@@ -28,6 +28,7 @@ END = "# <<< MAINFRAME CODEX PERMISSIONS <<<"
 FEATURE_START = "# >>> MAINFRAME CODEX NETWORK PROXY >>>"
 FEATURE_END = "# <<< MAINFRAME CODEX NETWORK PROXY <<<"
 TOP_KEYS = {"approval_policy", "approvals_reviewer", "default_permissions", "sandbox_mode"}
+MUTABLE_MODEL_KEYS = {"model", "model_reasoning_effort"}
 TABLE_RE = re.compile(r"^\s*(\[+[^]]+\]+)\s*(?:#.*)?$")
 ASSIGN_RE = re.compile(r"^\s*([A-Za-z0-9_.-]+)\s*=")
 
@@ -232,11 +233,41 @@ def read_state(path: Path) -> dict | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def verify_managed(text: str, state: dict) -> tuple[str, str]:
+def extract_mutable_model_preferences(text: str) -> tuple[str, str]:
+    kept: list[str] = []
+    preferences: list[str] = []
+    for line in text.splitlines(keepends=True):
+        match = ASSIGN_RE.match(line)
+        if match and match.group(1) in MUTABLE_MODEL_KEYS:
+            preferences.append(line)
+        else:
+            kept.append(line)
+    return "".join(kept), "".join(preferences)
+
+
+def insert_mutable_model_preferences(block: str, preferences: str) -> str:
+    if not preferences:
+        return block
+    lines = block.splitlines(keepends=True)
+    index = next(
+        (index for index, line in enumerate(lines) if table_name(line)),
+        len(lines) - 2,
+    )
+    lines.insert(index, preferences)
+    return "".join(lines)
+
+
+def verify_managed(text: str, state: dict) -> tuple[str, str, str]:
     current, remainder = split_managed(text)
-    if current is None or state.get("managed_sha") != sha(current):
+    if current is None:
         raise ValueError("the MAINFRAME permissions block changed after installation")
-    return current, remainder
+    owned, preferences = extract_mutable_model_preferences(current)
+    normalized = re.sub(r"\n{3,}", "\n\n", owned) if preferences else owned
+    if state.get("managed_sha") == sha(normalized):
+        owned = normalized
+    elif state.get("managed_sha") != sha(owned):
+        raise ValueError("the MAINFRAME permissions block changed after installation")
+    return owned, preferences, remainder
 
 
 def verify_feature_managed(text: str, state: dict) -> tuple[str, str]:
@@ -269,7 +300,7 @@ def install(config: Path, source: Path, repo_root: Path, state_path: Path,
     current = config.read_text(encoding="utf-8") if config.exists() else ""
     state = read_state(state_path)
     if state:
-        current_block, remainder = verify_managed(current, state)
+        current_block, preferences, remainder = verify_managed(current, state)
         feature_migrated = False
         if "feature_managed_sha" in state:
             current_feature, _ = verify_feature_managed(remainder, state)
@@ -284,7 +315,7 @@ def install(config: Path, source: Path, repo_root: Path, state_path: Path,
             state["feature_managed_sha"] = sha(feature_block())
             feature_migrated = True
         expected = managed_block(fragment)
-        candidate = expected + remainder
+        candidate = insert_mutable_model_preferences(expected, preferences) + remainder
         parse_config(candidate)
         if current_block == expected and not feature_migrated:
             return "permissions already installed" if not dry_run else "would keep existing permissions block"
@@ -302,8 +333,11 @@ def install(config: Path, source: Path, repo_root: Path, state_path: Path,
     if has_profile_collision(data):
         raise ValueError("an unmanaged permissions.mainframe profile already exists")
     cleaned, removed = remove_legacy(current)
+    cleaned, preferences = extract_mutable_model_preferences(cleaned)
     cleaned, feature_table_created = insert_in_table(cleaned, "[features]", feature_block())
-    candidate = managed_block(fragment) + cleaned.lstrip("\n")
+    candidate = insert_mutable_model_preferences(
+        managed_block(fragment), preferences
+    ) + cleaned.lstrip("\n")
     parse_config(candidate)
     if dry_run:
         return "would back up and merge the MAINFRAME permissions block"
@@ -332,7 +366,7 @@ def uninstall(config: Path, source: Path, repo_root: Path, state_path: Path, dry
         raise ValueError("the managed Codex config is missing")
     _ = source, repo_root
     current = config.read_text(encoding="utf-8")
-    _, remainder = verify_managed(current, state)
+    _, preferences, remainder = verify_managed(current, state)
     _, remainder = verify_feature_managed(remainder, state)
     if state.get("feature_table_created"):
         remainder = remove_empty_created_features_table(remainder)
@@ -351,7 +385,7 @@ def uninstall(config: Path, source: Path, repo_root: Path, state_path: Path, dry
         raise ValueError("features.network_proxy now conflicts with user configuration")
     if "sandbox_workspace_write" in data and any(i["kind"] == "table" for i in state["removed"]):
         raise ValueError("sandbox_workspace_write now conflicts with user configuration")
-    restored = restore_legacy(remainder, state["removed"])
+    restored = preferences + restore_legacy(remainder, state["removed"])
     parse_config(restored)
     if dry_run:
         return "would remove MAINFRAME permissions and restore displaced settings"

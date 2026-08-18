@@ -178,8 +178,11 @@ def _move_to_backup(target: Path, backup_root: Path) -> Path:
 def _legacy_owned_link(target: Path, source: Path, legacy_link_source: str = "") -> bool:
     if not target.is_symlink():
         return False
-    expected = Path(legacy_link_source).resolve(strict=False) if legacy_link_source else source
-    return target.resolve(strict=False) == expected.resolve(strict=False)
+    actual = target.resolve(strict=False)
+    return actual == source.resolve(strict=False) or (
+        bool(legacy_link_source)
+        and actual == Path(legacy_link_source).resolve(strict=False)
+    )
 
 
 def _legacy_owned_target(source: Path, target: Path, args: argparse.Namespace) -> bool:
@@ -189,7 +192,8 @@ def _legacy_owned_target(source: Path, target: Path, args: argparse.Namespace) -
         bool(args.legacy_managed_digest)
         and target.is_file()
         and not target.is_symlink()
-        and artifact_digest(target) == args.legacy_managed_digest
+        and args.legacy_managed_digest
+        in {artifact_digest(target), hashlib.sha256(target.read_bytes()).hexdigest()}
     )
 
 

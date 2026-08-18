@@ -908,6 +908,31 @@ def test_existing_config_is_merged_and_uninstall_restores_only_displaced_setting
     assert backups[0].exists()
 
 
+def test_model_choices_inside_managed_permissions_are_preserved():
+    installed, home = _run("--codex", "--dev")
+    assert installed.returncode == 0, installed.stderr
+    config = home / ".codex" / "config.toml"
+    text = config.read_text(encoding="utf-8").replace(
+        "\n[otel]\n",
+        '\nmodel = "gpt-5.6-luna"\nmodel_reasoning_effort = "medium"\n\n[otel]\n',
+        1,
+    )
+    config.write_text(text, encoding="utf-8")
+
+    reinstalled, _ = _run("--codex", "--dev", home=home)
+    assert reinstalled.returncode == 0, reinstalled.stderr
+    data = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert data["model"] == "gpt-5.6-luna"
+    assert data["model_reasoning_effort"] == "medium"
+
+    removed, _ = _run("--codex", "--uninstall", home=home)
+    assert removed.returncode == 0, removed.stderr
+    assert tomllib.loads(config.read_text(encoding="utf-8")) == {
+        "model": "gpt-5.6-luna",
+        "model_reasoning_effort": "medium",
+    }
+
+
 def test_existing_install_migrates_to_owned_network_proxy_setting():
     installed, home = _run("--codex")
     assert installed.returncode == 0, installed.stderr

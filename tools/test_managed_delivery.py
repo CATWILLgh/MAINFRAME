@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 
@@ -188,6 +189,29 @@ def test_legacy_managed_copy_migrates_without_treating_it_as_user_content(tmp_pa
         backups,
         "--legacy-managed-digest",
         digest_proc.stdout.strip(),
+    )
+    assert installed.returncode == 0, installed.stderr
+    assert target.read_text(encoding="utf-8") == "new managed\n"
+    assert not backups.exists()
+
+
+def test_legacy_plain_sha256_migrates_without_confirmation(tmp_path):
+    source = tmp_path / "source.txt"
+    target = tmp_path / "target.txt"
+    state = tmp_path / "state.json"
+    backups = tmp_path / "backups"
+    source.write_text("new managed\n", encoding="utf-8")
+    target.write_text("old managed\n", encoding="utf-8")
+    legacy_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+
+    installed = _run(
+        "install",
+        source,
+        target,
+        state,
+        backups,
+        "--legacy-managed-digest",
+        legacy_digest,
     )
     assert installed.returncode == 0, installed.stderr
     assert target.read_text(encoding="utf-8") == "new managed\n"
