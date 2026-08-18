@@ -223,6 +223,20 @@ test("engineer workspace creates only new in-scope text files", async () => {
   await assert.rejects(workspace.createFile("../escape.ts", "no\n"), /outside the project/);
 });
 
+test("engineer workspace can read safe context outside the write scope but cannot edit it", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-read-scope-"));
+  await writeFile(path.join(root, "context.md"), "architecture context\n");
+  const workspace = await EngineerWorkspace.create(root, parseEngineerBlockManifest(block({
+    scope: { include: ["src/**"], exclude: [] },
+  })));
+  const observed = await workspace.observe("context.md");
+  assert.equal(observed.content, "architecture context\n");
+  await assert.rejects(
+    workspace.edit("context.md", observed.version, [{ oldText: "architecture", newText: "changed" }]),
+    /outside the block scope/,
+  );
+});
+
 test("check runner executes only the exact manifest command and captures pass or failure", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-check-"));
   await execFileAsync("git", ["init", "-q", root]);

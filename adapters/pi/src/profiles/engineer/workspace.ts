@@ -54,20 +54,22 @@ export class EngineerWorkspace {
     return new EngineerWorkspace(await resolveProjectRoot(projectRoot), manifest);
   }
 
-  private relative(requestedPath: string): string {
+  private relative(requestedPath: string, requireWriteScope: boolean): string {
     if (!requestedPath || path.isAbsolute(requestedPath)) throw new Error("File path must be project-relative");
     const candidate = path.resolve(this.projectRoot, requestedPath);
     if (!isInside(this.projectRoot, candidate)) throw new Error("File path is outside the project");
     const relative = normalizeRelative(path.relative(this.projectRoot, candidate));
     if (!relative || isModelExcludedRelativePath(relative)) throw new Error(`File path is excluded: ${relative || "."}`);
-    const included = this.manifest.scope.include.some((pattern) => path.matchesGlob(relative, normalizeRelative(pattern)));
-    const excluded = this.manifest.scope.exclude.some((pattern) => path.matchesGlob(relative, normalizeRelative(pattern)));
-    if (!included || excluded) throw new Error(`File path is outside the block scope: ${relative}`);
+    if (requireWriteScope) {
+      const included = this.manifest.scope.include.some((pattern) => path.matchesGlob(relative, normalizeRelative(pattern)));
+      const excluded = this.manifest.scope.exclude.some((pattern) => path.matchesGlob(relative, normalizeRelative(pattern)));
+      if (!included || excluded) throw new Error(`File path is outside the block scope: ${relative}`);
+    }
     return relative;
   }
 
-  private async existingFile(requestedPath: string): Promise<{ relative: string; absolute: string }> {
-    const relative = this.relative(requestedPath);
+  private async existingFile(requestedPath: string, requireWriteScope: boolean): Promise<{ relative: string; absolute: string }> {
+    const relative = this.relative(requestedPath, requireWriteScope);
     const candidate = path.join(this.projectRoot, relative);
     if ((await lstat(candidate)).isSymbolicLink()) throw new Error(`Symbolic-link files are not writable: ${relative}`);
     const absolute = await realpath(candidate);
@@ -78,7 +80,7 @@ export class EngineerWorkspace {
   }
 
   async observe(requestedPath: string): Promise<EngineerObservedFile> {
-    const { relative, absolute } = await this.existingFile(requestedPath);
+    const { relative, absolute } = await this.existingFile(requestedPath, false);
     const raw = await readFile(absolute);
     const content = requireText(raw, relative);
     const observedVersion = version(raw);
@@ -87,7 +89,7 @@ export class EngineerWorkspace {
   }
 
   async edit(requestedPath: string, observedVersion: string, edits: EngineerExactEdit[]): Promise<EngineerObservedFile> {
-    const { relative, absolute } = await this.existingFile(requestedPath);
+    const { relative, absolute } = await this.existingFile(requestedPath, true);
     return withFileMutationQueue(absolute, async () => {
       const recorded = this.observations.get(relative);
       if (!recorded || recorded !== observedVersion) throw new Error(`Re-read before editing ${relative}`);
@@ -124,7 +126,7 @@ export class EngineerWorkspace {
   }
 
   async createFile(requestedPath: string, content: string): Promise<EngineerObservedFile> {
-    const relative = this.relative(requestedPath);
+    const relative = this.relative(requestedPath, true);
     const absolute = path.join(this.projectRoot, relative);
     return withFileMutationQueue(absolute, async () => {
       try {
