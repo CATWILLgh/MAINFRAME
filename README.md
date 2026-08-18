@@ -119,15 +119,17 @@ external `--input-file`; file options may be repeated. Ordinary agent
 conversation is never treated as the requirements package. Claude
 Code and Codex expose the same result through their native MAINFRAME skills.
 
-The Pi engineer pilot is invoked from one Git worktree with an explicit block
-manifest and architect-selected session mode:
+The Pi engineer pilot is invoked from one Git worktree with a short block
+request and architect-selected session mode. MAINFRAME fills the block ID,
+current Git `HEAD`, acceptance/check IDs, and internal manifest fields:
 
 ```bash
-mainframe-pi engineer --mode new --manifest .agents/runtime/pi/requests/block-001.json
+mainframe-pi engineer --mode new --request .agents/runtime/pi/requests/block-001.json
 ```
 
-`resume` continues that same worktree's active block. Another worktree receives
-another Pi session by construction.
+`mainframe-pi engineer --mode resume` continues that worktree's recorded active
+block without repeating the request. Another worktree receives another Pi
+session by construction.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 

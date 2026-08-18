@@ -174,7 +174,7 @@ export function parseEngineerBlockManifest(value: unknown): EngineerBlockManifes
       include: stringArray(scope.include, "scope.include", false),
       exclude: stringArray(scope.exclude, "scope.exclude"),
     },
-    invariants: stringArray(root.invariants, "invariants", false),
+    invariants: stringArray(root.invariants, "invariants"),
     acceptance,
     forbiddenFutureStages: stringArray(root.forbiddenFutureStages, "forbiddenFutureStages"),
     allowedChecks,

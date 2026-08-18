@@ -13,8 +13,12 @@ import {
   parseEngineerVerifierVerdict,
 } from "../src/profiles/engineer/contracts.js";
 import { runEngineerCheck } from "../src/profiles/engineer/check-runner.js";
-import { acquireEngineerWriterLock, inspectEngineerGit } from "../src/profiles/engineer/preflight.js";
-import { recordActiveEngineerBlock, validateEngineerSessionIntent } from "../src/profiles/engineer/session-state.js";
+import { acquireEngineerWriterLock, inspectEngineerGit, inspectEngineerGitState } from "../src/profiles/engineer/preflight.js";
+import {
+  loadActiveEngineerManifest,
+  recordActiveEngineerBlock,
+  validateEngineerSessionIntent,
+} from "../src/profiles/engineer/session-state.js";
 import { EngineerWorkspace } from "../src/profiles/engineer/workspace.js";
 import { validateVerdictAgainstRunEvidence } from "../src/profiles/engineer/verifier-runner.js";
 
@@ -150,6 +154,8 @@ test("Git preflight binds the run to exact HEAD and records dirty paths", async 
   const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
   await writeFile(path.join(root, "tracked.txt"), "changed\n");
   await writeFile(path.join(root, "untracked.txt"), "new\n");
+  const rawFacts = await inspectEngineerGitState(root);
+  assert.equal(rawFacts.startingHead, head);
   const manifest = parseEngineerBlockManifest(block({ expectedHead: head }));
   const facts = await inspectEngineerGit(root, manifest);
   assert.equal(facts.startingHead, head);
@@ -319,6 +325,9 @@ test("resume is bound to the same manifest and worktree while new starts explici
   const facts = await inspectEngineerGit(root, fresh);
   assert.deepEqual(await validateEngineerSessionIntent(facts, fresh), []);
   await recordActiveEngineerBlock(facts, fresh);
+  const active = await loadActiveEngineerManifest(facts);
+  assert.equal(active.blockId, fresh.blockId);
+  assert.equal(active.sessionMode, "resume");
   assert.deepEqual(
     await validateEngineerSessionIntent(facts, parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "resume" }))),
     [],

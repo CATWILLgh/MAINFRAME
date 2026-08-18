@@ -133,7 +133,7 @@ def test_launcher_rejects_project_override_and_missing_initiative():
     assert "requires an explicit --statement, --entry, or --input-file" in missing_source.stderr
 
 
-def test_launcher_binds_engineer_mode_and_manifest_to_current_worktree():
+def _engineer_launcher_fixture():
     root = pathlib.Path(tempfile.mkdtemp())
     project = root / "project"
     project.mkdir()
@@ -154,8 +154,13 @@ def test_launcher_binds_engineer_mode_and_manifest_to_current_worktree():
         MAINFRAME_PI_CONFIG=str(config),
         CAPTURED=str(captured),
     )
+    return project, config, captured, env
+
+
+def test_launcher_compiles_new_request_for_current_worktree():
+    project, config, captured, env = _engineer_launcher_fixture()
     proc = subprocess.run(
-        [str(LAUNCHER), "engineer", "--mode", "new", "--manifest", ".agents/runtime/pi/requests/block.json"],
+        [str(LAUNCHER), "engineer", "--mode", "new", "--request", ".agents/runtime/pi/requests/block.json"],
         cwd=project,
         capture_output=True,
         text=True,
@@ -171,11 +176,37 @@ def test_launcher_binds_engineer_mode_and_manifest_to_current_worktree():
         "--profile", "engineer-pilot",
         "--project", canonical_project,
         "--mode", "new",
-        "--manifest", ".agents/runtime/pi/requests/block.json",
+        "--request", ".agents/runtime/pi/requests/block.json",
     ]
 
+
+def test_launcher_resumes_active_worktree_without_repeating_request():
+    project, config, captured, env = _engineer_launcher_fixture()
+    canonical_project = os.path.realpath(project)
+    resume = subprocess.run(
+        [str(LAUNCHER), "engineer", "--mode", "resume", "--feedback", ".agents/runtime/pi/requests/feedback.json"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert resume.returncode == 0, resume.stderr
+    data = json.loads(captured.read_text(encoding="utf-8"))
+    assert data["args"] == [
+        str(ADAPTER / "src" / "engineer-pilot.ts"),
+        "--config", str(config),
+        "--profile", "engineer-pilot",
+        "--project", canonical_project,
+        "--mode", "resume",
+        "--feedback", ".agents/runtime/pi/requests/feedback.json",
+    ]
+
+
+def test_launcher_rejects_invalid_engineer_mode_combinations():
+    project, _, _, env = _engineer_launcher_fixture()
+
     bad_mode = subprocess.run(
-        [str(LAUNCHER), "engineer", "--mode", "auto", "--manifest", "block.json"],
+        [str(LAUNCHER), "engineer", "--mode", "auto", "--request", "block.json"],
         cwd=project,
         capture_output=True,
         text=True,
@@ -185,7 +216,7 @@ def test_launcher_binds_engineer_mode_and_manifest_to_current_worktree():
     assert "requires --mode new or --mode resume" in bad_mode.stderr
 
     feedback_on_new = subprocess.run(
-        [str(LAUNCHER), "engineer", "--mode", "new", "--manifest", "block.json", "--feedback", "feedback.json"],
+        [str(LAUNCHER), "engineer", "--mode", "new", "--request", "block.json", "--feedback", "feedback.json"],
         cwd=project,
         capture_output=True,
         text=True,
@@ -193,6 +224,22 @@ def test_launcher_binds_engineer_mode_and_manifest_to_current_worktree():
     )
     assert feedback_on_new.returncode == 2
     assert "--feedback requires --mode resume" in feedback_on_new.stderr
+
+    missing_request = subprocess.run(
+        [str(LAUNCHER), "engineer", "--mode", "new"], cwd=project, capture_output=True, text=True, env=env
+    )
+    assert missing_request.returncode == 2
+    assert "requires --request" in missing_request.stderr
+
+    request_on_resume = subprocess.run(
+        [str(LAUNCHER), "engineer", "--mode", "resume", "--request", "block.json"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert request_on_resume.returncode == 2
+    assert "does not accept --request" in request_on_resume.stderr
 
 
 def test_adapter_skills_expose_one_bounded_primary_invocation():

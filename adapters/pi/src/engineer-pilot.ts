@@ -7,9 +7,12 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { loadEngineerProfile } from "./config.js";
 import { isInside, resolveProjectRoot } from "./paths.js";
 import { verifyPiCli } from "./preflight.js";
+import { compileEngineerBlockManifest, parseEngineerBlockRequest } from "./profiles/engineer/block-request.js";
 import { parseEngineerBlockManifest, parseEngineerCorrectionPacket } from "./profiles/engineer/contracts.js";
+import { inspectEngineerGitState } from "./profiles/engineer/preflight.js";
 import { resolveModel } from "./profiles/business-analyst/runtime.js";
 import { runEngineerPipeline } from "./profiles/engineer/runtime.js";
+import { loadActiveEngineerManifest } from "./profiles/engineer/session-state.js";
 
 const ADAPTER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,15 +34,20 @@ async function main(): Promise<void> {
   const projectRoot = await resolveProjectRoot(argument("--project") ?? process.cwd());
   const mode = argument("--mode");
   if (mode !== "new" && mode !== "resume") throw new Error("--mode must be exactly new or resume");
-  const manifestArgument = argument("--manifest");
-  if (!manifestArgument) throw new Error("--manifest is required");
-  const manifestPath = await realpath(path.resolve(projectRoot, manifestArgument));
-  if (!isInside(projectRoot, manifestPath)) throw new Error("Engineer manifest must be inside the current project");
-  const raw = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
-  if (raw.sessionMode !== undefined && raw.sessionMode !== mode) {
-    throw new Error("Manifest sessionMode conflicts with the explicit --mode argument");
+  const requestArgument = argument("--request");
+  if (mode === "new" && !requestArgument) throw new Error("--request is required with --mode new");
+  if (mode === "resume" && requestArgument) throw new Error("--request is not accepted with --mode resume");
+  const gitFacts = await inspectEngineerGitState(projectRoot);
+  let manifest;
+  if (mode === "new") {
+    const requestPath = await realpath(path.resolve(projectRoot, requestArgument!));
+    if (!isInside(projectRoot, requestPath)) throw new Error("Engineer block request must be inside the current project");
+    const request = parseEngineerBlockRequest(JSON.parse(await readFile(requestPath, "utf8")));
+    manifest = compileEngineerBlockManifest(request, gitFacts.startingHead, mode);
+  } else {
+    const active = await loadActiveEngineerManifest(gitFacts);
+    manifest = parseEngineerBlockManifest({ ...active, sessionMode: mode });
   }
-  const manifest = parseEngineerBlockManifest({ ...raw, sessionMode: mode });
   const feedbackArgument = argument("--feedback");
   let initialCorrection;
   if (feedbackArgument) {

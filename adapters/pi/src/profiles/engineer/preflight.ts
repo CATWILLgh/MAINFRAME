@@ -53,15 +53,20 @@ export async function inspectEngineerGit(
   projectRoot: string,
   manifest: EngineerBlockManifest,
 ): Promise<EngineerGitFacts> {
+  const facts = await inspectEngineerGitState(projectRoot);
+  if (facts.startingHead.toLowerCase() !== manifest.expectedHead.toLowerCase()) {
+    throw new Error(`Git HEAD changed before the run: expected ${manifest.expectedHead}, found ${facts.startingHead}`);
+  }
+  return facts;
+}
+
+export async function inspectEngineerGitState(projectRoot: string): Promise<EngineerGitFacts> {
   const root = await resolveProjectRoot(projectRoot);
   const topLevel = await realpath((await git(root, ["rev-parse", "--show-toplevel"])).trim());
   if (topLevel !== root) {
     throw new Error(`Pi engineer must run from the Git worktree root: ${topLevel}`);
   }
   const startingHead = (await git(root, ["rev-parse", "HEAD"])).trim();
-  if (startingHead.toLowerCase() !== manifest.expectedHead.toLowerCase()) {
-    throw new Error(`Git HEAD changed before the run: expected ${manifest.expectedHead}, found ${startingHead}`);
-  }
   const gitDirectoryRaw = (await git(root, ["rev-parse", "--absolute-git-dir"])).trim();
   const gitDirectory = await realpath(gitDirectoryRaw);
   const worktreeId = createHash("sha256").update(`${root}\0${gitDirectory}`).digest("hex").slice(0, 20);

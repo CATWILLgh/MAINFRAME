@@ -55,27 +55,53 @@ Then run it from the project being analyzed:
 mainframe-pi business-analysis --initiative order-handoff --entry docs/requirements.md
 ```
 
-The engineer pilot accepts one architect-authored JSON block manifest. The
-architect explicitly selects whether the worktree session starts a new block
-or resumes the active one:
+The engineer pilot accepts one short architect-authored JSON block request.
+MAINFRAME compiles the internal manifest by adding the block ID, current Git
+`HEAD`, session mode, acceptance IDs, check IDs, and permanent runtime safety
+boundaries. A typical request is:
+
+```json
+{
+  "schemaVersion": 1,
+  "goal": "Implement the agreed order calculation block.",
+  "writePaths": ["src/orders/**", "test/orders/**"],
+  "excludePaths": ["src/orders/generated/**"],
+  "invariants": ["Keep the public API unchanged."],
+  "acceptance": [
+    "The agreed calculation is implemented.",
+    "The focused regression test passes."
+  ],
+  "forbiddenFutureStages": ["Do not start persistence or UI work."],
+  "checks": [
+    { "argv": ["npm", "test", "--", "orders"], "timeoutMs": 60000 }
+  ]
+}
+```
+
+`writePaths` should normally contain a few directory globs rather than a file
+inventory. Permanent exclusions for Git internals, MAINFRAME runtime state,
+credentials, dependencies, generated output, and inherited agent instructions
+remain harness policy and are not repeated in every request. The architect
+explicitly selects whether the worktree session starts a new block or resumes
+the active one:
 
 ```sh
-mainframe-pi engineer --mode new --manifest .agents/runtime/pi/requests/block-001.json
-mainframe-pi engineer --mode resume --manifest .agents/runtime/pi/requests/block-001.json
+mainframe-pi engineer --mode new --request .agents/runtime/pi/requests/block-001.json
+mainframe-pi engineer --mode resume
 ```
 
 When the external architect rejects an internally green block, it can return a
 closed correction packet to the same session:
 
 ```sh
-mainframe-pi engineer --mode resume --manifest .agents/runtime/pi/requests/block-001.json \
+mainframe-pi engineer --mode resume \
   --feedback .agents/runtime/pi/requests/block-001-feedback.json
 ```
 
 Each Git worktree has one persistent writable Pi session. `new` compacts that
 session before the block; `resume` preserves its current context and relies on
 native measured context pressure. The executor can read the safe project but
-write only manifest-owned clean paths. It cannot use shell, network, secrets,
+write only request-scoped clean paths. It cannot use shell, network, secrets,
 Git mutation, dependency installation, or another worktree. After exact
 manifest-approved checks, a fresh read-only model verifies every acceptance
 item and either returns `ready-for-architect-review` or a bounded correction to
