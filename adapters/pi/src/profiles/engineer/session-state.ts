@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { isInside } from "../../paths.js";
 import { parseEngineerBlockManifest, type EngineerBlockManifest } from "./contracts.js";
@@ -11,8 +13,11 @@ interface ActiveEngineerBlock {
   worktreeId: string;
   manifest: EngineerBlockManifest;
   ownedPaths: Array<{ path: string; sha256: string }>;
+  reviewReady: boolean;
   recordedAt: string;
 }
+
+const execFileAsync = promisify(execFile);
 
 export function engineerRuntimeDirectory(facts: EngineerGitFacts): string {
   return path.join(facts.projectRoot, ".agents/runtime/pi/engineer", facts.worktreeId);
@@ -38,8 +43,9 @@ async function readActiveEngineerBlock(facts: EngineerGitFacts): Promise<ActiveE
     throw new Error("Cannot resume: the recorded Pi engineer block is malformed");
   }
   const candidate = raw as Record<string, unknown>;
-  const expectedFields = ["schemaVersion", "worktreeId", "manifest", "ownedPaths", "recordedAt"];
-  if (Object.keys(candidate).some((key) => !expectedFields.includes(key)) || expectedFields.some((key) => !(key in candidate))) {
+  const expectedFields = ["schemaVersion", "worktreeId", "manifest", "ownedPaths", "reviewReady", "recordedAt"];
+  const requiredFields = expectedFields.filter((field) => field !== "reviewReady");
+  if (Object.keys(candidate).some((key) => !expectedFields.includes(key)) || requiredFields.some((key) => !(key in candidate))) {
     throw new Error("Cannot resume: the recorded Pi engineer block has unsupported or missing fields");
   }
   if (candidate.schemaVersion !== 1 || candidate.worktreeId !== facts.worktreeId) {
@@ -74,6 +80,9 @@ async function readActiveEngineerBlock(facts: EngineerGitFacts): Promise<ActiveE
   if (typeof candidate.recordedAt !== "string" || !candidate.recordedAt) {
     throw new Error("Cannot resume: the recorded Pi engineer timestamp is invalid");
   }
+  if (candidate.reviewReady !== undefined && typeof candidate.reviewReady !== "boolean") {
+    throw new Error("Cannot resume: the recorded Pi engineer review state is invalid");
+  }
   const manifest = parseEngineerBlockManifest(candidate.manifest);
   if (manifest.sessionMode !== "resume") {
     throw new Error("Cannot resume: the recorded Pi engineer manifest is not resumable");
@@ -83,6 +92,7 @@ async function readActiveEngineerBlock(facts: EngineerGitFacts): Promise<ActiveE
     worktreeId: facts.worktreeId,
     manifest,
     ownedPaths,
+    reviewReady: candidate.reviewReady === true,
     recordedAt: candidate.recordedAt,
   };
 }
@@ -127,10 +137,79 @@ export async function recordActiveEngineerBlock(
       path: ownedPath,
       sha256: createHash("sha256").update(await readFile(path.join(facts.projectRoot, ownedPath))).digest("hex"),
     }))),
+    reviewReady: false,
     recordedAt: new Date().toISOString(),
   };
   await writeFile(temporary, `${JSON.stringify(active, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   await rename(temporary, statePath);
+}
+
+async function writeActiveEngineerBlock(facts: EngineerGitFacts, active: ActiveEngineerBlock): Promise<void> {
+  const directory = engineerRuntimeDirectory(facts);
+  const temporary = path.join(directory, `active-block.${process.pid}.${Date.now()}.tmp`);
+  await writeFile(temporary, `${JSON.stringify(active, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  await rename(temporary, path.join(directory, "active-block.json"));
+}
+
+async function verifyOwnedHashes(facts: EngineerGitFacts, active: ActiveEngineerBlock): Promise<void> {
+  for (const owned of active.ownedPaths) {
+    const current = createHash("sha256").update(await readFile(path.join(facts.projectRoot, owned.path))).digest("hex");
+    if (current !== owned.sha256) throw new Error(`Pi-owned file changed after verification: ${owned.path}`);
+  }
+}
+
+export async function markEngineerBlockReadyForArchitectReview(facts: EngineerGitFacts): Promise<void> {
+  const active = await readActiveEngineerBlock(facts);
+  if (active.ownedPaths.length === 0) throw new Error("Cannot mark an engineer block ready without owned changes");
+  await verifyOwnedHashes(facts, active);
+  await writeActiveEngineerBlock(facts, { ...active, reviewReady: true, recordedAt: new Date().toISOString() });
+}
+
+function conventionalCommitMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!/^(feat|fix|refactor|perf|test|docs|build|ci|chore)(\([a-z0-9][a-z0-9._/-]*\))?!?: [^\n]+$/.test(trimmed)) {
+    throw new Error("Commit message must use Conventional Commits: type(optional-scope): description");
+  }
+  return trimmed;
+}
+
+export async function commitAcceptedEngineerBlock(facts: EngineerGitFacts, message: string) {
+  const active = await readActiveEngineerBlock(facts);
+  if (!active.reviewReady) throw new Error("Cannot commit: the active block has not reached architect review");
+  if (facts.startingHead.toLowerCase() !== active.manifest.expectedHead.toLowerCase()) {
+    throw new Error(`Cannot commit: Git HEAD changed after the block started (expected ${active.manifest.expectedHead}, found ${facts.startingHead})`);
+  }
+  if (active.ownedPaths.length === 0) throw new Error("Cannot commit: the active block owns no changed paths");
+  await verifyOwnedHashes(facts, active);
+  const commitMessage = conventionalCommitMessage(message);
+  const ownedPaths = active.ownedPaths.map(({ path: ownedPath }) => ownedPath);
+  const directory = engineerRuntimeDirectory(facts);
+  await mkdir(path.join(directory, "commits"), { recursive: true, mode: 0o700 });
+  const temporaryIndex = path.join(directory, `commit-index.${process.pid}.${Date.now()}`);
+  const gitEnvironment = { ...process.env, GIT_INDEX_FILE: temporaryIndex };
+  try {
+    await execFileAsync("git", ["-C", facts.projectRoot, "read-tree", "HEAD"], { env: gitEnvironment });
+    await execFileAsync("git", ["-C", facts.projectRoot, "add", "--", ...ownedPaths], { env: gitEnvironment });
+    const staged = (await execFileAsync("git", ["-C", facts.projectRoot, "diff", "--cached", "--name-only", "-z", "HEAD"], { env: gitEnvironment, encoding: "utf8" })).stdout.split("\0").filter(Boolean).sort();
+    if (JSON.stringify(staged) !== JSON.stringify([...ownedPaths].sort())) throw new Error(`Cannot commit: isolated index paths differ from Pi ownership (${JSON.stringify(staged)})`);
+    const headBeforeCommit = (await execFileAsync("git", ["-C", facts.projectRoot, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+    if (headBeforeCommit.toLowerCase() !== active.manifest.expectedHead.toLowerCase()) {
+      throw new Error(`Cannot commit: Git HEAD changed while preparing the isolated commit (found ${headBeforeCommit})`);
+    }
+    await execFileAsync("git", ["-C", facts.projectRoot, "commit", "-m", commitMessage], { env: gitEnvironment, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
+  } finally {
+    await rm(temporaryIndex, { force: true });
+  }
+  const commit = (await execFileAsync("git", ["-C", facts.projectRoot, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+  const parent = (await execFileAsync("git", ["-C", facts.projectRoot, "rev-parse", `${commit}^`], { encoding: "utf8" })).stdout.trim();
+  if (parent.toLowerCase() !== active.manifest.expectedHead.toLowerCase()) throw new Error("Committed block does not descend from its expected HEAD");
+  const committedPaths = (await execFileAsync("git", ["-C", facts.projectRoot, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", commit], { encoding: "utf8" })).stdout.split("\0").filter(Boolean).sort();
+  if (JSON.stringify(committedPaths) !== JSON.stringify([...ownedPaths].sort())) throw new Error(`Committed paths differ from Pi ownership: ${JSON.stringify(committedPaths)}`);
+  await execFileAsync("git", ["-C", facts.projectRoot, "add", "--", ...ownedPaths]);
+  const receipt = { schemaVersion: 1 as const, blockId: active.manifest.blockId, commit, message: commitMessage, paths: [...ownedPaths].sort() };
+  await writeFile(path.join(directory, "commits", `${active.manifest.blockId}-${commit.slice(0, 12)}.json`), `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  await rm(path.join(directory, "active-block.json"));
+  return receipt;
 }
 
 export function newBlockCompactionInstructions(manifest: EngineerBlockManifest): string {

@@ -107,6 +107,20 @@ manifest-approved checks, a fresh read-only model verifies every acceptance
 item and either returns `ready-for-architect-review` or a bounded correction to
 the same executor session.
 
+`ready-for-architect-review` does not create a commit. After the primary agent
+accepts the block, it closes that block through the harness:
+
+```sh
+mainframe-pi engineer commit --message "feat(orders): implement agreed calculation"
+```
+
+The harness commits only Pi-owned paths through an isolated temporary index,
+preserves unrelated staged and dirty work, writes a local receipt, and removes
+the active block. Pi never receives a Git tool. Push, branch and worktree
+changes, history rewriting, stash, restore, reset, merge, and rebase remain
+outside this command. Manifest checks cannot invoke Git or an inline shell;
+read-only Git inspection is performed only by the harness.
+
 The launcher always binds `--project` to its current working directory and
 rejects an override. Claude Code and Codex therefore share one execution
 contract without copying this adapter into their own delivery layers.

@@ -132,6 +132,16 @@ function uniqueIds(items: Array<{ id: string }>, owner: string): void {
   if (new Set(items.map(({ id }) => id)).size !== items.length) throw new Error(`${owner} ids must be unique`);
 }
 
+export function validateEngineerCheckArgv(argv: string[], owner: string): void {
+  const executable = argv[0]!.split(/[\\/]/).at(-1)!.toLowerCase();
+  if (executable === "git" || executable === "git.exe") {
+    throw new Error(`${owner} cannot invoke Git; Git state belongs to the harness`);
+  }
+  if (["sh", "bash", "zsh", "dash", "fish"].includes(executable) && argv.some((part) => part === "-c" || part === "-lc")) {
+    throw new Error(`${owner} cannot use an inline shell; provide the exact executable and arguments`);
+  }
+}
+
 export function parseEngineerBlockManifest(value: unknown): EngineerBlockManifest {
   const root = object(value, "Engineer block manifest");
   exactKeys(root, [
@@ -158,6 +168,7 @@ export function parseEngineerBlockManifest(value: unknown): EngineerBlockManifes
   const allowedChecks = objectArray(root.allowedChecks, "allowedChecks").map((item, index) => {
     exactKeys(item, ["id", "argv", "timeoutMs"], `allowedChecks[${index}]`);
     const argv = stringArray(item.argv, `allowedChecks[${index}].argv`, false);
+    validateEngineerCheckArgv(argv, `allowedChecks[${index}].argv`);
     if (typeof item.timeoutMs !== "number" || !Number.isInteger(item.timeoutMs) || item.timeoutMs < 1_000 || item.timeoutMs > 3_600_000) {
       throw new Error(`allowedChecks[${index}].timeoutMs must be an integer from 1000 to 3600000`);
     }

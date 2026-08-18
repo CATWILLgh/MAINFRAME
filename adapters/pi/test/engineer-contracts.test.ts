@@ -14,11 +14,7 @@ import {
 } from "../src/profiles/engineer/contracts.js";
 import { runEngineerCheck } from "../src/profiles/engineer/check-runner.js";
 import { acquireEngineerWriterLock, inspectEngineerGit, inspectEngineerGitState } from "../src/profiles/engineer/preflight.js";
-import {
-  loadActiveEngineerManifest,
-  recordActiveEngineerBlock,
-  validateEngineerSessionIntent,
-} from "../src/profiles/engineer/session-state.js";
+import { loadActiveEngineerManifest, recordActiveEngineerBlock, validateEngineerSessionIntent } from "../src/profiles/engineer/session-state.js";
 import { EngineerWorkspace } from "../src/profiles/engineer/workspace.js";
 import { validateVerdictAgainstRunEvidence } from "../src/profiles/engineer/verifier-runner.js";
 
@@ -61,6 +57,9 @@ test("block manifest requires full Git id, unique acceptance, and argv checks", 
     allowedChecks: [{ id: "CHECK", command: "npm test", timeoutMs: 60_000 }],
   })), /unsupported field 'command'/);
   assert.throws(() => parseEngineerBlockManifest(block({ blockId: "../../escape" })), /safe identifier/);
+  assert.throws(() => parseEngineerBlockManifest(block({
+    allowedChecks: [{ id: "CHECK", argv: ["/usr/bin/git", "status"], timeoutMs: 60_000 }],
+  })), /cannot invoke Git/);
 });
 
 test("candidate completion must cover every acceptance item with evidence", () => {

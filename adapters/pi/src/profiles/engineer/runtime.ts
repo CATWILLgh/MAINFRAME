@@ -17,6 +17,7 @@ import type {
 } from "./contracts.js";
 import { EngineerExecutor } from "./executor-runner.js";
 import { runEngineerVerifier } from "./verifier-runner.js";
+import { markEngineerBlockReadyForArchitectReview } from "./session-state.js";
 
 export interface EngineerPipelineOptions {
   projectRoot: string;
@@ -106,6 +107,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
       verdict = verification.verdict;
       addUsage(verifierUsage, verification.usage);
       if (verdict.status === "ready-for-architect-review") {
+        await markEngineerBlockReadyForArchitectReview(executor.facts);
         const executorUsage = executor.usage();
         addUsage(totalUsage, executorUsage);
         addUsage(totalUsage, verifierUsage);

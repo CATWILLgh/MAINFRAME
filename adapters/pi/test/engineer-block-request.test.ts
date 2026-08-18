@@ -63,6 +63,20 @@ test("short block request rejects ambiguous or expanding fields", () => {
     acceptance: ["Done"],
     checks: "npm test",
   }), /checks must be an array/);
+  assert.throws(() => parseEngineerBlockRequest({
+    schemaVersion: 1,
+    goal: "Implement",
+    writePaths: ["src/**"],
+    acceptance: ["Done"],
+    checks: [{ argv: ["git", "reset", "--hard"] }],
+  }), /cannot invoke Git/);
+  assert.throws(() => parseEngineerBlockRequest({
+    schemaVersion: 1,
+    goal: "Implement",
+    writePaths: ["src/**"],
+    acceptance: ["Done"],
+    checks: [{ argv: ["bash", "-lc", "git status"] }],
+  }), /cannot use an inline shell/);
 });
 
 test("resume rejects a runtime-owned path that leaves the project", async () => {

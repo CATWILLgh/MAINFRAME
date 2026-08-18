@@ -21,6 +21,7 @@ Usage:
   mainframe-pi business-analysis --initiative <slug> (--statement <text> | --entry <project-path> | --input-file <path>)... [--fresh-session]
   mainframe-pi engineer --mode new --request <project-path> [--timeout-ms <ms>] [--verifier-timeout-ms <ms>] [--max-turns <n>]
   mainframe-pi engineer --mode resume [--feedback <project-path>] [--timeout-ms <ms>] [--verifier-timeout-ms <ms>] [--max-turns <n>]
+  mainframe-pi engineer commit --message "type(optional-scope): description"
   mainframe-pi models
   mainframe-pi --help
 
@@ -47,6 +48,11 @@ case "${1:-}" in
         shift
         [[ -x "$RUNNER" ]] || fail "Pi adapter dependencies are missing. Run MAINFRAME install.sh --pi."
         [[ -f "$PROFILE_CONFIG" ]] || fail "Pi profile routing is missing: $PROFILE_CONFIG"
+        if [[ "${1:-}" == "commit" ]]; then
+            shift
+            [[ "${1:-}" == "--message" && -n "${2:-}" && $# -eq 2 ]] || fail 'engineer commit requires --message "type(optional-scope): description"'
+            exec "$RUNNER" "${ADAPTER_ROOT}/src/engineer-commit.ts" --project "$PWD" --message "$2"
+        fi
         mode=""
         request=""
         feedback=""

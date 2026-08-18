@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   parseEngineerBlockManifest,
+  validateEngineerCheckArgv,
   type EngineerBlockManifest,
   type EngineerSessionMode,
 } from "./contracts.js";
@@ -60,7 +61,9 @@ export function parseEngineerBlockRequest(value: unknown): EngineerBlockRequest 
     if (typeof timeoutMs !== "number" || !Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 3_600_000) {
       throw new Error(`checks[${index}].timeoutMs must be an integer from 1000 to 3600000`);
     }
-    return { argv: texts(check.argv, `checks[${index}].argv`, true), timeoutMs };
+    const argv = texts(check.argv, `checks[${index}].argv`, true);
+    validateEngineerCheckArgv(argv, `checks[${index}].argv`);
+    return { argv, timeoutMs };
   });
   return {
     schemaVersion: 1,

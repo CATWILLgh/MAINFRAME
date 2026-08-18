@@ -202,6 +202,24 @@ def test_launcher_resumes_active_worktree_without_repeating_request():
     ]
 
 
+def test_launcher_routes_harness_owned_engineer_commit():
+    project, _, captured, env = _engineer_launcher_fixture()
+    proc = subprocess.run(
+        [str(LAUNCHER), "engineer", "commit", "--message", "feat(test): close block"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    data = json.loads(captured.read_text(encoding="utf-8"))
+    assert data["args"] == [
+        str(ADAPTER / "src" / "engineer-commit.ts"),
+        "--project", os.path.realpath(project),
+        "--message", "feat(test): close block",
+    ]
+
+
 def test_launcher_rejects_invalid_engineer_mode_combinations():
     project, _, _, env = _engineer_launcher_fixture()
 
