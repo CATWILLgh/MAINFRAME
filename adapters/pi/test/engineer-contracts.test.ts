@@ -317,9 +317,12 @@ test("resume is bound to the same manifest and worktree while new starts explici
   const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
   const fresh = parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "new" }));
   const facts = await inspectEngineerGit(root, fresh);
-  await validateEngineerSessionIntent(facts, fresh);
+  assert.deepEqual(await validateEngineerSessionIntent(facts, fresh), []);
   await recordActiveEngineerBlock(facts, fresh);
-  await validateEngineerSessionIntent(facts, parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "resume" })));
+  assert.deepEqual(
+    await validateEngineerSessionIntent(facts, parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "resume" }))),
+    [],
+  );
   await assert.rejects(
     validateEngineerSessionIntent(facts, parseEngineerBlockManifest(block({
       expectedHead: head,
@@ -328,6 +331,25 @@ test("resume is bound to the same manifest and worktree while new starts explici
     }))),
     /manifest differs/,
   );
+});
+
+test("resume permits unchanged Pi-owned files and rejects external changes to them", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-owned-"));
+  await execFileAsync("git", ["init", "-q", root]);
+  await execFileAsync("git", ["-C", root, "config", "user.name", "MAINFRAME Test"]);
+  await execFileAsync("git", ["-C", root, "config", "user.email", "mainframe-test@example.invalid"]);
+  await writeFile(path.join(root, "source.ts"), "initial\n");
+  await execFileAsync("git", ["-C", root, "add", "source.ts"]);
+  await execFileAsync("git", ["-C", root, "commit", "-qm", "test: initial"]);
+  const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+  const fresh = parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "new" }));
+  const facts = await inspectEngineerGit(root, fresh);
+  await writeFile(path.join(root, "source.ts"), "pi change\n");
+  await recordActiveEngineerBlock(facts, fresh, ["source.ts"]);
+  const resume = parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "resume" }));
+  assert.deepEqual(await validateEngineerSessionIntent(facts, resume), ["source.ts"]);
+  await writeFile(path.join(root, "source.ts"), "external change\n");
+  await assert.rejects(validateEngineerSessionIntent(facts, resume), /changed outside the recorded session/);
 });
 
 test("independent ready verdict is rejected when a deterministic check failed", () => {

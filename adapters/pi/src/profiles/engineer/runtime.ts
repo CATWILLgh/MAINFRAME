@@ -12,6 +12,7 @@ import type {
   EngineerBlockManifest,
   EngineerCheckResult,
   EngineerCompletionManifest,
+  EngineerCorrectionPacket,
   EngineerVerifierVerdict,
 } from "./contracts.js";
 import { EngineerExecutor } from "./executor-runner.js";
@@ -28,6 +29,7 @@ export interface EngineerPipelineOptions {
   executorTimeoutMs?: number;
   verifierTimeoutMs?: number;
   maxTurns?: number;
+  initialCorrection?: EngineerCorrectionPacket;
 }
 
 export interface EngineerPipelineResult {
@@ -82,7 +84,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
       ...(options.executorTimeoutMs === undefined ? {} : { timeoutMs: options.executorTimeoutMs }),
       ...(options.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }),
     });
-    let correction;
+    let correction = options.initialCorrection;
     while (true) {
       rounds += 1;
       const executorRound = correction

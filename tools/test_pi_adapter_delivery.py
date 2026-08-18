@@ -184,6 +184,16 @@ def test_launcher_binds_engineer_mode_and_manifest_to_current_worktree():
     assert bad_mode.returncode == 2
     assert "requires --mode new or --mode resume" in bad_mode.stderr
 
+    feedback_on_new = subprocess.run(
+        [str(LAUNCHER), "engineer", "--mode", "new", "--manifest", "block.json", "--feedback", "feedback.json"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert feedback_on_new.returncode == 2
+    assert "--feedback requires --mode resume" in feedback_on_new.stderr
+
 
 def test_adapter_skills_expose_one_bounded_primary_invocation():
     claude = ROOT / "adapters" / "claude-code" / "plugin" / "skills" / "pi-business-analysis" / "SKILL.md"

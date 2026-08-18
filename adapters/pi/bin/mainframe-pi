@@ -19,7 +19,7 @@ MAINFRAME Pi
 
 Usage:
   mainframe-pi business-analysis --initiative <slug> (--statement <text> | --entry <project-path> | --input-file <path>)... [--fresh-session]
-  mainframe-pi engineer --mode <new|resume> --manifest <project-path> [--timeout-ms <ms>] [--verifier-timeout-ms <ms>] [--max-turns <n>]
+  mainframe-pi engineer --mode <new|resume> --manifest <project-path> [--feedback <project-path>] [--timeout-ms <ms>] [--verifier-timeout-ms <ms>] [--max-turns <n>]
   mainframe-pi models
   mainframe-pi --help
 
@@ -48,17 +48,20 @@ case "${1:-}" in
         [[ -f "$PROFILE_CONFIG" ]] || fail "Pi profile routing is missing: $PROFILE_CONFIG"
         mode=""
         manifest=""
+        feedback=""
         expect_value=""
         for argument in "$@"; do
             if [[ -n "$expect_value" ]]; then
                 [[ "$expect_value" == "mode" ]] && mode="$argument"
                 [[ "$expect_value" == "manifest" ]] && manifest="$argument"
+                [[ "$expect_value" == "feedback" ]] && feedback="$argument"
                 expect_value=""
                 continue
             fi
             case "$argument" in
                 --mode) expect_value="mode" ;;
                 --manifest) expect_value="manifest" ;;
+                --feedback) expect_value="feedback" ;;
                 --timeout-ms|--verifier-timeout-ms|--max-turns) expect_value="value" ;;
                 --project|--config|--profile) fail "$argument is owned by the installed MAINFRAME Pi launcher" ;;
                 --*) fail "Unknown engineer option: $argument" ;;
@@ -68,6 +71,7 @@ case "${1:-}" in
         [[ -z "$expect_value" ]] || fail "An option is missing its value"
         [[ "$mode" == "new" || "$mode" == "resume" ]] || fail "engineer requires --mode new or --mode resume"
         [[ -n "$manifest" ]] || fail "engineer requires --manifest <project-path>"
+        [[ -z "$feedback" || "$mode" == "resume" ]] || fail "engineer --feedback requires --mode resume"
         exec "$RUNNER" "${ADAPTER_ROOT}/src/engineer-pilot.ts" \
             --config "$PROFILE_CONFIG" \
             --profile engineer-pilot \

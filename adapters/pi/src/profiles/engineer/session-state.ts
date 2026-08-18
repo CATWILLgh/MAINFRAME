@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -8,6 +9,7 @@ interface ActiveEngineerBlock {
   schemaVersion: 1;
   worktreeId: string;
   manifest: EngineerBlockManifest;
+  ownedPaths: Array<{ path: string; sha256: string }>;
   recordedAt: string;
 }
 
@@ -26,8 +28,8 @@ function comparableManifest(manifest: EngineerBlockManifest): string {
 export async function validateEngineerSessionIntent(
   facts: EngineerGitFacts,
   manifest: EngineerBlockManifest,
-): Promise<void> {
-  if (manifest.sessionMode === "new") return;
+): Promise<string[]> {
+  if (manifest.sessionMode === "new") return [];
   const statePath = path.join(engineerRuntimeDirectory(facts), "active-block.json");
   let active: ActiveEngineerBlock;
   try {
@@ -41,11 +43,23 @@ export async function validateEngineerSessionIntent(
   if (comparableManifest(active.manifest) !== comparableManifest(manifest)) {
     throw new Error("Cannot resume: the supplied block manifest differs from the active Pi engineer block; use sessionMode new for a new block");
   }
+  if (!Array.isArray(active.ownedPaths)) {
+    throw new Error("Cannot resume: the recorded Pi engineer block predates file-ownership tracking; restart it with sessionMode new");
+  }
+  for (const owned of active.ownedPaths) {
+    const content = await readFile(path.join(facts.projectRoot, owned.path));
+    const current = createHash("sha256").update(content).digest("hex");
+    if (current !== owned.sha256) {
+      throw new Error(`Cannot resume: a previously Pi-owned file changed outside the recorded session: ${owned.path}`);
+    }
+  }
+  return active.ownedPaths.map(({ path: ownedPath }) => ownedPath);
 }
 
 export async function recordActiveEngineerBlock(
   facts: EngineerGitFacts,
   manifest: EngineerBlockManifest,
+  ownedPaths: string[] = [],
 ): Promise<void> {
   const directory = engineerRuntimeDirectory(facts);
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -55,6 +69,10 @@ export async function recordActiveEngineerBlock(
     schemaVersion: 1,
     worktreeId: facts.worktreeId,
     manifest: { ...manifest, sessionMode: "resume" },
+    ownedPaths: await Promise.all([...new Set(ownedPaths)].sort().map(async (ownedPath) => ({
+      path: ownedPath,
+      sha256: createHash("sha256").update(await readFile(path.join(facts.projectRoot, ownedPath))).digest("hex"),
+    }))),
     recordedAt: new Date().toISOString(),
   };
   await writeFile(temporary, `${JSON.stringify(active, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });

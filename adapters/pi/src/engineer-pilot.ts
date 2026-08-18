@@ -7,7 +7,7 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { loadEngineerProfile } from "./config.js";
 import { isInside, resolveProjectRoot } from "./paths.js";
 import { verifyPiCli } from "./preflight.js";
-import { parseEngineerBlockManifest } from "./profiles/engineer/contracts.js";
+import { parseEngineerBlockManifest, parseEngineerCorrectionPacket } from "./profiles/engineer/contracts.js";
 import { resolveModel } from "./profiles/business-analyst/runtime.js";
 import { runEngineerPipeline } from "./profiles/engineer/runtime.js";
 
@@ -40,6 +40,14 @@ async function main(): Promise<void> {
     throw new Error("Manifest sessionMode conflicts with the explicit --mode argument");
   }
   const manifest = parseEngineerBlockManifest({ ...raw, sessionMode: mode });
+  const feedbackArgument = argument("--feedback");
+  let initialCorrection;
+  if (feedbackArgument) {
+    if (mode !== "resume") throw new Error("--feedback is valid only with --mode resume");
+    const feedbackPath = await realpath(path.resolve(projectRoot, feedbackArgument));
+    if (!isInside(projectRoot, feedbackPath)) throw new Error("Engineer feedback must be inside the current project");
+    initialCorrection = parseEngineerCorrectionPacket(JSON.parse(await readFile(feedbackPath, "utf8")), manifest);
+  }
   const configPath = path.resolve(argument("--config") ?? path.join(ADAPTER_ROOT, "config", "profiles.local.json"));
   const profile = await loadEngineerProfile(configPath, argument("--profile") ?? "engineer-pilot");
   const modelRuntime = await ModelRuntime.create({ signal: AbortSignal.timeout(15_000) });
@@ -61,6 +69,7 @@ async function main(): Promise<void> {
     ...(timeoutMs === undefined ? {} : { executorTimeoutMs: timeoutMs }),
     ...(verifierTimeoutMs === undefined ? {} : { verifierTimeoutMs }),
     ...(maxTurns === undefined ? {} : { maxTurns }),
+    ...(initialCorrection === undefined ? {} : { initialCorrection }),
   });
   console.log(JSON.stringify(result, null, 2));
   if (result.status !== "ready-for-architect-review") process.exitCode = 1;

@@ -328,18 +328,7 @@ export function parseEngineerVerifierVerdict(
   }
   let correctionPacket: EngineerCorrectionPacket | undefined;
   if (hasCorrection) {
-    const packet = object(root.correctionPacket, "correctionPacket");
-    exactKeys(packet, ["instructions", "missingEvidence", "failedCheckIds"], "correctionPacket");
-    const knownChecks = new Set(manifest.allowedChecks.map(({ id }) => id));
-    const failedCheckIds = stringArray(packet.failedCheckIds, "correctionPacket.failedCheckIds");
-    for (const id of failedCheckIds) {
-      if (!knownChecks.has(id)) throw new Error(`correctionPacket references unknown check '${id}'`);
-    }
-    correctionPacket = {
-      instructions: stringArray(packet.instructions, "correctionPacket.instructions", false),
-      missingEvidence: stringArray(packet.missingEvidence, "correctionPacket.missingEvidence"),
-      failedCheckIds,
-    };
+    correctionPacket = parseEngineerCorrectionPacket(root.correctionPacket, manifest);
   }
   return {
     schemaVersion: 1,
@@ -347,5 +336,23 @@ export function parseEngineerVerifierVerdict(
     status: root.status as EngineerVerifierVerdict["status"],
     items,
     ...(correctionPacket ? { correctionPacket } : {}),
+  };
+}
+
+export function parseEngineerCorrectionPacket(
+  value: unknown,
+  manifest: EngineerBlockManifest,
+): EngineerCorrectionPacket {
+  const packet = object(value, "correctionPacket");
+  exactKeys(packet, ["instructions", "missingEvidence", "failedCheckIds"], "correctionPacket");
+  const knownChecks = new Set(manifest.allowedChecks.map(({ id }) => id));
+  const failedCheckIds = stringArray(packet.failedCheckIds, "correctionPacket.failedCheckIds");
+  for (const id of failedCheckIds) {
+    if (!knownChecks.has(id)) throw new Error(`correctionPacket references unknown check '${id}'`);
+  }
+  return {
+    instructions: stringArray(packet.instructions, "correctionPacket.instructions", false),
+    missingEvidence: stringArray(packet.missingEvidence, "correctionPacket.missingEvidence"),
+    failedCheckIds,
   };
 }

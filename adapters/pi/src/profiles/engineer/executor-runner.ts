@@ -70,11 +70,13 @@ export class EngineerExecutor {
 
   static async create(options: EngineerExecutorOptions): Promise<EngineerExecutor> {
     const facts = await inspectEngineerGit(options.projectRoot, options.manifest);
-    await validateEngineerSessionIntent(facts, options.manifest);
+    const resumedOwnedPaths = await validateEngineerSessionIntent(facts, options.manifest);
     const writerLock = await acquireEngineerWriterLock(facts, options.manifest.blockId);
     let session: AgentSession | undefined;
     try {
-      const workspace = await EngineerWorkspace.create(facts.projectRoot, options.manifest, facts.initialDirtyPaths);
+      const resumedOwned = new Set(resumedOwnedPaths);
+      const protectedPaths = facts.initialDirtyPaths.filter((dirtyPath) => !resumedOwned.has(dirtyPath));
+      const workspace = await EngineerWorkspace.create(facts.projectRoot, options.manifest, protectedPaths);
       const toolSet = createEngineerTools(facts.projectRoot, options.manifest, workspace);
       const settings = SettingsManager.inMemory({
         compaction: { enabled: true },
@@ -158,6 +160,7 @@ export class EngineerExecutor {
     }
     const completion = this.toolSet.completion();
     if (!completion) throw new Error("Pi engineer ended without a valid completion manifest");
+    await recordActiveEngineerBlock(this.facts, this.manifest, completion.changedPaths);
     return { completion, usage: collectUsage(this.session) };
   }
 

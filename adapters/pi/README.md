@@ -64,6 +64,14 @@ mainframe-pi engineer --mode new --manifest .agents/runtime/pi/requests/block-00
 mainframe-pi engineer --mode resume --manifest .agents/runtime/pi/requests/block-001.json
 ```
 
+When the external architect rejects an internally green block, it can return a
+closed correction packet to the same session:
+
+```sh
+mainframe-pi engineer --mode resume --manifest .agents/runtime/pi/requests/block-001.json \
+  --feedback .agents/runtime/pi/requests/block-001-feedback.json
+```
+
 Each Git worktree has one persistent writable Pi session. `new` compacts that
 session before the block; `resume` preserves its current context and relies on
 native measured context pressure. The executor can read the safe project but
