@@ -33,6 +33,7 @@ AGENTS = ADAPTER / "agents"
 SHARED_CREDENTIALS = ROOT / "shared" / "credentials"
 ADAPTER_INSTALLER = ADAPTER / "install.sh"
 SETTINGS_MANAGER = ADAPTER / "settings-manager.py"
+MANAGED_DELIVERY = ROOT / "shared" / "managed-delivery" / "manage-artifact.py"
 MIN_CLAUDE_VERSION = re.search(
     r'^MIN_CLAUDE_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$',
     ADAPTER_INSTALLER.read_text(encoding="utf-8"),
@@ -114,6 +115,43 @@ def test_root_dispatches_claude_dry_run():
     assert "claude code adapter" in proc.stdout.lower()
 
 
+def test_reinstall_removes_unchanged_retired_managed_artifact():
+    home = pathlib.Path(tempfile.mkdtemp())
+    source = home / "retired-style.md"
+    target = home / ".claude" / "output-styles" / "retired-style.md"
+    state = (
+        home
+        / ".claude"
+        / ".mainframe-managed-artifacts"
+        / "output-style-retired-style.md.json"
+    )
+    source.write_text("retired\n", encoding="utf-8")
+    seeded = subprocess.run(
+        [
+            sys.executable,
+            str(MANAGED_DELIVERY),
+            "install",
+            "--source",
+            str(source),
+            "--target",
+            str(target),
+            "--state",
+            str(state),
+            "--backup-root",
+            str(home / "backups"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert seeded.returncode == 0, seeded.stderr
+    source.unlink()
+
+    installed, _ = _run_installer("--claude", home=home)
+    assert installed.returncode == 0, installed.stderr
+    assert not target.exists()
+    assert not state.exists()
+
+
 def test_claude_dev_dry_run_is_adapter_scoped():
     proc, _ = _run_installer("--claude", "--dev", "--dry-run")
     assert proc.returncode == 0, proc.stderr
@@ -148,7 +186,9 @@ def test_plain_reinstall_disables_owned_dev_links():
     data_link = claude_dir / "mainframe"
     feedback_link = claude_dir / "skills" / "harness-feedback"
     data_link.symlink_to(ROOT / "workspace" / "runtime")
-    feedback_link.symlink_to(ROOT / "dev" / "skills" / "harness-feedback")
+    feedback_link.symlink_to(
+        ROOT / "adapters" / "claude-code" / "dev" / "skills" / "harness-feedback"
+    )
 
     reinstalled, _ = _run_installer("--claude", home=home)
     assert reinstalled.returncode == 0, reinstalled.stderr
@@ -197,12 +237,15 @@ def test_claude_uninstall_preserves_shared_secrets():
     assert installed.returncode == 0, installed.stderr
     helper = home / ".local" / "bin" / "secret"
     assert helper.is_symlink()
-    assert (home / ".claude" / "CLAUDE.md").is_symlink()
+    assert (home / ".claude" / "CLAUDE.md").is_file()
+    assert not (home / ".claude" / "CLAUDE.md").is_symlink()
     index_link = home / ".claude" / "credentials-index.md"
     assert index_link.is_symlink()
     assert index_link.resolve() == SHARED_CREDENTIALS / "credentials-index.md"
-    assert (home / ".claude" / "skills" / "mainframe").is_symlink()
-    assert (home / ".claude" / "agents" / "mainframe").is_symlink()
+    assert (home / ".claude" / "skills" / "mainframe").is_dir()
+    assert not (home / ".claude" / "skills" / "mainframe").is_symlink()
+    assert (home / ".claude" / "agents" / "mainframe").is_dir()
+    assert not (home / ".claude" / "agents" / "mainframe").is_symlink()
     settings = home / ".claude" / "settings.json"
     settings_state = home / ".claude" / ".mainframe-settings-state.json"
     assert settings.is_file() and not settings.is_symlink()
@@ -238,9 +281,12 @@ def test_installed_uninstall_fails_closed_without_python():
     )
     assert removed.returncode != 0
     assert "working python3 is required" in removed.stderr
-    assert (home / ".claude" / "CLAUDE.md").is_symlink()
-    assert (home / ".claude" / "skills" / "mainframe").is_symlink()
-    assert (home / ".claude" / "agents" / "mainframe").is_symlink()
+    assert (home / ".claude" / "CLAUDE.md").is_file()
+    assert not (home / ".claude" / "CLAUDE.md").is_symlink()
+    assert (home / ".claude" / "skills" / "mainframe").is_dir()
+    assert not (home / ".claude" / "skills" / "mainframe").is_symlink()
+    assert (home / ".claude" / "agents" / "mainframe").is_dir()
+    assert not (home / ".claude" / "agents" / "mainframe").is_symlink()
 
 
 def test_settings_migrate_legacy_link_to_regular_user_file():

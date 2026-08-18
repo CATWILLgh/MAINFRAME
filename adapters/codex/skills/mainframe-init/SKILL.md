@@ -67,6 +67,12 @@ Work directly when delegation would cost more than it saves. Use a matching spec
 
 Prefer the native Codex background and parallel execution model when it preserves the primary conversation. Verify returned evidence instead of accepting a specialist conclusion on authority.
 
+Only when the user explicitly hands over a requirement statement or named
+requirement documents for digital business-analysis review, use
+`mainframe-pi-business-analysis`. Never construct its input from ordinary task
+discussion. Keep its result as evidence for this primary
+task; Pi never owns user communication or product decisions.
+
 ## Memory
 
 Use Codex memory for durable facts a future task will need: user preferences, project constraints, decisions and their reasons, and hard-won gotchas. Do not use memory as the only source for behavior that may have changed. Never store secrets, temporary task progress, transient debugging output, or guesses. Having nothing worth retaining is normal.

@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""Contract tests for the installed MAINFRAME Pi execution adapter."""
+
+import json
+import os
+import pathlib
+import stat
+import subprocess
+import tempfile
+
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+INSTALLER = ROOT / "install.sh"
+ADAPTER = ROOT / "adapters" / "pi"
+LAUNCHER = ADAPTER / "bin" / "mainframe-pi"
+
+
+def _fake_runtime(home: pathlib.Path) -> tuple[dict[str, str], pathlib.Path]:
+    fake_bin = home / "fake-bin"
+    fake_bin.mkdir(parents=True)
+    pi = fake_bin / "pi"
+    pi.write_text("#!/bin/sh\necho 'pi 0.84.2'\n", encoding="utf-8")
+    pi.chmod(pi.stat().st_mode | stat.S_IXUSR)
+    env = dict(os.environ, HOME=str(home), PATH=f"{fake_bin}:{os.environ['PATH']}")
+    return env, fake_bin
+
+
+def test_root_help_exposes_pi_without_installing_it():
+    home = pathlib.Path(tempfile.mkdtemp())
+    proc = subprocess.run(
+        ["bash", str(INSTALLER)], capture_output=True, text=True, env=dict(os.environ, HOME=str(home))
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "--pi" in proc.stdout
+    assert not (home / ".local" / "bin" / "mainframe-pi").exists()
+
+
+def test_pi_dry_run_is_adapter_only_and_does_not_install_shared_secrets():
+    home = pathlib.Path(tempfile.mkdtemp())
+    env, _ = _fake_runtime(home)
+    proc = subprocess.run(
+        ["bash", str(INSTALLER), "--pi", "--dry-run"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Pi adapter preflight passed" in proc.stdout
+    assert "mainframe-pi" in proc.stdout
+    assert "shared secrets" not in proc.stdout
+    assert not (home / ".local" / "bin" / "mainframe-pi").exists()
+    assert not (home / ".config" / "credentials").exists()
+
+
+def test_launcher_binds_business_analysis_to_current_project():
+    root = pathlib.Path(tempfile.mkdtemp())
+    project = root / "project"
+    project.mkdir()
+    config = root / "profiles.json"
+    config.write_text("{}\n", encoding="utf-8")
+    captured = root / "arguments.json"
+    runner = root / "runner"
+    runner.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "json.dump({'cwd': os.getcwd(), 'args': sys.argv[1:]}, open(os.environ['CAPTURED'], 'w'))\n",
+        encoding="utf-8",
+    )
+    runner.chmod(runner.stat().st_mode | stat.S_IXUSR)
+    env = dict(
+        os.environ,
+        MAINFRAME_PI_RUNNER=str(runner),
+        MAINFRAME_PI_CONFIG=str(config),
+        CAPTURED=str(captured),
+    )
+    proc = subprocess.run(
+        [str(LAUNCHER), "business-analysis", "--initiative", "order-handoff", "--entry", "docs/requirements.md"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    data = json.loads(captured.read_text(encoding="utf-8"))
+    canonical_project = os.path.realpath(project)
+    assert data["cwd"] == canonical_project
+    assert data["args"] == [
+        str(ADAPTER / "src" / "pilot.ts"),
+        "--config",
+        str(config),
+        "--profile",
+        "business-analysis",
+        "--project",
+        canonical_project,
+        "--initiative",
+        "order-handoff",
+        "--entry",
+        "docs/requirements.md",
+    ]
+
+
+def test_launcher_rejects_project_override_and_missing_initiative():
+    root = pathlib.Path(tempfile.mkdtemp())
+    config = root / "profiles.json"
+    config.write_text("{}\n", encoding="utf-8")
+    runner = root / "runner"
+    runner.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    runner.chmod(runner.stat().st_mode | stat.S_IXUSR)
+    env = dict(os.environ, MAINFRAME_PI_RUNNER=str(runner), MAINFRAME_PI_CONFIG=str(config))
+
+    override = subprocess.run(
+        [str(LAUNCHER), "business-analysis", "--initiative", "x", "--project", "/tmp"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert override.returncode == 2
+    assert "owned by the installed MAINFRAME Pi launcher" in override.stderr
+
+    missing = subprocess.run(
+        [str(LAUNCHER), "business-analysis"], capture_output=True, text=True, env=env
+    )
+    assert missing.returncode == 2
+    assert "requires --initiative" in missing.stderr
+
+    missing_source = subprocess.run(
+        [str(LAUNCHER), "business-analysis", "--initiative", "x"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert missing_source.returncode == 2
+    assert "requires an explicit --statement, --entry, or --input-file" in missing_source.stderr
+
+
+def test_adapter_skills_expose_one_bounded_primary_invocation():
+    claude = ROOT / "adapters" / "claude-code" / "plugin" / "skills" / "pi-business-analysis" / "SKILL.md"
+    codex = ROOT / "adapters" / "codex" / "skills" / "mainframe-pi-business-analysis"
+    claude_body = claude.read_text(encoding="utf-8")
+    codex_body = (codex / "SKILL.md").read_text(encoding="utf-8")
+    metadata = (codex / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    for body in (claude_body, codex_body):
+        assert "mainframe-pi business-analysis" in body
+        assert "current project as the analysis boundary" in body
+        assert "Pi never owns user communication or product decisions" not in body
+        assert "Keep ownership of user communication and product decisions" in body
+        assert "second fresh run" in body
+        assert "infer the package from ordinary" in body.replace("\n", " ")
+    assert "allow_implicit_invocation: true" in metadata
+    assert "mainframe-pi-business-analysis" in (ROOT / "adapters" / "codex" / "install.sh").read_text(encoding="utf-8")
+    rules = (ROOT / "adapters" / "codex" / "rules" / "mainframe.rules").read_text(encoding="utf-8")
+    assert 'pattern = ["mainframe-pi", "business-analysis"]' in rules
+    assert 'decision = "prompt"' in rules
+    assert '"mainframe-pi models"' in rules
+
+
+def _run_all():
+    failures = 0
+    tests = [
+        (name, fn)
+        for name, fn in sorted(globals().items())
+        if name.startswith("test_") and callable(fn)
+    ]
+    for name, fn in tests:
+        try:
+            fn()
+            print(f"  ok  {name}")
+        except Exception as exc:
+            failures += 1
+            print(f"FAIL  {name}: {exc!r}")
+    print(f"\n{len(tests) - failures}/{len(tests)} passed")
+    raise SystemExit(1 if failures else 0)
+
+
+if __name__ == "__main__":
+    _run_all()

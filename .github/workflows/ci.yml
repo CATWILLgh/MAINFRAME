@@ -67,7 +67,7 @@ jobs:
         run: python3 tools/validate-claude-md.py adapters/claude-code/export/CLAUDE.md
 
       - name: Pi pilot tests
-        working-directory: pi
+        working-directory: adapters/pi
         run: |
           npm ci --ignore-scripts
           npm run build

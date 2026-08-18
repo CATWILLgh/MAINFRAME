@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+    SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    LINK_TARGET="$(readlink "$SOURCE")"
+    if [[ "$LINK_TARGET" == /* ]]; then SOURCE="$LINK_TARGET"; else SOURCE="${SOURCE_DIR}/${LINK_TARGET}"; fi
+done
+
+ADAPTER_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+RUNNER="${MAINFRAME_PI_RUNNER:-${ADAPTER_ROOT}/node_modules/.bin/tsx}"
+PROFILE_CONFIG="${MAINFRAME_PI_CONFIG:-${ADAPTER_ROOT}/config/profiles.local.json}"
+
+usage() {
+    cat <<'EOF'
+MAINFRAME Pi
+
+Usage:
+  mainframe-pi business-analysis --initiative <slug> (--statement <text> | --entry <project-path> | --input-file <path>)... [--fresh-session]
+  mainframe-pi models
+  mainframe-pi --help
+
+Business analysis always uses the current working directory as the project root.
+The result is written under docs/initiatives/<slug>/reviews/ in that project.
+EOF
+}
+
+fail() { printf 'Error: %s\n' "$1" >&2; exit 2; }
+
+case "${1:-}" in
+    -h|--help|"") usage; exit 0 ;;
+    models)
+        shift
+        [[ $# -eq 0 ]] || fail "models accepts no arguments"
+        [[ -x "$RUNNER" ]] || fail "Pi adapter dependencies are missing. Run MAINFRAME install.sh --pi."
+        [[ -f "$PROFILE_CONFIG" ]] || fail "Pi profile routing is missing: $PROFILE_CONFIG"
+        exec "$RUNNER" "${ADAPTER_ROOT}/src/pilot.ts" --config "$PROFILE_CONFIG" --list-models
+        ;;
+    business-analysis) shift ;;
+    *) fail "Unknown Pi profile command: $1" ;;
+esac
+
+[[ -x "$RUNNER" ]] || fail "Pi adapter dependencies are missing. Run MAINFRAME install.sh --pi."
+[[ -f "$PROFILE_CONFIG" ]] || fail "Pi profile routing is missing: $PROFILE_CONFIG"
+
+initiative=""
+source_count=0
+expect_value=""
+for argument in "$@"; do
+    if [[ -n "$expect_value" ]]; then
+        [[ "$expect_value" == "initiative" ]] && initiative="$argument"
+        [[ "$expect_value" == "source" ]] && source_count=$((source_count + 1))
+        expect_value=""
+        continue
+    fi
+    case "$argument" in
+        --initiative) expect_value="initiative" ;;
+        --statement|--entry|--input-file) expect_value="source" ;;
+        --timeout-ms|--max-turns) expect_value="value" ;;
+        --fresh-session) ;;
+        --project|--config|--profile|--list-models) fail "$argument is owned by the installed MAINFRAME Pi launcher" ;;
+        --*) fail "Unknown business-analysis option: $argument" ;;
+        *) fail "Unexpected positional argument: $argument" ;;
+    esac
+done
+
+[[ -z "$expect_value" ]] || fail "An option is missing its value"
+[[ -n "$initiative" ]] || fail "business-analysis requires --initiative <slug>"
+[[ "$source_count" -gt 0 ]] || fail "business-analysis requires an explicit --statement, --entry, or --input-file"
+
+exec "$RUNNER" "${ADAPTER_ROOT}/src/pilot.ts" \
+    --config "$PROFILE_CONFIG" \
+    --profile business-analysis \
+    --project "$PWD" \
+    "$@"

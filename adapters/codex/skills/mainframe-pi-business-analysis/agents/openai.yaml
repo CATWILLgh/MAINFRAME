@@ -1,0 +1,6 @@
+interface:
+  display_name: "MAINFRAME Pi Business Analysis"
+  short_description: "Review requirements and business-process gaps"
+  default_prompt: "Use $mainframe-pi-business-analysis to review the requirements statement or named document package explicitly supplied for the current project."
+policy:
+  allow_implicit_invocation: true

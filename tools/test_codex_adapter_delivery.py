@@ -17,6 +17,7 @@ ADAPTER = ROOT / "adapters" / "codex"
 SHARED = ROOT / "shared" / "credentials"
 CONFIG_MANAGER = ADAPTER / "scripts" / "manage-config.py"
 CONFIG_SOURCE = ADAPTER / "config" / "mainframe-permissions.toml"
+MANAGED_DELIVERY = ROOT / "shared" / "managed-delivery" / "manage-artifact.py"
 
 
 def _agent_template_data(name, *, home):
@@ -24,16 +25,22 @@ def _agent_template_data(name, *, home):
         encoding="utf-8"
     )
     replacements = {
-        "__MAINFRAME_RESEARCH_METHOD_SKILL__": ADAPTER
-        / "skills"
+        "__MAINFRAME_RESEARCH_METHOD_SKILL__": home
+        / ".codex"
+        / "mainframe"
+        / "private-skills"
         / "mainframe-research-method"
         / "SKILL.md",
-        "__MAINFRAME_DECISION_REVIEW_SKILL__": ADAPTER
-        / "skills"
+        "__MAINFRAME_DECISION_REVIEW_SKILL__": home
+        / ".codex"
+        / "mainframe"
+        / "private-skills"
         / "mainframe-decision-review"
         / "SKILL.md",
-        "__MAINFRAME_READINESS_REVIEW_SKILL__": ADAPTER
-        / "skills"
+        "__MAINFRAME_READINESS_REVIEW_SKILL__": home
+        / ".codex"
+        / "mainframe"
+        / "private-skills"
         / "mainframe-readiness-review"
         / "SKILL.md",
         "__MAINFRAME_PYTHON_BACKEND_SKILL__": home
@@ -152,11 +159,48 @@ def test_root_help_exposes_codex_without_installing_it():
     assert not (home / ".agents").exists()
 
 
+def test_reinstall_removes_unchanged_retired_managed_artifact():
+    home = pathlib.Path(tempfile.mkdtemp())
+    source = home / "retired-skill"
+    source.mkdir()
+    (source / "SKILL.md").write_text("retired\n", encoding="utf-8")
+    target = home / ".agents" / "skills" / "retired-skill"
+    state = home / ".codex" / ".mainframe-managed-artifacts" / "skill-retired.json"
+    seeded = subprocess.run(
+        [
+            sys.executable,
+            str(MANAGED_DELIVERY),
+            "install",
+            "--source",
+            str(source),
+            "--target",
+            str(target),
+            "--state",
+            str(state),
+            "--backup-root",
+            str(home / "backups"),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert seeded.returncode == 0, seeded.stderr
+    for child in source.iterdir():
+        child.unlink()
+    source.rmdir()
+
+    installed, _ = _run("--codex", home=home)
+    assert installed.returncode == 0, installed.stderr
+    assert not target.exists()
+    assert not state.exists()
+
+
 def test_dry_run_reports_direct_cross_surface_delivery():
     proc, home = _run("--codex", "--dry-run")
     assert proc.returncode == 0, proc.stderr
-    assert "regular file" in proc.stdout
+    assert "managed copy" in proc.stdout
     assert "mainframe-init" in proc.stdout
+    assert "mainframe-opencode" in proc.stdout
+    assert "mainframe-pi-business-analysis" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe-ticket" in proc.stdout
     assert "mainframe-tickets-find" in proc.stdout
@@ -232,7 +276,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
 
     codex_dir = home / ".codex"
     agents = codex_dir / "AGENTS.md"
-    state = codex_dir / ".mainframe-agents-state"
+    state = codex_dir / ".mainframe-managed-artifacts" / "global-agents.json"
     index_state = codex_dir / ".mainframe-index-state"
     assert agents.is_file() and not agents.is_symlink()
     assert agents.read_bytes() == (ADAPTER / "export" / "AGENTS.md").read_bytes()
@@ -242,6 +286,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
 
     for name in (
         "mainframe-init",
+        "mainframe-pi-business-analysis",
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-tickets-find",
@@ -255,21 +300,27 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-infrastructure",
         "mainframe-curl-requests",
         "mainframe-ops-app-server-safety",
-    ):
+        ):
         target = home / ".agents" / "skills" / name
-        assert target.is_symlink()
-        assert target.resolve() == ADAPTER / "skills" / name
+        assert target.is_dir() and not target.is_symlink()
+        assert (target / "SKILL.md").read_bytes() == (
+            ADAPTER / "skills" / name / "SKILL.md"
+        ).read_bytes()
 
     index = codex_dir / "credentials-index.md"
     helper = home / ".local" / "bin" / "secret"
+    opencode_launcher = home / ".local" / "bin" / "mainframe-opencode"
+    assert opencode_launcher.is_file() and not opencode_launcher.is_symlink()
+    assert opencode_launcher.read_bytes() == (ADAPTER / "bin" / "mainframe-opencode").read_bytes()
     assert index.is_symlink() and index.resolve() == SHARED / "credentials-index.md"
     assert index_state.is_file()
     rules = codex_dir / "rules" / "mainframe.rules"
-    rules_state = codex_dir / ".mainframe-rules-state"
-    assert rules.is_symlink() and rules.resolve() == ADAPTER / "rules" / "mainframe.rules"
+    rules_state = codex_dir / ".mainframe-managed-artifacts" / "rules.json"
+    assert rules.is_file() and not rules.is_symlink()
+    assert rules.read_bytes() == (ADAPTER / "rules" / "mainframe.rules").read_bytes()
     assert rules_state.is_file()
     researcher = codex_dir / "agents" / "mainframe_researcher.toml"
-    researcher_state = codex_dir / ".mainframe-agent-mainframe_researcher-state"
+    researcher_state = codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_researcher.json"
     assert researcher.is_file() and not researcher.is_symlink()
     assert researcher_state.is_file()
     researcher_data = tomllib.loads(researcher.read_text(encoding="utf-8"))
@@ -284,8 +335,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert researcher_data["skills"]["config"] == [
         {
             "path": str(
-                ADAPTER
-                / "skills"
+                codex_dir
+                / "mainframe"
+                / "private-skills"
                 / "mainframe-research-method"
                 / "SKILL.md"
             ),
@@ -299,7 +351,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         codex_dir / "agents" / "mainframe_typescript_backend_engineer.toml"
     )
     typescript_state = (
-        codex_dir / ".mainframe-agent-mainframe_typescript_backend_engineer-state"
+        codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_typescript_backend_engineer.json"
     )
     assert typescript_engineer.is_file() and not typescript_engineer.is_symlink()
     assert typescript_state.is_file()
@@ -329,7 +381,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         },
     ]
     python_engineer = codex_dir / "agents" / "mainframe_python_backend_engineer.toml"
-    python_state = codex_dir / ".mainframe-agent-mainframe_python_backend_engineer-state"
+    python_state = codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_python_backend_engineer.json"
     assert python_engineer.is_file() and not python_engineer.is_symlink()
     assert python_state.is_file()
     python_data = tomllib.loads(python_engineer.read_text(encoding="utf-8"))
@@ -351,7 +403,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     ]
     frontend_engineer = codex_dir / "agents" / "mainframe_react_frontend_engineer.toml"
     frontend_state = (
-        codex_dir / ".mainframe-agent-mainframe_react_frontend_engineer-state"
+        codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_react_frontend_engineer.json"
     )
     assert frontend_engineer.is_file() and not frontend_engineer.is_symlink()
     assert frontend_state.is_file()
@@ -368,7 +420,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     ]
     test_auditor = codex_dir / "agents" / "mainframe_test_auditor.toml"
     test_auditor_state = (
-        codex_dir / ".mainframe-agent-mainframe_test_auditor-state"
+        codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_test_auditor.json"
     )
     assert test_auditor.is_file() and not test_auditor.is_symlink()
     assert test_auditor_state.is_file()
@@ -400,7 +452,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     ]
     decision_reviewer = codex_dir / "agents" / "mainframe_decision_reviewer.toml"
     decision_reviewer_state = (
-        codex_dir / ".mainframe-agent-mainframe_decision_reviewer-state"
+        codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_decision_reviewer.json"
     )
     assert decision_reviewer.is_file() and not decision_reviewer.is_symlink()
     assert decision_reviewer_state.is_file()
@@ -416,8 +468,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert decision_reviewer_data["skills"]["config"] == [
         {
             "path": str(
-                ADAPTER
-                / "skills"
+                codex_dir
+                / "mainframe"
+                / "private-skills"
                 / "mainframe-decision-review"
                 / "SKILL.md"
             ),
@@ -428,7 +481,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         home / ".agents" / "skills" / "mainframe-decision-review"
     ).exists()
     advisor = codex_dir / "agents" / "mainframe_advisor.toml"
-    advisor_state = codex_dir / ".mainframe-agent-mainframe_advisor-state"
+    advisor_state = codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_advisor.json"
     assert advisor.is_file() and not advisor.is_symlink()
     assert advisor_state.is_file()
     advisor_data = tomllib.loads(advisor.read_text(encoding="utf-8"))
@@ -441,8 +494,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert advisor_data["skills"]["config"] == [
         {
             "path": str(
-                ADAPTER
-                / "skills"
+                codex_dir
+                / "mainframe"
+                / "private-skills"
                 / "mainframe-readiness-review"
                 / "SKILL.md"
             ),
@@ -529,6 +583,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not decision_reviewer_state.exists()
     assert not advisor.exists()
     assert not advisor_state.exists()
+    assert not opencode_launcher.exists() and not opencode_launcher.is_symlink()
     assert not config.exists()
     assert not config_state.exists()
     assert not hooks.exists()
@@ -536,6 +591,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert helper.is_symlink()
     for name in (
         "mainframe-init",
+        "mainframe-pi-business-analysis",
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-tickets-find",
@@ -563,21 +619,25 @@ def test_existing_global_agents_requires_explicit_backed_up_replacement():
 
     refused, _ = _run("--codex", home=home)
     assert refused.returncode != 0
-    assert "unmanaged global AGENTS.md" in refused.stderr
+    assert "pre-existing content" in refused.stderr
     assert target.read_text(encoding="utf-8") == "personal instructions\n"
     assert not (home / ".local" / "bin" / "secret").exists()
 
-    installed, _ = _run("--codex", "--yes", home=home)
+    installed, _ = _run("--codex", "--replace-modified", home=home)
     assert installed.returncode == 0, installed.stderr
     assert target.read_bytes() == (ADAPTER / "export" / "AGENTS.md").read_bytes()
-    backups = list(codex_dir.glob("AGENTS.md.backup-*"))
-    assert len(backups) == 1
-    assert backups[0].read_text(encoding="utf-8") == "personal instructions\n"
+    managed_state = json.loads(
+        (codex_dir / ".mainframe-managed-artifacts" / "global-agents.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    backup = pathlib.Path(managed_state["original_backup"])
+    assert backup.read_text(encoding="utf-8") == "personal instructions\n"
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
     assert target.read_text(encoding="utf-8") == "personal instructions\n"
-    assert not backups[0].exists()
+    assert not backup.exists()
 
 
 def test_changed_managed_agents_is_preserved_on_uninstall():
@@ -588,7 +648,7 @@ def test_changed_managed_agents_is_preserved_on_uninstall():
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode != 0
-    assert "changed after installation" in removed.stderr
+    assert "local changes" in removed.stderr
     assert target.read_text(encoding="utf-8") == "user changed this file\n"
 
 
@@ -624,12 +684,13 @@ def test_existing_mainframe_rules_require_yes_and_are_restored():
 
     refused, _ = _run("--codex", home=home)
     assert refused.returncode != 0
-    assert "MAINFRAME rules file already exists" in refused.stderr
+    assert "pre-existing content" in refused.stderr
     assert target.read_text(encoding="utf-8") == "# user-owned rules\n"
 
-    installed, _ = _run("--codex", "--yes", home=home)
+    installed, _ = _run("--codex", "--replace-modified", home=home)
     assert installed.returncode == 0, installed.stderr
-    assert target.is_symlink() and target.resolve() == ADAPTER / "rules" / "mainframe.rules"
+    assert target.is_file() and not target.is_symlink()
+    assert target.read_bytes() == (ADAPTER / "rules" / "mainframe.rules").read_bytes()
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
@@ -679,7 +740,8 @@ def test_changed_managed_hook_stops_uninstall_before_other_removal():
     assert "changed or is duplicated" in removed.stderr
     assert target.exists()
     assert (home / ".codex" / "AGENTS.md").is_file()
-    assert (home / ".agents" / "skills" / "mainframe-init").is_symlink()
+    assert (home / ".agents" / "skills" / "mainframe-init").is_dir()
+    assert not (home / ".agents" / "skills" / "mainframe-init").is_symlink()
 
 
 def test_existing_mainframe_researcher_requires_yes_and_is_restored():
@@ -696,10 +758,10 @@ def test_existing_mainframe_researcher_requires_yes_and_is_restored():
 
     refused, _ = _run("--codex", home=home)
     assert refused.returncode != 0
-    assert "agent already exists" in refused.stderr
+    assert "pre-existing content" in refused.stderr
     assert 'name = "personal"' in target.read_text(encoding="utf-8")
 
-    installed, _ = _run("--codex", "--yes", home=home)
+    installed, _ = _run("--codex", "--replace-modified", home=home)
     assert installed.returncode == 0, installed.stderr
     assert target.is_file() and not target.is_symlink()
     assert tomllib.loads(target.read_text(encoding="utf-8"))["name"] == (
@@ -725,7 +787,9 @@ def test_legacy_symlinked_researcher_migrates_without_user_backup():
     installed, _ = _run("--codex", home=home)
     assert installed.returncode == 0, installed.stderr
     assert target.is_file() and not target.is_symlink()
-    assert "managed_sha=" in state.read_text(encoding="utf-8")
+    managed_state = codex_dir / ".mainframe-managed-artifacts" / "agent-mainframe_researcher.json"
+    assert managed_state.is_file()
+    assert not state.exists()
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
@@ -747,10 +811,10 @@ def test_existing_decision_reviewer_requires_yes_and_is_restored():
 
     refused, _ = _run("--codex", home=home)
     assert refused.returncode != 0
-    assert "agent already exists" in refused.stderr
+    assert "pre-existing content" in refused.stderr
     assert 'name = "personal_reviewer"' in target.read_text(encoding="utf-8")
 
-    installed, _ = _run("--codex", "--yes", home=home)
+    installed, _ = _run("--codex", "--replace-modified", home=home)
     assert installed.returncode == 0, installed.stderr
     assert target.is_file() and not target.is_symlink()
     assert tomllib.loads(target.read_text(encoding="utf-8"))["name"] == (
@@ -772,10 +836,11 @@ def test_changed_mainframe_rules_stop_uninstall_before_other_removal():
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode != 0
-    assert "rules installation changed" in removed.stderr
+    assert "local changes" in removed.stderr
     assert target.read_text(encoding="utf-8") == "# changed after install\n"
     assert (home / ".codex" / "AGENTS.md").is_file()
-    assert (home / ".agents" / "skills" / "mainframe-init").is_symlink()
+    assert (home / ".agents" / "skills" / "mainframe-init").is_dir()
+    assert not (home / ".agents" / "skills" / "mainframe-init").is_symlink()
 
 
 def test_changed_mainframe_researcher_stops_uninstall_before_other_removal():
@@ -792,7 +857,7 @@ def test_changed_mainframe_researcher_stops_uninstall_before_other_removal():
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode != 0
-    assert "agent installation changed" in removed.stderr
+    assert "local changes" in removed.stderr
     assert 'name = "changed"' in target.read_text(encoding="utf-8")
     assert (home / ".codex" / "AGENTS.md").is_file()
 
@@ -956,7 +1021,7 @@ def test_skill_collision_stops_before_shared_install():
 
     proc, _ = _run("--codex", home=home)
     assert proc.returncode != 0
-    assert "existing skill path" in proc.stderr
+    assert "pre-existing content" in proc.stderr
     assert not (home / ".local" / "bin" / "secret").exists()
     assert (collision / "SKILL.md").read_text(encoding="utf-8") == "unrelated\n"
 
@@ -968,6 +1033,14 @@ def test_dev_mode_initializes_only_codex_owned_telemetry():
     db = telemetry / "telemetry.db"
     assert db.is_file()
     assert (telemetry / "enabled").is_file()
+    feedback = home / ".agents" / "skills" / "harness-feedback"
+    assert feedback.is_dir() and not feedback.is_symlink()
+    assert (feedback / "SKILL.md").read_bytes() == (
+        ADAPTER / "dev" / "skills" / "harness-feedback" / "SKILL.md"
+    ).read_bytes()
+    opencode = home / ".local" / "bin" / "mainframe-opencode"
+    assert opencode.is_file() and not opencode.is_symlink()
+    assert opencode.read_bytes() == (ADAPTER / "bin" / "mainframe-opencode").read_bytes()
     assert not (home / ".claude" / "mainframe").exists()
     config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
     assert config["otel"] == {
@@ -985,6 +1058,7 @@ def test_dev_mode_initializes_only_codex_owned_telemetry():
     assert normal.returncode == 0, normal.stderr
     assert db.is_file()
     assert not (telemetry / "enabled").exists()
+    assert not feedback.exists()
     config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
     assert "otel" not in config
 
@@ -993,6 +1067,9 @@ def test_normal_install_leaves_codex_telemetry_inactive():
     proc, home = _run("--codex")
     assert proc.returncode == 0, proc.stderr
     assert not (home / ".codex" / "mainframe" / "codex" / "telemetry").exists()
+    assert not (home / ".agents" / "skills" / "harness-feedback").exists()
+    launcher = home / ".local" / "bin" / "mainframe-opencode"
+    assert launcher.is_file() and not launcher.is_symlink()
 
 
 def test_baseline_uses_native_standalone_layers_only():
@@ -1011,9 +1088,14 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "Do not inspect the repository" in researcher_data["developer_instructions"]
     assert researcher_data["skills"]["config"] == [
         {
-            "path": str(
-                ADAPTER / "skills" / "mainframe-research-method" / "SKILL.md"
-            ),
+                "path": str((
+                        template_home
+                    / ".codex"
+                    / "mainframe"
+                    / "private-skills"
+                    / "mainframe-research-method"
+                        / "SKILL.md"
+                ).resolve()),
             "enabled": True,
         }
     ]

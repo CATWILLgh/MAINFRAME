@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # MAINFRAME Claude Code adapter installer.
-# Safe by default: backs up mutable settings before merging and existing
-# immutable targets before linking.
+# Safe by default: merges mutable settings and installs adapter artifacts as
+# drift-aware regular copies. Repository-owned mutable data stays linked.
 #
 # Delivered:
 #   - plugin:       plugin/  →  ~/.claude/skills/mainframe/
@@ -23,13 +23,15 @@
 #                   (Plugin format does not support path-scoped rules with
 #                   `paths:` frontmatter; per-item keeps the layer composable.)
 #
-# Migration cleanup removes stale per-item symlinks left by older layouts.
+# Migration converts repository-owned symlinks from older layouts in place.
 #
 # Usage:
 #   ./install.sh              # install (with safe merge and backups)
 #   ./install.sh --dry-run    # show what would happen, no changes
 #   ./install.sh --yes        # approve a required Claude Code update
-#   ./install.sh --uninstall  # remove owned settings and symlinks
+#   ./install.sh --replace-modified
+#                           # explicitly preserve then replace local changes
+#   ./install.sh --uninstall  # remove owned settings and managed artifacts
 #   ./install.sh --help
 #
 # Idempotent: re-running with the same state does nothing.
@@ -61,14 +63,15 @@ DRY_RUN=0
 UNINSTALL=0
 DEV=0
 ASSUME_YES=0
+REPLACE_MODIFIED=0
 PREFLIGHT_ONLY=0
 
 usage() {
     cat <<EOF
 MAINFRAME Claude Code adapter installer
 
-Installs the shared hub runtime as a Claude Code plugin: a single symlink in
-~/.claude/skills/ points to this adapter's plugin/ directory, which Claude
+Installs the shared hub runtime as a Claude Code plugin: a managed regular copy
+under ~/.claude/skills/ contains this adapter's plugin/ directory, which Claude
 Code auto-loads as the 'mainframe' plugin. Skills, commands, and hooks inside
 the plugin become available with the 'mainframe:' namespace prefix.
 
@@ -76,19 +79,18 @@ Specialist profiles are installed separately at ~/.claude/agents/mainframe/ as
 user-level agents named mainframe-*. This preserves agent-scoped hooks and MCP
 servers, which Claude Code intentionally ignores on plugin-shipped agents.
 
-The umbrella CLAUDE.md stays a direct symlink because Claude Code does not edit
-it. User settings are different: Claude Code writes /model, /effort, and
-/config choices to ~/.claude/settings.json, so MAINFRAME merges its policy and
-initial defaults into a regular local file instead of linking repository source.
-Path-scoped rules in export/rules/ install per-item.
+The umbrella CLAUDE.md, plugin, profiles, and output styles are managed copies.
+Their installation hashes detect local customization before an update or
+uninstall. User settings remain a structured merge because Claude Code writes
+/model, /effort, and /config choices to ~/.claude/settings.json.
 
 The first install after upgrading from the pre-plugin layout also cleans up
 stale per-item symlinks in ~/.claude/{skills,agents,hooks}/ left over from
 the old layout, and removes the empty directories if any.
 
 Usage:
-  $0                  Install (links immutable artifacts, safely merges user
-                      settings, and backs up changed existing files).
+  $0                  Install managed copies, safely merge user settings, and
+                      back up displaced existing files.
   $0 --dev            Install PLUS the hub-development instrumentation:
                       the 'harness-feedback' skill and the hub data
                       namespace ~/.claude/mainframe -> workspace/runtime/
@@ -99,14 +101,19 @@ Usage:
                       Ordinary users do not need this.
   $0 --dry-run        Show what would happen, no changes.
   $0 --yes            Approve a required Claude Code update without prompting.
-  $0 --uninstall      Remove MAINFRAME-owned settings and symlinks (incl.
+  $0 --replace-modified
+                      Back up and replace/remove locally changed managed
+                      artifacts. Without this flag an interactive run asks;
+                      a non-interactive run stops without data loss.
+  $0 --uninstall      Remove MAINFRAME-owned settings and artifacts (incl.
                       --dev ones; telemetry/feedback data is left in place).
   $0 --help           Show this message.
 
-Idempotent: re-running is safe — correct links and merged settings stay intact.
+Idempotent: unchanged managed copies and merged settings stay intact.
 
 Backups (if any) live at:
-  ~/.claude/<file>.backup-YYYYMMDD-HHMMSS-PID
+  ~/.claude/.mainframe-backups/YYYYMMDD-HHMMSS-PID/
+Structured settings keep their existing sibling .backup-* convention.
 
 EOF
 }
@@ -116,6 +123,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run)   DRY_RUN=1 ;;
         --dev)       DEV=1 ;;
         --yes)       ASSUME_YES=1 ;;
+        --replace-modified) REPLACE_MODIFIED=1 ;;
         --preflight) PREFLIGHT_ONLY=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)   usage; exit 0 ;;
@@ -132,24 +140,30 @@ CLAUDE_DIR="$HOME/.claude"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)-$$"
 MIN_CLAUDE_VERSION="2.1.226"
 
-# Single-file (and single-dir) artifacts. Format: "<source-relative-to-project>:<target-absolute>"
+# Adapter artifacts installed as regular managed copies. Format:
+# "<source-relative-to-project>:<target-absolute>:<state-id>"
 # Layout:
-#   - plugin/ is symlinked as a single directory under ~/.claude/skills/mainframe/.
+#   - plugin/ is copied as one managed directory under ~/.claude/skills/mainframe/.
 #     Claude Code auto-loads it as the 'mainframe' plugin via the skills-dir mechanism,
 #     and skills/commands/hooks inside get the `mainframe:` namespace prefix.
-#   - agents/ is symlinked under ~/.claude/agents/mainframe/ so Claude Code loads
+#   - agents/ is copied under ~/.claude/agents/mainframe/ so Claude Code loads
 #     the profiles at user scope and honors agent-scoped fields unavailable to
 #     plugin agents.
-#   - CLAUDE.md stays a direct symlink. settings.json is handled separately by
+#   - CLAUDE.md is a managed copy. settings.json is handled separately by
 #     settings-manager.py because Claude Code mutates user preferences in place.
 #   - the repository-owned, gitignored credentials index is exposed through a
 #     stable Claude-facing path so moving the checkout does not break skills or
 #     permissions. The index itself remains in shared/credentials/.
-ARTIFACTS=(
-    "adapters/claude-code/export/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md"
+MANAGED_ARTIFACTS=(
+    "adapters/claude-code/export/CLAUDE.md:${CLAUDE_DIR}/CLAUDE.md:global-instructions"
+    "adapters/claude-code/plugin:${CLAUDE_DIR}/skills/mainframe:plugin"
+    "adapters/claude-code/agents:${CLAUDE_DIR}/agents/mainframe:agents"
+)
+
+# Repository-owned mutable data remains linked so edits and runtime writes have
+# one authoritative location rather than a copied fork.
+LINKED_ARTIFACTS=(
     "shared/credentials/credentials-index.md:${CLAUDE_DIR}/credentials-index.md"
-    "adapters/claude-code/plugin:${CLAUDE_DIR}/skills/mainframe"
-    "adapters/claude-code/agents:${CLAUDE_DIR}/agents/mainframe"
 )
 
 SETTINGS_SOURCE="${ADAPTER_ROOT}/export/settings.json"
@@ -162,24 +176,30 @@ SETTINGS_DEV_OVERLAY="${ADAPTER_ROOT}/dev/settings-telemetry.json"
 # ~/.claude/mainframe is the hub-OWNED data namespace. The telemetry hook's
 # early shell gate opens only while claude-code/telemetry exists. The adapter
 # segment prevents a future Codex dev install from enabling Claude telemetry.
-DEV_ARTIFACTS=(
-    "dev/skills/harness-feedback:${CLAUDE_DIR}/skills/harness-feedback"
+DEV_MANAGED_ARTIFACTS=(
+    "adapters/claude-code/dev/skills/harness-feedback:${CLAUDE_DIR}/skills/harness-feedback:dev-harness-feedback"
+)
+DEV_LINKED_ARTIFACTS=(
     "workspace/runtime:${CLAUDE_DIR}/mainframe"
 )
 TELEMETRY_DIR="${PROJECT_ROOT}/workspace/runtime/claude-code/telemetry"
 TELEMETRY_DB="${TELEMETRY_DIR}/telemetry.db"
 
-# Directories whose CONTENTS are linked item-by-item into ~/.claude/<dir>/.
+# Directories whose CONTENTS are copied item-by-item into ~/.claude/<dir>/.
 # These layers have no plugin-format equivalent, so they stay outside the plugin and
 # install per-item so the hub composes with anything the user already has there:
 #   - `rules/` — path-scoped rules with `paths:` frontmatter (no plugin support).
 #   - `output-styles/` — user-selectable styles activated via `/config`; per-item so
 #     the hub's styles sit alongside the user's own.
-# Format: "<source-dir-relative>:<target-dir-absolute>"
+# Format: "<source-dir-relative>:<target-dir-absolute>:<state-prefix>"
 MANAGED_DIRS=(
-    "adapters/claude-code/export/rules:${CLAUDE_DIR}/rules"
-    "adapters/claude-code/export/output-styles:${CLAUDE_DIR}/output-styles"
+    "adapters/claude-code/export/rules:${CLAUDE_DIR}/rules:rule"
+    "adapters/claude-code/export/output-styles:${CLAUDE_DIR}/output-styles:output-style"
 )
+
+MANAGED_DELIVERY="${PROJECT_ROOT}/shared/managed-delivery/manage-artifact.py"
+MANAGED_STATE_DIR="${CLAUDE_DIR}/.mainframe-managed-artifacts"
+MANAGED_BACKUP_ROOT="${CLAUDE_DIR}/.mainframe-backups/${TIMESTAMP}"
 
 # Safe backup dir for items inside managed dirs (skills/, hooks/, rules/, etc.).
 # Claude Code scans those dirs wholesale, so a sibling .backup-* file there could
@@ -295,6 +315,40 @@ check_python() {
     return 1
 }
 
+check_managed_inputs() {
+    if [[ ! -f "$MANAGED_DELIVERY" ]]; then
+        log_error "Managed delivery helper is missing: ${MANAGED_DELIVERY}"
+        return 1
+    fi
+    local action="install" entry src rest target state_id
+    [[ $UNINSTALL -eq 1 ]] && action="uninstall"
+    for entry in "${MANAGED_ARTIFACTS[@]}"; do
+        src="${entry%%:*}"
+        rest="${entry#*:}"
+        target="${rest%%:*}"
+        state_id="${entry##*:}"
+        check_managed "$action" "$src" "$target" "$state_id"
+    done
+    for entry in "${DEV_MANAGED_ARTIFACTS[@]}"; do
+        src="${entry%%:*}"
+        rest="${entry#*:}"
+        target="${rest%%:*}"
+        state_id="${entry##*:}"
+        if [[ $UNINSTALL -eq 1 || $DEV -eq 0 ]]; then
+            check_managed uninstall "$src" "$target" "$state_id"
+        else
+            check_managed install "$src" "$target" "$state_id"
+        fi
+    done
+    for entry in "${MANAGED_DIRS[@]}"; do
+        src="${entry%%:*}"
+        rest="${entry#*:}"
+        target="${rest%%:*}"
+        state_id="${entry##*:}"
+        check_managed_dir_contents "$action" "$src" "$target" "$state_id"
+    done
+}
+
 check_settings_inputs() {
     local args=(check \
         --source "$SETTINGS_SOURCE" \
@@ -335,6 +389,99 @@ uninstall_settings() {
         args+=(--dry-run)
     fi
     python3 "$SETTINGS_MANAGER" "${args[@]}"
+}
+
+managed_delivery() {
+    local action="$1" src_rel="$2" target="$3" state_id="$4"
+    local source="$src_rel"
+    if [[ "$source" != /* ]]; then source="${PROJECT_ROOT}/${source}"; fi
+    local args=(
+        "$action"
+        --source "$source"
+        --target "$target"
+        --state "${MANAGED_STATE_DIR}/${state_id}.json"
+        --backup-root "$MANAGED_BACKUP_ROOT"
+    )
+    if [[ $DRY_RUN -eq 1 && "$action" != check-* ]]; then
+        args+=(--dry-run)
+    fi
+    if [[ $REPLACE_MODIFIED -eq 1 ]]; then
+        args+=(--replace-modified)
+    fi
+    if [[ -t 0 && -t 1 ]]; then
+        args+=(--interactive)
+    fi
+    python3 "$MANAGED_DELIVERY" "${args[@]}"
+}
+
+process_stale_managed_states() {
+    local action="$1" state_prefix="$2" state_file state_id source target
+    [[ -d "$MANAGED_STATE_DIR" ]] || return 0
+    for state_file in "${MANAGED_STATE_DIR}/${state_prefix}-"*.json; do
+        [[ -f "$state_file" ]] || continue
+        IFS=$'\t' read -r source target < <(
+            python3 -c 'import json,sys; value=json.load(open(sys.argv[1])); print(value["source"]+"\t"+value["target"])' "$state_file"
+        )
+        [[ -e "$source" || -L "$source" ]] && continue
+        state_id="$(basename "$state_file" .json)"
+        managed_delivery "$action" "$source" "$target" "$state_id"
+    done
+}
+
+install_managed() {
+    managed_delivery install "$@"
+}
+
+uninstall_managed() {
+    managed_delivery uninstall "$@"
+}
+
+check_managed() {
+    local action="$1"
+    shift
+    managed_delivery "check-${action}" "$@" >/dev/null
+}
+
+install_managed_dir_contents() {
+    local src_dir_rel="$1" target_dir="$2" state_prefix="$3"
+    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
+    local child base
+    if [[ -d "$src_dir_abs" ]]; then
+        for child in "$src_dir_abs"/*; do
+            [[ -e "$child" ]] || continue
+            base="$(basename "$child")"
+            install_managed "${src_dir_rel}/${base}" "${target_dir}/${base}" "${state_prefix}-${base}"
+        done
+    fi
+    process_stale_managed_states uninstall "$state_prefix"
+}
+
+uninstall_managed_dir_contents() {
+    local src_dir_rel="$1" target_dir="$2" state_prefix="$3"
+    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
+    local child base
+    if [[ -d "$src_dir_abs" ]]; then
+        for child in "$src_dir_abs"/*; do
+            [[ -e "$child" ]] || continue
+            base="$(basename "$child")"
+            uninstall_managed "${src_dir_rel}/${base}" "${target_dir}/${base}" "${state_prefix}-${base}"
+        done
+    fi
+    process_stale_managed_states uninstall "$state_prefix"
+}
+
+check_managed_dir_contents() {
+    local action="$1" src_dir_rel="$2" target_dir="$3" state_prefix="$4"
+    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
+    local child base
+    if [[ -d "$src_dir_abs" ]]; then
+        for child in "$src_dir_abs"/*; do
+            [[ -e "$child" ]] || continue
+            base="$(basename "$child")"
+            check_managed "$action" "${src_dir_rel}/${base}" "${target_dir}/${base}" "${state_prefix}-${base}"
+        done
+    fi
+    process_stale_managed_states check-uninstall "$state_prefix" >/dev/null
 }
 
 # Resolve the absolute path that a symlink points to, or empty string if not a symlink.
@@ -461,33 +608,6 @@ uninstall_one() {
     fi
 }
 
-# Symlink each child of a hub source dir into the target dir, item-by-item.
-install_dir_contents() {
-    local src_dir_rel="$1"
-    local target_dir="$2"
-    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
-
-    if [[ ! -d "$src_dir_abs" ]]; then
-        return 0  # nothing to link from this dir yet
-    fi
-
-    if [[ ! -d "$target_dir" ]]; then
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log_action "would create ${target_dir}"
-        else
-            mkdir -p "$target_dir"
-            log_ok "created ${target_dir}"
-        fi
-    fi
-
-    local child base
-    for child in "$src_dir_abs"/*; do
-        [[ -e "$child" ]] || continue  # guard against empty-glob literal
-        base="$(basename "$child")"
-        install_one "${src_dir_rel}/${base}" "${target_dir}/${base}"
-    done
-}
-
 # Non-fatal preflight: the tooling phase is best-effort, so surface missing
 # prerequisites up front with OS-appropriate install hints, instead of letting
 # the user discover them as a string of per-tool failures.
@@ -595,61 +715,19 @@ bootstrap_nodejs_security_tools() {
     _install_npm_global oxlint || true
 }
 
-# Drift cleanup: remove hub-symlinks in ~/.claude/<layer>/ whose targets in
-# export/ no longer exist. Leaves user-created real files/folders untouched.
-# Backups go to the safe per-run dir, NOT in-place.
-cleanup_stale_in_dir() {
-    local src_dir_rel="$1"
-    local target_dir="$2"
-    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
-
-    if [[ ! -d "$target_dir" ]]; then
-        return 0
-    fi
-
-    local entry resolved
-    for entry in "$target_dir"/*; do
-        [[ -e "$entry" || -L "$entry" ]] || continue
-        [[ -L "$entry" ]] || continue                      # only manage symlinks
-        resolved="$(readlink_safe "$entry")"
-        [[ "$resolved" == "${src_dir_abs}/"* ]] || continue # only our hub
-        [[ -e "$resolved" ]] && continue                    # target still present
-        if [[ $DRY_RUN -eq 1 ]]; then
-            log_action "would remove stale symlink ${entry} (target ${resolved} gone)"
-        else
-            backup_target "$entry"
-            log_ok "removed stale symlink ${entry}"
-        fi
-    done
-}
-
-# Remove the symlinks previously created for each child of a hub source dir.
-uninstall_dir_contents() {
-    local src_dir_rel="$1"
-    local target_dir="$2"
-    local src_dir_abs="${PROJECT_ROOT}/${src_dir_rel}"
-
-    if [[ ! -d "$src_dir_abs" ]]; then
-        return 0
-    fi
-
-    local child base
-    for child in "$src_dir_abs"/*; do
-        [[ -e "$child" ]] || continue
-        base="$(basename "$child")"
-        uninstall_one "${src_dir_rel}/${base}" "${target_dir}/${base}"
-    done
-}
-
 # List any existing backups so user knows what's restorable.
 list_backups() {
     local backups
-    # Avoid relying on a glob expanding when nothing matches.
-    backups=$(find "${CLAUDE_DIR}" -maxdepth 1 -name '*.backup-*' 2>/dev/null | sort || true)
+    backups=$(
+        {
+            find "${CLAUDE_DIR}" -maxdepth 1 -name '*.backup-*' 2>/dev/null
+            find "${CLAUDE_DIR}/.mainframe-backups" -mindepth 1 -maxdepth 2 2>/dev/null
+        } | sort || true
+    )
     if [[ -n "${backups:-}" ]]; then
         log_info "Existing backups in ${CLAUDE_DIR}:"
         echo "${backups}" | sed 's/^/    /'
-        log_info "Restore manually with: mv <backup> <original-name>"
+        log_info "Original displaced artifacts restore automatically on uninstall; local-change backups remain manual."
     fi
 }
 
@@ -742,10 +820,19 @@ main() {
         log_info "${BOLD}DRY RUN${NC} — nothing will be changed."
     fi
 
+    if [[ $UNINSTALL -eq 1 && ! -d "${CLAUDE_DIR}" ]]; then
+        log_ok "Nothing to uninstall: ${CLAUDE_DIR} does not exist."
+        return 0
+    fi
+
     if [[ $UNINSTALL -eq 0 ]]; then
         check_claude_version
         check_python
         check_settings_inputs
+        check_managed_inputs
+    else
+        check_python
+        check_managed_inputs
     fi
     if [[ $PREFLIGHT_ONLY -eq 1 ]]; then
         return 0
@@ -767,17 +854,33 @@ main() {
             check_settings_inputs
             uninstall_settings
         fi
-        log_info "Uninstalling MAINFRAME hub symlinks from ${CLAUDE_DIR}..."
-        for entry in "${ARTIFACTS[@]}"; do
+        log_info "Uninstalling MAINFRAME managed artifacts from ${CLAUDE_DIR}..."
+        for entry in "${MANAGED_ARTIFACTS[@]}"; do
             local src="${entry%%:*}"
-            local tgt="${entry##*:}"
-            uninstall_one "$src" "$tgt"
+            local rest="${entry#*:}"
+            local tgt="${rest%%:*}"
+            local state_id="${entry##*:}"
+            uninstall_managed "$src" "$tgt" "$state_id"
         done
-        for entry in "${DEV_ARTIFACTS[@]}"; do
+        for entry in "${LINKED_ARTIFACTS[@]}"; do
+            uninstall_one "${entry%%:*}" "${entry##*:}"
+        done
+        for entry in "${DEV_MANAGED_ARTIFACTS[@]}"; do
+            local src="${entry%%:*}"
+            local rest="${entry#*:}"
+            local tgt="${rest%%:*}"
+            local state_id="${entry##*:}"
+            uninstall_managed "$src" "$tgt" "$state_id"
+        done
+        for entry in "${DEV_LINKED_ARTIFACTS[@]}"; do
             uninstall_one "${entry%%:*}" "${entry##*:}"
         done
         for entry in "${MANAGED_DIRS[@]}"; do
-            uninstall_dir_contents "${entry%%:*}" "${entry##*:}"
+            local src="${entry%%:*}"
+            local rest="${entry#*:}"
+            local tgt="${rest%%:*}"
+            local state_id="${entry##*:}"
+            uninstall_managed_dir_contents "$src" "$tgt" "$state_id"
         done
         log_warn "Shared secrets and workspace/runtime/ data were left in place."
         log_warn "Remove them manually if you want a full reset."
@@ -807,10 +910,15 @@ main() {
         fi
     done
 
-    for entry in "${ARTIFACTS[@]}"; do
+    for entry in "${MANAGED_ARTIFACTS[@]}"; do
         local src="${entry%%:*}"
-        local tgt="${entry##*:}"
-        install_one "$src" "$tgt"
+        local rest="${entry#*:}"
+        local tgt="${rest%%:*}"
+        local state_id="${entry##*:}"
+        install_managed "$src" "$tgt" "$state_id"
+    done
+    for entry in "${LINKED_ARTIFACTS[@]}"; do
+        install_one "${entry%%:*}" "${entry##*:}"
     done
 
     install_settings
@@ -835,7 +943,14 @@ main() {
                 fi
             fi
         fi
-        for entry in "${DEV_ARTIFACTS[@]}"; do
+        for entry in "${DEV_MANAGED_ARTIFACTS[@]}"; do
+            local src="${entry%%:*}"
+            local rest="${entry#*:}"
+            local tgt="${rest%%:*}"
+            local state_id="${entry##*:}"
+            install_managed "$src" "$tgt" "$state_id"
+        done
+        for entry in "${DEV_LINKED_ARTIFACTS[@]}"; do
             install_one "${entry%%:*}" "${entry##*:}"
         done
         # Local hub reference page (dev-only, gitignored output). Best-effort:
@@ -855,8 +970,15 @@ main() {
         fi
     else
         # A plain reinstall explicitly turns adapter development mode off.
-        # Remove only symlinks owned by this repository; runtime data remains.
-        for entry in "${DEV_ARTIFACTS[@]}"; do
+        # Remove only dev artifacts owned by this installation; runtime data remains.
+        for entry in "${DEV_MANAGED_ARTIFACTS[@]}"; do
+            local src="${entry%%:*}"
+            local rest="${entry#*:}"
+            local tgt="${rest%%:*}"
+            local state_id="${entry##*:}"
+            uninstall_managed "$src" "$tgt" "$state_id"
+        done
+        for entry in "${DEV_LINKED_ARTIFACTS[@]}"; do
             local dev_target="${entry##*:}"
             if [[ -L "$dev_target" ]]; then
                 uninstall_one "${entry%%:*}" "$dev_target"
@@ -870,12 +992,11 @@ main() {
         fi
     fi
     for entry in "${MANAGED_DIRS[@]}"; do
-        install_dir_contents "${entry%%:*}" "${entry##*:}"
-    done
-
-    # Drift cleanup pass — after install so stale items get reported alongside.
-    for entry in "${MANAGED_DIRS[@]}"; do
-        cleanup_stale_in_dir "${entry%%:*}" "${entry##*:}"
+        local src="${entry%%:*}"
+        local rest="${entry#*:}"
+        local tgt="${rest%%:*}"
+        local state_id="${entry##*:}"
+        install_managed_dir_contents "$src" "$tgt" "$state_id"
     done
 
     echo

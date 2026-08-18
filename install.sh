@@ -9,8 +9,9 @@ usage() {
 MAINFRAME installer
 
 Usage:
-  ./install.sh --claude [--dry-run] [--dev] [--yes] [--uninstall]
-  ./install.sh --codex [--dry-run] [--dev] [--yes] [--uninstall]
+  ./install.sh --claude [--dry-run] [--dev] [--yes] [--replace-modified] [--uninstall]
+  ./install.sh --codex [--dry-run] [--dev] [--yes] [--replace-modified] [--uninstall]
+  ./install.sh --pi [--dry-run] [--yes] [--uninstall]
   ./install.sh --help
 
 With no arguments, this help is shown and no changes are made.
@@ -18,11 +19,14 @@ With no arguments, this help is shown and no changes are made.
 Targets:
   --claude     Install or remove the Claude Code adapter.
   --codex      Install or remove the Codex adapter.
+  --pi         Install or remove the Pi execution adapter.
 
 Adapter options are forwarded unchanged to its installer.
 Use --yes to approve a required Claude Code update without an interactive prompt.
-For Codex, --yes permits backed-up replacement of conflicting managed delivery
-targets such as global instructions, agents, rules, and the credentials-index link.
+Use --replace-modified only to back up and replace/remove locally customized
+managed artifacts; otherwise they are preserved and the operation stops.
+For Codex, --yes can back up and replace a conflicting credentials-index link;
+it never authorizes loss of a locally changed managed copy.
 EOF
 }
 
@@ -48,6 +52,11 @@ main() {
             adapter_label="Codex"
             shift
             ;;
+        --pi)
+            adapter="pi"
+            adapter_label="Pi"
+            shift
+            ;;
         *)
             echo "Unknown target: $1" >&2
             usage >&2
@@ -65,9 +74,11 @@ main() {
 
     if [[ $uninstall -eq 0 ]]; then
         "${ROOT}/adapters/${adapter}/install.sh" --preflight "$@"
-        echo "[mainframe] shared secrets"
-        "${ROOT}/shared/credentials/install.sh" "$@"
-        echo
+        if [[ "$adapter" != "pi" ]]; then
+            echo "[mainframe] shared secrets"
+            "${ROOT}/shared/credentials/install.sh" "$@"
+            echo
+        fi
     fi
 
     echo "[mainframe] ${adapter_label} adapter"

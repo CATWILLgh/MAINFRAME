@@ -17,7 +17,7 @@
 .agents/runtime/pi/
 
 # Machine-local Pi profile routing; the reproducible example is tracked.
-pi/config/profiles.local.json
+adapters/pi/config/profiles.local.json
 
 # Python venv (local toolchain — tiktoken, pyyaml)
 .venv/

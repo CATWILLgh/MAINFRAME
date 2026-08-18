@@ -83,6 +83,35 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["mainframe-pi", "business-analysis"],
+    decision = "prompt",
+    justification = "The explicit project-scoped Pi business-analysis workflow needs its authorized model providers while keeping ordinary command networking inside the MAINFRAME domain boundary.",
+    match = [
+        "mainframe-pi business-analysis --initiative order-handoff --statement 'Review order handoff requirements'",
+        "mainframe-pi business-analysis --initiative order-handoff --entry docs/requirements.md",
+    ],
+    not_match = [
+        "mainframe-pi models",
+        "pi --version",
+    ],
+)
+
+prefix_rule(
+    pattern = ["mainframe-opencode"],
+    decision = "prompt",
+    justification = "OpenCode is a separate user-configured CLI whose model calls need reviewed external access; the launcher only isolates Codex-inaccessible configuration references and does not grant task authority.",
+    match = [
+        "mainframe-opencode --version",
+        "mainframe-opencode models",
+        "mainframe-opencode run --model zai-coding-plan/glm-5.3 'Inspect the supplied task'",
+    ],
+    not_match = [
+        "opencode auth login",
+        "opencode run 'Inspect the supplied task'",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "push"],
     decision = "prompt",
     justification = "Push only when the user explicitly requested remote delivery; ordinary push authority does not include force push.",

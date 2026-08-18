@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 4,
+  "models": {
+    "final-analysis": {
+      "provider": "zai",
+      "model": "glm-5.3"
+    },
+    "process-scout": {
+      "provider": "minimax",
+      "model": "MiniMax-M3"
+    },
+    "adversarial-scout": {
+      "provider": "zai",
+      "model": "glm-5-turbo"
+    },
+    "document-scout": {
+      "provider": "zai",
+      "model": "glm-5.2"
+    }
+  },
+  "profiles": {
+    "business-analysis": {
+      "collectors": {
+        "minimax": {
+          "model": "process-scout",
+          "thinking": "off"
+        },
+        "glm-turbo": {
+          "model": "adversarial-scout",
+          "thinking": "off"
+        },
+        "glm-5.2": {
+          "model": "document-scout",
+          "thinking": "off"
+        }
+      },
+      "verifier": {
+        "model": "final-analysis",
+        "thinking": "max"
+      },
+      "synthesizer": {
+        "model": "final-analysis",
+        "thinking": "max"
+      }
+    }
+  }
+}

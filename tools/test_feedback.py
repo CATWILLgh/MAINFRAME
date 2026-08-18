@@ -3,11 +3,12 @@
 
 Run: `python3 tools/test_feedback.py` (exit 0 = pass). Stdlib only. Uses a temp
 target dir via the `MAINFRAME_FEEDBACK_DIR` env var so the real
-`~/.claude/mainframe/claude-code/feedback` is never touched. CLI-level tests
+`workspace/runtime/<adapter>/feedback` queues are never touched. CLI-level tests
 spawn real subprocesses — the actual skill scenario (agent runs the script via
 Bash). Model analysis is disabled except in its dedicated launch test.
 """
 
+import importlib.util
 import os
 import subprocess
 import sys
@@ -15,12 +16,18 @@ import tempfile
 
 sys.dont_write_bytecode = True   # keep __pycache__ out of the validated skill dir
 
-_SKILL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "..", "dev", "skills", "harness-feedback")
-sys.path.insert(0, _SKILL_DIR)
-import feedback  # noqa: E402
-
-SCRIPT = os.path.join(_SKILL_DIR, "feedback.py")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RECEIVER = os.path.join(ROOT, "dev", "harness-feedback", "receiver.py")
+SPEC = importlib.util.spec_from_file_location("mainframe_harness_feedback", RECEIVER)
+assert SPEC is not None and SPEC.loader is not None
+feedback = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(feedback)
+SCRIPTS = {
+    "claude-code": os.path.join(
+        ROOT, "adapters", "claude-code", "dev", "skills", "harness-feedback", "feedback.py"),
+    "codex": os.path.join(
+        ROOT, "adapters", "codex", "dev", "skills", "harness-feedback", "feedback.py"),
+}
 
 GOOD_BODY = (
     "## Trigger\n"
@@ -31,14 +38,16 @@ GOOD_BODY = (
 )
 
 
-def _run(args, body=GOOD_BODY, env_extra=None, cwd=None):
+def _run(args, body=GOOD_BODY, env_extra=None, cwd=None, adapter="claude-code"):
     env = dict(os.environ)
     env.pop("CLAUDE_SESSION_ID", None)
+    env.pop("CODEX_THREAD_ID", None)
+    env.pop("CODEX_SESSION_ID", None)
     env["MAINFRAME_MODEL_LAB_DISABLE"] = "1"
     if env_extra:
         env.update(env_extra)
     return subprocess.run(
-        [sys.executable, SCRIPT] + args,
+        [sys.executable, SCRIPTS[adapter]] + args,
         input=body, capture_output=True, text=True, env=env, cwd=cwd,
     )
 
@@ -101,6 +110,28 @@ def test_session_env_captured():
     assert r.returncode == 0, r.stderr
     text = open(r.stdout.strip(), encoding="utf-8").read()
     assert "session: sess-42" in text
+
+
+def test_codex_session_selects_codex_queue_contract():
+    d = _tmp()
+    r = _run(_base_args(), adapter="codex",
+             env_extra={"MAINFRAME_FEEDBACK_DIR": d,
+                        "CODEX_THREAD_ID": "thread-42"})
+    assert r.returncode == 0, r.stderr
+    text = open(r.stdout.strip(), encoding="utf-8").read()
+    assert "adapter: codex" in text
+    assert "model_lab_eligible: false" in text
+    assert "session: thread-42" in text
+
+
+def test_codex_entrypoint_does_not_need_session_detection():
+    d = _tmp()
+    r = _run(_base_args(), adapter="codex",
+             env_extra={"MAINFRAME_FEEDBACK_DIR": d})
+    assert r.returncode == 0, r.stderr
+    text = open(r.stdout.strip(), encoding="utf-8").read()
+    assert "adapter: codex" in text
+    assert "session: " in text
 
 
 def test_project_from_cwd():

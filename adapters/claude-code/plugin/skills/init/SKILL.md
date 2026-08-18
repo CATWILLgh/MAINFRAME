@@ -97,6 +97,12 @@ background tool restrictions make the assigned task impossible or the runtime
 cannot complete it correctly there. Never rely on a background result before
 its completion notification arrives.
 
+Only when the user explicitly hands over a requirement statement or named
+requirement documents for digital business-analysis review, use
+`mainframe:pi-business-analysis`. Never construct its input from ordinary
+session discussion. Keep its result as evidence for this primary session;
+Pi never owns user communication or product decisions.
+
 Keep each specialist's engineering rules, testing context, and diagnostics in
 that specialist's own context. Require executors to return enough evidence for
 verification: current documentation for drift-prone external behavior, code

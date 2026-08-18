@@ -1,0 +1,4 @@
+interface:
+  display_name: "MAINFRAME Harness Feedback"
+  short_description: "Record reproducible Codex harness friction"
+  default_prompt: "Use $harness-feedback to record this resolved, reproducible MAINFRAME harness problem."
