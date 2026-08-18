@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -13,6 +13,7 @@ import {
   parseEngineerVerifierVerdict,
 } from "../src/profiles/engineer/contracts.js";
 import { acquireEngineerWriterLock, inspectEngineerGit } from "../src/profiles/engineer/preflight.js";
+import { EngineerWorkspace } from "../src/profiles/engineer/workspace.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -167,4 +168,55 @@ test("writer lock permits only one Pi engineer in a worktree", async () => {
   await first.release();
   const second = await acquireEngineerWriterLock(facts, "BLOCK-002");
   await second.release();
+});
+
+test("engineer workspace requires an observed version for exact edits", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-workspace-"));
+  await writeFile(path.join(root, "source.ts"), "const first = 1;\nconst second = 2;\n");
+  const manifest = parseEngineerBlockManifest(block({
+    scope: { include: ["*.ts", "src/**"], exclude: ["src/generated/**"] },
+  }));
+  const workspace = await EngineerWorkspace.create(root, manifest);
+  const observed = await workspace.observe("source.ts");
+  const edited = await workspace.edit("source.ts", observed.version, [
+    { oldText: "first = 1", newText: "first = 10" },
+    { oldText: "second = 2", newText: "second = 20" },
+  ]);
+  assert.match(edited.content, /first = 10/);
+  assert.match(await readFile(path.join(root, "source.ts"), "utf8"), /second = 20/);
+  await assert.rejects(
+    workspace.edit("source.ts", observed.version, [{ oldText: "first = 10", newText: "first = 100" }]),
+    /Re-read before editing/,
+  );
+});
+
+test("engineer workspace detects external changes and refuses ambiguous edits", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-stale-"));
+  const target = path.join(root, "source.ts");
+  await writeFile(target, "same\nsame\n");
+  const workspace = await EngineerWorkspace.create(root, parseEngineerBlockManifest(block({
+    scope: { include: ["*.ts"], exclude: [] },
+  })));
+  const observed = await workspace.observe("source.ts");
+  await assert.rejects(
+    workspace.edit("source.ts", observed.version, [{ oldText: "same", newText: "changed" }]),
+    /must occur exactly once/,
+  );
+  await writeFile(target, "external\n");
+  await assert.rejects(
+    workspace.edit("source.ts", observed.version, [{ oldText: "same", newText: "changed" }]),
+    /changed after it was read/,
+  );
+});
+
+test("engineer workspace creates only new in-scope text files", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-create-"));
+  const workspace = await EngineerWorkspace.create(root, parseEngineerBlockManifest(block({
+    scope: { include: ["src/**"], exclude: ["src/generated/**"] },
+  })));
+  await workspace.createFile("src/new.ts", "export const value = 1;\n");
+  assert.equal(await readFile(path.join(root, "src/new.ts"), "utf8"), "export const value = 1;\n");
+  await assert.rejects(workspace.createFile("src/new.ts", "overwrite\n"), /already exists/);
+  await assert.rejects(workspace.createFile("src/generated/no.ts", "no\n"), /outside the block scope/);
+  await assert.rejects(workspace.createFile("../escape.ts", "no\n"), /outside the project/);
 });
