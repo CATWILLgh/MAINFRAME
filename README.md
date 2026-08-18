@@ -112,6 +112,8 @@ To see the result without changing anything:
 
 Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit skills, native specialist agents, command rules, reviewed native hooks, the shared credentials index, and a least-privilege permission profile for Desktop, CLI, and the IDE extension. The installer merges only its owned configuration and hook groups, preserves unrelated settings, and can remove only its own changes later. New or changed hooks still require review through `/hooks`.
 
+New Codex tasks start with the `mainframe` profile and route network or filesystem boundary crossings through Auto-review. The profile deliberately contains no project-specific servers. Current Desktop builds can retain Full access's non-interactive approval state when an existing task is switched back to a named profile; start a fresh task to restore the complete `mainframe` boundary and reviewer together.
+
 Use `--pi --dry-run` to inspect the Pi command delivery. From a target project,
 the direct analysis form is `mainframe-pi business-analysis --initiative <slug>` with at
 least one explicitly supplied `--statement`, project-local `--entry`, or
