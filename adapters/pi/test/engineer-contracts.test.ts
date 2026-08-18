@@ -12,6 +12,7 @@ import {
   parseEngineerCompletionManifest,
   parseEngineerVerifierVerdict,
 } from "../src/profiles/engineer/contracts.js";
+import { runEngineerCheck } from "../src/profiles/engineer/check-runner.js";
 import { acquireEngineerWriterLock, inspectEngineerGit } from "../src/profiles/engineer/preflight.js";
 import { EngineerWorkspace } from "../src/profiles/engineer/workspace.js";
 
@@ -53,6 +54,7 @@ test("block manifest requires full Git id, unique acceptance, and argv checks", 
   assert.throws(() => parseEngineerBlockManifest(block({
     allowedChecks: [{ id: "CHECK", command: "npm test", timeoutMs: 60_000 }],
   })), /unsupported field 'command'/);
+  assert.throws(() => parseEngineerBlockManifest(block({ blockId: "../../escape" })), /safe identifier/);
 });
 
 test("candidate completion must cover every acceptance item with evidence", () => {
@@ -219,4 +221,57 @@ test("engineer workspace creates only new in-scope text files", async () => {
   await assert.rejects(workspace.createFile("src/new.ts", "overwrite\n"), /already exists/);
   await assert.rejects(workspace.createFile("src/generated/no.ts", "no\n"), /outside the block scope/);
   await assert.rejects(workspace.createFile("../escape.ts", "no\n"), /outside the project/);
+});
+
+test("check runner executes only the exact manifest command and captures pass or failure", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-check-"));
+  await execFileAsync("git", ["init", "-q", root]);
+  await execFileAsync("git", ["-C", root, "config", "user.name", "MAINFRAME Test"]);
+  await execFileAsync("git", ["-C", root, "config", "user.email", "mainframe-test@example.invalid"]);
+  await writeFile(path.join(root, "tracked.txt"), "initial\n");
+  await execFileAsync("git", ["-C", root, "add", "tracked.txt"]);
+  await execFileAsync("git", ["-C", root, "commit", "-qm", "test: initial"]);
+  const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+  const manifest = parseEngineerBlockManifest(block({
+    expectedHead: head,
+    allowedChecks: [
+      { id: "PASS", argv: [process.execPath, "-e", "process.stdout.write('ok')"], timeoutMs: 10_000 },
+      { id: "FAIL", argv: [process.execPath, "-e", "process.stderr.write('bad'); process.exit(3)"], timeoutMs: 10_000 },
+    ],
+  }));
+  const facts = await inspectEngineerGit(root, manifest);
+  const passed = await runEngineerCheck(facts, manifest, "PASS");
+  assert.equal(passed.status, "passed");
+  assert.equal(passed.output.inline, "ok");
+  const failed = await runEngineerCheck(facts, manifest, "FAIL");
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.exitCode, 3);
+  assert.equal(failed.output.inline, "bad");
+  await assert.rejects(runEngineerCheck(facts, manifest, "UNKNOWN"), /Unknown manifest-approved check/);
+});
+
+test("check runner times out a process group and retains oversized output", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-check-bounds-"));
+  await execFileAsync("git", ["init", "-q", root]);
+  await execFileAsync("git", ["-C", root, "config", "user.name", "MAINFRAME Test"]);
+  await execFileAsync("git", ["-C", root, "config", "user.email", "mainframe-test@example.invalid"]);
+  await writeFile(path.join(root, "tracked.txt"), "initial\n");
+  await execFileAsync("git", ["-C", root, "add", "tracked.txt"]);
+  await execFileAsync("git", ["-C", root, "commit", "-qm", "test: initial"]);
+  const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+  const manifest = parseEngineerBlockManifest(block({
+    expectedHead: head,
+    allowedChecks: [
+      { id: "TIMEOUT", argv: [process.execPath, "-e", "setInterval(() => {}, 1000)"], timeoutMs: 1_000 },
+      { id: "LARGE", argv: [process.execPath, "-e", "process.stdout.write('x'.repeat(25000))"], timeoutMs: 10_000 },
+    ],
+  }));
+  const facts = await inspectEngineerGit(root, manifest);
+  const timedOut = await runEngineerCheck(facts, manifest, "TIMEOUT");
+  assert.equal(timedOut.status, "timed-out");
+  assert.equal(timedOut.exitCode, null);
+  const large = await runEngineerCheck(facts, manifest, "LARGE");
+  assert.equal(large.output.truncated, true);
+  assert.ok(large.output.retainedPath);
+  assert.equal((await readFile(path.join(root, large.output.retainedPath!), "utf8")).length, 25_000);
 });

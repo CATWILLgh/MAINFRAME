@@ -106,6 +106,14 @@ function nonEmptyString(value: unknown, owner: string): string {
   return value;
 }
 
+function identifier(value: unknown, owner: string): string {
+  const parsed = nonEmptyString(value, owner);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(parsed)) {
+    throw new Error(`${owner} must be a safe identifier no longer than 64 characters`);
+  }
+  return parsed;
+}
+
 function stringArray(value: unknown, owner: string, allowEmpty = true): string[] {
   if (!Array.isArray(value) || (!allowEmpty && value.length === 0)) {
     throw new Error(`${owner} must be ${allowEmpty ? "an" : "a non-empty"} array`);
@@ -141,7 +149,7 @@ export function parseEngineerBlockManifest(value: unknown): EngineerBlockManifes
   const acceptance = objectArray(root.acceptance, "acceptance").map((item, index) => {
     exactKeys(item, ["id", "requirement"], `acceptance[${index}]`);
     return {
-      id: nonEmptyString(item.id, `acceptance[${index}].id`),
+      id: identifier(item.id, `acceptance[${index}].id`),
       requirement: nonEmptyString(item.requirement, `acceptance[${index}].requirement`),
     };
   });
@@ -153,12 +161,12 @@ export function parseEngineerBlockManifest(value: unknown): EngineerBlockManifes
     if (typeof item.timeoutMs !== "number" || !Number.isInteger(item.timeoutMs) || item.timeoutMs < 1_000 || item.timeoutMs > 3_600_000) {
       throw new Error(`allowedChecks[${index}].timeoutMs must be an integer from 1000 to 3600000`);
     }
-    return { id: nonEmptyString(item.id, `allowedChecks[${index}].id`), argv, timeoutMs: item.timeoutMs };
+    return { id: identifier(item.id, `allowedChecks[${index}].id`), argv, timeoutMs: item.timeoutMs };
   });
   uniqueIds(allowedChecks, "allowedChecks");
   return {
     schemaVersion: 1,
-    blockId: nonEmptyString(root.blockId, "blockId"),
+    blockId: identifier(root.blockId, "blockId"),
     sessionMode: root.sessionMode,
     goal: nonEmptyString(root.goal, "goal"),
     expectedHead,
