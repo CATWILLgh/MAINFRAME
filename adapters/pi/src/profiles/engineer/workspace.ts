@@ -44,14 +44,28 @@ function countOccurrences(content: string, needle: string): number {
 
 export class EngineerWorkspace {
   private readonly observations = new Map<string, string>();
+  private readonly mutations = new Set<string>();
 
   private constructor(
     readonly projectRoot: string,
     private readonly manifest: EngineerBlockManifest,
+    private readonly protectedPaths: ReadonlySet<string>,
   ) {}
 
-  static async create(projectRoot: string, manifest: EngineerBlockManifest): Promise<EngineerWorkspace> {
-    return new EngineerWorkspace(await resolveProjectRoot(projectRoot), manifest);
+  static async create(
+    projectRoot: string,
+    manifest: EngineerBlockManifest,
+    protectedPaths: string[] = [],
+  ): Promise<EngineerWorkspace> {
+    return new EngineerWorkspace(
+      await resolveProjectRoot(projectRoot),
+      manifest,
+      new Set(protectedPaths.map(normalizeRelative)),
+    );
+  }
+
+  changedPaths(): string[] {
+    return [...this.mutations].sort();
   }
 
   private relative(requestedPath: string, requireWriteScope: boolean): string {
@@ -90,6 +104,7 @@ export class EngineerWorkspace {
 
   async edit(requestedPath: string, observedVersion: string, edits: EngineerExactEdit[]): Promise<EngineerObservedFile> {
     const { relative, absolute } = await this.existingFile(requestedPath, true);
+    if (this.protectedPaths.has(relative)) throw new Error(`Refusing to modify a path that was dirty before the run: ${relative}`);
     return withFileMutationQueue(absolute, async () => {
       const recorded = this.observations.get(relative);
       if (!recorded || recorded !== observedVersion) throw new Error(`Re-read before editing ${relative}`);
@@ -121,12 +136,14 @@ export class EngineerWorkspace {
       await writeFile(absolute, next, { encoding: "utf8" });
       const nextVersion = version(next);
       this.observations.set(relative, nextVersion);
+      this.mutations.add(relative);
       return { path: relative, version: nextVersion, content: next };
     });
   }
 
   async createFile(requestedPath: string, content: string): Promise<EngineerObservedFile> {
     const relative = this.relative(requestedPath, true);
+    if (this.protectedPaths.has(relative)) throw new Error(`Refusing to modify a path that was dirty before the run: ${relative}`);
     const absolute = path.join(this.projectRoot, relative);
     return withFileMutationQueue(absolute, async () => {
       try {
@@ -150,6 +167,7 @@ export class EngineerWorkspace {
       }
       const observedVersion = version(content);
       this.observations.set(relative, observedVersion);
+      this.mutations.add(relative);
       return { path: relative, version: observedVersion, content };
     });
   }

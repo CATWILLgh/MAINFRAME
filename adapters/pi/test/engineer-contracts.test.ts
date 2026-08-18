@@ -14,6 +14,7 @@ import {
 } from "../src/profiles/engineer/contracts.js";
 import { runEngineerCheck } from "../src/profiles/engineer/check-runner.js";
 import { acquireEngineerWriterLock, inspectEngineerGit } from "../src/profiles/engineer/preflight.js";
+import { recordActiveEngineerBlock, validateEngineerSessionIntent } from "../src/profiles/engineer/session-state.js";
 import { EngineerWorkspace } from "../src/profiles/engineer/workspace.js";
 
 const execFileAsync = promisify(execFile);
@@ -237,6 +238,20 @@ test("engineer workspace can read safe context outside the write scope but canno
   );
 });
 
+test("engineer workspace preserves paths that were dirty before the run", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-dirty-"));
+  await writeFile(path.join(root, "source.ts"), "user work\n");
+  const workspace = await EngineerWorkspace.create(root, parseEngineerBlockManifest(block({
+    scope: { include: ["*.ts"], exclude: [] },
+  })), ["source.ts"]);
+  const observed = await workspace.observe("source.ts");
+  await assert.rejects(
+    workspace.edit("source.ts", observed.version, [{ oldText: "user", newText: "agent" }]),
+    /dirty before the run/,
+  );
+  assert.deepEqual(workspace.changedPaths(), []);
+});
+
 test("check runner executes only the exact manifest command and captures pass or failure", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-check-"));
   await execFileAsync("git", ["init", "-q", root]);
@@ -288,4 +303,28 @@ test("check runner times out a process group and retains oversized output", asyn
   assert.equal(large.output.truncated, true);
   assert.ok(large.output.retainedPath);
   assert.equal((await readFile(path.join(root, large.output.retainedPath!), "utf8")).length, 25_000);
+});
+
+test("resume is bound to the same manifest and worktree while new starts explicitly", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-engineer-session-"));
+  await execFileAsync("git", ["init", "-q", root]);
+  await execFileAsync("git", ["-C", root, "config", "user.name", "MAINFRAME Test"]);
+  await execFileAsync("git", ["-C", root, "config", "user.email", "mainframe-test@example.invalid"]);
+  await writeFile(path.join(root, "tracked.txt"), "initial\n");
+  await execFileAsync("git", ["-C", root, "add", "tracked.txt"]);
+  await execFileAsync("git", ["-C", root, "commit", "-qm", "test: initial"]);
+  const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+  const fresh = parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "new" }));
+  const facts = await inspectEngineerGit(root, fresh);
+  await validateEngineerSessionIntent(facts, fresh);
+  await recordActiveEngineerBlock(facts, fresh);
+  await validateEngineerSessionIntent(facts, parseEngineerBlockManifest(block({ expectedHead: head, sessionMode: "resume" })));
+  await assert.rejects(
+    validateEngineerSessionIntent(facts, parseEngineerBlockManifest(block({
+      expectedHead: head,
+      sessionMode: "resume",
+      goal: "A different block disguised as resume",
+    }))),
+    /manifest differs/,
+  );
 });

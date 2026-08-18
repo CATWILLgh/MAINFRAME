@@ -27,6 +27,7 @@ function textResult(value: unknown, terminate = false) {
 export interface EngineerToolSet {
   tools: ToolDefinition[];
   completion(): EngineerCompletionManifest | undefined;
+  beginRound(): void;
 }
 
 export function createEngineerTools(
@@ -143,7 +144,13 @@ export function createEngineerTools(
     execute: async (_id, params) => {
       if (completed) return textResult("Completion submission is already closed.", true);
       try {
-        completed = parseEngineerCompletionManifest(params, manifest);
+        const candidate = parseEngineerCompletionManifest(params, manifest);
+        const actualPaths = workspace.changedPaths();
+        if (JSON.stringify([...candidate.changedPaths].sort()) !== JSON.stringify(actualPaths)) {
+          return textResult(`Completion rejected: changedPaths must exactly equal ${JSON.stringify(actualPaths)}`);
+        }
+        candidate.changedPaths = actualPaths;
+        completed = candidate;
       } catch (error) {
         return textResult(`Completion rejected: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -154,5 +161,6 @@ export function createEngineerTools(
   return {
     tools: [read, find, grep, list, edit, create, finish],
     completion: () => completed,
+    beginRound: () => { completed = undefined; },
   };
 }
