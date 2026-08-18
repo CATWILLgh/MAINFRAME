@@ -129,6 +129,10 @@ export class EngineerExecutor {
     return this.runRound(engineerCorrectionPrompt(packet));
   }
 
+  usage(): UsageSummary {
+    return collectUsage(this.session);
+  }
+
   private async runRound(prompt: string): Promise<EngineerExecutorRound> {
     this.toolSet.beginRound();
     const started = Date.now();

@@ -19,11 +19,14 @@ MAINFRAME Pi
 
 Usage:
   mainframe-pi business-analysis --initiative <slug> (--statement <text> | --entry <project-path> | --input-file <path>)... [--fresh-session]
+  mainframe-pi engineer --mode <new|resume> --manifest <project-path> [--timeout-ms <ms>] [--verifier-timeout-ms <ms>] [--max-turns <n>]
   mainframe-pi models
   mainframe-pi --help
 
 Business analysis always uses the current working directory as the project root.
 The result is written under docs/initiatives/<slug>/reviews/ in that project.
+Engineer uses one persistent Pi session per current Git worktree. The manifest
+fixes one bounded implementation block; --mode is an explicit architect choice.
 EOF
 }
 
@@ -39,6 +42,38 @@ case "${1:-}" in
         exec "$RUNNER" "${ADAPTER_ROOT}/src/pilot.ts" --config "$PROFILE_CONFIG" --list-models
         ;;
     business-analysis) shift ;;
+    engineer)
+        shift
+        [[ -x "$RUNNER" ]] || fail "Pi adapter dependencies are missing. Run MAINFRAME install.sh --pi."
+        [[ -f "$PROFILE_CONFIG" ]] || fail "Pi profile routing is missing: $PROFILE_CONFIG"
+        mode=""
+        manifest=""
+        expect_value=""
+        for argument in "$@"; do
+            if [[ -n "$expect_value" ]]; then
+                [[ "$expect_value" == "mode" ]] && mode="$argument"
+                [[ "$expect_value" == "manifest" ]] && manifest="$argument"
+                expect_value=""
+                continue
+            fi
+            case "$argument" in
+                --mode) expect_value="mode" ;;
+                --manifest) expect_value="manifest" ;;
+                --timeout-ms|--verifier-timeout-ms|--max-turns) expect_value="value" ;;
+                --project|--config|--profile) fail "$argument is owned by the installed MAINFRAME Pi launcher" ;;
+                --*) fail "Unknown engineer option: $argument" ;;
+                *) fail "Unexpected positional argument: $argument" ;;
+            esac
+        done
+        [[ -z "$expect_value" ]] || fail "An option is missing its value"
+        [[ "$mode" == "new" || "$mode" == "resume" ]] || fail "engineer requires --mode new or --mode resume"
+        [[ -n "$manifest" ]] || fail "engineer requires --manifest <project-path>"
+        exec "$RUNNER" "${ADAPTER_ROOT}/src/engineer-pilot.ts" \
+            --config "$PROFILE_CONFIG" \
+            --profile engineer-pilot \
+            --project "$PWD" \
+            "$@"
+        ;;
     *) fail "Unknown Pi profile command: $1" ;;
 esac
 

@@ -3,8 +3,8 @@
 This adapter is MAINFRAME's programmable Pi layer. The repository does not
 vendor Pi itself: the globally installed Pi runtime owns provider login, while
 this package pins the SDK contracts, profiles, tools, validators, and tests.
-`src/profiles/business-analyst/` is the first profile; later profiles such as
-`engineer` remain separate instead of sharing one undifferentiated prompt.
+`src/profiles/business-analyst/` and `src/profiles/engineer/` remain separate
+instead of sharing one undifferentiated prompt and permission surface.
 
 Three fresh low-cost collectors independently traverse the same primary source:
 MiniMax M3, GLM-5-Turbo, and GLM-5.2. They submit atomic evidence cards rather
@@ -54,6 +54,24 @@ Then run it from the project being analyzed:
 ```sh
 mainframe-pi business-analysis --initiative order-handoff --entry docs/requirements.md
 ```
+
+The engineer pilot accepts one architect-authored JSON block manifest. The
+architect explicitly selects whether the worktree session starts a new block
+or resumes the active one:
+
+```sh
+mainframe-pi engineer --mode new --manifest .agents/runtime/pi/requests/block-001.json
+mainframe-pi engineer --mode resume --manifest .agents/runtime/pi/requests/block-001.json
+```
+
+Each Git worktree has one persistent writable Pi session. `new` compacts that
+session before the block; `resume` preserves its current context and relies on
+native measured context pressure. The executor can read the safe project but
+write only manifest-owned clean paths. It cannot use shell, network, secrets,
+Git mutation, dependency installation, or another worktree. After exact
+manifest-approved checks, a fresh read-only model verifies every acceptance
+item and either returns `ready-for-architect-review` or a bounded correction to
+the same executor session.
 
 The launcher always binds `--project` to its current working directory and
 rejects an override. Claude Code and Codex therefore share one execution

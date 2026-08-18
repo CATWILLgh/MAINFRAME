@@ -76,7 +76,7 @@ export interface RunResult {
   };
 }
 
-async function resolveModel(runtime: ModelRuntime, selection: ModelSelection): Promise<Model<any>> {
+export async function resolveModel(runtime: ModelRuntime, selection: ModelSelection): Promise<Model<any>> {
   const available = await runtime.getAvailable(selection.provider, { signal: AbortSignal.timeout(15_000) });
   const selected = available.find((model) => model.id === selection.model);
   if (!selected) {

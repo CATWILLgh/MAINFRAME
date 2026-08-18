@@ -36,12 +36,18 @@ interface RawProfileConfig {
       synthesizer: ProfileStage;
     }
   >;
+  engineerProfiles: Record<string, { executor: ProfileStage; verifier: ProfileStage }>;
 }
 
 export interface ResolvedProfile {
   collectors: CollectorSelection[];
   verifier: ModelSelection;
   synthesizer: ModelSelection;
+}
+
+export interface ResolvedEngineerProfile {
+  executor: ModelSelection;
+  verifier: ModelSelection;
 }
 
 const COLLECTOR_ROLES: CollectorRole[] = ["minimax", "glm-turbo", "glm-5.2"];
@@ -114,7 +120,42 @@ function parseConfig(value: unknown): RawProfileConfig {
       },
     };
   }
-  return { schemaVersion: 4, models, profiles };
+  const rawEngineerProfiles = root.engineerProfiles === undefined
+    ? {}
+    : object(root.engineerProfiles, "engineerProfiles");
+  const engineerProfiles: RawProfileConfig["engineerProfiles"] = {};
+  for (const [name, rawEngineerProfile] of Object.entries(rawEngineerProfiles)) {
+    const profile = object(rawEngineerProfile, `engineerProfiles.${name}`);
+    const parsed = {} as { executor: ProfileStage; verifier: ProfileStage };
+    for (const role of ["executor", "verifier"] as const) {
+      const stage = object(profile[role], `engineerProfiles.${name}.${role}`);
+      if (typeof stage.model !== "string" || !models[stage.model]) {
+        throw new Error(`engineerProfiles.${name}.${role}.model must reference a configured model alias`);
+      }
+      if (typeof stage.thinking !== "string" || !THINKING_LEVELS.has(stage.thinking as ThinkingLevel)) {
+        throw new Error(`engineerProfiles.${name}.${role}.thinking is unsupported`);
+      }
+      parsed[role] = { model: stage.model, thinking: stage.thinking as ThinkingLevel };
+    }
+    engineerProfiles[name] = parsed;
+  }
+  return { schemaVersion: 4, models, profiles, engineerProfiles };
+}
+
+export async function loadEngineerProfile(
+  configPath: string,
+  profileName: string,
+): Promise<ResolvedEngineerProfile> {
+  const absolute = path.resolve(configPath);
+  const parsed = parseConfig(JSON.parse(await readFile(absolute, "utf8")) as unknown);
+  const profile = parsed.engineerProfiles[profileName];
+  if (!profile) throw new Error(`Unknown Pi engineer profile: ${profileName}`);
+  const resolveStage = (stage: ProfileStage): ModelSelection => {
+    const alias = parsed.models[stage.model];
+    if (!alias) throw new Error(`Unknown model alias: ${stage.model}`);
+    return { provider: alias.provider, model: alias.model, thinking: stage.thinking };
+  };
+  return { executor: resolveStage(profile.executor), verifier: resolveStage(profile.verifier) };
 }
 
 export async function loadProfile(

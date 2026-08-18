@@ -133,6 +133,58 @@ def test_launcher_rejects_project_override_and_missing_initiative():
     assert "requires an explicit --statement, --entry, or --input-file" in missing_source.stderr
 
 
+def test_launcher_binds_engineer_mode_and_manifest_to_current_worktree():
+    root = pathlib.Path(tempfile.mkdtemp())
+    project = root / "project"
+    project.mkdir()
+    config = root / "profiles.json"
+    config.write_text("{}\n", encoding="utf-8")
+    captured = root / "arguments.json"
+    runner = root / "runner"
+    runner.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, os, sys\n"
+        "json.dump({'cwd': os.getcwd(), 'args': sys.argv[1:]}, open(os.environ['CAPTURED'], 'w'))\n",
+        encoding="utf-8",
+    )
+    runner.chmod(runner.stat().st_mode | stat.S_IXUSR)
+    env = dict(
+        os.environ,
+        MAINFRAME_PI_RUNNER=str(runner),
+        MAINFRAME_PI_CONFIG=str(config),
+        CAPTURED=str(captured),
+    )
+    proc = subprocess.run(
+        [str(LAUNCHER), "engineer", "--mode", "new", "--manifest", ".agents/runtime/pi/requests/block.json"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    data = json.loads(captured.read_text(encoding="utf-8"))
+    canonical_project = os.path.realpath(project)
+    assert data["cwd"] == canonical_project
+    assert data["args"] == [
+        str(ADAPTER / "src" / "engineer-pilot.ts"),
+        "--config", str(config),
+        "--profile", "engineer-pilot",
+        "--project", canonical_project,
+        "--mode", "new",
+        "--manifest", ".agents/runtime/pi/requests/block.json",
+    ]
+
+    bad_mode = subprocess.run(
+        [str(LAUNCHER), "engineer", "--mode", "auto", "--manifest", "block.json"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert bad_mode.returncode == 2
+    assert "requires --mode new or --mode resume" in bad_mode.stderr
+
+
 def test_adapter_skills_expose_one_bounded_primary_invocation():
     claude = ROOT / "adapters" / "claude-code" / "plugin" / "skills" / "pi-business-analysis" / "SKILL.md"
     codex = ROOT / "adapters" / "codex" / "skills" / "mainframe-pi-business-analysis"

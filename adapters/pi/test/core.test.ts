@@ -7,7 +7,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { buildProjectMap } from "../src/project-map.js";
-import { loadProfile } from "../src/config.js";
+import { loadEngineerProfile, loadProfile } from "../src/config.js";
 import { protectProjectRuntime } from "../src/runtime-storage.js";
 import { parsePiVersion } from "../src/preflight.js";
 import { WebRouter } from "../src/web-tools.js";
@@ -251,6 +251,10 @@ test("profile config resolves logical model aliases without containing credentia
   ]);
   assert.deepEqual(profile.verifier, { provider: "zai", model: "glm-5.3", thinking: "max" });
   assert.deepEqual(profile.synthesizer, { provider: "zai", model: "glm-5.3", thinking: "max" });
+  assert.deepEqual(await loadEngineerProfile("config/profiles.example.json", "engineer-pilot"), {
+    executor: { provider: "zai", model: "glm-5.3", thinking: "max" },
+    verifier: { provider: "zai", model: "glm-5.3", thinking: "max" },
+  });
   const source = await readFile("config/profiles.example.json", "utf8");
   assert(!/api.?key|token|secret/i.test(source));
 });

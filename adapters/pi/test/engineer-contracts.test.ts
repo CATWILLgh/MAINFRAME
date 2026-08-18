@@ -16,6 +16,7 @@ import { runEngineerCheck } from "../src/profiles/engineer/check-runner.js";
 import { acquireEngineerWriterLock, inspectEngineerGit } from "../src/profiles/engineer/preflight.js";
 import { recordActiveEngineerBlock, validateEngineerSessionIntent } from "../src/profiles/engineer/session-state.js";
 import { EngineerWorkspace } from "../src/profiles/engineer/workspace.js";
+import { validateVerdictAgainstRunEvidence } from "../src/profiles/engineer/verifier-runner.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -327,4 +328,39 @@ test("resume is bound to the same manifest and worktree while new starts explici
     }))),
     /manifest differs/,
   );
+});
+
+test("independent ready verdict is rejected when a deterministic check failed", () => {
+  const manifest = parseEngineerBlockManifest(block());
+  const completion = parseEngineerCompletionManifest({
+    schemaVersion: 1,
+    blockId: "BLOCK-001",
+    status: "candidate",
+    summary: "Implemented",
+    changedPaths: ["src/example.ts"],
+    acceptanceClaims: [
+      { acceptanceId: "A-001", claim: "Implemented", evidence: ["src/example.ts:1"] },
+      { acceptanceId: "A-002", claim: "Tested", evidence: ["CHECK-TEST"] },
+    ],
+    blockers: [],
+  }, manifest);
+  const verdict = parseEngineerVerifierVerdict({
+    schemaVersion: 1,
+    blockId: "BLOCK-001",
+    status: "ready-for-architect-review",
+    items: [
+      { acceptanceId: "A-001", verdict: "verified", reason: "Code inspected", evidence: ["src/example.ts:1"] },
+      { acceptanceId: "A-002", verdict: "verified", reason: "Claimed check", evidence: ["CHECK-TEST"] },
+    ],
+  }, manifest);
+  const failedCheck = parseEngineerCheckResult({
+    schemaVersion: 1,
+    checkId: "CHECK-TEST",
+    argv: ["npm", "test", "--", "focused"],
+    status: "failed",
+    exitCode: 1,
+    durationMs: 100,
+    output: { inline: "failure", truncated: false },
+  }, manifest);
+  assert.throws(() => validateVerdictAgainstRunEvidence(verdict, completion, [failedCheck]), /checks did not pass/);
 });

@@ -113,11 +113,21 @@ To see the result without changing anything:
 Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit skills, native specialist agents, command rules, reviewed native hooks, the shared credentials index, and a least-privilege permission profile for Desktop, CLI, and the IDE extension. The installer merges only its owned configuration and hook groups, preserves unrelated settings, and can remove only its own changes later. New or changed hooks still require review through `/hooks`.
 
 Use `--pi --dry-run` to inspect the Pi command delivery. From a target project,
-the direct form is `mainframe-pi business-analysis --initiative <slug>` with at
+the direct analysis form is `mainframe-pi business-analysis --initiative <slug>` with at
 least one explicitly supplied `--statement`, project-local `--entry`, or
 external `--input-file`; file options may be repeated. Ordinary agent
 conversation is never treated as the requirements package. Claude
 Code and Codex expose the same result through their native MAINFRAME skills.
+
+The Pi engineer pilot is invoked from one Git worktree with an explicit block
+manifest and architect-selected session mode:
+
+```bash
+mainframe-pi engineer --mode new --manifest .agents/runtime/pi/requests/block-001.json
+```
+
+`resume` continues that same worktree's active block. Another worktree receives
+another Pi session by construction.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 

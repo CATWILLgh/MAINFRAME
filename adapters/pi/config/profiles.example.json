@@ -43,5 +43,17 @@
         "thinking": "max"
       }
     }
+  },
+  "engineerProfiles": {
+    "engineer-pilot": {
+      "executor": {
+        "model": "final-analysis",
+        "thinking": "max"
+      },
+      "verifier": {
+        "model": "final-analysis",
+        "thinking": "max"
+      }
+    }
   }
 }
