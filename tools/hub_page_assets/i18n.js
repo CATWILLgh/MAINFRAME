@@ -7,6 +7,11 @@ window.HUB_STRINGS_RU = {
   // shell / navigation
   "Overview": "Обзор",
   "Telemetry": "Телеметрия",
+  "Telemetry queue": "Очередь телеметрии",
+  "pending": "ожидает записи",
+  "being replayed": "записывается повторно",
+  "invalid": "повреждено",
+  "{pending} pending, {claimed} being replayed, {invalid} invalid": "Ожидает записи: {pending}; повторно записывается: {claimed}; повреждено: {invalid}",
   "Usage": "Расход",
   "Analysis": "Анализ",
   "Components": "Компоненты",

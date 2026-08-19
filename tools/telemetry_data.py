@@ -102,6 +102,23 @@ def _duration_summary(values):
         "max_ms": max(values) if values else 0,
     }
 
+
+def _pending_queue_state(path):
+    directory = Path(path).parent / "pending-events"
+    state = {"pending": 0, "claimed": 0, "invalid": 0}
+    try:
+        for item in directory.iterdir():
+            name = item.name
+            if name.endswith(".invalid"):
+                state["invalid"] += 1
+            elif ".json.claim-" in name:
+                state["claimed"] += 1
+            elif name.endswith(".json"):
+                state["pending"] += 1
+    except OSError:
+        pass
+    return state
+
 _SESSION_UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -425,6 +442,7 @@ def _empty_report(
         "breakdowns": [],
         "hook_effectiveness": [],
         "hook_invocations": [],
+        "telemetry_queue": {"pending": 0, "claimed": 0, "invalid": 0},
         "engineer_runs": _empty_engineer_runs(),
         "engineer_tools": [],
         "workload": _empty_workload(),
@@ -456,6 +474,7 @@ def build_report(
     report = _empty_report(
         active=True, included_origins=allowed_origins, adapter_id=adapter_id
     )
+    report["telemetry_queue"] = _pending_queue_state(path)
     report["period"] = {
         "from": str(start_timestamp or ""), "to": str(end_timestamp or ""),
         "preset": "custom" if start_timestamp or end_timestamp else "all",
@@ -949,6 +968,10 @@ def build_multi_report(
     result["period"] = {
         "from": str(start_timestamp or ""), "to": str(end_timestamp or ""),
         "preset": "custom" if start_timestamp or end_timestamp else "all",
+    }
+    result["telemetry_queue"] = {
+        key: sum(item["telemetry_queue"][key] for item in adapters)
+        for key in ("pending", "claimed", "invalid")
     }
     for key in (
         "records", "usable_records", "excluded_records", "sessions",

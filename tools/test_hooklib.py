@@ -9,6 +9,7 @@ import io
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -154,6 +155,45 @@ def test_changed_files():
         assert _hooklib.changed_files(tempfile.gettempdir() + "/no-such-xyz", (".py",)) == []
     finally:
         shutil.rmtree(d, ignore_errors=True)
+
+
+def test_telemetry_contention_is_queued_and_replayed():
+    root = tempfile.mkdtemp()
+    db = os.path.join(root, "telemetry.db")
+    previous_db = os.environ.get("MAINFRAME_TELEMETRY_DB")
+    previous_origin = os.environ.get("MAINFRAME_TELEMETRY_ORIGIN")
+    try:
+        os.environ["MAINFRAME_TELEMETRY_DB"] = db
+        os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = "runtime"
+        _hooklib.initialize_telemetry_db(db)
+        blocker = sqlite3.connect(db)
+        blocker.execute("BEGIN IMMEDIATE")
+        result = _hooklib.log_event(
+            "user_prompt", {"prompt_len": 1}, {"session_id": "queued"}
+        )
+        assert result == "queued"
+        blocker.rollback()
+        blocker.close()
+        assert _hooklib.log_event(
+            "user_prompt", {"prompt_len": 2}, {"session_id": "current"}
+        ) == "written"
+        with sqlite3.connect(db) as connection:
+            rows = connection.execute(
+                "SELECT session_id FROM events ORDER BY id"
+            ).fetchall()
+        assert rows == [("queued",), ("current",)]
+        pending = os.path.join(root, "pending-events")
+        assert not [name for name in os.listdir(pending) if name.endswith(".json")]
+    finally:
+        if previous_db is None:
+            os.environ.pop("MAINFRAME_TELEMETRY_DB", None)
+        else:
+            os.environ["MAINFRAME_TELEMETRY_DB"] = previous_db
+        if previous_origin is None:
+            os.environ.pop("MAINFRAME_TELEMETRY_ORIGIN", None)
+        else:
+            os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = previous_origin
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def main():

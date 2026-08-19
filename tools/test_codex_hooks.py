@@ -291,6 +291,38 @@ def test_dispatcher_records_exact_component_denominators():
     assert "bash-pattern-reminder.py=1" in checks
 
 
+def test_dispatcher_queues_and_replays_telemetry_during_contention():
+    root = Path(tempfile.mkdtemp())
+    db = root / "telemetry" / "telemetry.db"
+    state = root / "state"
+    env = {"MAINFRAME_CODEX_TELEMETRY_DB": str(db)}
+
+    def prompt(session):
+        return {
+            "session_id": session, "turn_id": "turn",
+            "hook_event_name": "UserPromptSubmit", "cwd": str(root),
+            "prompt": "bounded",
+        }
+
+    _run_hook(prompt("before"), state, extra_env=env)
+    import sqlite3
+    blocker = sqlite3.connect(db)
+    blocker.execute("BEGIN IMMEDIATE")
+    queued, _ = _run_hook(prompt("queued"), state, extra_env=env)
+    assert queued.returncode == 0
+    blocker.rollback()
+    blocker.close()
+    current, _ = _run_hook(prompt("current"), state, extra_env=env)
+    assert current.returncode == 0
+    with sqlite3.connect(db) as connection:
+        sessions = {
+            row[0] for row in connection.execute(
+                "SELECT session_id FROM events WHERE event='user_prompt'"
+            )
+        }
+    assert sessions == {"before", "queued", "current"}
+
+
 def test_dispatcher_records_code_edits_like_the_claude_adapter():
     root = Path(tempfile.mkdtemp())
     project = root / "project"

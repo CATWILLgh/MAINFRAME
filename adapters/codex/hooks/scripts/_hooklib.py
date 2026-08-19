@@ -11,6 +11,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -227,6 +228,96 @@ def _telemetry_busy(error):
     return "locked" in message or "busy" in message
 
 
+_EVENT_INSERT = (
+    "INSERT INTO events(ts, schema_version, session_id, turn_id, agent_id, "
+    "agent_type, tool_use_id, project, hook_event, model, origin, event, payload) "
+    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+)
+_PENDING_EVENT_LIMIT = 512
+
+
+def _pending_directory(db):
+    return os.path.join(os.path.dirname(db), "pending-events")
+
+
+def _queue_pending_row(db, row):
+    try:
+        directory = _pending_directory(db)
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        queued = [name for name in os.listdir(directory)
+                  if ".json" in name and not name.endswith(".invalid")]
+        if len(queued) >= _PENDING_EVENT_LIMIT:
+            return "error"
+        fd, temporary = tempfile.mkstemp(prefix="event-", suffix=".tmp", dir=directory)
+        final = temporary[:-4] + ".json"
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(list(row), handle, separators=(",", ":"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, final)
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+        return "queued"
+    except Exception:
+        return "error"
+
+
+def _flush_pending_rows(db, limit=8):
+    directory = _pending_directory(db)
+    try:
+        now = time.time()
+        for name in os.listdir(directory):
+            if ".json.claim-" not in name:
+                continue
+            claimed = os.path.join(directory, name)
+            if now - os.path.getmtime(claimed) < 60:
+                continue
+            original = claimed.split(".claim-", 1)[0]
+            if not os.path.exists(original):
+                os.replace(claimed, original)
+        names = sorted(name for name in os.listdir(directory) if name.endswith(".json"))
+    except OSError:
+        return
+    for name in names[:limit]:
+        source = os.path.join(directory, name)
+        claim = source + f".claim-{os.getpid()}"
+        try:
+            os.replace(source, claim)
+        except OSError:
+            continue
+        try:
+            with open(claim, encoding="utf-8") as handle:
+                row = json.load(handle)
+            if not isinstance(row, list) or len(row) != 13:
+                os.replace(claim, claim + ".invalid")
+                continue
+            connection = sqlite3.connect(db, timeout=0.05)
+            try:
+                connection.execute("PRAGMA busy_timeout=50")
+                connection.execute("PRAGMA synchronous=NORMAL")
+                connection.execute(_EVENT_INSERT, tuple(row))
+                connection.commit()
+            finally:
+                connection.close()
+            os.unlink(claim)
+        except sqlite3.IntegrityError:
+            try:
+                os.unlink(claim)
+            except OSError:
+                pass
+        except Exception:
+            try:
+                os.replace(claim, source)
+            except OSError:
+                pass
+            break
+
+
 def log_event(event, payload=None, hook_payload=None):
     """Append one allowlisted row; telemetry failure never affects the hook."""
     try:
@@ -239,6 +330,7 @@ def log_event(event, payload=None, hook_payload=None):
             return "disabled"
         if not os.path.exists(db):
             initialize_telemetry_db(db)
+        _flush_pending_rows(db)
         if validate_payload is None or ROW_SCHEMA_VERSION <= 0:
             return "error"
 
@@ -276,12 +368,7 @@ def log_event(event, payload=None, hook_payload=None):
                 connection = sqlite3.connect(db, timeout=0.05)
                 connection.execute("PRAGMA busy_timeout=50")
                 connection.execute("PRAGMA synchronous=NORMAL")
-                connection.execute(
-                    "INSERT INTO events(ts, schema_version, session_id, turn_id, "
-                    "agent_id, agent_type, tool_use_id, project, hook_event, model, "
-                    "origin, event, payload) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    row,
-                )
+                connection.execute(_EVENT_INSERT, row)
                 connection.commit()
                 return "written"
             except sqlite3.IntegrityError:
@@ -292,7 +379,7 @@ def log_event(event, payload=None, hook_payload=None):
             finally:
                 if connection is not None:
                     connection.close()
-        return "busy"
+        return _queue_pending_row(db, row)
     except Exception:
         return "error"
 

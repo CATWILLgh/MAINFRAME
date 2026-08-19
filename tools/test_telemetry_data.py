@@ -75,6 +75,18 @@ def test_hook_invocations_are_reported_as_a_bounded_denominator():
     assert report["hook_invocations"][0]["hook"] == "check.py"
 
 
+def test_pending_telemetry_queue_remains_visible():
+    db = fresh_db()
+    pending = db.parent / "pending-events"
+    pending.mkdir()
+    (pending / "one.json").write_text("[]", encoding="utf-8")
+    (pending / "two.json.claim-1").write_text("[]", encoding="utf-8")
+    (pending / "three.json.claim-2.invalid").write_text("[]", encoding="utf-8")
+    assert telemetry_data.build_report(db)["telemetry_queue"] == {
+        "pending": 1, "claimed": 1, "invalid": 1,
+    }
+
+
 def test_pi_engineer_events_feed_shared_report_and_multi_adapter_view():
     db = fresh_db()
     run = {

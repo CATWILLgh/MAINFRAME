@@ -514,6 +514,7 @@
     const toolFailures = (report.tool_reliability || []).reduce(
       (sum, row) => sum + (row.failures || 0), 0);
     const feedback = (ds.feedback || []).length;
+    const queue = report.telemetry_queue || {};
 
     const collectionBroken = ingest.evidence === "observed" && ingest.batches_failed > 0;
     const concerns = [];
@@ -522,6 +523,12 @@
         f("The collector rejected {failed} of {total} batches ({reason})", {
           failed: num(ingest.batches_failed), total: num(ingest.batches),
           reason: t(ingest.last_reason || "unknown"),
+        }), "warn"]);
+    }
+    if ((queue.pending || 0) + (queue.claimed || 0) + (queue.invalid || 0)) {
+      concerns.push([t("Telemetry queue"),
+        f("{pending} pending, {claimed} being replayed, {invalid} invalid", {
+          pending: num(queue.pending), claimed: num(queue.claimed), invalid: num(queue.invalid),
         }), "warn"]);
     }
     if (!ds.active) concerns.push([t("Telemetry"), t("No validated events yet"), "idle"]);
@@ -717,6 +724,14 @@
       el("div", { class: "notice " + (ingestNote.tone === "good" ? "ok" : "") }, ingestNote.text),
     ]);
     root.appendChild(section(t("Collector"), "dev", null, collectorBody));
+
+    const queue = report.telemetry_queue || {};
+    root.appendChild(section(t("Telemetry queue"), "dev", queue.pending || 0,
+      statRow([
+        [num(queue.pending), t("pending")],
+        [num(queue.claimed), t("being replayed")],
+        [num(queue.invalid), t("invalid")],
+      ])));
 
     // Adapters.
     const adapterRows = (report.adapters || []).map((item) => cells([

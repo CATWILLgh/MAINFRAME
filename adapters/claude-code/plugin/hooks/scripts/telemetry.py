@@ -61,7 +61,7 @@ def _lang_bucket(file_path):
 
 def _record(event, data, payload):
     result = log_event(event, data, payload)
-    if result not in ("written", "disabled"):
+    if result not in ("written", "queued", "disabled"):
         raise RuntimeError("telemetry sink unavailable")
 
 
