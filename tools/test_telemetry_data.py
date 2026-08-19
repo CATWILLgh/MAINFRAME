@@ -414,6 +414,26 @@ def test_cli_exposes_summary_and_incremental_jsonl():
     assert rows[0]["data"] == {"prompt_len": 8}
 
 
+def test_cli_adapter_summary_does_not_silently_return_all_adapters():
+    db = fresh_db()
+    assert _hooklib.log_event(
+        "user_prompt", {"prompt_len": 4}, {"session_id": "s"}
+    ) == "written"
+    home = pathlib.Path(tempfile.mkdtemp())
+    installed = home / ".claude/mainframe/claude-code/telemetry/telemetry.db"
+    installed.parent.mkdir(parents=True)
+    installed.write_bytes(pathlib.Path(db).read_bytes())
+    result = subprocess.run(
+        [sys.executable, str(TOOLS / "telemetry_data.py"),
+         "--adapter", "claude-code"],
+        check=True, capture_output=True, text=True,
+        env={**os.environ, "HOME": str(home)},
+    )
+    report = json.loads(result.stdout)
+    assert report["adapter_id"] == "claude-code"
+    assert report["records"] == 1
+
+
 def test_lifecycle_discrepancies_do_not_cancel_each_other():
     db = fresh_db()
     base = {"session_id": "s", "hook_event_name": "SubagentStart"}

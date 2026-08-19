@@ -1358,8 +1358,10 @@ def main():
     if args.format == "summary":
         report = (
             build_multi_report()
-            if args.all or args.db is None
-            else build_report(args.db, adapter_id=args.adapter)
+            if args.all
+            else build_report(
+                args.db or default_db_path(args.adapter), adapter_id=args.adapter
+            )
         )
         print(json.dumps(report, ensure_ascii=False, indent=2 if args.pretty else None))
         return 0 if report["active"] or not report["error"] else 1
