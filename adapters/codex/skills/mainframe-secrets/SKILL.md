@@ -21,6 +21,16 @@ Use the installed credential mechanism without bringing secret values into model
 Follow the exact name and access pattern in the index. Pass the value directly to the process that needs it, for example:
 
 ```bash
+secret run REGISTERED_NAME -- consumer-command
+```
+
+`secret run` removes other names from the managed store from the inherited
+environment and exposes only the requested names to that one child process.
+Prefer it whenever the consumer accepts credentials through environment
+variables. If a consumer requires the value in a specific argument or header,
+use the narrow inline form without printing it:
+
+```bash
 curl -H "x-api-key: $(secret get REGISTERED_NAME)" https://example.invalid/
 ```
 

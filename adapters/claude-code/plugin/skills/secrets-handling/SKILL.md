@@ -25,8 +25,17 @@ model context.
 
 ## Consume a registered value
 
-Follow the exact credential name and access pattern in the index. Prefer direct
-substitution into the process that needs the value:
+Follow the exact credential name and access pattern in the index. Prefer an
+environment-scoped child process when the consumer supports it:
+
+```bash
+secret run REGISTERED_NAME -- consumer-command
+```
+
+`secret run` removes other names from the managed store from the inherited
+environment and exposes only the requested names to that one child process.
+If a consumer requires the value in a specific argument or header, use the
+narrow inline form without printing it:
 
 ```bash
 curl -H "x-api-key: $(secret get REGISTERED_NAME)" https://example.invalid/
