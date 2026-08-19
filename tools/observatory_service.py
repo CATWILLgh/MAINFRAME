@@ -16,7 +16,7 @@ import subprocess
 import sys
 import threading
 import time
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import build_hub_page
 import native_telemetry_receiver
@@ -25,12 +25,30 @@ import telemetry_data
 
 ROOT = Path(__file__).resolve().parent.parent
 PROVIDERS = {"spark", "antigravity"}
-ADAPTERS = {"claude-code", "codex"}
+ADAPTERS = {"claude-code", "codex", "pi"}
+MODEL_ADAPTERS = {"claude-code", "codex"}
 TERMINAL = {"completed", "retryable", "failed", "cancelled"}
 
 
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+
+
+def _valid_timestamp_boundary(value):
+    if len(value) > 40:
+        return False
+    try:
+        datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return "T" in value
+
+
+def _parse_timestamp_boundary(value):
+    parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(datetime.timezone.utc)
 
 
 class JobStore:
@@ -75,7 +93,7 @@ class JobStore:
         return dict(row) if row is not None else None
 
     def enqueue(self, provider: str, adapter: str):
-        if provider not in PROVIDERS or adapter not in ADAPTERS:
+        if provider not in PROVIDERS or adapter not in MODEL_ADAPTERS:
             raise ValueError("unknown model-lab target")
         if provider == "antigravity" and adapter != "claude-code":
             raise ValueError("Antigravity audit currently supports Claude Code telemetry only")
@@ -196,8 +214,11 @@ class ObservatoryApp:
         self._stop = threading.Event()
         self._worker = None
 
-    def _build_snapshot(self):
-        value = build_hub_page.build_manifest(str(self.root))
+    def _build_snapshot(self, start_timestamp=None, end_timestamp=None):
+        value = build_hub_page.build_manifest(
+            str(self.root), start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+        )
         enabled_dir = self.runtime / "enabled"
         active_adapters = sorted(
             adapter for adapter in ADAPTERS
@@ -218,6 +239,11 @@ class ObservatoryApp:
         }
         return value
 
+    def period_snapshot(self, start_timestamp=None, end_timestamp=None):
+        if not start_timestamp and not end_timestamp:
+            return self.snapshot()
+        return self._build_snapshot(start_timestamp, end_timestamp)
+
     def snapshot(self, force=False):
         with self._snapshot_lock:
             if force or self._snapshot is None or time.monotonic() - self._snapshot_at >= 4:
@@ -225,11 +251,14 @@ class ObservatoryApp:
                 self._snapshot_at = time.monotonic()
             return self._snapshot
 
-    def live_snapshot(self):
-        value = self.snapshot()
+    def live_snapshot(self, start_timestamp=None, end_timestamp=None):
+        value = self.period_snapshot(start_timestamp, end_timestamp)
         return {
             key: value.get(key)
-            for key in ("dev_state", "usage", "health", "control", "ingest")
+            for key in (
+                "dev_state", "usage", "health", "control", "ingest", "analyses",
+                "installation",
+            )
             if key in value
         }
 
@@ -318,11 +347,24 @@ class ObservatoryApp:
         return headers.get("X-Mainframe-Token", headers.get("x-mainframe-token", "")) == self.token
 
     def handle(self, method, raw_path, headers, body):
-        path = urlparse(raw_path).path
+        parsed = urlparse(raw_path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+        start_timestamp = (query.get("from") or [""])[0]
+        end_timestamp = (query.get("to") or [""])[0]
+        for value in (start_timestamp, end_timestamp):
+            if value and not _valid_timestamp_boundary(value):
+                return self._json({"error": "invalid period boundary"}, 400)
+        if (
+            start_timestamp and end_timestamp
+            and _parse_timestamp_boundary(start_timestamp)
+            >= _parse_timestamp_boundary(end_timestamp)
+        ):
+            return self._json({"error": "period start must be before end"}, 400)
         if method == "GET" and path == "/api/snapshot":
-            return self._json(self.snapshot())
+            return self._json(self.period_snapshot(start_timestamp, end_timestamp))
         if method == "GET" and path == "/api/live":
-            return self._json(self.live_snapshot())
+            return self._json(self.live_snapshot(start_timestamp, end_timestamp))
         if method == "GET" and path == "/api/jobs":
             return self._json({
                 "providers": self.store.providers(), "jobs": self.store.list_jobs(),

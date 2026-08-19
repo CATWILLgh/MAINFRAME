@@ -29,6 +29,9 @@ CLAUDE_REPOSITORY_DB = (
 CODEX_REPOSITORY_DB = (
     ROOT / "workspace" / "runtime" / "codex" / "telemetry" / "telemetry.db"
 )
+PI_REPOSITORY_DB = (
+    ROOT / "workspace" / "runtime" / "pi" / "telemetry" / "telemetry.db"
+)
 
 
 def _load_contract(adapter_id, path):
@@ -53,8 +56,11 @@ CONTRACTS = {
         ROOT / "adapters" / "codex" / "hooks" / "scripts"
         / "_telemetry_contract.py",
     ),
+    "pi": _load_contract(
+        "pi", ROOT / "adapters" / "pi" / "telemetry_contract.py",
+    ),
 }
-ADAPTER_LABELS = {"claude-code": "Claude Code", "codex": "Codex"}
+ADAPTER_LABELS = {"claude-code": "Claude Code", "codex": "Codex", "pi": "Pi"}
 
 BREAKDOWN_FIELDS = {
     "session": ("phase",),
@@ -68,6 +74,8 @@ BREAKDOWN_FIELDS = {
     "permission_request": ("tool_name", "permission_mode"),
     "hook_run": ("status", "recipient"),
     "tool_decision": ("decision", "source"),
+    "engineer_run": ("mode", "status", "verifier_status"),
+    "engineer_tool_summary": ("stage",),
 }
 
 # Why a row never reached a metric. "Excluded" alone reads as data loss; naming
@@ -111,10 +119,12 @@ def _effective_origin(origin, session_id):
 
 
 def default_db_path(adapter_id="claude-code"):
-    installed, repository = {
+    candidates = {
         "claude-code": (CLAUDE_INSTALLED_DB, CLAUDE_REPOSITORY_DB),
         "codex": (CODEX_INSTALLED_DB, CODEX_REPOSITORY_DB),
+        "pi": (PI_REPOSITORY_DB, PI_REPOSITORY_DB),
     }[adapter_id]
+    installed, repository = candidates
     return installed if installed.is_file() else repository
 
 
@@ -253,6 +263,27 @@ def _empty_context_cost():
     }
 
 
+def _empty_engineer_runs():
+    return {
+        "runs": 0, "ready": 0, "blocked": 0, "new": 0, "resume": 0,
+        "rounds": 0, "correction_rounds": 0, "checks_total": 0,
+        "checks_passed": 0, "tool_calls": 0, "repeated_tool_calls": 0,
+        "failed_tool_calls": 0, "compactions": 0, "retries": 0,
+        "duration_ms": 0, "by_status": [], "by_verdict": [],
+    }
+
+
+def _empty_workload():
+    return {
+        "model_turns": 0, "top_level_turns": 0, "top_level_tokens": 0,
+        "subagent_starts": 0, "subagent_stops": 0, "subagent_instances": 0,
+        "subagent_attributed_turns": 0, "subagent_attributed_tokens": 0,
+        "subagent_token_evidence": "unavailable",
+        "top_level_evidence": "unavailable", "by_subagent": [], "skills": [],
+        "skill_evidence": "unavailable",
+    }
+
+
 def _empty_report(
     active=False, error="", included_origins=None, adapter_id="claude-code"
 ):
@@ -276,6 +307,7 @@ def _empty_report(
         "included_origins": sorted(included_origins or []),
         "stored_first_timestamp": "",
         "stored_last_timestamp": "",
+        "period": {"from": "", "to": "", "preset": "all"},
         "exclusions": {reason: 0 for reason in EXCLUSION_REASONS},
         "tool_reliability": [],
         "tool_decisions": [],
@@ -291,6 +323,9 @@ def _empty_report(
         "agent_lifecycle": [],
         "breakdowns": [],
         "hook_effectiveness": [],
+        "engineer_runs": _empty_engineer_runs(),
+        "engineer_tools": [],
+        "workload": _empty_workload(),
         "token_usage": _empty_token_usage(),
         "cost": _empty_cost(),
         "latency": {"evidence": "unavailable", **_duration_summary([])},
@@ -301,7 +336,8 @@ def _empty_report(
 
 
 def build_report(
-    path, recent_limit=40, included_origins=None, adapter_id="claude-code"
+    path, recent_limit=40, included_origins=None, adapter_id="claude-code",
+    start_timestamp=None, end_timestamp=None,
 ):
     """Aggregate the same validated stream consumed by the machine CLI and UI."""
     allowed_origins = set(
@@ -318,6 +354,10 @@ def build_report(
     report = _empty_report(
         active=True, included_origins=allowed_origins, adapter_id=adapter_id
     )
+    report["period"] = {
+        "from": str(start_timestamp or ""), "to": str(end_timestamp or ""),
+        "preset": "custom" if start_timestamp or end_timestamp else "all",
+    }
     contract = CONTRACTS[adapter_id]
     sessions = set()
     agents = set()
@@ -342,18 +382,35 @@ def build_report(
     tools = {}
     decisions = collections.Counter()
     hook_health = {}
+    engineer_runs = collections.Counter()
+    engineer_statuses = collections.Counter()
+    engineer_verdicts = collections.Counter()
+    engineer_tools = collections.Counter()
+    global_agent_types = {}
+    period_agent_instances = collections.defaultdict(set)
+    period_agent_starts = collections.Counter()
+    period_agent_stops = collections.Counter()
+    usage_by_session = collections.defaultdict(collections.Counter)
+    skill_requests = collections.Counter()
     recent = collections.deque(maxlen=max(0, int(recent_limit)))
 
     try:
         rows = iter_events(path, adapter_id=adapter_id)
         for row in rows:
-            report["records"] += 1
-            schema_versions[row["schema_version"]] += 1
-            origins[row["origin"]] += 1
             if row["timestamp"]:
                 report["stored_first_timestamp"] = (
                     report["stored_first_timestamp"] or row["timestamp"])
                 report["stored_last_timestamp"] = row["timestamp"]
+            if (row["event"] in ("subagent_start", "subagent_stop")
+                    and row["agent_id"] and row["agent_type"]):
+                global_agent_types[row["agent_id"]] = row["agent_type"]
+            if start_timestamp and row["timestamp"] < str(start_timestamp):
+                continue
+            if end_timestamp and row["timestamp"] >= str(end_timestamp):
+                continue
+            report["records"] += 1
+            schema_versions[row["schema_version"]] += 1
+            origins[row["origin"]] += 1
             if row["schema_version"] < contract.ROW_SCHEMA_VERSION:
                 report["legacy_rows"] += 1
             if row["event"] not in contract.EVENT_FIELDS:
@@ -406,13 +463,18 @@ def build_report(
             # agent's lifetime; counting it produced stops with no matching start
             # and a permanent phantom gap.
             if (row["event"] in ("subagent_start", "subagent_stop")
-                    and (row["agent_id"] or row["agent_type"])):
+                    and row["agent_id"] and row["agent_type"]):
                 item = lifecycle.setdefault(role, {
                     "agent": role, "started": 0, "stopped": 0, "instances": set(),
                 })
                 item["started" if row["event"] == "subagent_start" else "stopped"] += 1
                 if row["agent_id"]:
                     item["instances"].add(row["agent_id"])
+                    period_agent_instances[role].add(row["agent_id"])
+                if row["event"] == "subagent_start":
+                    period_agent_starts[role] += 1
+                else:
+                    period_agent_stops[role] += 1
 
             for field in BREAKDOWN_FIELDS.get(row["event"], ()):
                 value = row["data"].get(field)
@@ -461,6 +523,9 @@ def build_report(
                 usage["all_tokens"] += everything
                 source_usage["all_tokens"] += everything
                 model_usage["all_tokens"] += everything
+                session_usage = usage_by_session[row["session_id"]]
+                session_usage["requests"] += data["request_count"]
+                session_usage["all_tokens"] += everything
                 # An absent cost field means the source does not publish one, so
                 # the reporting request count — not the row count — is the base.
                 if "cost_micro_usd" in data:
@@ -471,6 +536,10 @@ def build_report(
                     bucket["requests"] += data["request_count"]
                 if "duration_ms" in data:
                     request_latencies.append(data["duration_ms"])
+
+            if row["event"] == "skill_request" and row["valid"]:
+                data = row["data"]
+                skill_requests[(data["skill"], data["invoker"])] += 1
 
             if row["event"] == "tool_result" and row["valid"]:
                 data = row["data"]
@@ -509,6 +578,25 @@ def build_report(
                     item["runs"] += 1
                     item["errors"] += int(data["status"] == "failed")
                 item["durations"].append(data["duration_ms"])
+
+            if row["event"] == "engineer_run" and row["valid"]:
+                data = row["data"]
+                engineer_runs["runs"] += 1
+                engineer_runs[data["mode"]] += 1
+                engineer_runs["ready"] += int(data["status"] == "ready-for-architect-review")
+                engineer_runs["blocked"] += int(data["status"] != "ready-for-architect-review")
+                for key in (
+                    "rounds", "correction_rounds", "checks_total", "checks_passed",
+                    "tool_calls", "repeated_tool_calls", "failed_tool_calls",
+                    "compactions", "retries", "duration_ms",
+                ):
+                    engineer_runs[key] += data[key]
+                engineer_statuses[data["status"]] += 1
+                engineer_verdicts[data["verifier_status"]] += 1
+
+            if row["event"] == "engineer_tool_summary" and row["valid"]:
+                data = row["data"]
+                engineer_tools[(data["stage"], data["tool_name"])] += data["calls"]
 
             if recent.maxlen:
                 recent.append({key: row[key] for key in (
@@ -580,6 +668,21 @@ def build_report(
         ),
         key=lambda item: (-item["errors"], -item["runs"], item["hook_event"]),
     )
+    report["engineer_runs"] = {
+        **report["engineer_runs"],
+        **{key: engineer_runs[key] for key in (
+            "runs", "ready", "blocked", "new", "resume", "rounds",
+            "correction_rounds", "checks_total", "checks_passed", "tool_calls",
+            "repeated_tool_calls", "failed_tool_calls", "compactions", "retries",
+            "duration_ms",
+        )},
+        "by_status": [[key, value] for key, value in engineer_statuses.most_common()],
+        "by_verdict": [[key, value] for key, value in engineer_verdicts.most_common()],
+    }
+    report["engineer_tools"] = [
+        {"stage": stage, "tool_name": tool, "calls": calls}
+        for (stage, tool), calls in engineer_tools.most_common()
+    ]
     report["latency"] = {
         "evidence": "exact" if request_latencies else "unavailable",
         **_duration_summary(request_latencies),
@@ -621,6 +724,56 @@ def build_report(
             for model, values in sorted(usage_by_model.items())
         ],
     }
+    subagent_usage = collections.defaultdict(collections.Counter)
+    attributed_sessions = 0
+    for session_id, values in usage_by_session.items():
+        agent_type = global_agent_types.get(session_id)
+        if not agent_type:
+            continue
+        attributed_sessions += 1
+        subagent_usage[agent_type].update(values)
+    attributed_requests = sum(item["requests"] for item in subagent_usage.values())
+    attributed_tokens = sum(item["all_tokens"] for item in subagent_usage.values())
+    subagent_starts = sum(period_agent_starts.values())
+    report["workload"] = {
+        "model_turns": usage["requests"],
+        "top_level_turns": max(0, usage["requests"] - attributed_requests),
+        "top_level_tokens": max(0, usage["all_tokens"] - attributed_tokens),
+        "subagent_starts": subagent_starts,
+        "subagent_stops": sum(period_agent_stops.values()),
+        "subagent_instances": len({
+            value for values in period_agent_instances.values() for value in values
+        }),
+        "subagent_attributed_turns": attributed_requests,
+        "subagent_attributed_tokens": attributed_tokens,
+        "subagent_token_evidence": (
+            "observed-correlation" if attributed_sessions else "unavailable"
+        ),
+        "top_level_evidence": (
+            "exact" if not subagent_starts
+            else "observed-correlation" if adapter_id == "codex"
+            else "unavailable"
+        ),
+        "by_subagent": [
+            {
+                "agent": agent_type,
+                "starts": period_agent_starts[agent_type],
+                "stops": period_agent_stops[agent_type],
+                "instances": len(period_agent_instances[agent_type]),
+                "turns": subagent_usage[agent_type]["requests"],
+                "all_tokens": subagent_usage[agent_type]["all_tokens"],
+            }
+            for agent_type in sorted(
+                set(period_agent_instances) | set(subagent_usage),
+                key=lambda value: (-period_agent_starts[value], value),
+            )
+        ],
+        "skills": [
+            {"skill": skill, "invoker": invoker, "calls": calls}
+            for (skill, invoker), calls in skill_requests.most_common()
+        ],
+        "skill_evidence": "observed" if skill_requests else "unavailable",
+    }
     context_chars = sum(item["context_chars"] for item in effectiveness.values())
     report["harness_context_cost"] = {
         "evidence": "estimated",
@@ -634,11 +787,16 @@ def build_report(
     return report
 
 
-def build_multi_report(paths=None, recent_limit=40):
+def build_multi_report(
+    paths=None, recent_limit=40, start_timestamp=None, end_timestamp=None
+):
     """Combine adapter summaries without combining their runtime storage."""
     paths = paths or default_db_paths()
     adapters = [
-        build_report(path, recent_limit=recent_limit, adapter_id=adapter_id)
+        build_report(
+            path, recent_limit=recent_limit, adapter_id=adapter_id,
+            start_timestamp=start_timestamp, end_timestamp=end_timestamp,
+        )
         for adapter_id, path in sorted(paths.items())
     ]
     result = _empty_report(adapter_id="all")
@@ -646,6 +804,10 @@ def build_multi_report(paths=None, recent_limit=40):
     result["format_version"] = 2
     result["adapters"] = adapters
     result["active"] = any(item["active"] for item in adapters)
+    result["period"] = {
+        "from": str(start_timestamp or ""), "to": str(end_timestamp or ""),
+        "preset": "custom" if start_timestamp or end_timestamp else "all",
+    }
     for key in (
         "records", "usable_records", "excluded_records", "sessions",
         "agent_instances", "legacy_rows", "invalid_rows",
@@ -726,6 +888,39 @@ def build_multi_report(paths=None, recent_limit=40):
             for (adapter_id, model), values in sorted(combined_models.items())
         ],
     }
+    workload_number_keys = (
+        "model_turns", "top_level_turns", "top_level_tokens",
+        "subagent_starts", "subagent_stops", "subagent_instances",
+        "subagent_attributed_turns", "subagent_attributed_tokens",
+    )
+    result["workload"] = {
+        **{key: sum(item["workload"][key] for item in adapters)
+           for key in workload_number_keys},
+        "subagent_token_evidence": (
+            "observed-correlation" if any(
+                item["workload"]["subagent_token_evidence"] == "observed-correlation"
+                for item in adapters
+            ) else "unavailable"
+        ),
+        "top_level_evidence": (
+            "exact" if all(
+                item["workload"]["top_level_evidence"] == "exact"
+                for item in adapters if item["active"]
+            ) else "partial"
+        ),
+        "skill_evidence": (
+            "observed" if any(item["workload"]["skills"] for item in adapters)
+            else "unavailable"
+        ),
+        "by_subagent": [
+            {**row, "adapter_id": item["adapter_id"]}
+            for item in adapters for row in item["workload"]["by_subagent"]
+        ],
+        "skills": [
+            {**row, "adapter_id": item["adapter_id"]}
+            for item in adapters for row in item["workload"]["skills"]
+        ],
+    }
     context_chars = sum(
         item["harness_context_cost"]["characters"] for item in adapters
     )
@@ -765,13 +960,35 @@ def build_multi_report(paths=None, recent_limit=40):
     }
     for key in (
         "agent_lifecycle", "breakdowns", "hook_effectiveness",
-        "tool_reliability", "tool_decisions", "hook_health",
+        "tool_reliability", "tool_decisions", "hook_health", "engineer_tools",
     ):
         result[key] = []
         for item in adapters:
             result[key].extend([
                 {**row, "adapter_id": item["adapter_id"]} for row in item[key]
             ])
+    engineer_number_keys = (
+        "runs", "ready", "blocked", "new", "resume", "rounds",
+        "correction_rounds", "checks_total", "checks_passed", "tool_calls",
+        "repeated_tool_calls", "failed_tool_calls", "compactions", "retries",
+        "duration_ms",
+    )
+    result["engineer_runs"] = {
+        **result["engineer_runs"],
+        **{
+            key: sum(item["engineer_runs"][key] for item in adapters)
+            for key in engineer_number_keys
+        },
+        "by_status": [],
+        "by_verdict": [],
+    }
+    for source_key, target_key in (("by_status", "by_status"), ("by_verdict", "by_verdict")):
+        counts = collections.Counter()
+        for item in adapters:
+            counts.update(dict(item["engineer_runs"][source_key]))
+        result["engineer_runs"][target_key] = [
+            [key, value] for key, value in counts.most_common()
+        ]
     recent = []
     for item in adapters:
         recent.extend([

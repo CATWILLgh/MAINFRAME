@@ -11,6 +11,15 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools/spark_telemetry_triage.py"
+sys.path.insert(0, str(ROOT / "tools"))
+import spark_telemetry_triage
+
+
+def test_failure_detail_is_bounded_and_actionable():
+    detail = spark_telemetry_triage._failure_detail(
+        1, '{"type":"error","message":"Reconnecting... stream disconnected before completion"}'
+    )
+    assert detail == "Spark network transport is unavailable"
 
 
 def test_adapter_owned_candidate_and_usage():
@@ -53,5 +62,7 @@ def test_adapter_owned_candidate_and_usage():
 
 
 if __name__ == "__main__":
-    test_adapter_owned_candidate_and_usage()
-    print("OK spark telemetry triage - 1 test passed")
+    tests = [value for name, value in sorted(globals().items()) if name.startswith("test_")]
+    for test in tests:
+        test()
+    print(f"OK spark telemetry triage - {len(tests)} tests passed")

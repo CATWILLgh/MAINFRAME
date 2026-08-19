@@ -10,6 +10,8 @@ Bash). Model analysis is disabled except in its dedicated launch test.
 
 import importlib.util
 import os
+import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -122,6 +124,33 @@ def test_codex_session_selects_codex_queue_contract():
     assert "adapter: codex" in text
     assert "model_lab_eligible: false" in text
     assert "session: thread-42" in text
+
+
+def test_installed_copy_finds_receiver_through_managed_delivery_state():
+    home = _tmp()
+    installed = os.path.join(home, ".agents", "skills", "harness-feedback")
+    os.makedirs(installed)
+    script = os.path.join(installed, "feedback.py")
+    shutil.copyfile(SCRIPTS["codex"], script)
+    state_dir = os.path.join(home, ".codex", ".mainframe-managed-artifacts")
+    os.makedirs(state_dir)
+    source = os.path.join(
+        ROOT, "adapters", "codex", "dev", "skills", "harness-feedback"
+    )
+    with open(os.path.join(state_dir, "dev-harness-feedback.json"), "w") as handle:
+        json.dump({"source": source, "target": installed}, handle)
+    output = _tmp()
+    env = dict(os.environ)
+    env.update({
+        "HOME": home, "MAINFRAME_FEEDBACK_DIR": output,
+        "MAINFRAME_MODEL_LAB_DISABLE": "1",
+    })
+    result = subprocess.run(
+        [sys.executable, script] + _base_args(), input=GOOD_BODY,
+        capture_output=True, text=True, env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert os.path.isfile(result.stdout.strip())
 
 
 def test_codex_entrypoint_does_not_need_session_detection():

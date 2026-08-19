@@ -81,6 +81,14 @@ window.HUB_STRINGS_RU = {
   "tool": "инструмент",
   "hook event": "событие хука",
   "duration": "длительность",
+  "ready": "готово к ревью",
+  "not ready": "не готово",
+  "corrections": "исправлений",
+  "checks passed": "проверок пройдено",
+  "compactions": "компактов",
+  "tool calls": "вызовов инструментов",
+  "total duration": "общая длительность",
+  "stage": "этап",
 
   // period / evidence
   "Observation period: {from} — {to}": "Период наблюдения: {from} — {to}",
@@ -161,8 +169,8 @@ window.HUB_STRINGS_RU = {
   "How the data gets here": "Как данные сюда попадают",
   "Each adapter writes its own local database. The page reads them read-only and never merges their storage.":
     "Каждый адаптор пишет в свою локальную базу. Страница читает их только на чтение и не объединяет хранилища.",
-  "No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev or ./install.sh --codex --dev.":
-    "Телеметрия ещё не записана — либо dev-режим не установлен, либо с момента установки не было сессий. Включите нужный адаптор: ./install.sh --claude --dev или ./install.sh --codex --dev.",
+  "No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev, ./install.sh --codex --dev, or ./install.sh --pi --dev.":
+    "Телеметрия ещё не записана — либо dev-режим не установлен, либо с момента установки не было сессий. Включите нужный адаптор: ./install.sh --claude --dev, ./install.sh --codex --dev или ./install.sh --pi --dev.",
   "Telemetry read error: {error}": "Ошибка чтения телеметрии: {error}",
   "Collector": "Приёмник",
   "The collector receives the harness's own usage stream over local OTLP. If it fails, the page would otherwise show a confident zero.":
@@ -221,13 +229,16 @@ window.HUB_STRINGS_RU = {
   "Breakdowns": "Разбивки",
   "Recent validated rows": "Последние проверенные строки",
   "Files waiting in the local feedback queue.": "Файлы, ожидающие в локальной очереди обратной связи.",
+  "Pi engineer runs": "Запуски Pi-инженера",
+  "Bounded implementation blocks run by Pi. Ready means the internal verifier passed; the primary agent still owns final review and commit.":
+    "Ограниченные блоки реализации, выполненные Pi. «Готово» означает, что внутренний проверяющий пропустил результат; финальная проверка и коммит всё равно остаются за главным агентом.",
 
   // usage tab
   "Spend and tokens": "Затраты и токены",
   "Only exact native counters are added together. An adapter that reports nothing stays visible and is never treated as zero.":
     "Складываются только точные счётчики самой среды. Адаптор без данных остаётся видимым и никогда не считается нулём.",
-  "No adapter telemetry is active yet. Install Claude Code or Codex in dev mode and start a fresh session.":
-    "Телеметрия адапторов ещё не активна. Установите Claude Code или Codex в dev-режиме и начните новую сессию.",
+  "No adapter telemetry is active yet. Install Claude Code, Codex, or Pi in dev mode and start a fresh session.":
+    "Телеметрия адапторов ещё не активна. Установите Claude Code, Codex или Pi в dev-режиме и начните новую сессию.",
   "Total spend": "Всего затрат",
   "Cost is reported by {reporting} of {total} requests.":
     "Стоимость сообщают {reporting} из {total} запросов.",
@@ -235,6 +246,8 @@ window.HUB_STRINGS_RU = {
     "Ни один адаптор не сообщает стоимость, поэтому затраты показать нельзя. Счётчики токенов ниже всё равно точные.",
   "Cost by model": "Стоимость по моделям",
   "Token volume": "Объём токенов",
+  "Token share by adapter": "Доля токенов по адапторам",
+  "Token share by model": "Доля токенов по моделям",
   "\"Billed total\" is fresh input plus output — the number vendor consoles show. \"All tokens\" adds cache reads and writes, which is the real volume the model processed and is normally hundreds of times larger.":
     "«Оплачиваемый итог» — свежий вход плюс выход, то самое число, что показывают консоли провайдеров. «Всего токенов» добавляет чтение и запись кэша — это реальный объём, прошедший через модель, и он обычно в сотни раз больше.",
   "Response time": "Время ответа",
@@ -246,6 +259,8 @@ window.HUB_STRINGS_RU = {
   "Activity calendar": "Календарь активности",
   "{date} · {msgs} messages · {tok} tokens": "{date} · сообщений: {msgs} · токенов: {tok}",
   "Claude transcript history": "История транскриптов Claude",
+  "This legacy section always shows its full available transcript history and does not follow the period selector.":
+    "Этот архивный раздел всегда показывает всю доступную историю транскриптов и не зависит от выбранного периода.",
   "Claude-only history read from local session transcripts. It is useful for long-term trends but is kept out of the exact cross-adapter totals above, because Codex has no equivalent transcript contract.":
     "История только по Claude, прочитанная из локальных транскриптов сессий. Полезна для долгих трендов, но не входит в точные общие итоги выше, потому что у Codex нет аналогичного контракта транскриптов.",
   "Read from {files} local session transcripts. Counts only — no prompt text is read.":
@@ -302,6 +317,55 @@ window.HUB_STRINGS_RU = {
   "failed": "ошибка",
   "cancelled": "отменено",
   "No analysis jobs yet.": "Заданий анализа пока нет.",
+  "Analysis reports": "Отчёты анализа",
+  "No plain-language summary was stored.": "Понятное краткое описание не сохранено.",
+  "No Spark or Gemini reports have been stored yet.": "Отчётов Spark или Gemini пока нет.",
+  "Installed MAINFRAME layers": "Установленные слои MAINFRAME",
+  "This is a local presence check of MAINFRAME-managed delivery records and targets. It does not claim unchanged content; installer checks remain the authority for drift.":
+    "Это локальная проверка наличия записей доставки MAINFRAME и их целей. Она не утверждает, что содержимое не менялось: дрейф окончательно проверяет установщик.",
+  "component": "компонент",
+  "present": "установлен",
+  "missing": "отсутствует",
+  "state-only": "осталась только запись",
+  "state-unreadable": "запись не читается",
+  "Period": "Период",
+  "All time": "За всё время",
+  "Last 24 hours": "Последние 24 часа",
+  "Last 7 days": "Последние 7 дней",
+  "Last 30 days": "Последние 30 дней",
+  "Custom range": "Свой диапазон",
+  "From": "С",
+  "To": "По",
+  "Start date must not be after end date.": "Начальная дата не может быть позже конечной.",
+  "All available history": "Вся доступная история",
+  "Selected period": "Выбранный период",
+  "All tokens": "Все токены",
+  "exact native counters": "точные нативные счётчики",
+  "Model turns": "Ходы моделей",
+  "completed model responses": "завершённые ответы моделей",
+  "Execution split": "Распределение работы",
+  "top-level turns": "ходы главных агентов",
+  "main or unattributed turns": "ходы главных агентов или без привязки",
+  "subagent calls": "вызовы сабагентов",
+  "attributed subagent turns": "привязанные ходы сабагентов",
+  "Agent workload": "Нагрузка агентов",
+  "top-level tokens": "токены главных агентов",
+  "main or unattributed tokens": "токены главных агентов или без привязки",
+  "subagent completions": "завершения сабагентов",
+  "attributed subagent tokens": "привязанные токены сабагентов",
+  "Subagents": "Сабагенты",
+  "turns": "ходы",
+  "Skill invocations": "Вызовы навыков",
+  "invoker": "инициатор",
+  "status": "статус",
+  "Subagent tokens are shown only when the native model session identifier matches a recorded subagent identifier. Unmatched usage stays at the top level instead of being guessed.":
+    "Токены сабагента показаны только когда нативный идентификатор модельной сессии совпал с записанным идентификатором сабагента. Остальной расход остаётся на верхнем уровне без догадок.",
+  "The native telemetry does not currently expose a verified link between model usage and individual subagents. Calls are exact; per-subagent tokens remain unavailable.":
+    "Нативная телеметрия пока не даёт проверенной связи между расходом модели и отдельными сабагентами. Число вызовов точное, токены по каждому сабагенту недоступны.",
+  "Main-agent usage and unattributed usage are combined because at least one adapter does not expose enough identifiers to separate them safely.":
+    "Расход главных агентов объединён с расходом без привязки: хотя бы один адаптор не отдаёт достаточно идентификаторов для надёжного разделения.",
+  "No verified skill-invocation events were collected in this period. This is unknown coverage, not proof that no skill ran.":
+    "За этот период нет проверенных событий вызова навыков. Это неизвестное покрытие, а не доказательство, что навыки не запускались.",
 
   // components / hooks / config / health / map
   "Skills": "Навыки",

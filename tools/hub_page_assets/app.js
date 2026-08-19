@@ -399,25 +399,74 @@
     return (D.dev_state || {}).telemetry || {};
   }
 
+  let periodPreset = "all";
+  let customFrom = "";
+  let customTo = "";
+  try {
+    periodPreset = window.localStorage.getItem("mainframe-period") || "all";
+    customFrom = window.localStorage.getItem("mainframe-period-from") || "";
+    customTo = window.localStorage.getItem("mainframe-period-to") || "";
+  } catch (_err) { /* local state is optional */ }
+
+  function periodBounds() {
+    if (periodPreset === "all") return { from: "", to: "" };
+    if (periodPreset === "custom") {
+      return {
+        from: customFrom ? customFrom + "T00:00:00Z" : "",
+        to: customTo ? nextUtcDay(customTo) + "T00:00:00Z" : "",
+      };
+    }
+    const days = Number(periodPreset);
+    const end = new Date();
+    const start = new Date(end.getTime() - days * 86400000);
+    return { from: start.toISOString(), to: "" };
+  }
+
+  function nextUtcDay(day) {
+    const value = new Date(day + "T00:00:00Z");
+    value.setUTCDate(value.getUTCDate() + 1);
+    return value.toISOString().slice(0, 10);
+  }
+
+  function periodQuery() {
+    const bounds = periodBounds();
+    const query = new URLSearchParams();
+    if (bounds.from) query.set("from", bounds.from);
+    if (bounds.to) query.set("to", bounds.to);
+    return query.toString() ? "?" + query.toString() : "";
+  }
+
   function ingestState() {
     return D.ingest || { evidence: "unknown", healthy: null };
   }
 
   function activeAdapters(report) {
-    const configured = (D.control || {}).active_adapters;
-    const set = new Set(Array.isArray(configured) ? configured : []);
-    return (report.adapters || []).filter((item) =>
-      Array.isArray(configured) ? set.has(item.adapter_id) : item.active);
+    // Historical reporting must not disappear when an adapter's dev collector
+    // is currently disabled. The control panel separately shows which inputs
+    // are live now; analytics includes every adapter with a readable ledger.
+    return (report.adapters || []).filter((item) => item.active);
   }
 
   function periodLine(report) {
+    const selected = report.period || {};
+    if (selected.preset && selected.preset !== "all") {
+      const from = fmtDay(selected.from || report.first_timestamp);
+      let to = fmtDay(report.last_timestamp);
+      if (selected.to) {
+        const exclusive = new Date(selected.to);
+        to = Number.isNaN(exclusive.getTime()) ? fmtDay(selected.to)
+          : fmtDay(new Date(exclusive.getTime() - 1).toISOString());
+      }
+      if (!from || !to) return el("p", { class: "muted" }, t("No events have been recorded yet."));
+      return el("p", { class: "muted" },
+        t("Selected period") + ": " + from + " — " + to);
+    }
     const from = fmtDay(report.stored_first_timestamp || report.first_timestamp);
     const to = fmtDay(report.stored_last_timestamp || report.last_timestamp);
     if (!from || !to) return el("p", { class: "muted" }, t("No events have been recorded yet."));
-    return el("p", { class: "muted" }, [
+    return el("p", { class: "muted" },
       f("Observation period: {from} — {to}", { from: from, to: to }) + " · "
-        + t("All figures below cover the whole observation period unless a card says otherwise."),
-    ]);
+        + t("All available history"));
   }
 
   function ingestSummary() {
@@ -446,6 +495,8 @@
     const adapters = activeAdapters(report);
     const reportingAdapters = adapters.filter((item) => (item.usable_records || 0) > 0);
     const cost = report.cost || {};
+    const tokens = report.token_usage || {};
+    const workload = report.workload || {};
     const ingest = ingestState();
     const ingestNote = ingestSummary();
 
@@ -541,6 +592,8 @@
 
     root.appendChild(el("div", { class: "overview-metrics" }, [
       overviewMetric(t("Observed sessions"), num(report.sessions), t("separate harness runs")),
+      overviewMetric(t("All tokens"), fmtTok(tokens.all_tokens), t("exact native counters"), "usage-tone"),
+      overviewMetric(t("Model turns"), num(workload.model_turns), t("completed model responses"), "usage-tone"),
       // A partial cost figure covers only the requests that reported one, so the
       // note must say so; "billed by the provider" beside 3% coverage would read
       // as a full bill.
@@ -594,9 +647,12 @@
         shareRows(adapterActivity, report.usable_records || 0, "agent-share"),
       ]),
       el("div", null, [
-        el("h3", null, t("Telemetry by agent")),
-        shareRows((report.by_agent || []).slice(0, 7).map(([label, value]) =>
-          [label === "(main context)" ? t("(main context)") : label, value]), null, "agent-share"),
+        el("h3", null, t("Execution split")),
+        statRow([
+          [num(workload.top_level_turns), t("main or unattributed turns")],
+          [num(workload.subagent_starts), t("subagent calls")],
+          [num(workload.subagent_attributed_turns), t("attributed subagent turns")],
+        ]),
       ]),
     ]);
 
@@ -630,7 +686,7 @@
     const report = telemetry();
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
-        t("No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev or ./install.sh --codex --dev.")));
+        t("No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev, ./install.sh --codex --dev, or ./install.sh --pi --dev.")));
       if (report.error) {
         root.appendChild(el("div", { class: "notice" },
           f("Telemetry read error: {error}", { error: report.error })));
@@ -797,6 +853,32 @@
       ])))));
     }
 
+    const engineer = report.engineer_runs || {};
+    if (engineer.runs) {
+      root.appendChild(section(t("Pi engineer runs"), "agents", engineer.runs,
+        el("div", { class: "panel-stack" }, [
+          explain(t("Bounded implementation blocks run by Pi. Ready means the internal verifier passed; the primary agent still owns final review and commit.")),
+          statRow([
+            [num(engineer.runs), t("runs")],
+            [num(engineer.ready), t("ready")],
+            [num(engineer.blocked), t("not ready")],
+            [num(engineer.correction_rounds), t("corrections")],
+            [num(engineer.checks_passed) + " / " + num(engineer.checks_total), t("checks passed")],
+            [num(engineer.compactions), t("compactions")],
+            [num(engineer.tool_calls), t("tool calls")],
+            [fmtMs(engineer.duration_ms), t("total duration")],
+          ]),
+          (report.engineer_tools || []).length ? table([
+            [t("adapter")], [t("stage")], [t("tool")], [t("calls"), true],
+          ], report.engineer_tools.map((row) => cells([
+            [row.adapter_id || "pi", "mono"],
+            [row.stage, "mono"],
+            [row.tool_name, "mono"],
+            [num(row.calls), "num"],
+          ]))) : null,
+        ])));
+    }
+
     // Raw counts.
     if ((report.event_counts || []).length) {
       root.appendChild(section(t("Event counts"), "events", report.event_counts.length,
@@ -841,13 +923,14 @@
     const report = telemetry();
     const usage = report.token_usage || {};
     const cost = report.cost || {};
+    const workload = report.workload || {};
     const adapters = activeAdapters(report);
 
     root.appendChild(explain(t("Only exact native counters are added together. An adapter that reports nothing stays visible and is never treated as zero.")));
 
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
-        t("No adapter telemetry is active yet. Install Claude Code or Codex in dev mode and start a fresh session.")));
+        t("No adapter telemetry is active yet. Install Claude Code, Codex, or Pi in dev mode and start a fresh session.")));
       return;
     }
     root.appendChild(periodLine(report));
@@ -933,10 +1016,69 @@
         [t("adapter")], [t("source"), true], [t("requests"), true], [t("input"), true],
         [t("cached"), true], [t("output"), true], [t("all tokens"), true],
       ], coverageRows)));
+      const adapterTokenRows = adapters
+        .map((item) => [
+          item.adapter_label || item.adapter_id,
+          ((item.token_usage || {}).all_tokens || 0),
+          fmtTok((item.token_usage || {}).all_tokens || 0),
+        ])
+        .filter((row) => row[1] > 0);
+      if (adapterTokenRows.length) {
+        root.appendChild(section(t("Token share by adapter"), "usage", adapterTokenRows.length,
+          shareRows(adapterTokenRows, usage.all_tokens || 0, "usage-share")));
+      }
     }
+
+    root.appendChild(section(t("Agent workload"), "agents", null,
+      el("div", { class: "panel-stack" }, [
+        statRow([
+          [num(workload.top_level_turns), t("main or unattributed turns")],
+          [fmtTok(workload.top_level_tokens), t("main or unattributed tokens")],
+          [num(workload.subagent_starts), t("subagent calls")],
+          [num(workload.subagent_stops), t("subagent completions")],
+          [num(workload.subagent_attributed_turns), t("attributed subagent turns")],
+          [fmtTok(workload.subagent_attributed_tokens), t("attributed subagent tokens")],
+        ]),
+        explain(workload.subagent_token_evidence === "observed-correlation"
+          ? t("Subagent tokens are shown only when the native model session identifier matches a recorded subagent identifier. Unmatched usage stays at the top level instead of being guessed.")
+          : t("The native telemetry does not currently expose a verified link between model usage and individual subagents. Calls are exact; per-subagent tokens remain unavailable.")),
+        workload.top_level_evidence === "partial" || workload.top_level_evidence === "unavailable"
+          ? explain(t("Main-agent usage and unattributed usage are combined because at least one adapter does not expose enough identifiers to separate them safely."))
+          : null,
+      ])));
+
+    const agentRows = workload.by_subagent || [];
+    if (agentRows.length) {
+      root.appendChild(section(t("Subagents"), "agents", agentRows.length, table([
+        [t("adapter")], [t("agent")], [t("calls"), true], [t("completed"), true],
+        [t("turns"), true], [t("all tokens"), true],
+      ], agentRows.map((row) => cells([
+        [row.adapter_id || report.adapter_id || "—", "mono"],
+        [row.agent || t("(unknown)"), "mono"],
+        [num(row.starts), "num"], [num(row.stops), "num"],
+        [row.turns ? num(row.turns) : "—", "num"],
+        [row.all_tokens ? fmtTok(row.all_tokens) : "—", "num"],
+      ])))));
+    }
+
+    const skillRows = workload.skills || [];
+    root.appendChild(section(t("Skill invocations"), "skills", skillRows.length,
+      skillRows.length ? table([
+        [t("adapter")], [t("skill")], [t("invoker")], [t("calls"), true],
+      ], skillRows.map((row) => cells([
+        [row.adapter_id || report.adapter_id || "—", "mono"],
+        [row.skill, "mono"], [t(row.invoker), "mono"], [num(row.calls), "num"],
+      ]))) : emptyState(t("No verified skill-invocation events were collected in this period. This is unknown coverage, not proof that no skill ran."))));
 
     const modelRows = (usage.by_model || []).filter((row) => row.all_tokens > 0);
     if (modelRows.length) {
+      const modelTokenRows = modelRows.slice(0, 16).map((row) => [
+        (row.adapter_id ? row.adapter_id + " · " : "") + (row.model || t("(unknown)")),
+        row.all_tokens,
+        fmtTok(row.all_tokens),
+      ]);
+      root.appendChild(section(t("Token share by model"), "usage", modelTokenRows.length,
+        shareRows(modelTokenRows, usage.all_tokens || 0, "usage-share")));
       root.appendChild(section(t("Usage by model"), "usage", modelRows.length, table([
         [t("adapter")], [t("model")], [t("requests"), true], [t("input"), true],
         [t("cached"), true], [t("output"), true], [t("billed total"), true],
@@ -979,6 +1121,7 @@
     root.appendChild(section(t("Claude transcript history"), "usage", u.sessions || 0,
       el("div", { class: "panel-stack" }, [
         explain(t("Claude-only history read from local session transcripts. It is useful for long-term trends but is kept out of the exact cross-adapter totals above, because Codex has no equivalent transcript contract.")),
+        explain(t("This legacy section always shows its full available transcript history and does not follow the period selector.")),
         explain(f("Read from {files} local session transcripts. Counts only — no prompt text is read.",
           { files: num(u.files) })),
         statRow([
@@ -1122,6 +1265,22 @@
     const cfg = D.settings || {};
     const misc = D.misc || {};
     const perms = cfg.permissions || { allow: [], deny: [], ask: [] };
+
+    const installed = D.installation || [];
+    if (installed.length) {
+      const rows = [];
+      installed.forEach((adapter) => (adapter.items || []).forEach((item) => {
+        rows.push(cells([
+          [adapter.adapter_id, "mono"], [item.name, "mono"],
+          [t(item.status), item.status === "present" ? "good" : "warn"],
+        ]));
+      }));
+      root.appendChild(section(t("Installed MAINFRAME layers"), "config", rows.length,
+        el("div", { class: "panel-stack" }, [
+          explain(t("This is a local presence check of MAINFRAME-managed delivery records and targets. It does not claim unchanged content; installer checks remain the authority for drift.")),
+          table([[t("adapter")], [t("component")], [t("status")]], rows),
+        ])));
+    }
 
     root.appendChild(el("h2", { class: "layer-h config" }, t("Permissions")));
     root.appendChild(explain(f("What the hub lets an agent do silently, ask about, or refuse. Default mode: {mode}.",
@@ -1377,6 +1536,27 @@
     root.appendChild(section(t("Providers"), "config", providerCards.length,
       el("div", { class: "provider-grid" }, providerCards)));
 
+    const analyses = D.analyses || [];
+    if (analyses.length) {
+      root.appendChild(section(t("Analysis reports"), "dev", analyses.length,
+        el("div", { class: "report-list" }, analyses.map((report) =>
+          el("article", { class: "report-card" }, [
+            el("div", { class: "card-head" }, [
+              el("strong", { class: "mono" }, report.producer),
+              badge(report.adapter_id, "dev"),
+            ]),
+            el("div", { class: "report-meta mono" }, [
+              report.model + " · " + report.effort + " · " + fmtStamp(report.generated_at),
+            ]),
+            report.summary
+              ? el("p", { class: "card-desc" }, report.summary)
+              : el("p", { class: "card-desc muted" }, t("No plain-language summary was stored.")),
+            el("div", { class: "report-path mono dim" }, report.artifact),
+          ])))));
+    } else {
+      root.appendChild(emptyState(t("No Spark or Gemini reports have been stored yet.")));
+    }
+
     if (!jobs.length) {
       root.appendChild(el("div", { class: "notice" }, t("No analysis jobs yet.")));
       return;
@@ -1475,6 +1655,50 @@
       window.location.reload();
     });
     tools.appendChild(languageSelect);
+    const periodSelect = el("select", { class: "period-select", "aria-label": t("Period") }, [
+      el("option", { value: "all" }, t("All time")),
+      el("option", { value: "1" }, t("Last 24 hours")),
+      el("option", { value: "7" }, t("Last 7 days")),
+      el("option", { value: "30" }, t("Last 30 days")),
+      el("option", { value: "custom" }, t("Custom range")),
+    ]);
+    periodSelect.value = ["all", "1", "7", "30", "custom"].includes(periodPreset)
+      ? periodPreset : "all";
+    const fromInput = el("input", { class: "period-date", type: "date", "aria-label": t("From") });
+    const toInput = el("input", { class: "period-date", type: "date", "aria-label": t("To") });
+    fromInput.value = customFrom;
+    toInput.value = customTo;
+    const syncPeriodInputs = () => {
+      const custom = periodSelect.value === "custom";
+      fromInput.hidden = !custom;
+      toInput.hidden = !custom;
+    };
+    const applyPeriod = () => {
+      periodPreset = periodSelect.value;
+      customFrom = fromInput.value;
+      customTo = toInput.value;
+      const invalid = periodPreset === "custom" && customFrom && customTo
+        && customFrom > customTo;
+      toInput.setCustomValidity(invalid ? t("Start date must not be after end date.") : "");
+      if (invalid) {
+        toInput.reportValidity();
+        return;
+      }
+      try {
+        window.localStorage.setItem("mainframe-period", periodPreset);
+        window.localStorage.setItem("mainframe-period-from", customFrom);
+        window.localStorage.setItem("mainframe-period-to", customTo);
+      } catch (_err) { /* local state is optional */ }
+      syncPeriodInputs();
+      refreshData(true);
+    };
+    periodSelect.addEventListener("change", applyPeriod);
+    fromInput.addEventListener("change", applyPeriod);
+    toInput.addEventListener("change", applyPeriod);
+    syncPeriodInputs();
+    tools.appendChild(periodSelect);
+    tools.appendChild(fromInput);
+    tools.appendChild(toInput);
     const stamp = tools.querySelector(".stamp");
     tools.insertBefore(search, stamp || null);
     // anchor the fixed drawer just under the (sticky) topbar, measured not guessed
@@ -1545,7 +1769,7 @@
     if (!window.HUB_LIVE || refreshInFlight) return;
     refreshInFlight = true;
     try {
-      const response = await fetch("/api/live", { cache: "no-store" });
+      const response = await fetch("/api/live" + periodQuery(), { cache: "no-store" });
       if (!response.ok) throw new Error("live refresh failed");
       const update = await response.json();
       D = Object.assign({}, D, update);
@@ -1566,4 +1790,5 @@
   if (window.HUB_AUTO_REFRESH_MS >= 2000 && window.HUB_LIVE) {
     window.setInterval(() => { refreshData(false); }, window.HUB_AUTO_REFRESH_MS);
   }
+  if (window.HUB_LIVE && periodPreset !== "all") refreshData(true);
 })();

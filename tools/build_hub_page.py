@@ -34,6 +34,9 @@ _DEFAULT_DB = os.path.expanduser(
     "~/.claude/mainframe/claude-code/telemetry/telemetry.db")
 _DEFAULT_CODEX_DB = os.path.expanduser(
     "~/.codex/mainframe/codex/telemetry/telemetry.db")
+_DEFAULT_PI_DB = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..",
+    "workspace", "runtime", "pi", "telemetry", "telemetry.db")
 _DEFAULT_FEEDBACK = os.path.expanduser(
     "~/.claude/mainframe/claude-code/feedback")
 _DEFAULT_PROJECTS = os.path.expanduser("~/.claude/projects")
@@ -188,21 +191,108 @@ def build_edges(skills, agents, hooks):
     return edges
 
 
-def collect_dev_state(db_path, feedback_dir, codex_db_path=None):
+def collect_dev_state(
+    db_path, feedback_dir, codex_db_path=None, pi_db_path=None,
+    start_timestamp=None, end_timestamp=None,
+):
     """Build the UI from the same validated stream exposed to machine readers."""
     telemetry = (
         build_multi_telemetry_report({
-            "claude-code": db_path,
-            "codex": codex_db_path,
-        })
-        if codex_db_path is not None
-        else build_telemetry_report(db_path, adapter_id="claude-code")
+            **{"claude-code": db_path},
+            **({"codex": codex_db_path} if codex_db_path is not None else {}),
+            **({"pi": pi_db_path} if pi_db_path is not None else {}),
+        }, start_timestamp=start_timestamp, end_timestamp=end_timestamp)
+        if codex_db_path is not None or pi_db_path is not None
+        else build_telemetry_report(
+            db_path, adapter_id="claude-code",
+            start_timestamp=start_timestamp, end_timestamp=end_timestamp,
+        )
     )
     state = {"active": telemetry["active"], "telemetry": telemetry, "feedback": []}
     if os.path.isdir(feedback_dir):
         state["feedback"] = sorted(
             f for f in os.listdir(feedback_dir) if f.endswith(".md"))
     return state
+
+
+def _managed_state_summary(adapter_id, directory):
+    items = []
+    if os.path.isdir(directory):
+        for filename in sorted(os.listdir(directory)):
+            if not filename.endswith(".json"):
+                continue
+            path = os.path.join(directory, filename)
+            try:
+                payload = json.loads(_read(path))
+            except (OSError, ValueError, TypeError):
+                items.append({"name": filename[:-5], "status": "state-unreadable"})
+                continue
+            target = payload.get("target")
+            status = "present" if target and os.path.exists(target) else "state-only"
+            items.append({"name": filename[:-5], "status": status})
+    return {"adapter_id": adapter_id, "items": items}
+
+
+def collect_installation_state(root):
+    home = os.path.expanduser("~")
+    claude = _managed_state_summary(
+        "claude-code", os.path.join(home, ".claude", ".mainframe-managed-artifacts")
+    )
+    codex = _managed_state_summary(
+        "codex", os.path.join(home, ".codex", ".mainframe-managed-artifacts")
+    )
+    for name, target in (
+        ("settings", os.path.join(home, ".claude", ".mainframe-settings-state.json")),
+        ("config", os.path.join(home, ".codex", ".mainframe-config-state.json")),
+        ("hooks", os.path.join(home, ".codex", ".mainframe-hooks-state.json")),
+    ):
+        bucket = claude if name == "settings" else codex
+        bucket["items"].append({
+            "name": name, "status": "present" if os.path.isfile(target) else "missing",
+        })
+    pi_source = os.path.realpath(os.path.join(root, "adapters/pi/bin/mainframe-pi"))
+    pi_target = os.path.join(home, ".local", "bin", "mainframe-pi")
+    pi_present = os.path.islink(pi_target) and os.path.realpath(pi_target) == pi_source
+    pi = {"adapter_id": "pi", "items": [{
+        "name": "launcher", "status": "present" if pi_present else "missing",
+    }]}
+    return [claude, codex, pi]
+
+
+def collect_model_lab_reports(root, limit=40):
+    runtime = os.path.join(root, "workspace", "runtime")
+    reports = []
+    if not os.path.isdir(runtime):
+        return reports
+    for directory, _subdirs, filenames in os.walk(runtime):
+        if f"{os.sep}model-lab{os.sep}" not in directory + os.sep:
+            continue
+        for filename in filenames:
+            if not filename.endswith(".json"):
+                continue
+            path = os.path.join(directory, filename)
+            try:
+                payload = json.loads(_read(path))
+            except (OSError, ValueError, TypeError):
+                continue
+            if not isinstance(payload, dict) or not payload.get("producer"):
+                continue
+            summary = str(payload.get("summary") or "").strip()
+            reports.append({
+                "adapter_id": str(payload.get("adapter") or "unknown")[:40],
+                "producer": str(payload.get("producer") or "unknown")[:80],
+                "provider": str(payload.get("provider") or "unknown")[:80],
+                "model": str(payload.get("model") or "unknown")[:100],
+                "effort": str(payload.get("effort") or "unknown")[:40],
+                "generated_at": str(
+                    payload.get("generated_at") or payload.get("created_at") or ""
+                )[:40],
+                "summary": summary[:600],
+                "review_required": bool(payload.get("review_required", True)),
+                "artifact": os.path.relpath(path, root),
+            })
+    reports.sort(key=lambda item: item["generated_at"], reverse=True)
+    return reports[:max(0, int(limit))]
 
 
 def _iter_jsonl(projects_dir):
@@ -573,7 +663,8 @@ def compute_layout(nodes, layer_order):
 
 def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
                    projects_dir=_DEFAULT_PROJECTS, usage_cache=_DEFAULT_USAGE_CACHE,
-                   codex_db_path=None):
+                   codex_db_path=None, pi_db_path=None,
+                   start_timestamp=None, end_timestamp=None):
     skills = collect_skills(root)
     agents = collect_agents(root)
     hooks = collect_hooks(root)
@@ -588,10 +679,16 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
             db_path, feedback_dir,
             _DEFAULT_CODEX_DB if codex_db_path is None and db_path == _DEFAULT_DB
             else codex_db_path,
+            _DEFAULT_PI_DB if pi_db_path is None and db_path == _DEFAULT_DB
+            else pi_db_path,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
         ),
         "usage": collect_usage(projects_dir, usage_cache),
         "settings": collect_settings(root),
         "misc": collect_misc(root),
+        "installation": collect_installation_state(root),
+        "analyses": collect_model_lab_reports(root),
         "health": compute_health(skills, agents, hooks, root),
         "nodes": nodes,
         "layout": compute_layout(nodes, LAYER_ORDER),

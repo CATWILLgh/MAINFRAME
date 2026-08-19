@@ -57,6 +57,37 @@ def test_report_and_stream_share_the_same_rows():
     assert "/private/project" not in json.dumps(report)
 
 
+def test_pi_engineer_events_feed_shared_report_and_multi_adapter_view():
+    db = fresh_db()
+    run = {
+        "sample_id": "pi-run", "mode": "new",
+        "status": "ready-for-architect-review", "rounds": 2,
+        "correction_rounds": 1, "checks_total": 2, "checks_passed": 2,
+        "verifier_status": "ready-for-architect-review", "duration_ms": 1200,
+        "tool_calls": 8, "repeated_tool_calls": 1, "failed_tool_calls": 0,
+        "compactions": 1, "retries": 0, "executor_effort": "low",
+        "verifier_effort": "high",
+    }
+    tool = {"sample_id": "pi-tool", "stage": "executor", "tool_name": "read", "calls": 3}
+    with sqlite3.connect(db) as connection:
+        for index, (event, payload) in enumerate((("engineer_run", run), ("engineer_tool_summary", tool)), 1):
+            connection.execute(
+                "INSERT INTO events(ts,schema_version,session_id,agent_type,project,model,origin,event,payload) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (f"2026-08-18T00:00:0{index}Z", 2, "hashed-session", "engineer", "hashed-project",
+                 "provider/model", "runtime", event, json.dumps(payload)),
+            )
+    report = telemetry_data.build_report(db, adapter_id="pi")
+    assert report["engineer_runs"]["runs"] == 1
+    assert report["engineer_runs"]["ready"] == 1
+    assert report["engineer_runs"]["correction_rounds"] == 1
+    assert report["engineer_runs"]["checks_passed"] == 2
+    assert report["engineer_tools"] == [{"stage": "executor", "tool_name": "read", "calls": 3}]
+    combined = telemetry_data.build_multi_report({"pi": db})
+    assert combined["engineer_runs"]["runs"] == 1
+    assert combined["engineer_tools"][0]["adapter_id"] == "pi"
+
+
 def test_incremental_stream_uses_after_id_and_limit():
     db = fresh_db()
     for size in range(5):
@@ -83,6 +114,58 @@ def test_report_keeps_independent_breakdown_dimensions():
     }
     assert breakdowns[("skill_request", "skill")] == {"init": 2}
     assert breakdowns[("skill_request", "invoker")] == {"user": 1, "model": 1}
+
+
+def test_period_filter_keeps_observation_bounds_and_filters_metrics():
+    db = fresh_db()
+    with sqlite3.connect(db) as connection:
+        for timestamp, size in (
+            ("2026-08-01T00:00:00Z", 1),
+            ("2026-08-10T00:00:00Z", 2),
+            ("2026-08-20T00:00:00Z", 3),
+        ):
+            connection.execute(
+                "INSERT INTO events(ts,schema_version,session_id,agent_type,project,origin,event,payload) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (timestamp, 2, "s", "", "project", "runtime", "user_prompt",
+                 json.dumps({"prompt_len": size})),
+            )
+    report = telemetry_data.build_report(
+        db, start_timestamp="2026-08-05T00:00:00Z",
+        end_timestamp="2026-08-15T00:00:00Z",
+    )
+    assert report["records"] == report["usable_records"] == 1
+    assert report["stored_first_timestamp"] == "2026-08-01T00:00:00Z"
+    assert report["stored_last_timestamp"] == "2026-08-20T00:00:00Z"
+    assert report["first_timestamp"] == report["last_timestamp"] == "2026-08-10T00:00:00Z"
+
+
+def test_workload_attributes_only_native_sessions_matching_subagent_ids():
+    db = fresh_db()
+    usage = {
+        "sample_id": "sample", "source": "native-otel", "request_count": 2,
+        "input_tokens": 100, "cached_input_tokens": 20,
+        "cache_write_tokens": 0, "output_tokens": 30,
+        "reasoning_output_tokens": 0, "total_tokens": 130,
+    }
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "INSERT INTO events(ts,schema_version,session_id,agent_id,agent_type,project,origin,event,payload) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            ("2026-08-18T00:00:00Z", 2, "parent", "child", "reviewer", "project",
+             "runtime", "subagent_start", "{}"),
+        )
+        connection.execute(
+            "INSERT INTO events(ts,schema_version,session_id,agent_type,project,model,origin,event,payload) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            ("2026-08-18T00:00:01Z", 2, "child", "", "project", "model",
+             "runtime", "model_usage", json.dumps(usage)),
+        )
+    report = telemetry_data.build_report(db, adapter_id="codex")
+    assert report["workload"]["subagent_starts"] == 1
+    assert report["workload"]["subagent_attributed_turns"] == 2
+    assert report["workload"]["subagent_attributed_tokens"] == 150
+    assert report["workload"]["by_subagent"][0]["agent"] == "reviewer"
 
 
 def test_legacy_and_invalid_rows_are_visible_not_silently_counted_as_valid():

@@ -8,6 +8,7 @@ pure and tested against temp fixtures; the render layer is smoke-checked only.
 
 import json
 import os
+import pathlib
 import sqlite3
 import sys
 import tempfile
@@ -477,6 +478,56 @@ def test_collect_usage_absent_projects_degrades():
     u = bhp.collect_usage(projects_dir="/no/such/dir",
                           cache_path=os.path.join(tempfile.mkdtemp(), "c.json"))
     assert u == {"active": False}
+
+
+def test_managed_state_summary_distinguishes_present_and_stale_targets():
+    root = pathlib.Path(tempfile.mkdtemp())
+    state = root / "state"
+    state.mkdir()
+    target = root / "installed"
+    target.write_text("ok", encoding="utf-8")
+    (state / "present.json").write_text(
+        json.dumps({"target": str(target)}), encoding="utf-8"
+    )
+    (state / "stale.json").write_text(
+        json.dumps({"target": str(root / "missing")}), encoding="utf-8"
+    )
+    summary = bhp._managed_state_summary("codex", state)
+    assert summary["items"] == [
+        {"name": "present", "status": "present"},
+        {"name": "stale", "status": "state-only"},
+    ]
+
+
+def test_model_lab_reports_expose_only_bounded_summary_metadata():
+    root = pathlib.Path(tempfile.mkdtemp())
+    report = (
+        root / "workspace/runtime/codex/model-lab/spark/audit.json"
+    )
+    report.parent.mkdir(parents=True)
+    report.write_text(json.dumps({
+        "adapter": "codex",
+        "producer": "spark-telemetry-triage",
+        "provider": "openai",
+        "model": "gpt-5.3-codex-spark",
+        "effort": "low",
+        "generated_at": "2026-08-19T01:02:03Z",
+        "summary": "One bounded finding.",
+        "review_required": True,
+        "private_payload": "must not reach the page",
+    }), encoding="utf-8")
+    rows = bhp.collect_model_lab_reports(root)
+    assert rows == [{
+        "adapter_id": "codex",
+        "producer": "spark-telemetry-triage",
+        "provider": "openai",
+        "model": "gpt-5.3-codex-spark",
+        "effort": "low",
+        "generated_at": "2026-08-19T01:02:03Z",
+        "summary": "One bounded finding.",
+        "review_required": True,
+        "artifact": "workspace/runtime/codex/model-lab/spark/audit.json",
+    }]
 
 
 def test_collect_usage_cache_written_and_reused():

@@ -105,6 +105,20 @@ def _valid_candidate(value) -> bool:
     return True
 
 
+def _failure_detail(returncode: int, stdout: str) -> str:
+    lowered = stdout.lower()
+    if any(marker in lowered for marker in (
+        "proxy connection failed", "error sending request",
+        "stream disconnected before completion", "reconnecting...",
+    )):
+        return "Spark network transport is unavailable"
+    if "model" in lowered and any(
+        marker in lowered for marker in ("not found", "not available", "unknown model")
+    ):
+        return "Spark model is unavailable for this account or client"
+    return f"Spark worker exit {returncode}"
+
+
 def _record_usage(adapter: str, usage: dict | None, digest: str, db: Path | None):
     if not usage:
         return
@@ -168,7 +182,7 @@ Do not inspect prompts, code, paths, transcripts, or credentials.\n\n""" + json.
            timeout=180, check=False)
         usage = _usage(proc.stdout)
         if proc.returncode != 0:
-            return finish("retryable", f"Spark worker exit {proc.returncode}")
+            return finish("retryable", _failure_detail(proc.returncode, proc.stdout))
         candidate = json.loads(Path(response_name).read_text(encoding="utf-8"))
         if not _valid_candidate(candidate):
             return finish("retryable", "Spark returned an invalid review candidate")

@@ -68,6 +68,15 @@ def test_service_rejects_non_loopback_bind_and_has_csrf_boundary():
     assert status == 200 and json.loads(body) == {"safe": True}
     status, _headers, body = app.handle("GET", "/api/live", {}, b"")
     assert status == 200 and json.loads(body) == {}
+    status, _headers, body = app.handle(
+        "GET", "/api/live?from=not-a-date", {}, b""
+    )
+    assert status == 400 and "period" in json.loads(body)["error"]
+    status, _headers, body = app.handle(
+        "GET", "/api/live?from=2026-08-20T00:00:00Z&to=2026-08-19T00:00:00Z",
+        {}, b"",
+    )
+    assert status == 400 and "before" in json.loads(body)["error"]
     status, _headers, _body = app.handle(
         "POST", "/api/jobs", {"Content-Type": "application/json"},
         b'{"provider":"spark","adapter":"codex"}',
@@ -92,7 +101,9 @@ def test_panel_keeps_language_locally_and_exposes_both_catalogs():
     assert "mainframe-language" in app
     assert "localStorage" in app
     assert '"en"' in app and '"ru"' in app
-    assert 'fetch("/api/live"' in app
+    assert 'fetch("/api/live" + periodQuery()' in app
+    assert 'type: "date"' in app and 'mainframe-period' in app
+    assert "setCustomValidity" in app
     # Scroll position must not gate the refresh: treating any scroll as "busy"
     # froze a scrolled page forever. It is saved and restored around the
     # re-render instead, and an active filter is what defers the update.
@@ -112,6 +123,8 @@ def test_panel_uses_adapter_telemetry_for_shared_overview_and_usage():
     assert 'function renderTranscriptHistory' in app
     assert 'Claude transcript history' in app
     assert 'usage.by_model' in app
+    assert 't("Token share by adapter")' in app
+    assert 't("Token share by model")' in app
 
 
 def test_live_server_serves_panel_and_health_on_loopback():
