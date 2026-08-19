@@ -133,6 +133,15 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "PreToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-read-guard.py"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PreToolUse",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/secret-commit-gate.py"
             ]
           },

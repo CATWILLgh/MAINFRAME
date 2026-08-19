@@ -1255,6 +1255,9 @@ def test_claude_permissions_expose_only_helper_and_index():
     assert "Read(~/.claude/credentials-index.md)" in allowed
     assert "Read(~/.config/credentials/**)" in denied
     assert "Read(**/secrets/**)" in denied
+    hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
+    assert "secret-read-guard.py" in hooks
+    assert (PLUGIN / "hooks" / "scripts" / "secret-read-guard.py").is_file()
 
 
 def test_global_settings_preserve_role_language_and_session_choice_contracts():
