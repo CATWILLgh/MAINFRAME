@@ -6,8 +6,9 @@ Registered on several events (see `adapters/claude-code/plugin/hooks/hooks.json`
 NOTHING to stdout, so it is invisible to the agent. The adapter installer
 initializes the SQLite sink once; bounded retry absorbs brief writer contention.
 A persistent sink failure exits nonzero so the common launcher can report it
-once. Privacy: only typed low-risk metadata is extracted — never prompt text,
-file contents, denial reasons, tool arguments, or paths.
+once. The general stream remains privacy-safe. Permission requests are the one
+explicit dev-only exception: exact tool input is written to a separate local
+sensitive table for permission false-positive review.
 """
 
 import hashlib
@@ -17,7 +18,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _hooklib import initialize_telemetry_db, load_payload, log_event, run
+    from _hooklib import (
+        initialize_telemetry_db, load_payload, log_event,
+        record_permission_denied, record_permission_request, run,
+    )
 except Exception:
     sys.exit(0)
 
@@ -66,9 +70,14 @@ def main():
     event = payload.get("hook_event_name") or ""
     tool_input = payload.get("tool_input") or {}
 
-    if event == "PermissionDenied":
+    if event == "PermissionRequest":
+        if not payload.get("tool_name"):
+            raise RuntimeError("PermissionRequest payload lacks tool identity")
+        record_permission_request(payload)
+    elif event == "PermissionDenied":
         if not payload.get("tool_use_id") or not payload.get("tool_name"):
             raise RuntimeError("PermissionDenied payload lacks tool identity")
+        record_permission_denied(payload)
         _record("auto_permission_denied", {"tool_name": payload["tool_name"]}, payload)
     elif event == "SubagentStart":
         if not payload.get("agent_id") or not payload.get("agent_type"):

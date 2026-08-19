@@ -289,7 +289,7 @@
 
   function cells(values) {
     return el("tr", null, values.map(([value, kind]) =>
-      el("td", { class: kind || "" }, String(value))));
+      el("td", { class: kind || "" }, value && value.nodeType ? value : String(value))));
   }
 
   function barList(rows) {
@@ -802,6 +802,50 @@
           [num(row.count), "num"],
         ]))) : emptyState(t("No permission decision data has been recorded.")),
       ])));
+
+    // Sensitive permission audit exists only in the live, local dev service.
+    const permissionAudits = ds.permission_audit || [];
+    if (permissionAudits.length) {
+      const auditRows = permissionAudits.flatMap((audit) =>
+        (audit.records || []).map((row) => {
+          let input = row.tool_input || "{}";
+          try { input = JSON.stringify(JSON.parse(input), null, 2); } catch (_err) { /* show raw */ }
+          const detail = el("details", { class: "permission-input" }, [
+            el("summary", null, t("view input")),
+            el("pre", null, input),
+          ]);
+          return cells([
+            [audit.adapter_id, "mono"],
+            [fmtStamp(row.request_ts), "mono dim"],
+            [row.permission_mode || "unknown", "mono"],
+            [row.tool_name || "unknown", "mono"],
+            [row.decision || t("waiting"), row.decision ? "mono" : "mono warn"],
+            [row.decision_source || "—", "mono dim"],
+            [row.wait_ms == null ? "—" : "≈ " + fmtMs(row.wait_ms), "num"],
+            [t(row.correlation_evidence || "unresolved"), "mono dim"],
+            [detail, "permission-input-cell"],
+          ]);
+        }));
+      const requests = permissionAudits.reduce((n, item) => n + (item.requests || 0), 0);
+      const accepted = permissionAudits.reduce((n, item) => n + (item.accepted || 0), 0);
+      const rejected = permissionAudits.reduce((n, item) => n + (item.rejected || 0), 0);
+      const unresolved = permissionAudits.reduce((n, item) => n + (item.unresolved || 0), 0);
+      root.appendChild(section(t("Permission request audit"), "config", requests,
+        el("div", { class: "panel-stack" }, [
+          el("div", { class: "notice warn" },
+            t("Sensitive local data: exact tool input is stored only in the live dev database and is never included in static snapshots or model analysis.")),
+          explain(t("The runtime reports the final decision and its source, but not the exact matching rule. Request-to-decision links and wait time are marked as inferred when no shared ID exists.")),
+          statRow([
+            [num(requests), t("requests")], [num(accepted), t("accepted")],
+            [num(rejected), t("rejected")], [num(unresolved), t("waiting")],
+          ]),
+          auditRows.length ? table([
+            [t("adapter")], [t("time")], [t("mode")], [t("tool")],
+            [t("decision")], [t("source")], [t("wait"), true],
+            [t("link evidence")], [t("input")],
+          ], auditRows) : emptyState(t("No permission requests have been recorded.")),
+        ])));
+    }
 
     // Mainframe's own quality hooks.
     const effectiveness = report.hook_effectiveness || [];

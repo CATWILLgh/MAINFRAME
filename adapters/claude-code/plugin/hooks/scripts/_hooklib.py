@@ -29,6 +29,19 @@ except Exception:
     ROW_SCHEMA_VERSION = 0
     validate_payload = None
 
+try:
+    from _permission_audit import (
+        initialize as initialize_permission_audit,
+        record_decision as _record_permission_decision,
+        record_denied as _record_permission_denied,
+        record_request as _record_permission_request,
+    )
+except Exception:
+    initialize_permission_audit = None
+    _record_permission_decision = None
+    _record_permission_denied = None
+    _record_permission_request = None
+
 # Source-code extensions the hooks scan. Prose/config (.md/.json/.yaml/.txt) is
 # skipped on purpose: it legitimately mentions markers (incl. the hub's own docs).
 CODE_EXTENSIONS = frozenset({
@@ -53,6 +66,7 @@ HUB_HOOK_FILES = frozenset({
     "_hooklib.py", "_markers.py", "_marker_state.py", "_notice_state.py",
     "test_hooklib.py",
     "telemetry.py", "_telemetry_contract.py", "hook-failure-report.py",
+    "_permission_audit.py",
     "test_telemetry.py",
     "skill-authority.py",
 })
@@ -342,7 +356,43 @@ def initialize_telemetry_db(db=None):
         conn.commit()
     finally:
         conn.close()
+    if initialize_permission_audit is not None:
+        initialize_permission_audit(path)
     return path
+
+
+def record_permission_request(hook_payload):
+    """Store exact permission input only while the dev telemetry sink exists."""
+    db = _telemetry_db_path()
+    if not os.environ.get("MAINFRAME_TELEMETRY_DB") and not os.path.isdir(os.path.dirname(db)):
+        return "disabled"
+    if _record_permission_request is None:
+        return "error"
+    try:
+        return _record_permission_request(db, "claude-code", hook_payload or {})
+    except Exception:
+        return "error"
+
+
+def record_permission_denied(hook_payload):
+    db = _telemetry_db_path()
+    if not os.environ.get("MAINFRAME_TELEMETRY_DB") and not os.path.isdir(os.path.dirname(db)):
+        return "disabled"
+    if _record_permission_denied is None:
+        return "error"
+    try:
+        return _record_permission_denied(db, "claude-code", hook_payload or {})
+    except Exception:
+        return "error"
+
+
+def record_permission_decision(sample):
+    if _record_permission_decision is None:
+        return "error"
+    try:
+        return _record_permission_decision(_telemetry_db_path(), "claude-code", sample or {})
+    except Exception:
+        return "error"
 
 
 def _telemetry_busy(exc):

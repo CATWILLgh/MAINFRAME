@@ -460,6 +460,7 @@ def _record_runtime_event(payload: dict) -> None:
                 {}, payload,
             )
     elif event == "PermissionRequest":
+        hooklib.record_permission_request(payload)
         hooklib.log_event("permission_request", {
             "tool_name": str(payload.get("tool_name") or "unknown"),
             "permission_mode": str(payload.get("permission_mode") or "unknown"),

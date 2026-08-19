@@ -218,6 +218,25 @@ window.HUB_STRINGS_RU = {
   "What the harness decided before running a tool, and what made the decision — configuration, a hook, or the user.":
     "Что среда решила перед запуском инструмента и кто решил — конфигурация, хук или пользователь.",
   "No permission decision data has been recorded.": "Данных о решениях доступа нет.",
+  "Permission request audit": "Аудит запросов доступа",
+  "Sensitive local data: exact tool input is stored only in the live dev database and is never included in static snapshots or model analysis.":
+    "Чувствительные локальные данные: точный ввод инструмента хранится только в живой dev-базе и никогда не попадает в статические снимки или анализ моделей.",
+  "The runtime reports the final decision and its source, but not the exact matching rule. Request-to-decision links and wait time are marked as inferred when no shared ID exists.":
+    "Среда сообщает итоговое решение и его источник, но не точное сработавшее правило. Связь запроса с решением и время ожидания помечаются как вычисленные, если общего ID нет.",
+  "requests": "запросов",
+  "accepted": "разрешено",
+  "rejected": "отклонено",
+  "waiting": "ожидает",
+  "time": "время",
+  "mode": "режим",
+  "wait": "ожидание",
+  "link evidence": "точность связи",
+  "input": "ввод",
+  "view input": "показать ввод",
+  "exact-tool-use-id": "точная связь по ID",
+  "inferred-session-tool-time": "вычислено по сессии, инструменту и времени",
+  "unresolved": "не связано",
+  "No permission requests have been recorded.": "Запросы доступа ещё не записаны.",
   "Quality hook outcomes": "Итоги хуков качества",
   "MAINFRAME's own checks. \"Blocked\" stopped the turn; \"resolved\" means a later signal confirmed the fix. A large gap between them is worth reading.":
     "Собственные проверки MAINFRAME. «Блокировок» — шаг остановлен; «исправлено» — более поздний сигнал подтвердил починку. Большой разрыв между ними стоит изучить.",

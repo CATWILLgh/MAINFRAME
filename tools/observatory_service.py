@@ -218,6 +218,7 @@ class ObservatoryApp:
         value = build_hub_page.build_manifest(
             str(self.root), start_timestamp=start_timestamp,
             end_timestamp=end_timestamp,
+            include_sensitive=True,
         )
         enabled_dir = self.runtime / "enabled"
         active_adapters = sorted(

@@ -920,6 +920,15 @@ def test_marker_quality_is_enforced_by_hooks_not_a_discovery_skill():
     assert "stop-gate-suppression-markers.py" in subagent_stop
 
 
+def test_dev_permission_audit_observes_requests_without_deciding_them():
+    hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())
+    permission = json.dumps(hooks["hooks"]["PermissionRequest"])
+    assert '"matcher": "*"' in permission
+    assert "run-telemetry-hook.sh" in permission
+    assert "telemetry.py" in permission
+    assert (PLUGIN / "hooks" / "scripts" / "_permission_audit.py").is_file()
+
+
 def test_server_safety_does_not_grant_or_assume_destructive_bash():
     body = (PLUGIN / "skills" / "ops-app-server-safety" / "SKILL.md").read_text(
         encoding="utf-8"

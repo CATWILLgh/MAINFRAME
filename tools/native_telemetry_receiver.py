@@ -26,6 +26,7 @@ def _load_hooklib(adapter_id: str):
     }[adapter_id]
     path = str(script.parent)
     old_contract = sys.modules.pop("_telemetry_contract", None)
+    old_permission = sys.modules.pop("_permission_audit", None)
     sys.path.insert(0, path)
     try:
         spec = importlib.util.spec_from_file_location(
@@ -39,8 +40,11 @@ def _load_hooklib(adapter_id: str):
     finally:
         sys.path.remove(path)
         sys.modules.pop("_telemetry_contract", None)
+        sys.modules.pop("_permission_audit", None)
         if old_contract is not None:
             sys.modules["_telemetry_contract"] = old_contract
+        if old_permission is not None:
+            sys.modules["_permission_audit"] = old_permission
 
 
 HOOKLIBS = {
@@ -102,9 +106,21 @@ def record_samples(samples: list[dict], db_paths: dict[str, Path]) -> dict[str, 
             status = HOOKLIBS[adapter_id].log_event(
                 sample.get("event", "model_usage"),
                 sample["payload"],
-                {"session_id": sample["session_id"], "model": sample["model"]},
+                {
+                    "session_id": sample["session_id"], "model": sample["model"],
+                    "tool_use_id": sample.get("tool_use_id", ""),
+                },
             )
             results[status if status in results else "failed"] += 1
+            if sample.get("event") == "tool_decision":
+                HOOKLIBS[adapter_id].record_permission_decision({
+                    "session_id": sample.get("session_id", ""),
+                    "tool_use_id": sample.get("tool_use_id", ""),
+                    "timestamp": sample.get("timestamp", ""),
+                    "tool_name": sample["payload"].get("tool_name", ""),
+                    "decision": sample["payload"].get("decision", ""),
+                    "source": sample["payload"].get("source", "unknown"),
+                })
     finally:
         for key, value in old.items():
             if value is None:

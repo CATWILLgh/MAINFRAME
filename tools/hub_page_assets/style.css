@@ -384,6 +384,9 @@ table.matrix td { padding: 7px 10px; border-bottom: 1px solid var(--border); ver
 table.matrix th.num, table.matrix td.num { text-align: right; }
 table.matrix td.num { color: var(--accent); font-variant-numeric: tabular-nums; }
 table.matrix tr:hover td { background: var(--panel); }
+.permission-input { min-width: 120px; }
+.permission-input summary { cursor: pointer; color: var(--accent); white-space: nowrap; }
+.permission-input pre { margin: 8px 0 0; max-width: 520px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); font-size: 11px; }
 
 .notice { background: var(--panel); border-left: 2px solid var(--warn); padding: 14px 16px; margin-top: 14px; color: var(--muted); }
 .notice p { margin: 0 0 9px; }

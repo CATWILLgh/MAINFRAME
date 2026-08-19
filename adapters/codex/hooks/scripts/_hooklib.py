@@ -32,6 +32,17 @@ except Exception:
     ROW_SCHEMA_VERSION = 0
     validate_payload = None
 
+try:
+    from _permission_audit import (
+        initialize as initialize_permission_audit,
+        record_decision as _record_permission_decision,
+        record_request as _record_permission_request,
+    )
+except Exception:
+    initialize_permission_audit = None
+    _record_permission_decision = None
+    _record_permission_request = None
+
 
 CODE_EXTENSIONS = frozenset({
     ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
@@ -51,6 +62,7 @@ HUB_HOOK_FILES = frozenset({
     "_length_check.py",
     "length-quality-note.py", "_hooklib.py", "_markers.py",
     "_telemetry_contract.py", "telemetry.py",
+    "_permission_audit.py",
     "_marker_state.py", "_notice_state.py",
 })
 
@@ -183,7 +195,31 @@ def initialize_telemetry_db(db=None):
         connection.commit()
     finally:
         connection.close()
+    if initialize_permission_audit is not None:
+        initialize_permission_audit(path)
     return path
+
+
+def record_permission_request(hook_payload):
+    db = _telemetry_db_path()
+    explicit = bool(os.environ.get("MAINFRAME_CODEX_TELEMETRY_DB"))
+    if not explicit and not os.path.isfile(os.path.join(os.path.dirname(db), "enabled")):
+        return "disabled"
+    if _record_permission_request is None:
+        return "error"
+    try:
+        return _record_permission_request(db, "codex", hook_payload or {})
+    except Exception:
+        return "error"
+
+
+def record_permission_decision(sample):
+    if _record_permission_decision is None:
+        return "error"
+    try:
+        return _record_permission_decision(_telemetry_db_path(), "codex", sample or {})
+    except Exception:
+        return "error"
 
 
 def _telemetry_busy(error):

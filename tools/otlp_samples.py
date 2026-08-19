@@ -9,6 +9,7 @@ never carried into a payload.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 
@@ -109,6 +110,20 @@ def _text(attrs, *keys, limit=120):
         if text:
             return text[:limit]
     return ""
+
+
+def _record_timestamp(record):
+    raw = record.get("timeUnixNano", record.get("time_unix_nano"))
+    try:
+        nanos = int(raw)
+    except (TypeError, ValueError):
+        return ""
+    if nanos <= 0:
+        return ""
+    value = datetime.datetime.fromtimestamp(
+        nanos / 1_000_000_000, tz=datetime.timezone.utc
+    )
+    return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _sample_id(adapter_id, event_name, native_id, record, extra):
@@ -278,11 +293,15 @@ def _harness_sample(adapter_id, event_name, attrs, record):
     payload = build(adapter_id, event_name, attrs, record)
     if payload is None:
         return None
-    return {
+    sample = {
         "adapter_id": adapter_id, "event": event,
         "session_id": _session_of(adapter_id, attrs),
         "model": _text(attrs, "model"), "payload": payload,
     }
+    if event == "tool_decision":
+        sample["tool_use_id"] = _text(attrs, "tool_use_id", "call_id")
+        sample["timestamp"] = _record_timestamp(record)
+    return sample
 
 
 def samples(adapter_id, event_name, attrs, record):

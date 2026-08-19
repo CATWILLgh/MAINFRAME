@@ -298,6 +298,22 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-telemetry-hook.sh",
+              "PermissionRequest",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
+            ]
+          }
+        ]
+      }
+    ],
     "PermissionDenied": [
       {
         "matcher": "*",

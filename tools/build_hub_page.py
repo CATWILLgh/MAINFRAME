@@ -26,6 +26,7 @@ import native_telemetry_receiver
 
 from telemetry_data import (
     build_multi_report as build_multi_telemetry_report,
+    build_permission_audit,
     build_report as build_telemetry_report,
 )
 
@@ -193,7 +194,7 @@ def build_edges(skills, agents, hooks):
 
 def collect_dev_state(
     db_path, feedback_dir, codex_db_path=None, pi_db_path=None,
-    start_timestamp=None, end_timestamp=None,
+    start_timestamp=None, end_timestamp=None, include_sensitive=False,
 ):
     """Build the UI from the same validated stream exposed to machine readers."""
     telemetry = (
@@ -209,6 +210,16 @@ def collect_dev_state(
         )
     )
     state = {"active": telemetry["active"], "telemetry": telemetry, "feedback": []}
+    if include_sensitive:
+        state["permission_audit"] = [
+            build_permission_audit(
+                path, adapter_id, start_timestamp, end_timestamp,
+            )
+            for adapter_id, path in (
+                ("claude-code", db_path),
+                *(([("codex", codex_db_path)]) if codex_db_path is not None else []),
+            )
+        ]
     if os.path.isdir(feedback_dir):
         state["feedback"] = sorted(
             f for f in os.listdir(feedback_dir) if f.endswith(".md"))
@@ -664,7 +675,8 @@ def compute_layout(nodes, layer_order):
 def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
                    projects_dir=_DEFAULT_PROJECTS, usage_cache=_DEFAULT_USAGE_CACHE,
                    codex_db_path=None, pi_db_path=None,
-                   start_timestamp=None, end_timestamp=None):
+                   start_timestamp=None, end_timestamp=None,
+                   include_sensitive=False):
     skills = collect_skills(root)
     agents = collect_agents(root)
     hooks = collect_hooks(root)
@@ -683,6 +695,7 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
             else pi_db_path,
             start_timestamp=start_timestamp,
             end_timestamp=end_timestamp,
+            include_sensitive=include_sensitive,
         ),
         "usage": collect_usage(projects_dir, usage_cache),
         "settings": collect_settings(root),

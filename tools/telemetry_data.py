@@ -128,6 +128,79 @@ def default_db_path(adapter_id="claude-code"):
     return installed if installed.is_file() else repository
 
 
+def build_permission_audit(
+    path, adapter_id, start_timestamp=None, end_timestamp=None, limit=200,
+):
+    """Read the local sensitive permission table for Observatory only.
+
+    This function is deliberately separate from build_report and its machine
+    export so exact tool input cannot leak into general telemetry consumers.
+    """
+    result = {
+        "adapter_id": adapter_id, "active": False, "sensitive": True,
+        "requests": 0, "accepted": 0, "rejected": 0, "unresolved": 0,
+        "exact_links": 0, "inferred_links": 0,
+        "wait": _duration_summary([]), "records": [],
+    }
+    db = Path(path).expanduser()
+    if not db.is_file():
+        return result
+    connection = sqlite3.connect(db)
+    connection.row_factory = sqlite3.Row
+    try:
+        if connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='permission_audit'"
+        ).fetchone() is None:
+            return result
+        clauses = ["adapter_id = ?"]
+        params = [adapter_id]
+        if start_timestamp:
+            clauses.append("request_ts >= ?")
+            params.append(start_timestamp)
+        if end_timestamp:
+            clauses.append("request_ts < ?")
+            params.append(end_timestamp)
+        where = " AND ".join(clauses)
+        rows = connection.execute(
+            "SELECT * FROM permission_audit WHERE " + where
+            + " ORDER BY request_ts DESC, id DESC LIMIT ?",
+            (*params, int(limit)),
+        ).fetchall()
+        totals = connection.execute(
+            "SELECT COUNT(*) AS requests,"
+            "SUM(CASE WHEN lower(decision) IN ('accept','accepted','approve','approved','allow') THEN 1 ELSE 0 END) AS accepted,"
+            "SUM(CASE WHEN lower(decision) IN ('reject','rejected','deny','denied') THEN 1 ELSE 0 END) AS rejected,"
+            "SUM(CASE WHEN decision IS NULL OR decision='' THEN 1 ELSE 0 END) AS unresolved,"
+            "SUM(CASE WHEN correlation_evidence='exact-tool-use-id' THEN 1 ELSE 0 END) AS exact_links,"
+            "SUM(CASE WHEN correlation_evidence='inferred-session-tool-time' THEN 1 ELSE 0 END) AS inferred_links "
+            "FROM permission_audit WHERE " + where,
+            params,
+        ).fetchone()
+        waits = [
+            int(row[0]) for row in connection.execute(
+                "SELECT wait_ms FROM permission_audit WHERE " + where
+                + " AND wait_ms IS NOT NULL",
+                params,
+            ).fetchall()
+        ]
+        result.update({
+            "active": True,
+            "requests": int(totals["requests"] or 0),
+            "accepted": int(totals["accepted"] or 0),
+            "rejected": int(totals["rejected"] or 0),
+            "unresolved": int(totals["unresolved"] or 0),
+            "exact_links": int(totals["exact_links"] or 0),
+            "inferred_links": int(totals["inferred_links"] or 0),
+            "wait": _duration_summary(waits),
+            "records": [dict(row) for row in rows],
+        })
+        return result
+    except sqlite3.Error:
+        return result
+    finally:
+        connection.close()
+
+
 def default_db_paths():
     return {adapter_id: default_db_path(adapter_id) for adapter_id in CONTRACTS}
 

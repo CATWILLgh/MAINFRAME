@@ -66,6 +66,24 @@ def test_writes_row():
     assert envelope == (2, "p1", "a1", "t1", "PostToolUse", "claude-test", "runtime")
 
 
+def test_permission_request_is_separate_sensitive_local_data():
+    db = _fresh_db()
+    result = _hooklib.record_permission_request({
+        "session_id": "permission-session", "permission_mode": "default",
+        "tool_name": "Bash", "tool_input": {"command": "ssh internal-host"},
+        "cwd": "/private/customer/project",
+    })
+    assert result == "written"
+    assert _rows(db) == []
+    with sqlite3.connect(db) as connection:
+        row = connection.execute(
+            "SELECT tool_input, permission_mode, decision, rule_evidence "
+            "FROM permission_audit"
+        ).fetchone()
+    assert json.loads(row[0]) == {"command": "ssh internal-host"}
+    assert row[1:] == ("default", None, "unavailable")
+
+
 def test_origin_separates_runtime_test_and_model_lab_calls():
     old_db = os.environ.pop("MAINFRAME_TELEMETRY_DB", None)
     old_origin = os.environ.pop("MAINFRAME_TELEMETRY_ORIGIN", None)

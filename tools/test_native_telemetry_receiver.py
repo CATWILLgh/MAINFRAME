@@ -176,6 +176,67 @@ def test_tool_and_hook_signals_are_captured_without_content():
     assert hooks[0]["payload"]["hooks"] == 9
 
 
+def test_permission_audit_keeps_exact_input_locally_and_labels_inference():
+    directory = Path(tempfile.mkdtemp())
+    paths = {
+        "claude-code": directory / "claude/telemetry.db",
+        "codex": directory / "codex/telemetry.db",
+    }
+    old = {
+        "MAINFRAME_TELEMETRY_DB": os.environ.get("MAINFRAME_TELEMETRY_DB"),
+        "MAINFRAME_CODEX_TELEMETRY_DB": os.environ.get("MAINFRAME_CODEX_TELEMETRY_DB"),
+    }
+    try:
+        os.environ["MAINFRAME_TELEMETRY_DB"] = str(paths["claude-code"])
+        os.environ["MAINFRAME_CODEX_TELEMETRY_DB"] = str(paths["codex"])
+        for adapter_id, command in (
+            ("claude-code", "ssh example.invalid"),
+            ("codex", "git worktree prune --dry-run"),
+        ):
+            hooklib = receiver.HOOKLIBS[adapter_id]
+            assert hooklib.record_permission_request({
+                "session_id": adapter_id + "-session",
+                "permission_mode": "default",
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+                "cwd": str(directory),
+            }) == "written"
+            assert hooklib.record_permission_decision({
+                "session_id": adapter_id + "-session",
+                "tool_name": "exec_command" if adapter_id == "codex" else "Bash",
+                "decision": "approved" if adapter_id == "codex" else "accept",
+                "source": "User" if adapter_id == "codex" else "user_temporary",
+            }) == "updated"
+            audit = telemetry_data.build_permission_audit(paths[adapter_id], adapter_id)
+            assert audit["requests"] == 1 and audit["accepted"] == 1
+            row = audit["records"][0]
+            assert json.loads(row["tool_input"])["command"] == command
+            assert row["correlation_evidence"] == "inferred-session-tool-time"
+            assert row["rule_evidence"] == "unavailable" and row["rule_match"] == ""
+            assert row["decision_evidence"] == "native-otel"
+            assert os.stat(paths[adapter_id]).st_mode & 0o777 == 0o600
+        claude = receiver.HOOKLIBS["claude-code"]
+        assert claude.record_permission_denied({
+            "session_id": "claude-denied", "tool_use_id": "tool-42",
+            "permission_mode": "default", "tool_name": "Bash",
+            "tool_input": {"command": "rm protected-file"}, "reason": "policy",
+        }) == "written"
+        assert claude.record_permission_decision({
+            "session_id": "claude-denied", "tool_use_id": "tool-42",
+            "tool_name": "Bash", "decision": "reject", "source": "hook",
+        }) == "updated"
+        audit = telemetry_data.build_permission_audit(paths["claude-code"], "claude-code")
+        denied = next(row for row in audit["records"] if row["request_kind"] == "auto_denial")
+        assert denied["correlation_evidence"] == "exact-tool-use-id"
+        assert denied["decision_source"] == "hook"
+    finally:
+        for key, value in old.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def test_codex_tool_result_never_stores_arguments_or_output():
     request = _harness_batch("codex", "codex.tool_result", {
         "tool_name": "exec", "success": "true", "duration_ms": "10",

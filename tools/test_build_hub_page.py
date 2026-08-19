@@ -138,6 +138,42 @@ def test_dev_state_absent_db_reports_inactive():
     assert state["feedback"] == []
 
 
+def test_sensitive_permission_audit_is_opt_in_and_never_in_static_manifest():
+    directory = tempfile.mkdtemp()
+    root = os.path.join(directory, "repo")
+    os.makedirs(root)
+    db = os.path.join(directory, "telemetry.db")
+    connection = sqlite3.connect(db)
+    connection.execute("""
+        CREATE TABLE permission_audit (
+          id INTEGER PRIMARY KEY, adapter_id TEXT, request_ts TEXT, updated_ts TEXT,
+          session_id TEXT, turn_id TEXT, tool_use_id TEXT, project TEXT,
+          tool_name TEXT, normalized_tool_name TEXT, permission_mode TEXT,
+          tool_input TEXT, input_sha256 TEXT, request_kind TEXT, decision TEXT,
+          decision_source TEXT, decision_ts TEXT, wait_ms INTEGER,
+          wait_evidence TEXT, decision_evidence TEXT, correlation_evidence TEXT,
+          runtime_reason TEXT, rule_match TEXT, rule_evidence TEXT
+        )
+    """)
+    connection.execute(
+        "INSERT INTO permission_audit VALUES (1,'claude-code','2026-08-19T10:00:00Z',"
+        "'2026-08-19T10:00:01Z','s','','','','Bash','exec_command','default',?,"
+        "'hash','prompt','accept','user_temporary','2026-08-19T10:00:01Z',1000,"
+        "'inferred-between-events','native-otel','inferred-session-tool-time','','','unavailable')",
+        (json.dumps({"command": "sensitive command"}),),
+    )
+    connection.commit()
+    connection.close()
+    static = bhp.build_manifest(root, db_path=db, feedback_dir="/nonexistent")
+    assert "permission_audit" not in static["dev_state"]
+    assert "sensitive command" not in json.dumps(static)
+    live = bhp.build_manifest(
+        root, db_path=db, feedback_dir="/nonexistent", include_sensitive=True,
+    )
+    assert live["dev_state"]["permission_audit"][0]["requests"] == 1
+    assert "sensitive command" in json.dumps(live)
+
+
 def test_dev_state_combines_separate_adapter_databases():
     claude_db = _telemetry_db([
         ("s1", "session", '{"phase":"start","source":"startup"}'),
