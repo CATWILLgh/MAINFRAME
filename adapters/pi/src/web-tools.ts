@@ -144,7 +144,7 @@ export function createWebTools(router: WebRouter) {
     defineTool({
       name: "web_search",
       label: "Search the public web",
-      description: "Search current public sources. Results are leads; fetch the authoritative page before treating a claim as evidence.",
+      description: "Search current public sources using only generic technology, version, API, or protocol terms. Never include project names, paths, code, logs, requirements, or secrets. Results are leads; fetch the authoritative page before treating a claim as evidence.",
       parameters: Type.Object({ query: Type.String({ minLength: 1, maxLength: 280 }) }),
       execute: async (_id, params) => textResult(await router.search(params.query)),
     }),

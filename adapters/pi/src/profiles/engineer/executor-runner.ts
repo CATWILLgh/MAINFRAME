@@ -42,8 +42,9 @@ import {
   recordActiveEngineerBlock,
   validateEngineerSessionIntent,
 } from "./session-state.js";
-import { createEngineerTools, type EngineerToolSet } from "./tools.js";
+import { createEngineerTools, ENGINEER_TOOL_NAMES, type EngineerToolSet } from "./tools.js";
 import { EngineerWorkspace } from "./workspace.js";
+import type { WebRouter } from "../../web-tools.js";
 
 export interface EngineerExecutorOptions {
   projectRoot: string;
@@ -53,6 +54,7 @@ export interface EngineerExecutorOptions {
   thinking: ThinkingLevel;
   timeoutMs?: number;
   maxTurns?: number;
+  webRouter: WebRouter;
 }
 
 export interface EngineerExecutorRound {
@@ -81,7 +83,7 @@ export class EngineerExecutor {
       const resumedOwned = new Set(resumedOwnedPaths);
       const protectedPaths = facts.initialDirtyPaths.filter((dirtyPath) => !resumedOwned.has(dirtyPath));
       const workspace = await EngineerWorkspace.create(facts.projectRoot, options.manifest, protectedPaths);
-      const toolSet = createEngineerTools(facts.projectRoot, options.manifest, workspace);
+      const toolSet = createEngineerTools(facts.projectRoot, options.manifest, workspace, options.webRouter);
       const settings = SettingsManager.inMemory({
         compaction: { enabled: true },
         retry: { enabled: true, maxRetries: 2 },
@@ -94,10 +96,7 @@ export class EngineerExecutor {
         modelRuntime: options.modelRuntime,
         model: options.model,
         thinkingLevel: options.thinking,
-        tools: [
-          "engineer_read", "engineer_find", "engineer_grep", "engineer_list",
-          "engineer_edit", "engineer_create", "engineer_finish",
-        ],
+        tools: [...ENGINEER_TOOL_NAMES],
         customTools: toolSet.tools,
         resourceLoader: loader,
         sessionManager: SessionManager.continueRecent(facts.projectRoot, sessionDirectory),

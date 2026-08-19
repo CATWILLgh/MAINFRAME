@@ -101,9 +101,14 @@ mainframe-pi engineer --mode resume \
 Each Git worktree has one persistent writable Pi session. `new` compacts that
 session before the block; `resume` preserves its current context and relies on
 native measured context pressure. The executor can read the safe project but
-write only request-scoped clean paths. It cannot use shell, network, secrets,
-Git mutation, dependency installation, or another worktree. After exact
-manifest-approved checks, a fresh read-only model verifies every acceptance
+write only request-scoped clean paths. It cannot use shell, secrets, Git
+mutation, dependency installation, another worktree, or externally mutating
+tools. It receives provider-neutral public `web_search` and `web_fetch` only
+for version-sensitive external contracts. Queries cannot contain project
+content, and both executor and verifier must fetch the authoritative primary
+page instead of accepting a search snippet or model memory as evidence. If
+that evidence is necessary and unavailable, the block remains unproven instead
+of being guessed. After exact manifest-approved checks, a fresh read-only model verifies every acceptance
 item and either returns `ready-for-architect-review` or a bounded correction to
 the same executor session.
 
@@ -114,6 +119,16 @@ next `new`, the harness verifies that the accepted files were committed without
 later changes, writes a receipt, closes the previous block, and compacts the Pi
 session. Pi never receives a Git tool. Manifest checks cannot invoke Git or an
 inline shell; read-only Git inspection is performed only by the harness.
+
+Repeated identical project-navigation calls receive at most two targeted
+no-progress advisories, on the third and sixth consecutive call. There is no
+periodic reminder injection, so normal work does not pay a continuing context
+cost.
+
+The executor deliberately has no process tool. MAINFRAME runs every
+manifest-approved deterministic check after each completion claim and passes
+the observed result to the fresh verifier. Neither model is asked to invent or
+relay an exit code it could not observe.
 
 Install with `./install.sh --pi --dev` to record privacy-safe model usage,
 duration, tools, checks, correction rounds, compactions, and verifier verdicts

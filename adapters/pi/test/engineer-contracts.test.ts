@@ -17,6 +17,9 @@ import { acquireEngineerWriterLock, inspectEngineerGit, inspectEngineerGitState 
 import { loadActiveEngineerManifest, recordActiveEngineerBlock, validateEngineerSessionIntent } from "../src/profiles/engineer/session-state.js";
 import { EngineerWorkspace } from "../src/profiles/engineer/workspace.js";
 import { validateVerdictAgainstRunEvidence } from "../src/profiles/engineer/verifier-runner.js";
+import { VERIFIER_SYSTEM_PROMPT } from "../src/profiles/engineer/verifier-runner.js";
+import { ENGINEER_SYSTEM_PROMPT } from "../src/profiles/engineer/prompts.js";
+import { createEngineerProgressHints, ENGINEER_TOOL_NAMES } from "../src/profiles/engineer/tools.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -38,6 +41,29 @@ function block(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+test("engineer reference tools and prompts require bounded primary-source use", () => {
+  assert.ok(ENGINEER_TOOL_NAMES.includes("web_search"));
+  assert.ok(ENGINEER_TOOL_NAMES.includes("web_fetch"));
+  assert.match(ENGINEER_SYSTEM_PROMPT, /version-sensitive or unclear external/);
+  assert.match(ENGINEER_SYSTEM_PROMPT, /Never send project names, paths, code, logs, requirements/);
+  assert.match(ENGINEER_SYSTEM_PROMPT, /cannot execute the manifest's deterministic checks/);
+  assert.match(VERIFIER_SYSTEM_PROMPT, /re-fetch the cited primary documentation/);
+  assert.match(VERIFIER_SYSTEM_PROMPT, /Search snippets and the executor's memory are not evidence/);
+  assert.match(VERIFIER_SYSTEM_PROMPT, /Never instruct the executor to run a check or fabricate an exit code/);
+});
+
+test("engineer progress hints are bounded and reset when the action changes", () => {
+  const hint = createEngineerProgressHints();
+  assert.equal(hint("engineer_grep", { query: "same" }), undefined);
+  assert.equal(hint("engineer_grep", { query: "same" }), undefined);
+  assert.match(hint("engineer_grep", { query: "same" }) ?? "", /three times/);
+  assert.equal(hint("engineer_grep", { query: "same" }), undefined);
+  assert.equal(hint("engineer_read", { path: "src/a.ts" }), undefined);
+  for (let index = 0; index < 4; index += 1) hint("engineer_read", { path: "src/a.ts" });
+  assert.match(hint("engineer_read", { path: "src/a.ts" }) ?? "", /six consecutive/);
+  assert.equal(hint("engineer_read", { path: "src/a.ts" }), undefined);
+});
 
 test("block manifest accepts explicit new and resume session modes", () => {
   assert.equal(parseEngineerBlockManifest(block()).sessionMode, "new");

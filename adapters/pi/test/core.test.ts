@@ -210,16 +210,16 @@ test("project discovery and reading exclude secrets and Pi runtime state", async
   assert(!map.files.some((file) => file.path.startsWith(".agents/runtime/pi/")));
   assert(!map.files.some((file) => file.path.startsWith(".claude/")));
   assert(!map.files.some((file) => file.path === "AGENTS.md"));
-  await assert.rejects(readProjectFile(root, ".env"), /excluded from the business-analysis profile/);
+  await assert.rejects(readProjectFile(root, ".env"), /excluded from project navigation/);
   await assert.rejects(
     readProjectFile(root, ".agents/runtime/pi/sessions/session.jsonl"),
-    /excluded from the business-analysis profile/,
+    /excluded from project navigation/,
   );
   await assert.rejects(
     readProjectFile(root, ".claude/agent-memory/MEMORY.md"),
-    /excluded from the business-analysis profile/,
+    /excluded from project navigation/,
   );
-  await assert.rejects(readProjectFile(root, "AGENTS.md"), /excluded from the business-analysis profile/);
+  await assert.rejects(readProjectFile(root, "AGENTS.md"), /excluded from project navigation/);
   await writeFile(path.join(root, ".agents/runtime/pi/project-map.json"), "{}\n");
   assert.match(await readProjectFile(root, ".agents/runtime/pi/project-map.json"), /1: \{\}/);
 });

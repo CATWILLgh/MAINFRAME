@@ -15,6 +15,7 @@ import { runEngineerPipeline } from "./profiles/engineer/runtime.js";
 import { loadActiveEngineerManifest } from "./profiles/engineer/session-state.js";
 import { reconcileAcceptedEngineerBlock } from "./profiles/engineer/session-state.js";
 import { writeEngineerTelemetry } from "./telemetry.js";
+import { createWebRouter } from "./web-tools.js";
 
 const ADAPTER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -67,6 +68,7 @@ async function main(): Promise<void> {
     resolveModel(modelRuntime, profile.executor),
     resolveModel(modelRuntime, profile.verifier),
   ]);
+  const webRouter = await createWebRouter(modelRuntime, "zai");
   const timeoutMs = positiveIntegerArgument("--timeout-ms");
   const verifierTimeoutMs = positiveIntegerArgument("--verifier-timeout-ms");
   const maxTurns = positiveIntegerArgument("--max-turns");
@@ -78,6 +80,7 @@ async function main(): Promise<void> {
     executorThinking: profile.executor.thinking,
     verifierModel,
     verifierThinking: profile.verifier.thinking,
+    webRouter,
     ...(timeoutMs === undefined ? {} : { executorTimeoutMs: timeoutMs }),
     ...(verifierTimeoutMs === undefined ? {} : { verifierTimeoutMs }),
     ...(maxTurns === undefined ? {} : { maxTurns }),

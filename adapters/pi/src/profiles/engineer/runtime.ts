@@ -23,6 +23,7 @@ import type {
 import { EngineerExecutor } from "./executor-runner.js";
 import { runEngineerVerifier } from "./verifier-runner.js";
 import { markEngineerBlockReadyForArchitectReview } from "./session-state.js";
+import type { WebRouter } from "../../web-tools.js";
 
 export interface EngineerPipelineOptions {
   projectRoot: string;
@@ -36,6 +37,7 @@ export interface EngineerPipelineOptions {
   verifierTimeoutMs?: number;
   maxTurns?: number;
   initialCorrection?: EngineerCorrectionPacket;
+  webRouter: WebRouter;
 }
 
 export interface EngineerPipelineResult {
@@ -121,6 +123,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
       thinking: options.executorThinking,
       ...(options.executorTimeoutMs === undefined ? {} : { timeoutMs: options.executorTimeoutMs }),
       ...(options.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }),
+      webRouter: options.webRouter,
     });
     let correction = options.initialCorrection;
     while (true) {
@@ -138,6 +141,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
         options.modelRuntime,
         options.verifierModel,
         options.verifierThinking,
+        options.webRouter,
         options.verifierTimeoutMs ?? 900_000,
         options.maxTurns ?? 96,
       );

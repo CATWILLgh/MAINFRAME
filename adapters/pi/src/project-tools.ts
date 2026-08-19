@@ -57,12 +57,12 @@ async function resolveInside(
   const candidate = path.resolve(root, requestedPath || ".");
   if (!isInside(root, candidate)) throw new Error("Requested path is outside the project");
   if (isModelExcludedRelativePath(normalizeRelative(path.relative(root, candidate)), allowedRuntimeInput)) {
-    throw new Error("Requested path is excluded from the business-analysis profile");
+    throw new Error("Requested path is excluded from project navigation");
   }
   const resolved = await realpath(candidate);
   if (!isInside(root, resolved)) throw new Error("Requested path resolves outside the project");
   if (isModelExcludedRelativePath(normalizeRelative(path.relative(root, resolved)), allowedRuntimeInput)) {
-    throw new Error("Requested path is excluded from the business-analysis profile");
+    throw new Error("Requested path is excluded from project navigation");
   }
   return resolved;
 }

@@ -29,13 +29,16 @@ import {
   type EngineerVerifierVerdict,
 } from "./contracts.js";
 import type { EngineerGitFacts } from "./preflight.js";
+import { createWebTools, type WebRouter } from "../../web-tools.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_INLINE_DIFF = 120_000;
 
-const VERIFIER_SYSTEM_PROMPT = `You are MAINFRAME's fresh read-only completion verifier.
+export const VERIFIER_SYSTEM_PROMPT = `You are MAINFRAME's fresh read-only completion verifier.
 
-The executor report is a claim, not evidence. Compare every acceptance item with the actual Git state, changed files, focused check results, and direct project reads. Do not edit files, propose unrelated improvements, or widen the block. A passing check proves only what that check covers. Missing evidence is unproven, not verified.
+The executor report is a claim, not evidence. Compare every acceptance item with the actual Git state, changed files, focused check results, and direct project reads. Do not edit files, propose unrelated improvements, or widen the block. A passing check proves only what that check covers. Missing evidence is unproven, not verified. When a claim depends on a version-sensitive external contract, inspect the project's installed version and re-fetch the cited primary documentation. Never send project names, paths, code, logs, requirements, or other project content to web tools. Search snippets and the executor's memory are not evidence. Do not browse for claims already proven entirely by repository state.
+
+The executor cannot run deterministic checks; MAINFRAME runs them after every completion claim and supplies their real results to you. Never instruct the executor to run a check or fabricate an exit code. If a transient check failure needs no repository change, ask it only to resubmit the unchanged candidate so the harness can rerun the check.
 
 Classify every acceptance item exactly once. Return ready-for-architect-review only when every item is verified and all supplied deterministic checks passed. For correctable omissions return one exact correction packet for the same executor session. Use plan-conflict only when the agreed manifest itself prevents a correct implementation. Use blocked only for a demonstrated external blocker.`;
 
@@ -98,6 +101,7 @@ export async function runEngineerVerifier(
   modelRuntime: ModelRuntime,
   model: Model<any>,
   thinking: ThinkingLevel,
+  webRouter: WebRouter,
   timeoutMs = 900_000,
   maxTurns = 96,
 ): Promise<EngineerVerificationResult> {
@@ -153,8 +157,8 @@ export async function runEngineerVerifier(
     modelRuntime,
     model,
     thinkingLevel: thinking,
-    tools: ["project_read", "project_find", "project_grep", "project_list", "submit_engineer_verdict"],
-    customTools: [...createProjectTools(facts.projectRoot), submit],
+    tools: ["project_read", "project_find", "project_grep", "project_list", "web_search", "web_fetch", "submit_engineer_verdict"],
+    customTools: [...createProjectTools(facts.projectRoot), ...createWebTools(webRouter), submit],
     resourceLoader: loader,
     sessionManager: SessionManager.inMemory(facts.projectRoot),
     settingsManager: settings,

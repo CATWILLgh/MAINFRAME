@@ -15,6 +15,7 @@ import {
   type EngineerCompletionManifest,
 } from "./contracts.js";
 import { EngineerWorkspace } from "./workspace.js";
+import { createWebTools, type WebRouter } from "../../web-tools.js";
 
 function textResult(value: unknown, terminate = false) {
   return {
@@ -30,12 +31,43 @@ export interface EngineerToolSet {
   beginRound(): void;
 }
 
+export const ENGINEER_TOOL_NAMES = [
+  "engineer_read", "engineer_find", "engineer_grep", "engineer_list",
+  "engineer_edit", "engineer_create", "web_search", "web_fetch", "engineer_finish",
+] as const;
+
+export function createEngineerProgressHints(): (tool: string, params: unknown) => string | undefined {
+  let previous = "";
+  let consecutive = 0;
+  return (tool, params) => {
+    const signature = `${tool}:${JSON.stringify(params)}`;
+    if (signature === previous) consecutive += 1;
+    else {
+      previous = signature;
+      consecutive = 1;
+    }
+    if (consecutive === 3) {
+      return "MAINFRAME advisory: this exact tool call has repeated three times. Reuse the prior result or change the query, path, or cursor unless the repository state changed.";
+    }
+    if (consecutive === 6) {
+      return "MAINFRAME no-progress advisory: six consecutive identical calls produced no new request. Stop repeating it and choose a different evidence path or report the concrete blocker.";
+    }
+    return undefined;
+  };
+}
+
 export function createEngineerTools(
   projectRoot: string,
   manifest: EngineerBlockManifest,
   workspace: EngineerWorkspace,
+  webRouter: WebRouter,
 ): EngineerToolSet {
   let completed: EngineerCompletionManifest | undefined;
+  const progressHint = createEngineerProgressHints();
+  const withHint = <T extends object>(tool: string, params: unknown, value: T): T & { advisory?: string } => {
+    const advisory = progressHint(tool, params);
+    return advisory ? { ...value, advisory } : value;
+  };
 
   const read = defineTool({
     name: "engineer_read",
@@ -51,7 +83,7 @@ export function createEngineerTools(
       const first = params.startLine ?? 1;
       const returned = first > lines.length ? [] : lines.slice(first - 1, first + 239);
       const endLine = returned.length ? first + returned.length - 1 : Math.min(first - 1, lines.length);
-      return textResult({
+      return textResult(withHint("engineer_read", params, {
         path: observed.path,
         version: observed.version,
         totalLines: lines.length,
@@ -60,7 +92,7 @@ export function createEngineerTools(
         nextStartLine: endLine < lines.length ? endLine + 1 : null,
         truncated: endLine < lines.length,
         lines: returned.map((line, index) => `${first + index}: ${line}`),
-      });
+      }));
     },
   });
   const find = defineTool({
@@ -71,7 +103,9 @@ export function createEngineerTools(
       query: Type.String(),
       offset: Type.Optional(Type.Integer({ minimum: 0 })),
     }),
-    execute: async (_id, params) => textResult(await findProjectFilesPage(projectRoot, params.query, params.offset)),
+    execute: async (_id, params) => textResult(withHint(
+      "engineer_find", params, await findProjectFilesPage(projectRoot, params.query, params.offset),
+    )),
   });
   const grep = defineTool({
     name: "engineer_grep",
@@ -82,7 +116,9 @@ export function createEngineerTools(
       path: Type.Optional(Type.String()),
       offset: Type.Optional(Type.Integer({ minimum: 0 })),
     }),
-    execute: async (_id, params) => textResult(await grepProjectPage(projectRoot, params.query, params.path, params.offset)),
+    execute: async (_id, params) => textResult(withHint(
+      "engineer_grep", params, await grepProjectPage(projectRoot, params.query, params.path, params.offset),
+    )),
   });
   const list = defineTool({
     name: "engineer_list",
@@ -92,7 +128,9 @@ export function createEngineerTools(
       path: Type.Optional(Type.String()),
       offset: Type.Optional(Type.Integer({ minimum: 0 })),
     }),
-    execute: async (_id, params) => textResult(await listProjectDirectoryPage(projectRoot, params.path, params.offset)),
+    execute: async (_id, params) => textResult(withHint(
+      "engineer_list", params, await listProjectDirectoryPage(projectRoot, params.path, params.offset),
+    )),
   });
   const edit = defineTool({
     name: "engineer_edit",
@@ -107,6 +145,7 @@ export function createEngineerTools(
       }), { minItems: 1, maxItems: 40 }),
     }),
     execute: async (_id, params) => {
+      progressHint("engineer_edit", params);
       const result = await workspace.edit(params.path, params.version, params.edits);
       return textResult({ path: result.path, version: result.version, changed: true });
     },
@@ -120,6 +159,7 @@ export function createEngineerTools(
       content: Type.String(),
     }),
     execute: async (_id, params) => {
+      progressHint("engineer_create", params);
       const result = await workspace.createFile(params.path, params.content);
       return textResult({ path: result.path, version: result.version, created: true });
     },
@@ -142,6 +182,7 @@ export function createEngineerTools(
       blockers: Type.Array(Type.String({ minLength: 1 }), { maxItems: 40 }),
     }),
     execute: async (_id, params) => {
+      progressHint("engineer_finish", params);
       if (completed) return textResult("Completion submission is already closed.", true);
       try {
         const candidate = parseEngineerCompletionManifest(params, manifest);
@@ -159,7 +200,7 @@ export function createEngineerTools(
   });
 
   return {
-    tools: [read, find, grep, list, edit, create, finish],
+    tools: [read, find, grep, list, edit, create, ...createWebTools(webRouter), finish],
     completion: () => completed,
     beginRound: () => { completed = undefined; },
   };

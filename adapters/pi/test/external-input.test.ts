@@ -22,7 +22,7 @@ test("an external input is staged immutably and only that runtime file becomes r
   await writeFile(sibling, "must remain private\n");
   await assert.rejects(
     readProjectFile(root, ".agents/runtime/pi/inputs/unrelated.md", 1, undefined, staged),
-    /excluded from the business-analysis profile/,
+    /excluded from project navigation/,
   );
 });
 
