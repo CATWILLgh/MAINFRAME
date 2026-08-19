@@ -32,6 +32,19 @@ Do not duplicate the same guarantee across levels or leave temporary markers.
 Automated checks prove technical behaviour. They do not replace product-owner
 acceptance of the running UX and UI.
 
+## Keep the local run bounded
+
+Run tests in the foreground and never start a second gate before the first
+finishes. Begin with the focused test; run the full frontend suite at most once
+and only after focused green. For local Vitest, default to
+`--maxWorkers=2 --no-file-parallelism` unless the project is already stricter or
+the test requires parallel workers. Before a broad run, check for existing
+workers in this repository. Retain the PID of any long run and stop only that
+process; never use broad `pkill` or `killall`. If it hangs or overloads the
+machine, stop your process and report instead of launching a duplicate. A
+narrow correction needs only the focused test plus typecheck or lint when those
+checks cover its risk.
+
 ## Sources
 
 - React Testing Library guiding principles — https://testing-library.com/docs/guiding-principles/

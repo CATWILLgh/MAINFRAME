@@ -38,6 +38,16 @@ database and assert the business outcome. The implementation detail
 Do not add arbitrary waits or duplicate the same guarantee across several test
 levels merely to increase test count.
 
+## Keep the local run bounded
+
+Run tests in the foreground and never start another test or gate before the
+first finishes. Start with the focused test. Before a broader run, check for
+existing workers in this repository. Retain the PID of a long run and stop only
+that process; never use broad `pkill` or `killall` against shared pytest or
+Python processes. If it hangs or overloads the machine, stop your process and
+report instead of launching a duplicate. After a narrow correction, focused
+tests plus the relevant type or lint check are enough when they cover the risk.
+
 ## Sources
 
 - Python `unittest` — https://docs.python.org/3/library/unittest.html

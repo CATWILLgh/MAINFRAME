@@ -28,6 +28,18 @@ test boundary or keep the suite economical.
 - Do not add arbitrary waits or duplicate one guarantee across several levels
   merely to increase test count.
 
+## Keep the local run bounded
+
+Run tests in the foreground and never start another test or gate before the
+first finishes. Start with the focused test. For local Vitest, default to
+`--maxWorkers=2 --no-file-parallelism` unless the project is already stricter or
+the test requires parallel workers. Before a broader run, check for existing
+workers in this repository. Retain the PID of a long run and stop only that
+process; never use broad `pkill` or `killall` against shared Node or test-runner
+processes. If it hangs or overloads the machine, stop your process and report
+instead of launching a duplicate. After a narrow correction, focused tests plus
+typecheck or lint are enough when they cover the risk.
+
 Sources: [Node.js test runner](https://nodejs.org/api/test.html),
 [Next.js testing](https://nextjs.org/docs/app/guides/testing),
 [NestJS testing](https://docs.nestjs.com/fundamentals/testing).

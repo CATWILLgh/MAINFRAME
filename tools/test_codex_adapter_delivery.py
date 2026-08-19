@@ -1286,7 +1286,18 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "cheapest faithful observation" in testing_body
     assert "real local PostgreSQL" in testing_body
     assert "mainframe-ticket" in testing_body
+    assert "--maxWorkers=2 --no-file-parallelism" in testing_body
+    assert "Never use broad `pkill` or `killall`" in testing_body
     assert "allow_implicit_invocation" not in testing_metadata
+
+    for path in (
+        ADAPTER / "skills" / "mainframe-python-backend" / "references" / "testing.md",
+        ADAPTER / "skills" / "mainframe-typescript-backend" / "references" / "testing.md",
+        ADAPTER / "skills" / "mainframe-frontend" / "references" / "testing.md",
+    ):
+        body = path.read_text(encoding="utf-8")
+        assert "never start" in body.lower()
+        assert "pkill" in body and "killall" in body
 
     infrastructure_skill = ADAPTER / "skills" / "mainframe-infrastructure"
     infrastructure_body = (infrastructure_skill / "SKILL.md").read_text(

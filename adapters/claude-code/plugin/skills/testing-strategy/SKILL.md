@@ -68,6 +68,24 @@ not be.
 - Do not prescribe a universal wrapper command. Discover and use the project's
   native runner and documented conventions.
 
+## Keep local execution bounded
+
+- Run tests in the foreground by default. Do not start a second test or gate
+  while the first is still running.
+- Start with the focused test. Run one broader frontend suite only after the
+  focused test is green. For local Vitest runs, default to
+  `--maxWorkers=2 --no-file-parallelism` unless the project already defines a
+  stricter limit or the test explicitly depends on parallel workers.
+- Before a broad run, check for existing test workers for the same repository.
+  If you start a long-running process, retain its PID and stop only that process.
+  Never use broad `pkill` or `killall` against shared Node, Vitest, pytest, or
+  similar processes.
+- If a run hangs or causes unexpected load, stop the process you started and
+  report the limitation instead of launching a duplicate.
+- After a narrow correction, focused tests plus typecheck or lint are enough
+  when they cover the changed risk; do not repeat an unchanged full suite for
+  ceremony.
+
 ## Sufficient coverage
 
 Cover the meaningful success, rejection, boundary, and failure behaviours that

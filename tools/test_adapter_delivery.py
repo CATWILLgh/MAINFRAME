@@ -699,6 +699,8 @@ def test_testing_context_preserves_role_boundaries():
     assert "An audit-only recipient evaluates the existing evidence" in normalized_strategy
     assert "cross-cutting testing strategy" in normalized_strategy
     assert "Not for routine focused tests" in normalized_strategy
+    assert "--maxWorkers=2 --no-file-parallelism" in strategy
+    assert "Never use broad `pkill` or `killall`" in strategy
 
     profiles = {
         "mainframe-python-backend-engineer.md": "mainframe:python-backend-patterns",
@@ -747,6 +749,17 @@ def test_testing_context_preserves_role_boundaries():
     ).read_text(encoding="utf-8")
     assert "existing test runner" in python_testing
     assert "do not introduce pytest" in python_testing
+    for testing in (
+        python_testing,
+        (PLUGIN / "skills" / "typescript-backend-patterns" / "testing.md").read_text(
+            encoding="utf-8"
+        ),
+        (PLUGIN / "skills" / "frontend" / "references" / "testing.md").read_text(
+            encoding="utf-8"
+        ),
+    ):
+        assert "never start" in testing.lower()
+        assert "pkill" in testing and "killall" in testing
 
     python_sqlalchemy = (
         PLUGIN / "skills" / "python-backend-patterns" / "sqlalchemy.md"
