@@ -654,12 +654,14 @@ def collect_misc(root):
 
 
 def compute_health(skills, agents, hooks, root):
-    """Integrity findings the graph hides: broken refs, orphans, missing scripts.
+    """Integrity findings plus skills with no known static graph connection.
 
     build_edges drops any edge whose target is not a node, so a typo'd cross-ref
     or a `skills:` entry pointing at a deleted skill vanishes silently — this
-    surfaces exactly those, plus skills with no graph connection at all and hook
-    scripts registered in hooks.json but absent from disk.
+    surfaces exactly those and hook scripts registered in hooks.json but absent
+    from disk. Skills with no static edge are returned separately as neutral
+    inventory: description routing, explicit invocation, and native commands are
+    valid dynamic entry points that this static graph cannot prove.
     """
     skill_names = {s["name"] for s in skills}
     known = skill_names | {a["name"] for a in agents}
@@ -686,7 +688,8 @@ def compute_health(skills, agents, hooks, root):
             local_name = sk.removeprefix("mainframe:")
             if local_name in skill_names:
                 connected.add(local_name)
-    orphans = sorted(s["name"] for s in skills if s["name"] not in connected)
+    unlinked_skills = sorted(
+        s["name"] for s in skills if s["name"] not in connected)
 
     scripts_dir = os.path.join(root, "adapters/claude-code/plugin/hooks/scripts")
     missing, seen = [], set()
@@ -697,7 +700,11 @@ def compute_health(skills, agents, hooks, root):
         if not os.path.isfile(os.path.join(scripts_dir, h["script"])):
             missing.append(h["script"])
 
-    return {"dangling": dangling, "orphans": orphans, "missing_scripts": missing}
+    return {
+        "dangling": dangling,
+        "unlinked_skills": unlinked_skills,
+        "missing_scripts": missing,
+    }
 
 
 def build_nodes(skills, agents, hooks):

@@ -408,7 +408,7 @@ def _fixture_health(root):
     return root
 
 
-def test_compute_health_flags_dangling_orphans_and_missing_scripts():
+def test_compute_health_flags_dangling_unlinked_skills_and_missing_scripts():
     root = _fixture_health(tempfile.mkdtemp())
     skills = bhp.collect_skills(root)
     agents = bhp.collect_agents(root)
@@ -417,7 +417,7 @@ def test_compute_health_flags_dangling_orphans_and_missing_scripts():
     dangling = {(d["source"], d["target"]) for d in health["dangling"]}
     assert ("alpha", "ghost") in dangling          # skill cross-ref to a non-existent skill
     assert ("gamma", "delta") in dangling          # agent preloads a non-existent skill
-    assert health["orphans"] == ["beta"]           # no edge in or out
+    assert health["unlinked_skills"] == ["beta"]  # no known static edge in or out
     assert health["missing_scripts"] == ["absent.py"]
 
 
@@ -428,7 +428,7 @@ def test_compute_health_all_resolved_is_empty():
     _write(os.path.join(root, "adapters/claude-code/plugin/skills/peer/SKILL.md"),
            "---\nname: peer\n---\n\nSee [`solo`](../solo/SKILL.md).\n")
     health = bhp.compute_health(bhp.collect_skills(root), [], [], root)
-    assert health == {"dangling": [], "orphans": [], "missing_scripts": []}
+    assert health == {"dangling": [], "unlinked_skills": [], "missing_scripts": []}
 
 
 def test_compute_health_resolves_namespaced_agent_skills():
@@ -436,7 +436,7 @@ def test_compute_health_resolves_namespaced_agent_skills():
     skills = [{"name": "ticket", "crossrefs": []}]
     agents = [{"name": "worker", "skills": ["mainframe:ticket"]}]
     health = bhp.compute_health(skills, agents, [], root)
-    assert health == {"dangling": [], "orphans": [], "missing_scripts": []}
+    assert health == {"dangling": [], "unlinked_skills": [], "missing_scripts": []}
 
 
 def _usage_fixture():

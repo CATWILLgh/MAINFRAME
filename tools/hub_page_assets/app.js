@@ -491,7 +491,7 @@
   function renderOverview(root) {
     const ds = D.dev_state || { active: false, feedback: [] };
     const report = telemetry();
-    const repo = D.health || { dangling: [], missing_scripts: [], orphans: [] };
+    const repo = D.health || { dangling: [], missing_scripts: [], unlinked_skills: [] };
     const adapters = activeAdapters(report);
     const reportingAdapters = adapters.filter((item) => (item.usable_records || 0) > 0);
     const cost = report.cost || {};
@@ -1384,12 +1384,12 @@
   }
 
   function renderHealth(root) {
-    const h = D.health || { dangling: [], orphans: [], missing_scripts: [] };
+    const h = D.health || { dangling: [], unlinked_skills: [], missing_scripts: [] };
     const issues = h.dangling.length + h.missing_scripts.length;
     root.appendChild(statRow([
       [num(h.missing_scripts.length), t("missing scripts")],
       [num(h.dangling.length), t("broken refs")],
-      [num(h.orphans.length), t("orphan skills")],
+      [num(h.unlinked_skills.length), t("skills without static links")],
     ]));
     if (issues === 0) {
       root.appendChild(el("div", { class: "notice ok" },
@@ -1410,11 +1410,11 @@
             el("span", { class: "muted small" }, "  " + f("({kind}, dropped from the graph)", { kind: d.kind })),
           ])))));
     }
-    if (h.orphans.length) {
-      root.appendChild(section(t("Orphan skills"), "config", h.orphans.length,
+    if (h.unlinked_skills.length) {
+      root.appendChild(section(t("Skills without static links"), "config", h.unlinked_skills.length,
         el("div", null, [
-          explain(t("No preload or cross-ref edge in or out. Expected for user-invocable skills and description-triggered ones — not necessarily a problem.")),
-          el("div", { class: "chips" }, h.orphans.map((o) => linkChip(o, "skills", o))),
+          explain(t("No static preload or cross-reference is known. These skills may still be reached through description routing, explicit invocation, init, or native commands; this is inventory, not a health failure.")),
+          el("div", { class: "chips" }, h.unlinked_skills.map((o) => linkChip(o, "skills", o))),
         ])));
     }
   }

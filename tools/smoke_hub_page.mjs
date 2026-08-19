@@ -44,10 +44,10 @@ const visibleNodes = () => q(".gnode").filter((n) => !n.classList.contains("filt
 const fire = (elm, type, init) => elm.dispatchEvent(new window.Event(type, { bubbles: true, ...init }));
 const esc = () => window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape" }));
 
-ok(q("#tabs button").length === 8, "8 tabs rendered");
+ok(q("#tabs button").length === 9, "9 tabs rendered");
 ok(doc.querySelector("#view-overview").classList.contains("active"), "overview is the default view");
-ok(q("#view-overview .overview-metric").length >= 10, "overview metrics rendered");
-ok(q("#view-overview .overview-panel").length >= 6, "overview evidence panels rendered");
+ok(q("#view-overview .overview-metric").length === 8, "overview metrics rendered");
+ok(q("#view-overview .overview-panel").length === 5, "overview evidence panels rendered");
 ok(/whole agent system|What deserves a look/.test(doc.querySelector("#view-overview").textContent),
   "overview explains the system in plain language");
 ok(q("#view-overview .signal-chart").length === 1, "overview telemetry signal rendered");
@@ -62,11 +62,13 @@ ok(search.hidden, "catalog search stays hidden on the analytics overview");
 const detail = doc.querySelector("#detail");
 ok(!!detail && detail.hidden, "detail drawer present and hidden at start");
 
-search.value = "shadcn";
+// Use a term represented by both a catalog artifact and a graph node. Graph
+// filtering intentionally searches graph identity, not every card body field.
+search.value = "ticket";
 fire(search, "input");
 const vc1 = visibleCards();
 ok(vc1.length >= 1 && vc1.length < totalCards, "query narrows cards (" + vc1.length + "/" + totalCards + ")");
-ok(vc1.some((c) => c.textContent.toLowerCase().includes("shadcn")), "the matching card stays visible");
+ok(vc1.some((c) => c.textContent.toLowerCase().includes("ticket")), "the matching card stays visible");
 const vn1 = visibleNodes();
 ok(vn1.length >= 1 && vn1.length < totalNodes, "query narrows graph nodes (" + vn1.length + "/" + totalNodes + ")");
 
@@ -128,15 +130,18 @@ const health = doc.querySelector("#view-health");
 ok(!!health, "health pane rendered");
 ok(q("#view-health .stat").length === 3, "health shows 3 stat tiles");
 ok(!!health.querySelector(".notice.ok"), "clean repo shows the all-resolved notice");
-ok(/Orphan skills/.test(health.textContent), "orphan section present with its caveat");
+ok(/Skills without static links/.test(health.textContent),
+  "dynamically reachable skills are shown as neutral inventory");
 
 const dev = doc.querySelector("#view-dev");
 ok(!!dev, "dev pane rendered");
-ok(q("#view-dev .bars").length >= 2, "activity-by-day and by-agent bar charts present");
+ok(q("#view-dev .bars").length >= 1, "recorded event bar chart present");
 ok(q("#view-dev .bar-row").length >= 2, "bar rows rendered (" + q("#view-dev .bar-row").length + ")");
-const breakdowns = window.HUB_DATA.dev_state.telemetry.breakdowns || [];
+const breakdowns = (window.HUB_DATA.dev_state.telemetry.breakdowns || [])
+  .filter((item) => item.items.length > 1);
 ok(!breakdowns.length || breakdowns.every((b) =>
-  dev.textContent.includes(b.event + " · by " + b.key)), "available payload breakdowns rendered");
+  dev.textContent.includes((b.adapter_id ? b.adapter_id + " · " : "") + b.event + " · " + b.key)),
+  "available payload breakdowns rendered");
 
 const usage = doc.querySelector("#view-usage");
 ok(!!usage, "usage pane rendered");

@@ -140,6 +140,10 @@ window.HUB_STRINGS_RU = {
   "{count} rows are stored but not counted": "{count} строк хранится, но не учитывается",
   "Delivery health": "Целостность поставки",
   "{count} broken references or missing scripts": "{count} битых ссылок или отсутствующих скриптов",
+  "skills without static links": "skills без статических связей",
+  "Skills without static links": "Skills без статических связей",
+  "No static preload or cross-reference is known. These skills may still be reached through description routing, explicit invocation, init, or native commands; this is inventory, not a health failure.":
+    "Статический preload или cross-reference не найден. Эти skills всё равно могут вызываться по description, явно, через init или нативные команды; это инвентаризация, а не ошибка целостности.",
   "Subagent lifecycle": "Жизненный цикл сабагентов",
   "{count} start/stop signals without a pair": "{count} сигналов старта/остановки без пары",
   "Tool failures": "Сбои инструментов",
@@ -445,7 +449,6 @@ window.HUB_STRINGS_RU = {
     "Зарезервированные, но пустые слои — они есть в архитектуре, но пока ничего не поставляют:",
   "missing scripts": "отсутствующих скриптов",
   "broken refs": "битых ссылок",
-  "orphan skills": "изолированных навыков",
   "Every cross-ref and preload resolves, and every registered hook script exists on disk.":
     "Все перекрёстные ссылки и предзагрузки разрешаются, а каждый зарегистрированный скрипт хука есть на диске.",
   "Missing hook scripts": "Отсутствующие скрипты хуков",
@@ -453,9 +456,6 @@ window.HUB_STRINGS_RU = {
     "{name} — зарегистрирован в hooks.json, но отсутствует на диске",
   "Broken references": "Битые ссылки",
   "({kind}, dropped from the graph)": "({kind}, выброшено из графа)",
-  "Orphan skills": "Изолированные навыки",
-  "No preload or cross-ref edge in or out. Expected for user-invocable skills and description-triggered ones — not necessarily a problem.":
-    "Нет входящих и исходящих связей предзагрузки или ссылок. Это нормально для навыков, вызываемых пользователем, и тех, что срабатывают по описанию — не обязательно проблема.",
   "drag to pan · scroll to zoom · hover to trace links · click a node for details":
     "тяните для сдвига · колесо для масштаба · наведение подсвечивает связи · клик открывает детали",
   "zoom in": "приблизить",
