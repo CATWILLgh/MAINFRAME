@@ -144,7 +144,7 @@ def test_dispatcher_delivers_one_bounded_note():
 def test_blocked_command_does_not_consume_the_later_reminder():
     state = Path(tempfile.mkdtemp()) / "notices"
     blocked = _run(
-        "rm -rf generated && rg -rn needle .", state, dispatcher=True,
+        "rm -rf . && rg -rn needle .", state, dispatcher=True,
     )
     assert blocked["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "ripgrep option check" not in (
