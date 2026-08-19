@@ -65,6 +65,7 @@ DEV=0
 ASSUME_YES=0
 REPLACE_MODIFIED=0
 PREFLIGHT_ONLY=0
+WITH_PEER_ADVISOR=0
 
 usage() {
     cat <<EOF
@@ -99,6 +100,10 @@ Usage:
                       (claude-code/telemetry/ — a local SQLite DB; nothing
                       leaves the machine).
                       Ordinary users do not need this.
+  $0 --with-peer-advisor
+                      Verify an authenticated Codex CLI and install the
+                      optional Codex review skill. Reinstalling without this
+                      flag removes only that managed optional skill.
   $0 --dry-run        Show what would happen, no changes.
   $0 --yes            Approve a required Claude Code update without prompting.
   $0 --replace-modified
@@ -124,6 +129,7 @@ while [[ $# -gt 0 ]]; do
         --dev)       DEV=1 ;;
         --yes)       ASSUME_YES=1 ;;
         --replace-modified) REPLACE_MODIFIED=1 ;;
+        --with-peer-advisor) WITH_PEER_ADVISOR=1 ;;
         --preflight) PREFLIGHT_ONLY=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)   usage; exit 0 ;;
@@ -179,6 +185,8 @@ SETTINGS_DEV_OVERLAY="${ADAPTER_ROOT}/dev/settings-telemetry.json"
 DEV_MANAGED_ARTIFACTS=(
     "adapters/claude-code/dev/skills/harness-feedback:${CLAUDE_DIR}/skills/harness-feedback:dev-harness-feedback"
 )
+PEER_ADVISOR_SOURCE="adapters/claude-code/optional/skills/mainframe-peer-review"
+PEER_ADVISOR_TARGET="${CLAUDE_DIR}/skills/mainframe-peer-review"
 DEV_LINKED_ARTIFACTS=(
     "workspace/runtime:${CLAUDE_DIR}/mainframe"
 )
@@ -340,6 +348,11 @@ check_managed_inputs() {
             check_managed install "$src" "$target" "$state_id"
         fi
     done
+    if [[ $UNINSTALL -eq 1 || $WITH_PEER_ADVISOR -eq 0 ]]; then
+        check_managed uninstall "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    else
+        check_managed install "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    fi
     for entry in "${MANAGED_DIRS[@]}"; do
         src="${entry%%:*}"
         rest="${entry#*:}"
@@ -347,6 +360,18 @@ check_managed_inputs() {
         state_id="${entry##*:}"
         check_managed_dir_contents "$action" "$src" "$target" "$state_id"
     done
+}
+
+check_peer_advisor() {
+    [[ $WITH_PEER_ADVISOR -eq 1 ]] || return 0
+    if ! command -v codex >/dev/null 2>&1; then
+        log_error "--with-peer-advisor requires the Codex CLI on PATH; no Claude adapter files were changed."
+        return 1
+    fi
+    if ! codex login status >/dev/null 2>&1; then
+        log_error "--with-peer-advisor requires an authenticated Codex CLI; run 'codex login' and retry."
+        return 1
+    fi
 }
 
 check_settings_inputs() {
@@ -833,6 +858,7 @@ main() {
     if [[ $UNINSTALL -eq 0 ]]; then
         check_claude_version
         check_python
+        check_peer_advisor
         check_settings_inputs
         check_managed_inputs
     else
@@ -877,6 +903,7 @@ main() {
             local state_id="${entry##*:}"
             uninstall_managed "$src" "$tgt" "$state_id"
         done
+        uninstall_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
         for entry in "${DEV_LINKED_ARTIFACTS[@]}"; do
             uninstall_one "${entry%%:*}" "${entry##*:}"
         done
@@ -925,6 +952,11 @@ main() {
     for entry in "${LINKED_ARTIFACTS[@]}"; do
         install_one "${entry%%:*}" "${entry##*:}"
     done
+    if [[ $WITH_PEER_ADVISOR -eq 1 ]]; then
+        install_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    else
+        uninstall_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    fi
 
     install_settings
     if [[ $DEV -eq 1 ]]; then

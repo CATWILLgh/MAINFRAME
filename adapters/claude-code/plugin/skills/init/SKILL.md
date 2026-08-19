@@ -72,8 +72,10 @@ When a task needs a formal definition of done or is known to be complex, read
 a bounded formal route from the full complex or high-stakes review route, then
 defines red evidence, `/goal`, execution, and acceptance. Do not load it for a
 small, unambiguous task.
-When that workflow reaches its independent Codex checkpoint, read
-[codex-exec.md](codex-exec.md) for the Claude Code adapter's invocation method.
+When the optional `mainframe-peer-review` skill is installed, use it at the
+workflow's independent external-model checkpoint. Its result is additional
+evidence; it never replaces the configured decision reviewer, final advisor,
+or primary acceptance.
 
 ## Execution route
 

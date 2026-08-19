@@ -9,8 +9,8 @@ usage() {
 MAINFRAME installer
 
 Usage:
-  ./install.sh --claude [--dry-run] [--dev] [--yes] [--replace-modified] [--uninstall]
-  ./install.sh --codex [--dry-run] [--dev] [--yes] [--replace-modified] [--uninstall]
+  ./install.sh --claude [--dry-run] [--dev] [--with-peer-advisor] [--yes] [--replace-modified] [--uninstall]
+  ./install.sh --codex [--dry-run] [--dev] [--with-peer-advisor] [--yes] [--replace-modified] [--uninstall]
   ./install.sh --pi [--dry-run] [--dev] [--yes] [--uninstall]
   ./install.sh --help
 
@@ -23,6 +23,7 @@ Targets:
 
 Adapter options are forwarded unchanged to its installer.
 Use --yes to approve a required Claude Code update without an interactive prompt.
+Use --with-peer-advisor to add the optional authenticated peer-CLI review skill.
 Use --replace-modified only to back up and replace/remove locally customized
 managed artifacts; otherwise they are preserved and the operation stops.
 For Codex, --yes can back up and replace a conflicting credentials-index link;
@@ -65,10 +66,14 @@ main() {
     esac
 
     local uninstall=0
+    local shared_args=()
     local argument
     for argument in "$@"; do
         if [[ "$argument" == "--uninstall" ]]; then
             uninstall=1
+        fi
+        if [[ "$argument" != "--with-peer-advisor" ]]; then
+            shared_args+=("$argument")
         fi
     done
 
@@ -76,7 +81,7 @@ main() {
         "${ROOT}/adapters/${adapter}/install.sh" --preflight "$@"
         if [[ "$adapter" != "pi" ]]; then
             echo "[mainframe] shared secrets"
-            "${ROOT}/shared/credentials/install.sh" "$@"
+            "${ROOT}/shared/credentials/install.sh" ${shared_args[@]+"${shared_args[@]}"}
             echo
         fi
     fi

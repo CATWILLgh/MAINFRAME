@@ -35,7 +35,8 @@ facts and switch routes before asking the user to agree the DoD.
    and affected paths. Have it challenge the decision, then reconcile each
    grounded objection against the repository and sources. Do not refer to
    conversation context that the subagent does not receive.
-4. Run an independent Codex review using [codex-exec.md](codex-exec.md).
+4. If `mainframe-peer-review` is installed, run its independent external-model
+   review. Otherwise continue without inventing an unavailable dependency.
 5. Invoke `mainframe-advisor` last with a preparation-readiness task. Its start
    hook supplies the filtered parent conversation; name only the review phase
    and unclear affected paths. Reconcile findings, then present the checked
@@ -79,4 +80,4 @@ authority, or an unavailable external condition. For impossibility, report the
 blocker, evidence, checked alternatives, and why preparation missed it. Do not
 repeat an unchanged attempt without a new hypothesis or evidence.
 
-An additional Codex review after the final `mainframe-advisor` is reserved for irreversible data, money, security, broad production impact, or hard-to-reverse architecture.
+An additional installed peer review after the final `mainframe-advisor` is reserved for irreversible data, money, security, broad production impact, or hard-to-reverse architecture.

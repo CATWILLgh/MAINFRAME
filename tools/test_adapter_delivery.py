@@ -41,7 +41,9 @@ MIN_CLAUDE_VERSION = re.search(
 ).group(1)
 
 
-def _run_installer(*args, home=None, claude_version=None, broken_python=False):
+def _run_installer(
+    *args, home=None, claude_version=None, broken_python=False, codex_peer=False
+):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
     fake_bin.mkdir(exist_ok=True)
@@ -59,6 +61,16 @@ def _run_installer(*args, home=None, claude_version=None, broken_python=False):
         encoding="utf-8",
     )
     claude.chmod(claude.stat().st_mode | stat.S_IXUSR)
+    if codex_peer:
+        codex = fake_bin / "codex"
+        codex.write_text(
+            "#!/bin/sh\n"
+            "if [ \"${1:-}\" = login ] && [ \"${2:-}\" = status ]; then exit 0; fi\n"
+            "if [ \"${1:-}\" = --version ]; then echo 'codex-cli 0.147.0'; exit 0; fi\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        codex.chmod(codex.stat().st_mode | stat.S_IXUSR)
     if broken_python:
         python = fake_bin / "python3"
         python.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
@@ -113,6 +125,28 @@ def test_root_dispatches_claude_dry_run():
     assert proc.returncode == 0, proc.stderr
     assert "shared secrets" in proc.stdout.lower()
     assert "claude code adapter" in proc.stdout.lower()
+
+
+def test_peer_advisor_is_explicit_optional_and_reversible():
+    missing, missing_home = _run_installer("--claude", "--with-peer-advisor")
+    assert missing.returncode != 0
+    assert "requires the Codex CLI" in missing.stderr
+    assert not (missing_home / ".claude" / "skills" / "mainframe-peer-review").exists()
+
+    installed, home = _run_installer(
+        "--claude", "--with-peer-advisor", codex_peer=True
+    )
+    assert installed.returncode == 0, installed.stderr
+    target = home / ".claude" / "skills" / "mainframe-peer-review"
+    assert target.is_dir() and not target.is_symlink()
+    body = (target / "SKILL.md").read_text(encoding="utf-8")
+    assert "codex exec --ignore-user-config" in body
+    assert "never use `--last`" in body
+    assert "allowed-tools: Bash(codex *)," in body
+
+    plain, _ = _run_installer("--claude", home=home, codex_peer=True)
+    assert plain.returncode == 0, plain.stderr
+    assert not target.exists()
 
 
 def test_reinstall_removes_unchanged_retired_managed_artifact():
@@ -1087,9 +1121,10 @@ def test_init_replaces_automatic_task_workflow():
     init_dir = PLUGIN / "skills" / "init"
     body = (init_dir / "SKILL.md").read_text(encoding="utf-8")
     assert "[workflow.md](workflow.md)" in body
-    assert "[codex-exec.md](codex-exec.md)" in body
+    assert "mainframe-peer-review" in body
     assert (init_dir / "workflow.md").is_file()
-    assert (init_dir / "codex-exec.md").is_file()
+    assert not (init_dir / "codex-exec.md").exists()
+    assert (ADAPTER / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md").is_file()
     assert not (PLUGIN / "skills" / "task-workflow").exists()
     assert not (PLUGIN / "hooks" / "scripts" / "session-posture.py").exists()
     assert not (PLUGIN / "hooks" / "scripts" / "task-workflow-engagement.py").exists()
@@ -1101,7 +1136,9 @@ def test_init_replaces_automatic_task_workflow():
 def test_init_separates_bounded_dod_from_complex_review():
     init_dir = PLUGIN / "skills" / "init"
     workflow = (init_dir / "workflow.md").read_text(encoding="utf-8")
-    codex = (init_dir / "codex-exec.md").read_text(encoding="utf-8")
+    codex = (
+        ADAPTER / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md"
+    ).read_text(encoding="utf-8")
     assert "A formal DoD alone does not make a task complex" in workflow
     assert "### Bounded formal route" in workflow
     assert "### Complex route" in workflow
@@ -1110,13 +1147,13 @@ def test_init_separates_bounded_dod_from_complex_review():
     assert "The bounded route ends after direct proof" in " ".join(workflow.split())
     assert "bounded formal" not in codex
     assert "gpt-5.6-terra" not in codex
-    assert "gpt-5.6-sol`, `medium`" in codex
-    assert "gpt-5.6-sol`, `xhigh`" in codex
+    assert "`gpt-5.6-sol` with `medium`" in codex
+    assert "Use `xhigh` only" in codex
 
 
 def test_codex_review_isolated_from_user_configuration():
     codex = (
-        PLUGIN / "skills" / "init" / "codex-exec.md"
+        ADAPTER / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md"
     ).read_text(encoding="utf-8")
     assert codex.count("--ignore-user-config") == 2
     assert codex.count("--strict-config") == 2

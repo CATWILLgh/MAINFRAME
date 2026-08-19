@@ -59,6 +59,11 @@ state and then invoke `mainframe_advisor` with the inherited task history and a
 changes the result or its evidence, rerun the affected verification and repeat
 the final-state review before declaring the goal complete.
 
+When the optional `mainframe-peer-review` skill is installed, use it for the
+independent external-model checkpoint of a consequential preparation or final
+state. Its result is additional evidence; it never replaces the configured
+decision reviewer, final advisor, or primary acceptance.
+
 If a task that looked small reveals a material architecture, product, infrastructure, or risk boundary, investigate enough to explain the real choice, then return to the user before expanding the agreed work.
 
 ## Delegation

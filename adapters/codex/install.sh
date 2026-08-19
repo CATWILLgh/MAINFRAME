@@ -68,6 +68,8 @@ DEV_FEEDBACK_SOURCE="${ADAPTER_ROOT}/dev/skills/harness-feedback"
 DEV_FEEDBACK_TARGET="${GLOBAL_SKILLS_DIR}/harness-feedback"
 OPENCODE_LAUNCHER_SOURCE="${ADAPTER_ROOT}/bin/mainframe-opencode"
 OPENCODE_LAUNCHER_TARGET="$HOME/.local/bin/mainframe-opencode"
+PEER_ADVISOR_SOURCE="${ADAPTER_ROOT}/optional/skills/mainframe-peer-review"
+PEER_ADVISOR_TARGET="${GLOBAL_SKILLS_DIR}/mainframe-peer-review"
 MANAGED_DELIVERY="${REPO_ROOT}/shared/managed-delivery/manage-artifact.py"
 MANAGED_STATE_DIR="${CODEX_DIR}/.mainframe-managed-artifacts"
 MANAGED_BACKUP_ROOT="${CODEX_DIR}/.mainframe-backups/${TIMESTAMP}"
@@ -78,13 +80,14 @@ UNINSTALL=0
 PREFLIGHT=0
 DEV_MODE=0
 REPLACE_MODIFIED=0
+WITH_PEER_ADVISOR=0
 
 usage() {
     cat <<'EOF'
 MAINFRAME Codex adapter installer
 
 Usage:
-  install.sh [--dry-run] [--dev] [--yes] [--replace-modified] [--uninstall]
+  install.sh [--dry-run] [--dev] [--with-peer-advisor] [--yes] [--replace-modified] [--uninstall]
   install.sh --preflight [--dry-run] [--yes] [--replace-modified]
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
@@ -93,6 +96,9 @@ and reviewed native hooks. Permission selection remains entirely user-owned.
 --dev additionally enables
 the adapter-owned local telemetry sink and harness-feedback receiver; normal
 installation keeps both inactive.
+--with-peer-advisor verifies an authenticated Claude Code CLI and installs the
+optional Claude review skill. Reinstalling without it removes only that managed
+optional skill.
 
 Adapter artifacts are managed regular copies. Local changes block update or
 uninstall unless confirmed interactively or with --replace-modified; changed
@@ -109,6 +115,7 @@ parse_args() {
             --dry-run) DRY_RUN=1 ;;
             --yes) ASSUME_YES=1 ;;
             --replace-modified) REPLACE_MODIFIED=1 ;;
+            --with-peer-advisor) WITH_PEER_ADVISOR=1 ;;
             --uninstall) UNINSTALL=1 ;;
             --preflight) PREFLIGHT=1 ;;
             -h|--help) usage; exit 0 ;;
@@ -166,7 +173,7 @@ check_managed() {
 managed_state_is_current() {
     local state_id="$1" name
     case "$state_id" in
-        global-agents|rules|opencode-launcher|dev-harness-feedback) return 0 ;;
+        global-agents|rules|opencode-launcher|peer-advisor|dev-harness-feedback) return 0 ;;
     esac
     for name in "${SKILL_NAMES[@]}"; do
         [[ "$state_id" == "skill-${name}" ]] && return 0
@@ -272,6 +279,11 @@ delivery_preflight() {
     else
         check_managed uninstall "$DEV_FEEDBACK_SOURCE" "$DEV_FEEDBACK_TARGET" "dev-harness-feedback"
     fi
+    if [[ $WITH_PEER_ADVISOR -eq 1 ]]; then
+        check_managed install "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    else
+        check_managed uninstall "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    fi
     check_managed install "$OPENCODE_LAUNCHER_SOURCE" "$OPENCODE_LAUNCHER_TARGET" "opencode-launcher"
     if link_conflicts "$INDEX_TARGET" "$INDEX_SOURCE" && [[ $ASSUME_YES -ne 1 ]]; then
         error "A Codex credentials index already exists. Rerun with --yes to back it up before linking the repository index."
@@ -321,6 +333,8 @@ check_sources() {
         "$DEV_FEEDBACK_SOURCE/agents/openai.yaml" \
         "${REPO_ROOT}/dev/harness-feedback/receiver.py" \
         "$OPENCODE_LAUNCHER_SOURCE" \
+        "$PEER_ADVISOR_SOURCE/SKILL.md" \
+        "$PEER_ADVISOR_SOURCE/agents/openai.yaml" \
         "$MANAGED_DELIVERY" \
         "$HOOKS_TOOL"; do
         if [[ ! -f "$path" ]]; then
@@ -352,6 +366,18 @@ check_sources() {
             return 1
         fi
     done
+}
+
+check_peer_advisor() {
+    [[ $WITH_PEER_ADVISOR -eq 1 ]] || return 0
+    if ! command -v claude >/dev/null 2>&1; then
+        error "--with-peer-advisor requires the Claude Code CLI on PATH; no Codex adapter files were changed."
+        return 1
+    fi
+    if ! claude auth status >/dev/null 2>&1; then
+        error "--with-peer-advisor requires an authenticated Claude Code CLI; run 'claude auth login' and retry."
+        return 1
+    fi
 }
 
 manage_config() {
@@ -413,6 +439,7 @@ preflight() {
                 "${PRIVATE_SKILLS_DIR}/${name}" "private-skill-${name}"
         done
         check_managed uninstall "$DEV_FEEDBACK_SOURCE" "$DEV_FEEDBACK_TARGET" "dev-harness-feedback"
+        check_managed uninstall "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
         check_managed uninstall "$OPENCODE_LAUNCHER_SOURCE" "$OPENCODE_LAUNCHER_TARGET" "opencode-launcher"
         check_managed uninstall "$RULES_SOURCE" "$RULES_TARGET" "rules" "$(rules_state_value || printf '-')"
         for name in "${TEMPLATED_AGENT_NAMES[@]}"; do
@@ -429,6 +456,7 @@ preflight() {
     else
         check_sources
         runtime_preflight
+        check_peer_advisor
         validate_rules
         delivery_preflight
         manage_config install --dry-run >/dev/null
@@ -622,6 +650,14 @@ configure_dev_feedback() {
     fi
 }
 
+configure_peer_advisor() {
+    if [[ $WITH_PEER_ADVISOR -eq 1 ]]; then
+        install_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    else
+        uninstall_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    fi
+}
+
 install_adapter() {
     local name
     install_agents
@@ -638,6 +674,7 @@ install_adapter() {
     install_config
     install_hooks
     configure_dev_feedback
+    configure_peer_advisor
     process_stale_managed_states uninstall
     configure_dev_telemetry
     if [[ $DRY_RUN -eq 1 ]]; then
@@ -721,6 +758,7 @@ uninstall_adapter() {
     fi
     uninstall_agents
     uninstall_managed "$DEV_FEEDBACK_SOURCE" "$DEV_FEEDBACK_TARGET" "dev-harness-feedback"
+    uninstall_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
     uninstall_managed "$OPENCODE_LAUNCHER_SOURCE" "$OPENCODE_LAUNCHER_TARGET" "opencode-launcher"
     for name in "${SKILL_NAMES[@]}"; do
         uninstall_managed "${ADAPTER_ROOT}/skills/${name}" "${GLOBAL_SKILLS_DIR}/${name}" "skill-${name}"

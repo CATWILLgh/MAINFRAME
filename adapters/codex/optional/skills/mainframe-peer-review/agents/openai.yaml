@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Peer Review"
+  short_description: "Ask Claude for bounded independent review"
+  default_prompt: "Use $mainframe-peer-review to check this consequential result for material blind spots."

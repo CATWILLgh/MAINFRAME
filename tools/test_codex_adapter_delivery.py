@@ -108,6 +108,7 @@ def _run(
     desktop_hooks_supported=True,
     feature_rows=0,
     require_existing_codex_home=False,
+    claude_peer=False,
 ):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
@@ -125,6 +126,16 @@ def _run(
         feature_rows=feature_rows,
         require_existing_codex_home=require_existing_codex_home,
     )
+    if claude_peer:
+        claude = fake_bin / "claude"
+        claude.write_text(
+            "#!/bin/sh\n"
+            "if [ \"${1:-}\" = auth ] && [ \"${2:-}\" = status ]; then exit 0; fi\n"
+            "if [ \"${1:-}\" = --version ]; then echo '2.1.226 (Claude Code)'; exit 0; fi\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        claude.chmod(claude.stat().st_mode | stat.S_IXUSR)
     env = dict(
         os.environ,
         HOME=str(home),
@@ -940,6 +951,27 @@ def test_normal_install_leaves_codex_telemetry_inactive():
     assert not (home / ".agents" / "skills" / "harness-feedback").exists()
     launcher = home / ".local" / "bin" / "mainframe-opencode"
     assert launcher.is_file() and not launcher.is_symlink()
+
+
+def test_peer_advisor_is_explicit_optional_and_reversible():
+    missing, missing_home = _run("--codex", "--with-peer-advisor")
+    assert missing.returncode != 0
+    assert "requires the Claude Code CLI" in missing.stderr
+    assert not (missing_home / ".agents" / "skills" / "mainframe-peer-review").exists()
+
+    installed, home = _run("--codex", "--with-peer-advisor", claude_peer=True)
+    assert installed.returncode == 0, installed.stderr
+    target = home / ".agents" / "skills" / "mainframe-peer-review"
+    assert target.is_dir() and not target.is_symlink()
+    body = (target / "SKILL.md").read_text(encoding="utf-8")
+    assert "claude -p --safe-mode" in body
+    assert "--dangerously-skip-permissions" in body
+    metadata = (target / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    assert "allow_implicit_invocation: false" not in metadata
+
+    plain, _ = _run("--codex", home=home, claude_peer=True)
+    assert plain.returncode == 0, plain.stderr
+    assert not target.exists()
 
 
 def test_baseline_uses_native_standalone_layers_only():
