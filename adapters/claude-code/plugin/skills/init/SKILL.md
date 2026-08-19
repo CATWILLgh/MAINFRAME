@@ -89,6 +89,13 @@ no specialist matches, work directly instead of delegating to the built-in
 general-purpose agent. Do not delegate merely to reproduce the primary model
 without relevant specialist context.
 
+For a bounded built-in agent whose specific role still adds value, choose its
+model explicitly at invocation instead of silently inheriting the primary
+model. Claude Code does not expose an effort override on an individual agent
+invocation, so do not pretend to choose one there: use the active session
+effort or a configured specialist profile. Do not use a catch-all built-in as
+a substitute for a missing profile.
+
 Prefer background execution for delegation so intermediate agent activity does
 not displace the primary-session interaction. MAINFRAME agents declare this in
 their definitions; request background execution when invoking built-in or

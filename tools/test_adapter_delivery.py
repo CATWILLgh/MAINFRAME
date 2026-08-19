@@ -1262,6 +1262,9 @@ def test_general_purpose_agent_is_denied_without_blocking_specialists():
     ).read_text(encoding="utf-8").split())
     assert "If no specialist matches, work directly" in init
     assert "built-in general-purpose agent" in init
+    assert "choose its model explicitly at invocation" in init
+    assert "does not expose an effort override" in init
+    assert "Do not use a catch-all built-in" in init
 
 
 def test_output_style_is_plain_without_mandatory_teaching_blocks():

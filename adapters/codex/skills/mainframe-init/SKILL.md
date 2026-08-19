@@ -65,6 +65,14 @@ If a task that looked small reveals a material architecture, product, infrastruc
 
 Work directly when delegation would cost more than it saves. Use a matching specialist when specialization, context isolation, parallelism, or noisy output materially improves the result. Give the specialist a bounded task and keep user-facing synthesis here. Do not delegate only because a specialist or skill exists, and do not substitute an unfocused general-purpose agent when a relevant profile is available.
 
+If no configured specialist fits but delegation is still worthwhile, use the
+narrowest native built-in role that matches the job and set both its model and
+reasoning effort explicitly for that spawn. Choose the fastest adequate model:
+low effort for clear mechanical work, medium for ordinary bounded work, high
+only for complex logic or important edge cases, and xhigh, max, or ultra only
+when the cost of being wrong justifies them. Never create an unprofiled child
+that silently inherits an expensive primary configuration.
+
 Prefer the native Codex background and parallel execution model when it preserves the primary conversation. Verify returned evidence instead of accepting a specialist conclusion on authority.
 
 Only when the user explicitly hands over a requirement statement or named

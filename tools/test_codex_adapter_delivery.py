@@ -1439,6 +1439,9 @@ def test_shared_judgment_and_primary_completion_are_separated():
     assert "mainframe_advisor" in normalized_init
     assert "preparation-readiness" in normalized_init
     assert "final-state" in normalized_init
+    assert "set both its model and reasoning effort explicitly" in normalized_init
+    assert "fastest adequate model" in normalized_init
+    assert "silently inherits an expensive primary configuration" in normalized_init
 
 
 def _run_all():
