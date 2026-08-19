@@ -1318,13 +1318,13 @@ def test_arbitrary_execution_and_network_do_not_bypass_auto_mode_checks():
     }
 
 
-def test_recursive_delete_policy_is_owned_by_the_path_hook():
+def test_recursive_delete_policy_defers_to_claude_native_permission_mode():
     settings = json.loads(
         (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
     )
     assert "Bash(rm -rf *)" not in settings["permissions"]["ask"]
     hooks = (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
-    assert "path-validation.py" in hooks
+    assert "path-validation.py" not in hooks
 
 
 def test_language_dependencies_use_auto_mode_not_manual_confirmation():

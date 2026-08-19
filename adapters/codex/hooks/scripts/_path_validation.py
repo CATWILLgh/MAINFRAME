@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Require confirmation for risky or unresolved recursive ``rm`` targets.
+"""Block recursive ``rm`` only for three catastrophic literal targets.
 
-This global PreToolUse hook is only a destructive-path circuit breaker. A
-plain recursive removal whose literal target resolves strictly below the
-project root produces no decision, so Codex command rules and normal approval
-handling still apply. The hook never returns ``allow``.
+The active Codex permission mode owns every narrower or unresolved command.
+MAINFRAME intervenes only when a target resolves exactly to the filesystem
+root, the user's home root, or the active project root. The hook never returns
+``allow`` and does not treat leaving the project as unsafe by itself.
 """
 
 from __future__ import annotations
@@ -15,14 +15,9 @@ import shlex
 
 
 OPERATORS = {"&&", "||", ";", "|", "|&", "&", "(", ")"}
-RULE_SAFE_OPERATORS = {"&&", "||", ";", "|"}
-CWD_COMMANDS = {"cd", "pushd", "popd"}
 SHELL_COMMANDS = {"sh", "bash", "zsh", "dash", "ksh"}
 SIMPLE_WRAPPERS = {"command", "builtin", "exec", "nohup", "time"}
 RUNTIME_WRAPPERS = {"sudo", "doas", "env", "timeout", "nice", "stdbuf"}
-NON_EXECUTING_COMMANDS = {"echo", "printf"}
-SHELL_META_RE = re.compile(r"\$|`|[?*\[]|[{}]|<\(|>\(")
-RULE_UNSAFE_SYNTAX_RE = re.compile(r"[\r\n<>$`?*\[\]{}]")
 RM_HINT_RE = re.compile(r"(?<![A-Za-z0-9_])(?:[^\s;&|()]*/)?rm(?=\s|$)")
 
 
@@ -139,152 +134,61 @@ def _nested_shell_command(tokens: list[str]) -> str | None:
     return None
 
 
-def _dynamic_rm(tokens: list[str]) -> bool:
-    """True for xargs/find forms whose targets come from runtime input."""
-    if not tokens:
-        return False
-    command = _basename(tokens[0])
-    if command == "xargs":
-        return any(_recursive_rm_at(tokens, i) for i in range(1, len(tokens)))
-    if command == "find":
-        return any(
-            tokens[i - 1] in {"-exec", "-execdir"} and _recursive_rm_at(tokens, i)
-            for i in range(1, len(tokens))
-        )
-    return False
-
-
-def _recursive_rm_indices(tokens: list[str]) -> list[int]:
-    return [
-        index for index in range(len(tokens))
-        if _recursive_rm_at(tokens, index)
-    ]
-
-
-def _rule_safe_syntax(command: str, tokens: list[str]) -> bool:
-    """Whether Codex rules can split this shell text into argv prefixes."""
-    if RULE_UNSAFE_SYNTAX_RE.search(command):
-        return False
-    if any(token in OPERATORS - RULE_SAFE_OPERATORS for token in tokens):
-        return False
-    return not any(_is_assignment(token) for token in tokens)
-
-
-def rule_handles_recursive_rm(command: str) -> bool:
-    """True when native rules cover every executable recursive rm segment."""
-    tokens = tokenize(command)
-    if tokens is None or not _rule_safe_syntax(command, tokens):
-        return False
-    segments = split_subcommands(tokens)
-    # The published contract says simple shell chains are split before rule
-    # evaluation, but execpolicy checks on the supported local runtimes do not
-    # expose that behavior. Only trust the directly testable argv prefix.
-    if len(segments) != 1 or any(token in OPERATORS for token in tokens):
-        return False
-    found = False
-    accepted_options = {
-        "-r", "-R", "-rf", "-rF", "-fr", "-fR", "-Rf", "-RF",
-        "--recursive",
-    }
-    for segment in segments:
-        recursive = _recursive_rm_indices(segment)
-        if not recursive:
-            continue
-        if _basename(segment[0]) in NON_EXECUTING_COMMANDS:
-            continue
-        found = True
-        if recursive != [0]:
-            return False
-        if segment[0] not in {"rm", "/bin/rm"}:
-            return False
-        if len(segment) < 2 or segment[1] not in accepted_options:
-            return False
-    return found
-
-
 def _target_reason(path: str, cwd: str, project_dir: str) -> str | None:
-    if SHELL_META_RE.search(path):
-        return f"recursive rm target requires shell expansion: {path[:100]}"
-    absolute = path if os.path.isabs(path) else os.path.join(cwd, path)
-    expanded = os.path.expanduser(absolute)
-    project = os.path.realpath(project_dir)
-    # rm does not follow a symlink supplied as the final argument. Preserve
-    # that useful narrow deletion while still resolving symlinked parents and
-    # a trailing slash, both of which can reach a tree outside the project.
-    if not path.endswith(os.sep) and os.path.islink(expanded):
-        resolved = os.path.join(
-            os.path.realpath(os.path.dirname(expanded)),
-            os.path.basename(os.path.normpath(expanded)),
-        )
+    home = os.path.realpath(os.path.expanduser("~"))
+    if path in {"$HOME", "${HOME}"}:
+        resolved = home
+    elif "$" in path or "`" in path or any(char in path for char in "?*[]{}"):
+        return None
     else:
-        resolved = os.path.realpath(expanded)
+        absolute = path if os.path.isabs(path) else os.path.join(cwd, path)
+        expanded = os.path.expanduser(absolute)
+        # rm does not follow a symlink supplied as the final argument. Preserve
+        # deletion of the link itself; a trailing slash can reach its target.
+        if not path.endswith(os.sep) and os.path.islink(expanded):
+            resolved = os.path.join(
+                os.path.realpath(os.path.dirname(expanded)),
+                os.path.basename(os.path.normpath(expanded)),
+            )
+        else:
+            resolved = os.path.realpath(expanded)
+    project = os.path.realpath(project_dir)
+    if resolved == os.path.realpath(os.sep):
+        return "recursive rm targets the filesystem root"
+    if resolved == home:
+        return f"recursive rm targets the home root: {home}"
     if resolved == project:
         return f"recursive rm targets the project root: {project}"
-    try:
-        inside = os.path.commonpath([resolved, project]) == project
-    except ValueError:
-        inside = False
-    if not inside:
-        return f"recursive rm target is outside the project: {resolved}"
     return None
 
 
 def decision_reason(
     command: str, cwd: str, project_dir: str, *, depth: int = 0,
 ) -> str | None:
-    """Return an unsafe-target reason, or None for a classifiable command."""
+    """Return a catastrophic literal-target reason, otherwise no decision."""
     if not command or RM_HINT_RE.search(command) is None:
         return None
-    if "<(" in command or ">(" in command:
-        return "recursive rm target requires shell expansion"
     if depth > 3:
-        return "recursive rm is nested too deeply to validate safely"
+        return None
     tokens = tokenize(command)
     if tokens is None:
-        return "recursive rm command could not be parsed safely"
+        return None
 
-    executable_recursive_rm = any(
-        _recursive_rm_indices(segment)
-        and _basename(segment[0]) not in NON_EXECUTING_COMMANDS
-        for segment in split_subcommands(tokens)
-    )
-    if executable_recursive_rm and not _rule_safe_syntax(command, tokens):
-        return "recursive rm uses shell syntax that command rules cannot classify"
-
-    cwd_may_have_changed = False
     for segment in split_subcommands(tokens):
         nested = _nested_shell_command(segment)
         if nested is not None and RM_HINT_RE.search(nested):
             reason = decision_reason(nested, cwd, project_dir, depth=depth + 1)
-            return reason or "recursive rm is executed through a nested shell"
-
-        if _dynamic_rm(segment):
-            return "recursive rm receives targets dynamically from xargs or find"
+            if reason:
+                return reason
 
         index = _direct_rm_index(segment)
         if index is not None and _recursive_rm_at(segment, index):
-            if cwd_may_have_changed:
-                return "recursive rm follows a shell directory change"
             paths = _paths_after_rm(segment, index)
-            if not paths:
-                return "recursive rm has no explicit target"
             for path in paths:
                 reason = _target_reason(path, cwd, project_dir)
                 if reason:
                     return reason
 
-        recursive_indices = _recursive_rm_indices(segment)
-        if (
-            recursive_indices
-            and _basename(segment[0]) not in NON_EXECUTING_COMMANDS
-            and index not in recursive_indices
-        ):
-            return "recursive rm is not a direct classifiable command"
-
-        if segment and _basename(segment[0]) in CWD_COMMANDS:
-            cwd_may_have_changed = True
-
-    # A hint that could not be classified as an executable rm (for example an
-    # echoed command) is ignored. A classified safe rm deliberately returns no
-    # decision rather than allow, preserving Codex's normal permission flow.
+    # Unresolved, indirect, external, and narrow targets are deliberately left
+    # to the selected native permission mode.
     return None

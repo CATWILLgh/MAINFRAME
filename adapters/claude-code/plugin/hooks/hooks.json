@@ -113,15 +113,6 @@
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
               "PreToolUse",
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/path-validation.py"
-            ]
-          },
-          {
-            "type": "command",
-            "command": "sh",
-            "args": [
-              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
-              "PreToolUse",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/git-authority.py"
             ],
             "if": "Bash(git *)"

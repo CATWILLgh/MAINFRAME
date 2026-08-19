@@ -204,6 +204,7 @@ def _git_repo() -> Path:
 
 def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
     source = json.loads(HOOKS_SOURCE.read_text(encoding="utf-8"))
+    assert source["description"].startswith("MAINFRAME lifecycle")
     assert set(source["hooks"]) == {
         "SessionStart", "SessionEnd", "SubagentStart", "PreToolUse",
         "PermissionRequest", "PostToolUse", "PostCompact",
@@ -214,6 +215,7 @@ def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
         assert len(groups[0]["hooks"]) == 1
         handler = groups[0]["hooks"][0]
         assert handler["type"] == "command"
+        assert handler["statusMessage"].startswith("MAINFRAME:")
         assert "mainframe-hook.py" not in handler["command"]
         assert "@MAINFRAME_HOOK_SCRIPT@" in handler["command"]
         assert 0 < handler["timeout"] <= 210
@@ -228,6 +230,7 @@ def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
     assert source["hooks"]["SessionStart"][0]["matcher"] == (
         "^(startup|resume|clear|compact)$"
     )
+    assert source["hooks"]["SessionEnd"][0]["hooks"][0]["timeout"] == 3
 
 
 def test_dispatcher_records_privacy_safe_dev_telemetry():
@@ -484,7 +487,7 @@ def test_manager_refuses_to_remove_a_changed_owned_group():
     assert target.exists() and state.exists()
 
 
-def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
+def test_command_safety_keeps_native_mode_authoritative_except_catastrophic_roots():
     root = Path(tempfile.mkdtemp())
     state = root / "state"
 
@@ -506,26 +509,26 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
         )
         assert reviewed_recursive is None, command
 
-    _, ambiguous_recursive = _run_hook(
-        _tool_payload(root, event="PreToolUse", command="rm -f -r generated"), state
-    )
-    assert ambiguous_recursive["hookSpecificOutput"]["permissionDecision"] == "deny"
-
     for command in (
         "rm -rf /",
         "rm -rf .",
+        f"rm -rf {Path.home()}",
+        "rm -rf $HOME",
+        "sh -c 'rm -rf /'",
+    ):
+        _, catastrophic = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert catastrophic["hookSpecificOutput"]["permissionDecision"] == "deny", command
+
+    for command in (
+        "rm -f -r generated",
         "rm -rf ..",
         "rm -rf ../outside-project",
+        "rm -rf /tmp/external",
         "rm -rf '$HOME/generated'",
         "rm -rf generated/*",
         "cd generated && rm -rf nested",
-    ):
-        _, broad_recursive = _run_hook(
-            _tool_payload(root, event="PreToolUse", command=command), state
-        )
-        assert broad_recursive["hookSpecificOutput"]["permissionDecision"] == "deny", command
-
-    for command in (
         "rm -rf generated >/dev/null",
         "rm -rf generated 2>/dev/null",
         "rm -rf generated & echo done",
@@ -535,10 +538,10 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
         "find generated -exec rm -rf {} +",
         "xargs rm -rf",
     ):
-        _, blocked = _run_hook(
+        _, native_review = _run_hook(
             _tool_payload(root, event="PreToolUse", command=command), state
         )
-        assert blocked["hookSpecificOutput"]["permissionDecision"] == "deny", command
+        assert native_review is None, command
 
     for command in (
         "rm -rf generated && echo done",
@@ -546,10 +549,10 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
         "rm -rf generated; echo done",
         "rm -rf generated | cat",
     ):
-        _, indirect = _run_hook(
+        _, native_review = _run_hook(
             _tool_payload(root, event="PreToolUse", command=command), state
         )
-        assert indirect["hookSpecificOutput"]["permissionDecision"] == "deny", command
+        assert native_review is None, command
 
     for command in (
         "echo rm -rf /",
@@ -588,13 +591,6 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
         "git clean --dry-run -d",
         "git worktree prune -n",
         "git worktree prune --dry-run --expire now",
-    ):
-        _, approval = _run_hook(
-            _tool_payload(root, event="PermissionRequest", command=command), state
-        )
-        assert approval["hookSpecificOutput"]["decision"]["behavior"] == "allow"
-
-    for command in (
         "git clean -fd",
         "git worktree prune",
         "git -C ../outside clean -n",
@@ -613,7 +609,7 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
     _, positional_branch = _run_hook(
         _tool_payload(root, event="PreToolUse", command="git branch new"), state
     )
-    assert positional_branch["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert positional_branch is None
 
     _, force_push = _run_hook(
         _tool_payload(root, event="PreToolUse", command="git push --force"), state
@@ -673,8 +669,7 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
         _, indirect = _run_hook(
             _tool_payload(root, event="PreToolUse", command=command), state
         )
-        assert indirect["hookSpecificOutput"]["permissionDecision"] == "deny", command
-        assert "simple direct Git form" in indirect["hookSpecificOutput"]["permissionDecisionReason"], command
+        assert indirect is None, command
 
     for command in (
         "git commit-tree deadbeef -m test",
@@ -696,7 +691,7 @@ def test_command_safety_uses_rules_for_simple_forms_and_denies_bypasses():
         assert inspection is None, command
 
 
-def test_recursive_delete_allows_only_the_symlink_entry_inside_project():
+def test_recursive_delete_allows_external_symlink_but_protects_project_root_target():
     root = Path(tempfile.mkdtemp())
     outside = Path(tempfile.mkdtemp())
     link = root / "external-link"
@@ -709,11 +704,19 @@ def test_recursive_delete_allows_only_the_symlink_entry_inside_project():
     )
     assert link_only is None
 
-    _, followed_link = _run_hook(
+    _, followed_external_link = _run_hook(
         _tool_payload(root, event="PreToolUse", command="rm -rf external-link/"),
         state,
     )
-    assert followed_link["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert followed_external_link is None
+
+    project_link = root / "project-root-link"
+    project_link.symlink_to(root, target_is_directory=True)
+    _, followed_project_link = _run_hook(
+        _tool_payload(root, event="PreToolUse", command="rm -rf project-root-link/"),
+        state,
+    )
+    assert followed_project_link["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_secret_commit_gate_checks_real_index_without_exposing_the_value():
@@ -1483,6 +1486,8 @@ def test_missing_snapshot_is_a_visible_role_neutral_failure():
     payload = _patch_payload(root, "missing.go", event="PostToolUse")
     _, result = _run_hook(payload, state)
     context = result["hookSpecificOutput"]["additionalContext"]
+    assert "edit-snapshot" in context
+    assert "dispatcher-PostToolUse" not in context
     assert "unavailable" in context.lower()
     assert "immediate caller" in context
     assert "user" not in context.lower()

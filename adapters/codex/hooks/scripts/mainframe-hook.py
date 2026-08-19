@@ -9,8 +9,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
-import shlex
 import sys
 import time
 
@@ -71,8 +69,10 @@ def _capture(payload: dict) -> None:
         if content is None:
             continue
         rows.append({"path": str(path), "existed": existed, "text": content})
-    if rows:
-        snapshot.atomic_write(payload, rows)
+    # Write an empty marker too. PostToolUse otherwise cannot distinguish an
+    # intentional no-content capture (new/deleted/oversized path) from a lost
+    # PreToolUse event and reports a misleading dispatcher failure.
+    snapshot.atomic_write(payload, rows)
     snapshot.cleanup()
 
 
@@ -171,7 +171,14 @@ def _quality(payload: dict) -> None:
     outputs: list[dict] = []
     failures: list[str] = []
     changes: list[dict[str, str]] = []
-    for saved in _load_snapshot(payload):
+    try:
+        saved_rows = _load_snapshot(payload)
+    except FileNotFoundError as exc:
+        notice = _failure_notice(payload, "edit-snapshot", exc)
+        if notice:
+            failures.append(notice)
+        saved_rows = []
+    for saved in saved_rows:
         path = Path(saved["path"])
         before = saved.get("text") or ""
         after = snapshot.read_text(path)
@@ -233,85 +240,6 @@ def _quality(payload: dict) -> None:
         )
 
 
-def _rule_handles(command: str, reason: str) -> bool:
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False
-    if len(tokens) < 2 or os.path.basename(tokens[0]) != "git":
-        return False
-    subcommand = tokens[1]
-    if subcommand in {
-        "push", "switch", "checkout", "pull", "merge", "rebase", "reset",
-        "cherry-pick", "revert", "restore", "clean", "update-index",
-        "update-ref", "read-tree",
-    }:
-        return True
-    if subcommand == "apply":
-        return len(tokens) > 2 and tokens[2] in {
-            "--cached", "--index", "--3way", "-3", "--intent-to-add", "-N",
-        }
-    if subcommand == "commit":
-        return len(tokens) > 2 and tokens[2] == "--amend"
-    if subcommand == "stash":
-        return len(tokens) > 2 and tokens[2] in {
-            "push", "pop", "apply", "drop", "clear", "branch", "save",
-        }
-    if subcommand == "worktree":
-        return len(tokens) > 2 and tokens[2] in {
-            "add", "move", "remove", "lock", "unlock", "prune", "repair",
-        }
-    if subcommand == "branch" and len(tokens) > 2:
-        return tokens[2].split("=", 1)[0] in {
-            "-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move",
-            "--copy", "--force", "--edit-description", "--set-upstream-to",
-            "--unset-upstream", "--create-reflog", "--track", "--no-track",
-        }
-    return False
-
-
-def _rm_rule_handles(command: str) -> bool:
-    path_module = _load_module("_path_validation.py")
-    return path_module.rule_handles_recursive_rm(command)
-
-
-def _safe_git_diagnostic(command: str) -> bool:
-    """Recognize direct Git dry runs that rules route through approval."""
-    if re.search(r"[;&|`$<>()\r\n]", command):
-        return False
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False
-    if len(tokens) < 3 or tokens[0] != "git":
-        return False
-    arguments = tokens[2:]
-    if tokens[1] == "clean":
-        return any(
-            token in {"-n", "--dry-run"}
-            or (
-                token.startswith("-")
-                and not token.startswith("--")
-                and "n" in token[1:]
-            )
-            for token in arguments
-        )
-    if tokens[1:3] == ["worktree", "prune"]:
-        return any(token in {"-n", "--dry-run"} for token in tokens[3:])
-    return False
-
-
-def _permission_request(payload: dict) -> None:
-    command = (payload.get("tool_input") or {}).get("command") or ""
-    if _safe_git_diagnostic(command):
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PermissionRequest",
-                "decision": {"behavior": "allow"},
-            }
-        }))
-
-
 def _command(payload: dict) -> None:
     snapshot = _snapshot_module()
     command = (payload.get("tool_input") or {}).get("command") or ""
@@ -324,21 +252,9 @@ def _command(payload: dict) -> None:
     path_reason = path_module.decision_reason(command, cwd, project)
     if path_reason:
         reasons.append(
-            "Recursive deletion was not safely attributable: " + path_reason
-            + ". Use a literal narrow target and let normal approval review it."
+            "Recursive deletion was stopped by the catastrophe breaker: "
+            + path_reason + ". Choose a narrower target."
         )
-    else:
-        tokens = path_module.tokenize(command)
-        recursive = bool(tokens) and any(
-            (index := path_module._direct_rm_index(segment)) is not None
-            and path_module._recursive_rm_at(segment, index)
-            for segment in path_module.split_subcommands(tokens)
-        )
-        if recursive and not _rm_rule_handles(command):
-            reasons.append(
-                "Recursive deletion must use a simple direct `rm -rf <literal>` "
-                "form so Codex command rules can review the resolved target."
-            )
 
     git_module = _load_module("_git_authority.py")
     decision, git_reason = git_module.authority_decision(
@@ -346,11 +262,11 @@ def _command(payload: dict) -> None:
     )
     if decision == "deny" and git_reason:
         reasons.append(git_reason)
-    elif decision == "ask" and git_reason and not _rule_handles(command, git_reason):
-        reasons.append(
-            git_reason
-            + " Use the simple direct Git form so Codex command rules can review it."
-        )
+    # `ask` is an authority classification for the primary-session contract,
+    # not a hook denial. Native Full access disables approval prompts, so
+    # converting it to a rule or hook block would reject even an action that
+    # the immediate caller already authorized. Deterministic `deny` findings
+    # remain enforced above.
 
     for row in _run_module("_secret_commit.py", payload):
         specific = row.get("hookSpecificOutput") or {}
@@ -567,8 +483,6 @@ def main() -> None:
                 _command(payload)
             else:
                 _capture(payload)
-        elif event == "PermissionRequest" and payload.get("tool_name") == "Bash":
-            _permission_request(payload)
         elif event == "PostToolUse":
             _quality(payload)
         elif event in {"Stop", "SubagentStop"}:

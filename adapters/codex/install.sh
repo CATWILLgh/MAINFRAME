@@ -10,6 +10,7 @@ GLOBAL_SKILLS_DIR="$HOME/.agents/skills"
 SKILL_NAMES=(
     mainframe-init
     mainframe-pi-business-analysis
+    mainframe-pi-engineer
     mainframe-secrets
     mainframe-ticket
     mainframe-tickets-find
@@ -48,7 +49,6 @@ INDEX_STATE="${CODEX_DIR}/.mainframe-index-state"
 RULES_SOURCE="${ADAPTER_ROOT}/rules/mainframe.rules"
 RULES_TARGET="${CODEX_DIR}/rules/mainframe.rules"
 RULES_STATE="${CODEX_DIR}/.mainframe-rules-state"
-CONFIG_SOURCE="${ADAPTER_ROOT}/config/mainframe-permissions.toml"
 CONFIG_TOOL="${ADAPTER_ROOT}/scripts/manage-config.py"
 CONFIG_TARGET="${CODEX_DIR}/config.toml"
 CONFIG_STATE="${CODEX_DIR}/.mainframe-config-state.json"
@@ -88,8 +88,9 @@ Usage:
   install.sh --preflight [--dry-run] [--yes] [--replace-modified]
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
-share AGENTS.md, standalone skills, command rules, a bounded permission profile,
-native specialist agents, and reviewed native hooks. --dev additionally enables
+share AGENTS.md, standalone skills, command rules, native specialist agents,
+and reviewed native hooks. Permission selection remains entirely user-owned.
+--dev additionally enables
 the adapter-owned local telemetry sink and harness-feedback receiver; normal
 installation keeps both inactive.
 
@@ -230,10 +231,6 @@ runtime_preflight() {
             error "The installed Codex CLI does not expose stable native hooks. Update Codex before installation."
             return 1
         fi
-        if ! grep -E '^network_proxy[[:space:]]+' <<<"$features" >/dev/null; then
-            error "The installed Codex CLI does not expose the network proxy required by the MAINFRAME permission profile. Update Codex before installation."
-            return 1
-        fi
         found=1
     fi
     if [[ -x "$CODEX_DESKTOP_RUNTIME" ]]; then
@@ -241,10 +238,6 @@ runtime_preflight() {
         features="$(run_runtime "$CODEX_DESKTOP_RUNTIME" features list 2>/dev/null)"
         if ! grep -E '^hooks[[:space:]]+stable[[:space:]]+true$' <<<"$features" >/dev/null; then
             error "The installed Codex Desktop runtime does not expose stable native hooks. Update the app before installation."
-            return 1
-        fi
-        if ! grep -E '^network_proxy[[:space:]]+' <<<"$features" >/dev/null; then
-            error "The installed Codex Desktop runtime does not expose the network proxy required by the MAINFRAME permission profile. Update the app before installation."
             return 1
         fi
         found=1
@@ -318,7 +311,6 @@ check_sources() {
         "${ADAPTER_ROOT}/skills/mainframe-ticket/references/record-confirmed-problem.md" \
         "${ADAPTER_ROOT}/skills/mainframe-ticket/references/ticket-format.md" \
         "$RULES_SOURCE" \
-        "$CONFIG_SOURCE" \
         "$CONFIG_TOOL" \
         "$HOOKS_SOURCE" \
         "$HOOKS_SCRIPT" \
@@ -367,8 +359,6 @@ manage_config() {
     shift
     local args=("$action" \
         --config "$CONFIG_TARGET" \
-        --source "$CONFIG_SOURCE" \
-        --repo-root "$REPO_ROOT" \
         --state "$CONFIG_STATE" \
         --backup "$CONFIG_BACKUP")
     if [[ "$action" == "install" && $DEV_MODE -eq 1 ]]; then
@@ -401,20 +391,7 @@ validate_rules() {
             error "Codex rejected the MAINFRAME rules file; no adapter files were changed."
             return 1
         fi
-        if ! rule_decision_is_prompt "$runtime" git add README.md \
-            || ! rule_decision_is_prompt "$runtime" git commit -m mainframe-validation; then
-            error "MAINFRAME rules do not route ordinary Git delivery through approval; no adapter files were changed."
-            return 1
-        fi
     fi
-}
-
-rule_decision_is_prompt() {
-    local runtime="$1" output
-    shift
-    output="$(run_runtime "$runtime" execpolicy check --rules "$RULES_SOURCE" -- "$@" 2>/dev/null)" || return 1
-    RULE_DECISION_OUTPUT="$output" python3 -c \
-        'import json, os, sys; sys.exit(0 if json.loads(os.environ["RULE_DECISION_OUTPUT"]).get("decision") == "prompt" else 1)'
 }
 
 preflight() {

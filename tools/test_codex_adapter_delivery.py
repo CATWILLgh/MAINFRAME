@@ -2,6 +2,7 @@
 """Contract tests for the first native Codex adapter baseline."""
 
 import json
+import hashlib
 import os
 import pathlib
 import stat
@@ -15,8 +16,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 INSTALLER = ROOT / "install.sh"
 ADAPTER = ROOT / "adapters" / "codex"
 SHARED = ROOT / "shared" / "credentials"
-CONFIG_MANAGER = ADAPTER / "scripts" / "manage-config.py"
-CONFIG_SOURCE = ADAPTER / "config" / "mainframe-permissions.toml"
 MANAGED_DELIVERY = ROOT / "shared" / "managed-delivery" / "manage-artifact.py"
 
 
@@ -76,15 +75,10 @@ def _agent_template_data(name, *, home):
 
 
 def _write_fake_codex(
-    path, *, hooks_supported=True, network_proxy_supported=True, feature_rows=0,
+    path, *, hooks_supported=True, feature_rows=0,
     require_existing_codex_home=False,
 ):
     hooks_value = "true" if hooks_supported else "false"
-    network_proxy_row = (
-        '    print "network_proxy experimental false";\n'
-        if network_proxy_supported
-        else ""
-    )
     path.write_text(
         "#!/bin/sh\n"
         + (
@@ -97,7 +91,6 @@ def _write_fake_codex(
         "if [ \"${1:-}\" = features ] && [ \"${2:-}\" = list ]; then\n"
         "  awk 'BEGIN {\n"
         f"    print \"hooks stable {hooks_value}\";\n"
-        f"{network_proxy_row}"
         f"    for (i = 0; i < {feature_rows}; i++) print \"feature_\" i \" stable false\";\n"
         "  }'\n"
         "  exit $?\n"
@@ -113,7 +106,6 @@ def _run(
     *args,
     home=None,
     desktop_hooks_supported=True,
-    desktop_network_proxy_supported=True,
     feature_rows=0,
     require_existing_codex_home=False,
 ):
@@ -130,7 +122,6 @@ def _run(
     _write_fake_codex(
         desktop_codex,
         hooks_supported=desktop_hooks_supported,
-        network_proxy_supported=desktop_network_proxy_supported,
         feature_rows=feature_rows,
         require_existing_codex_home=require_existing_codex_home,
     )
@@ -223,7 +214,6 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe_test_auditor.toml" in proc.stdout
     assert "mainframe_decision_reviewer.toml" in proc.stdout
     assert "mainframe_advisor.toml" in proc.stdout
-    assert "permissions" in proc.stdout
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 
@@ -254,18 +244,6 @@ def test_install_stops_when_desktop_runtime_lacks_native_hooks():
     )
     assert proc.returncode != 0
     assert "Desktop runtime does not expose stable native hooks" in proc.stderr
-    assert not (home / ".codex").exists()
-    assert not (home / ".agents").exists()
-
-
-def test_install_stops_when_desktop_runtime_lacks_network_proxy():
-    proc, home = _run(
-        "--codex",
-        "--dry-run",
-        desktop_network_proxy_supported=False,
-    )
-    assert proc.returncode != 0
-    assert "does not expose the network proxy" in proc.stderr
     assert not (home / ".codex").exists()
     assert not (home / ".agents").exists()
 
@@ -428,16 +406,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert test_auditor_data["name"] == "mainframe_test_auditor"
     assert "model" not in test_auditor_data
     assert "model_reasoning_effort" not in test_auditor_data
-    assert "sandbox_mode" not in test_auditor_data
-    assert test_auditor_data["default_permissions"] == "mainframe-test-auditor"
-    auditor_permissions = test_auditor_data["permissions"]["mainframe-test-auditor"]
-    assert auditor_permissions["filesystem"][":workspace_roots"]["."] == "read"
-    assert (
-        auditor_permissions["filesystem"][":workspace_roots"][
-            "docs/tickets/open"
-        ]
-        == "write"
-    )
+    assert test_auditor_data["sandbox_mode"] == "workspace-write"
+    assert "default_permissions" not in test_auditor_data
+    assert "permissions" not in test_auditor_data
     assert test_auditor_data["web_search"] == "live"
     assert test_auditor_data["features"]["apps"] is False
     assert [item["path"] for item in test_auditor_data["skills"]["config"]] == [
@@ -508,31 +479,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     ).exists()
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
-    assert config.is_file() and config_state.is_file()
-    config_data = tomllib.loads(config.read_text(encoding="utf-8"))
-    assert config_data["default_permissions"] == "mainframe"
-    assert config_data["approval_policy"] == "on-request"
-    assert config_data["approvals_reviewer"] == "auto_review"
-    assert config_data["features"]["network_proxy"] is True
-    assert config_data["shell_environment_policy"]["inherit"] == "core"
-    assert config_data["permissions"]["mainframe"]["extends"] == ":workspace"
-    assert config_data["permissions"]["mainframe"]["filesystem"][
-        str((SHARED / "credentials-index.md").resolve())
-    ] == "read"
-    assert "~/.codex/credentials-index.md" not in config_data["permissions"]["mainframe"][
-        "filesystem"
-    ]
-    assert config_data["permissions"]["mainframe"]["filesystem"]["~/.config/credentials"] == "deny"
-    assert config_data["permissions"]["mainframe"]["network"]["domains"] == {
-        "localhost": "allow",
-        "127.0.0.1": "allow",
-        "::1": "allow",
-    }
-    assert config_data["permissions"]["mainframe"]["network"]["unix_sockets"] == {
-        "/tmp/.s.PGSQL.5432": "allow"
-    }
-    assert stat.S_IMODE(config.stat().st_mode) == 0o600
-    assert stat.S_IMODE(config_state.stat().st_mode) == 0o600
+    assert not config.exists()
+    assert not config_state.exists()
     hooks = codex_dir / "hooks.json"
     hooks_state = codex_dir / ".mainframe-hooks-state.json"
     assert hooks.is_file() and hooks_state.is_file()
@@ -862,180 +810,75 @@ def test_changed_mainframe_researcher_stops_uninstall_before_other_removal():
     assert (home / ".codex" / "AGENTS.md").is_file()
 
 
-def test_existing_config_is_merged_and_uninstall_restores_only_displaced_settings():
+def test_existing_config_is_untouched_by_normal_install_and_uninstall():
     home = pathlib.Path(tempfile.mkdtemp())
     codex_dir = home / ".codex"
     codex_dir.mkdir()
     config = codex_dir / "config.toml"
-    config.write_text(
+    original = (
         'model = "example"\n'
-        'approval_policy = "on-request"\n'
-        'approvals_reviewer = "auto_review"\n'
-        'sandbox_mode = "workspace-write"\n\n'
+        'default_permissions = ":danger-full-access"\n\n'
         '[mcp_servers.example]\n'
-        'command = "example"\n\n'
-        '[features]\n'
-        'apps = true\n'
-        'network_proxy = false\n\n'
-        '[shell_environment_policy.set]\n'
-        'EXAMPLE = "kept"\n',
-        encoding="utf-8",
+        'command = "example"\n'
     )
+    config.write_text(original, encoding="utf-8")
 
     installed, _ = _run("--codex", home=home)
     assert installed.returncode == 0, installed.stderr
-    data = tomllib.loads(config.read_text(encoding="utf-8"))
-    assert "sandbox_mode" not in data
-    assert data["default_permissions"] == "mainframe"
-    assert data["features"] == {"apps": True, "network_proxy": True}
-    assert data["mcp_servers"]["example"]["command"] == "example"
-    backups = list(codex_dir.glob("config.toml.backup-*"))
-    assert len(backups) == 1
-    assert 'sandbox_mode = "workspace-write"' in backups[0].read_text(encoding="utf-8")
-
-    with config.open("a", encoding="utf-8") as handle:
-        handle.write('\n[desktop]\ntheme = "dark"\n')
+    assert config.read_text(encoding="utf-8") == original
+    assert not (codex_dir / ".mainframe-config-state.json").exists()
 
     removed, _ = _run("--codex", "--uninstall", home=home)
     assert removed.returncode == 0, removed.stderr
-    restored = tomllib.loads(config.read_text(encoding="utf-8"))
-    assert restored["sandbox_mode"] == "workspace-write"
-    assert restored["approval_policy"] == "on-request"
-    assert restored["approvals_reviewer"] == "auto_review"
-    assert restored["desktop"]["theme"] == "dark"
-    assert restored["features"] == {"apps": True, "network_proxy": False}
-    assert "default_permissions" not in restored
-    assert backups[0].exists()
+    assert config.read_text(encoding="utf-8") == original
 
 
-def test_model_choices_inside_managed_permissions_are_preserved():
-    installed, home = _run("--codex", "--dev")
-    assert installed.returncode == 0, installed.stderr
-    config = home / ".codex" / "config.toml"
-    text = config.read_text(encoding="utf-8").replace(
-        "\n[otel]\n",
-        '\nmodel = "gpt-5.6-luna"\nmodel_reasoning_effort = "medium"\n\n[otel]\n',
-        1,
-    )
-    config.write_text(text, encoding="utf-8")
-
-    reinstalled, _ = _run("--codex", "--dev", home=home)
-    assert reinstalled.returncode == 0, reinstalled.stderr
-    data = tomllib.loads(config.read_text(encoding="utf-8"))
-    assert data["model"] == "gpt-5.6-luna"
-    assert data["model_reasoning_effort"] == "medium"
-
-    removed, _ = _run("--codex", "--uninstall", home=home)
-    assert removed.returncode == 0, removed.stderr
-    assert tomllib.loads(config.read_text(encoding="utf-8")) == {
-        "model": "gpt-5.6-luna",
-        "model_reasoning_effort": "medium",
-    }
-
-
-def test_existing_install_migrates_to_owned_network_proxy_setting():
-    installed, home = _run("--codex")
-    assert installed.returncode == 0, installed.stderr
-    codex_dir = home / ".codex"
-    config = codex_dir / "config.toml"
-    state_path = codex_dir / ".mainframe-config-state.json"
-
-    text = config.read_text(encoding="utf-8")
-    feature_start = text.index("# >>> MAINFRAME CODEX NETWORK PROXY >>>")
-    feature_end = text.index("# <<< MAINFRAME CODEX NETWORK PROXY <<<")
-    feature_end = text.index("\n", feature_end) + 1
-    text = text[:feature_start] + text[feature_end:]
-    text = text.replace("[features]\n", "", 1)
-    config.write_text(text, encoding="utf-8")
-    state = json.loads(state_path.read_text(encoding="utf-8"))
-    state.pop("feature_managed_sha")
-    state.pop("feature_table_created")
-    state_path.write_text(json.dumps(state), encoding="utf-8")
-
-    migrated, _ = _run("--codex", home=home)
-    assert migrated.returncode == 0, migrated.stderr
-    assert tomllib.loads(config.read_text(encoding="utf-8"))["features"]["network_proxy"] is True
-
-    removed, _ = _run("--codex", "--uninstall", home=home)
-    assert removed.returncode == 0, removed.stderr
-    assert not config.exists()
-
-
-def test_unmanaged_mainframe_permission_profile_stops_before_delivery():
+def test_existing_managed_permissions_are_retired_and_user_settings_restored():
     home = pathlib.Path(tempfile.mkdtemp())
     codex_dir = home / ".codex"
     codex_dir.mkdir()
     config = codex_dir / "config.toml"
+    state_path = codex_dir / ".mainframe-config-state.json"
+    block = (
+        "# >>> MAINFRAME CODEX PERMISSIONS >>>\n"
+        'default_permissions = "mainframe"\n'
+        'permissions.mainframe.extends = ":workspace"\n'
+        "# <<< MAINFRAME CODEX PERMISSIONS <<<\n\n"
+    )
+    feature = (
+        "# >>> MAINFRAME CODEX NETWORK PROXY >>>\n"
+        "network_proxy = true\n"
+        "# <<< MAINFRAME CODEX NETWORK PROXY <<<\n"
+    )
     config.write_text(
-        '[permissions.mainframe]\nextends = ":read-only"\n',
+        block + 'model = "kept"\n\n[features]\n' + feature + 'apps = true\n',
         encoding="utf-8",
     )
-
-    refused, _ = _run("--codex", home=home)
-    assert refused.returncode != 0
-    assert "unmanaged permissions.mainframe" in refused.stderr
-    assert config.read_text(encoding="utf-8") == '[permissions.mainframe]\nextends = ":read-only"\n'
-    assert not (home / ".local" / "bin" / "secret").exists()
-
-
-def test_changed_permissions_block_is_preserved_on_uninstall():
-    installed, home = _run("--codex")
-    assert installed.returncode == 0, installed.stderr
-    config = home / ".codex" / "config.toml"
-    config.write_text(
-        config.read_text(encoding="utf-8").replace(
-            'default_permissions = "mainframe"',
-            'default_permissions = ":danger-full-access"',
+    state_path.write_text(
+        json.dumps(
+            {
+                "managed_sha": hashlib.sha256(block.encode()).hexdigest(),
+                "feature_managed_sha": hashlib.sha256(feature.encode()).hexdigest(),
+                "feature_table_created": False,
+                "removed": [
+                    {"kind": "top", "text": 'approval_policy = "on-request"\n'},
+                    {"kind": "top", "text": 'sandbox_mode = "workspace-write"\n'},
+                ],
+            }
         ),
         encoding="utf-8",
     )
 
-    removed, _ = _run("--codex", "--uninstall", home=home)
-    assert removed.returncode != 0
-    assert "permissions block changed" in removed.stderr
-    assert ':danger-full-access' in config.read_text(encoding="utf-8")
-    assert (home / ".codex" / "AGENTS.md").is_file()
-
-
-def test_owned_permissions_block_can_evolve_without_replacing_user_config():
-    installed, home = _run("--codex")
-    assert installed.returncode == 0, installed.stderr
-    codex_dir = home / ".codex"
-    config = codex_dir / "config.toml"
-    source = home / "updated-permissions.toml"
-    source.write_text(
-        CONFIG_SOURCE.read_text(encoding="utf-8").replace(
-            "Workspace editing with protected credentials and reviewed Git delivery and external access.",
-            "Updated owned profile.",
-        ),
-        encoding="utf-8",
-    )
-    with config.open("a", encoding="utf-8") as handle:
-        handle.write('\n[desktop]\ntheme = "kept"\n')
-
-    updated = subprocess.run(
-        [
-            sys.executable,
-            str(CONFIG_MANAGER),
-            "install",
-            "--config",
-            str(config),
-            "--source",
-            str(source),
-            "--repo-root",
-            str(ROOT),
-            "--state",
-            str(codex_dir / ".mainframe-config-state.json"),
-            "--backup",
-            str(codex_dir / "unused-backup"),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert updated.returncode == 0, updated.stderr
+    migrated, _ = _run("--codex", home=home)
+    assert migrated.returncode == 0, migrated.stderr
     data = tomllib.loads(config.read_text(encoding="utf-8"))
-    assert data["permissions"]["mainframe"]["description"] == "Updated owned profile."
-    assert data["desktop"]["theme"] == "kept"
+    assert data["model"] == "kept"
+    assert data["approval_policy"] == "on-request"
+    assert data["sandbox_mode"] == "workspace-write"
+    assert data["features"] == {"apps": True}
+    assert "default_permissions" not in data
+    assert "permissions" not in data
+    assert not state_path.exists()
 
 
 def test_skill_collision_stops_before_shared_install():
@@ -1084,8 +927,7 @@ def test_dev_mode_initializes_only_codex_owned_telemetry():
     assert db.is_file()
     assert not (telemetry / "enabled").exists()
     assert not feedback.exists()
-    config = tomllib.loads((home / ".codex" / "config.toml").read_text(encoding="utf-8"))
-    assert "otel" not in config
+    assert not (home / ".codex" / "config.toml").exists()
 
 
 def test_normal_install_leaves_codex_telemetry_inactive():
@@ -1169,12 +1011,13 @@ def test_baseline_uses_native_standalone_layers_only():
     )
     assert "model" not in test_auditor_data
     assert "model_reasoning_effort" not in test_auditor_data
-    assert "sandbox_mode" not in test_auditor_data
+    assert test_auditor_data["sandbox_mode"] == "workspace-write"
     assert "load and follow" not in (
         test_auditor_data["developer_instructions"].lower()
     )
     assert "Do not implement fixes" in test_auditor_data["developer_instructions"]
-    assert test_auditor_data["default_permissions"] == "mainframe-test-auditor"
+    assert "default_permissions" not in test_auditor_data
+    assert "permissions" not in test_auditor_data
     assert len(test_auditor_data["skills"]["config"]) == 2
     decision_reviewer_template = (
         ADAPTER / "agents" / "mainframe_decision_reviewer.toml.template"
@@ -1243,18 +1086,15 @@ def test_baseline_uses_native_standalone_layers_only():
     rules_body = (
         ADAPTER / "rules" / "mainframe.rules"
     ).read_text(encoding="utf-8")
-    assert 'pattern = ["secret"]' in rules_body
-    assert (
-        'pattern = ["git", ["add", "stage", "commit", "rm", "mv", "update-index"]]'
-        in rules_body
-    )
-    assert 'pattern = ["git", ["update-ref", "read-tree"]]' in rules_body
+    assert 'pattern = ["secret"]' not in rules_body
+    assert 'pattern = ["mainframe-pi", "business-analysis"]' not in rules_body
+    assert 'pattern = ["mainframe-opencode"]' not in rules_body
+    assert 'pattern = ["git", ["add", "stage", "commit"' not in rules_body
     assert 'pattern = ["git", ["commit-tree", "send-pack"]]' in rules_body
-    assert 'pattern = ["git", "clean"]' in rules_body
-    assert '"git clean --dry-run"' in rules_body
-    assert '"git worktree prune --dry-run"' in rules_body
-    assert "protected Git metadata" in rules_body
-    assert (ADAPTER / "config" / "mainframe-permissions.toml").is_file()
+    assert 'decision = "forbidden"' in rules_body
+    assert 'decision = "prompt"' not in rules_body
+    assert '"git worktree prune"' not in rules_body
+    assert not (ADAPTER / "config" / "mainframe-permissions.toml").exists()
     assert (ADAPTER / "scripts" / "manage-config.py").is_file()
     assert (ADAPTER / "scripts" / "manage-hooks.py").is_file()
 

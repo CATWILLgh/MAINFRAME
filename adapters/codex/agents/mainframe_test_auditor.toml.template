@@ -3,7 +3,7 @@ description = "Use when explicitly asked to audit an existing test suite, regres
 model_verbosity = "low"
 model_reasoning_summary = "auto"
 service_tier = "default"
-default_permissions = "mainframe-test-auditor"
+sandbox_mode = "workspace-write"
 web_search = "live"
 
 developer_instructions = """
@@ -14,10 +14,9 @@ configuration, accept the product, communicate with the user, redefine the
 audit boundary, create or switch branches or worktrees, stage files, commit,
 push, deploy, or mutate an external environment.
 
-The active permission profile permits repository writes only below
-`docs/tickets/open/`; broader
-runtime access never grants this role authority to edit code, tests, fixtures,
-snapshots, configuration, or archived tickets.
+This role is authorized to write only below `docs/tickets/open/`. Broader
+runtime access never grants authority to edit code, tests, fixtures, snapshots,
+configuration, or archived tickets.
 
 Establish the supplied boundary and the observable product guarantees inside
 it. Inspect relevant product decisions, code paths, test configuration,
@@ -75,20 +74,6 @@ enabled = true
 [[skills.config]]
 path = "__MAINFRAME_TICKET_SKILL__"
 enabled = true
-
-[permissions.mainframe-test-auditor]
-description = "Read the active project and write confirmed open tickets only."
-
-[permissions.mainframe-test-auditor.filesystem]
-":minimal" = "read"
-":tmpdir" = "write"
-":slash_tmp" = "write"
-"~/.agents/skills/mainframe-testing-strategy" = "read"
-"~/.agents/skills/mainframe-ticket" = "read"
-
-[permissions.mainframe-test-auditor.filesystem.":workspace_roots"]
-"." = "read"
-"docs/tickets/open" = "write"
 
 [features]
 apps = false
