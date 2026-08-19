@@ -1570,13 +1570,22 @@
     launch.children[2].appendChild(el("span", { class: "button-detail" }, "Claude Code"));
     root.appendChild(section(t("Analysis queue"), "dev", 3, launch));
 
-    const providerCards = Object.entries(control.providers || {}).map(([provider, enabled]) =>
-      el("article", { class: "provider-card" }, [
-        el("div", null, [el("strong", { class: "mono" }, provider),
-          badge(enabled ? t("Enabled") : t("Paused"), enabled ? "user" : "muted")]),
+    const providerStatus = control.provider_status || {};
+    const providerCards = Object.entries(control.providers || {}).map(([provider, enabled]) => {
+      const readiness = providerStatus[provider] || { state: "checking", detail: "" };
+      return el("article", { class: "provider-card" }, [
+        el("div", { class: "provider-copy" }, [
+          el("div", { class: "provider-title" }, [
+            el("strong", { class: "mono" }, provider),
+            badge(enabled ? t("Enabled") : t("Paused"), enabled ? "user" : "muted"),
+            badge(t(readiness.state), readiness.state),
+          ]),
+          el("span", { class: "provider-detail" }, t(readiness.detail || "")),
+        ]),
         actionButton(enabled ? t("Pause") : t("Resume"),
           () => controlPost("/api/providers/" + provider, { enabled: !enabled })),
-      ]));
+      ]);
+    });
     root.appendChild(section(t("Providers"), "config", providerCards.length,
       el("div", { class: "provider-grid" }, providerCards)));
 
@@ -1588,6 +1597,7 @@
             el("div", { class: "card-head" }, [
               el("strong", { class: "mono" }, report.producer),
               badge(report.adapter_id, "dev"),
+              report.finding_count ? badge(num(report.finding_count) + " " + t("findings"), "muted") : null,
             ]),
             el("div", { class: "report-meta mono" }, [
               report.model + " · " + report.effort + " · " + fmtStamp(report.generated_at),
@@ -1595,6 +1605,10 @@
             report.summary
               ? el("p", { class: "card-desc" }, report.summary)
               : el("p", { class: "card-desc muted" }, t("No plain-language summary was stored.")),
+            report.findings && report.findings.length
+              ? el("ul", { class: "report-findings" }, report.findings.map((finding) =>
+                  el("li", null, finding)))
+              : null,
             el("div", { class: "report-path mono dim" }, report.artifact),
           ])))));
     } else {

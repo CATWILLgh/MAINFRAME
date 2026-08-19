@@ -53,6 +53,47 @@ def test_queue_rejects_unknown_actions_and_supports_retry():
     assert retried["status"] == "queued" and retried["attempts"] == 1
 
 
+def test_provider_probe_distinguishes_ready_and_auth_required():
+    module = _load()
+    original_which = module.shutil.which
+    original_run = module.subprocess.run
+    try:
+        module.shutil.which = lambda command: "/tmp/fake-" + command
+        class Result:
+            returncode = 0
+            stdout = "gemini-3.7-flash-high\tGemini 3.7 Flash (High)\n"
+            stderr = ""
+
+        module.subprocess.run = lambda *_args, **_kwargs: Result()
+        assert module._probe_provider("antigravity")["state"] == "ready"
+
+        Result.returncode = 1
+        Result.stdout = ""
+        Result.stderr = "Please sign in to view available models."
+        assert module._probe_provider("antigravity")["state"] == "auth-required"
+    finally:
+        module.shutil.which = original_which
+        module.subprocess.run = original_run
+
+
+def test_provider_status_prefers_latest_job_outcome():
+    module = _load()
+    app = module.ObservatoryApp(
+        ROOT, Path(tempfile.mkdtemp()), snapshot_builder=lambda: {}
+    )
+    job = app.store.enqueue("spark", "codex")
+    app.store.claim_next()
+    app.store.finish(job["id"], "completed", detail="stored")
+    status = app.provider_status()["spark"]
+    assert status["state"] == "ready"
+    assert "completed" in status["detail"]
+    with app._provider_lock:
+        app._provider_status["spark"] = {
+            "state": "unavailable", "detail": "not available", "checked_at": "now"
+        }
+    assert app.provider_status()["spark"]["state"] == "unavailable"
+
+
 def test_service_rejects_non_loopback_bind_and_has_csrf_boundary():
     module = _load()
     try:

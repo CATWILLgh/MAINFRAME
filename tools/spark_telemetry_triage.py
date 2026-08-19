@@ -16,6 +16,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 MODEL = "gpt-5.3-codex-spark"
 EFFORT = "low"
+ANALYZER_VERSION = 3
 
 
 def _load(path: Path, name: str):
@@ -69,40 +70,126 @@ def _usage(stdout: str):
     return latest
 
 
-def _valid_candidate(value) -> bool:
+def _pointer(payload: object, path: str) -> object:
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise KeyError(path)
+    current = payload
+    for raw in path[1:].split("/"):
+        token = raw.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, list):
+            current = current[int(token)]
+        elif isinstance(current, dict):
+            current = current[token]
+        else:
+            raise KeyError(path)
+    return current
+
+
+def _candidate_error(value, payload) -> str | None:
     if not isinstance(value, dict) or set(value) != {"evidence", "candidates"}:
-        return False
+        return "top-level shape is invalid"
     evidence = value["evidence"]
     candidates = value["candidates"]
     if not isinstance(evidence, list) or len(evidence) > 12:
-        return False
+        return "evidence list is invalid"
     if not isinstance(candidates, list) or len(candidates) > 8:
-        return False
-    if any(
-        not isinstance(row, dict)
-        or set(row) != {"path", "value"}
-        or not isinstance(row["path"], str)
-        or not row["path"].startswith("/")
-        for row in evidence
-    ):
-        return False
+        return "candidate list is invalid"
+    evidence_paths = set()
+    for row in evidence:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"path", "value"}
+            or not isinstance(row["path"], str)
+            or row["path"] in evidence_paths
+        ):
+            return "evidence row shape or path uniqueness is invalid"
+        try:
+            expected = _pointer(payload, row["path"])
+        except (KeyError, IndexError, ValueError, TypeError):
+            return "an evidence path does not resolve in the input"
+        if isinstance(expected, (dict, list)) or row["value"] != expected:
+            return "an evidence value does not exactly match its input primitive"
+        evidence_paths.add(row["path"])
     categories = {"noisy-injection", "model-lab-cost", "hook-efficiency", "data-gap"}
     for row in candidates:
         if not isinstance(row, dict) or set(row) != {
             "category", "hypothesis", "evidence_paths", "confidence", "next_probe"
         }:
-            return False
+            return "candidate row shape is invalid"
         if row["category"] not in categories or row["confidence"] not in {"low", "medium"}:
-            return False
+            return "candidate category or confidence is invalid"
         if not isinstance(row["hypothesis"], str) or not row["hypothesis"].strip():
-            return False
+            return "candidate hypothesis is empty"
         if not isinstance(row["next_probe"], str) or not row["next_probe"].strip():
-            return False
+            return "candidate probe is empty"
         if not isinstance(row["evidence_paths"], list) or not row["evidence_paths"]:
-            return False
-        if any(not isinstance(path, str) or not path.startswith("/") for path in row["evidence_paths"]):
-            return False
-    return True
+            return "candidate evidence paths are empty"
+        if (
+            len(set(row["evidence_paths"])) != len(row["evidence_paths"])
+            or not set(row["evidence_paths"]).issubset(evidence_paths)
+        ):
+            return "candidate references evidence that was not returned exactly"
+    return None
+
+
+def _valid_candidate(value, payload) -> bool:
+    return _candidate_error(value, payload) is None
+
+
+def _candidate_request_error(value, payload) -> str | None:
+    if not isinstance(value, dict) or set(value) != {"candidates"}:
+        return "top-level shape is invalid"
+    candidates = value["candidates"]
+    if not isinstance(candidates, list) or len(candidates) > 8:
+        return "candidate list is invalid"
+    categories = {"noisy-injection", "model-lab-cost", "hook-efficiency", "data-gap"}
+    cited_paths = set()
+    for row in candidates:
+        if not isinstance(row, dict) or set(row) != {
+            "category", "hypothesis", "evidence_paths", "confidence", "next_probe"
+        }:
+            return "candidate row shape is invalid"
+        if row["category"] not in categories or row["confidence"] not in {"low", "medium"}:
+            return "candidate category or confidence is invalid"
+        if not isinstance(row["hypothesis"], str) or not row["hypothesis"].strip():
+            return "candidate hypothesis is empty"
+        if not isinstance(row["next_probe"], str) or not row["next_probe"].strip():
+            return "candidate probe is empty"
+        paths = row["evidence_paths"]
+        if not isinstance(paths, list) or not paths or len(paths) > 6:
+            return "candidate evidence paths are invalid"
+        if len(set(paths)) != len(paths):
+            return "candidate evidence paths are duplicated"
+        for path in paths:
+            try:
+                expected = _pointer(payload, path)
+            except (KeyError, IndexError, ValueError, TypeError):
+                return "a candidate evidence path does not resolve in the input"
+            if isinstance(expected, (dict, list)):
+                return "a candidate evidence path does not identify a primitive"
+            cited_paths.add(path)
+    if len(cited_paths) > 12:
+        return "candidates cite more than twelve distinct evidence paths"
+    return None
+
+
+def _materialize_candidate(value, payload) -> dict:
+    evidence = []
+    seen = set()
+    for row in value["candidates"]:
+        for path in row["evidence_paths"]:
+            if path not in seen:
+                evidence.append({"path": path, "value": _pointer(payload, path)})
+                seen.add(path)
+    return {"evidence": evidence, "candidates": value["candidates"]}
+
+
+def _merge_usage(total: dict | None, current: dict | None) -> dict | None:
+    if current is None:
+        return total
+    if total is None:
+        return dict(current)
+    return {key: int(total.get(key, 0)) + int(current.get(key, 0)) for key in current}
 
 
 def _failure_detail(returncode: int, stdout: str) -> str:
@@ -119,7 +206,9 @@ def _failure_detail(returncode: int, stdout: str) -> str:
     return f"Spark worker exit {returncode}"
 
 
-def _record_usage(adapter: str, usage: dict | None, digest: str, db: Path | None):
+def _record_usage(
+    adapter: str, usage: dict | None, digest: str, db: Path | None, request_count: int
+):
     if not usage:
         return
     receiver = _load(ROOT / "tools/native_telemetry_receiver.py", "mainframe_receiver")
@@ -129,7 +218,7 @@ def _record_usage(adapter: str, usage: dict | None, digest: str, db: Path | None
         "model": MODEL,
         "payload": {
             "sample_id": hashlib.sha256(f"spark-triage:{adapter}:{digest}".encode()).hexdigest(),
-            "source": "model-lab", "request_count": 1, **usage,
+            "source": "model-lab", "request_count": request_count, **usage,
         },
     }
     paths = _load(
@@ -158,39 +247,68 @@ def main(argv=None):
             os.replace(temporary_status, args.status_file)
         return 0
     payload = _source(args.adapter, args.db)
-    digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+    source_digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True).encode()
+    ).hexdigest()
+    analysis_digest = hashlib.sha256(
+        f"spark-telemetry-triage:{ANALYZER_VERSION}:{source_digest}".encode()
+    ).hexdigest()
     output_root = args.output_root or ROOT / "workspace/runtime"
-    destination = output_root / args.adapter / "model-lab/spark/telemetry-triage" / f"triage-{digest[:16]}.json"
+    destination = output_root / args.adapter / "model-lab/spark/telemetry-triage" / f"triage-{analysis_digest[:16]}.json"
     if destination.exists():
         return finish("completed", "matching telemetry was already analyzed", destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    prompt = """Analyze this privacy-safe MAINFRAME telemetry summary for cheap triage only.
-Return exact evidence paths and bounded hypotheses. Do not claim causal overhead,
+    base_prompt = """Analyze this privacy-safe MAINFRAME telemetry summary for cheap triage only.
+Return exact JSON Pointer evidence paths. MAINFRAME will copy the cited primitive
+values deterministically after validation; do not return a separate evidence list.
+Each path is one JSON string. Never join, comma-separate, or combine several paths.
+Return bounded hypotheses. Do not claim causal overhead,
 waste, savings, or effectiveness from aggregates. Recommend a probe instead.
 Do not inspect prompts, code, paths, transcripts, or credentials.\n\n""" + json.dumps(payload, sort_keys=True)
     fd, response_name = tempfile.mkstemp(prefix="mainframe-spark-triage-", suffix=".json")
     os.close(fd)
     usage = None
+    request_count = 0
     try:
-        proc = subprocess.run([
-            os.environ.get("MAINFRAME_CODEX_BIN", "codex"), "exec", "--model", MODEL,
-            "--config", f'model_reasoning_effort="{EFFORT}"', "--ephemeral",
-            "--ignore-user-config", "--ignore-rules", "--sandbox", "read-only",
-            "--cd", str(ROOT), "--output-schema", str(ROOT / "tools/schemas/spark-telemetry-triage.json"),
-            "--output-last-message", response_name, "--json", "-",
-        ], input=prompt, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-           timeout=180, check=False)
-        usage = _usage(proc.stdout)
-        if proc.returncode != 0:
-            return finish("retryable", _failure_detail(proc.returncode, proc.stdout))
-        candidate = json.loads(Path(response_name).read_text(encoding="utf-8"))
-        if not _valid_candidate(candidate):
-            return finish("retryable", "Spark returned an invalid review candidate")
+        prompt = base_prompt
+        candidate = None
+        error = "Spark returned no review candidate"
+        for attempt in range(2):
+            proc = subprocess.run([
+                os.environ.get("MAINFRAME_CODEX_BIN", "codex"), "exec", "--model", MODEL,
+                "--config", f'model_reasoning_effort="{EFFORT}"', "--ephemeral",
+                "--ignore-user-config", "--ignore-rules", "--sandbox", "read-only",
+                "--cd", str(ROOT), "--output-schema", str(ROOT / "tools/schemas/spark-telemetry-triage.json"),
+                "--output-last-message", response_name, "--json", "-",
+            ], input=prompt, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+               timeout=180, check=False)
+            request_count += 1
+            usage = _merge_usage(usage, _usage(proc.stdout))
+            if proc.returncode != 0:
+                return finish("retryable", _failure_detail(proc.returncode, proc.stdout))
+            raw_candidate = json.loads(Path(response_name).read_text(encoding="utf-8"))
+            error = _candidate_request_error(raw_candidate, payload)
+            if error is None:
+                candidate = _materialize_candidate(raw_candidate, payload)
+                if not _valid_candidate(candidate, payload):
+                    error = "deterministic evidence materialization failed"
+                    continue
+                break
+            if attempt == 0:
+                prompt = (
+                    base_prompt
+                    + "\n\nThe previous JSON was rejected because " + error + ". "
+                    + "Return a corrected complete JSON object. Previous JSON:\n"
+                    + json.dumps(raw_candidate, ensure_ascii=False, separators=(",", ":"))
+                )
+        if error is not None:
+            return finish("retryable", f"Spark validation failed: {error}")
         envelope = {
-            "schema": 1, "adapter": args.adapter, "producer": "spark-telemetry-triage",
-            "model": MODEL, "effort": EFFORT,
+            "schema": 1, "analyzer_version": ANALYZER_VERSION,
+            "adapter": args.adapter, "producer": "spark-telemetry-triage",
+            "provider": "openai", "model": MODEL, "effort": EFFORT,
             "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-            "source_sha256": digest, "usage": usage, "review_required": True,
+            "source_sha256": source_digest, "usage": usage, "review_required": True,
             "candidate": candidate,
         }
         temporary = destination.with_suffix(".tmp")
@@ -201,7 +319,7 @@ Do not inspect prompts, code, paths, transcripts, or credentials.\n\n""" + json.
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as error:
         return finish("retryable", f"Spark unavailable: {type(error).__name__}")
     finally:
-        _record_usage(args.adapter, usage, digest, args.db)
+        _record_usage(args.adapter, usage, analysis_digest, args.db, request_count)
         try:
             os.unlink(response_name)
         except OSError:

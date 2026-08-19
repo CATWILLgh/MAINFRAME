@@ -270,6 +270,59 @@ def collect_installation_state(root):
     return [claude, codex, pi]
 
 
+def _model_lab_findings(payload, limit=5):
+    candidate = payload.get("candidate")
+    audit = payload.get("audit")
+    rows = []
+    if isinstance(candidate, dict):
+        rows = candidate.get("candidates") or []
+        values = [row.get("hypothesis") for row in rows if isinstance(row, dict)]
+    elif isinstance(audit, dict) and isinstance(audit.get("hypotheses"), list):
+        rows = audit["hypotheses"]
+        values = [row.get("statement") for row in rows if isinstance(row, dict)]
+    elif isinstance(audit, dict) and isinstance(audit.get("hook_findings"), list):
+        rows = audit["hook_findings"]
+        values = [row.get("finding") for row in rows if isinstance(row, dict)]
+    else:
+        values = []
+    return [str(value).strip()[:500] for value in values if str(value or "").strip()][
+        :max(0, int(limit))
+    ]
+
+
+def _model_lab_finding_count(payload):
+    candidate = payload.get("candidate")
+    audit = payload.get("audit")
+    if isinstance(candidate, dict) and isinstance(candidate.get("candidates"), list):
+        return len(candidate["candidates"])
+    if isinstance(audit, dict):
+        for key in ("hypotheses", "hook_findings"):
+            if isinstance(audit.get(key), list):
+                return len(audit[key])
+    return 0
+
+
+def _model_lab_summary(payload, findings, finding_count):
+    summary = str(payload.get("summary") or "").strip()
+    audit = payload.get("audit")
+    if not summary and isinstance(audit, dict):
+        summary = str(audit.get("summary") or "").strip()
+    if summary:
+        return summary[:600]
+    if findings:
+        label = "review candidate" if finding_count == 1 else "review candidates"
+        return f"{finding_count} {label} stored; open the findings below for review."[:600]
+    if isinstance(audit, dict):
+        observations = audit.get("observations")
+        probes = audit.get("probes")
+        if isinstance(observations, list) or isinstance(probes, list):
+            return (
+                f"Stored {len(observations or [])} observations and "
+                f"{len(probes or [])} proposed probes."
+            )
+    return "The model completed, but no review findings were stored."
+
+
 def collect_model_lab_reports(root, limit=40):
     runtime = os.path.join(root, "workspace", "runtime")
     reports = []
@@ -288,17 +341,26 @@ def collect_model_lab_reports(root, limit=40):
                 continue
             if not isinstance(payload, dict) or not payload.get("producer"):
                 continue
-            summary = str(payload.get("summary") or "").strip()
+            findings = _model_lab_findings(payload)
+            finding_count = _model_lab_finding_count(payload)
+            producer = str(payload.get("producer") or "unknown")[:80]
+            provider = str(payload.get("provider") or "").strip()
+            if not provider and producer == "spark-telemetry-triage":
+                provider = "openai"
+            elif not provider and producer == "gemini-telemetry-audit":
+                provider = "google-antigravity"
             reports.append({
                 "adapter_id": str(payload.get("adapter") or "unknown")[:40],
-                "producer": str(payload.get("producer") or "unknown")[:80],
-                "provider": str(payload.get("provider") or "unknown")[:80],
+                "producer": producer,
+                "provider": (provider or "unknown")[:80],
                 "model": str(payload.get("model") or "unknown")[:100],
                 "effort": str(payload.get("effort") or "unknown")[:40],
                 "generated_at": str(
                     payload.get("generated_at") or payload.get("created_at") or ""
                 )[:40],
-                "summary": summary[:600],
+                "summary": _model_lab_summary(payload, findings, finding_count),
+                "finding_count": finding_count,
+                "findings": findings,
                 "review_required": bool(payload.get("review_required", True)),
                 "artifact": os.path.relpath(path, root),
             })

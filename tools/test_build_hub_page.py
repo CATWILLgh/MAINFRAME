@@ -549,6 +549,10 @@ def test_model_lab_reports_expose_only_bounded_summary_metadata():
         "effort": "low",
         "generated_at": "2026-08-19T01:02:03Z",
         "summary": "One bounded finding.",
+        "candidate": {
+            "evidence": [],
+            "candidates": [{"hypothesis": "A concrete bounded hypothesis."}],
+        },
         "review_required": True,
         "private_payload": "must not reach the page",
     }), encoding="utf-8")
@@ -561,9 +565,43 @@ def test_model_lab_reports_expose_only_bounded_summary_metadata():
         "effort": "low",
         "generated_at": "2026-08-19T01:02:03Z",
         "summary": "One bounded finding.",
+        "finding_count": 1,
+        "findings": ["A concrete bounded hypothesis."],
         "review_required": True,
         "artifact": "workspace/runtime/codex/model-lab/spark/audit.json",
     }]
+
+
+def test_model_lab_reports_derive_bounded_spark_and_gemini_descriptions():
+    root = pathlib.Path(tempfile.mkdtemp())
+    spark = root / "workspace/runtime/codex/model-lab/spark/triage.json"
+    spark.parent.mkdir(parents=True)
+    spark.write_text(json.dumps({
+        "adapter": "codex", "producer": "spark-telemetry-triage",
+        "generated_at": "2026-08-19T02:00:00Z",
+        "candidate": {"candidates": [
+            {"hypothesis": "First review hypothesis."},
+            {"hypothesis": "Second review hypothesis."},
+        ]},
+    }), encoding="utf-8")
+    gemini = root / "workspace/runtime/claude-code/model-lab/gemini/audit.json"
+    gemini.parent.mkdir(parents=True)
+    gemini.write_text(json.dumps({
+        "adapter": "claude-code", "producer": "gemini-telemetry-audit",
+        "generated_at": "2026-08-19T01:00:00Z",
+        "audit": {"summary": "Nested audit summary.", "hypotheses": [
+            {"statement": "Gemini review hypothesis."},
+        ]},
+    }), encoding="utf-8")
+    rows = bhp.collect_model_lab_reports(root)
+    assert rows[0]["summary"] == "2 review candidates stored; open the findings below for review."
+    assert rows[0]["finding_count"] == 2
+    assert rows[0]["findings"] == [
+        "First review hypothesis.", "Second review hypothesis."
+    ]
+    assert rows[1]["summary"] == "Nested audit summary."
+    assert rows[1]["finding_count"] == 1
+    assert rows[1]["findings"] == ["Gemini review hypothesis."]
 
 
 def test_collect_usage_cache_written_and_reused():

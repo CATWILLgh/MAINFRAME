@@ -2,19 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["evidence", "candidates"],
+  "required": ["candidates"],
   "properties": {
-    "evidence": {
-      "type": "array", "maxItems": 12,
-      "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["path", "value"],
-        "properties": {
-          "path": {"type": "string", "pattern": "^/"},
-          "value": {"type": ["string", "number", "integer", "boolean", "null"]}
-        }
-      }
-    },
     "candidates": {
       "type": "array", "maxItems": 8,
       "items": {

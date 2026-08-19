@@ -22,6 +22,50 @@ def test_failure_detail_is_bounded_and_actionable():
     assert detail == "Spark network transport is unavailable"
 
 
+def test_candidate_requires_real_exact_evidence_and_references():
+    payload = {"records": 7, "nested": {"state": "observed"}}
+    valid = {
+        "evidence": [
+            {"path": "/records", "value": 7},
+            {"path": "/nested/state", "value": "observed"},
+        ],
+        "candidates": [{
+            "category": "data-gap",
+            "hypothesis": "A bounded gap may exist.",
+            "evidence_paths": ["/records"],
+            "confidence": "low",
+            "next_probe": "Inspect the missing deterministic counter.",
+        }],
+    }
+    assert spark_telemetry_triage._valid_candidate(valid, payload)
+
+    request = {"candidates": valid["candidates"]}
+    assert spark_telemetry_triage._candidate_request_error(request, payload) is None
+    assert spark_telemetry_triage._materialize_candidate(request, payload) == {
+        "evidence": [{"path": "/records", "value": 7}],
+        "candidates": valid["candidates"],
+    }
+
+    broken = json.loads(json.dumps(valid))
+    broken["evidence"][0]["path"] = "/missing"
+    assert not spark_telemetry_triage._valid_candidate(broken, payload)
+    assert "does not resolve" in spark_telemetry_triage._candidate_error(broken, payload)
+
+    broken = json.loads(json.dumps(valid))
+    broken["evidence"][0]["value"] = 8
+    assert not spark_telemetry_triage._valid_candidate(broken, payload)
+
+    assert spark_telemetry_triage._merge_usage(
+        {"input_tokens": 10, "output_tokens": 2},
+        {"input_tokens": 5, "output_tokens": 3},
+    ) == {"input_tokens": 15, "output_tokens": 5}
+
+    broken = json.loads(json.dumps(valid))
+    broken["candidates"][0]["evidence_paths"] = ["/nested/state"]
+    broken["evidence"] = broken["evidence"][:1]
+    assert not spark_telemetry_triage._valid_candidate(broken, payload)
+
+
 def test_adapter_owned_candidate_and_usage():
     work = Path(tempfile.mkdtemp())
     fake = work / "codex"
@@ -31,7 +75,7 @@ def test_adapter_owned_candidate_and_usage():
         "while [ $# -gt 0 ]; do\n"
         "  if [ \"$1\" = '--output-last-message' ]; then out=$2; shift 2; else shift; fi\n"
         "done\n"
-        "printf '%s\\n' '{\"evidence\":[],\"candidates\":[]}' > \"$out\"\n"
+        "printf '%s\\n' '{\"candidates\":[]}' > \"$out\"\n"
         "printf '%s\\n' '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":100,\"cached_input_tokens\":20,\"output_tokens\":10,\"reasoning_output_tokens\":2}}'\n",
         encoding="utf-8",
     )
@@ -48,6 +92,8 @@ def test_adapter_owned_candidate_and_usage():
     artifacts = list((output / "codex/model-lab/spark/telemetry-triage").glob("*.json"))
     assert len(artifacts) == 1
     artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
+    assert artifact["analyzer_version"] == 3
+    assert artifact["provider"] == "openai"
     assert artifact["review_required"] is True
     assert artifact["usage"]["total_tokens"] == 110
     with sqlite3.connect(db) as connection:

@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -28,6 +29,75 @@ PROVIDERS = {"spark", "antigravity"}
 ADAPTERS = {"claude-code", "codex", "pi"}
 MODEL_ADAPTERS = {"claude-code", "codex"}
 TERMINAL = {"completed", "retryable", "failed", "cancelled"}
+
+
+def _probe_provider(provider: str):
+    checked_at = _now()
+    if provider == "spark":
+        configured = os.environ.get("MAINFRAME_CODEX_BIN", "codex")
+        executable = configured if os.path.isabs(configured) else shutil.which(configured)
+        if not executable or not Path(executable).is_file():
+            return {
+                "state": "unavailable", "detail": "Codex CLI was not found.",
+                "checked_at": checked_at,
+            }
+        try:
+            proc = subprocess.run(
+                [executable, "--version"], text=True, capture_output=True,
+                timeout=5, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return {
+                "state": "unavailable", "detail": "Codex CLI did not respond.",
+                "checked_at": checked_at,
+            }
+        if proc.returncode != 0:
+            return {
+                "state": "unavailable", "detail": "Codex CLI readiness check failed.",
+                "checked_at": checked_at,
+            }
+        version = (proc.stdout or proc.stderr).strip().splitlines()
+        return {
+            "state": "available",
+            "detail": version[0][:160] if version else "Codex CLI is available; run a job to verify Spark access.",
+            "checked_at": checked_at,
+        }
+    executable = shutil.which("agy")
+    if not executable:
+        return {
+            "state": "unavailable", "detail": "Antigravity CLI was not found.",
+            "checked_at": checked_at,
+        }
+    try:
+        proc = subprocess.run(
+            [executable, "models"], text=True, capture_output=True,
+            timeout=15, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "state": "unavailable", "detail": "Antigravity readiness check timed out.",
+            "checked_at": checked_at,
+        }
+    except OSError:
+        return {
+            "state": "unavailable", "detail": "Antigravity CLI could not start.",
+            "checked_at": checked_at,
+        }
+    combined = f"{proc.stdout}\n{proc.stderr}".lower()
+    if "please sign in" in combined or "not signed in" in combined:
+        return {
+            "state": "auth-required", "detail": "Run agy in a terminal and sign in.",
+            "checked_at": checked_at,
+        }
+    if proc.returncode == 0 and "gemini-3.7-flash-high" in combined:
+        return {
+            "state": "ready", "detail": "Gemini 3.7 Flash High is available.",
+            "checked_at": checked_at,
+        }
+    return {
+        "state": "unavailable", "detail": "Gemini 3.7 Flash High is unavailable.",
+        "checked_at": checked_at,
+    }
 
 
 def _now():
@@ -213,6 +283,15 @@ class ObservatoryApp:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._worker = None
+        self._readiness_worker = None
+        self._provider_lock = threading.Lock()
+        self._provider_status = {
+            provider: {
+                "state": "checking", "detail": "Readiness check is pending.",
+                "checked_at": "",
+            }
+            for provider in PROVIDERS
+        }
 
     def _build_snapshot(self, start_timestamp=None, end_timestamp=None):
         value = build_hub_page.build_manifest(
@@ -227,6 +306,7 @@ class ObservatoryApp:
         )
         value["control"] = {
             "providers": self.store.providers(),
+            "provider_status": self.provider_status(),
             "jobs": self.store.list_jobs(),
             "counts": self.store.counts(),
             "refresh_seconds": 5,
@@ -273,6 +353,48 @@ class ObservatoryApp:
             return
         self._worker = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
+        if not self._readiness_worker or not self._readiness_worker.is_alive():
+            self._readiness_worker = threading.Thread(
+                target=self._readiness_loop, daemon=True
+            )
+            self._readiness_worker.start()
+
+    def provider_status(self):
+        with self._provider_lock:
+            statuses = {
+                provider: dict(status)
+                for provider, status in self._provider_status.items()
+            }
+        latest = {}
+        for job in self.store.list_jobs():
+            latest.setdefault(job["provider"], job)
+        for provider, job in latest.items():
+            if statuses[provider]["state"] in {"auth-required", "unavailable"}:
+                continue
+            if job["status"] == "completed":
+                statuses[provider] = {
+                    "state": "ready",
+                    "detail": "The latest analysis completed successfully.",
+                    "checked_at": job["updated_at"],
+                }
+            elif job["status"] in {"retryable", "failed"}:
+                statuses[provider] = {
+                    "state": "needs-retry",
+                    "detail": job["detail"] or "The latest analysis needs attention.",
+                    "checked_at": job["updated_at"],
+                }
+        return statuses
+
+    def _readiness_loop(self):
+        while not self._stop.is_set():
+            for provider in sorted(PROVIDERS):
+                if self._stop.is_set():
+                    return
+                status = _probe_provider(provider)
+                with self._provider_lock:
+                    self._provider_status[provider] = status
+                self.invalidate()
+            self._stop.wait(300)
 
     def _worker_loop(self):
         while not self._stop.is_set():
@@ -369,7 +491,7 @@ class ObservatoryApp:
         if method == "GET" and path == "/api/jobs":
             return self._json({
                 "providers": self.store.providers(), "jobs": self.store.list_jobs(),
-                "counts": self.store.counts(),
+                "counts": self.store.counts(), "provider_status": self.provider_status(),
             })
         if method == "POST":
             if not self._authorized(headers):
