@@ -35,11 +35,15 @@ window.HUB_STRINGS_RU = {
   "requests": "запросов",
   "input": "вход",
   "cached": "из кэша",
+  "fresh input": "новый вход",
+  "cached input detail": "вход из кэша",
   "cache write": "запись в кэш",
+  "request context": "контекст запросов",
   "output": "выход",
   "reasoning": "размышления",
-  "billed total": "оплачиваемый итог",
-  "all tokens": "всего токенов",
+  "reasoning detail": "размышления в выходе",
+  "processed volume": "обработанный объём",
+  "input plus output": "вход плюс выход",
   "cost": "стоимость",
   "priced requests": "запросов с ценой",
   "coverage": "покрытие",
@@ -258,8 +262,8 @@ window.HUB_STRINGS_RU = {
 
   // usage tab
   "Spend and tokens": "Затраты и токены",
-  "Only exact native counters are added together. An adapter that reports nothing stays visible and is never treated as zero.":
-    "Складываются только точные счётчики самой среды. Адаптор без данных остаётся видимым и никогда не считается нулём.",
+  "Only exact native counters are used. Cached input is normalized per adapter so it is counted once; an adapter that reports nothing stays visible and is never treated as zero.":
+    "Используются только точные счётчики самой среды. Вход из кэша нормализуется для каждого адаптора и считается один раз; адаптор без данных остаётся видимым и никогда не считается нулём.",
   "No adapter telemetry is active yet. Install Claude Code, Codex, or Pi in dev mode and start a fresh session.":
     "Телеметрия адапторов ещё не активна. Установите Claude Code, Codex или Pi в dev-режиме и начните новую сессию.",
   "Total spend": "Всего затрат",
@@ -271,8 +275,8 @@ window.HUB_STRINGS_RU = {
   "Token volume": "Объём токенов",
   "Token share by adapter": "Доля токенов по адапторам",
   "Token share by model": "Доля токенов по моделям",
-  "\"Billed total\" is fresh input plus output — the number vendor consoles show. \"All tokens\" adds cache reads and writes, which is the real volume the model processed and is normally hundreds of times larger.":
-    "«Оплачиваемый итог» — свежий вход плюс выход, то самое число, что показывают консоли провайдеров. «Всего токенов» добавляет чтение и запись кэша — это реальный объём, прошедший через модель, и он обычно в сотни раз больше.",
+  "Fresh input excludes cache hits. Request context is the full input seen by the model for the recorded requests, with cached input counted once. Reasoning is a detail of output, not an extra amount. Processed volume is request context plus output. None of these counters is a price; only the separately reported cost is money.":
+    "Новый вход не включает попадания в кэш. Контекст запросов — весь вход, который увидела модель, причём кэш считается один раз. Размышления входят в выход и не прибавляются повторно. Обработанный объём — контекст запросов плюс выход. Ни один из этих счётчиков не является ценой; деньги показывает только отдельно переданная стоимость.",
   "Response time": "Время ответа",
   "Measured from request to completed response, as the harness reports it.":
     "Измеряется от запроса до завершённого ответа, как это сообщает сама среда.",
@@ -295,8 +299,8 @@ window.HUB_STRINGS_RU = {
   "peak hour": "пиковый час",
   "top model": "основная модель",
   "{n}d": "{n}д",
-  "Cache is excluded from the total here, matching the desktop usage view: {read} read + {write} written.":
-    "Кэш исключён из итога, как в десктопном экране расхода: {read} чтения + {write} записи.",
+  "This legacy input-plus-output counter excludes cache and is not a price: {read} cache-read tokens + {write} cache-write tokens are shown separately.":
+    "Этот архивный счётчик «вход плюс выход» не включает кэш и не является ценой: отдельно показано {read} токенов чтения кэша и {write} токенов записи кэша.",
   "Main window vs subagents": "Основное окно и сабагенты",
   "scope": "область",
   "messages": "сообщений",
@@ -382,8 +386,8 @@ window.HUB_STRINGS_RU = {
   "Start date must not be after end date.": "Начальная дата не может быть позже конечной.",
   "All available history": "Вся доступная история",
   "Selected period": "Выбранный период",
-  "All tokens": "Все токены",
-  "exact native counters": "точные нативные счётчики",
+  "Processed token volume": "Обработанный объём токенов",
+  "normalized context plus output": "нормализованный контекст плюс выход",
   "Model turns": "Ходы моделей",
   "completed model responses": "завершённые ответы моделей",
   "Execution split": "Распределение работы",
@@ -393,9 +397,9 @@ window.HUB_STRINGS_RU = {
   "attributed subagent turns": "привязанные ходы сабагентов",
   "Agent workload": "Нагрузка агентов",
   "top-level tokens": "токены главных агентов",
-  "main or unattributed tokens": "токены главных агентов или без привязки",
+  "main or unattributed processed tokens": "обработанные токены главных агентов или без привязки",
   "subagent completions": "завершения сабагентов",
-  "attributed subagent tokens": "привязанные токены сабагентов",
+  "attributed subagent processed tokens": "привязанные обработанные токены сабагентов",
   "Subagents": "Сабагенты",
   "turns": "ходы",
   "Skill invocations": "Вызовы навыков",

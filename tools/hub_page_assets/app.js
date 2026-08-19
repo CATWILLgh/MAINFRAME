@@ -592,7 +592,8 @@
 
     root.appendChild(el("div", { class: "overview-metrics" }, [
       overviewMetric(t("Observed sessions"), num(report.sessions), t("separate harness runs")),
-      overviewMetric(t("All tokens"), fmtTok(tokens.all_tokens), t("exact native counters"), "usage-tone"),
+      overviewMetric(t("Processed token volume"), fmtTok(tokens.processed_tokens),
+        t("normalized context plus output"), "usage-tone"),
       overviewMetric(t("Model turns"), num(workload.model_turns), t("completed model responses"), "usage-tone"),
       // A partial cost figure covers only the requests that reported one, so the
       // note must say so; "billed by the provider" beside 3% coverage would read
@@ -970,7 +971,7 @@
     const workload = report.workload || {};
     const adapters = activeAdapters(report);
 
-    root.appendChild(explain(t("Only exact native counters are added together. An adapter that reports nothing stays visible and is never treated as zero.")));
+    root.appendChild(explain(t("Only exact native counters are used. Cached input is normalized per adapter so it is counted once; an adapter that reports nothing stays visible and is never treated as zero.")));
 
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
@@ -1012,15 +1013,15 @@
       el("div", { class: "panel-stack" }, [
         statRow([
           [num(usage.requests), t("requests")],
-          [fmtTok(usage.input_tokens), t("input")],
-          [fmtTok(usage.cached_input_tokens), t("cached")],
+          [fmtTok(usage.fresh_input_tokens), t("fresh input")],
+          [fmtTok(usage.cached_input_tokens), t("cached input detail")],
           [fmtTok(usage.cache_write_tokens), t("cache write")],
+          [fmtTok(usage.request_context_tokens), t("request context")],
           [fmtTok(usage.output_tokens), t("output")],
-          [fmtTok(usage.reasoning_output_tokens), t("reasoning")],
-          [fmtTok(usage.total_tokens), t("billed total")],
-          [fmtTok(usage.all_tokens), t("all tokens")],
+          [fmtTok(usage.reasoning_output_tokens), t("reasoning detail")],
+          [fmtTok(usage.processed_tokens), t("processed volume")],
         ]),
-        explain(t("\"Billed total\" is fresh input plus output — the number vendor consoles show. \"All tokens\" adds cache reads and writes, which is the real volume the model processed and is normally hundreds of times larger.")),
+        explain(t("Fresh input excludes cache hits. Request context is the full input seen by the model for the recorded requests, with cached input counted once. Reasoning is a detail of output, not an extra amount. Processed volume is request context plus output. None of these counters is a price; only the separately reported cost is money.")),
       ])));
 
     // Latency.
@@ -1049,27 +1050,29 @@
         [item.adapter_label || item.adapter_id, "mono"],
         [t(value.evidence || "unavailable"), "num"],
         [num(value.requests), "num"],
-        [fmtTok(value.input_tokens), "num"],
+        [fmtTok(value.fresh_input_tokens), "num"],
         [fmtTok(value.cached_input_tokens), "num"],
+        [fmtTok(value.request_context_tokens), "num"],
         [fmtTok(value.output_tokens), "num"],
-        [fmtTok(value.all_tokens), "num"],
+        [fmtTok(value.processed_tokens), "num"],
       ]);
     });
     if (coverageRows.length) {
       root.appendChild(section(t("Adapter coverage"), "dev", coverageRows.length, table([
-        [t("adapter")], [t("source"), true], [t("requests"), true], [t("input"), true],
-        [t("cached"), true], [t("output"), true], [t("all tokens"), true],
+        [t("adapter")], [t("source"), true], [t("requests"), true], [t("fresh input"), true],
+        [t("cached input detail"), true], [t("request context"), true],
+        [t("output"), true], [t("processed volume"), true],
       ], coverageRows)));
       const adapterTokenRows = adapters
         .map((item) => [
           item.adapter_label || item.adapter_id,
-          ((item.token_usage || {}).all_tokens || 0),
-          fmtTok((item.token_usage || {}).all_tokens || 0),
+          ((item.token_usage || {}).processed_tokens || 0),
+          fmtTok((item.token_usage || {}).processed_tokens || 0),
         ])
         .filter((row) => row[1] > 0);
       if (adapterTokenRows.length) {
         root.appendChild(section(t("Token share by adapter"), "usage", adapterTokenRows.length,
-          shareRows(adapterTokenRows, usage.all_tokens || 0, "usage-share")));
+          shareRows(adapterTokenRows, usage.processed_tokens || 0, "usage-share")));
       }
     }
 
@@ -1077,11 +1080,11 @@
       el("div", { class: "panel-stack" }, [
         statRow([
           [num(workload.top_level_turns), t("main or unattributed turns")],
-          [fmtTok(workload.top_level_tokens), t("main or unattributed tokens")],
+          [fmtTok(workload.top_level_tokens), t("main or unattributed processed tokens")],
           [num(workload.subagent_starts), t("subagent calls")],
           [num(workload.subagent_stops), t("subagent completions")],
           [num(workload.subagent_attributed_turns), t("attributed subagent turns")],
-          [fmtTok(workload.subagent_attributed_tokens), t("attributed subagent tokens")],
+          [fmtTok(workload.subagent_attributed_tokens), t("attributed subagent processed tokens")],
         ]),
         explain(workload.subagent_token_evidence === "observed-correlation"
           ? t("Subagent tokens are shown only when the native model session identifier matches a recorded subagent identifier. Unmatched usage stays at the top level instead of being guessed.")
@@ -1095,13 +1098,13 @@
     if (agentRows.length) {
       root.appendChild(section(t("Subagents"), "agents", agentRows.length, table([
         [t("adapter")], [t("agent")], [t("calls"), true], [t("completed"), true],
-        [t("turns"), true], [t("all tokens"), true],
+        [t("turns"), true], [t("processed volume"), true],
       ], agentRows.map((row) => cells([
         [row.adapter_id || report.adapter_id || "—", "mono"],
         [row.agent || t("(unknown)"), "mono"],
         [num(row.starts), "num"], [num(row.stops), "num"],
         [row.turns ? num(row.turns) : "—", "num"],
-        [row.all_tokens ? fmtTok(row.all_tokens) : "—", "num"],
+        [row.processed_tokens ? fmtTok(row.processed_tokens) : "—", "num"],
       ])))));
     }
 
@@ -1114,28 +1117,28 @@
         [row.skill, "mono"], [t(row.invoker), "mono"], [num(row.calls), "num"],
       ]))) : emptyState(t("No verified skill-invocation events were collected in this period. This is unknown coverage, not proof that no skill ran."))));
 
-    const modelRows = (usage.by_model || []).filter((row) => row.all_tokens > 0);
+    const modelRows = (usage.by_model || []).filter((row) => row.processed_tokens > 0);
     if (modelRows.length) {
       const modelTokenRows = modelRows.slice(0, 16).map((row) => [
         (row.adapter_id ? row.adapter_id + " · " : "") + (row.model || t("(unknown)")),
-        row.all_tokens,
-        fmtTok(row.all_tokens),
+        row.processed_tokens,
+        fmtTok(row.processed_tokens),
       ]);
       root.appendChild(section(t("Token share by model"), "usage", modelTokenRows.length,
-        shareRows(modelTokenRows, usage.all_tokens || 0, "usage-share")));
+        shareRows(modelTokenRows, usage.processed_tokens || 0, "usage-share")));
       root.appendChild(section(t("Usage by model"), "usage", modelRows.length, table([
-        [t("adapter")], [t("model")], [t("requests"), true], [t("input"), true],
-        [t("cached"), true], [t("output"), true], [t("billed total"), true],
-        [t("all tokens"), true],
+        [t("adapter")], [t("model")], [t("requests"), true], [t("fresh input"), true],
+        [t("cached input detail"), true], [t("request context"), true],
+        [t("output"), true], [t("processed volume"), true],
       ], modelRows.map((row) => cells([
         [row.adapter_id || "—", "mono"],
         [row.model || t("(unknown)"), "mono"],
         [num(row.requests), "num"],
-        [fmtTok(row.input_tokens), "num"],
+        [fmtTok(row.fresh_input_tokens), "num"],
         [fmtTok(row.cached_input_tokens), "num"],
+        [fmtTok(row.request_context_tokens), "num"],
         [fmtTok(row.output_tokens), "num"],
-        [fmtTok(row.total_tokens), "num"],
-        [fmtTok(row.all_tokens), "num"],
+        [fmtTok(row.processed_tokens), "num"],
       ])))));
     }
 
@@ -1143,11 +1146,11 @@
       [row.adapter_id || "—", "mono"],
       [row.source, "mono"],
       [num(row.requests), "num"],
-      [fmtTok(row.all_tokens), "num"],
+      [fmtTok(row.processed_tokens), "num"],
     ]));
     if (sourceRows.length) {
       root.appendChild(section(t("Usage by source"), "usage", sourceRows.length, table([
-        [t("adapter")], [t("source")], [t("requests"), true], [t("all tokens"), true],
+        [t("adapter")], [t("source")], [t("requests"), true], [t("processed volume"), true],
       ], sourceRows)));
     }
 
@@ -1171,14 +1174,14 @@
         statRow([
           [num(u.sessions), t("sessions")],
           [num(u.messages), t("assistant replies")],
-          [fmtTok(u.tokens.total), t("billed total")],
+          [fmtTok(u.tokens.total), t("input plus output")],
           [num(u.active_days), t("active days")],
           [f("{n}d", { n: u.current_streak }), t("current streak")],
           [f("{n}d", { n: u.longest_streak }), t("longest streak")],
           [fmtHour(u.peak_hour), t("peak hour")],
           [u.favorite_model || "—", t("top model")],
         ]),
-        explain(f("Cache is excluded from the total here, matching the desktop usage view: {read} read + {write} written.",
+        explain(f("This legacy input-plus-output counter excludes cache and is not a price: {read} cache-read tokens + {write} cache-write tokens are shown separately.",
           { read: fmtTok(u.tokens.cache_read), write: fmtTok(u.tokens.cache_creation) })),
       ])));
 
@@ -1192,14 +1195,14 @@
     ]);
     root.appendChild(section(t("Main window vs subagents"), "usage", 2, table([
       [t("scope")], [t("messages"), true], [t("input"), true],
-      [t("output"), true], [t("billed total"), true],
+      [t("output"), true], [t("input plus output"), true],
     ], [splitRow(t("main window"), sp.main), splitRow(t("subagents"), sp.sub)])));
 
     const grand = u.tokens.total || 1;
     const shown = u.models.filter((m) => m.total > 0);
     root.appendChild(section(t("Tokens by model"), "usage", shown.length, table([
       [t("model")], [t("input"), true], [t("output"), true],
-      [t("billed total"), true], [t("share")],
+      [t("input plus output"), true], [t("share")],
     ], shown.map((m) => el("tr", null, [
       el("td", { class: "mono" }, m.model),
       el("td", { class: "num" }, fmtTok(m["in"])),

@@ -164,7 +164,8 @@ def test_workload_attributes_only_native_sessions_matching_subagent_ids():
     report = telemetry_data.build_report(db, adapter_id="codex")
     assert report["workload"]["subagent_starts"] == 1
     assert report["workload"]["subagent_attributed_turns"] == 2
-    assert report["workload"]["subagent_attributed_tokens"] == 150
+    assert report["workload"]["subagent_attributed_tokens"] == 130
+    assert report["workload"]["by_subagent"][0]["processed_tokens"] == 130
     assert report["workload"]["by_subagent"][0]["agent"] == "reviewer"
 
 
@@ -376,32 +377,41 @@ def test_usage_costs_keep_exact_and_estimated_evidence_separate():
         "evidence": "exact",
         "requests": 1,
         "input_tokens": 1200,
+        "fresh_input_tokens": 1200,
         "cached_input_tokens": 800,
         "cache_write_tokens": 100,
+        "request_context_tokens": 2100,
         "output_tokens": 240,
         "reasoning_output_tokens": 0,
         "total_tokens": 1440,
+        "processed_tokens": 2340,
         "all_tokens": 2340,
         "by_source": [{
             "source": "native-otel",
             "requests": 1,
             "input_tokens": 1200,
+            "fresh_input_tokens": 1200,
             "cached_input_tokens": 800,
             "cache_write_tokens": 100,
+            "request_context_tokens": 2100,
             "output_tokens": 240,
             "reasoning_output_tokens": 0,
             "total_tokens": 1440,
+            "processed_tokens": 2340,
             "all_tokens": 2340,
         }],
         "by_model": [{
             "model": "claude-test",
             "requests": 1,
             "input_tokens": 1200,
+            "fresh_input_tokens": 1200,
             "cached_input_tokens": 800,
             "cache_write_tokens": 100,
+            "request_context_tokens": 2100,
             "output_tokens": 240,
             "reasoning_output_tokens": 0,
             "total_tokens": 1440,
+            "processed_tokens": 2340,
             "all_tokens": 2340,
         }],
     }
@@ -463,15 +473,28 @@ def _usage_row(sample, **overrides):
     return payload
 
 
-def test_all_tokens_counts_cache_that_the_billed_total_leaves_out():
+def test_claude_normalizes_separate_cache_counters_into_request_context():
     db = fresh_db()
     base = {"session_id": "s", "model": "claude-test"}
     assert _hooklib.log_event("model_usage", _usage_row("a" * 64), base) == "written"
     usage = telemetry_data.build_report(db)["token_usage"]
-    # The billed total is what a vendor console shows; the cache it excludes is
-    # the bulk of what actually moved through the model.
+    assert usage["fresh_input_tokens"] == 100
+    assert usage["request_context_tokens"] == 100 + 900 + 10
     assert usage["total_tokens"] == 150
+    assert usage["processed_tokens"] == 100 + 900 + 10 + 50
     assert usage["all_tokens"] == 100 + 900 + 10 + 50
+
+
+def test_codex_cached_input_is_a_subset_and_is_not_counted_twice():
+    db = fresh_db()
+    base = {"session_id": "s", "model": "codex-test"}
+    row = _usage_row("a" * 64, input_tokens=1000, total_tokens=1050)
+    assert _hooklib.log_event("model_usage", row, base) == "written"
+    usage = telemetry_data.build_report(db, adapter_id="codex")["token_usage"]
+    assert usage["fresh_input_tokens"] == 100
+    assert usage["request_context_tokens"] == 1000
+    assert usage["processed_tokens"] == 1050
+    assert usage["all_tokens"] == 1050
 
 
 def test_cost_evidence_tracks_how_many_requests_reported_a_price():

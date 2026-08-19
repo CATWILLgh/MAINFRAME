@@ -48,6 +48,8 @@ ok(q("#tabs button").length === 9, "9 tabs rendered");
 ok(doc.querySelector("#view-overview").classList.contains("active"), "overview is the default view");
 ok(q("#view-overview .overview-metric").length === 8, "overview metrics rendered");
 ok(q("#view-overview .overview-panel").length === 5, "overview evidence panels rendered");
+ok(/Processed token volume/.test(doc.querySelector("#view-overview").textContent),
+  "overview labels normalized token volume without calling it spend");
 ok(/whole agent system|What deserves a look/.test(doc.querySelector("#view-overview").textContent),
   "overview explains the system in plain language");
 ok(q("#view-overview .signal-chart").length === 1, "overview telemetry signal rendered");
@@ -146,6 +148,10 @@ ok(!breakdowns.length || breakdowns.every((b) =>
 const usage = doc.querySelector("#view-usage");
 ok(!!usage, "usage pane rendered");
 ok(q("#view-usage .stat").length >= 6, "usage stat tiles present (" + q("#view-usage .stat").length + ")");
+ok(/Request context/.test(usage.textContent) && /Processed volume/.test(usage.textContent),
+  "usage separates full request context from processed volume");
+ok(!/Billed total|All tokens/.test(usage.textContent),
+  "token counters are not presented as billing or an additive all-token sum");
 ok(q("#view-usage table.matrix").length >= 1, "per-model token table present");
 ok(q("#view-usage .heatmap").length === 1, "activity-calendar heatmap present");
 ok(q("#view-usage .hm-cell").length > 300, "rolling-year heatmap cells rendered (" + q("#view-usage .hm-cell").length + ")");

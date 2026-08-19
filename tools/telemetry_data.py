@@ -301,17 +301,45 @@ def _empty_token_usage():
         "evidence": "unavailable",
         "requests": 0,
         "input_tokens": 0,
+        "fresh_input_tokens": 0,
         "cached_input_tokens": 0,
         "cache_write_tokens": 0,
+        "request_context_tokens": 0,
         "output_tokens": 0,
         "reasoning_output_tokens": 0,
-        # total_tokens counts only freshly billed input plus output, the way the
-        # vendor consoles report it. all_tokens adds cache reads and writes — the
-        # real volume moved through the model, normally orders of magnitude larger.
+        # total_tokens preserves the source's native total. It is not a cost:
+        # providers differ on whether cached input is included in input_tokens.
+        # processed_tokens is the normalized request context plus output, with
+        # cached input counted once. all_tokens is a compatibility alias only.
         "total_tokens": 0,
+        "processed_tokens": 0,
         "all_tokens": 0,
         "by_source": [],
         "by_model": [],
+    }
+
+
+def _normalized_token_dimensions(adapter_id, data):
+    """Return comparable token dimensions without double-counting cache.
+
+    Anthropic and Pi expose uncached input, cache reads, and cache writes as
+    separate counters. OpenAI exposes cached input as a detail of input, so it
+    must be subtracted to obtain fresh input and must not be added to request
+    context again.
+    """
+    input_tokens = data["input_tokens"]
+    cached = data["cached_input_tokens"]
+    cache_write = data["cache_write_tokens"]
+    if adapter_id == "codex":
+        fresh_input = max(0, input_tokens - cached)
+        request_context = input_tokens
+    else:
+        fresh_input = input_tokens
+        request_context = input_tokens + cached + cache_write
+    return {
+        "fresh_input_tokens": fresh_input,
+        "request_context_tokens": request_context,
+        "processed_tokens": request_context + data["output_tokens"],
     }
 
 
@@ -572,6 +600,7 @@ def build_report(
 
             if row["event"] == "model_usage" and row["valid"]:
                 data = row["data"]
+                normalized = _normalized_token_dimensions(adapter_id, data)
                 source = data["source"]
                 source_usage = usage_by_source.setdefault(source, collections.Counter())
                 model = row["model"] or "(unknown)"
@@ -589,16 +618,18 @@ def build_report(
                     usage[source_key] += value
                     source_usage[source_key] += value
                     model_usage[source_key] += value
-                everything = (
-                    data["input_tokens"] + data["cached_input_tokens"]
-                    + data["cache_write_tokens"] + data["output_tokens"]
-                )
-                usage["all_tokens"] += everything
-                source_usage["all_tokens"] += everything
-                model_usage["all_tokens"] += everything
+                for key, value in normalized.items():
+                    usage[key] += value
+                    source_usage[key] += value
+                    model_usage[key] += value
+                processed = normalized["processed_tokens"]
+                usage["all_tokens"] += processed
+                source_usage["all_tokens"] += processed
+                model_usage["all_tokens"] += processed
                 session_usage = usage_by_session[row["session_id"]]
                 session_usage["requests"] += data["request_count"]
-                session_usage["all_tokens"] += everything
+                session_usage["processed_tokens"] += processed
+                session_usage["all_tokens"] += processed
                 # An absent cost field means the source does not publish one, so
                 # the reporting request count — not the row count — is the base.
                 if "cost_micro_usd" in data:
@@ -781,9 +812,9 @@ def build_report(
         ),
     }
     usage_keys = (
-        "requests", "input_tokens", "cached_input_tokens", "cache_write_tokens",
-        "output_tokens", "reasoning_output_tokens",
-        "total_tokens", "all_tokens",
+        "requests", "input_tokens", "fresh_input_tokens", "cached_input_tokens",
+        "cache_write_tokens", "request_context_tokens", "output_tokens",
+        "reasoning_output_tokens", "total_tokens", "processed_tokens", "all_tokens",
     )
     report["token_usage"] = {
         "evidence": "exact" if usage["requests"] else "unavailable",
@@ -806,12 +837,14 @@ def build_report(
         attributed_sessions += 1
         subagent_usage[agent_type].update(values)
     attributed_requests = sum(item["requests"] for item in subagent_usage.values())
-    attributed_tokens = sum(item["all_tokens"] for item in subagent_usage.values())
+    attributed_tokens = sum(
+        item["processed_tokens"] for item in subagent_usage.values()
+    )
     subagent_starts = sum(period_agent_starts.values())
     report["workload"] = {
         "model_turns": usage["requests"],
         "top_level_turns": max(0, usage["requests"] - attributed_requests),
-        "top_level_tokens": max(0, usage["all_tokens"] - attributed_tokens),
+        "top_level_tokens": max(0, usage["processed_tokens"] - attributed_tokens),
         "subagent_starts": subagent_starts,
         "subagent_stops": sum(period_agent_stops.values()),
         "subagent_instances": len({
@@ -834,7 +867,8 @@ def build_report(
                 "stops": period_agent_stops[agent_type],
                 "instances": len(period_agent_instances[agent_type]),
                 "turns": subagent_usage[agent_type]["requests"],
-                "all_tokens": subagent_usage[agent_type]["all_tokens"],
+                "processed_tokens": subagent_usage[agent_type]["processed_tokens"],
+                "all_tokens": subagent_usage[agent_type]["processed_tokens"],
             }
             for agent_type in sorted(
                 set(period_agent_instances) | set(subagent_usage),
@@ -919,9 +953,9 @@ def build_multi_report(
         [key, value] for key, value in counters["by_model"].most_common()
     ]
     usage_keys = (
-        "requests", "input_tokens", "cached_input_tokens", "cache_write_tokens",
-        "output_tokens", "reasoning_output_tokens",
-        "total_tokens", "all_tokens",
+        "requests", "input_tokens", "fresh_input_tokens", "cached_input_tokens",
+        "cache_write_tokens", "request_context_tokens", "output_tokens",
+        "reasoning_output_tokens", "total_tokens", "processed_tokens", "all_tokens",
     )
     combined_usage = collections.Counter()
     combined_sources = {}
