@@ -73,6 +73,11 @@ requirement documents for digital business-analysis review, use
 discussion. Keep its result as evidence for this primary
 task; Pi never owns user communication or product decisions.
 
+After a bounded implementation block has an agreed result, scope, acceptance,
+and allowed checks, `mainframe-pi-engineer` may execute it. Keep architecture
+and final acceptance here, use its `resume` path for corrections, and commit
+only after independent review.
+
 ## Memory
 
 Use Codex memory for durable facts a future task will need: user preferences, project constraints, decisions and their reasons, and hard-won gotchas. Do not use memory as the only source for behavior that may have changed. Never store secrets, temporary task progress, transient debugging output, or guesses. Having nothing worth retaining is normal.

@@ -10,8 +10,22 @@ while [[ -L "$SOURCE" ]]; do
 done
 
 ADAPTER_ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
-RUNNER="${MAINFRAME_PI_RUNNER:-${ADAPTER_ROOT}/node_modules/.bin/tsx}"
+RUNNER_OVERRIDE="${MAINFRAME_PI_RUNNER:-}"
+RUNNER_PREFIX=()
+if [[ -n "$RUNNER_OVERRIDE" ]]; then
+    RUNNER="$RUNNER_OVERRIDE"
+else
+    RUNNER="$(command -v node || true)"
+    RUNNER_PREFIX=(--import "${ADAPTER_ROOT}/node_modules/tsx/dist/loader.mjs")
+fi
 PROFILE_CONFIG="${MAINFRAME_PI_CONFIG:-${ADAPTER_ROOT}/config/profiles.local.json}"
+
+run_typescript() {
+    if [[ -n "$RUNNER_OVERRIDE" ]]; then
+        exec "$RUNNER" "$@"
+    fi
+    exec "$RUNNER" "${RUNNER_PREFIX[@]}" "$@"
+}
 
 usage() {
     cat <<'EOF'
@@ -21,7 +35,6 @@ Usage:
   mainframe-pi business-analysis --initiative <slug> (--statement <text> | --entry <project-path> | --input-file <path>)... [--fresh-session]
   mainframe-pi engineer --mode new --request <project-path> [--timeout-ms <ms>] [--verifier-timeout-ms <ms>] [--max-turns <n>]
   mainframe-pi engineer --mode resume [--feedback <project-path>] [--timeout-ms <ms>] [--verifier-timeout-ms <ms>] [--max-turns <n>]
-  mainframe-pi engineer commit --message "type(optional-scope): description"
   mainframe-pi models
   mainframe-pi --help
 
@@ -41,18 +54,17 @@ case "${1:-}" in
         [[ $# -eq 0 ]] || fail "models accepts no arguments"
         [[ -x "$RUNNER" ]] || fail "Pi adapter dependencies are missing. Run MAINFRAME install.sh --pi."
         [[ -f "$PROFILE_CONFIG" ]] || fail "Pi profile routing is missing: $PROFILE_CONFIG"
-        exec "$RUNNER" "${ADAPTER_ROOT}/src/pilot.ts" --config "$PROFILE_CONFIG" --list-models
+        run_typescript "${ADAPTER_ROOT}/src/pilot.ts" --config "$PROFILE_CONFIG" --list-models
         ;;
-    business-analysis) shift ;;
+    business-analysis)
+        shift
+        if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi
+        ;;
     engineer)
         shift
+        if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi
         [[ -x "$RUNNER" ]] || fail "Pi adapter dependencies are missing. Run MAINFRAME install.sh --pi."
         [[ -f "$PROFILE_CONFIG" ]] || fail "Pi profile routing is missing: $PROFILE_CONFIG"
-        if [[ "${1:-}" == "commit" ]]; then
-            shift
-            [[ "${1:-}" == "--message" && -n "${2:-}" && $# -eq 2 ]] || fail 'engineer commit requires --message "type(optional-scope): description"'
-            exec "$RUNNER" "${ADAPTER_ROOT}/src/engineer-commit.ts" --project "$PWD" --message "$2"
-        fi
         mode=""
         request=""
         feedback=""
@@ -80,7 +92,7 @@ case "${1:-}" in
         [[ "$mode" != "new" || -n "$request" ]] || fail "engineer --mode new requires --request <project-path>"
         [[ "$mode" != "resume" || -z "$request" ]] || fail "engineer --mode resume reuses the active block and does not accept --request"
         [[ -z "$feedback" || "$mode" == "resume" ]] || fail "engineer --feedback requires --mode resume"
-        exec "$RUNNER" "${ADAPTER_ROOT}/src/engineer-pilot.ts" \
+        run_typescript "${ADAPTER_ROOT}/src/engineer-pilot.ts" \
             --config "$PROFILE_CONFIG" \
             --profile engineer-pilot \
             --project "$PWD" \
@@ -117,7 +129,7 @@ done
 [[ -n "$initiative" ]] || fail "business-analysis requires --initiative <slug>"
 [[ "$source_count" -gt 0 ]] || fail "business-analysis requires an explicit --statement, --entry, or --input-file"
 
-exec "$RUNNER" "${ADAPTER_ROOT}/src/pilot.ts" \
+run_typescript "${ADAPTER_ROOT}/src/pilot.ts" \
     --config "$PROFILE_CONFIG" \
     --profile business-analysis \
     --project "$PWD" \

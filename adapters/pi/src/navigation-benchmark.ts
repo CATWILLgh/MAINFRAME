@@ -193,7 +193,7 @@ async function runOne(
       falsePositives: [],
       missing: corpus.gold.map(({ id }) => id),
       durationMs: Date.now() - started,
-      usage: session ? collectUsage(session) : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: 0 },
+      usage: session ? collectUsage(session) : { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: 0 },
       navigation: metrics,
       error: error instanceof Error ? error.message : String(error),
     };

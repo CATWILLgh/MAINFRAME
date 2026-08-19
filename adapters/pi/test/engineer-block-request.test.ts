@@ -10,10 +10,12 @@ import {
   compileEngineerBlockManifest,
   parseEngineerBlockRequest,
 } from "../src/profiles/engineer/block-request.js";
-import { inspectEngineerGit } from "../src/profiles/engineer/preflight.js";
+import { inspectEngineerGit, inspectEngineerGitState } from "../src/profiles/engineer/preflight.js";
 import {
   engineerRuntimeDirectory,
   loadActiveEngineerManifest,
+  markEngineerBlockReadyForArchitectReview,
+  reconcileAcceptedEngineerBlock,
   recordActiveEngineerBlock,
 } from "../src/profiles/engineer/session-state.js";
 
@@ -102,4 +104,37 @@ test("resume rejects a runtime-owned path that leaves the project", async () => 
   state.ownedPaths = [{ path: "../escape", sha256: "a".repeat(64) }];
   await writeFile(statePath, `${JSON.stringify(state)}\n`);
   await assert.rejects(loadActiveEngineerManifest(facts), /path leaves the project/);
+});
+
+test("new reconciles only a reviewed block committed by the primary agent", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-request-accepted-"));
+  await execFileAsync("git", ["init", "-q", root]);
+  await execFileAsync("git", ["-C", root, "config", "user.name", "MAINFRAME Test"]);
+  await execFileAsync("git", ["-C", root, "config", "user.email", "mainframe-test@example.invalid"]);
+  await writeFile(path.join(root, "source.ts"), "initial\n");
+  await execFileAsync("git", ["-C", root, "add", "source.ts"]);
+  await execFileAsync("git", ["-C", root, "commit", "-qm", "test: initial"]);
+  const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+  const request = parseEngineerBlockRequest({
+    schemaVersion: 1,
+    goal: "Implement",
+    writePaths: ["*.ts"],
+    acceptance: ["Done"],
+  });
+  const manifest = compileEngineerBlockManifest(request, head, "new");
+  let facts = await inspectEngineerGit(root, manifest);
+  await writeFile(path.join(root, "source.ts"), "implemented\n");
+  await recordActiveEngineerBlock(facts, manifest, ["source.ts"]);
+  await assert.rejects(reconcileAcceptedEngineerBlock(facts), /still needs architect review/);
+  await markEngineerBlockReadyForArchitectReview(facts);
+  await assert.rejects(reconcileAcceptedEngineerBlock(facts), /before the primary agent commits/);
+  await execFileAsync("git", ["-C", root, "add", "source.ts"]);
+  await execFileAsync("git", ["-C", root, "commit", "-qm", "feat(test): implement block"]);
+  facts = await inspectEngineerGitState(root);
+  const receipt = await reconcileAcceptedEngineerBlock(facts);
+  assert.equal(receipt?.blockId, manifest.blockId);
+  assert.deepEqual(receipt?.paths, ["source.ts"]);
+  assert.equal(receipt?.previousHead, head);
+  assert.equal(receipt?.acceptedHead, facts.startingHead);
+  await assert.rejects(loadActiveEngineerManifest(facts), /no recorded Pi engineer block/);
 });

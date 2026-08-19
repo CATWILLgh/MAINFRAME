@@ -12,10 +12,13 @@ import {
 
 import {
   boundedPrompt,
+  collectSessionMetrics,
   collectUsage,
   createIsolatedLoader,
   isBenignCompactionNoop,
   type UsageSummary,
+  type SessionMetricsCollector,
+  type SessionMetricsSummary,
 } from "../../session-utils.js";
 import type {
   EngineerBlockManifest,
@@ -63,6 +66,7 @@ export class EngineerExecutor {
     private readonly manifest: EngineerBlockManifest,
     private readonly session: AgentSession,
     private readonly toolSet: EngineerToolSet,
+    private readonly metrics: SessionMetricsCollector,
     private readonly writerLock: EngineerWriterLock,
     private readonly timeoutMs: number,
     private readonly maxTurns: number,
@@ -99,6 +103,7 @@ export class EngineerExecutor {
         sessionManager: SessionManager.continueRecent(facts.projectRoot, sessionDirectory),
         settingsManager: settings,
       })).session;
+      const metrics = collectSessionMetrics(session);
       if (options.manifest.sessionMode === "new") {
         try {
           await session.compact(newBlockCompactionInstructions(options.manifest));
@@ -112,6 +117,7 @@ export class EngineerExecutor {
         options.manifest,
         session,
         toolSet,
+        metrics,
         writerLock,
         options.timeoutMs ?? 1_800_000,
         options.maxTurns ?? 160,
@@ -133,6 +139,10 @@ export class EngineerExecutor {
 
   usage(): UsageSummary {
     return collectUsage(this.session);
+  }
+
+  sessionMetrics(): SessionMetricsSummary {
+    return this.metrics.summary();
   }
 
   private async runRound(prompt: string): Promise<EngineerExecutorRound> {
@@ -165,6 +175,7 @@ export class EngineerExecutor {
   }
 
   async dispose(): Promise<void> {
+    this.metrics.dispose();
     this.session.dispose();
     await this.writerLock.release();
   }

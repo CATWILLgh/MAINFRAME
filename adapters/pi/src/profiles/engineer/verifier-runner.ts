@@ -15,9 +15,11 @@ import { Type } from "typebox";
 import { createProjectTools } from "../../project-tools.js";
 import {
   boundedPrompt,
+  collectSessionMetrics,
   collectUsage,
   createIsolatedLoader,
   type UsageSummary,
+  type SessionMetricsSummary,
 } from "../../session-utils.js";
 import {
   parseEngineerVerifierVerdict,
@@ -40,6 +42,7 @@ Classify every acceptance item exactly once. Return ready-for-architect-review o
 export interface EngineerVerificationResult {
   verdict: EngineerVerifierVerdict;
   usage: UsageSummary;
+  metrics: SessionMetricsSummary;
 }
 
 export function validateVerdictAgainstRunEvidence(
@@ -156,12 +159,14 @@ export async function runEngineerVerifier(
     sessionManager: SessionManager.inMemory(facts.projectRoot),
     settingsManager: settings,
   })).session;
+  const metrics = collectSessionMetrics(session);
   try {
     const prompt = `Verify this implementation block. The Git diff may omit untracked file contents; inspect every changed path directly when needed. If diffTruncated is true, use focused reads and searches instead of assuming the omitted tail.\n\n${JSON.stringify({ manifest, executorClaim: completion, deterministicChecks: checks, git: evidence }, null, 2)}`;
     await boundedPrompt(session, prompt, timeoutMs, maxTurns, () => verdict !== undefined, "submit_engineer_verdict");
     if (!verdict) throw new Error("Pi engineer verifier ended without a valid verdict");
-    return { verdict, usage: collectUsage(session) };
+    return { verdict, usage: collectUsage(session), metrics: metrics.summary() };
   } finally {
+    metrics.dispose();
     session.dispose();
   }
 }

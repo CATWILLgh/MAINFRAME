@@ -103,6 +103,11 @@ requirement documents for digital business-analysis review, use
 session discussion. Keep its result as evidence for this primary session;
 Pi never owns user communication or product decisions.
 
+After a bounded implementation block has an agreed result, scope, acceptance,
+and allowed checks, `mainframe:pi-engineer` may execute it. Keep architecture
+and final acceptance here, use its `resume` path for corrections, and commit
+only after independent review.
+
 Keep each specialist's engineering rules, testing context, and diagnostics in
 that specialist's own context. Require executors to return enough evidence for
 verification: current documentation for drift-prone external behavior, code

@@ -6,7 +6,12 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
-import { addUsage, emptyUsage, type UsageSummary } from "../../session-utils.js";
+import {
+  addUsage,
+  emptyUsage,
+  type SessionMetricsSummary,
+  type UsageSummary,
+} from "../../session-utils.js";
 import { runEngineerChecks } from "./check-runner.js";
 import type {
   EngineerBlockManifest,
@@ -45,6 +50,37 @@ export interface EngineerPipelineResult {
     verifier: UsageSummary;
     total: UsageSummary;
   };
+  metrics: {
+    executor: SessionMetricsSummary;
+    verifier: SessionMetricsSummary;
+  };
+}
+
+const EMPTY_METRICS: SessionMetricsSummary = {
+  toolCalls: 0,
+  repeatedToolCalls: 0,
+  callsByTool: {},
+  failedToolCalls: 0,
+  compactions: 0,
+  retries: 0,
+};
+
+function addMetrics(
+  target: SessionMetricsSummary,
+  source: SessionMetricsSummary,
+): SessionMetricsSummary {
+  const callsByTool = { ...target.callsByTool };
+  for (const [name, calls] of Object.entries(source.callsByTool)) {
+    callsByTool[name] = (callsByTool[name] ?? 0) + calls;
+  }
+  return {
+    toolCalls: target.toolCalls + source.toolCalls,
+    repeatedToolCalls: target.repeatedToolCalls + source.repeatedToolCalls,
+    callsByTool,
+    failedToolCalls: target.failedToolCalls + source.failedToolCalls,
+    compactions: target.compactions + source.compactions,
+    retries: target.retries + source.retries,
+  };
 }
 
 async function progressFingerprint(
@@ -73,6 +109,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
   let completion: EngineerCompletionManifest | undefined;
   let checks: EngineerCheckResult[] = [];
   let verdict: EngineerVerifierVerdict | undefined;
+  let verifierMetrics = { ...EMPTY_METRICS, callsByTool: {} };
   let rounds = 0;
   const rejectedFingerprints = new Set<string>();
   try {
@@ -106,6 +143,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
       );
       verdict = verification.verdict;
       addUsage(verifierUsage, verification.usage);
+      verifierMetrics = addMetrics(verifierMetrics, verification.metrics);
       if (verdict.status === "ready-for-architect-review") {
         await markEngineerBlockReadyForArchitectReview(executor.facts);
         const executorUsage = executor.usage();
@@ -114,6 +152,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
         return {
           status: "ready-for-architect-review", rounds, completion, checks, verdict,
           usage: { executor: executorUsage, verifier: verifierUsage, total: totalUsage },
+          metrics: { executor: executor.sessionMetrics(), verifier: verifierMetrics },
         };
       }
       if (verdict.status === "blocked" || verdict.status === "plan-conflict") {
@@ -123,6 +162,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
         return {
           status: verdict.status, rounds, completion, checks, verdict,
           usage: { executor: executorUsage, verifier: verifierUsage, total: totalUsage },
+          metrics: { executor: executor.sessionMetrics(), verifier: verifierMetrics },
         };
       }
       const fingerprint = await progressFingerprint(executor.facts.projectRoot, completion, checks, verdict);
@@ -138,6 +178,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
           checks,
           verdict,
           usage: { executor: executorUsage, verifier: verifierUsage, total: totalUsage },
+          metrics: { executor: executor.sessionMetrics(), verifier: verifierMetrics },
         };
       }
       rejectedFingerprints.add(fingerprint);
@@ -156,6 +197,10 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
       checks,
       ...(verdict ? { verdict } : {}),
       usage: { executor: executorUsage, verifier: verifierUsage, total: totalUsage },
+      metrics: {
+        executor: executor?.sessionMetrics() ?? { ...EMPTY_METRICS, callsByTool: {} },
+        verifier: verifierMetrics,
+      },
     };
   } finally {
     await executor?.dispose();

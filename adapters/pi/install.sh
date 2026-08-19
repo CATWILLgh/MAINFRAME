@@ -12,18 +12,22 @@ DRY_RUN=0
 UNINSTALL=0
 PREFLIGHT=0
 ASSUME_YES=0
+DEV_MODE=0
+REPO_ROOT="$(cd "${ADAPTER_ROOT}/../.." && pwd)"
+TELEMETRY_DIR="${REPO_ROOT}/workspace/runtime/pi/telemetry"
 
 usage() {
     cat <<'EOF'
 MAINFRAME Pi adapter installer
 
 Usage:
-  install.sh [--dry-run] [--yes] [--uninstall]
-  install.sh --preflight [--dry-run] [--yes]
+  install.sh [--dry-run] [--dev] [--yes] [--uninstall]
+  install.sh --preflight [--dry-run] [--dev] [--yes]
 
 Installs the project-scoped `mainframe-pi` launcher. Pi provider authorization
 remains owned by the globally installed Pi CLI. The adapter installs only its
 pinned local SDK dependencies and command link.
+--dev enables privacy-safe Pi engineer telemetry and the local observatory.
 EOF
 }
 
@@ -33,6 +37,7 @@ while [[ $# -gt 0 ]]; do
         --uninstall) UNINSTALL=1 ;;
         --preflight) PREFLIGHT=1 ;;
         --yes) ASSUME_YES=1 ;;
+        --dev) DEV_MODE=1 ;;
         -h|--help) usage; exit 0 ;;
         *) printf 'Error: Unknown Pi adapter option: %s\n' "$1" >&2; exit 2 ;;
     esac
@@ -77,6 +82,12 @@ if [[ $UNINSTALL -eq 1 ]]; then
     else
         printf 'Pi launcher is not installed.\n'
     fi
+    if [[ $DRY_RUN -eq 1 ]]; then
+        printf 'would disable the Pi observatory input; telemetry data would be preserved\n'
+    else
+        rm -f "${TELEMETRY_DIR}/enabled"
+        "${REPO_ROOT}/tools/mainframe-observatory.sh" disable pi >/dev/null 2>&1 || true
+    fi
     exit 0
 fi
 
@@ -110,22 +121,46 @@ fi
 
 if [[ -L "$TARGET" && "$(resolve_link "$TARGET")" == "$(resolve_link "$SOURCE")" ]]; then
     printf 'Pi launcher is already installed: %s\n' "$TARGET"
-    exit 0
-fi
-
-if [[ -e "$TARGET" || -L "$TARGET" ]]; then
+elif [[ -e "$TARGET" || -L "$TARGET" ]]; then
     if [[ $ASSUME_YES -ne 1 ]]; then
         printf 'Error: A launcher already exists at %s. Rerun with --yes to back it up.\n' "$TARGET" >&2
         exit 1
     fi
     backup="${TARGET}.backup-$(date +%Y%m%d-%H%M%S)-$$"
-    if [[ $DRY_RUN -eq 1 ]]; then printf 'would back up %s to %s\n' "$TARGET" "$backup"; else mv "$TARGET" "$backup"; printf 'backed up existing launcher to %s\n' "$backup"; fi
-fi
-
-if [[ $DRY_RUN -eq 1 ]]; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+        printf 'would back up %s to %s\n' "$TARGET" "$backup"
+        printf 'would link %s -> %s\n' "$TARGET" "$SOURCE"
+    else
+        mv "$TARGET" "$backup"
+        printf 'backed up existing launcher to %s\n' "$backup"
+        mkdir -p "$TARGET_DIR"
+        ln -s "$SOURCE" "$TARGET"
+        printf 'installed Pi launcher: %s\n' "$TARGET"
+    fi
+elif [[ $DRY_RUN -eq 1 ]]; then
     printf 'would link %s -> %s\n' "$TARGET" "$SOURCE"
 else
     mkdir -p "$TARGET_DIR"
     ln -s "$SOURCE" "$TARGET"
     printf 'installed Pi launcher: %s\n' "$TARGET"
+fi
+
+if [[ $DEV_MODE -eq 1 ]]; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+        printf 'would enable privacy-safe Pi engineer telemetry and the local observatory\n'
+    else
+        mkdir -p "$TELEMETRY_DIR"
+        touch "${TELEMETRY_DIR}/enabled"
+        chmod 700 "$TELEMETRY_DIR"
+        chmod 600 "${TELEMETRY_DIR}/enabled"
+        if ! "${REPO_ROOT}/tools/mainframe-observatory.sh" enable pi; then
+            rm -f "${TELEMETRY_DIR}/enabled"
+            printf 'Error: Pi dev telemetry was not enabled because the observatory could not start.\n' >&2
+            exit 1
+        fi
+        printf 'enabled Pi engineer telemetry\n'
+    fi
+elif [[ $DRY_RUN -eq 0 ]]; then
+    rm -f "${TELEMETRY_DIR}/enabled"
+    "${REPO_ROOT}/tools/mainframe-observatory.sh" disable pi >/dev/null 2>&1 || true
 fi

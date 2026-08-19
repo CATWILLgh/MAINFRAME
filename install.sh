@@ -11,7 +11,7 @@ MAINFRAME installer
 Usage:
   ./install.sh --claude [--dry-run] [--dev] [--yes] [--replace-modified] [--uninstall]
   ./install.sh --codex [--dry-run] [--dev] [--yes] [--replace-modified] [--uninstall]
-  ./install.sh --pi [--dry-run] [--yes] [--uninstall]
+  ./install.sh --pi [--dry-run] [--dev] [--yes] [--uninstall]
   ./install.sh --help
 
 With no arguments, this help is shown and no changes are made.

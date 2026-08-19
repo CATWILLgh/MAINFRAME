@@ -52,6 +52,20 @@ def test_pi_dry_run_is_adapter_only_and_does_not_install_shared_secrets():
     assert not (home / ".config" / "credentials").exists()
 
 
+def test_pi_dev_dry_run_exposes_telemetry_without_mutating_runtime():
+    home = pathlib.Path(tempfile.mkdtemp())
+    env, _ = _fake_runtime(home)
+    proc = subprocess.run(
+        ["bash", str(INSTALLER), "--pi", "--dev", "--dry-run"],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Pi engineer telemetry" in proc.stdout
+    assert not (ROOT / "workspace" / "runtime" / "pi" / "telemetry" / "enabled").exists()
+
+
 def test_launcher_binds_business_analysis_to_current_project():
     root = pathlib.Path(tempfile.mkdtemp())
     project = root / "project"
@@ -202,8 +216,8 @@ def test_launcher_resumes_active_worktree_without_repeating_request():
     ]
 
 
-def test_launcher_routes_harness_owned_engineer_commit():
-    project, _, captured, env = _engineer_launcher_fixture()
+def test_launcher_has_no_harness_owned_engineer_commit():
+    project, _, _, env = _engineer_launcher_fixture()
     proc = subprocess.run(
         [str(LAUNCHER), "engineer", "commit", "--message", "feat(test): close block"],
         cwd=project,
@@ -211,13 +225,8 @@ def test_launcher_routes_harness_owned_engineer_commit():
         text=True,
         env=env,
     )
-    assert proc.returncode == 0, proc.stderr
-    data = json.loads(captured.read_text(encoding="utf-8"))
-    assert data["args"] == [
-        str(ADAPTER / "src" / "engineer-commit.ts"),
-        "--project", os.path.realpath(project),
-        "--message", "feat(test): close block",
-    ]
+    assert proc.returncode == 2
+    assert "Unexpected positional argument: commit" in proc.stderr
 
 
 def test_launcher_rejects_invalid_engineer_mode_combinations():
@@ -260,6 +269,18 @@ def test_launcher_rejects_invalid_engineer_mode_combinations():
     assert "does not accept --request" in request_on_resume.stderr
 
 
+def test_launcher_exposes_help_for_each_profile_without_running_pi():
+    for profile in ("business-analysis", "engineer"):
+        proc = subprocess.run(
+            [str(LAUNCHER), profile, "--help"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "Usage:" in proc.stdout
+
+
 def test_adapter_skills_expose_one_bounded_primary_invocation():
     claude = ROOT / "adapters" / "claude-code" / "plugin" / "skills" / "pi-business-analysis" / "SKILL.md"
     codex = ROOT / "adapters" / "codex" / "skills" / "mainframe-pi-business-analysis"
@@ -275,10 +296,19 @@ def test_adapter_skills_expose_one_bounded_primary_invocation():
         assert "infer the package from ordinary" in body.replace("\n", " ")
     assert "allow_implicit_invocation: true" in metadata
     assert "mainframe-pi-business-analysis" in (ROOT / "adapters" / "codex" / "install.sh").read_text(encoding="utf-8")
-    rules = (ROOT / "adapters" / "codex" / "rules" / "mainframe.rules").read_text(encoding="utf-8")
-    assert 'pattern = ["mainframe-pi", "business-analysis"]' in rules
-    assert 'decision = "prompt"' in rules
-    assert '"mainframe-pi models"' in rules
+    engineer_claude = ROOT / "adapters" / "claude-code" / "plugin" / "skills" / "pi-engineer" / "SKILL.md"
+    engineer_codex = ROOT / "adapters" / "codex" / "skills" / "mainframe-pi-engineer"
+    for body in (
+        engineer_claude.read_text(encoding="utf-8"),
+        (engineer_codex / "SKILL.md").read_text(encoding="utf-8"),
+    ):
+        assert "mainframe-pi engineer --mode new" in body.replace("\n", " ")
+        assert "mainframe-pi engineer --mode resume" in body.replace("\n", " ")
+        assert "ready-for-architect-review" in body
+        assert "Conventional Commit" in body
+    engineer_metadata = (engineer_codex / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    assert "allow_implicit_invocation: true" in engineer_metadata
+    assert "mainframe-pi-engineer" in (ROOT / "adapters" / "codex" / "install.sh").read_text(encoding="utf-8")
 
 
 def _run_all():

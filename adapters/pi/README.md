@@ -55,7 +55,7 @@ Then run it from the project being analyzed:
 mainframe-pi business-analysis --initiative order-handoff --entry docs/requirements.md
 ```
 
-The engineer pilot accepts one short architect-authored JSON block request.
+The engineer accepts one short architect-authored JSON block request.
 MAINFRAME compiles the internal manifest by adding the block ID, current Git
 `HEAD`, session mode, acceptance IDs, check IDs, and permanent runtime safety
 boundaries. A typical request is:
@@ -107,19 +107,18 @@ manifest-approved checks, a fresh read-only model verifies every acceptance
 item and either returns `ready-for-architect-review` or a bounded correction to
 the same executor session.
 
-`ready-for-architect-review` does not create a commit. After the primary agent
-accepts the block, it closes that block through the harness:
+`ready-for-architect-review` does not create a commit. The primary agent first
+checks the real diff and evidence, then creates a Conventional Commit limited
+to accepted paths while preserving unrelated staged and dirty work. Before the
+next `new`, the harness verifies that the accepted files were committed without
+later changes, writes a receipt, closes the previous block, and compacts the Pi
+session. Pi never receives a Git tool. Manifest checks cannot invoke Git or an
+inline shell; read-only Git inspection is performed only by the harness.
 
-```sh
-mainframe-pi engineer commit --message "feat(orders): implement agreed calculation"
-```
-
-The harness commits only Pi-owned paths through an isolated temporary index,
-preserves unrelated staged and dirty work, writes a local receipt, and removes
-the active block. Pi never receives a Git tool. Push, branch and worktree
-changes, history rewriting, stash, restore, reset, merge, and rebase remain
-outside this command. Manifest checks cannot invoke Git or an inline shell;
-read-only Git inspection is performed only by the harness.
+Install with `./install.sh --pi --dev` to record privacy-safe model usage,
+duration, tools, checks, correction rounds, compactions, and verifier verdicts
+in the shared local observatory. Prompts, code, paths, and project names are not
+stored.
 
 The launcher always binds `--project` to its current working directory and
 rejects an override. Claude Code and Codex therefore share one execution

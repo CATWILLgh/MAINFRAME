@@ -13,6 +13,8 @@ import { inspectEngineerGitState } from "./profiles/engineer/preflight.js";
 import { resolveModel } from "./profiles/business-analyst/runtime.js";
 import { runEngineerPipeline } from "./profiles/engineer/runtime.js";
 import { loadActiveEngineerManifest } from "./profiles/engineer/session-state.js";
+import { reconcileAcceptedEngineerBlock } from "./profiles/engineer/session-state.js";
+import { writeEngineerTelemetry } from "./telemetry.js";
 
 const ADAPTER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -30,6 +32,7 @@ function positiveIntegerArgument(name: string): number | undefined {
 }
 
 async function main(): Promise<void> {
+  const started = Date.now();
   await verifyPiCli();
   const projectRoot = await resolveProjectRoot(argument("--project") ?? process.cwd());
   const mode = argument("--mode");
@@ -38,6 +41,7 @@ async function main(): Promise<void> {
   if (mode === "new" && !requestArgument) throw new Error("--request is required with --mode new");
   if (mode === "resume" && requestArgument) throw new Error("--request is not accepted with --mode resume");
   const gitFacts = await inspectEngineerGitState(projectRoot);
+  if (mode === "new") await reconcileAcceptedEngineerBlock(gitFacts);
   let manifest;
   if (mode === "new") {
     const requestPath = await realpath(path.resolve(projectRoot, requestArgument!));
@@ -79,6 +83,18 @@ async function main(): Promise<void> {
     ...(maxTurns === undefined ? {} : { maxTurns }),
     ...(initialCorrection === undefined ? {} : { initialCorrection }),
   });
+  const telemetryStatus = writeEngineerTelemetry({
+    facts: gitFacts,
+    mode,
+    profile,
+    result,
+    durationMs: Date.now() - started,
+  });
+  if (telemetryStatus === "error") {
+    console.error(
+      "MAINFRAME Pi dev telemetry is unavailable; the engineering result below remains valid.",
+    );
+  }
   console.log(JSON.stringify(result, null, 2));
   if (result.status !== "ready-for-architect-review") process.exitCode = 1;
 }
