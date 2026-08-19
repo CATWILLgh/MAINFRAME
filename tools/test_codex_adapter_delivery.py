@@ -504,6 +504,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     permission_groups = hooks_data["hooks"]["PermissionRequest"]
     assert permission_groups[0]["matcher"] == ".*"
     assert (ADAPTER / "hooks" / "scripts" / "_permission_audit.py").is_file()
+    assert (ADAPTER / "hooks" / "scripts" / "_secret_read.py").is_file()
     assert stat.S_IMODE(hooks.stat().st_mode) == 0o600
     assert stat.S_IMODE(hooks_state.stat().st_mode) == 0o600
     commands = [

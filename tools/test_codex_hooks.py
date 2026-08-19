@@ -287,6 +287,7 @@ def test_dispatcher_records_exact_component_denominators():
     checks = json.loads(raw[0])["checks"]
     assert "path-validation.py=1" in checks
     assert "git-authority.py=1" in checks
+    assert "secret-read-guard.py=1" in checks
     assert "secret-commit-gate.py=1" in checks
     assert "bash-pattern-reminder.py=1" in checks
 
@@ -696,7 +697,6 @@ def test_command_safety_keeps_native_mode_authoritative_except_catastrophic_root
         _tool_payload(root, event="PreToolUse", command="git commit -m test"), state
     )
     assert primary_commit is None
-
     for command in (
         "git update-index --refresh",
         "git apply --cached change.patch",
@@ -751,6 +751,47 @@ def test_command_safety_keeps_native_mode_authoritative_except_catastrophic_root
             _tool_payload(root, event="PreToolUse", command=command), state
         )
         assert inspection is None, command
+
+
+def test_standalone_secret_reads_are_blocked_without_intercepting_consumers():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+
+    for command in (
+        "secret get API_TOKEN",
+        "  secret   get   'API_TOKEN'  ",
+        "command secret get API_TOKEN",
+        "/usr/local/bin/secret get API_TOKEN",
+    ):
+        _, blocked = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert blocked["hookSpecificOutput"]["permissionDecision"] == "deny", command
+        assert "would expose the credential" in blocked["hookSpecificOutput"][
+            "permissionDecisionReason"
+        ], command
+
+    for command in (
+        'curl -H "Authorization: $(secret get API_TOKEN)" https://example.invalid',
+        "secret get API_TOKEN | wc -c",
+        "TOKEN=$(secret get API_TOKEN) consumer",
+        "secret list",
+        "secret get",
+    ):
+        _, accepted = _run_hook(
+            _tool_payload(root, event="PreToolUse", command=command), state
+        )
+        assert accepted is None, command
+
+    import sqlite3
+    with sqlite3.connect(state / "telemetry" / "telemetry.db") as connection:
+        rows = connection.execute(
+            "SELECT payload FROM events WHERE event='hook_signal'"
+        ).fetchall()
+    signals = [json.loads(row[0]) for row in rows]
+    assert len(signals) == 4
+    assert all(signal["rule_id"] == "standalone-secret-read" for signal in signals)
+    assert all(signal["outcome"] == "blocked" for signal in signals)
 
 
 def test_recursive_delete_allows_external_symlink_but_protects_project_root_target():

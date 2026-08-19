@@ -21,6 +21,7 @@ MAX_STOP_CHARS = 8_000
 
 _CHECK_NAMES = {
     "_path_validation.py": "path-validation.py",
+    "_secret_read.py": "secret-read-guard.py",
     "_git_authority.py": "git-authority.py",
     "_secret_commit.py": "secret-commit-gate.py",
     "_bash_patterns.py": "bash-pattern-reminder.py",
@@ -42,6 +43,7 @@ HEALTH_MODULES = (
     "_permission_audit.py",
     "_python_findings.py",
     "_secret_commit.py",
+    "_secret_read.py",
     "_telemetry_contract.py",
     "comment-discipline-reminder.py",
     "comment_extract.py",
@@ -268,6 +270,21 @@ def _command(payload: dict) -> None:
     command = (payload.get("tool_input") or {}).get("command") or ""
     notes: list[str] = []
     reasons: list[str] = []
+
+    _mark_check("_secret_read.py")
+    secret_read = _load_module("_secret_read.py")
+    secret_reason = secret_read.decision_reason(command)
+    if secret_reason:
+        hooklib = importlib.import_module("_hooklib")
+        hooklib.log_hook_signal(
+            "secret-read-guard.py",
+            "standalone-secret-read",
+            "blocked",
+            1,
+            payload,
+            context=secret_reason,
+        )
+        reasons.append(secret_reason)
 
     _mark_check("_path_validation.py")
     path_module = _load_module("_path_validation.py")
