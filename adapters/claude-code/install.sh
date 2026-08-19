@@ -930,6 +930,7 @@ main() {
     if [[ $DEV -eq 1 ]]; then
         if [[ $DRY_RUN -eq 1 ]]; then
             log_action "would create workspace/runtime/claude-code/{telemetry,feedback,model-lab} (hub data, gitignored)"
+            log_action "would install the mainframe-observatory command without starting its server"
         else
             mkdir -p "${TELEMETRY_DIR}" \
                      "${PROJECT_ROOT}/workspace/runtime/claude-code/feedback" \
@@ -942,9 +943,9 @@ main() {
             fi
             if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
                 if "${PROJECT_ROOT}/tools/mainframe-observatory.sh" enable claude-code; then
-                    log_ok "Started the local MAINFRAME observatory."
+                    log_ok "Installed the MAINFRAME Observatory command; run mainframe-observatory when needed."
                 else
-                    log_warn "Native usage collection is inactive; hook telemetry remains available."
+                    log_warn "Could not install the MAINFRAME Observatory command; hook telemetry remains available."
                 fi
             fi
         fi

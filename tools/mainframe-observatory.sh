@@ -1,23 +1,57 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RUNTIME="${ROOT}/workspace/runtime/observatory"
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+    SOURCE_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" = /* ]] || SOURCE="${SOURCE_DIR}/${SOURCE}"
+done
+SOURCE="$(cd -P "$(dirname "$SOURCE")" && pwd)/$(basename "$SOURCE")"
+ROOT="$(cd "$(dirname "$SOURCE")/.." && pwd)"
+RUNTIME="${MAINFRAME_OBSERVATORY_RUNTIME:-${ROOT}/workspace/runtime/observatory}"
 ACTIVE_DIR="${RUNTIME}/enabled"
-PID_FILE="${RUNTIME}/service.pid"
 LOG_FILE="${RUNTIME}/service.log"
+AUTOSTART_LOG_FILE="${MAINFRAME_OBSERVATORY_AUTOSTART_LOG:-${HOME}/Library/Logs/MAINFRAME Observatory/service.log}"
 TOKEN_FILE="${RUNTIME}/service.token"
-LEGACY_PID_FILE="${RUNTIME}/receiver.pid"
-LEGACY_TOKEN_FILE="${RUNTIME}/receiver.token"
 PYTHON="${ROOT}/.venv/bin/python3"
+CONTROL_PYTHON="$(command -v python3 || true)"
 SERVICE="${ROOT}/tools/observatory_service.py"
+PORT="${MAINFRAME_OBSERVATORY_PORT:-4318}"
+URL="http://127.0.0.1:${PORT}/"
+HEALTH="${URL}health"
+BIN_DIR="${MAINFRAME_BIN_DIR:-${HOME}/.local/bin}"
+COMMAND_TARGET="${BIN_DIR}/mainframe-observatory"
 LABEL="com.mainframe.observatory"
-PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
-HEALTH="http://127.0.0.1:4318/health"
+PLIST="${MAINFRAME_LAUNCH_AGENTS_DIR:-${HOME}/Library/LaunchAgents}/${LABEL}.plist"
+SYSTEMD_DIR="${MAINFRAME_SYSTEMD_USER_DIR:-${HOME}/.config/systemd/user}"
+SYSTEMD_UNIT="${SYSTEMD_DIR}/mainframe-observatory.service"
+TESTING="${MAINFRAME_OBSERVATORY_TESTING:-0}"
 
 usage() {
-    printf 'Usage: %s {enable ADAPTER|disable ADAPTER|start|stop|status|uninstall}\n' "$0"
+    cat <<'EOF'
+MAINFRAME Observatory — local development telemetry panel
+
+Usage:
+  mainframe-observatory                 Run in this terminal (Ctrl+C stops it)
+  mainframe-observatory status          Show server and autostart status
+  mainframe-observatory open            Open the panel in a browser
+  mainframe-observatory autostart install
+  mainframe-observatory autostart status
+  mainframe-observatory autostart remove
+
+The command is delivered only by a MAINFRAME adapter installed with --dev.
+The server listens only on 127.0.0.1 and starts automatically only after the
+explicit `mainframe-observatory autostart install` command.
+EOF
+}
+
+platform_name() {
+    if [[ "$TESTING" == "1" && -n "${MAINFRAME_OBSERVATORY_TEST_PLATFORM:-}" ]]; then
+        printf '%s\n' "$MAINFRAME_OBSERVATORY_TEST_PLATFORM"
+    else
+        uname -s
+    fi
 }
 
 valid_adapter() {
@@ -26,32 +60,33 @@ valid_adapter() {
 
 check_prerequisites() {
     if [[ ! -x "$PYTHON" ]]; then
-        printf 'MAINFRAME observatory is inactive: repository .venv is missing.\n' >&2
-        printf 'Create it and install tools/telemetry-requirements.txt, then retry.\n' >&2
+        printf 'MAINFRAME Observatory cannot start: %s is missing.\n' "$PYTHON" >&2
+        printf 'Create the repository .venv and install tools/telemetry-requirements.txt.\n' >&2
         return 2
     fi
     if ! "$PYTHON" -c 'import opentelemetry.proto.collector.logs.v1.logs_service_pb2' >/dev/null 2>&1; then
-        printf 'MAINFRAME observatory is inactive: dev telemetry dependencies are missing.\n' >&2
-        printf 'Run .venv/bin/pip install -r tools/telemetry-requirements.txt, then retry.\n' >&2
+        printf 'MAINFRAME Observatory cannot start: dev telemetry dependencies are missing.\n' >&2
+        printf 'Run .venv/bin/pip install -r tools/telemetry-requirements.txt.\n' >&2
         return 2
     fi
 }
 
 ensure_runtime() {
+    [[ -n "$CONTROL_PYTHON" ]] || { printf 'python3 is required.\n' >&2; return 2; }
     mkdir -p "$RUNTIME" "$ACTIVE_DIR"
     if [[ ! -s "$TOKEN_FILE" ]]; then
-        "$PYTHON" -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TOKEN_FILE"
+        "$CONTROL_PYTHON" -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TOKEN_FILE"
     fi
     touch "$LOG_FILE"
     chmod 600 "$TOKEN_FILE" "$LOG_FILE"
+    rm -f "${RUNTIME}/service.pid"
 }
 
 health_ok() {
-    [[ -x "$PYTHON" && -s "$TOKEN_FILE" ]] || return 1
-    "$PYTHON" - "$HEALTH" "$TOKEN_FILE" <<'PY' >/dev/null 2>&1
+    [[ -n "$CONTROL_PYTHON" && -s "$TOKEN_FILE" ]] || return 1
+    "$CONTROL_PYTHON" - "$HEALTH" "$TOKEN_FILE" <<'PY' >/dev/null 2>&1
 import sys
 import urllib.request
-
 token = open(sys.argv[2], encoding="utf-8").read().strip()
 with urllib.request.urlopen(sys.argv[1], timeout=1) as response:
     actual = response.headers.get("X-Mainframe-Instance", "")
@@ -59,248 +94,227 @@ with urllib.request.urlopen(sys.argv[1], timeout=1) as response:
 PY
 }
 
-health_matches_token_file() {
-    local token_file="$1"
-    [[ -x "$PYTHON" && -s "$token_file" ]] || return 1
-    "$PYTHON" - "$HEALTH" "$token_file" <<'PY' >/dev/null 2>&1
-import sys
-import urllib.request
-
-token = open(sys.argv[2], encoding="utf-8").read().strip()
-with urllib.request.urlopen(sys.argv[1], timeout=1) as response:
-    raise SystemExit(0 if response.headers.get("X-Mainframe-Instance", "") == token else 1)
-PY
+wait_healthy() {
+    local attempt
+    for attempt in {1..40}; do health_ok && return 0; sleep 0.25; done
+    return 1
 }
 
-stop_legacy_receiver() {
-    [[ -f "$LEGACY_PID_FILE" ]] || return 0
-    local pid
-    pid="$(tr -d '[:space:]' < "$LEGACY_PID_FILE")"
-    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-        if ! health_matches_token_file "$LEGACY_TOKEN_FILE"; then
-            printf 'Legacy receiver pid exists but its ownership could not be verified: %s\n' "$pid" >&2
+resolve_link() {
+    local target="$1" directory
+    while [[ -L "$target" ]]; do
+        directory="$(cd -P "$(dirname "$target")" && pwd)"
+        target="$(readlink "$target")"
+        [[ "$target" = /* ]] || target="${directory}/${target}"
+    done
+    [[ -e "$target" ]] || return 1
+    printf '%s/%s\n' "$(cd -P "$(dirname "$target")" && pwd)" "$(basename "$target")"
+}
+
+install_command() {
+    mkdir -p "$BIN_DIR"
+    if [[ -e "$COMMAND_TARGET" || -L "$COMMAND_TARGET" ]]; then
+        if [[ "$(resolve_link "$COMMAND_TARGET" 2>/dev/null || true)" != "$SOURCE" ]]; then
+            printf 'Refusing to replace an unmanaged command: %s\n' "$COMMAND_TARGET" >&2
             return 1
         fi
-        kill "$pid"
-        local attempt
-        for attempt in {1..20}; do
-            kill -0 "$pid" 2>/dev/null || break
-            sleep 0.1
-        done
-        if kill -0 "$pid" 2>/dev/null; then
-            printf 'Legacy receiver did not stop within two seconds: %s\n' "$pid" >&2
-            return 1
-        fi
+        return 0
     fi
-    rm -f "$LEGACY_PID_FILE" "$LEGACY_TOKEN_FILE"
+    ln -s "$SOURCE" "$COMMAND_TARGET"
+}
+
+remove_command() {
+    if [[ -L "$COMMAND_TARGET" && "$(resolve_link "$COMMAND_TARGET" 2>/dev/null || true)" == "$SOURCE" ]]; then
+        rm -f "$COMMAND_TARGET"
+    fi
 }
 
 managed_plist() {
-    [[ -f "$PLIST" ]] || return 1
-    "$PYTHON" - "$PLIST" "$LABEL" "$SERVICE" <<'PY' >/dev/null 2>&1
-import plistlib
-import sys
-
-with open(sys.argv[1], "rb") as handle:
-    value = plistlib.load(handle)
-arguments = value.get("ProgramArguments") or []
-raise SystemExit(0 if value.get("Label") == sys.argv[2] and sys.argv[3] in arguments else 1)
+    [[ -f "$PLIST" && -n "$CONTROL_PYTHON" ]] || return 1
+    "$CONTROL_PYTHON" - "$PLIST" "$LABEL" "$SERVICE" <<'PY' >/dev/null 2>&1
+import plistlib, sys
+with open(sys.argv[1], "rb") as handle: value = plistlib.load(handle)
+raise SystemExit(0 if value.get("Label") == sys.argv[2] and sys.argv[3] in (value.get("ProgramArguments") or []) else 1)
 PY
 }
 
 write_plist() {
+    local system_python="/usr/bin/python3" site_packages
+    [[ -x "$system_python" ]] || {
+        printf 'macOS autostart requires /usr/bin/python3 (Apple Command Line Tools).\n' >&2
+        return 2
+    }
+    site_packages="$("$PYTHON" -c 'import site; print(site.getsitepackages()[0])')"
     mkdir -p "$(dirname "$PLIST")"
+    mkdir -p "$(dirname "$AUTOSTART_LOG_FILE")"
+    touch "$AUTOSTART_LOG_FILE"
+    chmod 600 "$AUTOSTART_LOG_FILE"
     if [[ -e "$PLIST" ]] && ! managed_plist; then
-        printf 'Refusing to replace an unmanaged LaunchAgent: %s\n' "$PLIST" >&2
-        return 1
+        printf 'Refusing to replace an unmanaged LaunchAgent: %s\n' "$PLIST" >&2; return 1
     fi
-    "$PYTHON" - "$PLIST" "$LABEL" "$PYTHON" "$SERVICE" "$ROOT" "$RUNTIME" "$TOKEN_FILE" "$LOG_FILE" <<'PY'
-import os
-import plistlib
-import sys
-import tempfile
-
-target, label, python, service, root, runtime, token_path, log_path = sys.argv[1:]
+    "$CONTROL_PYTHON" - "$PLIST" "$LABEL" "$system_python" "$SERVICE" "$ROOT" "$RUNTIME" "$TOKEN_FILE" "$AUTOSTART_LOG_FILE" "$PORT" "$site_packages" <<'PY'
+import os, plistlib, sys, tempfile
+target, label, python, service, root, runtime, token, log, port, site_packages = sys.argv[1:]
 payload = {
     "Label": label,
-    "ProgramArguments": [python, "-B", service, "--health-token-file", token_path, "--runtime", runtime],
-    "WorkingDirectory": root,
-    "RunAtLoad": True,
-    "KeepAlive": True,
-    "ProcessType": "Background",
-    "ThrottleInterval": 10,
-    "StandardOutPath": log_path,
-    "StandardErrorPath": log_path,
-    "EnvironmentVariables": {"PYTHONUNBUFFERED": "1"},
+    "ProgramArguments": [python, "-B", service, "--health-token-file", token, "--runtime", runtime, "--port", port],
+    "RunAtLoad": True, "KeepAlive": True,
+    "ProcessType": "Background", "ThrottleInterval": 10,
+    "StandardOutPath": log, "StandardErrorPath": log,
+    "EnvironmentVariables": {
+        "PYTHONUNBUFFERED": "1",
+        "PYTHONPATH": site_packages,
+        "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION": "python",
+    },
 }
 fd, temporary = tempfile.mkstemp(prefix=".mainframe-observatory-", dir=os.path.dirname(target))
 try:
-    with os.fdopen(fd, "wb") as handle:
-        plistlib.dump(payload, handle, sort_keys=True)
-    os.chmod(temporary, 0o644)
-    os.replace(temporary, target)
+    with os.fdopen(fd, "wb") as handle: plistlib.dump(payload, handle, sort_keys=True)
+    os.chmod(temporary, 0o644); os.replace(temporary, target)
 finally:
-    if os.path.exists(temporary):
-        os.unlink(temporary)
+    if os.path.exists(temporary): os.unlink(temporary)
 PY
 }
 
-manual_pid() {
-    [[ -f "$PID_FILE" ]] || return 1
-    local pid
-    pid="$(tr -d '[:space:]' < "$PID_FILE")"
-    [[ "$pid" =~ ^[0-9]+$ ]] || return 1
-    printf '%s\n' "$pid"
+managed_systemd_unit() {
+    [[ -f "$SYSTEMD_UNIT" ]] || return 1
+    grep -Fq '# Managed by MAINFRAME Observatory' "$SYSTEMD_UNIT" && grep -Fq "$SERVICE" "$SYSTEMD_UNIT"
 }
 
-stop_manual() {
-    local pid=""
-    pid="$(manual_pid || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && health_ok; then
-        kill "$pid"
-        local attempt
-        for attempt in {1..20}; do
-            kill -0 "$pid" 2>/dev/null || break
-            sleep 0.1
-        done
-        if kill -0 "$pid" 2>/dev/null; then
-            printf 'Manual observatory did not stop within two seconds: %s\n' "$pid" >&2
-            return 1
-        fi
+write_systemd_unit() {
+    mkdir -p "$SYSTEMD_DIR"
+    if [[ -e "$SYSTEMD_UNIT" ]] && ! managed_systemd_unit; then
+        printf 'Refusing to replace an unmanaged user service: %s\n' "$SYSTEMD_UNIT" >&2; return 1
     fi
-    rm -f "$PID_FILE"
+    "$CONTROL_PYTHON" - "$SYSTEMD_UNIT" "$PYTHON" "$SERVICE" "$ROOT" "$RUNTIME" "$TOKEN_FILE" "$LOG_FILE" "$PORT" <<'PY'
+import os, sys, tempfile
+target, python, service, root, runtime, token, log, port = sys.argv[1:]
+def quote(value): return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+payload = "\n".join([
+    "# Managed by MAINFRAME Observatory", "[Unit]",
+    "Description=MAINFRAME Observatory local development telemetry panel", "After=network.target", "",
+    "[Service]", "Type=simple", f"WorkingDirectory={quote(root)}",
+    f"ExecStart={quote(python)} -B {quote(service)} --health-token-file {quote(token)} --runtime {quote(runtime)} --port {port}",
+    "Restart=on-failure", "RestartSec=10", "",
+    "[Install]", "WantedBy=default.target", "",
+])
+fd, temporary = tempfile.mkstemp(prefix=".mainframe-observatory-", dir=os.path.dirname(target), text=True)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle: handle.write(payload)
+    os.chmod(temporary, 0o644); os.replace(temporary, target)
+finally:
+    if os.path.exists(temporary): os.unlink(temporary)
+PY
 }
 
-launch_domain() {
-    printf 'gui/%s\n' "$(id -u)"
-}
+launch_domain() { printf 'gui/%s\n' "$(id -u)"; }
 
-start_manual() {
-    local token
-    token="$(tr -d '[:space:]' < "$TOKEN_FILE")"
-    nohup "$PYTHON" -B "$SERVICE" --health-token "$token" --runtime "$RUNTIME" >>"$LOG_FILE" 2>&1 &
-    printf '%s\n' "$!" > "$PID_FILE"
-    chmod 600 "$PID_FILE"
-}
-
-start_service() {
-    check_prerequisites
-    ensure_runtime
-    if health_ok; then
-        printf 'MAINFRAME observatory is already running at http://127.0.0.1:4318/.\n'
-        return 0
-    fi
-    stop_legacy_receiver
-    stop_manual
-    local managed=0
-    if [[ "$(uname -s)" == "Darwin" && -x "$(command -v launchctl || true)" ]]; then
-        write_plist
-        launchctl bootout "$(launch_domain)" "$PLIST" >/dev/null 2>&1 || true
-        if launchctl bootstrap "$(launch_domain)" "$PLIST"; then
-            managed=1
+autostart_install() {
+    check_prerequisites; ensure_runtime; install_command
+    case "$(platform_name)" in
+        Darwin)
+            write_plist
+            if [[ "$TESTING" == "1" ]]; then printf 'Prepared MAINFRAME Observatory LaunchAgent.\n'; return 0; fi
+            command -v launchctl >/dev/null 2>&1 || { printf 'launchctl is unavailable.\n' >&2; return 2; }
+            launchctl bootout "$(launch_domain)" "$PLIST" >/dev/null 2>&1 || true
+            launchctl bootstrap "$(launch_domain)" "$PLIST" || { printf 'Could not register MAINFRAME Observatory with launchd.\n' >&2; return 1; }
+            ;;
+        Linux)
+            write_systemd_unit
+            if [[ "$TESTING" == "1" ]]; then printf 'Prepared MAINFRAME Observatory systemd user service.\n'; return 0; fi
+            command -v systemctl >/dev/null 2>&1 || { printf 'systemctl is unavailable.\n' >&2; return 2; }
+            systemctl --user daemon-reload
+            systemctl --user enable --now mainframe-observatory.service
+            ;;
+        *) printf 'Autostart is supported on macOS and systemd-based Linux.\n' >&2; return 2 ;;
+    esac
+    if ! wait_healthy; then
+        autostart_remove 1
+        if [[ "$(platform_name)" == "Darwin" ]] && grep -Fq "Operation not permitted" "$AUTOSTART_LOG_FILE" 2>/dev/null; then
+            printf 'macOS denied the background process access to this repository. Autostart was rolled back.\n' >&2
+            printf 'Run mainframe-observatory in a terminal, or move the repository outside Desktop, Documents, and Downloads.\n' >&2
         else
-            printf 'LaunchAgent registration was unavailable; using a manual background process for this login.\n' >&2
-            start_manual
+            printf 'Autostart did not become healthy and was rolled back; run mainframe-observatory in a terminal to inspect the failure.\n' >&2
         fi
-    else
-        start_manual
-    fi
-    if wait_healthy; then
-        printf 'MAINFRAME observatory started at http://127.0.0.1:4318/.\n'
-        return 0
-    fi
-    # A registered agent can still never run — under a TCC-protected home
-    # directory launchd rejects the job with EX_CONFIG and writes nothing to the
-    # log. Silent non-collection is the worst outcome, so fall back rather than
-    # leave the receiver down.
-    if (( managed )); then
-        printf 'LaunchAgent did not become healthy; falling back to a manual background process.\n' >&2
-        launchctl bootout "$(launch_domain)" "$PLIST" >/dev/null 2>&1 || true
-        rm -f "$PLIST"
-        start_manual
-        if wait_healthy; then
-            printf 'MAINFRAME observatory started at http://127.0.0.1:4318/ (manual, this login only).\n'
-            return 0
-        fi
-    fi
-    printf 'MAINFRAME observatory failed to start; see %s.\n' "$LOG_FILE" >&2
-    return 1
-}
-
-wait_healthy() {
-    local attempt
-    for attempt in {1..40}; do
-        health_ok && return 0
-        sleep 0.25
-    done
-    return 1
-}
-
-stop_service() {
-    if [[ "$(uname -s)" == "Darwin" ]] && managed_plist; then
-        launchctl bootout "$(launch_domain)" "$PLIST" >/dev/null 2>&1 || true
-    fi
-    stop_legacy_receiver
-    stop_manual
-    if health_ok; then
-        printf 'MAINFRAME observatory did not stop.\n' >&2
         return 1
     fi
-    printf 'MAINFRAME observatory stopped.\n'
+    printf 'MAINFRAME Observatory autostart is active at %s\n' "$URL"
 }
 
-uninstall_service() {
-    stop_service
-    if managed_plist; then
-        rm -f "$PLIST"
-        printf 'Removed the MAINFRAME LaunchAgent; runtime data was preserved.\n'
-    else
-        printf 'No managed MAINFRAME LaunchAgent was installed; runtime data was preserved.\n'
-    fi
+autostart_remove() {
+    local quiet="${1:-0}"
+    case "$(platform_name)" in
+        Darwin)
+            if managed_plist; then
+                [[ "$TESTING" == "1" ]] || launchctl bootout "$(launch_domain)" "$PLIST" >/dev/null 2>&1 || true
+                rm -f "$PLIST"
+            fi ;;
+        Linux)
+            if managed_systemd_unit; then
+                if [[ "$TESTING" != "1" ]] && command -v systemctl >/dev/null 2>&1; then
+                    systemctl --user disable --now mainframe-observatory.service >/dev/null 2>&1 || true
+                fi
+                rm -f "$SYSTEMD_UNIT"
+                if [[ "$TESTING" != "1" ]] && command -v systemctl >/dev/null 2>&1; then systemctl --user daemon-reload >/dev/null 2>&1 || true; fi
+            fi ;;
+    esac
+    [[ "$quiet" == "1" ]] || printf 'MAINFRAME Observatory autostart is removed; telemetry data was preserved.\n'
+}
+
+autostart_status() {
+    local installed="no"
+    case "$(platform_name)" in Darwin) managed_plist && installed="yes" ;; Linux) managed_systemd_unit && installed="yes" ;; esac
+    printf 'Autostart installed: %s\n' "$installed"
+    health_ok && printf 'Panel running: yes (%s)\n' "$URL" || printf 'Panel running: no\n'
+    [[ "$installed" == "yes" ]]
+}
+
+serve_foreground() {
+    check_prerequisites; ensure_runtime
+    if health_ok; then printf 'MAINFRAME Observatory is already running at %s\n' "$URL"; return 0; fi
+    printf 'MAINFRAME Observatory: %s\nRunning in this terminal. Press Ctrl+C to stop.\n' "$URL"
+    exec "$PYTHON" -B "$SERVICE" --health-token-file "$TOKEN_FILE" --runtime "$RUNTIME" --port "$PORT"
+}
+
+open_panel() {
+    health_ok || { printf 'MAINFRAME Observatory is not running. Start it first.\n' >&2; return 1; }
+    case "$(platform_name)" in Darwin) open "$URL" ;; Linux) xdg-open "$URL" ;; *) printf '%s\n' "$URL" ;; esac
+}
+
+status_service() {
+    autostart_status || true
+    if [[ -d "$ACTIVE_DIR" ]]; then find "$ACTIVE_DIR" -maxdepth 1 -type f -exec basename {} \; | sort | sed 's/^/Dev adapter: /'; fi
+}
+
+has_enabled_adapters() {
+    [[ -d "$ACTIVE_DIR" ]] && find "$ACTIVE_DIR" -maxdepth 1 -type f -print -quit | grep -q .
 }
 
 enable_adapter() {
     local adapter="${1:-}"
     valid_adapter "$adapter" || { printf 'Unknown adapter: %s\n' "$adapter" >&2; return 2; }
-    check_prerequisites
-    ensure_runtime
-    touch "${ACTIVE_DIR}/${adapter}"
-    chmod 600 "${ACTIVE_DIR}/${adapter}"
-    if ! start_service; then
-        rm -f "${ACTIVE_DIR}/${adapter}"
-        return 1
-    fi
+    ensure_runtime; install_command; touch "${ACTIVE_DIR}/${adapter}"; chmod 600 "${ACTIVE_DIR}/${adapter}"
+    printf 'MAINFRAME Observatory command installed: %s\n' "$COMMAND_TARGET"
+    printf 'Run `mainframe-observatory` when you want the panel, or install optional autostart.\n'
 }
 
 disable_adapter() {
     local adapter="${1:-}"
     valid_adapter "$adapter" || { printf 'Unknown adapter: %s\n' "$adapter" >&2; return 2; }
     rm -f "${ACTIVE_DIR}/${adapter}"
-    if [[ ! -d "$ACTIVE_DIR" ]] || ! find "$ACTIVE_DIR" -maxdepth 1 -type f -print -quit | grep -q .; then
-        uninstall_service
-    else
-        printf 'Disabled %s observatory input; another dev adapter still uses the service.\n' "$adapter"
-    fi
+    if has_enabled_adapters; then printf 'Disabled %s observatory input; another dev adapter still uses the command.\n' "$adapter"; return 0; fi
+    autostart_remove 1; remove_command
+    printf 'Removed the MAINFRAME Observatory command and autostart; telemetry data was preserved.\n'
 }
 
-status_service() {
-    if health_ok; then
-        printf 'MAINFRAME observatory is running at http://127.0.0.1:4318/.\n'
-        if [[ -d "$ACTIVE_DIR" ]]; then
-            find "$ACTIVE_DIR" -maxdepth 1 -type f -exec basename {} \; | sort | sed 's/^/  dev adapter: /'
-        fi
-        return 0
-    fi
-    printf 'MAINFRAME observatory is not running.\n'
-    return 1
-}
-
-case "${1:-}" in
+case "${1:-serve}" in
+    serve|start) serve_foreground ;;
+    status) status_service ;;
+    open) open_panel ;;
+    autostart)
+        case "${2:-status}" in install) autostart_install ;; status) autostart_status ;; remove) autostart_remove ;; *) usage >&2; exit 2 ;; esac ;;
     enable) enable_adapter "${2:-}" ;;
     disable) disable_adapter "${2:-}" ;;
-    start) start_service ;;
-    stop) stop_service ;;
-    status) status_service ;;
-    uninstall) uninstall_service ;;
+    help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;
 esac

@@ -220,22 +220,24 @@ For native model-usage counters, prepare the repository development environment 
 
 ```bash
 .venv/bin/pip install -r tools/telemetry-requirements.txt
-tools/mainframe-observatory.sh start
+mainframe-observatory
 ```
 
-The `--dev` installers register a lightweight user LaunchAgent on macOS and start the local observatory when its dependencies are available. It binds only to `127.0.0.1`, accepts privacy-bounded OTLP usage logs, and serves the live control panel at [http://127.0.0.1:4318/](http://127.0.0.1:4318/). The panel keeps its English or Russian display choice and selected period in the browser. It shows exact native token counters by adapter and model, model turns, observed subagent and skill activity, installed MAINFRAME layers, hook and tool reliability, and stored model-lab reports. The period can cover all collected history, the last day, 7 or 30 days, or a calendar range. Missing attribution remains labelled unavailable or partial instead of being converted to zero: Claude Code currently exposes subagent calls but not a verified link from each call to its model tokens, while Codex attribution is used only when native identifiers actually match.
+The `--dev` installers add `mainframe-observatory` to `~/.local/bin`. They do not silently start a background process. Run the command when you want the panel; it stays attached to the terminal and stops with `Ctrl+C`. It binds only to `127.0.0.1`, accepts privacy-bounded OTLP usage logs, and serves the live control panel at [http://127.0.0.1:4318/](http://127.0.0.1:4318/). The panel keeps its English or Russian display choice and selected period in the browser. It shows exact native token counters by adapter and model, model turns, observed subagent and skill activity, installed MAINFRAME layers, hook and tool reliability, and stored model-lab reports. The period can cover all collected history, the last day, 7 or 30 days, or a calendar range. Missing attribution remains labelled unavailable or partial instead of being converted to zero: Claude Code currently exposes subagent calls but not a verified link from each call to its model tokens, while Codex attribution is used only when native identifiers actually match.
 
 The same page shows the durable local analysis queue and can run or pause the optional Spark and Antigravity review workers. Their output remains review-only; it never changes adapter policy or project code.
 
-Check, stop, or remove only the background service with:
+Optional autostart is explicit and reversible. It uses a user LaunchAgent on macOS or a systemd user service on Linux:
 
 ```bash
-tools/mainframe-observatory.sh status
-tools/mainframe-observatory.sh stop
-tools/mainframe-observatory.sh uninstall
+mainframe-observatory autostart install
+mainframe-observatory autostart status
+mainframe-observatory autostart remove
 ```
 
-Stopping or uninstalling the LaunchAgent preserves telemetry, queue state, and model-lab artifacts. Reinstalling one adapter without `--dev` disables only that adapter's input; the shared service remains active while another dev adapter still uses it.
+Removing autostart preserves telemetry, queue state, and model-lab artifacts. Reinstalling one adapter without `--dev` disables only that adapter's input; the command and optional autostart remain while another dev adapter still uses them. Because the command points to this repository checkout, rerun the dev installer and the autostart command after moving the repository.
+
+On macOS, a legacy user LaunchAgent cannot read code stored under the privacy-protected `Desktop`, `Documents`, or `Downloads` folders unless its runtime receives extra system access. Observatory checks `/health` and rolls back a registration that macOS blocks instead of leaving a crash loop. The foreground command remains the zero-configuration option; reliable macOS autostart requires keeping the repository outside those protected folders or a future signed app wrapper.
 
 It also generates the offline fallback page at `workspace/runtime/hub.html`. To keep that file refreshed temporarily without the service:
 

@@ -27,7 +27,7 @@ Usage:
 Installs the project-scoped `mainframe-pi` launcher. Pi provider authorization
 remains owned by the globally installed Pi CLI. The adapter installs only its
 pinned local SDK dependencies and command link.
---dev enables privacy-safe Pi engineer telemetry and the local observatory.
+--dev enables privacy-safe Pi engineer telemetry and installs the local observatory command.
 EOF
 }
 
@@ -147,7 +147,7 @@ fi
 
 if [[ $DEV_MODE -eq 1 ]]; then
     if [[ $DRY_RUN -eq 1 ]]; then
-        printf 'would enable privacy-safe Pi engineer telemetry and the local observatory\n'
+        printf 'would enable privacy-safe Pi engineer telemetry and install the observatory command without starting it\n'
     else
         mkdir -p "$TELEMETRY_DIR"
         touch "${TELEMETRY_DIR}/enabled"
@@ -155,10 +155,10 @@ if [[ $DEV_MODE -eq 1 ]]; then
         chmod 600 "${TELEMETRY_DIR}/enabled"
         if ! "${REPO_ROOT}/tools/mainframe-observatory.sh" enable pi; then
             rm -f "${TELEMETRY_DIR}/enabled"
-            printf 'Error: Pi dev telemetry was not enabled because the observatory could not start.\n' >&2
+            printf 'Error: Pi dev telemetry was not enabled because the observatory command could not be installed.\n' >&2
             exit 1
         fi
-        printf 'enabled Pi engineer telemetry\n'
+        printf 'enabled Pi engineer telemetry and installed the MAINFRAME Observatory command\n'
     fi
 elif [[ $DRY_RUN -eq 0 ]]; then
     rm -f "${TELEMETRY_DIR}/enabled"

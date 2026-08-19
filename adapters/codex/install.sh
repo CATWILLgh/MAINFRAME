@@ -570,6 +570,7 @@ configure_dev_telemetry() {
     if [[ $DEV_MODE -eq 1 ]]; then
         if [[ $DRY_RUN -eq 1 ]]; then
             log "would initialize Codex development telemetry: $TELEMETRY_DB"
+            log "would install the mainframe-observatory command without starting its server"
             return
         fi
         python3 -B "$TELEMETRY_SCRIPT" --initialize "$TELEMETRY_DB"
@@ -578,9 +579,9 @@ configure_dev_telemetry() {
         log "enabled Codex development telemetry: $TELEMETRY_DB"
         if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
             if "${REPO_ROOT}/tools/mainframe-observatory.sh" enable codex; then
-                log "started the local MAINFRAME observatory"
+                log "installed the MAINFRAME Observatory command; run mainframe-observatory when needed"
             else
-                log "native usage collection is inactive; hook telemetry remains available"
+                log "could not install the MAINFRAME Observatory command; hook telemetry remains available"
             fi
         fi
         if [[ -x "${REPO_ROOT}/.venv/bin/python3" ]]; then

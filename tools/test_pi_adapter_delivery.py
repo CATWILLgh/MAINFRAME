@@ -55,6 +55,8 @@ def test_pi_dry_run_is_adapter_only_and_does_not_install_shared_secrets():
 def test_pi_dev_dry_run_exposes_telemetry_without_mutating_runtime():
     home = pathlib.Path(tempfile.mkdtemp())
     env, _ = _fake_runtime(home)
+    marker = ROOT / "workspace" / "runtime" / "pi" / "telemetry" / "enabled"
+    marker_existed = marker.exists()
     proc = subprocess.run(
         ["bash", str(INSTALLER), "--pi", "--dev", "--dry-run"],
         capture_output=True,
@@ -63,7 +65,7 @@ def test_pi_dev_dry_run_exposes_telemetry_without_mutating_runtime():
     )
     assert proc.returncode == 0, proc.stderr
     assert "Pi engineer telemetry" in proc.stdout
-    assert not (ROOT / "workspace" / "runtime" / "pi" / "telemetry" / "enabled").exists()
+    assert marker.exists() is marker_existed
 
 
 def test_launcher_binds_business_analysis_to_current_project():

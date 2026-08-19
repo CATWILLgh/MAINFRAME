@@ -159,9 +159,13 @@ def test_dev_lifecycle_is_adapter_scoped_and_keeps_token_out_of_plist():
     manager = (ROOT / "tools/mainframe-observatory.sh").read_text(encoding="utf-8")
     claude_installer = (ROOT / "adapters/claude-code/install.sh").read_text(encoding="utf-8")
     codex_installer = (ROOT / "adapters/codex/install.sh").read_text(encoding="utf-8")
-    assert "enable ADAPTER|disable ADAPTER" in manager
+    assert 'case "${1:-serve}"' in manager
     assert "--health-token-file" in manager
     assert '"KeepAlive": True' in manager and '"RunAtLoad": True' in manager
+    assert "mainframe-observatory.service" in manager
+    assert "autostart install" in manager
+    assert "exec \"$PYTHON\"" in manager
+    assert "nohup" not in manager
     assert '"MainframeManaged"' not in manager
     assert 'mainframe-observatory.sh" enable claude-code' in claude_installer
     assert 'mainframe-observatory.sh" disable claude-code' in claude_installer
