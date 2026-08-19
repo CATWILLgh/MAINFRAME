@@ -220,10 +220,10 @@ For native model-usage counters, prepare the repository development environment 
 
 ```bash
 .venv/bin/pip install -r tools/telemetry-requirements.txt
-mainframe-observatory
+mainframe-observatory start
 ```
 
-The `--dev` installers add `mainframe-observatory` to `~/.local/bin`. They do not silently start a background process. Run the command when you want the panel; it stays attached to the terminal and stops with `Ctrl+C`. It binds only to `127.0.0.1`, accepts privacy-bounded OTLP usage logs, and serves the live control panel at [http://127.0.0.1:4318/](http://127.0.0.1:4318/). The panel keeps its English or Russian display choice and selected period in the browser. It shows exact native token counters by adapter and model, model turns, observed subagent and skill activity, installed MAINFRAME layers, hook and tool reliability, and stored model-lab reports. The period can cover all collected history, the last day, 7 or 30 days, or a calendar range. Missing attribution remains labelled unavailable or partial instead of being converted to zero: Claude Code currently exposes subagent calls but not a verified link from each call to its model tokens, while Codex attribution is used only when native identifiers actually match.
+The `--dev` installers add `mainframe-observatory` to `~/.local/bin`. They do not silently start a background process. Run `mainframe-observatory` for help and `mainframe-observatory start` when you want the panel; it stays attached to the terminal and stops with `Ctrl+C`. It binds only to `127.0.0.1`, accepts privacy-bounded OTLP usage logs, and serves the live control panel at [http://127.0.0.1:4318/](http://127.0.0.1:4318/). The panel keeps its English or Russian display choice and selected period in the browser. It shows exact native token counters by adapter and model, model turns, observed subagent and skill activity, installed MAINFRAME layers, hook and tool reliability, and stored model-lab reports. The period can cover all collected history, the last day, 7 or 30 days, or a calendar range. Missing attribution remains labelled unavailable or partial instead of being converted to zero: Claude Code currently exposes subagent calls but not a verified link from each call to its model tokens, while Codex attribution is used only when native identifiers actually match.
 
 The same page shows the durable local analysis queue and can run or pause the optional Spark and Antigravity review workers. Their output remains review-only; it never changes adapter policy or project code.
 

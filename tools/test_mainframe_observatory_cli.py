@@ -25,7 +25,7 @@ def run(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
 
 def test_help_describes_foreground_and_explicit_autostart():
     result = subprocess.run(
-        [str(SCRIPT), "--help"],
+        [str(SCRIPT)],
         cwd=ROOT,
         text=True,
         stdout=subprocess.PIPE,
@@ -33,6 +33,7 @@ def test_help_describes_foreground_and_explicit_autostart():
         check=False,
     )
     assert result.returncode == 0, result.stdout
+    assert "mainframe-observatory start" in result.stdout
     assert "Run in this terminal" in result.stdout
     assert "autostart install" in result.stdout
     assert "starts automatically only after" in result.stdout

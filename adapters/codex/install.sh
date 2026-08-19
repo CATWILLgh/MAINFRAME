@@ -579,7 +579,7 @@ configure_dev_telemetry() {
         log "enabled Codex development telemetry: $TELEMETRY_DB"
         if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
             if "${REPO_ROOT}/tools/mainframe-observatory.sh" enable codex; then
-                log "installed the MAINFRAME Observatory command; run mainframe-observatory when needed"
+                log "installed the MAINFRAME Observatory command; run mainframe-observatory start when needed"
             else
                 log "could not install the MAINFRAME Observatory command; hook telemetry remains available"
             fi

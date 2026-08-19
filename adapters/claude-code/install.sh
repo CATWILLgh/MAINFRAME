@@ -943,7 +943,7 @@ main() {
             fi
             if [[ "${MAINFRAME_INSTALL_TESTING:-0}" != "1" ]]; then
                 if "${PROJECT_ROOT}/tools/mainframe-observatory.sh" enable claude-code; then
-                    log_ok "Installed the MAINFRAME Observatory command; run mainframe-observatory when needed."
+                    log_ok "Installed the MAINFRAME Observatory command; run mainframe-observatory start when needed."
                 else
                     log_warn "Could not install the MAINFRAME Observatory command; hook telemetry remains available."
                 fi

@@ -33,7 +33,8 @@ usage() {
 MAINFRAME Observatory — local development telemetry panel
 
 Usage:
-  mainframe-observatory                 Run in this terminal (Ctrl+C stops it)
+  mainframe-observatory                 Show this help
+  mainframe-observatory start           Run in this terminal (Ctrl+C stops it)
   mainframe-observatory status          Show server and autostart status
   mainframe-observatory open            Open the panel in a browser
   mainframe-observatory autostart install
@@ -234,7 +235,7 @@ autostart_install() {
             printf 'macOS denied the background process access to this repository. Autostart was rolled back.\n' >&2
             printf 'Run mainframe-observatory in a terminal, or move the repository outside Desktop, Documents, and Downloads.\n' >&2
         else
-            printf 'Autostart did not become healthy and was rolled back; run mainframe-observatory in a terminal to inspect the failure.\n' >&2
+            printf 'Autostart did not become healthy and was rolled back; run mainframe-observatory start in a terminal to inspect the failure.\n' >&2
         fi
         return 1
     fi
@@ -295,7 +296,7 @@ enable_adapter() {
     valid_adapter "$adapter" || { printf 'Unknown adapter: %s\n' "$adapter" >&2; return 2; }
     ensure_runtime; install_command; touch "${ACTIVE_DIR}/${adapter}"; chmod 600 "${ACTIVE_DIR}/${adapter}"
     printf 'MAINFRAME Observatory command installed: %s\n' "$COMMAND_TARGET"
-    printf 'Run `mainframe-observatory` when you want the panel, or install optional autostart.\n'
+    printf 'Run `mainframe-observatory start` when you want the panel, or install optional autostart.\n'
 }
 
 disable_adapter() {
@@ -307,7 +308,7 @@ disable_adapter() {
     printf 'Removed the MAINFRAME Observatory command and autostart; telemetry data was preserved.\n'
 }
 
-case "${1:-serve}" in
+case "${1:-help}" in
     serve|start) serve_foreground ;;
     status) status_service ;;
     open) open_panel ;;
