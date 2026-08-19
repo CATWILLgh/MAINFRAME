@@ -58,6 +58,23 @@ def test_report_and_stream_share_the_same_rows():
     assert "/private/project" not in json.dumps(report)
 
 
+def test_hook_invocations_are_reported_as_a_bounded_denominator():
+    db = fresh_db()
+    base = {"session_id": "s", "hook_event_name": "PostToolUse"}
+    assert _hooklib.log_event(
+        "hook_invocation",
+        {"hook": "check.py", "hook_event": "PostToolUse"}, base,
+    ) == "written"
+    assert _hooklib.log_hook_signal(
+        "check.py", "quality", "noted", 1, base, context="note"
+    ) == "written"
+    report = telemetry_data.build_report(db)
+    row = report["hook_effectiveness"][0]
+    assert row["invocations"] == 1
+    assert row["denominator_from"]
+    assert report["hook_invocations"][0]["hook"] == "check.py"
+
+
 def test_pi_engineer_events_feed_shared_report_and_multi_adapter_view():
     db = fresh_db()
     run = {

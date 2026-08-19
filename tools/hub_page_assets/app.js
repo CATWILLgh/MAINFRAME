@@ -853,11 +853,11 @@
     if (effectiveness.length) {
       root.appendChild(section(t("Quality hook outcomes"), "hooks", effectiveness.length,
         el("div", { class: "panel-stack" }, [
-          explain(t("MAINFRAME's own checks. \"Blocked\" stopped the turn; \"resolved\" means a later signal confirmed the fix. A large gap between them is worth reading.")),
+          explain(t("MAINFRAME's own checks. \"Blocked\" stopped the turn; \"resolved\" means a later signal confirmed the fix. Recorded runs are an exact denominator only from the shown collection start; older signals are retained and must not be divided by that newer count.")),
           table([
             [t("adapter")], [t("script")], [t("rule")], [t("noted"), true],
             [t("asked"), true], [t("blocked"), true], [t("resolved"), true],
-            [t("sessions"), true],
+            [t("sessions"), true], [t("recorded runs"), true], [t("since")],
           ], effectiveness.map((row) => cells([
             [row.adapter_id || report.adapter_id || "—", "mono"],
             [row.hook, "mono"],
@@ -867,6 +867,8 @@
             [num(row.blocked), "num"],
             [num(row.resolved), "num"],
             [num(row.sessions), "num"],
+            [row.denominator_from ? num(row.invocations) : "—", "num"],
+            [row.denominator_from ? fmtStamp(row.denominator_from) : "—", "mono"],
           ]))),
         ])));
     }

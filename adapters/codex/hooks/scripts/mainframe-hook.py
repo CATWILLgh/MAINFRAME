@@ -19,6 +19,14 @@ sys.path.insert(0, str(SCRIPT_DIR))
 MAX_SECTIONS = 8
 MAX_STOP_CHARS = 8_000
 
+_CHECK_NAMES = {
+    "_path_validation.py": "path-validation.py",
+    "_git_authority.py": "git-authority.py",
+    "_secret_commit.py": "secret-commit-gate.py",
+    "_bash_patterns.py": "bash-pattern-reminder.py",
+}
+_CHECK_COUNTS: dict[str, int] = {}
+
 HEALTH_MODULES = (
     "_bash_patterns.py",
     "_comment_findings.py",
@@ -127,7 +135,19 @@ def _invoke_loaded(module, payload: dict) -> list[dict]:
 
 
 def _run_module(filename: str, payload: dict) -> list[dict]:
+    _mark_check(filename)
     return _invoke_loaded(_load_module(filename), payload)
+
+
+def _mark_check(filename: str) -> None:
+    name = _CHECK_NAMES.get(filename, filename.lstrip("_"))
+    _CHECK_COUNTS[name] = _CHECK_COUNTS.get(name, 0) + 1
+
+
+def _encoded_checks() -> str:
+    return ";".join(
+        f"{name}={count}" for name, count in sorted(_CHECK_COUNTS.items())
+    )
 
 
 def _notes(rows: list[dict]) -> list[str]:
@@ -196,6 +216,7 @@ def _quality(payload: dict) -> None:
             "python-security-scan.py",
         ):
             try:
+                _mark_check(filename)
                 module = _load_module(filename)
                 if hasattr(module, "read_git_head"):
                     module.read_git_head = lambda _path, baseline=before: baseline
@@ -216,6 +237,7 @@ def _quality(payload: dict) -> None:
                 "ticket-id-format-reminder.py", ticket_payload, failures
             ))
     try:
+        _mark_check("length-quality-note.py")
         length = _load_module("length-quality-note.py")
         note, count = length.note_for_changes(
             payload.get("cwd") or os.getcwd(), changes
@@ -247,6 +269,7 @@ def _command(payload: dict) -> None:
     notes: list[str] = []
     reasons: list[str] = []
 
+    _mark_check("_path_validation.py")
     path_module = _load_module("_path_validation.py")
     cwd = payload.get("cwd") or os.getcwd()
     project = str(snapshot.project_root(Path(cwd).resolve()))
@@ -257,6 +280,7 @@ def _command(payload: dict) -> None:
             + path_reason + ". Choose a narrower target."
         )
 
+    _mark_check("_git_authority.py")
     git_module = _load_module("_git_authority.py")
     decision, git_reason = git_module.authority_decision(
         command, payload.get("agent_id")
@@ -495,11 +519,15 @@ def main() -> None:
     finally:
         try:
             hooklib = importlib.import_module("_hooklib")
-            hooklib.log_event("hook_run", {
+            run_payload = {
                 "status": status,
                 "duration_ms": max(0, round((time.monotonic() - started) * 1000)),
                 "recipient": "subagent" if payload.get("agent_id") else "root",
-            }, payload)
+            }
+            checks = _encoded_checks()
+            if checks:
+                run_payload["checks"] = checks
+            hooklib.log_event("hook_run", run_payload, payload)
         except Exception:
             pass
 

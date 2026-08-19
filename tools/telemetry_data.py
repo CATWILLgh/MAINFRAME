@@ -424,6 +424,7 @@ def _empty_report(
         "agent_lifecycle": [],
         "breakdowns": [],
         "hook_effectiveness": [],
+        "hook_invocations": [],
         "engineer_runs": _empty_engineer_runs(),
         "engineer_tools": [],
         "workload": _empty_workload(),
@@ -475,6 +476,8 @@ def build_report(
         for event, fields in BREAKDOWN_FIELDS.items() for field in fields
     }
     effectiveness = {}
+    hook_invocations = collections.Counter()
+    hook_invocation_first_seen = {}
     usage = collections.Counter()
     usage_by_source = {}
     usage_by_model = {}
@@ -603,6 +606,11 @@ def build_report(
                 item["context_chars"] += data["context_chars"]
                 item["last_seen"] = max(item["last_seen"], row["timestamp"])
 
+            if row["event"] == "hook_invocation" and row["valid"]:
+                hook = row["data"]["hook"]
+                hook_invocations[hook] += 1
+                hook_invocation_first_seen.setdefault(hook, row["timestamp"])
+
             if row["event"] == "model_usage" and row["valid"]:
                 data = row["data"]
                 normalized = _normalized_token_dimensions(adapter_id, data)
@@ -686,6 +694,14 @@ def build_report(
                 else:
                     item["runs"] += 1
                     item["errors"] += int(data["status"] == "failed")
+                    for encoded in data.get("checks", "").split(";"):
+                        if not encoded:
+                            continue
+                        hook, separator, count = encoded.rpartition("=")
+                        if not separator or not count.isdigit() or not hook:
+                            continue
+                        hook_invocations[hook] += int(count)
+                        hook_invocation_first_seen.setdefault(hook, row["timestamp"])
                 item["durations"].append(data["duration_ms"])
 
             if row["event"] == "engineer_run" and row["valid"]:
@@ -749,10 +765,20 @@ def build_report(
     report["hook_effectiveness"] = []
     for item in effectiveness.values():
         item["sessions"] = len(item["sessions"])
+        item["invocations"] = hook_invocations[item["hook"]]
+        item["denominator_from"] = hook_invocation_first_seen.get(item["hook"], "")
         report["hook_effectiveness"].append(item)
     report["hook_effectiveness"].sort(
         key=lambda item: (-item["signals"], item["hook"], item["rule_id"])
     )
+    report["hook_invocations"] = [
+        {
+            "hook": hook,
+            "invocations": count,
+            "first_seen": hook_invocation_first_seen.get(hook, ""),
+        }
+        for hook, count in hook_invocations.most_common()
+    ]
     report["tool_reliability"] = sorted(
         (
             {
@@ -1075,7 +1101,7 @@ def build_multi_report(
         **_duration_summary([]),
     }
     for key in (
-        "agent_lifecycle", "breakdowns", "hook_effectiveness",
+        "agent_lifecycle", "breakdowns", "hook_effectiveness", "hook_invocations",
         "tool_reliability", "tool_decisions", "hook_health", "engineer_tools",
     ):
         result[key] = []

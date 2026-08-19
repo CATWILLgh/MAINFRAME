@@ -10,7 +10,9 @@ EVENT_FIELDS = {
     "subagent_start": {},
     "subagent_stop": {},
     "permission_request": {"tool_name": str, "permission_mode": str},
-    "hook_run": {"status": str, "duration_ms": int, "recipient": str},
+    "hook_run": {
+        "status": str, "duration_ms": int, "recipient": str, "checks": str,
+    },
     "hook_signal": {
         "hook": str,
         "rule_id": str,

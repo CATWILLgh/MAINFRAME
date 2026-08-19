@@ -5,6 +5,7 @@ import concurrent.futures
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,25 @@ def test_success_passes_through_untouched():
     with tempfile.TemporaryDirectory() as tmp:
         proc = _run("PreToolUse", GOOD, tmp)
         assert proc.returncode == 0 and proc.stdout == ""
+
+
+def test_launcher_records_exact_hook_invocation_denominator():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = os.path.join(tmp, "telemetry", "telemetry.db")
+        proc = _run(
+            "PreToolUse", GOOD, tmp,
+            extra_env={"MAINFRAME_TELEMETRY_DB": db},
+        )
+        assert proc.returncode == 0
+        with sqlite3.connect(db) as connection:
+            rows = connection.execute(
+                "SELECT event, payload FROM events ORDER BY id"
+            ).fetchall()
+        invocations = [json.loads(payload) for event, payload in rows
+                       if event == "hook_invocation"]
+        assert invocations == [{
+            "hook": "telemetry.py", "hook_event": "PreToolUse",
+        }]
 
 
 def test_missing_script_reports_to_immediate_caller():

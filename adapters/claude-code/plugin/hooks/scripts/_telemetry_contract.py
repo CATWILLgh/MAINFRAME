@@ -27,6 +27,9 @@ EVENT_FIELDS = {
         "count": int,
         "context_chars": int,
     },
+    # One row per product hook script that actually started. This is the exact
+    # denominator for hook signals; it contains only stable script/event names.
+    "hook_invocation": {"hook": str, "hook_event": str},
     "init_reminder_activated": {},
     "init_reminder": {"turn": int, "reminded": bool, "every": int},
     "model_lab": {
@@ -86,6 +89,7 @@ REQUIRED_FIELDS = {
     "ticket_change": {"uid", "operation"},
     "code_edit": {"lang", "ext", "operation"},
     "hook_signal": {"hook", "rule_id", "outcome", "count", "context_chars"},
+    "hook_invocation": {"hook", "hook_event"},
     "init_reminder": {"turn", "reminded", "every"},
     "model_lab": {"provider", "model", "effort", "task", "status", "elapsed_bucket_s"},
     "model_usage": {

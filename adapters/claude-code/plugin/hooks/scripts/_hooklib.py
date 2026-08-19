@@ -540,3 +540,31 @@ def run(main_fn):
     except Exception:
         sys.exit(1)
     sys.exit(0)
+
+
+def _record_launcher_invocation():
+    """Record an exact, privacy-safe denominator for one launched hook.
+
+    run-hook.sh supplies the already-buffered native payload path. Reading it
+    here adds no model context and no second Python process. A missing or
+    malformed launcher envelope remains fail-open and produces no telemetry.
+    """
+    source = os.environ.get("MAINFRAME_HOOK_INPUT")
+    script = os.path.basename(os.environ.get("MAINFRAME_HOOK_SCRIPT") or "")
+    event = os.environ.get("MAINFRAME_HOOK_EVENT") or ""
+    if not source or not script or not event:
+        return
+    try:
+        with open(source, encoding="utf-8") as handle:
+            hook_payload = json.load(handle)
+        if not isinstance(hook_payload, dict):
+            return
+        log_event("hook_invocation", {
+            "hook": script,
+            "hook_event": event,
+        }, hook_payload)
+    except Exception:
+        return
+
+
+_record_launcher_invocation()

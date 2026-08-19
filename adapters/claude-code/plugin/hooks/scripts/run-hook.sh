@@ -40,6 +40,9 @@ OUTPUT=$(mktemp "${TMPDIR:-/tmp}/mainframe-hook-output.XXXXXX") || {
 trap 'rm -f "$INPUT" "$OUTPUT"' EXIT HUP INT TERM
 
 cat >"$INPUT"
+MAINFRAME_HOOK_EVENT="$EVENT" \
+MAINFRAME_HOOK_SCRIPT="$SCRIPT" \
+MAINFRAME_HOOK_INPUT="$INPUT" \
 python3 "$SCRIPT" <"$INPUT" >"$OUTPUT"
 STATUS=$?
 if [ "$STATUS" -eq 0 ]; then

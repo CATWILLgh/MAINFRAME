@@ -76,6 +76,8 @@ window.HUB_STRINGS_RU = {
   "noted": "подсказок",
   "asked": "запросов",
   "resolved": "исправлено",
+  "recorded runs": "зафиксированных запусков",
+  "since": "с какого момента",
   "instances": "экземпляров",
   "started": "стартов",
   "stopped": "остановок",
@@ -247,8 +249,8 @@ window.HUB_STRINGS_RU = {
   "unresolved": "не связано",
   "No permission requests have been recorded.": "Запросы доступа ещё не записаны.",
   "Quality hook outcomes": "Итоги хуков качества",
-  "MAINFRAME's own checks. \"Blocked\" stopped the turn; \"resolved\" means a later signal confirmed the fix. A large gap between them is worth reading.":
-    "Собственные проверки MAINFRAME. «Блокировок» — шаг остановлен; «исправлено» — более поздний сигнал подтвердил починку. Большой разрыв между ними стоит изучить.",
+  "MAINFRAME's own checks. \"Blocked\" stopped the turn; \"resolved\" means a later signal confirmed the fix. Recorded runs are an exact denominator only from the shown collection start; older signals are retained and must not be divided by that newer count.":
+    "Собственные проверки MAINFRAME. «Блокировок» — шаг остановлен; «исправлено» — более поздний сигнал подтвердил починку. Зафиксированные запуски дают точный знаменатель только с указанного начала сбора: старые сигналы сохранены, но делить их на новый счётчик нельзя.",
   "context characters": "символов контекста",
   "Injected context": "Добавленный контекст",
   "Hook messages added {chars} characters to the model's context. At 2–6 characters per token that is roughly {low}–{high} tokens — an estimate, not a measurement, and it does not prove the harness slowed anything down.":

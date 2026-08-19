@@ -265,6 +265,32 @@ def test_dispatcher_records_privacy_safe_dev_telemetry():
     assert str(root) not in " ".join(str(value) for value in row)
 
 
+def test_dispatcher_records_exact_component_denominators():
+    root = Path(tempfile.mkdtemp())
+    db = root / "telemetry" / "telemetry.db"
+    payload = {
+        "session_id": "session", "turn_id": "turn",
+        "hook_event_name": "PreToolUse", "tool_name": "Bash",
+        "tool_input": {"command": "git status"}, "cwd": str(root),
+    }
+    proc, _ = _run_hook(
+        payload, root / "state",
+        extra_env={"MAINFRAME_CODEX_TELEMETRY_DB": str(db)},
+    )
+    assert proc.returncode == 0
+    import sqlite3
+    with sqlite3.connect(db) as connection:
+        raw = connection.execute(
+            "SELECT payload FROM events WHERE event='hook_run'"
+        ).fetchone()
+    assert raw is not None
+    checks = json.loads(raw[0])["checks"]
+    assert "path-validation.py=1" in checks
+    assert "git-authority.py=1" in checks
+    assert "secret-commit-gate.py=1" in checks
+    assert "bash-pattern-reminder.py=1" in checks
+
+
 def test_dispatcher_records_code_edits_like_the_claude_adapter():
     root = Path(tempfile.mkdtemp())
     project = root / "project"

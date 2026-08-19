@@ -384,6 +384,7 @@ def test_hook_effectiveness_aggregates_outcomes_and_skips_malformed_rows():
         "hook": "check.py", "rule_id": "r", "signals": 3, "sessions": 2,
         "noted": 3, "asked": 0, "blocked": 1, "resolved": 2,
         "context_chars": 200, "last_seen": "2026-08-11T10:02:00",
+        "invocations": 0, "denominator_from": "",
     }]
 
 
