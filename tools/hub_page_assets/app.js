@@ -733,6 +733,29 @@
         [num(queue.invalid), t("invalid")],
       ])));
 
+    const concurrency = report.session_concurrency || {};
+    const concurrencyRows = concurrency.by_adapter || (concurrency.evidence
+      ? [{ adapter_id: report.adapter_id, ...concurrency }] : []);
+    root.appendChild(section(t("Parallel sessions"), "agents", concurrencyRows.length,
+      el("div", { class: "panel-stack" }, [
+        explain(t("Measured only from paired session start and end events. Partial means at least one boundary falls outside the selected period or was never observed; missing boundaries are not guessed.")),
+        concurrencyRows.length ? table([
+          [t("adapter")], [t("coverage")], [t("complete runs"), true],
+          [t("peak active"), true], [t("sessions overlapping"), true],
+          [t("overlap time"), true], [t("unpaired boundaries"), true],
+        ], concurrencyRows.map((row) => cells([
+          [row.adapter_id || "—", "mono"],
+          [t(row.evidence || "unavailable"), row.evidence === "partial" ? "mono warn" : "mono"],
+          [num(row.complete_runs), "num"],
+          [num(row.peak_active), "num"],
+          [num(row.overlap_sessions), "num"],
+          [fmtMs(row.overlap_ms), "num"],
+          [num((row.missing_start || 0) + (row.missing_end || 0)
+            + (row.duplicate_start || 0) + (row.invalid_timestamp || 0)),
+          (row.evidence === "partial") ? "num warn" : "num"],
+        ]))) : emptyState(t("No paired session boundaries have been recorded.")),
+      ])));
+
     // Adapters.
     const adapterRows = (report.adapters || []).map((item) => cells([
       [item.adapter_label || item.adapter_id, "mono"],

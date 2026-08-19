@@ -103,6 +103,90 @@ def _duration_summary(values):
     }
 
 
+def _timestamp_ms(value):
+    """Parse the canonical ISO timestamp without guessing missing timezones."""
+    text = str(value or "")
+    if not text:
+        return None
+    try:
+        parsed = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return int(parsed.timestamp() * 1000)
+
+
+def _session_concurrency_summary(boundaries):
+    """Pair observed session boundaries and measure exact concurrent runtime."""
+    active = {}
+    intervals = []
+    missing_start = 0
+    duplicate_start = 0
+    invalid_timestamp = 0
+    for timestamp, session_id, phase in sorted(boundaries):
+        stamp_ms = _timestamp_ms(timestamp)
+        if stamp_ms is None:
+            invalid_timestamp += 1
+            continue
+        if phase == "start":
+            if session_id in active:
+                duplicate_start += 1
+                # A resume can arrive after a process disappeared without a
+                # SessionEnd. Keeping the older start would invent activity
+                # across that unknown gap, so mark it incomplete and restart
+                # observation at the new boundary.
+            active[session_id] = stamp_ms
+        elif phase == "end":
+            started = active.pop(session_id, None)
+            if started is None:
+                missing_start += 1
+            elif stamp_ms >= started:
+                intervals.append((started, stamp_ms, session_id))
+            else:
+                invalid_timestamp += 1
+
+    overlap_session_ids = set()
+    for index, (start, end, session_id) in enumerate(intervals):
+        for other_start, other_end, other_session_id in intervals[index + 1:]:
+            if session_id == other_session_id:
+                continue
+            if max(start, other_start) < min(end, other_end):
+                overlap_session_ids.update((session_id, other_session_id))
+
+    timeline = []
+    for start, end, _session_id in intervals:
+        timeline.extend(((start, 1), (end, -1)))
+    # At the same timestamp an ending session is no longer concurrent with a
+    # starting one, so end boundaries sort before starts.
+    timeline.sort(key=lambda item: (item[0], item[1]))
+    active_count = 0
+    peak_active = 0
+    overlap_ms = 0
+    previous = None
+    for stamp_ms, delta in timeline:
+        if previous is not None and active_count > 1:
+            overlap_ms += max(0, stamp_ms - previous)
+        active_count += delta
+        peak_active = max(peak_active, active_count)
+        previous = stamp_ms
+
+    incomplete = len(active) + missing_start + duplicate_start + invalid_timestamp
+    return {
+        "evidence": (
+            "unavailable" if not boundaries else "exact" if not incomplete else "partial"
+        ),
+        "complete_runs": len(intervals),
+        "peak_active": peak_active,
+        "overlap_sessions": len(overlap_session_ids),
+        "overlap_ms": overlap_ms,
+        "missing_start": missing_start,
+        "missing_end": len(active),
+        "duplicate_start": duplicate_start,
+        "invalid_timestamp": invalid_timestamp,
+    }
+
+
 def _pending_queue_state(path):
     directory = Path(path).parent / "pending-events"
     state = {"pending": 0, "claimed": 0, "invalid": 0}
@@ -439,6 +523,7 @@ def _empty_report(
         "by_agent": [],
         "by_model": [],
         "agent_lifecycle": [],
+        "session_concurrency": _session_concurrency_summary([]),
         "breakdowns": [],
         "hook_effectiveness": [],
         "hook_invocations": [],
@@ -516,6 +601,7 @@ def build_report(
     usage_by_session = collections.defaultdict(collections.Counter)
     skill_requests = collections.Counter()
     recent = collections.deque(maxlen=max(0, int(recent_limit)))
+    session_boundaries = []
 
     try:
         rows = iter_events(path, adapter_id=adapter_id)
@@ -581,6 +667,11 @@ def build_report(
             by_agent[role] += 1
             if row["model"]:
                 by_model[row["model"]] += 1
+
+            if row["event"] == "session" and row["session_id"]:
+                session_boundaries.append((
+                    row["timestamp"], row["session_id"], row["data"]["phase"],
+                ))
 
             # A lifecycle row without an agent identity cannot describe an
             # agent's lifetime; counting it produced stops with no matching start
@@ -761,6 +852,7 @@ def build_report(
     report["by_day"] = [[key, value] for key, value in sorted(days.items())]
     report["by_agent"] = [[key, value] for key, value in by_agent.most_common()]
     report["by_model"] = [[key, value] for key, value in by_model.most_common()]
+    report["session_concurrency"] = _session_concurrency_summary(session_boundaries)
     report["agent_lifecycle"] = []
     for item in sorted(lifecycle.values(), key=lambda value: value["agent"]):
         start_ids = item.pop("start_ids")
@@ -1122,6 +1214,13 @@ def build_multi_report(
             for item in adapters if item["latency"]["samples"]
         ],
         **_duration_summary([]),
+    }
+    result["session_concurrency"] = {
+        "evidence": "per-adapter",
+        "by_adapter": [
+            {"adapter_id": item["adapter_id"], **item["session_concurrency"]}
+            for item in adapters
+        ],
     }
     for key in (
         "agent_lifecycle", "breakdowns", "hook_effectiveness", "hook_invocations",

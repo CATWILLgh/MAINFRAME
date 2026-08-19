@@ -87,6 +87,68 @@ def test_pending_telemetry_queue_remains_visible():
     }
 
 
+def test_session_concurrency_uses_only_paired_runtime_boundaries():
+    db = fresh_db()
+    rows = (
+        ("2026-08-19T10:00:00Z", "first", "start"),
+        ("2026-08-19T10:05:00Z", "second", "start"),
+        ("2026-08-19T10:10:00Z", "first", "end"),
+        ("2026-08-19T10:15:00Z", "second", "end"),
+    )
+    with sqlite3.connect(db) as connection:
+        for timestamp, session_id, phase in rows:
+            connection.execute(
+                "INSERT INTO events(ts,schema_version,session_id,origin,event,payload) "
+                "VALUES(?,?,?,?,?,?)",
+                (timestamp, 2, session_id, "runtime", "session", json.dumps({
+                    "phase": phase,
+                    **({"source": "startup"} if phase == "start" else {
+                        "end_reason": "other",
+                    }),
+                })),
+            )
+
+    concurrency = telemetry_data.build_report(db)["session_concurrency"]
+    assert concurrency == {
+        "evidence": "exact",
+        "complete_runs": 2,
+        "peak_active": 2,
+        "overlap_sessions": 2,
+        "overlap_ms": 5 * 60 * 1000,
+        "missing_start": 0,
+        "missing_end": 0,
+        "duplicate_start": 0,
+        "invalid_timestamp": 0,
+    }
+
+
+def test_session_concurrency_marks_unpaired_period_as_partial():
+    db = fresh_db()
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "INSERT INTO events(ts,schema_version,session_id,origin,event,payload) "
+            "VALUES(?,?,?,?,?,?)",
+            ("2026-08-19T10:00:00Z", 2, "still-open", "runtime", "session",
+             json.dumps({"phase": "start", "source": "startup"})),
+        )
+    concurrency = telemetry_data.build_report(db)["session_concurrency"]
+    assert concurrency["evidence"] == "partial"
+    assert concurrency["complete_runs"] == 0
+    assert concurrency["missing_end"] == 1
+
+
+def test_session_concurrency_restarts_after_missing_end_without_inventing_gap():
+    summary = telemetry_data._session_concurrency_summary((
+        ("2026-08-19T10:00:00Z", "resumed", "start"),
+        ("2026-08-19T12:00:00Z", "resumed", "start"),
+        ("2026-08-19T12:05:00Z", "resumed", "end"),
+    ))
+    assert summary["evidence"] == "partial"
+    assert summary["duplicate_start"] == 1
+    assert summary["complete_runs"] == 1
+    assert summary["overlap_ms"] == 0
+
+
 def test_pi_engineer_events_feed_shared_report_and_multi_adapter_view():
     db = fresh_db()
     run = {
