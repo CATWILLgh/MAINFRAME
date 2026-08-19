@@ -49,7 +49,8 @@ def test_report_and_stream_share_the_same_rows():
     assert report["invalid_rows"] == 0 and report["legacy_rows"] == 0
     assert report["agent_lifecycle"] == [{
         "agent": "mainframe-researcher", "started": 1, "stopped": 1,
-        "instances": 1, "missing_start": 0, "missing_stop": 0,
+        "instances": 1, "duplicate_starts": 0, "duplicate_stops": 0,
+        "missing_start": 0, "missing_stop": 0,
         "unmatched": 0,
     }]
     assert report["hook_effectiveness"][0]["noted"] == 2
@@ -296,6 +297,19 @@ def test_lifecycle_discrepancies_do_not_cancel_each_other():
     assert lifecycle["beta"]["missing_start"] == 2
     assert lifecycle["beta"]["missing_stop"] == 0
     assert sum(item["unmatched"] for item in lifecycle.values()) == 3
+
+
+def test_repeated_stop_for_the_same_agent_is_not_a_missing_start():
+    db = fresh_db()
+    agent = {"session_id": "s", "agent_id": "a", "agent_type": "reviewer"}
+    assert _hooklib.log_event("subagent_start", {}, agent) == "written"
+    assert _hooklib.log_event("subagent_stop", {}, agent) == "written"
+    assert _hooklib.log_event("subagent_stop", {}, agent) == "written"
+    lifecycle = telemetry_data.build_report(db)["agent_lifecycle"][0]
+    assert lifecycle["instances"] == 1
+    assert lifecycle["started"] == 1 and lifecycle["stopped"] == 2
+    assert lifecycle["duplicate_stops"] == 1
+    assert lifecycle["unmatched"] == 0
 
 
 def test_multi_adapter_report_keeps_storage_and_evidence_separate():

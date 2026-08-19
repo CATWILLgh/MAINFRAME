@@ -886,13 +886,15 @@
     if (lifecycle.length) {
       root.appendChild(section(t("Subagent lifecycle"), "agents", lifecycle.length, table([
         [t("adapter")], [t("agent")], [t("instances"), true], [t("started"), true],
-        [t("stopped"), true], [t("missing start"), true], [t("missing stop"), true],
+        [t("stopped"), true], [t("duplicate stops"), true],
+        [t("missing start"), true], [t("missing stop"), true],
       ], lifecycle.map((row) => cells([
         [row.adapter_id || report.adapter_id || "—", "mono"],
         [row.agent === "(main context)" ? t("(main context)") : row.agent, "mono"],
         [num(row.instances), "num"],
         [num(row.started), "num"],
         [num(row.stopped), "num"],
+        [num(row.duplicate_stops), row.duplicate_stops ? "num warn" : "num"],
         [num(row.missing_start), row.missing_start ? "num warn" : "num"],
         [num(row.missing_stop), row.missing_stop ? "num warn" : "num"],
       ])))));

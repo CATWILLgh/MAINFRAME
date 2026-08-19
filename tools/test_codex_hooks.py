@@ -34,6 +34,10 @@ def _state_env(root: Path) -> dict[str, str]:
         "MAINFRAME_CODEX_SNAPSHOT_DIR": str(root / "snapshots"),
         "MAINFRAME_MARKER_STATE_DIR": str(root / "markers"),
         "MAINFRAME_NOTICE_STATE_DIR": str(root / "notices"),
+        # A developer may have live Codex telemetry enabled globally. Every
+        # synthetic hook invocation must still remain inside its temporary test
+        # root instead of contaminating the user's Observatory history.
+        "MAINFRAME_CODEX_TELEMETRY_DB": str(root / "telemetry" / "telemetry.db"),
     })
     return env
 

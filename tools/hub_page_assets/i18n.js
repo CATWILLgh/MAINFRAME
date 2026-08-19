@@ -79,6 +79,7 @@ window.HUB_STRINGS_RU = {
   "instances": "экземпляров",
   "started": "стартов",
   "stopped": "остановок",
+  "duplicate stops": "повторных остановок",
   "missing start": "нет старта",
   "missing stop": "нет остановки",
   "decision": "решение",

@@ -566,12 +566,17 @@ def build_report(
             if (row["event"] in ("subagent_start", "subagent_stop")
                     and row["agent_id"] and row["agent_type"]):
                 item = lifecycle.setdefault(role, {
-                    "agent": role, "started": 0, "stopped": 0, "instances": set(),
+                    "agent": role, "started": 0, "stopped": 0,
+                    "start_ids": set(), "stop_ids": set(),
                 })
                 item["started" if row["event"] == "subagent_start" else "stopped"] += 1
-                if row["agent_id"]:
-                    item["instances"].add(row["agent_id"])
-                    period_agent_instances[role].add(row["agent_id"])
+                identity_key = (
+                    row["session_id"], row["agent_id"], row["agent_type"]
+                )
+                item[
+                    "start_ids" if row["event"] == "subagent_start" else "stop_ids"
+                ].add(identity_key)
+                period_agent_instances[role].add(row["agent_id"])
                 if row["event"] == "subagent_start":
                     period_agent_starts[role] += 1
                 else:
@@ -723,9 +728,13 @@ def build_report(
     report["by_model"] = [[key, value] for key, value in by_model.most_common()]
     report["agent_lifecycle"] = []
     for item in sorted(lifecycle.values(), key=lambda value: value["agent"]):
-        item["instances"] = len(item["instances"])
-        item["missing_start"] = max(0, item["stopped"] - item["started"])
-        item["missing_stop"] = max(0, item["started"] - item["stopped"])
+        start_ids = item.pop("start_ids")
+        stop_ids = item.pop("stop_ids")
+        item["instances"] = len(start_ids | stop_ids)
+        item["duplicate_starts"] = max(0, item["started"] - len(start_ids))
+        item["duplicate_stops"] = max(0, item["stopped"] - len(stop_ids))
+        item["missing_start"] = len(stop_ids - start_ids)
+        item["missing_stop"] = len(start_ids - stop_ids)
         item["unmatched"] = item["missing_start"] + item["missing_stop"]
         report["agent_lifecycle"].append(item)
     report["breakdowns"] = [

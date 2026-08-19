@@ -31,6 +31,7 @@ HEALTH_MODULES = (
     "_node_findings.py",
     "_notice_state.py",
     "_path_validation.py",
+    "_permission_audit.py",
     "_python_findings.py",
     "_secret_commit.py",
     "_telemetry_contract.py",
