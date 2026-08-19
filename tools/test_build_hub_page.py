@@ -367,24 +367,29 @@ def test_page_counts_excluded_rows_as_data_quality_signal():
 
 def test_hook_effectiveness_aggregates_outcomes_and_skips_malformed_rows():
     db = _telemetry_db([
-        ("2026-08-11T10:00:00", "s1", "", "hook_signal",
+        ("2026-08-11T10:00:00Z", "s1", "", "hook_signal",
          '{"hook":"check.py","rule_id":"r","outcome":"noted",'
          '"count":3,"context_chars":120}'),
-        ("2026-08-11T10:01:00", "s1", "", "hook_signal",
+        ("2026-08-11T10:01:00Z", "s1", "", "hook_signal",
          '{"hook":"check.py","rule_id":"r","outcome":"resolved",'
          '"count":2,"context_chars":0}'),
-        ("2026-08-11T10:02:00", "s2", "", "hook_signal",
+        ("2026-08-11T10:02:00Z", "s2", "", "hook_signal",
          '{"hook":"check.py","rule_id":"r","outcome":"blocked",'
          '"count":1,"context_chars":80}'),
-        ("2026-08-11T10:03:00", "s2", "", "hook_signal", "not json"),
+        ("2026-08-11T10:03:00Z", "s2", "", "hook_signal", "not json"),
     ])
     state = bhp.collect_dev_state(db_path=db, feedback_dir="/nonexistent")
     rows = state["telemetry"]["hook_effectiveness"]
     assert rows == [{
         "hook": "check.py", "rule_id": "r", "signals": 3, "sessions": 2,
         "noted": 3, "asked": 0, "blocked": 1, "resolved": 2,
-        "context_chars": 200, "last_seen": "2026-08-11T10:02:00",
+        "context_chars": 200, "last_seen": "2026-08-11T10:02:00Z",
         "invocations": 0, "denominator_from": "",
+        "linked_resolutions": 2, "unlinked_resolutions": 0,
+        "resolution_latency": {
+            "samples": 2, "median_ms": 60_000, "p95_ms": 60_000,
+            "max_ms": 60_000,
+        },
     }]
 
 

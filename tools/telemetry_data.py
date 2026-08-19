@@ -187,6 +187,53 @@ def _session_concurrency_summary(boundaries):
     }
 
 
+def _hook_resolution_summaries(signals):
+    """Link confirmed fixes to one earlier same-session finding signal."""
+    pending = collections.defaultdict(lambda: {
+        "noted": collections.deque(),
+        "blocked": collections.deque(),
+        "asked": collections.deque(),
+    })
+    summaries = collections.defaultdict(lambda: {
+        "linked_resolutions": 0,
+        "unlinked_resolutions": 0,
+        "resolution_durations_ms": [],
+    })
+    for timestamp, session_id, hook, rule_id, outcome, count in signals:
+        if not session_id:
+            if outcome == "resolved":
+                summaries[(hook, rule_id)]["unlinked_resolutions"] += count
+            continue
+        key = (session_id, hook, rule_id)
+        if outcome != "resolved":
+            stamp_ms = _timestamp_ms(timestamp)
+            if stamp_ms is not None:
+                pending[key][outcome].append([stamp_ms, count])
+            continue
+
+        remaining = count
+        resolved_ms = _timestamp_ms(timestamp)
+        summary = summaries[(hook, rule_id)]
+        for source_outcome in ("noted", "blocked", "asked"):
+            queue = pending[key][source_outcome]
+            while remaining and queue:
+                started_ms, available = queue[0]
+                linked = min(remaining, available)
+                summary["linked_resolutions"] += linked
+                if resolved_ms is not None and resolved_ms >= started_ms:
+                    summary["resolution_durations_ms"].extend(
+                        [resolved_ms - started_ms] * linked
+                    )
+                remaining -= linked
+                available -= linked
+                if available:
+                    queue[0][1] = available
+                else:
+                    queue.popleft()
+        summary["unlinked_resolutions"] += remaining
+    return summaries
+
+
 def _pending_queue_state(path):
     directory = Path(path).parent / "pending-events"
     state = {"pending": 0, "claimed": 0, "invalid": 0}
@@ -602,6 +649,7 @@ def build_report(
     skill_requests = collections.Counter()
     recent = collections.deque(maxlen=max(0, int(recent_limit)))
     session_boundaries = []
+    hook_resolution_signals = []
 
     try:
         rows = iter_events(path, adapter_id=adapter_id)
@@ -715,6 +763,10 @@ def build_report(
                 item[data["outcome"]] += data["count"]
                 item["context_chars"] += data["context_chars"]
                 item["last_seen"] = max(item["last_seen"], row["timestamp"])
+                hook_resolution_signals.append((
+                    row["timestamp"], row["session_id"], data["hook"],
+                    data["rule_id"], data["outcome"], data["count"],
+                ))
 
             if row["event"] == "hook_invocation" and row["valid"]:
                 hook = row["data"]["hook"]
@@ -874,10 +926,17 @@ def build_report(
         for (event, field), values in breakdowns.items() if values
     ]
     report["hook_effectiveness"] = []
+    resolution_summaries = _hook_resolution_summaries(hook_resolution_signals)
     for item in effectiveness.values():
         item["sessions"] = len(item["sessions"])
         item["invocations"] = hook_invocations[item["hook"]]
         item["denominator_from"] = hook_invocation_first_seen.get(item["hook"], "")
+        resolution = resolution_summaries[(item["hook"], item["rule_id"])]
+        item["linked_resolutions"] = resolution["linked_resolutions"]
+        item["unlinked_resolutions"] = resolution["unlinked_resolutions"]
+        item["resolution_latency"] = _duration_summary(
+            resolution["resolution_durations_ms"]
+        )
         report["hook_effectiveness"].append(item)
     report["hook_effectiveness"].sort(
         key=lambda item: (-item["signals"], item["hook"], item["rule_id"])

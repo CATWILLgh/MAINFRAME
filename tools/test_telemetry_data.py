@@ -75,6 +75,52 @@ def test_hook_invocations_are_reported_as_a_bounded_denominator():
     assert report["hook_invocations"][0]["hook"] == "check.py"
 
 
+def test_hook_resolution_links_only_to_earlier_same_session_signal():
+    db = fresh_db()
+    rows = (
+        ("2026-08-19T10:00:00Z", "same", "noted", 2),
+        ("2026-08-19T10:00:30Z", "other", "resolved", 1),
+        ("2026-08-19T10:01:00Z", "same", "resolved", 3),
+    )
+    with sqlite3.connect(db) as connection:
+        for timestamp, session_id, outcome, count in rows:
+            connection.execute(
+                "INSERT INTO events(ts,schema_version,session_id,origin,event,payload) "
+                "VALUES(?,?,?,?,?,?)",
+                (timestamp, 2, session_id, "runtime", "hook_signal", json.dumps({
+                    "hook": "quality.py", "rule_id": "quality",
+                    "outcome": outcome, "count": count, "context_chars": 0,
+                })),
+            )
+    item = telemetry_data.build_report(db)["hook_effectiveness"][0]
+    assert item["linked_resolutions"] == 2
+    assert item["unlinked_resolutions"] == 2
+    assert item["resolution_latency"] == {
+        "samples": 2, "median_ms": 60_000, "p95_ms": 60_000,
+        "max_ms": 60_000,
+    }
+
+
+def test_hook_resolution_does_not_invent_a_shared_missing_session():
+    db = fresh_db()
+    with sqlite3.connect(db) as connection:
+        for timestamp, outcome in (
+            ("2026-08-19T10:00:00Z", "noted"),
+            ("2026-08-19T10:01:00Z", "resolved"),
+        ):
+            connection.execute(
+                "INSERT INTO events(ts,schema_version,origin,event,payload) "
+                "VALUES(?,?,?,?,?)",
+                (timestamp, 2, "runtime", "hook_signal", json.dumps({
+                    "hook": "quality.py", "rule_id": "quality",
+                    "outcome": outcome, "count": 1, "context_chars": 0,
+                })),
+            )
+    item = telemetry_data.build_report(db)["hook_effectiveness"][0]
+    assert item["linked_resolutions"] == 0
+    assert item["unlinked_resolutions"] == 1
+
+
 def test_pending_telemetry_queue_remains_visible():
     db = fresh_db()
     pending = db.parent / "pending-events"

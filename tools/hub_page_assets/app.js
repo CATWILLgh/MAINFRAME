@@ -891,11 +891,13 @@
     if (effectiveness.length) {
       root.appendChild(section(t("Quality hook outcomes"), "hooks", effectiveness.length,
         el("div", { class: "panel-stack" }, [
-          explain(t("MAINFRAME's own checks. \"Blocked\" stopped the turn; \"resolved\" means a later signal confirmed the fix. Recorded runs are an exact denominator only from the shown collection start; older signals are retained and must not be divided by that newer count.")),
+          explain(t("MAINFRAME's own checks. A linked fix is a later resolved signal for the same session, hook, and rule; it confirms the technical finding disappeared, not a user or product outcome. An unlinked fix has no earlier signal inside the selected period. Recorded runs are an exact denominator only from the shown collection start.")),
           table([
             [t("adapter")], [t("script")], [t("rule")], [t("noted"), true],
             [t("asked"), true], [t("blocked"), true], [t("resolved"), true],
-            [t("sessions"), true], [t("recorded runs"), true], [t("since")],
+            [t("linked fixes"), true], [t("unlinked fixes"), true],
+            [t("median to fix"), true], [t("sessions"), true],
+            [t("recorded runs"), true], [t("since")],
           ], effectiveness.map((row) => cells([
             [row.adapter_id || report.adapter_id || "—", "mono"],
             [row.hook, "mono"],
@@ -904,6 +906,9 @@
             [num(row.asked), "num"],
             [num(row.blocked), "num"],
             [num(row.resolved), "num"],
+            [num(row.linked_resolutions), "num"],
+            [num(row.unlinked_resolutions), row.unlinked_resolutions ? "num warn" : "num"],
+            [row.resolution_latency?.median_ms == null ? "—" : fmtMs(row.resolution_latency.median_ms), "num"],
             [num(row.sessions), "num"],
             [row.denominator_from ? num(row.invocations) : "—", "num"],
             [row.denominator_from ? fmtStamp(row.denominator_from) : "—", "mono"],

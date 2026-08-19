@@ -263,8 +263,11 @@ window.HUB_STRINGS_RU = {
   "unresolved": "не связано",
   "No permission requests have been recorded.": "Запросы доступа ещё не записаны.",
   "Quality hook outcomes": "Итоги хуков качества",
-  "MAINFRAME's own checks. \"Blocked\" stopped the turn; \"resolved\" means a later signal confirmed the fix. Recorded runs are an exact denominator only from the shown collection start; older signals are retained and must not be divided by that newer count.":
-    "Собственные проверки MAINFRAME. «Блокировок» — шаг остановлен; «исправлено» — более поздний сигнал подтвердил починку. Зафиксированные запуски дают точный знаменатель только с указанного начала сбора: старые сигналы сохранены, но делить их на новый счётчик нельзя.",
+  "MAINFRAME's own checks. A linked fix is a later resolved signal for the same session, hook, and rule; it confirms the technical finding disappeared, not a user or product outcome. An unlinked fix has no earlier signal inside the selected period. Recorded runs are an exact denominator only from the shown collection start.":
+    "Собственные проверки MAINFRAME. Связанное исправление — более поздний сигнал «исправлено» в той же сессии, для того же хука и правила. Он подтверждает исчезновение технической проблемы, но не пользу для пользователя или продукта. У несвязанного исправления нет более раннего сигнала внутри выбранного периода. Зафиксированные запуски дают точный знаменатель только с указанного начала сбора.",
+  "linked fixes": "связано исправлений",
+  "unlinked fixes": "без исходного сигнала",
+  "median to fix": "медиана до исправления",
   "context characters": "символов контекста",
   "Injected context": "Добавленный контекст",
   "Hook messages added {chars} characters to the model's context. At 2–6 characters per token that is roughly {low}–{high} tokens — an estimate, not a measurement, and it does not prove the harness slowed anything down.":
