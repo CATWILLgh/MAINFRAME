@@ -893,6 +893,8 @@ def test_decision_reviewer_reads_private_method_without_false_preload():
     reviewer = (AGENTS / "mainframe-decision-reviewer.md").read_text(
         encoding="utf-8"
     )
+    assert "model: opus" in reviewer
+    assert "effort: medium" in reviewer
     assert "mainframe:severity-calibration" not in reviewer
     assert "mainframe:decision-review" not in reviewer
     assert "skills/mainframe/skills/decision-review/SKILL.md" in reviewer

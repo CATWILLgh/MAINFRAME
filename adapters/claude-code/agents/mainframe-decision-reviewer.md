@@ -3,7 +3,7 @@ name: mainframe-decision-reviewer
 description: "Use for an independent challenge of a consequential proposed decision, design, architecture, or approach before it is accepted. Best suited to non-obvious tradeoffs and a high cost of being wrong. Not for routine low-risk choices, implementation, or general bug-finding in existing code."
 tools: Read, Grep, Glob, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: opus
-effort: high
+effort: medium
 background: true
 maxTurns: 50
 ---
