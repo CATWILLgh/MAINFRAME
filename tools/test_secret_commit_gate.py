@@ -181,6 +181,32 @@ def test_env_and_nested_shell_forms_are_scanned():
         assert _decision(_run_hook(command, root)) == "deny", command
 
 
+def test_literal_heredoc_body_does_not_hide_or_invent_a_commit():
+    root = _repo()
+    _write(root, "clean.txt", "clean\n")
+    _git(root, "add", "clean.txt")
+    clean_command = (
+        "python3 - <<'PY2'\nprint('safe')\nPY2\n"
+        "git commit -m 'safe message'"
+    )
+    assert _run_hook(clean_command, root) is None
+
+    _write(root, ".env", f"TOKEN={_ghp()}\n")
+    _git(root, "add", ".env")
+    assert _decision(_run_hook(clean_command, root)) == "deny"
+
+    body_only = "cat <<'TEXT'\ngit commit -m not-executed\nTEXT\n"
+    assert _run_hook(body_only, root) is None
+
+
+def test_unterminated_heredoc_fails_closed():
+    root = _repo()
+    command = "cat <<'TEXT'\nunfinished\ngit commit -m ambiguous"
+    result = _run_hook(command, root)
+    assert _decision(result) == "deny"
+    assert "could not verify" in result["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_sops_and_git_crypt_markers_do_not_disable_scanning():
     root = _repo()
     _write(root, ".sops.yaml", "creation_rules: []\n")

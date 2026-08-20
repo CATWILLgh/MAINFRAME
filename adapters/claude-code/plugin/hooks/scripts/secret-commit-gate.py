@@ -86,12 +86,64 @@ def _scan_diff_text(text: str) -> list[tuple[str, str]]:
 
 def _tokenize(command: str) -> list[str]:
     try:
+        command = _strip_heredoc_bodies(command)
         lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
         lexer.whitespace_split = True
         lexer.commenters = ""
         return list(lexer)
     except ValueError as exc:
         raise VerificationError("shell_parse") from exc
+
+
+def _line_heredocs(line: str) -> list[tuple[str, bool]]:
+    """Return literal heredoc delimiters without interpreting their bodies."""
+    try:
+        lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|()<>")
+        lexer.whitespace_split = True
+        lexer.commenters = ""
+        tokens = list(lexer)
+    except ValueError as exc:
+        raise VerificationError("shell_parse") from exc
+    found: list[tuple[str, bool]] = []
+    index = 0
+    while index < len(tokens):
+        if tokens[index] != "<<":
+            index += 1
+            continue
+        index += 1
+        if index >= len(tokens):
+            raise VerificationError("shell_parse")
+        delimiter = tokens[index]
+        strip_tabs = delimiter.startswith("-")
+        if strip_tabs:
+            delimiter = delimiter[1:]
+        if not delimiter or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", delimiter):
+            raise VerificationError("shell_parse")
+        found.append((delimiter, strip_tabs))
+        index += 1
+    return found
+
+
+def _strip_heredoc_bodies(command: str) -> str:
+    """Remove literal heredoc data so it is not parsed as executable shell."""
+    output: list[str] = []
+    pending: list[tuple[str, bool]] = []
+    for line in command.splitlines(keepends=True):
+        if pending:
+            delimiter, strip_tabs = pending[0]
+            candidate = line.rstrip("\r\n")
+            if strip_tabs:
+                candidate = candidate.lstrip("\t")
+            if candidate == delimiter:
+                pending.pop(0)
+                if not pending:
+                    output.append(";\n")
+            continue
+        output.append(line)
+        pending.extend(_line_heredocs(line))
+    if pending:
+        raise VerificationError("shell_parse")
+    return "".join(output)
 
 
 def _segments(tokens: list[str]) -> tuple[list[list[str]], list[str]]:
