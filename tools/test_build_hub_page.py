@@ -610,6 +610,29 @@ def test_model_lab_reports_derive_bounded_spark_and_gemini_descriptions():
     assert rows[1]["findings"] == ["Gemini review hypothesis."]
 
 
+def test_model_lab_reports_render_blind_subagent_review():
+    root = pathlib.Path(tempfile.mkdtemp())
+    report = root / "workspace/runtime/codex/model-lab/gemini/subagent-audits/a.json"
+    report.parent.mkdir(parents=True)
+    report.write_text(json.dumps({
+        "adapter": "codex", "producer": "gemini-subagent-audit",
+        "analysis_model": "gemini-3.7-flash-high", "analysis_effort": "high",
+        "generated_at": "2026-08-20T01:00:00Z", "review_required": True,
+        "analysis": {
+            "task": "Review one implementation.", "complexity": "medium",
+            "outcome": "completed", "evidence": ["The final message reports completion."],
+        },
+        "runtime": {"model": "not-for-page", "effort": "unavailable"},
+    }), encoding="utf-8")
+    rows = bhp.collect_model_lab_reports(root)
+    assert rows[0]["model"] == "gemini-3.7-flash-high"
+    assert rows[0]["effort"] == "high"
+    assert rows[0]["summary"] == (
+        "Review one implementation. Outcome: completed; complexity: medium."
+    )
+    assert rows[0]["findings"] == ["The final message reports completion."]
+
+
 def test_collect_usage_cache_written_and_reused():
     proj = _usage_fixture()
     cache = os.path.join(tempfile.mkdtemp(), "usage-cache.json")

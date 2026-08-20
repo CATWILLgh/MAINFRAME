@@ -31,6 +31,24 @@ MODEL_ADAPTERS = {"claude-code", "codex"}
 TERMINAL = {"completed", "retryable", "failed", "cancelled"}
 
 
+def _subagent_queue_root():
+    codex_home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+    return (
+        codex_home / "mainframe/codex/model-lab/gemini/subagent-audits"
+    ).resolve()
+
+
+def _subagent_queue_counts(root=None):
+    root = Path(root or _subagent_queue_root())
+    result = {}
+    for name in ("pending", "processing", "completed", "blocked"):
+        try:
+            result[name] = sum(1 for item in (root / name).iterdir() if item.is_file())
+        except OSError:
+            result[name] = 0
+    return result
+
+
 def _probe_provider(provider: str):
     checked_at = _now()
     if provider == "spark":
@@ -311,6 +329,7 @@ class ObservatoryApp:
             "counts": self.store.counts(),
             "refresh_seconds": 5,
             "active_adapters": active_adapters,
+            "subagent_analysis": _subagent_queue_counts(),
         }
         ingest = self.ingest.snapshot()
         value["ingest"] = {
@@ -400,12 +419,40 @@ class ObservatoryApp:
         while not self._stop.is_set():
             job = self.store.claim_next()
             if job is None:
+                if self.store.providers().get("antigravity") and self._run_subagent_job():
+                    self.invalidate()
+                    continue
                 self._wake.wait(1)
                 self._wake.clear()
                 continue
             status, detail, artifact = self._run_job(job)
             self.store.finish(job["id"], status, detail=detail, artifact=artifact)
             self.invalidate()
+
+    def _run_subagent_job(self):
+        python = self.root / ".venv/bin/python3"
+        if not python.is_file():
+            return False
+        command = [
+            str(python),
+            str(self.root / "adapters/codex/dev/model-lab/gemini-subagent-audit.py"),
+            "--queue-root", str(_subagent_queue_root()),
+            "--project-root", str(self.root),
+        ]
+        try:
+            proc = subprocess.run(
+                command, cwd=self.root, text=True, capture_output=True,
+                timeout=420, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        if proc.returncode != 0:
+            return False
+        try:
+            outcome = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            return False
+        return outcome.get("status") != "idle"
 
     def _run_job(self, job):
         python = self.root / ".venv/bin/python3"
@@ -506,9 +553,11 @@ class ObservatoryApp:
                     result = self.store.enqueue(payload.get("provider"), payload.get("adapter"))
                     status = 202
                 elif path.startswith("/api/jobs/") and path.endswith("/retry"):
-                    result = self.store.retry(int(path.split("/")[3])); status = 200
+                    result = self.store.retry(int(path.split("/")[3]))
+                    status = 200
                 elif path.startswith("/api/jobs/") and path.endswith("/cancel"):
-                    result = self.store.cancel(int(path.split("/")[3])); status = 200
+                    result = self.store.cancel(int(path.split("/")[3]))
+                    status = 200
                 elif path.startswith("/api/providers/"):
                     if not isinstance(payload.get("enabled"), bool):
                         raise ValueError("enabled must be a boolean")

@@ -53,6 +53,18 @@ def test_queue_rejects_unknown_actions_and_supports_retry():
     assert retried["status"] == "queued" and retried["attempts"] == 1
 
 
+def test_subagent_analysis_counts_are_adapter_owned_and_separate():
+    module = _load()
+    root = Path(tempfile.mkdtemp())
+    (root / "pending").mkdir()
+    (root / "completed").mkdir()
+    (root / "pending/a.json").write_text("{}", encoding="utf-8")
+    (root / "completed/b.json").write_text("{}", encoding="utf-8")
+    assert module._subagent_queue_counts(root) == {
+        "pending": 1, "processing": 0, "completed": 1, "blocked": 0,
+    }
+
+
 def test_provider_probe_distinguishes_ready_and_auth_required():
     module = _load()
     original_which = module.shutil.which

@@ -336,6 +336,11 @@ window.HUB_STRINGS_RU = {
   "Queue operations are local, bounded, and review-only.":
     "Операции очереди локальны, ограничены и только для проверки.",
   "Analysis queue": "Очередь анализа",
+  "Codex subagent reviews": "Разбор сабагентов Codex",
+  "Waiting": "Ожидают",
+  "Processing": "Обрабатывается",
+  "Reviewed": "Разобрано",
+  "Blocked after retries": "Заблокировано после повторов",
   "Providers": "Провайдеры",
   "Recent jobs": "Последние задания",
   "Provider": "Провайдер",

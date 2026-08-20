@@ -43,6 +43,7 @@ HEALTH_MODULES = (
     "_permission_audit.py",
     "_python_findings.py",
     "_secret_commit.py",
+    "_subagent_analysis_queue.py",
     "_secret_read.py",
     "_telemetry_contract.py",
     "comment-discipline-reminder.py",
@@ -501,6 +502,9 @@ def _record_runtime_event(payload: dict) -> None:
                 "subagent_start" if event == "SubagentStart" else "subagent_stop",
                 {}, payload,
             )
+            if event == "SubagentStop":
+                queue = importlib.import_module("_subagent_analysis_queue")
+                queue.enqueue(payload)
     elif event == "PermissionRequest":
         hooklib.record_permission_request(payload)
         hooklib.log_event("permission_request", {

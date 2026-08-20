@@ -64,6 +64,7 @@ HUB_HOOK_FILES = frozenset({
     "length-quality-note.py", "_hooklib.py", "_markers.py",
     "_telemetry_contract.py", "telemetry.py",
     "_permission_audit.py",
+    "_subagent_analysis_queue.py",
     "_marker_state.py", "_notice_state.py",
 })
 
@@ -144,6 +145,7 @@ _TELEMETRY_SCHEMA = (
 )
 _TELEMETRY_RETRY_DELAYS = (0.0, 0.005, 0.015, 0.030, 0.060)
 _HOOK_SIGNAL_OUTCOMES = frozenset({"noted", "asked", "blocked", "resolved"})
+_TELEMETRY_ORIGINS = frozenset({"runtime", "model-lab", "synthetic", "unclassified"})
 _HOOK_SIGNAL_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 _HOOK_SIGNAL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
@@ -337,6 +339,11 @@ def log_event(event, payload=None, hook_payload=None):
         envelope = hook_payload or {}
         safe = validate_payload(str(event), payload or {})
         now = datetime.datetime.now(datetime.timezone.utc)
+        requested_origin = os.environ.get("MAINFRAME_CODEX_TELEMETRY_ORIGIN")
+        if requested_origin not in _TELEMETRY_ORIGINS:
+            requested_origin = str(envelope.get("_telemetry_origin") or "")
+        if requested_origin not in _TELEMETRY_ORIGINS:
+            requested_origin = "synthetic" if explicit else "runtime"
         row = (
             now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
             ROW_SCHEMA_VERSION,
@@ -348,15 +355,7 @@ def log_event(event, payload=None, hook_payload=None):
             _telemetry_project_key(envelope.get("cwd") or ""),
             str(envelope.get("hook_event_name") or ""),
             str(envelope.get("model") or ""),
-            (
-                "runtime"
-                if not explicit
-                else (
-                    "runtime"
-                    if os.environ.get("MAINFRAME_CODEX_TELEMETRY_ORIGIN") == "runtime"
-                    else "synthetic"
-                )
-            ),
+            requested_origin,
             str(event),
             json.dumps(safe, separators=(",", ":")),
         )

@@ -1610,6 +1610,15 @@
       [num(countStatus("completed")), t("Completed")],
       [num(countStatus("retryable")), t("Needs retry")],
     ]));
+    const subagent = control.subagent_analysis || {};
+    root.appendChild(section(t("Codex subagent reviews"), "dev",
+      Object.values(subagent).reduce((sum, value) => sum + Number(value || 0), 0),
+      statRow([
+        [num(subagent.pending || 0), t("Waiting")],
+        [num(subagent.processing || 0), t("Processing")],
+        [num(subagent.completed || 0), t("Reviewed")],
+        [num(subagent.blocked || 0), t("Blocked after retries")],
+      ])));
     const launch = el("div", { class: "control-launch" }, [
       actionButton(t("Run Spark"), () => controlPost("/api/jobs", { provider: "spark", adapter: "claude-code" })),
       actionButton(t("Run Spark"), () => controlPost("/api/jobs", { provider: "spark", adapter: "codex" })),

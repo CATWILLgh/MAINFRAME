@@ -273,6 +273,7 @@ def collect_installation_state(root):
 def _model_lab_findings(payload, limit=5):
     candidate = payload.get("candidate")
     audit = payload.get("audit")
+    analysis = payload.get("analysis")
     rows = []
     if isinstance(candidate, dict):
         rows = candidate.get("candidates") or []
@@ -283,6 +284,8 @@ def _model_lab_findings(payload, limit=5):
     elif isinstance(audit, dict) and isinstance(audit.get("hook_findings"), list):
         rows = audit["hook_findings"]
         values = [row.get("finding") for row in rows if isinstance(row, dict)]
+    elif isinstance(analysis, dict) and isinstance(analysis.get("evidence"), list):
+        values = analysis["evidence"]
     else:
         values = []
     return [str(value).strip()[:500] for value in values if str(value or "").strip()][
@@ -293,22 +296,32 @@ def _model_lab_findings(payload, limit=5):
 def _model_lab_finding_count(payload):
     candidate = payload.get("candidate")
     audit = payload.get("audit")
+    analysis = payload.get("analysis")
     if isinstance(candidate, dict) and isinstance(candidate.get("candidates"), list):
         return len(candidate["candidates"])
     if isinstance(audit, dict):
         for key in ("hypotheses", "hook_findings"):
             if isinstance(audit.get(key), list):
                 return len(audit[key])
+    if isinstance(analysis, dict) and isinstance(analysis.get("evidence"), list):
+        return len(analysis["evidence"])
     return 0
 
 
 def _model_lab_summary(payload, findings, finding_count):
     summary = str(payload.get("summary") or "").strip()
     audit = payload.get("audit")
+    analysis = payload.get("analysis")
     if not summary and isinstance(audit, dict):
         summary = str(audit.get("summary") or "").strip()
     if summary:
         return summary[:600]
+    if isinstance(analysis, dict) and analysis.get("task"):
+        return (
+            f"{str(analysis['task']).strip()} Outcome: "
+            f"{analysis.get('outcome', 'unknown')}; complexity: "
+            f"{analysis.get('complexity', 'unknown')}."
+        )[:600]
     if findings:
         label = "review candidate" if finding_count == 1 else "review candidates"
         return f"{finding_count} {label} stored; open the findings below for review."[:600]
@@ -353,8 +366,12 @@ def collect_model_lab_reports(root, limit=40):
                 "adapter_id": str(payload.get("adapter") or "unknown")[:40],
                 "producer": producer,
                 "provider": (provider or "unknown")[:80],
-                "model": str(payload.get("model") or "unknown")[:100],
-                "effort": str(payload.get("effort") or "unknown")[:40],
+                "model": str(
+                    payload.get("model") or payload.get("analysis_model") or "unknown"
+                )[:100],
+                "effort": str(
+                    payload.get("effort") or payload.get("analysis_effort") or "unknown"
+                )[:40],
                 "generated_at": str(
                     payload.get("generated_at") or payload.get("created_at") or ""
                 )[:40],
