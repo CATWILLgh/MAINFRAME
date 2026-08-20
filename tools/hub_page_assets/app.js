@@ -54,6 +54,14 @@
     return el("span", { class: "badge " + (cls || "") }, text);
   }
 
+  function activateWithKeyboard(node, callback) {
+    node.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      callback(event);
+    });
+  }
+
   const SVGNS = "http://www.w3.org/2000/svg";
   function svg(tag, props, kids) {
     const n = document.createElementNS(SVGNS, tag);
@@ -187,7 +195,9 @@
       (layer === "agents" && agentByName[id]) ||
       (layer === "hooks" && hooksByScript[id]) ||
       (layer === "events" && hooksByEvent[id]);
-    const chip = el("span", { class: "chip" + (resolvable ? " link" : "") }, label);
+    const chip = el(resolvable ? "button" : "span", resolvable
+      ? { type: "button", class: "chip link" }
+      : { class: "chip" }, label);
     if (resolvable) chip.addEventListener("click", (e) => { e.stopPropagation(); openDetail(layer, id); });
     return chip;
   }
@@ -1324,7 +1334,11 @@
       items.forEach((it) => {
         const card = mk(it);
         const text = cardText(it);
-        card.addEventListener("click", () => openDetail(layer, it.name));
+        card.setAttribute("role", "button");
+        card.setAttribute("tabindex", "0");
+        const openCard = () => openDetail(layer, it.name);
+        card.addEventListener("click", openCard);
+        activateWithKeyboard(card, openCard);
         grid.appendChild(card);
         const entry = { el: card, text };
         catalogCards.push(entry);
@@ -1515,7 +1529,8 @@
     const nodeEls = {};
     placed.forEach((n) => {
       const p = pos[n.id];
-      const g = svg("g", { class: "gnode " + n.layer, transform: "translate(" + p.x + "," + p.y + ")" });
+      const g = svg("g", { class: "gnode " + n.layer, transform: "translate(" + p.x + "," + p.y + ")",
+        role: "button", tabindex: "0", "aria-label": n.label });
       g.appendChild(svg("circle", { r: 6, class: "dot" }));
       g.appendChild(svg("text", { x: 11, y: 4 }, n.label));
       g.addEventListener("mouseenter", () => focus(n.id));
@@ -1527,6 +1542,7 @@
         if (downXY && Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 4) return;
         openDetail(n.layer, n.id);
       });
+      activateWithKeyboard(g, () => openDetail(n.layer, n.id));
       nodeLayer.appendChild(g);
       nodeEls[n.id] = g;
       graphNodes.push({ el: g, id: n.id, text: (n.label || n.id).toLowerCase() });
@@ -1736,7 +1752,8 @@
 
   VIEWS.forEach((v) => {
     if (v.divider) tabsNav.appendChild(el("div", { class: "nav-label nav-label-inline" }, t("System")));
-    const btn = el("button", { type: "button", role: "tab", "aria-controls": "view-" + v.id,
+    const tabId = "tab-" + v.id;
+    const btn = el("button", { type: "button", role: "tab", id: tabId, "aria-controls": "view-" + v.id,
       "aria-selected": "false", class: v.divider ? "tab-divider" : "",
       "data-short": v.short }, [el("span", { class: "tab-code", "aria-hidden": "true" }, v.short),
       el("span", { class: "tab-label" }, t(v.label))]);
@@ -1752,7 +1769,8 @@
     });
     v.btn = btn;
     tabsNav.appendChild(btn);
-    const pane = el("div", { class: "view", id: "view-" + v.id, role: "tabpanel" });
+    const pane = el("div", { class: "view", id: "view-" + v.id, role: "tabpanel",
+      "aria-labelledby": tabId });
     app.appendChild(pane);
     panes[v.id] = { pane, btn };
     renderPane(v);

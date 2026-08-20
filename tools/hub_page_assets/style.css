@@ -34,7 +34,8 @@ body {
   text-rendering: optimizeLegibility;
 }
 button, input, select { font: inherit; }
-button:focus-visible, input:focus-visible, select:focus-visible, .clickable:focus-visible {
+button:focus-visible, input:focus-visible, select:focus-visible, .clickable:focus-visible,
+.gnode:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
