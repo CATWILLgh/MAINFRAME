@@ -16,7 +16,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 MODEL = "gpt-5.3-codex-spark"
 EFFORT = "low"
-ANALYZER_VERSION = 3
+ANALYZER_VERSION = 4
 
 
 def _load(path: Path, name: str):
@@ -45,6 +45,14 @@ def _source(adapter: str, db: Path | None):
             "runtime_token_count": report["token_usage"]["evidence"],
             "causal_overhead": "unproven",
             "cost_or_savings": "requires-comparable-ab-runs",
+            "hook_denominators": (
+                "signals are aligned to denominator_from when present; an empty "
+                "denominator_from means no rate can be inferred"
+            ),
+            "token_partitions": (
+                "by_source and by_model are alternative partitions of the same total; "
+                "one source bucket must not be compared with one model bucket"
+            ),
         },
     }
 
@@ -262,8 +270,16 @@ def main(argv=None):
 Return exact JSON Pointer evidence paths. MAINFRAME will copy the cited primitive
 values deterministically after validation; do not return a separate evidence list.
 Each path is one JSON string. Never join, comma-separate, or combine several paths.
+Use no more than twelve distinct evidence paths across the entire response, and
+copy every path exactly from the supplied JSON structure.
 Return bounded hypotheses. Do not claim causal overhead,
 waste, savings, or effectiveness from aggregates. Recommend a probe instead.
+Do not call an empty hook denominator a collection defect: it means the report
+has no comparable invocation window for that hook. When denominator_from is
+present, the top-level signal counts are already clipped to that same window;
+historical_before_denominator is context only. by_source and by_model are two
+partitions of the same token total, so comparing one source bucket with one
+model bucket is meaningless.
 Do not inspect prompts, code, paths, transcripts, or credentials.\n\n""" + json.dumps(payload, sort_keys=True)
     fd, response_name = tempfile.mkstemp(prefix="mainframe-spark-triage-", suffix=".json")
     os.close(fd)

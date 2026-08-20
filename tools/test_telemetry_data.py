@@ -75,6 +75,43 @@ def test_hook_invocations_are_reported_as_a_bounded_denominator():
     assert report["hook_invocations"][0]["hook"] == "check.py"
 
 
+def test_hook_effectiveness_does_not_mix_old_signals_with_new_denominator():
+    db = fresh_db()
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "INSERT INTO events(ts,schema_version,session_id,origin,event,payload) "
+            "VALUES(?,?,?,?,?,?)",
+            ("2026-08-19T09:00:00Z", 2, "old", "runtime", "hook_signal", json.dumps({
+                "hook": "check.py", "rule_id": "quality", "outcome": "noted",
+                "count": 3, "context_chars": 30,
+            })),
+        )
+        connection.execute(
+            "INSERT INTO events(ts,schema_version,session_id,origin,event,payload) "
+            "VALUES(?,?,?,?,?,?)",
+            ("2026-08-19T10:00:00Z", 2, "new", "runtime", "hook_invocation", json.dumps({
+                "hook": "check.py", "hook_event": "PostToolUse",
+            })),
+        )
+        connection.execute(
+            "INSERT INTO events(ts,schema_version,session_id,origin,event,payload) "
+            "VALUES(?,?,?,?,?,?)",
+            ("2026-08-19T10:01:00Z", 2, "new", "runtime", "hook_signal", json.dumps({
+                "hook": "check.py", "rule_id": "quality", "outcome": "noted",
+                "count": 2, "context_chars": 20,
+            })),
+        )
+    report = telemetry_data.build_report(db)
+    row = report["hook_effectiveness"][0]
+    assert row["signals"] == 1 and row["noted"] == 2 and row["sessions"] == 1
+    assert row["context_chars"] == 20 and row["invocations"] == 1
+    assert row["historical_before_denominator"] == {
+        "signals": 1, "count": 3, "sessions": 1,
+        "context_chars": 30, "last_seen": "2026-08-19T09:00:00Z",
+    }
+    assert report["harness_context_cost"]["characters"] == 50
+
+
 def test_hook_resolution_links_only_to_earlier_same_session_signal():
     db = fresh_db()
     rows = (

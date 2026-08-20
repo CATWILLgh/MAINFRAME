@@ -336,6 +336,9 @@ window.HUB_STRINGS_RU = {
   "Queue operations are local, bounded, and review-only.":
     "Операции очереди локальны, ограничены и только для проверки.",
   "Analysis queue": "Очередь анализа",
+  "older findings": "старые находки",
+  "MAINFRAME's own checks. When a collection start is shown, outcomes and recorded runs cover that same window; older findings are separated instead of being divided by a newer denominator. A linked fix only confirms that the technical finding disappeared in the same session, hook, and rule.":
+    "Собственные проверки MAINFRAME. Если показано начало сбора, результаты и число запусков относятся к одному окну; старые находки отделены и не делятся на новый знаменатель. Связанное исправление подтверждает только исчезновение технической находки в той же сессии, хуке и правиле.",
   "Codex subagent reviews": "Разбор сабагентов Codex",
   "Waiting": "Ожидают",
   "Processing": "Обрабатывается",

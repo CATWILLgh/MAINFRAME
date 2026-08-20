@@ -629,6 +629,8 @@ def build_report(
     effectiveness = {}
     hook_invocations = collections.Counter()
     hook_invocation_first_seen = {}
+    hook_signal_records = []
+    all_hook_signal_context_chars = 0
     usage = collections.Counter()
     usage_by_source = {}
     usage_by_model = {}
@@ -750,6 +752,16 @@ def build_report(
 
             if row["event"] == "hook_signal" and row["valid"]:
                 data = row["data"]
+                all_hook_signal_context_chars += data["context_chars"]
+                hook_signal_records.append({
+                    "timestamp": row["timestamp"],
+                    "session_id": row["session_id"],
+                    "hook": data["hook"],
+                    "rule_id": data["rule_id"],
+                    "outcome": data["outcome"],
+                    "count": data["count"],
+                    "context_chars": data["context_chars"],
+                })
                 key = (data["hook"], data["rule_id"])
                 item = effectiveness.setdefault(key, {
                     "hook": data["hook"], "rule_id": data["rule_id"],
@@ -926,12 +938,65 @@ def build_report(
         for (event, field), values in breakdowns.items() if values
     ]
     report["hook_effectiveness"] = []
-    resolution_summaries = _hook_resolution_summaries(hook_resolution_signals)
-    for item in effectiveness.values():
+    for key, item in effectiveness.items():
+        denominator_from = hook_invocation_first_seen.get(item["hook"], "")
+        aligned_resolution_signals = hook_resolution_signals
+        if denominator_from:
+            aligned = [
+                record for record in hook_signal_records
+                if (record["hook"], record["rule_id"]) == key
+                and record["timestamp"] >= denominator_from
+            ]
+            historical = [
+                record for record in hook_signal_records
+                if (record["hook"], record["rule_id"]) == key
+                and record["timestamp"] < denominator_from
+            ]
+            item.update({
+                "signals": len(aligned),
+                "sessions": {
+                    record["session_id"] for record in aligned if record["session_id"]
+                },
+                "noted": sum(
+                    record["count"] for record in aligned if record["outcome"] == "noted"
+                ),
+                "asked": sum(
+                    record["count"] for record in aligned if record["outcome"] == "asked"
+                ),
+                "blocked": sum(
+                    record["count"] for record in aligned if record["outcome"] == "blocked"
+                ),
+                "resolved": sum(
+                    record["count"] for record in aligned
+                    if record["outcome"] == "resolved"
+                ),
+                "context_chars": sum(record["context_chars"] for record in aligned),
+                "last_seen": max(
+                    (record["timestamp"] for record in aligned), default=""
+                ),
+                "historical_before_denominator": {
+                    "signals": len(historical),
+                    "count": sum(record["count"] for record in historical),
+                    "sessions": len({
+                        record["session_id"] for record in historical
+                        if record["session_id"]
+                    }),
+                    "context_chars": sum(
+                        record["context_chars"] for record in historical
+                    ),
+                    "last_seen": max(
+                        (record["timestamp"] for record in historical), default=""
+                    ),
+                },
+            })
+            aligned_resolution_signals = [
+                signal for signal in hook_resolution_signals
+                if signal[2:4] == key and signal[0] >= denominator_from
+            ]
         item["sessions"] = len(item["sessions"])
         item["invocations"] = hook_invocations[item["hook"]]
-        item["denominator_from"] = hook_invocation_first_seen.get(item["hook"], "")
-        resolution = resolution_summaries[(item["hook"], item["rule_id"])]
+        item["denominator_from"] = denominator_from
+        resolution = _hook_resolution_summaries(aligned_resolution_signals)[key]
         item["linked_resolutions"] = resolution["linked_resolutions"]
         item["unlinked_resolutions"] = resolution["unlinked_resolutions"]
         item["resolution_latency"] = _duration_summary(
@@ -1086,12 +1151,11 @@ def build_report(
         ],
         "skill_evidence": "observed" if skill_requests else "unavailable",
     }
-    context_chars = sum(item["context_chars"] for item in effectiveness.values())
     report["harness_context_cost"] = {
         "evidence": "estimated",
-        "characters": context_chars,
-        "estimated_tokens_low": math.ceil(context_chars / 6),
-        "estimated_tokens_high": math.ceil(context_chars / 2),
+        "characters": all_hook_signal_context_chars,
+        "estimated_tokens_low": math.ceil(all_hook_signal_context_chars / 6),
+        "estimated_tokens_high": math.ceil(all_hook_signal_context_chars / 2),
         "method": "character-range-2-to-6",
         "causal_overhead": "unproven",
     }

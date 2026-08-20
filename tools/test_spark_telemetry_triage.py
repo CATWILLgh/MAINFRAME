@@ -12,7 +12,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools/spark_telemetry_triage.py"
 sys.path.insert(0, str(ROOT / "tools"))
-import spark_telemetry_triage
+import spark_telemetry_triage  # noqa: E402
 
 
 def test_failure_detail_is_bounded_and_actionable():
@@ -92,7 +92,7 @@ def test_adapter_owned_candidate_and_usage():
     artifacts = list((output / "codex/model-lab/spark/telemetry-triage").glob("*.json"))
     assert len(artifacts) == 1
     artifact = json.loads(artifacts[0].read_text(encoding="utf-8"))
-    assert artifact["analyzer_version"] == 3
+    assert artifact["analyzer_version"] == 4
     assert artifact["provider"] == "openai"
     assert artifact["review_required"] is True
     assert artifact["usage"]["total_tokens"] == 110

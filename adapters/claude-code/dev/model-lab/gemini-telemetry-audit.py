@@ -135,11 +135,13 @@ def _source_payload(root: pathlib.Path, db: pathlib.Path) -> dict:
                 "blocked": "Sum of blocked finding counts, not hook calls or retries.",
                 "resolved": "Sum of resolved finding counts, not hook calls or retries.",
                 "context_chars": "Sum of model-visible context characters recorded by the rows.",
+                "denominator_window": "When denominator_from is present, top-level signal fields are aligned to that same window and historical_before_denominator is context only. An empty denominator_from means no rate is available, not an ingestion defect.",
             },
             "cost_metric_semantics": {
                 "token_usage": "Exact provider or runtime counters grouped by their recorded source.",
                 "harness_context_cost": "A broad character-based estimate, not a tokenizer result or causal overhead measurement.",
                 "causal_claims": "Only a controlled comparable A/B run may attribute downstream token changes to MAINFRAME.",
+                "partitions": "token_usage.by_source and token_usage.by_model independently partition the same aggregate total; comparing one source bucket with one model bucket is invalid.",
             },
             "session_boundary": "A distinct-session count does not reveal temporal overlap or prove concurrency safety.",
         },
@@ -163,6 +165,11 @@ Rules:
 - `signals` is the number of telemetry rows. `noted`, `asked`, `blocked`, and
   `resolved` are summed finding counts; they are not calls, retries, turns, or
   denominators for an effectiveness rate.
+- When denominator_from is present, those top-level hook fields are already
+  aligned to its window; historical_before_denominator is context only. An
+  empty denominator_from is unavailable evidence, not proof of dropped events.
+- token_usage.by_source and token_usage.by_model are alternative partitions of
+  the same total. Never compare one source bucket with one model bucket.
 - A distinct-session count does not reveal temporal overlap.
 - Copy the five supplied measurement boundaries exactly into
   measurement_boundaries; they are deterministic input semantics, not model

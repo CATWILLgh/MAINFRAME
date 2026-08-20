@@ -891,13 +891,13 @@
     if (effectiveness.length) {
       root.appendChild(section(t("Quality hook outcomes"), "hooks", effectiveness.length,
         el("div", { class: "panel-stack" }, [
-          explain(t("MAINFRAME's own checks. A linked fix is a later resolved signal for the same session, hook, and rule; it confirms the technical finding disappeared, not a user or product outcome. An unlinked fix has no earlier signal inside the selected period. Recorded runs are an exact denominator only from the shown collection start.")),
+          explain(t("MAINFRAME's own checks. When a collection start is shown, outcomes and recorded runs cover that same window; older findings are separated instead of being divided by a newer denominator. A linked fix only confirms that the technical finding disappeared in the same session, hook, and rule.")),
           table([
             [t("adapter")], [t("script")], [t("rule")], [t("noted"), true],
             [t("asked"), true], [t("blocked"), true], [t("resolved"), true],
             [t("linked fixes"), true], [t("unlinked fixes"), true],
             [t("median to fix"), true], [t("sessions"), true],
-            [t("recorded runs"), true], [t("since")],
+            [t("recorded runs"), true], [t("since")], [t("older findings"), true],
           ], effectiveness.map((row) => cells([
             [row.adapter_id || report.adapter_id || "—", "mono"],
             [row.hook, "mono"],
@@ -912,6 +912,8 @@
             [num(row.sessions), "num"],
             [row.denominator_from ? num(row.invocations) : "—", "num"],
             [row.denominator_from ? fmtStamp(row.denominator_from) : "—", "mono"],
+            [row.denominator_from
+              ? num(row.historical_before_denominator?.count || 0) : "—", "num dim"],
           ]))),
         ])));
     }
