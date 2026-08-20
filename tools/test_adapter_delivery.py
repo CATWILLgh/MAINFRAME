@@ -221,7 +221,6 @@ def test_claude_dev_telemetry_settings_are_owned_and_reversible():
     assert reinstalled.returncode == 0, reinstalled.stderr
     value = json.loads(settings.read_text(encoding="utf-8"))
     assert value["env"] == {
-        "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "70",
         "USER_SETTING": "kept",
     }
 
@@ -1292,11 +1291,11 @@ def test_global_settings_preserve_role_language_and_session_choice_contracts():
     assert "teammateMode" not in settings
 
 
-def test_global_settings_compact_main_and_subagent_contexts_at_seventy_percent():
+def test_global_settings_leave_native_autocompact_policy_to_claude_code():
     settings = json.loads(
         (ADAPTER / "export" / "settings.json").read_text(encoding="utf-8")
     )
-    assert settings["env"]["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"] == "70"
+    assert "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE" not in settings["env"]
     assert "CLAUDE_CODE_AUTO_COMPACT_WINDOW" not in settings["env"]
 
 
