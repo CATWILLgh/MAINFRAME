@@ -420,6 +420,8 @@ def iter_events(path, after_id=0, limit=None, adapter_id="claude-code"):
                     errors.append(str(error))
 
             effective_origin = _effective_origin(origin, session_id)
+            if str(event) == "model_usage" and payload.get("source") == "model-lab":
+                effective_origin = "model-lab"
             yield {
                 "adapter_id": adapter_id,
                 "schema_version": version,

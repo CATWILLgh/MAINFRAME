@@ -97,12 +97,15 @@ def record_samples(samples: list[dict], db_paths: dict[str, Path]) -> dict[str, 
     try:
         for sample in samples:
             adapter_id = sample["adapter_id"]
+            origin = sample.get("origin", "runtime")
+            if origin not in {"runtime", "model-lab"}:
+                origin = "runtime"
             if adapter_id == "claude-code":
                 os.environ["MAINFRAME_TELEMETRY_DB"] = str(db_paths[adapter_id])
-                os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = "runtime"
+                os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = origin
             else:
                 os.environ["MAINFRAME_CODEX_TELEMETRY_DB"] = str(db_paths[adapter_id])
-                os.environ["MAINFRAME_CODEX_TELEMETRY_ORIGIN"] = "runtime"
+                os.environ["MAINFRAME_CODEX_TELEMETRY_ORIGIN"] = origin
             status = HOOKLIBS[adapter_id].log_event(
                 sample.get("event", "model_usage"),
                 sample["payload"],

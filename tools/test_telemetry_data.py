@@ -413,16 +413,27 @@ def test_report_can_isolate_runtime_from_model_lab_rows():
         },
         {"session_id": "lab", "_telemetry_origin": "model-lab"},
     ) == "written"
+    assert _hooklib.log_event(
+        "model_usage",
+        {
+            "sample_id": "legacy-spark-model-lab-row",
+            "source": "model-lab", "request_count": 1,
+            "input_tokens": 10, "cached_input_tokens": 0,
+            "cache_write_tokens": 0, "output_tokens": 1,
+            "reasoning_output_tokens": 0, "total_tokens": 11,
+        },
+        {"session_id": "model-lab", "_telemetry_origin": "runtime"},
+    ) == "written"
     os.environ["MAINFRAME_TELEMETRY_ORIGIN"] = "runtime"
 
     default = telemetry_data.build_report(db)
     runtime = telemetry_data.build_report(
         db, included_origins={"runtime", "runtime-inferred"}
     )
-    assert default["usable_records"] == 2
+    assert default["usable_records"] == 3
     assert default["included_origins"] == ["model-lab", "runtime", "runtime-inferred"]
-    assert runtime["records"] == 2 and runtime["usable_records"] == 1
-    assert runtime["excluded_records"] == 1
+    assert runtime["records"] == 3 and runtime["usable_records"] == 1
+    assert runtime["excluded_records"] == 2
     assert runtime["included_origins"] == ["runtime", "runtime-inferred"]
     assert dict(runtime["event_counts"]) == {"user_prompt": 1}
 

@@ -16,7 +16,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parent.parent
 MODEL = "gpt-5.3-codex-spark"
 EFFORT = "low"
-ANALYZER_VERSION = 4
+ANALYZER_VERSION = 5
+RUNTIME_ORIGINS = {"runtime", "runtime-inferred"}
 
 
 def _load(path: Path, name: str):
@@ -32,11 +33,19 @@ def _source(adapter: str, db: Path | None):
     telemetry = _load(ROOT / "tools/telemetry_data.py", "mainframe_telemetry_data")
     if db is None:
         db = telemetry.default_db_path(adapter)
-    report = telemetry.build_report(db, adapter_id=adapter, recent_limit=0)
+    report = telemetry.build_report(
+        db,
+        adapter_id=adapter,
+        recent_limit=0,
+        included_origins=RUNTIME_ORIGINS,
+    )
     return {
         "adapter_id": adapter,
         "records": report["usable_records"],
         "sessions": report["sessions"],
+        "generated_at": report["generated_at"],
+        "first_runtime_timestamp": report["first_timestamp"],
+        "last_runtime_timestamp": report["last_timestamp"],
         "token_usage": report["token_usage"],
         "harness_context_cost": report["harness_context_cost"],
         "hook_effectiveness": report["hook_effectiveness"],
@@ -222,6 +231,7 @@ def _record_usage(
     receiver = _load(ROOT / "tools/native_telemetry_receiver.py", "mainframe_receiver")
     sample = {
         "adapter_id": adapter,
+        "origin": "model-lab",
         "session_id": "model-lab",
         "model": MODEL,
         "payload": {
@@ -280,6 +290,14 @@ present, the top-level signal counts are already clipped to that same window;
 historical_before_denominator is context only. by_source and by_model are two
 partitions of the same token total, so comparing one source bucket with one
 model bucket is meaningless.
+A blocked hook outcome is terminal enforcement, not an unresolved warning.
+The absence of a later resolved event does not by itself prove noise or failure.
+Only classify a noisy injection when the evidence shows repeated model-visible
+text or a directly observed false positive; invocation count alone is not noise.
+Return an empty candidate list when the data has no actionable anomaly. Do not
+create candidates merely to restate a measurement boundary, explain that a claim
+cannot be made, compare alternative token partitions, or repeat terminal-block
+semantics. A useful candidate identifies a concrete anomaly and a bounded probe.
 Do not inspect prompts, code, paths, transcripts, or credentials.\n\n""" + json.dumps(payload, sort_keys=True)
     fd, response_name = tempfile.mkstemp(prefix="mainframe-spark-triage-", suffix=".json")
     os.close(fd)
