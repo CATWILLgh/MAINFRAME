@@ -178,6 +178,8 @@ Rules:
   supplied.
 - A signal from one session cannot prove cross-session or concurrency safety.
 - A hook firing does not prove that the desired user-visible outcome occurred.
+- Do not describe telemetry as accurate, complete, reliable, or effective unless
+  the input contains a direct reconciliation against an independent ground truth.
 - Never compare estimated harness tokens with exact runtime tokens as if they
   shared the same evidence class. Do not claim savings, waste, or causation
   without a controlled comparable A/B result.

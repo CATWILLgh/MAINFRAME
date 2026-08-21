@@ -178,6 +178,7 @@ def test_valid_audit_is_bounded_and_provenanced():
     assert "Return concise English" in prompt
     assert '"causal_overhead":"unproven"' in prompt
     assert "controlled comparable A/B" in prompt
+    assert "independent ground truth" in prompt
     with sqlite3.connect(db) as connection:
         model_rows = connection.execute(
             "SELECT payload FROM events WHERE event='model_usage'"
