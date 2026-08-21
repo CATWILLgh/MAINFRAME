@@ -1,6 +1,6 @@
 interface:
   display_name: "MAINFRAME Ticket Discovery"
   short_description: "Find plausible problems without fixing them"
-  default_prompt: "Use $mainframe-tickets-find to search the whole current repository for plausible ticket candidates until the coverage map is complete."
+  default_prompt: "Use $mainframe-tickets-find to normalize the open ticket structure, then search the whole current repository until all coverage gaps are accounted for."
 policy:
   allow_implicit_invocation: false

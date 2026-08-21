@@ -1,15 +1,18 @@
 ---
 name: mainframe-tickets-implement
-description: Implement technically ready open tickets one at a time, establish focused red evidence where useful, validate each complete fix, commit coherent recovery points, and queue results for independent verification. Use only when the user explicitly starts a ticket-implementation run in native Goal mode for all ready tickets or a named scope. Do not use for ticket discovery, refinement, user-owned decisions, or closure verification.
+description: Implement explicitly autonomous ready tickets one at a time, establish focused red evidence where useful, validate each complete fix, commit coherent recovery points, and queue results for independent verification. Use only when the user explicitly starts a ticket-implementation run in native Goal mode for the autonomous queue or a named scope. Do not use for ticket discovery, refinement, user-approved work, or closure verification.
 ---
 
 # Implement ready tickets
 
 Treat the native Goal objective and any plain-language scope supplied with the
-explicit invocation as the run boundary. An empty scope means every eligible
-ticket in `docs/tickets/open/ready/`. Process one ticket at a time until the
-selected queue is exhausted or no eligible work can continue because of an
-evidenced external blocker.
+explicit invocation as the run boundary. An empty scope means every ticket in
+`docs/tickets/open/ready/` carrying `execution: autonomous` and the complete
+evidenced autonomous boundary. Process one ticket at a time until that selected
+queue is exhausted, the user pauses or cancels the run, or no eligible work can
+continue because of an evidenced external blocker. Never consume
+`execution: user-approved`; only the exact one-ticket Goal produced by
+`mainframe-init` may implement it.
 
 Before changing a ticket, read
 [ticket-format.md](../mainframe-ticket/references/ticket-format.md). Use the
@@ -22,9 +25,14 @@ suite cost, infrastructure, or broad regression coverage.
 ## Recheck the ticket
 
 Confirm that the ticket remains in `open/ready/`, its evidence still matches the
-current repository, and its stated scope covers the meaningful affected paths.
-Do not silently expand a ticket whose blast radius is materially incomplete.
+current repository, its `execution: autonomous` eligibility is supported by the
+required autonomous boundary, and its stated scope covers the meaningful
+affected paths. Do not silently reconstruct missing eligibility or expand a
+ticket whose blast radius is materially incomplete.
 
+- Return it to `open/needs-scope-review/` when the execution marker, fixed
+  expected behavior, cited authority, exclusions, or affected scope is missing
+  or stale.
 - Return it to `open/needs-scope-review/` when affected locations or
   consequences require separate refinement.
 - Move it to `open/needs-decision/` when implementation exposes a product,

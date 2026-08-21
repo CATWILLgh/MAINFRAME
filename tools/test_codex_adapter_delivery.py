@@ -1172,6 +1172,9 @@ def test_baseline_uses_native_standalone_layers_only():
     assert (
         "Do not claim that the repository has no remaining defects" in find_body
     )
+    assert "legacy-open-ticket normalization" in find_body
+    assert "`NOT COVERED`" in find_body
+    assert "user pauses or cancels" in " ".join(find_body.split())
     assert "allow_implicit_invocation: false" in find_metadata
 
     refine_skill = ADAPTER / "skills" / "mainframe-tickets-refine"
@@ -1188,6 +1191,8 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "open/needs-decision/" in refine_body
     assert "open/ready/" in refine_body
     assert "archive/rejected/" in refine_body
+    assert "execution: autonomous" in refine_body
+    assert "user pauses or cancels" in " ".join(refine_body.split())
     assert "allow_implicit_invocation: false" in refine_metadata
 
     implement_skill = ADAPTER / "skills" / "mainframe-tickets-implement"
@@ -1205,6 +1210,10 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "open/needs-verification/" in implement_body
     assert "open/needs-scope-review/" in implement_body
     assert "open/needs-decision/" in implement_body
+    assert "execution: autonomous" in implement_body
+    assert "execution: user-approved" in implement_body
+    assert "missing or stale" in " ".join(implement_body.split())
+    assert "user pauses or cancels" in " ".join(implement_body.split())
     assert "Do not independently close" in implement_body
     assert "Conventional Commit" in implement_body
     assert "allow_implicit_invocation: false" in implement_metadata
@@ -1226,6 +1235,8 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "open/needs-scope-review/" in verify_body
     assert "open/needs-decision/" in verify_body
     assert "archive/rejected/" in verify_body
+    assert "existing `execution` route" in verify_body
+    assert "user pauses or cancels" in " ".join(verify_body.split())
     assert "Conventional Commit" in verify_body
     assert "allow_implicit_invocation: false" in verify_metadata
 
@@ -1259,8 +1270,17 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "references/ticket-decision.md" in init_body
     assert "docs/tickets/open/needs-decision/" in ticket_decision
     assert "mainframe-testing-strategy" in ticket_decision
-    assert "/goal Implement ticket <id>" in ticket_decision
+    assert "/goal Implement only ticket <id>" in ticket_decision
     assert "docs/tickets/open/needs-verification/" in ticket_decision
+    assert "execution: user-approved" in ticket_decision
+
+    ticket_format = (
+        ticket_skill / "references" / "ticket-format.md"
+    ).read_text(encoding="utf-8")
+    assert "Normalize legacy open tickets during discovery" in ticket_format
+    assert "execution: autonomous" in ticket_format
+    assert "execution: user-approved" in ticket_format
+    assert "idempotent" in ticket_format
 
     frontend_skill = ADAPTER / "skills" / "mainframe-frontend"
     frontend_body = (frontend_skill / "SKILL.md").read_text(encoding="utf-8")

@@ -37,8 +37,8 @@ After the decision is settled:
    implementation when it can demonstrate the gap. The evidence may be a test,
    reproduction, measurement, or another observable check; do not create a
    ceremonial test for a purely structural change.
-4. Append the agreed definition of done and red evidence to the ticket, then
-   move the same ticket to `open/ready/`.
+4. Append the agreed definition of done and red evidence, set
+   `execution: user-approved`, then move the same ticket to `open/ready/`.
 
 Do not start implementation before the user sends the goal. Return one
 copyable block whose condition names the ticket, the agreed definition of done,
@@ -46,7 +46,7 @@ the prepared red evidence, and the required final move to
 `open/needs-verification/`:
 
 ```text
-/goal Implement ticket <id> against the agreed definition of done. Continue until every acceptance condition is demonstrated, the prepared red evidence is green, proportionate regression checks pass, the same ticket contains concise implementation evidence and is moved to open/needs-verification, or stop with a newly evidenced user-owned decision or external blocker that makes completion unreachable. Before finishing, surface the result, checks, ticket transition, and any blocker in the conversation.
+/goal Implement only ticket <id>, marked execution: user-approved, against the agreed definition of done. Continue until every acceptance condition is demonstrated, the prepared red evidence is green, proportionate regression checks pass, the same ticket contains concise implementation evidence and is moved to open/needs-verification, or stop when the user asks to pause or cancel, with a newly evidenced user-owned decision, or with an external blocker that makes completion unreachable. Before finishing, surface the result, checks, ticket transition, and any blocker in the conversation.
 ```
 
 The implementation remains in the current checkout and branch. It may create a

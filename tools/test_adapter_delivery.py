@@ -1092,6 +1092,7 @@ def test_ticket_run_skills_prepare_native_goals_in_primary_session():
         assert "/goal Follow the loaded" in body
         assert queue in body
         assert "Do not start" in body
+        assert "user asks to pause or cancel" in body
 
     shared = (
         PLUGIN / "references" / "ticket-autonomous-runs.md"
@@ -1106,12 +1107,36 @@ def test_ticket_run_skills_prepare_native_goals_in_primary_session():
     ).read_text(encoding="utf-8")
     assert "semantic duplicates" in refinement
     assert "Do not run tests" in refinement
+    assert "execution: autonomous" in refinement
+
+    discovery = (
+        PLUGIN / "skills" / "tickets-find" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "normalize current open tickets" in discovery
+    assert "`NOT COVERED`" in discovery
+    assert "unexamined coverage" in discovery
+
+    implementation = (
+        PLUGIN / "skills" / "tickets-implement" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert "execution: autonomous" in implementation
+    assert "execution: user-approved" in implementation
+    assert "Missing or stale eligibility" in implementation
 
     verification = (
         PLUGIN / "skills" / "tickets-verify" / "SKILL.md"
     ).read_text(encoding="utf-8")
     assert "fresh session" in verification
     assert "do not repair code inline" in verification.lower()
+    assert "existing execution route" in " ".join(verification.split())
+
+    ticket_format = (
+        PLUGIN / "skills" / "ticket" / "ticket-format.md"
+    ).read_text(encoding="utf-8")
+    assert "Normalize legacy open tickets during discovery" in ticket_format
+    assert "execution: autonomous" in ticket_format
+    assert "execution: user-approved" in ticket_format
+    assert "idempotent" in ticket_format
 
 
 def test_init_ticket_route_handles_one_user_decision_before_goal():
@@ -1127,8 +1152,9 @@ def test_init_ticket_route_handles_one_user_decision_before_goal():
     assert "Agree a concise definition of done" in route
     assert "obtain focused red evidence before" in route
     assert "Do not start implementation before the user sends the goal" in route
-    assert "/goal Implement ticket <id>" in route
+    assert "/goal Implement only ticket <id>" in route
     assert "open/needs-verification" in route
+    assert "execution: user-approved" in route
 
 
 def test_init_replaces_automatic_task_workflow():

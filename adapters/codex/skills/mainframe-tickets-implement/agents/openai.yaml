@@ -1,6 +1,6 @@
 interface:
   display_name: "MAINFRAME Ticket Implementation"
-  short_description: "Implement and validate ready tickets"
-  default_prompt: "Use $mainframe-tickets-implement to implement, validate, and queue every technically ready ticket for independent verification."
+  short_description: "Implement only autonomous ready tickets"
+  default_prompt: "Use $mainframe-tickets-implement to implement and validate only ready tickets with an evidenced autonomous execution route."
 policy:
   allow_implicit_invocation: false

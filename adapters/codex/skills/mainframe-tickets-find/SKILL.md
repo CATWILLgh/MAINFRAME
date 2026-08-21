@@ -7,12 +7,18 @@ description: Search the current local repository or a named scope broadly for co
 
 Treat the native Goal objective and any plain-language scope supplied with the
 explicit invocation as the run boundary. An empty scope means the whole current
-repository. Continue until the selected scope is covered or no eligible work can
-continue because of an evidenced external blocker.
+repository. Continue until the selected scope is covered, the user pauses or
+cancels the run, or no eligible work can continue because of an evidenced
+external blocker.
 
 Before writing tickets, read
 [record-observation.md](../mainframe-ticket/references/record-observation.md)
 and [ticket-format.md](../mainframe-ticket/references/ticket-format.md).
+
+Apply that reference's legacy-open-ticket normalization before discovery. Do
+not ask how to classify an ambiguous legacy record: use the safe canonical
+fallback. Keep this as a separate coherent change, and do not count it as a
+finding or silently refine ticket claims.
 
 ## Map the scope
 
@@ -25,6 +31,12 @@ Choose relevant risk directions for each area instead of applying one generic
 checklist. Process one bounded area at a time. Use a matching specialist only
 when specialization or context isolation is worth its briefing and verification
 cost.
+
+Every limitation, omission, or `NOT COVERED` result from delegated work is
+unfinished coverage until another pass examines it or a concrete reason places
+it outside the selected scope or authority. The agent that authored the first
+map must not use that map alone as proof that the repository is completely
+covered.
 
 ## Find and record candidates
 
@@ -69,6 +81,11 @@ Do not claim that the repository has no remaining defects. In the final response
 state in plain language:
 
 - the exact scope and coverage completed;
+- the normalization performed and any open records safely routed for later
+  scope review;
+- every remaining unexamined area and the concrete reason it is outside the
+  run, or an explicit statement that none remains after reconciling delegated
+  limitations;
 - how many tickets were created or updated and where;
 - what establishes that no discovered candidate remains unprocessed;
 - any evidenced blocker that prevented further eligible work.

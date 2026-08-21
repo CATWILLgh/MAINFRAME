@@ -11,7 +11,7 @@ Do not start refinement in the invocation turn. Return only this copyable block,
 with the invocation argument preserved as written:
 
 ```text
-/goal Follow the loaded tickets-refine workflow. Scope: "$ARGUMENTS"; an empty scope means every eligible ticket in open/observations and open/needs-scope-review. Continue one ticket at a time until every eligible ticket has been verified, atomized, checked for meaningful duplicates, scoped across its known blast radius, and moved to ready, needs-decision, or archive/rejected; or stop with an evidenced external blocker that prevents any eligible work from continuing. Before finishing, surface the checked queue, ticket outcomes, unresolved decision boundaries, and completion evidence in the conversation.
+/goal Follow the loaded tickets-refine workflow. Scope: "$ARGUMENTS"; an empty scope means every eligible ticket in open/observations and open/needs-scope-review. Continue one ticket at a time until every eligible ticket has been verified, atomized, checked for meaningful duplicates, scoped across its known blast radius, and moved to ready with an evidenced execution route, needs-decision, or archive/rejected; or stop when the user asks to pause or cancel, or with an evidenced external blocker that prevents any eligible work from continuing. Before finishing, surface the checked queue, ticket outcomes, execution routes, unresolved decision boundaries, and completion evidence in the conversation.
 ```
 
 When that goal starts, first read
@@ -30,10 +30,14 @@ grants no new authority. For each ticket:
 3. Compare plausible semantic duplicates, not only matching words. Keep the
    clearest canonical open ticket; update it with material evidence, then move
    confirmed duplicates to `archive/rejected` with a link and reason.
-4. Move a disproved or superseded ticket to `archive/rejected`; move a fully
-   scoped technical problem needing no user choice to `ready`; move a genuine
-   product, business-logic, material infrastructure, destructive-action, or
-   authority choice to `needs-decision` with the exact decision stated plainly.
+4. Move a disproved or superseded ticket to `archive/rejected`. Move work to
+   `ready` with `execution: autonomous` only when current cited evidence fixes
+   the expected behavior and no product, business-logic, material
+   infrastructure, destructive-action, data, authority, or irreducible
+   preference choice remains. Add the required autonomous boundary section.
+   Move every genuine or uncertain user-owned choice to `needs-decision` with
+   the exact decision stated plainly. Never infer autonomous eligibility merely
+   from an existing `ready` path or confidence in a proposed solution.
 
 Do not run tests, servers, containers, migrations, benchmarks, or external
 environments, and do not implement a fix. Existing tests and saved outputs may

@@ -9,8 +9,8 @@ Treat the native Goal objective and any plain-language scope supplied with the
 explicit invocation as the run boundary. An empty scope means every eligible
 ticket in `docs/tickets/open/observations/` and
 `docs/tickets/open/needs-scope-review/`. Process one ticket at a time until the
-selected queue is exhausted or no eligible work can continue because of an
-evidenced external blocker.
+selected queue is exhausted, the user pauses or cancels the run, or no eligible
+work can continue because of an evidenced external blocker.
 
 Before changing a ticket, read
 [ticket-format.md](../mainframe-ticket/references/ticket-format.md).
@@ -45,12 +45,15 @@ ticket.
 ## Route the result
 
 - Move a disproved, superseded, or duplicated ticket to `archive/rejected/`.
-- Move a confirmed, sufficiently scoped technical problem to `open/ready/` when
-  no new user choice is needed.
-- Move it to `open/needs-decision/` only for a product, business-logic, material
-  infrastructure, destructive-action, or authority choice. State the exact
-  decision and the known consequences plainly; do not turn ordinary engineering
-  judgment into a user decision.
+- Move a confirmed, sufficiently scoped problem to `open/ready/` with
+  `execution: autonomous` only when current cited evidence fixes the expected
+  behavior and no product, business-logic, material infrastructure,
+  destructive-action, data, authority, or irreducible preference choice
+  remains. Add the autonomous boundary required by the ticket format.
+- Move it to `open/needs-decision/` for every genuine or uncertain user-owned
+  choice. State the exact decision and known consequences plainly; do not turn
+  ordinary engineering judgment into a user decision, but never infer autonomy
+  merely from confidence in a proposed solution or an existing `ready` path.
 - Leave an unconfirmed ticket in `open/needs-scope-review/` only when the
   forbidden new measurement or unavailable evidence is genuinely required.
   Record exactly what is missing and why inspection alone cannot establish it.

@@ -41,8 +41,8 @@ After the decision is settled:
    obtain focused red evidence before implementation when it can demonstrate
    the gap. Use a test, reproduction, measurement, or another observable check;
    do not create a ceremonial test for a structural-only change.
-4. Append the agreed definition of done and red evidence to the ticket, then
-   move the same ticket to `open/ready/`.
+4. Append the agreed definition of done and red evidence, set
+   `execution: user-approved`, then move the same ticket to `open/ready/`.
 
 Do not implement before the user explicitly starts the goal. Return one
 copyable native Goal command whose completion condition names the ticket, the
@@ -50,7 +50,7 @@ agreed definition of done, the prepared red evidence, and the required final
 transition:
 
 ```text
-/goal Implement ticket <id> against the agreed definition of done. Continue until every acceptance condition is demonstrated, the prepared red evidence is green, proportionate regression checks pass, the same ticket contains concise implementation evidence and is moved to docs/tickets/open/needs-verification/, or stop with a newly evidenced user-owned decision or external blocker that makes completion unreachable. Before finishing, report the result, checks, ticket transition, and any blocker in plain language.
+/goal Implement only ticket <id>, marked execution: user-approved, against the agreed definition of done. Continue until every acceptance condition is demonstrated, the prepared red evidence is green, proportionate regression checks pass, the same ticket contains concise implementation evidence and is moved to docs/tickets/open/needs-verification/, or stop when the user asks to pause or cancel, with a newly evidenced user-owned decision, or with an external blocker that makes completion unreachable. Before finishing, report the result, checks, ticket transition, and any blocker in plain language.
 ```
 
 The implementation stays in the current checkout and starting branch. It may

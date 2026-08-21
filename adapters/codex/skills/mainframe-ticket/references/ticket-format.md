@@ -22,7 +22,7 @@ docs/tickets/
   blast radius still need profile review.
 - `needs-decision`: reviewed problems needing a product, infrastructure, or
   authority decision from the user.
-- `ready`: reviewed technical work needing no new user decision.
+- `ready`: reviewed work whose execution route is recorded explicitly.
 - `needs-verification`: completed implementations awaiting an independent check.
 - `archive/resolved`: independently verified fixes.
 - `archive/rejected`: tickets later disproved, superseded, or duplicated.
@@ -30,6 +30,24 @@ docs/tickets/
 There is no `in-progress` state. A ticket remains in `ready` while work is
 attempted and moves only after an implementation produces evidence ready for
 independent verification. An interrupted run therefore cannot strand it.
+
+Every ticket in `ready` or `needs-verification` carries one execution route in
+frontmatter:
+
+- `execution: autonomous` means the expected behavior is fixed by cited current
+  project evidence and no product, business-logic, material infrastructure,
+  destructive-action, data, authority, or irreducible preference choice remains.
+- `execution: user-approved` means the user resolved the recorded choice through
+  `mainframe-init` for that ticket. It may be implemented only by that route's
+  exact one-ticket Goal, never by the queue-wide autonomous implementation run.
+
+Before assigning `execution: autonomous`, add an `## Autonomous implementation
+boundary` section naming the fixed expected behavior, the repository or owning
+external evidence that fixes it, and the material decisions excluded from the
+implementation. Agent confidence, a proposed solution, or location in `ready`
+is not evidence. Code in a business path may be changed autonomously only to
+restore that already-fixed behavior; choosing new business behavior is never
+autonomous.
 
 Only independent verification moves a ticket to `archive/resolved`. A failed
 verification returns the same ticket to:
@@ -42,8 +60,29 @@ Archive files are immutable. Do not reopen, edit, move, or rename them. A later
 occurrence gets a new id and may link to a known archived ticket without
 searching the archive by default.
 
-A legacy project may keep tickets directly in `docs/tickets/`. Do not classify
-or move them during intake. Migrate them separately after reviewing each state.
+## Normalize legacy open tickets during discovery
+
+At the start of `mainframe-tickets-find`, bring current open ticket records
+under the canonical tree without asking the user. Make the migration a separate
+coherent change before discovering new problems.
+
+- Preserve every ticket body, history, existing id, and meaningful title. Do
+  not shorten a legacy id merely because new ids use four hex characters.
+- Add missing common frontmatter only from facts already present in the file;
+  use `unknown` where the component or origin cannot be recovered safely.
+- Give an unclear filename a concise kebab-case slug and update repository-local
+  links to the moved path.
+- Keep an explicitly recognizable open state when it maps directly to the
+  canonical tree. Put an ambiguous legacy open record in `observations`.
+- A legacy `ready` record without the autonomous boundary and
+  `execution: autonomous` is not eligible autonomous work: move it to
+  `needs-scope-review`. Never invent the missing eligibility evidence.
+- Leave archived records and non-ticket documentation unchanged. Do not
+  consolidate duplicates or verify ticket claims during normalization; those
+  belong to `mainframe-tickets-refine`.
+
+The normalization must be idempotent: a second discovery run over an already
+canonical queue produces no structural changes.
 
 ## Identity and filename
 
@@ -67,6 +106,8 @@ title: "<plain description of the problem or observation>"
 component: "<observed component or unknown>"
 created: <YYYY-MM-DD>
 created-from: "<current task, audit, or investigation>"
+# Added only after refinement or an explicit user decision:
+# execution: autonomous | user-approved
 ---
 ```
 

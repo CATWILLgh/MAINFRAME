@@ -8,8 +8,8 @@ description: Independently verify implemented tickets, archive proven fixes, and
 Treat the native Goal objective and any plain-language scope supplied with the
 explicit invocation as the run boundary. An empty scope means every eligible
 ticket in `docs/tickets/open/needs-verification/`. Process one ticket at a time
-until the selected queue is exhausted or no eligible work can continue because
-of an evidenced external blocker.
+until the selected queue is exhausted, the user pauses or cancels the run, or
+no eligible work can continue because of an evidenced external blocker.
 
 Do not continue if this task implemented any selected ticket. Independent
 verification must start in a fresh task with no ownership of the implementation.
@@ -53,7 +53,8 @@ ticket id and its accumulated history, append concise independent evidence, and
 make exactly one evidence-backed transition:
 
 - move a proven fix to immutable `docs/tickets/archive/resolved/`;
-- return an incomplete or incorrect implementation to `open/ready/`;
+- return an incomplete or incorrect implementation to `open/ready/` while
+  preserving its existing `execution` route;
 - return work with a materially missed blast radius to
   `open/needs-scope-review/`;
 - route a newly exposed product, business-logic, material infrastructure,

@@ -19,6 +19,9 @@ their value exceeds their briefing and verification cost.
   business-logic, material infrastructure, destructive-action, or missing-
   authority decision to `needs-decision`, then continue with other eligible
   work.
+- A direct user request to pause or cancel ends the current goal cleanly after
+  preserving the current ticket state. It is not an external blocker and must
+  not trigger repeated Stop rejections.
 - Record incidental out-of-scope findings through the ticket skill's
   `record-observation.md`, then resume the run.
 - Use current authoritative documentation when a changing external contract
@@ -38,6 +41,8 @@ Before the final turn ends, state in plain language:
 - what was processed and where each ticket moved;
 - the checks that establish the completion condition;
 - any evidenced blocker or remaining user-owned decision.
+- every delegated limitation or non-coverage result and how it was examined or
+  ruled outside the run.
 
 Keep the report short, but explicit enough for the `/goal` evaluator to judge
 the condition from the conversation without reading files or running tools.
