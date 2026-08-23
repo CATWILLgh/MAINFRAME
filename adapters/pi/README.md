@@ -90,6 +90,16 @@ mainframe-pi engineer --mode new --request .agents/runtime/pi/requests/block-001
 mainframe-pi engineer --mode resume
 ```
 
+A terminal `plan-conflict` is not silently retried. Supply corrective feedback
+when the block remains feasible. If independent review confirms that only the
+supplied plan or check is wrong, the primary agent accepts the actual diff by
+committing it, then explicitly selects `new` for the next block. A
+no-feedback resume fails before model invocation, avoiding a costly no-op rerun.
+
+A provider `Request timed out` does not poison or erase the persistent session.
+The launcher reports it as a recoverable provider failure; wait for provider
+recovery and resume the same block instead of starting a replacement session.
+
 When the external architect rejects an internally green block, it can return a
 closed correction packet to the same session:
 
@@ -108,17 +118,20 @@ for version-sensitive external contracts. Queries cannot contain project
 content, and both executor and verifier must fetch the authoritative primary
 page instead of accepting a search snippet or model memory as evidence. If
 that evidence is necessary and unavailable, the block remains unproven instead
-of being guessed. After exact manifest-approved checks, a fresh read-only model verifies every acceptance
-item and either returns `ready-for-architect-review` or a bounded correction to
+of being guessed. A concrete blocker or plan conflict stops executor work and
+goes directly to a fresh read-only verifier. A normal candidate first receives
+the exact manifest-approved checks, then the verifier assesses every acceptance
+item. A rejected early conflict or candidate returns one bounded correction to
 the same executor session.
 
 `ready-for-architect-review` does not create a commit. The primary agent first
 checks the real diff and evidence, then creates a Conventional Commit limited
-to accepted paths while preserving unrelated staged and dirty work. Before the
-next `new`, the harness verifies that the accepted files were committed without
-later changes, writes a receipt, closes the previous block, and compacts the Pi
-session. Pi never receives a Git tool. Manifest checks cannot invoke Git or an
-inline shell; read-only Git inspection is performed only by the harness.
+to accepted paths while preserving unrelated staged and dirty work. Selecting
+`new` is the primary agent's explicit decision to leave the previous block: the
+harness archives its resumable state without inferring acceptance from Git,
+starts the new block, and compacts the persistent Pi session. Selecting
+`resume` requires a valid active block in the same worktree. Pi never receives
+a Git tool. Manifest checks cannot invoke Git or an inline shell.
 
 Repeated identical project-navigation calls receive at most two targeted
 no-progress advisories, on the third and sixth consecutive call. There is no
@@ -126,9 +139,11 @@ periodic reminder injection, so normal work does not pay a continuing context
 cost.
 
 The executor deliberately has no process tool. MAINFRAME runs every
-manifest-approved deterministic check after each completion claim and passes
-the observed result to the fresh verifier. Neither model is asked to invent or
-relay an exit code it could not observe.
+manifest-approved deterministic check after each candidate claim and passes
+the observed result to the fresh verifier. Early blocker and plan-conflict
+claims skip irrelevant candidate checks but still require independent model
+verification. Neither model is asked to invent or relay an exit code it could
+not observe.
 
 Install with `./install.sh --pi --dev` to record privacy-safe model usage,
 duration, tools, checks, correction rounds, compactions, and verifier verdicts

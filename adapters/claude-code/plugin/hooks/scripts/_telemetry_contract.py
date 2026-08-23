@@ -27,6 +27,13 @@ EVENT_FIELDS = {
         "count": int,
         "context_chars": int,
     },
+    "analyzer_run": {
+        "analyzer": str,
+        "status": str,
+        "duration_ms": int,
+        "files": int,
+        "findings": int,
+    },
     # One row per product hook script that actually started. This is the exact
     # denominator for hook signals; it contains only stable script/event names.
     "hook_invocation": {"hook": str, "hook_event": str},
@@ -89,6 +96,7 @@ REQUIRED_FIELDS = {
     "ticket_change": {"uid", "operation"},
     "code_edit": {"lang", "ext", "operation"},
     "hook_signal": {"hook", "rule_id", "outcome", "count", "context_chars"},
+    "analyzer_run": {"analyzer", "status", "duration_ms", "files", "findings"},
     "hook_invocation": {"hook", "hook_event"},
     "init_reminder": {"turn", "reminded", "every"},
     "model_lab": {"provider", "model", "effort", "task", "status", "elapsed_bucket_s"},
@@ -117,6 +125,8 @@ FIELD_VALUES = {
     ("code_edit", "lang"): {"frontend", "ts", "python"},
     ("code_edit", "operation"): {"edit", "write", "multiedit"},
     ("hook_signal", "outcome"): {"noted", "asked", "blocked", "resolved"},
+    ("analyzer_run", "analyzer"): {"semgrep"},
+    ("analyzer_run", "status"): {"completed", "failed", "unavailable"},
     ("model_lab", "status"): {"completed", "deduplicated", "invalid", "unavailable"},
     ("model_usage", "source"): {
         "native-otel", "native-app-server", "transcript", "model-lab",

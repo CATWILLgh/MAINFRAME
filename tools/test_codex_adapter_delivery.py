@@ -109,6 +109,7 @@ def _run(
     feature_rows=0,
     require_existing_codex_home=False,
     claude_peer=False,
+    pi_agent=False,
 ):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
@@ -120,6 +121,9 @@ def _run(
         feature_rows=feature_rows,
         require_existing_codex_home=require_existing_codex_home,
     )
+    semgrep = fake_bin / "semgrep"
+    semgrep.write_text("#!/bin/sh\necho '1.164.0'\n", encoding="utf-8")
+    semgrep.chmod(semgrep.stat().st_mode | stat.S_IXUSR)
     _write_fake_codex(
         desktop_codex,
         hooks_supported=desktop_hooks_supported,
@@ -136,6 +140,15 @@ def _run(
             encoding="utf-8",
         )
         claude.chmod(claude.stat().st_mode | stat.S_IXUSR)
+    if pi_agent:
+        mainframe_pi = fake_bin / "mainframe-pi"
+        mainframe_pi.write_text(
+            "#!/bin/sh\n"
+            "if [ \"${1:-}\" = --help ]; then echo 'MAINFRAME Pi'; exit 0; fi\n"
+            "exit 2\n",
+            encoding="utf-8",
+        )
+        mainframe_pi.chmod(mainframe_pi.stat().st_mode | stat.S_IXUSR)
     env = dict(
         os.environ,
         HOME=str(home),
@@ -201,8 +214,10 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert proc.returncode == 0, proc.stderr
     assert "managed copy" in proc.stdout
     assert "mainframe-init" in proc.stdout
+    assert "mainframe-project-instructions-init" in proc.stdout
+    assert "mainframe-project-instructions-audit" in proc.stdout
     assert "mainframe-opencode" in proc.stdout
-    assert "mainframe-pi-business-analysis" in proc.stdout
+    assert "not managed:" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
     assert "mainframe-ticket" in proc.stdout
     assert "mainframe-tickets-find" in proc.stdout
@@ -275,7 +290,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
 
     for name in (
         "mainframe-init",
-        "mainframe-pi-business-analysis",
+        "mainframe-project-instructions-init",
+        "mainframe-project-instructions-audit",
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-tickets-find",
@@ -295,6 +311,9 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         assert (target / "SKILL.md").read_bytes() == (
             ADAPTER / "skills" / name / "SKILL.md"
         ).read_bytes()
+    assert not (home / ".agents" / "skills" / "mainframe-pi-business-analysis").exists()
+    assert not (home / ".agents" / "skills" / "mainframe-pi-engineer").exists()
+    assert not (codex_dir / "mainframe" / "pi-wait-enabled.json").exists()
 
     index = codex_dir / "credentials-index.md"
     helper = home / ".local" / "bin" / "secret"
@@ -513,12 +532,19 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         for group in groups
         for handler in group["hooks"]
     ]
-    assert commands and all(
-        command.startswith("python3 -B ")
-        and str((ADAPTER / "hooks" / "scripts" / "mainframe-hook.py").resolve())
-        in command
-        for command in commands
+    dispatcher = str(
+        (ADAPTER / "hooks" / "scripts" / "mainframe-hook.py").resolve()
     )
+    semgrep_hook = str(
+        (ADAPTER / "hooks" / "scripts" / "semgrep-informational.py").resolve()
+    )
+    assert commands and all(command.startswith("python3 -B ") for command in commands)
+    assert sum(dispatcher in command for command in commands) == len(commands) - 1
+    assert sum(semgrep_hook in command for command in commands) == 1
+    post_handlers = hooks_data["hooks"]["PostToolUse"][0]["hooks"]
+    assert post_handlers[1]["async"] is True
+    assert semgrep_hook in post_handlers[1]["command"]
+    assert (ADAPTER / "hooks" / "rules" / "semgrep-informational.yml").is_file()
     assert helper.is_symlink()
 
     reinstalled, _ = _run("--codex", home=home)
@@ -554,7 +580,8 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert helper.is_symlink()
     for name in (
         "mainframe-init",
-        "mainframe-pi-business-analysis",
+        "mainframe-project-instructions-init",
+        "mainframe-project-instructions-audit",
         "mainframe-secrets",
         "mainframe-ticket",
         "mainframe-tickets-find",
@@ -973,6 +1000,34 @@ def test_peer_advisor_is_explicit_optional_and_reversible():
     plain, _ = _run("--codex", home=home, claude_peer=True)
     assert plain.returncode == 0, plain.stderr
     assert not target.exists()
+
+
+def test_pi_integration_is_explicit_optional_and_reversible():
+    missing, missing_home = _run("--codex", "--with-pi")
+    assert missing.returncode != 0
+    assert "requires the separately installed MAINFRAME Pi adapter" in missing.stderr
+    assert not (missing_home / ".agents" / "skills" / "mainframe-pi-engineer").exists()
+
+    installed, home = _run("--codex", "--with-pi", pi_agent=True)
+    assert installed.returncode == 0, installed.stderr
+    for name in ("mainframe-pi-business-analysis", "mainframe-pi-engineer"):
+        target = home / ".agents" / "skills" / name
+        assert target.is_dir() and not target.is_symlink()
+    marker = home / ".codex" / "mainframe" / "pi-wait-enabled.json"
+    assert marker.is_file() and not marker.is_symlink()
+    hooks = json.loads((home / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    stop = hooks["hooks"]["Stop"][0]["hooks"][0]
+    assert stop["timeout"] == 7260
+    assert stop["statusMessage"] == "MAINFRAME: checking findings and Pi work"
+
+    plain, _ = _run("--codex", home=home, pi_agent=True)
+    assert plain.returncode == 0, plain.stderr
+    assert not marker.exists()
+    assert not (home / ".agents" / "skills" / "mainframe-pi-business-analysis").exists()
+    assert not (home / ".agents" / "skills" / "mainframe-pi-engineer").exists()
+    hooks = json.loads((home / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    stop = hooks["hooks"]["Stop"][0]["hooks"][0]
+    assert stop["timeout"] == 210
 
 
 def test_baseline_uses_native_standalone_layers_only():
@@ -1506,6 +1561,28 @@ def test_shared_judgment_and_primary_completion_are_separated():
     assert "set both its model and reasoning effort explicitly" in normalized_init
     assert "fastest adequate model" in normalized_init
     assert "silently inherits an expensive primary configuration" in normalized_init
+
+
+def test_project_instruction_workflows_are_explicit_and_adapter_native():
+    init_skill = ADAPTER / "skills" / "mainframe-project-instructions-init"
+    audit_skill = ADAPTER / "skills" / "mainframe-project-instructions-audit"
+
+    for skill in (init_skill, audit_skill):
+        metadata = (skill / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        assert "allow_implicit_invocation: false" in metadata
+
+    init_body = (init_skill / "SKILL.md").read_text(encoding="utf-8")
+    audit_body = (audit_skill / "SKILL.md").read_text(encoding="utf-8")
+    normalized_init = " ".join(init_body.split())
+    normalized_audit = " ".join(audit_body.split())
+    assert "effective Codex chain" in normalized_init
+    assert "exact link to the project skill" in normalized_init
+    assert "must not copy their descriptions or methods" in normalized_init
+    assert "before editing either side" in normalized_init
+    assert "Start read-only" in normalized_audit
+    assert "AGENTS.override.md" in normalized_audit
+    assert "requires the user's decision before editing" in normalized_audit
+    assert "before and after footprint" in normalized_audit
 
 
 def _run_all():

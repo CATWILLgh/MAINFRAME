@@ -76,6 +76,26 @@
             "timeout": 30,
             "statusMessage": "MAINFRAME: reviewing current edit",
             "additionalContextLimit": 1200
+          },
+          {
+            "type": "command",
+            "command": "python3 -B @MAINFRAME_SEMGREP_SCRIPT@",
+            "async": true,
+            "timeout": 15,
+            "statusMessage": "MAINFRAME: running Semgrep advice",
+            "additionalContextLimit": 1200
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
+            "timeout": 5,
+            "statusMessage": "MAINFRAME: checking Pi launch status",
+            "additionalContextLimit": 500
           }
         ]
       }

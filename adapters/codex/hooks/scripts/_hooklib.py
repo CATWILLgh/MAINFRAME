@@ -146,7 +146,7 @@ _TELEMETRY_SCHEMA = (
 _TELEMETRY_RETRY_DELAYS = (0.0, 0.005, 0.015, 0.030, 0.060)
 _HOOK_SIGNAL_OUTCOMES = frozenset({"noted", "asked", "blocked", "resolved"})
 _TELEMETRY_ORIGINS = frozenset({"runtime", "model-lab", "synthetic", "unclassified"})
-_HOOK_SIGNAL_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+_HOOK_SIGNAL_ID_RE = re.compile(r"[a-z0-9][a-z0-9.-]{0,127}")
 _HOOK_SIGNAL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 
 

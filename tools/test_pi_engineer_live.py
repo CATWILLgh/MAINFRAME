@@ -118,12 +118,12 @@ def commit_and_run_second(project: Path, request_dir: Path, environment: dict[st
                   acceptance=["Export sum(a, b) and pass the exact allowed check."])
     second = invoke(project, environment, "--mode", "new", "--request",
                     ".agents/runtime/pi/requests/block-2.json", "--max-turns", "96")
-    receipts = list((project / ".agents/runtime/pi/engineer").glob("*/accepted-blocks/*.json"))
-    if second["status"] != "ready-for-architect-review" or len(receipts) != 1:
-        raise RuntimeError(f"second block or commit reconciliation failed: {second}")
+    archives = list((project / ".agents/runtime/pi/engineer").glob("*/superseded-blocks/*.json"))
+    if second["status"] != "ready-for-architect-review" or len(archives) != 1:
+        raise RuntimeError(f"second block or previous-state archival failed: {second}")
     if second["metrics"]["executor"]["compactions"] < 1:
         raise RuntimeError("new-block compaction was not proven")
-    return second, len(receipts)
+    return second, len(archives)
 
 
 def main() -> int:
@@ -135,7 +135,7 @@ def main() -> int:
         second, receipt_count = commit_and_run_second(project, request_dir, environment)
         print(json.dumps({
             "status": "passed", "internal_correction_rounds": initial["rounds"] - 1,
-            "external_resume_status": resumed["status"], "accepted_receipts": receipt_count,
+            "external_resume_status": resumed["status"], "superseded_archives": receipt_count,
             "new_block_compactions": second["metrics"]["executor"]["compactions"],
             "owner_state_preserved": True, "telemetry_db": ".telemetry/telemetry.db",
         }, indent=2))

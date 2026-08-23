@@ -75,6 +75,25 @@ def test_hook_invocations_are_reported_as_a_bounded_denominator():
     assert report["hook_invocations"][0]["hook"] == "check.py"
 
 
+def test_analyzer_runs_are_available_in_generic_breakdowns():
+    db = fresh_db()
+    assert _hooklib.log_event(
+        "analyzer_run",
+        {
+            "analyzer": "semgrep", "status": "completed",
+            "duration_ms": 750, "files": 1, "findings": 2,
+        },
+        {"session_id": "s", "cwd": "/private/project"},
+    ) == "written"
+    report = telemetry_data.build_report(db)
+    breakdowns = {
+        (item["event"], item["key"]): dict(item["items"])
+        for item in report["breakdowns"]
+    }
+    assert breakdowns[("analyzer_run", "analyzer")] == {"semgrep": 1}
+    assert breakdowns[("analyzer_run", "status")] == {"completed": 1}
+
+
 def test_hook_effectiveness_does_not_mix_old_signals_with_new_denominator():
     db = fresh_db()
     with sqlite3.connect(db) as connection:

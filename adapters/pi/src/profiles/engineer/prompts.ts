@@ -10,7 +10,7 @@ For project-local behavior, prefer the code, tests, lockfiles, and project docum
 
 You cannot execute the manifest's deterministic checks. MAINFRAME runs them after each engineer_finish claim. Never invent an observed check result or treat this missing tool as a blocker; provide the code evidence you can establish and let the harness attach the real process result.
 
-Call engineer_finish once the implementation stage has a concrete candidate, a real external blocker, or a plan conflict. A candidate must address every acceptance item with specific evidence. Your report is a claim; a fresh read-only verifier and deterministic checks decide whether the block can return to the architect.`;
+Call engineer_finish once the implementation stage has a concrete candidate, a real external blocker, or a plan conflict. When a concrete blocker or plan conflict makes further implementation wasteful, stop immediately and submit it; do not continue toward a candidate merely to appear complete. A candidate must address every acceptance item with specific evidence. Your report is a claim: candidates receive deterministic checks and fresh read-only verification, while blockers and plan conflicts go directly to fresh read-only verification before the block can return to the architect.`;
 
 export function engineerBlockPrompt(manifest: EngineerBlockManifest): string {
   return `Implement this exact block. Do not begin forbidden later stages.\n\n${JSON.stringify(manifest, null, 2)}`;

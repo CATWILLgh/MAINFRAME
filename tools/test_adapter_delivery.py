@@ -75,7 +75,7 @@ def _run_installer(
         python = fake_bin / "python3"
         python.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
         python.chmod(python.stat().st_mode | stat.S_IXUSR)
-    for command in ("ruff", "oxlint"):
+    for command in ("ruff", "oxlint", "semgrep"):
         executable = fake_bin / command
         executable.write_text("#!/bin/sh\necho test-version\n", encoding="utf-8")
         executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
@@ -968,6 +968,27 @@ def test_marker_quality_is_enforced_by_hooks_not_a_discovery_skill():
     assert "stop-gate-suppression-markers.py" in subagent_stop
 
 
+def test_semgrep_advice_is_async_bounded_and_nonblocking():
+    hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())
+    handlers = hooks["hooks"]["PostToolUse"][0]["hooks"]
+    semgrep = [
+        handler for handler in handlers
+        if "semgrep-informational.py" in json.dumps(handler)
+    ]
+    assert semgrep == [{
+        "type": "command",
+        "command": "sh",
+        "args": [
+            "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+            "PostToolUse",
+            "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/semgrep-informational.py",
+        ],
+        "async": True,
+        "timeout": 15,
+    }]
+    assert (PLUGIN / "hooks" / "rules" / "semgrep-informational.yml").is_file()
+
+
 def test_dev_permission_audit_observes_requests_without_deciding_them():
     hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())
     permission = json.dumps(hooks["hooks"]["PermissionRequest"])
@@ -1071,6 +1092,28 @@ def test_init_skill_is_manual_only():
     assert "safest practical path" in normalized
     assert "When implementing directly" in normalized
     assert "deferred in-scope work as a substitute" in normalized
+
+
+def test_project_instruction_workflows_are_manual_and_claude_native():
+    init_body = (
+        PLUGIN / "skills" / "project-instructions-init" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    audit_body = (
+        PLUGIN / "skills" / "project-instructions-audit" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    normalized_init = " ".join(init_body.split())
+    normalized_audit = " ".join(audit_body.split())
+
+    for body in (init_body, audit_body):
+        assert "disable-model-invocation: true" in body
+    assert "native loading behavior" in normalized_init
+    assert "exact link to the project skill" in normalized_init
+    assert "must not copy their descriptions or methods" in normalized_init
+    assert "before editing either side" in normalized_init
+    assert "Start read-only" in normalized_audit
+    assert ".claude/rules/" in normalized_audit
+    assert "requires the user's decision before editing" in normalized_audit
+    assert "before and after footprint" in normalized_audit
 
 
 def test_ticket_run_skills_prepare_native_goals_in_primary_session():

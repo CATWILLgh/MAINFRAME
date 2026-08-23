@@ -6,6 +6,7 @@ MAX_TEXT_CHARS = 256
 EVENT_FIELDS = {
     "session": {"phase": str, "source": str},
     "user_prompt": {"prompt_len": int},
+    "skill_request": {"skill": str, "invoker": str},
     "compaction": {"trigger": str},
     "subagent_start": {},
     "subagent_stop": {},
@@ -19,6 +20,13 @@ EVENT_FIELDS = {
         "outcome": str,
         "count": int,
         "context_chars": int,
+    },
+    "analyzer_run": {
+        "analyzer": str,
+        "status": str,
+        "duration_ms": int,
+        "files": int,
+        "findings": int,
     },
     "code_edit": {
         "lang": str,
@@ -59,10 +67,12 @@ EVENT_FIELDS = {
 REQUIRED_FIELDS = {
     "session": {"phase", "source"},
     "user_prompt": {"prompt_len"},
+    "skill_request": {"skill", "invoker"},
     "compaction": {"trigger"},
     "permission_request": {"tool_name", "permission_mode"},
     "hook_run": {"status", "duration_ms", "recipient"},
     "hook_signal": {"hook", "rule_id", "outcome", "count", "context_chars"},
+    "analyzer_run": {"analyzer", "status", "duration_ms", "files", "findings"},
     "code_edit": {"lang", "ext", "operation"},
     "model_usage": {
         "sample_id", "source", "input_tokens", "cached_input_tokens", "cache_write_tokens",
@@ -76,11 +86,14 @@ FIELD_VALUES = {
     ("session", "phase"): {"start", "end"},
     ("session", "source"): {"startup", "resume", "clear", "compact", "ended"},
     ("compaction", "trigger"): {"manual", "auto"},
+    ("skill_request", "invoker"): {"model", "user"},
     ("hook_run", "status"): {"completed", "failed"},
     ("hook_run", "recipient"): {"root", "subagent"},
     ("code_edit", "lang"): {"frontend", "ts", "python"},
     ("code_edit", "operation"): {"edit", "write", "apply_patch"},
     ("hook_signal", "outcome"): {"noted", "asked", "blocked", "resolved"},
+    ("analyzer_run", "analyzer"): {"semgrep"},
+    ("analyzer_run", "status"): {"completed", "failed", "unavailable"},
     ("model_usage", "source"): {
         "native-otel", "native-app-server", "transcript", "model-lab",
     },

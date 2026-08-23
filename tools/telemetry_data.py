@@ -73,6 +73,7 @@ BREAKDOWN_FIELDS = {
     "model_lab": ("status",),
     "permission_request": ("tool_name", "permission_mode"),
     "hook_run": ("status", "recipient"),
+    "analyzer_run": ("analyzer", "status"),
     "tool_decision": ("decision", "source"),
     "engineer_run": ("mode", "status", "verifier_status"),
     "engineer_tool_summary": ("stage",),

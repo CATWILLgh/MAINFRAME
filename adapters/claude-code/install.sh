@@ -655,7 +655,7 @@ check_tooling_prerequisites() {
     fi
     log_warn "Some optional analyzers are missing — their checks will report unavailable when applicable:"
     if [[ $need_py -eq 1 ]]; then
-        log_warn "  - uv OR pipx (for ruff):"
+        log_warn "  - uv OR pipx (for ruff and semgrep):"
         case "$mgr" in
             apt)  log_warn "      sudo apt install -y pipx && pipx ensurepath" ;;
             brew) log_warn "      brew install uv   (or: brew install pipx)" ;;
@@ -711,6 +711,7 @@ bootstrap_python_security_tools() {
     # Tooling installs are best-effort: `|| true` keeps one failure from aborting
     # the phase under `set -e` (each helper warns internally on failure).
     _install_tool ruff ruff@latest || true
+    _install_tool semgrep semgrep || true
 }
 
 _install_npm_global() {

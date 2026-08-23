@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 
@@ -54,6 +55,7 @@ HEALTH_MODULES = (
     "python-security-scan.py",
     "python-security-stop-gate.py",
     "scan-suppression-markers.py",
+    "semgrep-informational.py",
     "stop-gate-comment-discipline.py",
     "stop-gate-suppression-markers.py",
     "ticket-id-format-reminder.py",
@@ -321,24 +323,25 @@ def _command(payload: dict) -> None:
     if reasons:
         _emit_deny("\n\n".join(dict.fromkeys(reasons))[:5000])
     else:
+        if _pi_wait_enabled():
+            importlib.import_module("_pi_wait").register(payload)
         notes.extend(_notes(_run_module("_bash_patterns.py", payload)))
         if notes:
             _emit_context("PreToolUse", "\n\n".join(dict.fromkeys(notes)))
 
 
 def _stop(payload: dict) -> None:
-    if payload.get("stop_hook_active"):
-        return
-    filenames = [
-        "stop-gate-suppression-markers.py",
-        "stop-gate-comment-discipline.py",
-        "python-security-stop-gate.py",
-        "nodejs-security-stop-gate.py",
-    ]
     rows: list[dict] = []
     failures: list[str] = []
-    for filename in filenames:
-        rows.extend(_checked_module(filename, payload, failures))
+    if not payload.get("stop_hook_active"):
+        filenames = [
+            "stop-gate-suppression-markers.py",
+            "stop-gate-comment-discipline.py",
+            "python-security-stop-gate.py",
+            "nodejs-security-stop-gate.py",
+        ]
+        for filename in filenames:
+            rows.extend(_checked_module(filename, payload, failures))
     reasons = []
     for row in rows:
         reason = row.get("reason") if row.get("decision") == "block" else None
@@ -346,6 +349,16 @@ def _stop(payload: dict) -> None:
             reasons.append(reason.strip())
     reasons.extend(_notes(rows))
     reasons.extend(failures)
+    if not reasons and _pi_wait_enabled():
+        try:
+            pi_reason = importlib.import_module("_pi_wait").wait_for_completion(payload)
+            if pi_reason:
+                reasons.append(pi_reason)
+        except Exception as exc:
+            notice = _failure_notice(payload, "pi-wait.py", exc)
+            if notice:
+                reasons.append(notice)
+                failures.append(notice)
     if reasons:
         unique_reasons = list(dict.fromkeys(reasons))[:MAX_SECTIONS]
         reason_text = "\n\n".join(unique_reasons)
@@ -360,7 +373,8 @@ def _stop(payload: dict) -> None:
 
 def _health(payload: dict) -> None:
     failures = []
-    for filename in HEALTH_MODULES:
+    modules = HEALTH_MODULES + (("_pi_wait.py",) if _pi_wait_enabled() else ())
+    for filename in modules:
         try:
             _load_module(filename)
         except (Exception, SystemExit) as exc:
@@ -388,6 +402,11 @@ def _health(payload: dict) -> None:
                 + "; ".join(failures)
             ),
         )
+
+
+def _pi_wait_enabled() -> bool:
+    codex_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+    return (codex_home / "mainframe" / "pi-wait-enabled.json").is_file()
 
 
 def _emit_context(
@@ -460,6 +479,9 @@ _EDIT_LANGS = {
     ".py": "python",
 }
 _EDIT_OPERATIONS = {"edit": "edit", "write": "write", "apply_patch": "apply_patch"}
+_EXPLICIT_PROJECT_INSTRUCTION_SKILL = re.compile(
+    r"(?<![A-Za-z0-9_-])\$(mainframe-project-instructions-(?:init|audit))\b"
+)
 
 
 def _record_code_edits(hooklib, payload: dict) -> None:
@@ -486,9 +508,14 @@ def _record_runtime_event(payload: dict) -> None:
     elif event == "SessionEnd":
         hooklib.log_event("session", {"phase": "end", "source": "ended"}, payload)
     elif event == "UserPromptSubmit":
-        hooklib.log_event(
-            "user_prompt", {"prompt_len": len(str(payload.get("prompt") or ""))}, payload
-        )
+        prompt = str(payload.get("prompt") or "")
+        hooklib.log_event("user_prompt", {"prompt_len": len(prompt)}, payload)
+        for skill in dict.fromkeys(
+            _EXPLICIT_PROJECT_INSTRUCTION_SKILL.findall(prompt)
+        ):
+            hooklib.log_event(
+                "skill_request", {"skill": skill, "invoker": "user"}, payload
+            )
     elif event == "PostCompact":
         trigger = str(payload.get("trigger") or "")
         if trigger in {"manual", "auto"}:
@@ -531,7 +558,13 @@ def main() -> None:
             else:
                 _capture(payload)
         elif event == "PostToolUse":
-            _quality(payload)
+            if payload.get("tool_name") == "Bash":
+                if _pi_wait_enabled():
+                    note = importlib.import_module("_pi_wait").complete_launch(payload)
+                    if note:
+                        _emit_context("PostToolUse", note)
+            else:
+                _quality(payload)
         elif event in {"Stop", "SubagentStop"}:
             _stop(payload)
     except Exception as exc:

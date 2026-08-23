@@ -237,6 +237,17 @@
               "PostToolUse",
               "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/telemetry.py"
             ]
+          },
+          {
+            "type": "command",
+            "command": "sh",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/run-hook.sh",
+              "PostToolUse",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/semgrep-informational.py"
+            ],
+            "async": true,
+            "timeout": 15
           }
         ]
       },

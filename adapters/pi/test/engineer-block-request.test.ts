@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -10,12 +10,11 @@ import {
   compileEngineerBlockManifest,
   parseEngineerBlockRequest,
 } from "../src/profiles/engineer/block-request.js";
-import { inspectEngineerGit, inspectEngineerGitState } from "../src/profiles/engineer/preflight.js";
+import { inspectEngineerGit } from "../src/profiles/engineer/preflight.js";
 import {
+  archiveActiveEngineerBlockForNew,
   engineerRuntimeDirectory,
   loadActiveEngineerManifest,
-  markEngineerBlockReadyForArchitectReview,
-  reconcileAcceptedEngineerBlock,
   recordActiveEngineerBlock,
 } from "../src/profiles/engineer/session-state.js";
 
@@ -106,7 +105,7 @@ test("resume rejects a runtime-owned path that leaves the project", async () => 
   await assert.rejects(loadActiveEngineerManifest(facts), /path leaves the project/);
 });
 
-test("new reconciles only a reviewed block committed by the primary agent", async () => {
+test("new archives the previous block without inferring architect acceptance", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-request-accepted-"));
   await execFileAsync("git", ["init", "-q", root]);
   await execFileAsync("git", ["-C", root, "config", "user.name", "MAINFRAME Test"]);
@@ -122,19 +121,39 @@ test("new reconciles only a reviewed block committed by the primary agent", asyn
     acceptance: ["Done"],
   });
   const manifest = compileEngineerBlockManifest(request, head, "new");
-  let facts = await inspectEngineerGit(root, manifest);
+  const facts = await inspectEngineerGit(root, manifest);
   await writeFile(path.join(root, "source.ts"), "implemented\n");
   await recordActiveEngineerBlock(facts, manifest, ["source.ts"]);
-  await assert.rejects(reconcileAcceptedEngineerBlock(facts), /still needs architect review/);
-  await markEngineerBlockReadyForArchitectReview(facts);
-  await assert.rejects(reconcileAcceptedEngineerBlock(facts), /before the primary agent commits/);
-  await execFileAsync("git", ["-C", root, "add", "source.ts"]);
-  await execFileAsync("git", ["-C", root, "commit", "-qm", "feat(test): implement block"]);
-  facts = await inspectEngineerGitState(root);
-  const receipt = await reconcileAcceptedEngineerBlock(facts);
+  const receipt = await archiveActiveEngineerBlockForNew(facts);
   assert.equal(receipt?.blockId, manifest.blockId);
-  assert.deepEqual(receipt?.paths, ["source.ts"]);
-  assert.equal(receipt?.previousHead, head);
-  assert.equal(receipt?.acceptedHead, facts.startingHead);
+  assert.match(receipt?.archivePath ?? "", /superseded-blocks/);
+  const archived = await readdir(path.join(engineerRuntimeDirectory(facts), "superseded-blocks"));
+  assert.equal(archived.length, 1);
+  const archivedState = JSON.parse(await readFile(path.join(
+    engineerRuntimeDirectory(facts), "superseded-blocks", archived[0]!,
+  ), "utf8")) as { manifest: { blockId: string }; ownedPaths: Array<{ path: string }> };
+  assert.equal(archivedState.manifest.blockId, manifest.blockId);
+  assert.deepEqual(archivedState.ownedPaths.map(({ path: ownedPath }) => ownedPath), ["source.ts"]);
   await assert.rejects(loadActiveEngineerManifest(facts), /no recorded Pi engineer block/);
+});
+
+test("new is a no-op when there is no previous active block", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "mainframe-pi-request-plan-conflict-"));
+  await execFileAsync("git", ["init", "-q", root]);
+  await execFileAsync("git", ["-C", root, "config", "user.name", "MAINFRAME Test"]);
+  await execFileAsync("git", ["-C", root, "config", "user.email", "mainframe-test@example.invalid"]);
+  await writeFile(path.join(root, "source.ts"), "initial\n");
+  await execFileAsync("git", ["-C", root, "add", "source.ts"]);
+  await execFileAsync("git", ["-C", root, "commit", "-qm", "test: initial"]);
+  const head = (await execFileAsync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim();
+  const request = parseEngineerBlockRequest({
+    schemaVersion: 1,
+    goal: "Implement",
+    writePaths: ["*.ts"],
+    acceptance: ["Done"],
+  });
+  const manifest = compileEngineerBlockManifest(request, head, "new");
+  let facts = await inspectEngineerGit(root, manifest);
+  const receipt = await archiveActiveEngineerBlockForNew(facts);
+  assert.equal(receipt, undefined);
 });

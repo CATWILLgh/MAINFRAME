@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "rule": "MI-COMMON-004",
+      "file": ".agents/skills/pi-layers/references/engineer-runtime-patterns.md",
+      "contains": "an existing file must use exact edit",
+      "reason": "This is a deterministic file-mutation invariant: whole-file creation and exact editing are separate tool contracts."
+    }
+  ]
+}

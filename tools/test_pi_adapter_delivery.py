@@ -258,6 +258,7 @@ def test_launcher_rejects_invalid_engineer_mode_combinations():
         [str(LAUNCHER), "engineer", "--mode", "new"], cwd=project, capture_output=True, text=True, env=env
     )
     assert missing_request.returncode == 2
+
     assert "requires --request" in missing_request.stderr
 
     request_on_resume = subprocess.run(

@@ -206,7 +206,7 @@ def _git_repo() -> Path:
     return root
 
 
-def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
+def test_hook_source_has_one_dispatcher_and_one_bounded_async_analyzer():
     source = json.loads(HOOKS_SOURCE.read_text(encoding="utf-8"))
     assert source["description"].startswith("MAINFRAME lifecycle")
     assert set(source["hooks"]) == {
@@ -215,9 +215,10 @@ def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
         "UserPromptSubmit", "Stop", "SubagentStop",
     }
     for event, groups in source["hooks"].items():
-        assert len(groups) == 1
-        assert len(groups[0]["hooks"]) == 1
-        handler = groups[0]["hooks"][0]
+        assert len(groups) == (2 if event == "PostToolUse" else 1)
+        handlers = groups[0]["hooks"]
+        assert len(handlers) == (2 if event == "PostToolUse" else 1)
+        handler = handlers[0]
         assert handler["type"] == "command"
         assert handler["statusMessage"].startswith("MAINFRAME:")
         assert "mainframe-hook.py" not in handler["command"]
@@ -231,6 +232,25 @@ def test_hook_source_is_one_handler_per_event_and_has_bounded_outputs():
                 "PostCompact", "UserPromptSubmit", "Stop", "SubagentStop",
             }
         assert "async" not in handler
+        if event == "PostToolUse":
+            analyzer = handlers[1]
+            assert analyzer == {
+                "type": "command",
+                "command": "python3 -B @MAINFRAME_SEMGREP_SCRIPT@",
+                "async": True,
+                "timeout": 15,
+                "statusMessage": "MAINFRAME: running Semgrep advice",
+                "additionalContextLimit": 1200,
+            }
+            bash_group = groups[1]
+            assert bash_group["matcher"] == "^Bash$"
+            assert bash_group["hooks"] == [{
+                "type": "command",
+                "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
+                "timeout": 5,
+                "statusMessage": "MAINFRAME: checking Pi launch status",
+                "additionalContextLimit": 500,
+            }]
     assert source["hooks"]["SessionStart"][0]["matcher"] == (
         "^(startup|resume|clear|compact)$"
     )
@@ -263,6 +283,40 @@ def test_dispatcher_records_privacy_safe_dev_telemetry():
     assert row[0] == "gpt-test"
     assert "secret-looking" not in " ".join(str(value) for value in row)
     assert str(root) not in " ".join(str(value) for value in row)
+
+
+def test_dispatcher_records_explicit_project_instruction_skills_without_prompt():
+    root = Path(tempfile.mkdtemp())
+    db = root / "telemetry" / "telemetry.db"
+    prompt = (
+        "Use $mainframe-project-instructions-init, then mention "
+        "$mainframe-project-instructions-init once more."
+    )
+    payload = {
+        "session_id": "session",
+        "turn_id": "turn",
+        "hook_event_name": "UserPromptSubmit",
+        "cwd": str(root / "private-project"),
+        "prompt": prompt,
+    }
+    proc, result = _run_hook(
+        payload, root / "state",
+        extra_env={"MAINFRAME_CODEX_TELEMETRY_DB": str(db)},
+    )
+    assert proc.returncode == 0 and result is None
+
+    import sqlite3
+    with sqlite3.connect(db) as connection:
+        rows = connection.execute(
+            "SELECT event, payload, project FROM events ORDER BY id"
+        ).fetchall()
+    skill_rows = [row for row in rows if row[0] == "skill_request"]
+    assert len(skill_rows) == 1
+    assert json.loads(skill_rows[0][1]) == {
+        "skill": "mainframe-project-instructions-init",
+        "invoker": "user",
+    }
+    assert prompt not in " ".join(str(value) for row in rows for value in row)
 
 
 def test_dispatcher_records_exact_component_denominators():
@@ -370,7 +424,7 @@ def test_startup_health_covers_every_runtime_module():
     expected = {
         path.name
         for path in HOOK.parent.glob("*.py")
-        if path.name != HOOK.name
+        if path.name not in {HOOK.name, "_pi_wait.py"}
     }
     assert set(module.HEALTH_MODULES) == expected
     dispatcher = HOOK.read_text(encoding="utf-8")
@@ -523,6 +577,93 @@ def test_manager_merges_user_groups_and_uninstall_removes_only_owned_groups():
     restored = json.loads(target.read_text(encoding="utf-8"))
     assert restored == {"description": "user", "hooks": {"PreToolUse": [user_group]}}
     assert not state.exists()
+
+
+def test_manager_extends_only_the_opt_in_pi_stop_handler():
+    root = Path(tempfile.mkdtemp())
+    target = root / "hooks.json"
+    state = root / "state.json"
+    install = subprocess.run(
+        [
+            sys.executable, str(MANAGER), "install", "--target", str(target),
+            "--source", str(HOOKS_SOURCE), "--script", str(HOOK),
+            "--state", str(state), "--with-pi",
+        ],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert install.returncode == 0, install.stderr
+    document = json.loads(target.read_text(encoding="utf-8"))
+    stop = document["hooks"]["Stop"][0]["hooks"][0]
+    assert stop["timeout"] == 7260
+    assert stop["statusMessage"] == "MAINFRAME: checking findings and Pi work"
+    assert document["hooks"]["SessionEnd"][0]["hooks"][0]["timeout"] == 3
+
+
+def test_pi_stop_bridge_returns_one_native_continuation():
+    root = Path(tempfile.mkdtemp())
+    state = root / "state"
+    codex_home = root / "codex-home"
+    config = codex_home / "mainframe" / "pi-wait-enabled.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "waitTimeoutSeconds": 2,
+                "startupGraceSeconds": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+    extra_env = {"CODEX_HOME": str(codex_home)}
+    command = {
+        "session_id": "pi-session",
+        "turn_id": "pi-turn",
+        "agent_id": "",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "cwd": str(root),
+        "tool_input": {
+            "command": "mainframe-pi engineer --mode new --request .agents/runtime/pi/requests/a.json"
+        },
+    }
+    proc, output = _run_hook(command, state, extra_env=extra_env)
+    assert proc.returncode == 0, proc.stderr
+    assert output is None
+
+    result = root / ".agents" / "runtime" / "pi" / "engineer" / "worktree" / "runs" / "run-one" / "result.json"
+    result.parent.mkdir(parents=True)
+    result.write_text("{}\n", encoding="utf-8")
+    latest = result.parents[2] / "latest-run.json"
+    latest.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "runId": "run-one",
+                "startedAt": "2026-08-21T10:00:00Z",
+                "phase": "finished",
+                "status": "ready-for-architect-review",
+                "resultPath": str(result.relative_to(root)),
+                "pid": 999999,
+            }
+        ),
+        encoding="utf-8",
+    )
+    stop = {
+        "session_id": "pi-session",
+        "turn_id": "pi-turn",
+        "agent_id": "",
+        "hook_event_name": "Stop",
+        "cwd": str(root),
+        "stop_hook_active": False,
+    }
+    proc, continuation = _run_hook(stop, state, extra_env=extra_env)
+    assert proc.returncode == 0, proc.stderr
+    assert continuation["decision"] == "block"
+    assert "Pi engineer finished" in continuation["reason"]
+    stop["stop_hook_active"] = True
+    _, consumed = _run_hook(stop, state, extra_env=extra_env)
+    assert consumed is None
 
 
 def test_manager_refuses_to_remove_a_changed_owned_group():

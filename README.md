@@ -75,7 +75,7 @@ Only the small global baseline is present everywhere. Primary-session orchestrat
 - Bash `3.2` or newer;
 - Python `3`.
 
-Some quality checks use optional tools when they are available, including Node.js, Ruff, Oxlint, and Fallow.
+Some quality checks use optional tools when they are available, including Node.js, Ruff, Oxlint, and Semgrep. The adapters install Semgrep on a best-effort basis; its per-edit advice remains non-blocking.
 
 ### Install
 
@@ -111,6 +111,19 @@ and authorize Pi's providers, then run:
 ./install.sh --pi
 ```
 
+Pi does not enter the ordinary Codex installation. To let Codex delegate to
+the installed Pi worker, opt in explicitly:
+
+```bash
+./install.sh --codex --with-pi
+```
+
+That variant adds only the two Pi skills and a native completion bridge. Codex
+can keep working while Pi runs in its terminal session; when the primary turn
+would otherwise end, the bridge waits without model turns and resumes Codex
+once Pi has a terminal result. Reinstalling Codex without `--with-pi` removes
+only these optional artifacts and restores the ordinary short Stop hook.
+
 The Pi installer keeps provider authorization in Pi, creates no shared secret
 copy, and installs one `mainframe-pi` launcher. Its machine-local model routing
 lives in `adapters/pi/config/profiles.local.json` beside the tracked example.
@@ -143,7 +156,8 @@ mainframe-pi engineer --mode new --request .agents/runtime/pi/requests/block-001
 `mainframe-pi engineer --mode resume` continues that worktree's recorded active
 block without repeating the request. Another worktree receives another Pi
 session by construction. Claude Code and Codex expose the same flow through
-their native `pi-engineer` / `mainframe-pi-engineer` skills. After independent
+their native `pi-engineer` / `mainframe-pi-engineer` skills when their Pi
+integration is installed. After independent
 acceptance, the primary agent creates the Conventional Commit; Pi never commits.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
@@ -155,6 +169,13 @@ Start a new Claude Code session after installation. For a MAINFRAME-guided prima
 In Codex, invoke `$mainframe-init` explicitly in the task.
 To resolve one ticket that needs a product or infrastructure decision, invoke
 `$mainframe-init` and name that ticket's four-character id.
+To establish a repository's own layered instruction system, use
+`/mainframe:project-instructions-init` in Claude Code or
+`$mainframe-project-instructions-init` in Codex. Periodic maintenance uses the
+matching `project-instructions-audit` command. Both workflows inspect the
+effective native instruction chain first and return semantic conflicts for a
+user decision before changing their meaning. Development telemetry records the
+explicit invocation, project, session, and time without storing the prompt.
 For a ticket pipeline run, start native Goal mode and explicitly invoke
 `$mainframe-tickets-find`, `$mainframe-tickets-refine`,
 `$mainframe-tickets-implement`, or `$mainframe-tickets-verify` with an optional

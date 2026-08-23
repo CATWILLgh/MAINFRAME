@@ -25,14 +25,14 @@ jobs:
           git config --global user.email "ci@mainframe.local"
           git config --global user.name "mainframe-ci"
 
-      # The hook tests exercise the real Ruff and Oxlint binaries. Validator tests and
+      # The hook tests exercise the real Ruff, Oxlint, and Semgrep binaries. Validator tests and
       # the hub-page generator parse YAML; the skill validator also counts
       # tokens. The OTLP receiver tests decode real protobuf batches, so the
       # observatory's own requirements are installed here too. Install the
       # verified test toolchain before any test discovers it.
       - name: Install test and validator dependencies
         run: |
-          pip install ruff==0.15.15 tiktoken pyyaml
+          pip install ruff==0.15.15 semgrep==1.164.0 tiktoken pyyaml
           pip install -r tools/telemetry-requirements.txt
           npm install --global oxlint@1.67.0
 

@@ -20,6 +20,14 @@ import { validateVerdictAgainstRunEvidence } from "../src/profiles/engineer/veri
 import { VERIFIER_SYSTEM_PROMPT } from "../src/profiles/engineer/verifier-runner.js";
 import { ENGINEER_SYSTEM_PROMPT } from "../src/profiles/engineer/prompts.js";
 import { createEngineerProgressHints, ENGINEER_TOOL_NAMES } from "../src/profiles/engineer/tools.js";
+import { engineerFailureReason, shouldRunEngineerChecks } from "../src/profiles/engineer/runtime.js";
+import {
+  beginEngineerRun,
+  failEngineerRun,
+  finishEngineerRun,
+  latestEngineerDisposition,
+  validateEngineerResumeDisposition,
+} from "../src/profiles/engineer/run-state.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -41,6 +49,126 @@ function block(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+test("engineer run state is durable and terminal", async () => {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "mainframe-pi-run-state-"));
+  const facts = {
+    projectRoot,
+    gitDirectory: path.join(projectRoot, ".git"),
+    worktreeId: "worktree-one",
+    startingHead: "a".repeat(40),
+    initialDirtyPaths: [],
+  };
+  const manifest = parseEngineerBlockManifest(block());
+  const handle = await beginEngineerRun(facts, manifest, "new");
+  const running = JSON.parse(await readFile(handle.statePath, "utf8"));
+  assert.equal(running.phase, "running");
+  assert.equal(running.runId, handle.runId);
+
+  const usage = {
+    requests: 0,
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: 0,
+  };
+  const metrics = {
+    toolCalls: 0,
+    repeatedToolCalls: 0,
+    callsByTool: {},
+    failedToolCalls: 0,
+    compactions: 0,
+    retries: 0,
+  };
+  await finishEngineerRun(handle, {
+    status: "ready-for-architect-review",
+    rounds: 1,
+    checks: [],
+    usage: { executor: usage, verifier: usage, total: usage },
+    metrics: { executor: metrics, verifier: metrics },
+  });
+  const finished = JSON.parse(await readFile(handle.statePath, "utf8"));
+  assert.equal(finished.phase, "finished");
+  assert.equal(finished.status, "ready-for-architect-review");
+  assert.equal(finished.exitCode, 0);
+  assert.equal(JSON.parse(await readFile(handle.resultPath, "utf8")).status, "ready-for-architect-review");
+
+  const failedHandle = await beginEngineerRun(facts, manifest, "resume");
+  await failEngineerRun(failedHandle, new Error("synthetic failure"));
+  const failed = JSON.parse(await readFile(failedHandle.statePath, "utf8"));
+  assert.equal(failed.phase, "finished");
+  assert.equal(failed.status, "failed");
+  assert.equal(failed.exitCode, 1);
+});
+
+test("terminal engineer dispositions prevent costly empty resumes", async () => {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "mainframe-pi-run-disposition-"));
+  const facts = {
+    projectRoot,
+    gitDirectory: path.join(projectRoot, ".git"),
+    worktreeId: "worktree-disposition",
+    startingHead: "a".repeat(40),
+    initialDirtyPaths: [],
+  };
+  const manifest = parseEngineerBlockManifest(block());
+  const usage = { requests: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: 0 };
+  const metrics = { toolCalls: 0, repeatedToolCalls: 0, callsByTool: {}, failedToolCalls: 0, compactions: 0, retries: 0 };
+  const planConflict = await beginEngineerRun(facts, manifest, "new");
+  await finishEngineerRun(planConflict, {
+    status: "plan-conflict",
+    rounds: 1,
+    checks: [],
+    usage: { executor: usage, verifier: usage, total: usage },
+    metrics: { executor: metrics, verifier: metrics },
+  });
+  await assert.rejects(
+    validateEngineerResumeDisposition(facts, manifest.blockId, false),
+    /corrective --feedback.*accept and commit/,
+  );
+  await validateEngineerResumeDisposition(facts, manifest.blockId, true);
+  assert.equal(await latestEngineerDisposition(facts, manifest.blockId), "plan-conflict");
+
+  const ready = await beginEngineerRun(facts, manifest, "resume");
+  await finishEngineerRun(ready, {
+    status: "ready-for-architect-review",
+    rounds: 1,
+    checks: [],
+    usage: { executor: usage, verifier: usage, total: usage },
+    metrics: { executor: metrics, verifier: metrics },
+  });
+  await assert.rejects(
+    validateEngineerResumeDisposition(facts, manifest.blockId, true),
+    /already awaits architect review/,
+  );
+  assert.equal(await latestEngineerDisposition(facts, manifest.blockId), "ready-for-architect-review");
+});
+
+test("provider timeouts explain that the active engineer session is preserved", () => {
+  assert.match(engineerFailureReason(new Error("Request timed out.")), /session.*remain intact/i);
+  assert.equal(engineerFailureReason(new Error("different failure")), "different failure");
+});
+
+test("blockers and plan conflicts go to review before deterministic candidate checks", () => {
+  const manifest = parseEngineerBlockManifest(block());
+  const completion = (status: "candidate" | "blocked" | "plan-conflict") => parseEngineerCompletionManifest({
+    schemaVersion: 1,
+    blockId: manifest.blockId,
+    status,
+    summary: "Bounded result",
+    changedPaths: [],
+    acceptanceClaims: status === "candidate"
+      ? manifest.acceptance.map(({ id }) => ({ acceptanceId: id, claim: "Done", evidence: ["src/example.ts:1"] }))
+      : [],
+    blockers: status === "candidate" ? [] : ["The manifest prevents the requested result"],
+  }, manifest);
+  assert.equal(shouldRunEngineerChecks(completion("candidate")), true);
+  assert.equal(shouldRunEngineerChecks(completion("blocked")), false);
+  assert.equal(shouldRunEngineerChecks(completion("plan-conflict")), false);
+  assert.match(ENGINEER_SYSTEM_PROMPT, /stop immediately/);
+  assert.match(VERIFIER_SYSTEM_PROMPT, /if it is wrong.*block is feasible/);
+});
 
 test("engineer reference tools and prompts require bounded primary-source use", () => {
   assert.ok(ENGINEER_TOOL_NAMES.includes("web_search"));

@@ -40,7 +40,7 @@ The executor report is a claim, not evidence. Compare every acceptance item with
 
 The executor cannot run deterministic checks; MAINFRAME runs them after every completion claim and supplies their real results to you. Never instruct the executor to run a check or fabricate an exit code. If a transient check failure needs no repository change, ask it only to resubmit the unchanged candidate so the harness can rerun the check.
 
-Classify every acceptance item exactly once. Return ready-for-architect-review only when every item is verified and all supplied deterministic checks passed. For correctable omissions return one exact correction packet for the same executor session. Use plan-conflict only when the agreed manifest itself prevents a correct implementation. Use blocked only for a demonstrated external blocker.`;
+Classify every acceptance item exactly once. Return ready-for-architect-review only when every item is verified and all supplied deterministic checks passed. When the executor reports blocked or plan-conflict, test that claim before requesting implementation work: if it is wrong, return one exact correction packet explaining why the block is feasible; if it is real, return the matching terminal status without demanding irrelevant candidate checks. For other correctable omissions return one exact correction packet for the same executor session. Use plan-conflict only when the agreed manifest itself prevents a correct implementation. Use blocked only for a demonstrated external blocker.`;
 
 export interface EngineerVerificationResult {
   verdict: EngineerVerifierVerdict;

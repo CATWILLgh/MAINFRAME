@@ -21,6 +21,7 @@ import type {
   EngineerVerifierVerdict,
 } from "./contracts.js";
 import { EngineerExecutor } from "./executor-runner.js";
+import type { EngineerGitFacts } from "./preflight.js";
 import { runEngineerVerifier } from "./verifier-runner.js";
 import { markEngineerBlockReadyForArchitectReview } from "./session-state.js";
 import type { WebRouter } from "../../web-tools.js";
@@ -38,6 +39,7 @@ export interface EngineerPipelineOptions {
   maxTurns?: number;
   initialCorrection?: EngineerCorrectionPacket;
   webRouter: WebRouter;
+  onStarted?: (facts: EngineerGitFacts) => Promise<void>;
 }
 
 export interface EngineerPipelineResult {
@@ -85,6 +87,18 @@ function addMetrics(
   };
 }
 
+export function engineerFailureReason(error: unknown): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  if (/^request timed out\.?$/i.test(reason.trim())) {
+    return "The model provider timed out after its retry budget. The active Pi session and recorded file ownership remain intact; retry --mode resume after provider recovery, with --feedback only when there is a real correction.";
+  }
+  return reason;
+}
+
+export function shouldRunEngineerChecks(completion: EngineerCompletionManifest): boolean {
+  return completion.status === "candidate";
+}
+
 async function progressFingerprint(
   projectRoot: string,
   completion: EngineerCompletionManifest,
@@ -124,6 +138,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
       ...(options.executorTimeoutMs === undefined ? {} : { timeoutMs: options.executorTimeoutMs }),
       ...(options.maxTurns === undefined ? {} : { maxTurns: options.maxTurns }),
       webRouter: options.webRouter,
+      ...(options.onStarted === undefined ? {} : { onLocked: options.onStarted }),
     });
     let correction = options.initialCorrection;
     while (true) {
@@ -132,7 +147,9 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
         ? await executor.runCorrection(correction)
         : await executor.runInitial();
       completion = executorRound.completion;
-      checks = await runEngineerChecks(executor.facts, options.manifest);
+      checks = shouldRunEngineerChecks(completion)
+        ? await runEngineerChecks(executor.facts, options.manifest)
+        : [];
       const verification = await runEngineerVerifier(
         executor.facts,
         options.manifest,
@@ -195,7 +212,7 @@ export async function runEngineerPipeline(options: EngineerPipelineOptions): Pro
     addUsage(totalUsage, verifierUsage);
     return {
       status: "blocked",
-      reason: error instanceof Error ? error.message : String(error),
+      reason: engineerFailureReason(error),
       rounds,
       ...(completion ? { completion } : {}),
       checks,

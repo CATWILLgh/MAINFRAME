@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { isInside } from "../../paths.js";
@@ -161,27 +161,14 @@ export async function markEngineerBlockReadyForArchitectReview(facts: EngineerGi
   await writeActiveEngineerBlock(facts, { ...active, reviewReady: true, recordedAt: new Date().toISOString() });
 }
 
-export interface AcceptedEngineerBlockReceipt {
-  schemaVersion: 1;
+export interface SupersededEngineerBlockReceipt {
   blockId: string;
-  previousHead: string;
-  acceptedHead: string;
-  paths: string[];
-  recordedAt: string;
+  archivePath: string;
 }
 
-async function git(facts: EngineerGitFacts, args: string[]): Promise<string> {
-  const { execFile } = await import("node:child_process");
-  const { promisify } = await import("node:util");
-  return (await promisify(execFile)("git", ["-C", facts.projectRoot, ...args], {
-    encoding: "utf8",
-    maxBuffer: 4 * 1024 * 1024,
-  })).stdout;
-}
-
-export async function reconcileAcceptedEngineerBlock(
+export async function archiveActiveEngineerBlockForNew(
   facts: EngineerGitFacts,
-): Promise<AcceptedEngineerBlockReceipt | undefined> {
+): Promise<SupersededEngineerBlockReceipt | undefined> {
   const statePath = path.join(engineerRuntimeDirectory(facts), "active-block.json");
   try {
     await readFile(statePath);
@@ -190,41 +177,11 @@ export async function reconcileAcceptedEngineerBlock(
     throw error;
   }
   const active = await readActiveEngineerBlock(facts);
-  if (!active.reviewReady) {
-    throw new Error("Cannot start a new Pi engineer block while the previous block still needs architect review or correction; use --mode resume");
-  }
-  if (facts.startingHead.toLowerCase() === active.manifest.expectedHead.toLowerCase()) {
-    throw new Error("Cannot start a new Pi engineer block before the primary agent commits the accepted block");
-  }
-  await verifyOwnedHashes(facts, active);
-  const paths = active.ownedPaths.map(({ path: ownedPath }) => ownedPath).sort();
-  const dirty = paths.length
-    ? await git(facts, ["status", "--porcelain=v1", "--", ...paths])
-    : "";
-  if (dirty.trim()) throw new Error("Cannot start a new Pi engineer block while accepted Pi-owned paths remain uncommitted");
-  const committed = new Set((await git(facts, [
-    "diff", "--name-only", "-z", active.manifest.expectedHead, facts.startingHead, "--", ...paths,
-  ])).split("\0").filter(Boolean));
-  const missing = paths.filter((ownedPath) => !committed.has(ownedPath));
-  if (missing.length) {
-    throw new Error(`Cannot start a new Pi engineer block because the accepted commit range does not contain: ${missing.join(", ")}`);
-  }
-  const receipt: AcceptedEngineerBlockReceipt = {
-    schemaVersion: 1,
-    blockId: active.manifest.blockId,
-    previousHead: active.manifest.expectedHead,
-    acceptedHead: facts.startingHead,
-    paths,
-    recordedAt: new Date().toISOString(),
-  };
-  const directory = path.join(engineerRuntimeDirectory(facts), "accepted-blocks");
+  const directory = path.join(engineerRuntimeDirectory(facts), "superseded-blocks");
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const destination = path.join(directory, `${active.manifest.blockId}-${facts.startingHead.slice(0, 12)}.json`);
-  const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  await rename(temporary, destination);
-  await rm(statePath);
-  return receipt;
+  const destination = path.join(directory, `${active.manifest.blockId}-${Date.now()}.json`);
+  await rename(statePath, destination);
+  return { blockId: active.manifest.blockId, archivePath: destination };
 }
 
 export function newBlockCompactionInstructions(manifest: EngineerBlockManifest): string {

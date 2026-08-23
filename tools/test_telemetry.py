@@ -66,6 +66,24 @@ def test_writes_row():
     assert envelope == (2, "p1", "a1", "t1", "PostToolUse", "claude-test", "runtime")
 
 
+def test_analyzer_run_is_privacy_safe_and_machine_readable():
+    db = _fresh_db()
+    assert _hooklib.log_event(
+        "analyzer_run",
+        {
+            "analyzer": "semgrep", "status": "completed",
+            "duration_ms": 812, "files": 2, "findings": 1,
+        },
+        {"session_id": "semgrep", "cwd": "/private/project"},
+    ) == "written"
+    payload = json.loads(_rows(db)[0][5])
+    assert payload == {
+        "analyzer": "semgrep", "status": "completed",
+        "duration_ms": 812, "files": 2, "findings": 1,
+    }
+    assert "/private/project" not in json.dumps(payload)
+
+
 def test_permission_request_is_separate_sensitive_local_data():
     db = _fresh_db()
     result = _hooklib.record_permission_request({
@@ -198,8 +216,16 @@ def test_hook_signal_contract_is_raw_and_machine_aggregator_owns_the_view():
     assert _hooklib.log_hook_signal(
         "/hooks/check.py", "unsafe-call", "resolved", 2, hp,
     ) == "written"
+    assert _hooklib.log_hook_signal(
+        "/hooks/semgrep-informational.py",
+        "mainframe.javascript.dynamic-child-process-exec",
+        "noted",
+        1,
+        hp,
+        context="bounded Semgrep advice",
+    ) == "written"
     rows = [row for row in _rows(db) if row[4] == "hook_signal"]
-    assert len(rows) == 2
+    assert len(rows) == 3
     first = json.loads(rows[0][5])
     assert first == {
         "hook": "check.py", "rule_id": "unsafe-call", "outcome": "noted",
@@ -207,6 +233,9 @@ def test_hook_signal_contract_is_raw_and_machine_aggregator_owns_the_view():
     }
     whole = " ".join(str(value) for row in rows for value in row)
     assert "private diagnostic text" not in whole and "/private/proj" not in whole
+    semgrep = json.loads(rows[2][5])
+    assert semgrep["rule_id"] == "mainframe.javascript.dynamic-child-process-exec"
+    assert semgrep["context_chars"] == len("bounded Semgrep advice")
 
 
 def test_hook_signal_rejects_unknown_or_empty_outcomes():

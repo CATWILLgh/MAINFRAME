@@ -55,6 +55,7 @@ export interface EngineerExecutorOptions {
   timeoutMs?: number;
   maxTurns?: number;
   webRouter: WebRouter;
+  onLocked?: (facts: EngineerGitFacts) => Promise<void>;
 }
 
 export interface EngineerExecutorRound {
@@ -80,6 +81,7 @@ export class EngineerExecutor {
     const writerLock = await acquireEngineerWriterLock(facts, options.manifest.blockId);
     let session: AgentSession | undefined;
     try {
+      await options.onLocked?.(facts);
       const resumedOwned = new Set(resumedOwnedPaths);
       const protectedPaths = facts.initialDirtyPaths.filter((dirtyPath) => !resumedOwned.has(dirtyPath));
       const workspace = await EngineerWorkspace.create(facts.projectRoot, options.manifest, protectedPaths);
