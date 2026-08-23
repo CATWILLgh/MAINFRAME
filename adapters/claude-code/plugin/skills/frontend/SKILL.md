@@ -1,8 +1,8 @@
 ---
 name: frontend
 user-invocable: false
-description: "Implements, debugs, reviews, tests, and visually refines client-facing React web applications and established web frontend layers, including UI, UX, accessibility, responsive behavior, component reuse, and focused frontend tests."
-when_to_use: "Use for React pages, components, forms, browser-side data, API integration, PWA or offline behavior, realtime UI, rich content, visualizations, shadcn projects, frontend accessibility, interaction design, responsive layouts, or visual refinement. Do not use for React Native, standalone backend behavior, infrastructure ownership, or reusable design-system library ownership."
+description: "Implements, debugs, reviews, tests, and visually refines client-facing React web applications and established React layers. Use for user journeys, components, browser state, accessibility, responsive behavior, UI and UX, and focused frontend tests. Not for React Native, substantial backend work, infrastructure ownership, or standalone design-system development."
+when_to_use: "The task changes client-facing React behavior, interaction, accessibility, responsive layout, browser state, or visual presentation."
 ---
 
 # Frontend engineering

@@ -1,8 +1,7 @@
 ---
 name: secrets-handling
 user-invocable: false
-description: Safely discover and consume credentials already registered on this machine without reading, echoing, logging, copying, or persisting their values. Uses the repository-owned credentials index for names and the `secret` helper or a native credential-aware tool for value delivery.
-when_to_use: Use when a terminal command, remote service, HTTP request, SSH connection, deployment, or external CLI needs a credential or a server/service short-name. Not needed for work that neither discovers nor consumes credentials.
+description: Safely discovers and consumes credentials already registered on this machine without reading, echoing, logging, copying, or persisting their values. Use when a command, remote service, HTTP request, SSH connection, deployment, or external CLI needs a registered credential.
 ---
 
 # Secrets handling

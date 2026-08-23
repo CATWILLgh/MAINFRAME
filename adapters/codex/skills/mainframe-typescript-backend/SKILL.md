@@ -1,6 +1,6 @@
 ---
 name: mainframe-typescript-backend
-description: Implement, debug, review, or plan server-side TypeScript in Node.js services, NestJS, Express, Fastify, and established Next.js server layers. Use for HTTP APIs, business logic, PostgreSQL, Prisma, TypeORM, Drizzle, auth, migrations, workers, queues, realtime communication, storage, resilience, observability, and backend tests. Do not use for substantial client-only React UI, Python services, data pipelines, or infrastructure ownership.
+description: Implement, debug, review, or plan server-side TypeScript in Node.js services and established Next.js server layers. Use for backend APIs, business logic, data access, workers, realtime behavior, integrations, and focused tests. Do not use for substantial client-only UI, Python services, data pipelines, or infrastructure ownership.
 ---
 
 # TypeScript backend engineering

@@ -507,6 +507,13 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert not (
         home / ".agents" / "skills" / "mainframe-readiness-review"
     ).exists()
+    for source in sorted((ADAPTER / "agents").glob("*.toml.template")):
+        name = source.name.removesuffix(".toml.template")
+        installed_data = tomllib.loads(
+            (codex_dir / "agents" / f"{name}.toml").read_text(encoding="utf-8")
+        )
+        expected_data = _agent_template_data(name, home=home)
+        assert installed_data["description"] == expected_data["description"]
     config = codex_dir / "config.toml"
     config_state = codex_dir / ".mainframe-config-state.json"
     assert not config.exists()

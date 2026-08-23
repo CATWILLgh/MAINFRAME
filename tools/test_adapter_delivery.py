@@ -292,6 +292,20 @@ def test_claude_uninstall_preserves_shared_secrets():
     assert not (home / ".claude" / "skills" / "mainframe").is_symlink()
     assert (home / ".claude" / "agents" / "mainframe").is_dir()
     assert not (home / ".claude" / "agents" / "mainframe").is_symlink()
+    for source in sorted((PLUGIN / "skills").glob("*/SKILL.md")):
+        target = (
+            home
+            / ".claude"
+            / "skills"
+            / "mainframe"
+            / "skills"
+            / source.parent.name
+            / "SKILL.md"
+        )
+        assert target.read_bytes() == source.read_bytes()
+    for source in sorted(AGENTS.glob("*.md")):
+        target = home / ".claude" / "agents" / "mainframe" / source.name
+        assert target.read_bytes() == source.read_bytes()
     settings = home / ".claude" / "settings.json"
     settings_state = home / ".claude" / ".mainframe-settings-state.json"
     assert settings.is_file() and not settings.is_symlink()
@@ -781,9 +795,9 @@ def test_testing_context_preserves_role_boundaries():
     nextjs_reference = (
         PLUGIN / "skills" / "typescript-backend-patterns" / "nextjs-server.md"
     ).read_text(encoding="utf-8")
-    assert "Next.js server code" in typescript_agent
+    assert "Next.js server layers" in typescript_agent
     assert "Next.js App Router server code" not in typescript_agent
-    assert "Pages API Routes" in typescript_skill
+    assert "preserve API Routes" in nextjs_reference
     assert "begin an App Router migration as incidental cleanup" in nextjs_reference
     assert "concrete adjacent observation" in typescript_agent
     assert "without investigating it" in typescript_agent
@@ -802,7 +816,10 @@ def test_testing_context_preserves_role_boundaries():
     react_agent = (AGENTS / "mainframe-react-frontend-engineer.md").read_text(
         encoding="utf-8"
     )
-    assert "React web applications and client React layers" in react_agent
+    assert (
+        "client-facing React web applications and established React layers"
+        in react_agent
+    )
     assert "React web work in Vite applications" not in react_agent
     assert "Bash, WebSearch" in react_agent
     assert "Skill" not in re.search(

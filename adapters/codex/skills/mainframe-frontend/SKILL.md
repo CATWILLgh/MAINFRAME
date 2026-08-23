@@ -1,6 +1,6 @@
 ---
 name: mainframe-frontend
-description: Implement, debug, review, test, or visually refine client-facing React web applications and established web frontend layers. Use for pages, components, forms, browser data, accessibility, responsive layouts, UI and UX, shadcn component reuse, PWA or offline behavior, realtime interfaces, rich content, visualizations, and frontend tests. Do not use for React Native, standalone backend behavior, infrastructure ownership, or building a reusable design-system library from scratch.
+description: Implement, debug, review, test, or visually refine client-facing React web applications and established React layers. Use for user journeys, components, browser state, accessibility, responsive behavior, UI and UX, and focused frontend tests. Do not use for React Native, substantial backend work, infrastructure ownership, or standalone design-system development.
 ---
 
 # Frontend engineering

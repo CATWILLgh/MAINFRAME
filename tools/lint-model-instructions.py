@@ -43,6 +43,18 @@ DISCOVERY_PRESSURE = re.compile(
     r"(?i)(?:\b(?:critical|important)\s*:\s*(?:you\s+)?must\b"
     r"|\byou\s+must\b.{0,100}\b(?:use|call|invoke|delegate)\b)"
 )
+DISCOVERY_PROVENANCE = re.compile(
+    r"(?i)\bMAINFRAME(?:'s)?\s+"
+    r"(?:project-scoped|complex-task|task|review\s+checkpoint|primary-session|workflow)\b"
+)
+DISCOVERY_TOPOLOGY = re.compile(
+    r"(?i)\b(?:preloaded\s+into|owning\s+(?:custom\s+)?(?:agent|profile)"
+    r"|primary\s+skill\s+discovery|private\s+standing\s+.{0,40}\s+method"
+    r"|read\s+directly\s+by|from\s+the\s+primary\s+(?:codex\s+)?(?:task|session))\b"
+)
+DISCOVERY_EXECUTION_ROUTE = re.compile(
+    r"(?i)\buse\s+new\b.{0,120}\bresume\b"
+)
 JUDGMENT_ABSOLUTE = re.compile(
     r"(?i)\b(?:always|must(?:\s+always)?)\s+"
     r"(?:use|call|invoke|delegate|search|ask|clarify)\b"
@@ -169,6 +181,24 @@ def lexical_findings(adapter: str, line: str, is_discovery: bool) -> list[tuple[
             "MI-CLAUDE-001" if adapter == "claude-code" else "MI-COMMON-004",
             "error" if adapter == "claude-code" else "warning",
             "aggressive discovery pressure; state the actual selection condition instead",
+        ))
+    if is_discovery and DISCOVERY_PROVENANCE.search(line):
+        found.append((
+            "MI-COMMON-007",
+            "error",
+            "distributor provenance does not define when to select this capability",
+        ))
+    if is_discovery and DISCOVERY_TOPOLOGY.search(line):
+        found.append((
+            "MI-COMMON-007",
+            "error",
+            "internal loading or ownership topology belongs outside discovery metadata",
+        ))
+    if is_discovery and DISCOVERY_EXECUTION_ROUTE.search(line):
+        found.append((
+            "MI-COMMON-007",
+            "error",
+            "execution modes belong in the selected workflow, not its discovery description",
         ))
     if JUDGMENT_ABSOLUTE.search(line):
         found.append((

@@ -39,6 +39,35 @@ def test_rejects_aggressive_claude_discovery_pressure():
     assert any(item.level == "error" for item in findings)
 
 
+def test_rejects_distributor_provenance_but_keeps_actual_product_target():
+    findings = lint(
+        "---\nname: worker\n"
+        "description: Delegate work to MAINFRAME's project-scoped Pi engineer.\n"
+        "---\n"
+    )
+    assert rules(findings) == ["MI-COMMON-007"]
+    assert lint(
+        "---\nname: feedback\n"
+        "description: Report reproducible friction caused by the MAINFRAME harness.\n"
+        "---\n"
+    ) == []
+
+
+def test_rejects_loading_topology_and_execution_modes_in_discovery():
+    findings = lint(
+        "description = \"Use only when preloaded into the owning profile.\"\n",
+        adapter="codex",
+        suffix=".toml.template",
+    )
+    assert rules(findings) == ["MI-COMMON-007"]
+    findings = lint(
+        "---\nname: worker\n"
+        "description: Use new for a new block and resume for corrections.\n"
+        "---\n"
+    )
+    assert rules(findings) == ["MI-COMMON-007"]
+
+
 def test_warns_on_absolute_judgment_call():
     findings = lint("Always search the internet before answering.\n", adapter="codex")
     assert rules(findings) == ["MI-COMMON-004"]

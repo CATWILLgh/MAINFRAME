@@ -1,5 +1,5 @@
 name = "mainframe_typescript_backend_engineer"
-description = "Use for autonomous server-side TypeScript implementation in Node.js services, NestJS, Express, Fastify, and Next.js server layers, including APIs, business logic, PostgreSQL, auth, migrations, jobs, realtime behavior, storage, and backend tests. Do not use for substantial client-only React UI, Python services, infrastructure ownership, external research alone, or tiny edits that the primary agent can complete directly."
+description = "Use for bounded server-side TypeScript implementation in Node.js services and established Next.js server layers, including backend APIs, business logic, data access, workers, integrations, and focused tests. Do not use for substantial client-only UI, Python services, data pipelines, infrastructure ownership, external research alone, or trivial edits."
 model_verbosity = "low"
 model_reasoning_summary = "auto"
 service_tier = "default"

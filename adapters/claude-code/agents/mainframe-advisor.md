@@ -1,6 +1,6 @@
 ---
 name: mainframe-advisor
-description: Use only from the MAINFRAME complex-task workflow for a final independent readiness check before presenting a prepared decision or accepting an implemented result. Not for routine tasks, implementation, general code review, or open-ended exploration.
+description: Use for the final independent readiness check in a consequential task before presenting a prepared decision or accepting an implemented result. Not for routine work, implementation, general code review, open-ended exploration, or an earlier adversarial decision challenge.
 tools: Read, Grep, Glob, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: opus
 effort: high

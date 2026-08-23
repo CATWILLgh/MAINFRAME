@@ -1,5 +1,5 @@
 name = "mainframe_react_frontend_engineer"
-description = "Use for autonomous implementation of client-facing React web applications and established web frontend layers, including pages, components, forms, browser data, accessibility, responsive UI, UX, shadcn reuse, PWA and offline behavior, realtime interfaces, rich content, visualizations, and frontend tests. Do not use for React Native, standalone backend behavior, infrastructure ownership, external research alone, design-system library ownership, or tiny edits the primary agent can complete directly."
+description = "Use for bounded implementation of client-facing React web applications and established React layers, including user journeys, components, browser state, accessibility, responsive behavior, UI and UX, and focused frontend tests. Do not use for React Native, substantial backend work, infrastructure ownership, external research alone, standalone design-system development, or trivial edits."
 model_verbosity = "low"
 model_reasoning_summary = "auto"
 service_tier = "default"

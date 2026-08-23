@@ -1,6 +1,6 @@
 ---
 name: mainframe-peer-review
-description: Ask the separately installed Codex CLI for one bounded independent review of a consequential decision or completed implementation. Use only at an explicit MAINFRAME review checkpoint; never use it for implementation, ordinary second opinions, or when the Codex peer integration was not installed.
+description: Ask the separately installed Codex CLI for one bounded independent review of a consequential decision or completed implementation. Use only at an explicit peer-review checkpoint; never use it for implementation, ordinary second opinions, or when the Codex integration is unavailable.
 allowed-tools: Bash(codex *), Bash(mktemp *), Bash(rm *), Read, Write
 ---
 

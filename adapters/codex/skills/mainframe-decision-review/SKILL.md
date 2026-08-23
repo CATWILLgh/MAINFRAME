@@ -1,6 +1,6 @@
 ---
 name: mainframe-decision-review
-description: Independently challenge a consequential proposed decision, design, architecture, or approach before acceptance. Use for non-obvious tradeoffs or a high cost of being wrong; do not use for routine low-risk choices, implementation, or general defect discovery in existing code.
+description: Evidence-grounded challenge method for the independent decision-review agent.
 ---
 
 # Decision review

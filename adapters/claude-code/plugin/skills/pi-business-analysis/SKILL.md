@@ -1,6 +1,6 @@
 ---
 name: pi-business-analysis
-description: Run MAINFRAME's project-scoped Pi digital business analyst on a requirements statement or document package explicitly handed over for review. Use when the user asks to review that supplied requirements input. Do not use for ordinary discussion, planning, code research, or implementation.
+description: Runs a project-scoped Pi business analyst on a requirements statement or document package explicitly handed over for review. Use when the user asks to review that supplied requirements input. Not for ordinary discussion, planning, code research, or implementation.
 argument-hint: "--initiative <slug> (--statement <text> | --entry <project-path> | --input-file <path>)... [--fresh-session]"
 allowed-tools: Bash(mainframe-pi business-analysis *) Read
 ---

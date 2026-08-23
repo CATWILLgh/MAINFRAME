@@ -1,8 +1,8 @@
 ---
 name: typescript-backend-patterns
 user-invocable: false
-description: "Guides version-aware implementation, debugging, review, and planning for server-side TypeScript in Node.js, NestJS, Express, Fastify, and established Next.js server routes, including focused backend tests."
-when_to_use: "Use for server-side TypeScript changes or technical decisions involving Node.js services, NestJS, Express, Fastify, Next.js Route Handlers, Server Actions, Server Components, Pages API Routes, server-side data loading, PostgreSQL, Prisma, TypeORM, Drizzle, auth, queues, WebSockets, files, caching, resilience, or backend tests. Do not use for substantial client-only React UI, Python services, data pipelines, or infrastructure ownership."
+description: "Guides implementation, debugging, review, and planning for server-side TypeScript in Node.js services and established Next.js server layers. Use for backend APIs, business logic, data access, workers, integrations, and focused tests; not for substantial client-only UI, Python services, data pipelines, or infrastructure ownership."
+when_to_use: "The task changes or plans server-side TypeScript behavior in an established Node.js service or Next.js server layer."
 ---
 
 # TypeScript backend patterns

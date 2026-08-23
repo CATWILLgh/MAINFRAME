@@ -2,7 +2,7 @@
 name: decision-review
 user-invocable: false
 disable-model-invocation: true
-description: Private evidence-grounded decision-review method read directly by the mainframe decision reviewer. Not a primary-session capability.
+description: Evidence-grounded challenge method for the independent decision-review agent.
 ---
 
 # Decision review — method

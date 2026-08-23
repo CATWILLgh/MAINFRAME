@@ -1,6 +1,6 @@
 ---
 name: init
-description: Load the MAINFRAME primary-session context for direct work with the user.
+description: Start the explicit primary-session collaboration context for direct work with the user.
 argument-hint: "[ticket <id>]"
 disable-model-invocation: true
 ---

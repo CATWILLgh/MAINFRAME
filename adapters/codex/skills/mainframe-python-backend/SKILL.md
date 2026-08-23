@@ -1,6 +1,6 @@
 ---
 name: mainframe-python-backend
-description: Implement, debug, review, or plan server-side Python in FastAPI, Django, Flask, and established Python services. Use for HTTP APIs, business logic, authentication, PostgreSQL, SQLAlchemy, migrations, workers, realtime behavior, caching, object storage, external integrations, generated documents, observability, and backend tests. Do not use for data pipelines, ML model development, substantial client-side UI, Node.js services, or infrastructure ownership.
+description: Implement, debug, review, or plan server-side Python in established FastAPI, Django, Flask, and other Python services. Use for backend APIs, business logic, data access, workers, realtime behavior, integrations, and focused tests. Do not use for data or ML pipelines, substantial client-side UI, Node.js services, or infrastructure ownership.
 ---
 
 # Python backend engineering

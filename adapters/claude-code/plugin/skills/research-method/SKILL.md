@@ -1,6 +1,6 @@
 ---
 name: research-method
-description: "Use only as the private standing research method of mainframe-researcher."
+description: "Evidence selection, cross-checking, numeric verification, and stopping method for the external-research agent."
 user-invocable: false
 disable-model-invocation: true
 ---

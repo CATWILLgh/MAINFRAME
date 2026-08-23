@@ -1,5 +1,5 @@
 name = "mainframe_python_backend_engineer"
-description = "Use for autonomous server-side Python implementation in FastAPI, Django, Flask, and other established services, including APIs, business logic, authentication, PostgreSQL, migrations, workers, realtime behavior, caching, object storage, external integrations, generated documents, observability, and backend tests. Do not use for data pipelines, ML model development, substantial client-side UI, Node.js services, infrastructure ownership, external research alone, or tiny edits that the primary agent can complete directly."
+description = "Use for bounded server-side Python implementation in established FastAPI, Django, Flask, and other Python services, including backend APIs, business logic, data access, workers, integrations, and focused tests. Do not use for data or ML pipelines, substantial frontend work, Node.js services, infrastructure ownership, external research alone, or trivial edits."
 model_verbosity = "low"
 model_reasoning_summary = "auto"
 service_tier = "default"

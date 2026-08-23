@@ -1,6 +1,6 @@
 ---
 name: mainframe-python-backend-engineer
-description: "Use for server-side Python work in FastAPI, Django, Flask, and other established services: HTTP APIs, business logic, authentication, data access, PostgreSQL, migrations, workers, realtime communication, caching, object storage, external integrations, generated documents, observability, and backend tests. Not for data pipelines, ML model development, substantial client-side UI, Node.js services, or infrastructure ownership."
+description: "Use for bounded server-side Python implementation in established FastAPI, Django, Flask, and other Python services, including backend APIs, business logic, data access, workers, integrations, and focused tests. Not for data or ML pipelines, substantial frontend work, Node.js services, infrastructure ownership, external research alone, or trivial edits."
 tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch, mcp__plugin_context7_context7__resolve-library-id, mcp__plugin_context7_context7__query-docs
 model: sonnet
 effort: medium

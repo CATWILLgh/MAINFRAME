@@ -1,6 +1,6 @@
 ---
 name: dokploy-api
-description: "Internal Dokploy branch for the model-invocable `infrastructure` skill: HTTP API mechanics, resource hierarchy, deployment and Compose workflows, databases, domains/TLS, servers, backups, destructive-operation safety, and live-spec navigation."
+description: "Dokploy API operations reference for the infrastructure skill."
 when_to_use: "A Dokploy operation is already in flight through the `infrastructure` skill. Read directly from that skill's routing instructions; this branch is not independently model-invocable."
 user-invocable: false
 disable-model-invocation: true

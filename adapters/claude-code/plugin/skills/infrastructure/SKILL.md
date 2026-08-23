@@ -1,8 +1,8 @@
 ---
 name: infrastructure
 user-invocable: false
-description: "Operate and maintain a project's deployment and infrastructure from the primary session: environment topology, Docker and Compose, CI/CD, Dokploy, domains and TLS, observability, and the operational layer of PostgreSQL or Redis. Uses a project-owned infrastructure map and verifies live state before consequential actions."
-when_to_use: "An active task changes, deploys, diagnoses, or verifies infrastructure: Dockerfile or Compose work, CI/CD configuration, deployment or rollback, environment selection, domains/TLS, remote service health, logs, backups, managed databases, PostgreSQL operations, Redis persistence, or credentials consumed by those operations. Not for ordinary application or UI implementation."
+description: "Operates, diagnoses, and verifies project deployment and infrastructure, including environment topology, containers, CI/CD, Dokploy, domains and TLS, observability, backups, managed databases, and data services. Use for infrastructure-owned work, not ordinary application or UI implementation."
+when_to_use: "The task changes, deploys, diagnoses, or verifies infrastructure or an external environment."
 ---
 
 # Infrastructure operations

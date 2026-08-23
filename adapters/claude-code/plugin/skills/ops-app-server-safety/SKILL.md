@@ -1,8 +1,8 @@
 ---
 name: ops-app-server-safety
 user-invocable: false
-description: Prevent accidental duplicate native development servers and choose the least disruptive correct action for an existing Docker Compose project. Identifies the exact process or Compose project before start, restart, or stop operations.
-when_to_use: Trigger when a task involves starting, restarting, or stopping a long-running development process or container stack. Signal commands include `npm run dev`, `npm start`, `yarn dev`, `pnpm dev`, `vite`, `next dev`, `nodemon`, `uvicorn`, `gunicorn`, `flask run`, `rails s`, `docker compose up`, `docker compose down`, `docker compose restart`. Signal phrases include "start the dev server", "launch the app", "restart the backend", "bring up docker compose".
+description: Prevents duplicate or disruptive local development servers. Use before starting, restarting, or stopping a long-running application process or Docker Compose stack; not for one-shot build, test, or inspection commands.
+when_to_use: The task may start, restart, or stop a long-running local application process or container stack.
 ---
 
 # Server safety: no duplicate long-running processes

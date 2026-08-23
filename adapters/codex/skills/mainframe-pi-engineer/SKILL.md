@@ -1,6 +1,6 @@
 ---
 name: mainframe-pi-engineer
-description: Delegate one agreed, bounded implementation block to MAINFRAME's project-scoped Pi engineer after the result, boundaries, acceptance criteria, and allowed checks are clear. Use new for a new block and resume for corrections to the active block. Do not use for requirements discovery, architecture decisions, open-ended research, or work that still needs a user choice.
+description: Delegate one already-agreed bounded implementation block to a project-scoped Pi coding worker after the result, writable scope, acceptance criteria, and allowed checks are clear. Do not use for requirements discovery, architecture decisions, open-ended research, or work that still needs a user choice.
 ---
 
 # Pi engineer

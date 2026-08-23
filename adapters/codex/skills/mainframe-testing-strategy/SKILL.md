@@ -1,6 +1,6 @@
 ---
 name: mainframe-testing-strategy
-description: Design or audit a cross-cutting testing strategy when test levels, suite cost, infrastructure boundaries, reliability, or regression coverage need a deliberate decision. Use for test-suite audits, slow or misleading suites, coverage spanning several components, or deciding which guarantees belong in fast local tests versus real dependencies, CI, or a deployed environment. Do not use for routine focused tests already governed by an engineering skill.
+description: Design or audit a cross-cutting testing strategy when test levels, suite cost, infrastructure boundaries, reliability, or regression coverage need a deliberate decision. Use for test-suite audits, slow or misleading suites, coverage spanning several components, or deciding which guarantees belong in fast local tests versus real dependencies, CI, or a deployed environment. Do not use for routine focused tests within an ordinary implementation task.
 ---
 
 # Testing strategy

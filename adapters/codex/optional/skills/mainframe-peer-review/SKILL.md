@@ -1,6 +1,6 @@
 ---
 name: mainframe-peer-review
-description: Ask the separately installed and authenticated Claude Code CLI for one bounded independent review of a consequential decision or completed implementation. Use only at an explicit MAINFRAME review checkpoint; never use it for implementation, ordinary second opinions, or when the Claude peer integration was not installed.
+description: Ask the separately installed and authenticated Claude Code CLI for one bounded independent review of a consequential decision or completed implementation. Use only at an explicit peer-review checkpoint; never use it for implementation, ordinary second opinions, or when the Claude integration is unavailable.
 ---
 
 # Independent Claude review

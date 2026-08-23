@@ -1,6 +1,6 @@
 ---
 name: mainframe-init
-description: Start MAINFRAME's explicit primary-session collaboration mode for direct work with the user or resolve one named ticket that needs a user decision. Use only when the user invokes this skill to establish product ownership, concise user communication, acceptance preparation, native Goal mode, delegation boundaries, memory hygiene, and Git delivery authority for the current Codex task.
+description: Start the explicit primary-session collaboration context for direct work with the user, or open one named ticket that requires a user decision.
 ---
 
 # Primary session

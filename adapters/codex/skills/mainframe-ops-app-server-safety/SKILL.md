@@ -1,6 +1,6 @@
 ---
 name: mainframe-ops-app-server-safety
-description: Prevent duplicate or disruptive local development servers and choose the least disruptive correct action for an existing Docker Compose project. Use before starting, restarting, or stopping a long-running process or container stack, including npm, yarn, pnpm, Vite, Next.js, nodemon, uvicorn, gunicorn, Flask, Rails, and Docker Compose commands.
+description: Prevent duplicate or disruptive local development servers. Use before starting, restarting, or stopping a long-running application process or Docker Compose stack; do not use for one-shot build, test, or inspection commands.
 ---
 
 # Server safety: no duplicate long-running processes

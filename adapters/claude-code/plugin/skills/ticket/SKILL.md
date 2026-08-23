@@ -1,7 +1,7 @@
 ---
 name: ticket
 user-invocable: false
-description: "Records a concrete problem outside the active task's assigned result or agreed definition of done without expanding scope. Use when work reveals an incidental observation worth preserving or an explicitly assigned investigation confirms a problem with evidence. Does not replace unfinished in-scope work, profile scope review, implementation, or independent closure verification."
+description: "Records a concrete problem outside the active task's assigned result or agreed definition of done without expanding scope. Use when work reveals an incidental observation worth preserving or an explicitly assigned investigation confirms a problem with evidence. Does not replace unfinished in-scope work, scope review, implementation, or independent closure verification."
 ---
 
 # Ticket

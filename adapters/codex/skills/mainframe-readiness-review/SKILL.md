@@ -1,6 +1,6 @@
 ---
 name: mainframe-readiness-review
-description: Perform the final independent readiness check for a consequential task before a prepared decision is presented or an implemented result is accepted. Use only inside the owning advisor profile for preparation-readiness and final-state reviews; do not use for routine work, implementation, or adversarial decision review.
+description: Preparation-readiness and final-state review method for the final advisor agent.
 ---
 
 # Readiness review

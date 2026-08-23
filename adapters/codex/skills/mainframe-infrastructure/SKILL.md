@@ -1,6 +1,6 @@
 ---
 name: mainframe-infrastructure
-description: Operate, diagnose, change, or verify project deployment and infrastructure from the primary Codex task. Use for environment topology, Dockerfiles and Compose, CI/CD, deployment and rollback, Dokploy, domains and TLS, observability, backups, managed databases, PostgreSQL or Redis operations, and credentials consumed by those operations. Do not use for ordinary application or UI implementation.
+description: Operate, diagnose, or verify project deployment and infrastructure, including environment topology, containers, CI/CD, Dokploy, domains and TLS, observability, backups, managed databases, and data services. Use for infrastructure-owned work, not ordinary application or UI implementation.
 ---
 
 # Infrastructure operations

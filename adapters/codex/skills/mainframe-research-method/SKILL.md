@@ -1,6 +1,6 @@
 ---
 name: mainframe-research-method
-description: Apply the private evidence, source-selection, cross-checking, numeric-verification, and stopping method of mainframe_researcher. Use only when preloaded into that custom agent; do not expose this specialist method to primary skill discovery.
+description: Evidence selection, cross-checking, numeric verification, and stopping method for the external-research agent.
 ---
 
 # Research method

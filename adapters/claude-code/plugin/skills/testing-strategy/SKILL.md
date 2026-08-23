@@ -1,7 +1,7 @@
 ---
 name: testing-strategy
 user-invocable: false
-description: Designs or audits a cross-cutting testing strategy when test levels, suite cost, infrastructure boundaries, or regression coverage need a deliberate decision. Not for routine focused tests already governed by a profile's testing guidance.
+description: Designs or audits a cross-cutting testing strategy when test levels, suite cost, infrastructure boundaries, reliability, or regression coverage need a deliberate decision. Not for routine focused tests within an ordinary implementation task.
 when_to_use: Use for a test-suite audit, a slow or misleading suite, coverage spanning several components, or deciding which guarantees belong in fast local tests versus real dependencies, CI, or a deployed environment.
 ---
 
