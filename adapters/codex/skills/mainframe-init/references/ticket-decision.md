@@ -5,7 +5,7 @@ four-character ticket id. It handles that ticket from
 `docs/tickets/open/needs-decision/` in the primary task. Do not select a second
 ticket, consume an autonomous queue, or treat a missing id as permission to
 choose one. Read
-[ticket-format.md](../../mainframe-ticket/references/ticket-format.md) before
+[ticket-format.md](../../mainframe-record-project-problem/references/ticket-format.md) before
 changing the ticket.
 
 ## Establish the real decision

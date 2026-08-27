@@ -17,7 +17,7 @@ block, with the invocation argument preserved as written:
 
 When that goal starts, first read
 [ticket-autonomous-runs.md](../../references/ticket-autonomous-runs.md),
-[ticket-format.md](../ticket/ticket-format.md). This workflow contains its own
+[ticket-format.md](../record-project-problem/ticket-format.md). This workflow contains its own
 independent-verification contract. When `testing-strategy` is available, it may
 refine a deliberate cross-cutting decision about test levels, suite cost,
 infrastructure, or broad regression coverage; its absence does not block

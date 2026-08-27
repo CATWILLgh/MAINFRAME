@@ -12,7 +12,7 @@ SKILL_NAMES=(
     mainframe-project-instructions-init
     mainframe-project-instructions-audit
     mainframe-secrets
-    mainframe-ticket
+    mainframe-record-project-problem
     mainframe-tickets-find
     mainframe-tickets-refine
     mainframe-tickets-implement
@@ -321,11 +321,11 @@ check_sources() {
         "${ADAPTER_ROOT}/skills/mainframe-init/SKILL.md" \
         "${ADAPTER_ROOT}/skills/mainframe-init/references/ticket-decision.md" \
         "${ADAPTER_ROOT}/skills/mainframe-secrets/SKILL.md" \
-        "${ADAPTER_ROOT}/skills/mainframe-ticket/SKILL.md" \
-        "${ADAPTER_ROOT}/skills/mainframe-ticket/agents/openai.yaml" \
-        "${ADAPTER_ROOT}/skills/mainframe-ticket/references/record-observation.md" \
-        "${ADAPTER_ROOT}/skills/mainframe-ticket/references/record-confirmed-problem.md" \
-        "${ADAPTER_ROOT}/skills/mainframe-ticket/references/ticket-format.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-record-project-problem/SKILL.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-record-project-problem/agents/openai.yaml" \
+        "${ADAPTER_ROOT}/skills/mainframe-record-project-problem/references/record-observation.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-record-project-problem/references/record-confirmed-problem.md" \
+        "${ADAPTER_ROOT}/skills/mainframe-record-project-problem/references/ticket-format.md" \
         "$RULES_SOURCE" \
         "$CONFIG_TOOL" \
         "$HOOKS_SOURCE" \
@@ -548,7 +548,7 @@ replacements = {
     "__MAINFRAME_TYPESCRIPT_BACKEND_SKILL__": global_skills / "mainframe-typescript-backend" / "SKILL.md",
     "__MAINFRAME_FRONTEND_SKILL__": global_skills / "mainframe-frontend" / "SKILL.md",
     "__MAINFRAME_TESTING_STRATEGY_SKILL__": global_skills / "mainframe-testing-strategy" / "SKILL.md",
-    "__MAINFRAME_TICKET_SKILL__": global_skills / "mainframe-ticket" / "SKILL.md",
+    "__MAINFRAME_RECORD_PROJECT_PROBLEM_SKILL__": global_skills / "mainframe-record-project-problem" / "SKILL.md",
 }
 body = source.read_text(encoding="utf-8")
 markers = set(re.findall(r"__MAINFRAME_[A-Z_]+_SKILL__", body))

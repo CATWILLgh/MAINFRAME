@@ -72,7 +72,7 @@ path = "__MAINFRAME_TESTING_STRATEGY_SKILL__"
 enabled = true
 
 [[skills.config]]
-path = "__MAINFRAME_TICKET_SKILL__"
+path = "__MAINFRAME_RECORD_PROJECT_PROBLEM_SKILL__"
 enabled = true
 
 [features]

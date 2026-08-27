@@ -4,7 +4,8 @@ Use this route only for `init ticket <four-character-id>`. It handles one ticket
 from `docs/tickets/open/needs-decision/` in the primary session. Do not select a
 second ticket, consume the autonomous queue, or treat a missing id as permission
 to choose one. Read
-[ticket-format.md](../ticket/ticket-format.md) before changing the ticket.
+[ticket-format.md](../record-project-problem/ticket-format.md) before changing
+the ticket.
 
 ## Establish the real decision
 

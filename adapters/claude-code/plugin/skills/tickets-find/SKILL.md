@@ -16,8 +16,7 @@ with the invocation argument preserved as written:
 
 When that goal starts, first read
 [ticket-autonomous-runs.md](../../references/ticket-autonomous-runs.md),
-[record-observation.md](../ticket/record-observation.md), and
-[ticket-format.md](../ticket/ticket-format.md).
+[ticket-format.md](../record-project-problem/ticket-format.md).
 
 Build a small coverage map from the repository's actual boundaries, manifests,
 entry points, interfaces, and major business areas. Select risk directions that

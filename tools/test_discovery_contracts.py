@@ -53,7 +53,10 @@ def test_cross_adapter_skill_meaning_stays_aligned():
         "python-backend-patterns": ("mainframe-python-backend", ("server-side python", "data or ml pipelines", "node.js services")),
         "research-method": ("mainframe-research-method", ("evidence selection", "cross-checking")),
         "testing-strategy": ("mainframe-testing-strategy", ("cross-cutting testing strategy", "routine focused tests")),
-        "ticket": ("mainframe-ticket", ("outside the active task", "without expanding scope")),
+        "record-project-problem": (
+            "mainframe-record-project-problem",
+            ("concrete repository problem", "outside the active task", "one minimal record"),
+        ),
         "tickets-find": ("mainframe-tickets-find", ("plausible", "without fixing")),
         "tickets-implement": ("mainframe-tickets-implement", ("autonomous ready tickets", "independent verification")),
         "tickets-refine": ("mainframe-tickets-refine", ("open ticket", "user decision")),

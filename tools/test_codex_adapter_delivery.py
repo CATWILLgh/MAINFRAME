@@ -62,10 +62,10 @@ def _agent_template_data(name, *, home):
         / "skills"
         / "mainframe-testing-strategy"
         / "SKILL.md",
-        "__MAINFRAME_TICKET_SKILL__": home
+        "__MAINFRAME_RECORD_PROJECT_PROBLEM_SKILL__": home
         / ".agents"
         / "skills"
-        / "mainframe-ticket"
+        / "mainframe-record-project-problem"
         / "SKILL.md",
     }
     for marker, path in replacements.items():
@@ -209,7 +209,7 @@ def test_dry_run_reports_direct_cross_surface_delivery():
     assert "mainframe-opencode" in proc.stdout
     assert "not managed:" in proc.stdout
     assert "mainframe-secrets" in proc.stdout
-    assert "mainframe-ticket" in proc.stdout
+    assert "mainframe-record-project-problem" in proc.stdout
     assert "mainframe-tickets-find" in proc.stdout
     assert "mainframe-tickets-refine" in proc.stdout
     assert "mainframe-tickets-implement" in proc.stdout
@@ -283,7 +283,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-project-instructions-init",
         "mainframe-project-instructions-audit",
         "mainframe-secrets",
-        "mainframe-ticket",
+        "mainframe-record-project-problem",
         "mainframe-tickets-find",
         "mainframe-tickets-refine",
         "mainframe-tickets-implement",
@@ -369,7 +369,11 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         },
         {
             "path": str(
-                home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"
+                home
+                / ".agents"
+                / "skills"
+                / "mainframe-record-project-problem"
+                / "SKILL.md"
             ),
             "enabled": True,
         },
@@ -393,7 +397,13 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
             / "mainframe-python-backend"
             / "SKILL.md"
         ),
-        str(home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"),
+        str(
+            home
+            / ".agents"
+            / "skills"
+            / "mainframe-record-project-problem"
+            / "SKILL.md"
+        ),
     ]
     frontend_engineer = codex_dir / "agents" / "mainframe_react_frontend_engineer.toml"
     frontend_state = (
@@ -410,7 +420,13 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
     assert frontend_data["features"]["apps"] is False
     assert [item["path"] for item in frontend_data["skills"]["config"]] == [
         str(home / ".agents" / "skills" / "mainframe-frontend" / "SKILL.md"),
-        str(home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"),
+        str(
+            home
+            / ".agents"
+            / "skills"
+            / "mainframe-record-project-problem"
+            / "SKILL.md"
+        ),
     ]
     test_auditor = codex_dir / "agents" / "mainframe_test_auditor.toml"
     test_auditor_state = (
@@ -435,7 +451,13 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
             / "mainframe-testing-strategy"
             / "SKILL.md"
         ),
-        str(home / ".agents" / "skills" / "mainframe-ticket" / "SKILL.md"),
+        str(
+            home
+            / ".agents"
+            / "skills"
+            / "mainframe-record-project-problem"
+            / "SKILL.md"
+        ),
     ]
     decision_reviewer = codex_dir / "agents" / "mainframe_decision_reviewer.toml"
     decision_reviewer_state = (
@@ -576,7 +598,7 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         "mainframe-project-instructions-init",
         "mainframe-project-instructions-audit",
         "mainframe-secrets",
-        "mainframe-ticket",
+        "mainframe-record-project-problem",
         "mainframe-tickets-find",
         "mainframe-tickets-refine",
         "mainframe-tickets-implement",
@@ -1173,16 +1195,26 @@ def test_baseline_uses_native_standalone_layers_only():
         ADAPTER / "skills" / "mainframe-init" / "SKILL.md"
     ).read_text(encoding="utf-8")
 
-    ticket_skill = ADAPTER / "skills" / "mainframe-ticket"
+    ticket_skill = ADAPTER / "skills" / "mainframe-record-project-problem"
     ticket_body = (ticket_skill / "SKILL.md").read_text(encoding="utf-8")
     ticket_metadata = (ticket_skill / "agents" / "openai.yaml").read_text(
         encoding="utf-8"
     )
-    assert "name: mainframe-ticket" in ticket_body
+    assert "name: mainframe-record-project-problem" in ticket_body
     assert "record-observation.md" in ticket_body
     assert "record-confirmed-problem.md" in ticket_body
     assert "ticket-format.md" in ticket_body
+    assert "Do not search" in ticket_body
+    observation_body = (
+        ticket_skill / "references" / "record-observation.md"
+    ).read_text(encoding="utf-8")
+    assert "Do not search open or archived tickets" in observation_body
+    assert "Search open tickets" not in observation_body
     assert "allow_implicit_invocation" not in ticket_metadata
+    global_instructions = (ADAPTER / "export" / "AGENTS.md").read_text(
+        encoding="utf-8"
+    )
+    assert "mainframe-record-project-problem" in global_instructions
     for reference in (
         "record-observation.md",
         "record-confirmed-problem.md",
@@ -1196,7 +1228,7 @@ def test_baseline_uses_native_standalone_layers_only():
         encoding="utf-8"
     )
     assert "name: mainframe-tickets-find" in find_body
-    assert "record-observation.md" in find_body
+    assert "record-observation.md" not in find_body
     assert "ticket-format.md" in find_body
     assert "native Goal" in find_body
     assert "Do not run project code" in find_body
@@ -1276,7 +1308,7 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "name: mainframe-typescript-backend" in typescript_body
     assert "scripts/recon.js" in typescript_body
     assert "references/testing.md" in typescript_body
-    assert "mainframe-ticket" in typescript_body
+    assert "mainframe-record-project-problem" in typescript_body
     assert (typescript_skill / "scripts" / "recon.js").is_file()
 
     python_skill = ADAPTER / "skills" / "mainframe-python-backend"
@@ -1288,7 +1320,7 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "scripts/recon.py" in python_body
     assert "references/testing.md" in python_body
     assert "references/postgres-concurrency.md" in python_body
-    assert "mainframe-ticket" in python_body
+    assert "mainframe-record-project-problem" in python_body
     assert "allow_implicit_invocation" not in python_metadata
     assert (python_skill / "scripts" / "recon.py").is_file()
 
@@ -1324,7 +1356,7 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "references/accessibility.md" in frontend_body
     assert "references/testing.md" in frontend_body
     assert "references/shadcn-composition.md" in frontend_body
-    assert "mainframe-ticket" in frontend_body
+    assert "mainframe-record-project-problem" in frontend_body
     assert "allow_implicit_invocation" not in frontend_metadata
     assert (frontend_skill / "scripts" / "recon.js").is_file()
     assert (frontend_skill / "scripts" / "inspect-ui.mjs").is_file()
@@ -1337,7 +1369,7 @@ def test_baseline_uses_native_standalone_layers_only():
     assert "name: mainframe-testing-strategy" in testing_body
     assert "cheapest faithful observation" in testing_body
     assert "real local PostgreSQL" in testing_body
-    assert "mainframe-ticket" in testing_body
+    assert "mainframe-record-project-problem" in testing_body
     assert "--maxWorkers=2 --no-file-parallelism" in testing_body
     assert "Never use broad `pkill` or `killall`" in testing_body
     assert "allow_implicit_invocation" not in testing_metadata

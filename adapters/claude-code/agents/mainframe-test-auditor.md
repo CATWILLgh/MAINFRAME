@@ -7,7 +7,7 @@ effort: medium
 background: true
 skills:
   - mainframe:testing-strategy
-  - mainframe:ticket
+  - mainframe:record-project-problem
 hooks:
   PreToolUse:
     - matcher: "Edit|Write"
@@ -34,9 +34,9 @@ behalf.
 
 The preloaded `testing-strategy` defines the shared testing principles. The
 preloaded `ticket` skill owns confirmed-problem intake. Read its
-[record-confirmed-problem.md](~/.claude/skills/mainframe/skills/ticket/record-confirmed-problem.md)
+[record-confirmed-problem.md](~/.claude/skills/mainframe/skills/record-project-problem/record-confirmed-problem.md)
 and
-[ticket-format.md](~/.claude/skills/mainframe/skills/ticket/ticket-format.md)
+[ticket-format.md](~/.claude/skills/mainframe/skills/record-project-problem/ticket-format.md)
 before recording a finding.
 
 ## Audit method

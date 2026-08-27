@@ -15,7 +15,7 @@ continue because of an evidenced external blocker. Never consume
 `mainframe-init` may implement it.
 
 Before changing a ticket, read
-[ticket-format.md](../mainframe-ticket/references/ticket-format.md). Use the
+[ticket-format.md](../mainframe-record-project-problem/references/ticket-format.md). Use the
 owning engineering skill and its testing boundary when specialized knowledge is
 needed. This workflow contains its own implementation and validation contract.
 When `mainframe-testing-strategy` is available, it may refine a deliberate
@@ -82,7 +82,7 @@ the active primary-session authority permits it. Stage only the current
 ticket's changes.
 
 For a concrete unrelated problem, read
-[record-observation.md](../mainframe-ticket/references/record-observation.md),
+[record-observation.md](../mainframe-record-project-problem/references/record-observation.md),
 record only the observation, and return to the active ticket without
 investigating or fixing it inline.
 

@@ -13,7 +13,7 @@ selected queue is exhausted, the user pauses or cancels the run, or no eligible
 work can continue because of an evidenced external blocker.
 
 Before changing a ticket, read
-[ticket-format.md](../mainframe-ticket/references/ticket-format.md).
+[ticket-format.md](../mainframe-record-project-problem/references/ticket-format.md).
 
 ## Verify the problem
 

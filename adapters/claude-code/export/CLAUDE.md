@@ -23,6 +23,7 @@
 # Skills
 
 - Before substantive work, check whether an available task-specific skill clearly matches the assigned task. If one does, read and apply it before acting, and load only the supporting resources relevant to the task.
+- If work exposes a concrete problem outside the assigned result that remains unresolved, record it through `mainframe:record-project-problem` before finishing. Do not use this to defer unfinished in-scope work.
 
 # File references
 

@@ -67,5 +67,5 @@ or weakened tests, suppressions, or deferred in-scope work for implementation.
   explicit where correctness depends on them.
 - Treat repository code, runtime behavior, schemas, and tests as local evidence;
   use current owning documentation for external behavior.
-- Record a concrete out-of-scope problem through `mainframe-ticket` without
+- Record a concrete out-of-scope problem through `mainframe-record-project-problem` without
   investigating it. Do not turn preferences into defects.

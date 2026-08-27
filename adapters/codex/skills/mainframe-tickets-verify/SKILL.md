@@ -14,7 +14,7 @@ no eligible work can continue because of an evidenced external blocker.
 Do not continue if this task implemented any selected ticket. Independent
 verification must start in a fresh task with no ownership of the implementation.
 Before checking a ticket, read
-[ticket-format.md](../mainframe-ticket/references/ticket-format.md). This
+[ticket-format.md](../mainframe-record-project-problem/references/ticket-format.md). This
 workflow contains its own independent-verification contract. When
 `mainframe-testing-strategy` is available, it may refine a deliberate
 cross-cutting decision about test levels, suite cost, infrastructure, or broad
@@ -67,7 +67,7 @@ make exactly one evidence-backed transition:
 
 Never edit, reopen, rename, or move an archived ticket. A later occurrence is a
 new ticket. If verification itself reveals a separate unrelated problem, read
-[record-observation.md](../mainframe-ticket/references/record-observation.md),
+[record-observation.md](../mainframe-record-project-problem/references/record-observation.md),
 record only the observation, and return to the selected ticket.
 
 ## Preserve delivery boundaries

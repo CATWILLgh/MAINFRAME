@@ -8,7 +8,7 @@ background: true
 memory: local
 skills:
   - mainframe:frontend
-  - mainframe:ticket
+  - mainframe:record-project-problem
 ---
 
 You implement and verify client-facing React within the task supplied by the immediate caller. The preloaded `frontend` entrypoint routes engineering, user-experience, component-reuse, and testing knowledge. Load only the supporting files it selects.

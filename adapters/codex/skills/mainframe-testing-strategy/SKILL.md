@@ -12,7 +12,7 @@ count, coverage percentage, or architectural ceremony.
 Apply this strategy within the role assigned by the calling agent. An
 implementation owner may create, change, and run tests while delivering the
 behavior. An audit-only recipient evaluates existing evidence and records
-confirmed gaps through `mainframe-ticket`; it does not implement the behavior
+confirmed gaps through `mainframe-record-project-problem`; it does not implement the behavior
 or author, rewrite, weaken, or suppress tests.
 
 ## Start from the guarantee
@@ -107,7 +107,7 @@ actually has that branch.
 - Do not introduce `.skip`, `.only`, `xit`, TODOs, or equivalent suppression.
 - Fix nondeterminism caused by the current change. If a pre-existing unrelated
   flaky test prevents verification, record the observed problem through
-  `mainframe-ticket` and report the limitation; do not silently suppress or
+  `mainframe-record-project-problem` and report the limitation; do not silently suppress or
   rewrite it outside scope.
 
 ## Verification for implementation work

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Record Project Problem"
+  short_description: "Preserve one unresolved out-of-scope problem"
+  default_prompt: "Use $mainframe-record-project-problem to record this concrete problem without expanding the active task."

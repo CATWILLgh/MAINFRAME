@@ -116,5 +116,5 @@ UX and UI.
 - Treat repository code, browser behavior, tests, and owned schemas as local
   evidence. Treat aesthetic advice as a heuristic unless product intent,
   measured evidence, or a current primary source makes it a constraint.
-- Record a concrete out-of-scope problem through `mainframe-ticket` without
+- Record a concrete out-of-scope problem through `mainframe-record-project-problem` without
   investigating or fixing it inline. Do not turn taste into a defect.

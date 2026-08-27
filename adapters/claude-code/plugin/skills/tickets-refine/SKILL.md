@@ -16,7 +16,7 @@ with the invocation argument preserved as written:
 
 When that goal starts, first read
 [ticket-autonomous-runs.md](../../references/ticket-autonomous-runs.md) and
-[ticket-format.md](../ticket/ticket-format.md).
+[ticket-format.md](../record-project-problem/ticket-format.md).
 
 Work from `open/observations` and `open/needs-scope-review`. A plain-language
 argument may narrow the queue by ticket id, path, component, or concern but

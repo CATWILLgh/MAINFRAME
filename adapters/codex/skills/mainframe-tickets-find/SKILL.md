@@ -12,8 +12,7 @@ cancels the run, or no eligible work can continue because of an evidenced
 external blocker.
 
 Before writing tickets, read
-[record-observation.md](../mainframe-ticket/references/record-observation.md)
-and [ticket-format.md](../mainframe-ticket/references/ticket-format.md).
+[ticket-format.md](../mainframe-record-project-problem/references/ticket-format.md).
 
 Apply that reference's legacy-open-ticket normalization before discovery. Do
 not ask how to classify an ambiguous legacy record: use the safe canonical

@@ -683,7 +683,7 @@ def test_test_auditor_is_non_implementing_and_ticket_scoped():
     assert "tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch," in auditor
     assert "current primary documentation" in auditor
     assert "mainframe:testing-strategy" in auditor
-    assert "mainframe:ticket" in auditor
+    assert "mainframe:record-project-problem" in auditor
     assert 'matcher: "Edit|Write"' in auditor
     assert 'matcher: "Bash"' in auditor
     assert "test-auditor-write-guard.py" in auditor
@@ -839,7 +839,7 @@ def test_testing_context_preserves_role_boundaries():
     ).group(1)
     for expected in (
         "mainframe:frontend",
-        "mainframe:ticket",
+        "mainframe:record-project-problem",
     ):
         assert expected in react_preloads
     for removed in ("react-frontend-patterns", "shadcn", "frontend-design"):
@@ -872,17 +872,25 @@ def test_testing_context_preserves_role_boundaries():
     assert '"shadcn": false' in react_skill
 
     observation = (
-        PLUGIN / "skills" / "ticket" / "record-observation.md"
+        PLUGIN
+        / "skills"
+        / "record-project-problem"
+        / "record-observation.md"
     ).read_text(encoding="utf-8")
-    ticket = (PLUGIN / "skills" / "ticket" / "SKILL.md").read_text(
+    ticket = (PLUGIN / "skills" / "record-project-problem" / "SKILL.md").read_text(
         encoding="utf-8"
     )
-    assert "assigned result or agreed definition of done" in ticket
-    assert "initial confirmation" in ticket
+    assert "assigned result or agreed definition of done" in " ".join(ticket.split())
+    assert "later ticket-refinement workflow owns deduplication" in ticket
     normalized_observation = " ".join(observation.split())
     assert "active task's assigned result" in normalized_observation
     assert "broad discovery run" in normalized_observation
-    assert "most distinctive available" in observation
+    assert "Do not search open or archived tickets" in observation
+
+    global_instructions = (ADAPTER / "export" / "CLAUDE.md").read_text(
+        encoding="utf-8"
+    )
+    assert "mainframe:record-project-problem" in global_instructions
     assert "two or three terms" not in observation
 
 
@@ -1199,7 +1207,7 @@ def test_ticket_run_skills_prepare_native_goals_in_primary_session():
     assert "existing execution route" in " ".join(verification.split())
 
     ticket_format = (
-        PLUGIN / "skills" / "ticket" / "ticket-format.md"
+        PLUGIN / "skills" / "record-project-problem" / "ticket-format.md"
     ).read_text(encoding="utf-8")
     assert "Normalize legacy open tickets during discovery" in ticket_format
     assert "execution: autonomous" in ticket_format

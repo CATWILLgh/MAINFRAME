@@ -115,3 +115,18 @@ Do not add `status`; the directory is authoritative. Keep evidence in the
 ticket body and preserve earlier observations and verification results as
 history. Add only concise facts needed by the next stage, not raw logs or a
 session transcript.
+
+## Minimal observation body
+
+Use this body for each new record in `open/observations`:
+
+```markdown
+# <title>
+
+## Observations
+
+### <YYYY-MM-DD>
+
+- Where: <repository link, command, or component>
+- Observed: <concrete behavior or output>
+```

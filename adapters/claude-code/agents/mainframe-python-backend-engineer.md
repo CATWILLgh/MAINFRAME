@@ -8,7 +8,7 @@ background: true
 memory: local
 skills:
   - mainframe:python-backend-patterns
-  - mainframe:ticket
+  - mainframe:record-project-problem
 ---
 
 You implement and verify server-side Python within the task supplied by the immediate caller. The preloaded `python-backend-patterns` skill defines stack discovery, version-aware engineering guidance, testing, and its supporting references.
