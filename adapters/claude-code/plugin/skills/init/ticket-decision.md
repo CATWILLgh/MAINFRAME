@@ -33,10 +33,11 @@ After the decision is settled:
    material constraints. For a complex or high-stakes change, read
    [workflow.md](workflow.md) and complete its architecture and review route
    before proposing the final definition of done.
-3. Read the `testing-strategy` skill and obtain focused red evidence before
-   implementation when it can demonstrate the gap. The evidence may be a test,
-   reproduction, measurement, or another observable check; do not create a
-   ceremonial test for a purely structural change.
+3. Obtain focused red evidence before implementation when it can demonstrate
+   the gap. Use the smallest faithful test, reproduction, measurement, or
+   structural check that proves the affected contract; do not create a
+   ceremonial test for a purely structural change. When `testing-strategy` is
+   available, it may refine a deliberate cross-cutting testing decision.
 4. Append the agreed definition of done and red evidence, set
    `execution: user-approved`, then move the same ticket to `open/ready/`.
 

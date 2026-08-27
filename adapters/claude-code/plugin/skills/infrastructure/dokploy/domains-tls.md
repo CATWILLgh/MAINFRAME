@@ -1,4 +1,4 @@
-# Domains, TLS, redirects, ports
+# Domains, TLS, redirects, and ports
 
 Dokploy routes public traffic through Traefik. A domain attaches to an application or a Compose service and can auto-issue a Let's Encrypt certificate.
 Verify `domain.create` against the target instance before mutation; certificate

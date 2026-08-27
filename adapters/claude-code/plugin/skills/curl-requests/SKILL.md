@@ -54,10 +54,14 @@ curl --disable -sS --fail-with-body \
 
 ## Credentials and output
 
-Read [`secrets-handling`](../secrets-handling/SKILL.md) before an authenticated
-request. Use the credential name and header scheme recorded in the
+For an authenticated request, use the credential name and header scheme recorded in the
 [credentials index](~/.claude/credentials-index.md);
 do not assume Bearer authentication.
+
+When `secrets-handling` is available, it may add credential-store guidance.
+Its absence does not authorize reading or searching protected stores: use only
+the index and pass the registered value directly through the `secret` helper or
+the native credential mechanism named there.
 
 Pass a registered value directly to curl, for example:
 

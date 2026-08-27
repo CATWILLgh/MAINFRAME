@@ -12,7 +12,7 @@ Dokploy manages six database engines, each with the same lifecycle and endpoint 
 | LibSQL | `libsql.*` |
 
 A database lives under an environment. Use the resolved URL and credential
-access from [SKILL.md](SKILL.md), resolve the `environmentId`, and verify the
+access from [dokploy.md](../dokploy.md), resolve the `environmentId`, and verify the
 chosen engine's create schema against the target instance.
 
 ## 1. Create & deploy

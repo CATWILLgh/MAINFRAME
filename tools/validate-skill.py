@@ -105,7 +105,7 @@ def count_non_empty_lines(text: str) -> int:
 
 
 _MD_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
-_AT_IMPORT_RE = re.compile(r"(?<![\w@])@([~/]?[\w][\w./\-~]*)")
+_AT_IMPORT_RE = re.compile(r"(?<![\w@/])@([~/]?[\w][\w./\-~]*)")
 
 
 def extract_referenced_paths(content: str, base: Path):
@@ -226,19 +226,37 @@ def validate_skill(skill_dir: Path) -> list[dict]:
         issues.append(issue("BODY-LINES", "warning", skill_md,
                             f"SKILL.md body is {body_lines} non-empty lines (Anthropic recommendation ≤ {MAX_SKILL_LINES})"))
 
-    # Supporting files inside the skill directory
+    # A small routing page may link to deeper supporting files; those files are
+    # reachable even when SKILL.md does not list each one directly.
     referenced: set[Path] = set()
-    for target in extract_referenced_paths(body, skill_md.parent):
-        try:
-            rel = target.relative_to(skill_dir)
-        except ValueError:
-            continue  # link points outside the skill dir, ignore
-        # Depth = directory levels below skill_dir; SKILL.md itself is depth 0
-        depth = len(rel.parts) - 1
-        if depth > MAX_DEPTH:
-            issues.append(issue("DEPTH", "warning", skill_md,
-                                f"reference `{rel}` is at depth {depth} (max {MAX_DEPTH}); Claude may only preview it"))
-        referenced.add(target.resolve())
+    visited_sources = {skill_md.resolve()}
+    pending_sources = [(body, skill_md.parent)]
+    text_exts = {".md", ".txt", ".yml", ".yaml", ".json"}
+    while pending_sources:
+        source_content, source_base = pending_sources.pop()
+        for target in extract_referenced_paths(source_content, source_base):
+            try:
+                rel = target.relative_to(skill_dir)
+            except ValueError:
+                continue  # link points outside the skill dir, ignore
+            # Depth = directory levels below skill_dir; SKILL.md itself is depth 0
+            depth = len(rel.parts) - 1
+            if depth > MAX_DEPTH:
+                issues.append(issue("DEPTH", "warning", skill_md,
+                                    f"reference `{rel}` is at depth {depth} (max {MAX_DEPTH}); Claude may only preview it"))
+            resolved = target.resolve()
+            referenced.add(resolved)
+            if (
+                resolved not in visited_sources
+                and target.is_file()
+                and target.suffix.lower() in text_exts
+            ):
+                visited_sources.add(resolved)
+                try:
+                    nested_content = target.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    continue
+                pending_sources.append((nested_content, target.parent))
 
     # All .md files inside the skill dir, except SKILL.md
     for supp in skill_dir.rglob("*"):
@@ -252,7 +270,6 @@ def validate_skill(skill_dir: Path) -> list[dict]:
             continue
 
         # Check size only for text-like extensions
-        text_exts = {".md", ".txt", ".yml", ".yaml", ".json"}
         if supp.suffix.lower() in text_exts:
             try:
                 supp_content = supp.read_text(encoding="utf-8")
@@ -270,10 +287,9 @@ def validate_skill(skill_dir: Path) -> list[dict]:
                 issues.append(issue("SUPP-LINES", "warning", supp,
                                     f"supporting file is {supp_lines} non-empty lines (limit {MAX_SUPPORT_LINES})"))
 
-        # Dead-supporting check: file exists but not linked from SKILL.md
         if supp_resolved not in referenced:
             issues.append(issue("DEAD-SUPP", "warning", supp,
-                                "file inside skill directory is not referenced from SKILL.md — Claude will not load it"))
+                                "file inside skill directory is not reachable from SKILL.md — Claude will not load it"))
 
     return issues
 

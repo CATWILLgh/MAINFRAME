@@ -59,9 +59,13 @@ For a small unambiguous task, discussion and an obvious verification are
 enough.
 
 After an approved definition of done, obtain red evidence before changing
-observable behavior when that evidence can prove the original gap. Use
-`testing-strategy` for the testing decision; do not create a test as ceremony
-for documentation, path moves, or other purely structural work.
+observable behavior when that evidence can prove the original gap. Use the
+smallest faithful test, reproduction, measurement, or structural check that
+proves the affected contract; do not create a test as ceremony for
+documentation, path moves, or other purely structural work. When
+`testing-strategy` is available, it may refine a deliberate cross-cutting
+decision about test levels, suite cost, infrastructure, or broad regression
+coverage.
 
 When implementing directly, deliver the complete assigned behavior. Do not
 leave TODOs, placeholders, disabled checks, suppressions, or deferred in-scope

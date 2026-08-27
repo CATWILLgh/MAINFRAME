@@ -36,11 +36,12 @@ After the decision is settled:
    material constraints. Apply the architecture, decision-review, and advisor
    route from the active `mainframe-init` skill when the change is complex or
    consequential.
-3. Read
-   [mainframe-testing-strategy](../../mainframe-testing-strategy/SKILL.md) and
-   obtain focused red evidence before implementation when it can demonstrate
-   the gap. Use a test, reproduction, measurement, or another observable check;
-   do not create a ceremonial test for a structural-only change.
+3. Obtain focused red evidence before implementation when it can demonstrate
+   the gap. Use the smallest faithful test, reproduction, measurement, or
+   structural check that proves the affected contract; do not create a
+   ceremonial test for a structural-only change. When
+   `mainframe-testing-strategy` is available, it may refine a deliberate
+   cross-cutting testing decision.
 4. Append the agreed definition of done and red evidence, set
    `execution: user-approved`, then move the same ticket to `open/ready/`.
 

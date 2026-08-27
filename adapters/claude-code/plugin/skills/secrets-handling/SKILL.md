@@ -78,6 +78,7 @@ The global permission layer blocks direct reads of protected stores. The
 commit content for high-confidence credential shapes. These are safety nets,
 not permission to retrieve values into context.
 
-For authenticated HTTP mechanics, use
-[`curl-requests`](../curl-requests/SKILL.md). For infrastructure authority and
-environment selection, use [`infrastructure`](../infrastructure/SKILL.md).
+This skill owns safe credential delivery on its own. When available,
+`curl-requests` may add HTTP transport guidance and `infrastructure` may add
+environment-selection and infrastructure-authority guidance. Their absence
+does not weaken this skill's credential boundaries.

@@ -1,7 +1,7 @@
 # Deploy an application (Git or Docker image)
 
 Prerequisites: the resolved base URL and credential access described in
-[SKILL.md](SKILL.md), plus its resource hierarchy. Verify each mutation's
+[dokploy.md](../dokploy.md), plus its resource hierarchy. Verify each mutation's
 current schema against the target instance before sending it. Chain resources
 by id; if a create response is empty, resolve the id through the documented
 read endpoints. Treat deployment as asynchronous and verify its actual status.

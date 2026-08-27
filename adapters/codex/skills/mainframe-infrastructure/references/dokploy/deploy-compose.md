@@ -36,9 +36,9 @@ curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -G -H "x-a
   "$DOKPLOY_URL/api/compose.readLogs"
 ```
 
-The example uses only non-secret environment data. For a real secret, follow
-[`secrets-handling`](../../../mainframe-secrets/SKILL.md) and build the request through
-a pipe so the value is neither printed nor inserted into a command argument.
+The example uses only non-secret environment data. For a real secret, pass its
+registered value directly from the `secret` helper through a pipe so the value
+is neither printed nor inserted into a command argument.
 
 ## Internal networking
 

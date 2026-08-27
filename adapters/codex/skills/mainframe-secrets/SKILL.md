@@ -45,7 +45,8 @@ If the index has no suitable entry, return the exact missing credential or catal
 
 Verify only whether the consuming operation succeeded. Return redacted evidence such as status, resource identity, or error class. Do not return request headers, environment dumps, verbose traces, authenticated URLs, or an unreviewed response body.
 
-For authenticated HTTP mechanics, use
-[`mainframe-curl-requests`](../mainframe-curl-requests/SKILL.md). For environment
-selection and infrastructure authority, use
-[`mainframe-infrastructure`](../mainframe-infrastructure/SKILL.md).
+This skill owns safe credential delivery on its own. When available, the
+`mainframe-curl-requests` skill may add HTTP transport guidance and the
+`mainframe-infrastructure` skill may add environment-selection and
+infrastructure-authority guidance. Their absence does not weaken this skill's
+credential boundaries.

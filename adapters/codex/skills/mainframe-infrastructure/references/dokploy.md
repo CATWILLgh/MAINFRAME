@@ -9,8 +9,7 @@ resolved running instance through its HTTP API.
 
 **Config is never hardcoded.** Resolve the non-secret base URL from the project
 infrastructure map or verified project configuration. Resolve the API-key name
-and its approved access pattern only through
-[`mainframe-secrets`](../../mainframe-secrets/SKILL.md) and the credentials index.
+and its approved access pattern only through the credentials index.
 An already-exported `DOKPLOY_API_KEY` is valid only when that index names it.
 Never read arbitrary config in search of a key or expose the value in output.
 
@@ -125,11 +124,14 @@ guidance, not a frozen replacement for the installed instance's contract.
 | Destructive-operation safety (read first) | [safety.md](dokploy/safety.md) |
 | Any other domain — find the right tag | [endpoint-map.md](dokploy/endpoint-map.md) |
 
-## Cross-references
+## Local operating baseline
 
-- [`mainframe-curl-requests`](../../mainframe-curl-requests/SKILL.md) — HTTP mechanics: `--fail-with-body`, timeouts, never inlining secrets.
-- [`mainframe-secrets`](../../mainframe-secrets/SKILL.md) — where `DOKPLOY_API_KEY` lives and how to substitute it without leaking the value.
-- [`mainframe-ticket`](../../mainframe-ticket/SKILL.md) — defer an out-of-scope Dokploy fix instead of silently working around it.
+- Use `--disable`, explicit connect and total timeouts, and
+  `--fail-with-body` for bounded HTTP mechanics.
+- Resolve `DOKPLOY_API_KEY` only by its registered name and pass it directly to
+  the request without printing, retaining, or tracing it.
+- Record an out-of-scope Dokploy defect as an observation instead of silently
+  working around it.
 
 ## Sources
 

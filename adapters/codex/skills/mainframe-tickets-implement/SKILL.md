@@ -17,10 +17,10 @@ continue because of an evidenced external blocker. Never consume
 Before changing a ticket, read
 [ticket-format.md](../mainframe-ticket/references/ticket-format.md). Use the
 owning engineering skill and its testing boundary when specialized knowledge is
-needed. Load
-[mainframe-testing-strategy](../mainframe-testing-strategy/SKILL.md) only when
-the ticket requires a deliberate cross-cutting decision about test levels,
-suite cost, infrastructure, or broad regression coverage.
+needed. This workflow contains its own implementation and validation contract.
+When `mainframe-testing-strategy` is available, it may refine a deliberate
+cross-cutting decision about test levels, suite cost, infrastructure, or broad
+regression coverage; its absence does not block ticket implementation.
 
 ## Recheck the ticket
 

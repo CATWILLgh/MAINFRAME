@@ -1,24 +1,15 @@
----
-name: dokploy-api
-description: "Dokploy API operations reference for the infrastructure skill."
-when_to_use: "A Dokploy operation is already in flight through the `infrastructure` skill. Read directly from that skill's routing instructions; this branch is not independently model-invocable."
-user-invocable: false
-disable-model-invocation: true
----
-
 # Working with the Dokploy API
 
-This is the hidden Dokploy branch of `mainframe:infrastructure`. The primary
-session reads it through that skill when the project map or verified recon
-identifies Dokploy.
+This is the Dokploy branch of `mainframe:infrastructure`. Read it only when the
+project map or verified recon identifies Dokploy, then open only the cookbook
+page needed for the current operation.
 
 Dokploy is a self-hostable PaaS built on Docker and Traefik. This skill drives a
 resolved running instance through its HTTP API.
 
 **Config is never hardcoded.** Resolve the non-secret base URL from the project
 infrastructure map or verified project configuration. Resolve the API-key name
-and its approved access pattern only through
-[`secrets-handling`](../secrets-handling/SKILL.md) and the credentials index.
+and its approved access pattern only through the credentials index.
 An already-exported `DOKPLOY_API_KEY` is valid only when that index names it.
 Never read arbitrary config in search of a key or expose the value in output.
 
@@ -99,7 +90,7 @@ Default to reads until the active task explicitly authorizes a mutation. Do not
 ask again for an exact operation already authorized, but never widen that
 authority to a sibling resource, parent environment, project, or instance-wide
 action. Before any removal, deletion, reload, or similarly disruptive action,
-read [`safety.md`](safety.md).
+read [`safety.md`](dokploy/safety.md).
 
 ## Live-spec navigation (the long tail)
 
@@ -124,20 +115,23 @@ guidance, not a frozen replacement for the installed instance's contract.
 
 | Task | File |
 |---|---|
-| Deploy an application from Git or a Docker image | [deploy-application.md](deploy-application.md) |
-| Deploy a Docker Compose stack | [deploy-compose.md](deploy-compose.md) |
-| Provision a database and connect it to an app | [databases.md](databases.md) |
-| Attach domains, issue TLS, redirects, ports | [domains-tls.md](domains-tls.md) |
-| Manage servers / multi-node / Docker on a node | [servers.md](servers.md) |
-| Database & volume backups | [backups.md](backups.md) |
-| Destructive-operation safety (read first) | [safety.md](safety.md) |
-| Any other domain — find the right tag | [endpoint-map.md](endpoint-map.md) |
+| Deploy an application from Git or a Docker image | [deploy-application.md](dokploy/deploy-application.md) |
+| Deploy a Docker Compose stack | [deploy-compose.md](dokploy/deploy-compose.md) |
+| Provision a database and connect it to an app | [databases.md](dokploy/databases.md) |
+| Attach domains, issue TLS, redirects, ports | [domains-tls.md](dokploy/domains-tls.md) |
+| Manage servers / multi-node / Docker on a node | [servers.md](dokploy/servers.md) |
+| Database & volume backups | [backups.md](dokploy/backups.md) |
+| Destructive-operation safety (read first) | [safety.md](dokploy/safety.md) |
+| Any other domain — find the right tag | [endpoint-map.md](dokploy/endpoint-map.md) |
 
-## Cross-references
+## Local operating baseline
 
-- [`curl-requests`](../curl-requests/SKILL.md) — HTTP mechanics: `--fail-with-body`, timeouts, never inlining secrets.
-- [`secrets-handling`](../secrets-handling/SKILL.md) — where `DOKPLOY_API_KEY` lives and how to substitute it without leaking the value.
-- [`ticket`](../ticket/SKILL.md) — defer an out-of-scope Dokploy fix instead of silently working around it.
+- Use `--disable`, explicit connect and total timeouts, and
+  `--fail-with-body` for bounded HTTP mechanics.
+- Resolve `DOKPLOY_API_KEY` only by its registered name and pass it directly to
+  the request without printing, retaining, or tracing it.
+- Record an out-of-scope Dokploy defect as an observation instead of silently
+  working around it.
 
 ## Sources
 

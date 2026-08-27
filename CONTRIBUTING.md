@@ -41,7 +41,14 @@ Reason: LLMs are tuned on English, follow English instructions more precisely, s
 ### 4. Single source of truth
 Each artifact exists in exactly one location in the repo. No mirrors, no copies between projects.
 
-### 5. Sub-agent economy
+### 5. Independent public skills
+Every public skill must produce its primary result on its own. Another skill may
+refine an applicable branch, but must not be a hidden mandatory dependency. If
+material has no independently useful result, keep it as a supporting resource
+inside the skill that owns the result. A private skill is appropriate when its
+entire method belongs to one specialist profile.
+
+### 6. Sub-agent economy
 Pick the model per task:
 - **Haiku** — trivial lookups, simple listings, basic extractions
 - **Sonnet** — most research, multi-step analysis, code audit, source-check via Context7/WebFetch
@@ -93,7 +100,7 @@ python3 tools/validate-claude-md.py --session-start
 Skill format rules:
 - 5K tokens / 500 lines for `SKILL.md` body
 - 5K tokens / 60 lines for supporting files
-- Depth = 1 (no nested subdirectories under skill folder)
+- Depth = 1 (one nested supporting level below the skill folder)
 - `description` ≤ 1024 chars
 - `description + when_to_use` ≤ 1536 chars
 - Frontmatter completeness

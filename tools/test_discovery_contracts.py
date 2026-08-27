@@ -98,6 +98,52 @@ def test_optional_peer_review_meaning_stays_aligned():
     )
 
 
+def test_public_skills_own_their_primary_result():
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    assert "Every public skill must produce its primary result on its own" in contributing
+
+    for exported in (
+        CODEX / "export" / "AGENTS.md",
+        CLAUDE / "export" / "CLAUDE.md",
+    ):
+        body = exported.read_text(encoding="utf-8")
+        assert "available task-specific skill clearly matches" in body
+        assert "load only the supporting resources relevant to the task" in body
+
+    skill_roots = (
+        CODEX / "skills",
+        CLAUDE / "plugin" / "skills",
+    )
+    cross_skill_link = re.compile(r"\]\([^)]*/SKILL\.md(?:#[^)]*)?\)")
+    for skill_root in skill_roots:
+        for skill_file in sorted(skill_root.glob("*/SKILL.md")):
+            body = skill_file.read_text(encoding="utf-8")
+            assert not cross_skill_link.search(body), skill_file
+
+    assert not (CLAUDE / "plugin" / "skills" / "dokploy-api" / "SKILL.md").exists()
+    assert (CLAUDE / "plugin" / "skills" / "infrastructure" / "dokploy.md").is_file()
+
+    for relative in (
+        "mainframe-curl-requests/SKILL.md",
+        "mainframe-secrets/SKILL.md",
+        "mainframe-infrastructure/SKILL.md",
+        "mainframe-tickets-implement/SKILL.md",
+        "mainframe-tickets-verify/SKILL.md",
+    ):
+        body = (CODEX / "skills" / relative).read_text(encoding="utf-8")
+        assert "absence does not" in " ".join(body.split()), relative
+
+    for relative in (
+        "curl-requests/SKILL.md",
+        "secrets-handling/SKILL.md",
+        "infrastructure/SKILL.md",
+        "tickets-implement/SKILL.md",
+        "tickets-verify/SKILL.md",
+    ):
+        body = (CLAUDE / "plugin" / "skills" / relative).read_text(encoding="utf-8")
+        assert "absence does not" in " ".join(body.split()), relative
+
+
 if __name__ == "__main__":
     tests = sorted(name for name in globals() if name.startswith("test_"))
     for name in tests:

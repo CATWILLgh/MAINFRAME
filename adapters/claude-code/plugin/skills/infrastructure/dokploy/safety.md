@@ -1,5 +1,8 @@
 # Destructive-operation safety
 
+This page is the destructive-operation branch of the infrastructure skill's
+Dokploy guide.
+
 Do not assume that a Dokploy resource deletion has dry-run or undo. Treat
 `*.remove` and `*.delete` as irreversible unless the target instance's current
 contract proves otherwise. Each call needs explicit authority for the exact

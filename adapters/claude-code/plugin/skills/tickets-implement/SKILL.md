@@ -16,7 +16,11 @@ block, with the invocation argument preserved as written:
 
 When that goal starts, first read
 [ticket-autonomous-runs.md](../../references/ticket-autonomous-runs.md),
-[ticket-format.md](../ticket/ticket-format.md), and the `testing-strategy` skill.
+[ticket-format.md](../ticket/ticket-format.md). This workflow contains its own
+implementation and validation contract. When `testing-strategy` is available,
+it may refine a deliberate cross-cutting decision about test levels, suite
+cost, infrastructure, or broad regression coverage; its absence does not block
+ticket implementation.
 
 Work only from `open/ready` tickets carrying `execution: autonomous` and the
 complete autonomous boundary required by `ticket-format.md`. A plain-language

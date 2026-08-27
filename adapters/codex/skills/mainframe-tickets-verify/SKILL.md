@@ -14,8 +14,11 @@ no eligible work can continue because of an evidenced external blocker.
 Do not continue if this task implemented any selected ticket. Independent
 verification must start in a fresh task with no ownership of the implementation.
 Before checking a ticket, read
-[ticket-format.md](../mainframe-ticket/references/ticket-format.md) and
-[mainframe-testing-strategy](../mainframe-testing-strategy/SKILL.md).
+[ticket-format.md](../mainframe-ticket/references/ticket-format.md). This
+workflow contains its own independent-verification contract. When
+`mainframe-testing-strategy` is available, it may refine a deliberate
+cross-cutting decision about test levels, suite cost, infrastructure, or broad
+regression coverage; its absence does not block verification.
 
 ## Reconstruct the claim
 

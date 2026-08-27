@@ -2,7 +2,7 @@
 
 A Compose stack is one Dokploy resource (`compose`) wrapping a multi-service
 Compose file. It lives under an environment and deploys asynchronously. Use the
-resolved URL and credential access from [SKILL.md](SKILL.md), and verify each
+resolved URL and credential access from [dokploy.md](../dokploy.md), and verify each
 mutation's schema against the target instance first.
 
 ## 1. Create the compose resource
@@ -36,9 +36,9 @@ curl --disable -sS --fail-with-body --connect-timeout 5 --max-time 30 -G -H "x-a
   "$DOKPLOY_URL/api/compose.readLogs"
 ```
 
-The example uses only non-secret environment data. For a real secret, follow
-[`secrets-handling`](../secrets-handling/SKILL.md) and build the request through
-a pipe so the value is neither printed nor inserted into a command argument.
+The example uses only non-secret environment data. For a real secret, pass its
+registered value directly from the `secret` helper through a pipe so the value
+is neither printed nor inserted into a command argument.
 
 ## Internal networking
 

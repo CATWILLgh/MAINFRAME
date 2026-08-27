@@ -24,9 +24,8 @@ secret get REGISTERED_STORAGE_SECRET | jq -Rs --arg accessKey "<id>" '{
   --data-binary @- "$DOKPLOY_URL/api/destination.create"
 ```
 
-Never inline the secret access key in a command shown to the user. Use the
-registered helper-to-stdin flow defined by
-[`secrets-handling`](../secrets-handling/SKILL.md).
+Never inline the secret access key in a command shown to the user. Pass its
+registered value directly from the `secret` helper through stdin.
 
 ## 2. Database backups
 

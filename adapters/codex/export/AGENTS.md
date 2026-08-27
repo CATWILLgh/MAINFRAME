@@ -20,6 +20,10 @@
 - Before a consequential action, inspect the relevant state and consider likely side effects, reversibility, and a safer viable alternative.
 - Use the smallest adequate check that can prove the intended result. Do not call work complete from an unverified edit, an unchecked artifact, or a narrow green check that does not cover the changed risk.
 
+# Skills
+
+- Before substantive work, check whether an available task-specific skill clearly matches the assigned task. If one does, read and apply it before acting, and load only the supporting resources relevant to the task.
+
 # File references
 
 - When referring to a known file, use a Markdown link to its path instead of a bare file name. Add a line suffix when useful.

@@ -12,6 +12,10 @@ context. A recipient that does not own those decisions returns verified facts
 and the exact missing decision to its immediate caller instead of acting or
 addressing the end user.
 
+This skill owns the complete infrastructure result. Other matching skills may
+add specialized guidance, but their absence does not block the primary task or
+weaken the safety and authority boundaries below.
+
 ## Start with the project map
 
 1. Resolve the project root from the active repository, falling back to the
@@ -25,9 +29,11 @@ addressing the end user.
 4. Read only the map's `references` whose `purpose` applies to the current
    operation. Resolve relative paths from the project root. A missing or
    escaping path is stale data, not permission to guess.
-5. Treat `credentialRefs` as names only. Load `mainframe-secrets`
-   before consuming credentials; never place values in the map, commands shown
-   in chat, logs, or generated runbooks.
+5. Treat `credentialRefs` as names only. Resolve them through the non-secret
+   credentials index and pass registered values directly through the `secret`
+   helper or the native mechanism named there. Never read protected stores or
+   place values in the map, commands shown in chat, logs, or generated runbooks.
+   When `mainframe-secrets` is available, it may add credential-store guidance.
 
 Read [infrastructure-map.md](references/infrastructure-map.md) before creating or changing
 the map. Use [infrastructure.example.json](references/infrastructure.example.json) as its
@@ -59,9 +65,16 @@ observations remain authoritative for project-local facts.
 - Dokploy: read the internal [Dokploy API guide](references/dokploy.md), then
   only its cookbook file for the requested operation. Read its `safety.md`
   before a destructive or disruptive endpoint.
-- Starting, stopping, or restarting a local process or Compose stack: load
-  `mainframe-ops-app-server-safety` first.
-- Raw HTTP interaction: load `mainframe-curl-requests`.
+- Starting, stopping, or restarting a local process or Compose stack: inspect
+  the existing listener, process, and container state; reuse a healthy instance;
+  avoid broad `pkill` or `killall`; and target only the resolved instance. When
+  `mainframe-ops-app-server-safety` is available, it may add process-specific
+  guidance.
+- Raw HTTP interaction: use HTTPS unless the target is verified local plaintext,
+  put `--disable` first, set explicit connect and total timeouts, fail on HTTP
+  errors, and do not follow redirects or weaken TLS without a verified need.
+  When `mainframe-curl-requests` is available, it may add transport-specific
+  guidance.
 
 Do not preload every branch. CI/CD systems and other platforms are derived from
 the repository's actual provider files and current official documentation,

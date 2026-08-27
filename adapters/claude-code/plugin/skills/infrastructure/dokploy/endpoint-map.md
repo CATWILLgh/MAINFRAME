@@ -4,7 +4,7 @@ The API groups endpoints under resource tags. This map points each known domain
 to its cookbook file, or marks it **live** — meaning no hand-written recipe
 exists. Tags and actions change between Dokploy versions, so fetch the exact
 schema from the target instance with the live-spec `jq` technique in
-[SKILL.md](SKILL.md#live-spec-navigation-the-long-tail).
+[dokploy.md](../dokploy.md#live-spec-navigation-the-long-tail).
 
 ## Covered by a cookbook
 
@@ -16,7 +16,7 @@ schema from the target instance with the live-spec `jq` technique in
 | `domain` `certificates` `redirects` `port` `mounts` | Ingress, TLS, routing, volumes | [domains-tls.md](domains-tls.md) |
 | `server` `cluster` `swarm` `docker` `destination` | Nodes, Swarm, containers, remote storage | [servers.md](servers.md) |
 | `backup` `volumeBackups` `schedule` `rollback` | Data protection & scheduled jobs | [backups.md](backups.md) |
-| `project` `environment` | Structure / hierarchy | [SKILL.md](SKILL.md#resource-hierarchy) |
+| `project` `environment` | Structure / hierarchy | [dokploy.md](../dokploy.md#resource-hierarchy) |
 | (any destructive endpoint) | Delete / disrupt safety | [safety.md](safety.md) |
 
 ## Live-spec only (no cookbook — fetch schema on demand)
@@ -32,4 +32,4 @@ schema from the target instance with the live-spec `jq` technique in
 | `tag` `patch` | Resource tagging, patch operations |
 | `whitelabeling` `stripe` `licenseKey` `admin` | Branding, billing, licensing, admin |
 
-**Workflow:** pick the tag from this map → list its actions with `... | jq -r '.paths|keys[]|select(startswith("/<tag>."))'` → pull one action's schema with `... | jq '.paths["/<tag>.<action>"]'` → build the call per the [convention](SKILL.md#call-convention-trpc-over-openapi). Check [safety.md](safety.md) if the action mutates.
+**Workflow:** pick the tag from this map → list its actions with `... | jq -r '.paths|keys[]|select(startswith("/<tag>."))'` → pull one action's schema with `... | jq '.paths["/<tag>.<action>"]'` → build the call per the [convention](../dokploy.md#call-convention-trpc-over-openapi). Check [safety.md](safety.md) if the action mutates.

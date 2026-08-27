@@ -1,4 +1,4 @@
-# Servers (multi-node)
+# Servers and multiple nodes
 
 By default Dokploy deploys to the host it runs on. Additional **remote servers** let you deploy across nodes. Endpoints are under `server.*`; container-level operations on a node are under `docker.*`; Swarm clustering under `cluster.*` / `swarm.*`.
 

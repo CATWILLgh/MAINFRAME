@@ -608,7 +608,7 @@ def test_infrastructure_is_primary_session_skill_not_agent():
     assert "disable-model-invocation: true" not in body
     assert "<project-root>/.agents/infrastructure.json" in body
     assert "mainframe:secrets-handling" in body
-    assert "../dokploy-api/SKILL.md" in body
+    assert "[Dokploy API guide](dokploy.md)" in body
     assert "only when repository edits are within the active task" in body
     assert "without changing repository files" in body
     map_contract = (skill / "infrastructure-map.md").read_text(encoding="utf-8")
@@ -641,14 +641,18 @@ def test_infrastructure_is_primary_session_skill_not_agent():
 
 
 def test_dokploy_branch_is_version_aware_and_secret_safe():
-    skill_dir = PLUGIN / "skills" / "dokploy-api"
-    skill = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    infrastructure_dir = PLUGIN / "skills" / "infrastructure"
+    skill_dir = infrastructure_dir / "dokploy"
+    skill = (infrastructure_dir / "dokploy.md").read_text(encoding="utf-8")
     all_markdown = "\n".join(
-        path.read_text(encoding="utf-8") for path in sorted(skill_dir.glob("*.md"))
+        path.read_text(encoding="utf-8")
+        for path in [infrastructure_dir / "dokploy.md", *sorted(skill_dir.glob("*.md"))]
     )
     normalized = " ".join(all_markdown.split())
 
-    assert "disable-model-invocation: true" in skill
+    assert not (PLUGIN / "skills" / "dokploy-api" / "SKILL.md").exists()
+    assert "# Working with the Dokploy API" in skill
+    assert "disable-model-invocation" not in skill
     assert "target instance" in skill
     assert "authority already supplied" in all_markdown
     assert "global permission pattern for `curl`" in normalized
@@ -1210,7 +1214,7 @@ def test_init_ticket_route_handles_one_user_decision_before_goal():
     normalized_route = " ".join(route.split())
     assert "before asking the user" in normalized_route
     assert "Agree a concise definition of done" in route
-    assert "obtain focused red evidence before" in route
+    assert "obtain focused red evidence before" in route.casefold()
     assert "Do not start implementation before the user sends the goal" in route
     assert "/goal Implement only ticket <id>" in route
     assert "open/needs-verification" in route
