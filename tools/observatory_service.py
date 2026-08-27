@@ -26,7 +26,7 @@ import telemetry_data
 
 ROOT = Path(__file__).resolve().parent.parent
 PROVIDERS = {"spark", "antigravity"}
-ADAPTERS = {"claude-code", "codex", "pi"}
+ADAPTERS = {"claude-code", "codex"}
 MODEL_ADAPTERS = {"claude-code", "codex"}
 TERMINAL = {"completed", "retryable", "failed", "cancelled"}
 

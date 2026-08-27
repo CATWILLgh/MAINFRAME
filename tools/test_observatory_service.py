@@ -186,6 +186,9 @@ def test_live_server_serves_panel_and_health_on_loopback():
     (runtime / "enabled").mkdir()
     (runtime / "enabled" / "codex").touch()
     server = module.create_server("127.0.0.1", 0, root=ROOT, runtime=runtime, token="probe")
+    # Warm the snapshot before applying a two-second HTTP timeout. This test
+    # checks the loopback server contract, not cold parsing of local transcripts.
+    server.app.snapshot()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

@@ -109,7 +109,6 @@ def _run(
     feature_rows=0,
     require_existing_codex_home=False,
     claude_peer=False,
-    pi_agent=False,
 ):
     home = home or pathlib.Path(tempfile.mkdtemp())
     fake_bin = home / "fake-bin"
@@ -140,15 +139,6 @@ def _run(
             encoding="utf-8",
         )
         claude.chmod(claude.stat().st_mode | stat.S_IXUSR)
-    if pi_agent:
-        mainframe_pi = fake_bin / "mainframe-pi"
-        mainframe_pi.write_text(
-            "#!/bin/sh\n"
-            "if [ \"${1:-}\" = --help ]; then echo 'MAINFRAME Pi'; exit 0; fi\n"
-            "exit 2\n",
-            encoding="utf-8",
-        )
-        mainframe_pi.chmod(mainframe_pi.stat().st_mode | stat.S_IXUSR)
     env = dict(
         os.environ,
         HOME=str(home),
@@ -311,10 +301,6 @@ def test_clean_install_is_idempotent_and_uninstall_preserves_shared_secrets():
         assert (target / "SKILL.md").read_bytes() == (
             ADAPTER / "skills" / name / "SKILL.md"
         ).read_bytes()
-    assert not (home / ".agents" / "skills" / "mainframe-pi-business-analysis").exists()
-    assert not (home / ".agents" / "skills" / "mainframe-pi-engineer").exists()
-    assert not (codex_dir / "mainframe" / "pi-wait-enabled.json").exists()
-
     index = codex_dir / "credentials-index.md"
     helper = home / ".local" / "bin" / "secret"
     opencode_launcher = home / ".local" / "bin" / "mainframe-opencode"
@@ -1009,34 +995,6 @@ def test_peer_advisor_is_explicit_optional_and_reversible():
     assert not target.exists()
 
 
-def test_pi_integration_is_explicit_optional_and_reversible():
-    missing, missing_home = _run("--codex", "--with-pi")
-    assert missing.returncode != 0
-    assert "requires the separately installed MAINFRAME Pi adapter" in missing.stderr
-    assert not (missing_home / ".agents" / "skills" / "mainframe-pi-engineer").exists()
-
-    installed, home = _run("--codex", "--with-pi", pi_agent=True)
-    assert installed.returncode == 0, installed.stderr
-    for name in ("mainframe-pi-business-analysis", "mainframe-pi-engineer"):
-        target = home / ".agents" / "skills" / name
-        assert target.is_dir() and not target.is_symlink()
-    marker = home / ".codex" / "mainframe" / "pi-wait-enabled.json"
-    assert marker.is_file() and not marker.is_symlink()
-    hooks = json.loads((home / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-    stop = hooks["hooks"]["Stop"][0]["hooks"][0]
-    assert stop["timeout"] == 7260
-    assert stop["statusMessage"] == "MAINFRAME: checking findings and Pi work"
-
-    plain, _ = _run("--codex", home=home, pi_agent=True)
-    assert plain.returncode == 0, plain.stderr
-    assert not marker.exists()
-    assert not (home / ".agents" / "skills" / "mainframe-pi-business-analysis").exists()
-    assert not (home / ".agents" / "skills" / "mainframe-pi-engineer").exists()
-    hooks = json.loads((home / ".codex" / "hooks.json").read_text(encoding="utf-8"))
-    stop = hooks["hooks"]["Stop"][0]["hooks"][0]
-    assert stop["timeout"] == 210
-
-
 def test_baseline_uses_native_standalone_layers_only():
     assert not (ADAPTER / "plugin").exists()
     assert (ADAPTER / "hooks" / "hooks.json").is_file()
@@ -1185,7 +1143,6 @@ def test_baseline_uses_native_standalone_layers_only():
         ADAPTER / "rules" / "mainframe.rules"
     ).read_text(encoding="utf-8")
     assert 'pattern = ["secret"]' not in rules_body
-    assert 'pattern = ["mainframe-pi", "business-analysis"]' not in rules_body
     assert 'pattern = ["mainframe-opencode"]' not in rules_body
     assert 'pattern = ["git", ["add", "stage", "commit"' not in rules_body
     assert 'pattern = ["git", ["commit-tree", "send-pack"]]' in rules_body

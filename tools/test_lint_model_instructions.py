@@ -40,12 +40,6 @@ def test_rejects_aggressive_claude_discovery_pressure():
 
 
 def test_rejects_distributor_provenance_but_keeps_actual_product_target():
-    findings = lint(
-        "---\nname: worker\n"
-        "description: Delegate work to MAINFRAME's project-scoped Pi engineer.\n"
-        "---\n"
-    )
-    assert rules(findings) == ["MI-COMMON-007"]
     assert lint(
         "---\nname: feedback\n"
         "description: Report reproducible friction caused by the MAINFRAME harness.\n"

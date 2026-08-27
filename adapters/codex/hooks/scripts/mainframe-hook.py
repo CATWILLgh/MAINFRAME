@@ -323,8 +323,6 @@ def _command(payload: dict) -> None:
     if reasons:
         _emit_deny("\n\n".join(dict.fromkeys(reasons))[:5000])
     else:
-        if _pi_wait_enabled():
-            importlib.import_module("_pi_wait").register(payload)
         notes.extend(_notes(_run_module("_bash_patterns.py", payload)))
         if notes:
             _emit_context("PreToolUse", "\n\n".join(dict.fromkeys(notes)))
@@ -349,16 +347,6 @@ def _stop(payload: dict) -> None:
             reasons.append(reason.strip())
     reasons.extend(_notes(rows))
     reasons.extend(failures)
-    if not reasons and _pi_wait_enabled():
-        try:
-            pi_reason = importlib.import_module("_pi_wait").wait_for_completion(payload)
-            if pi_reason:
-                reasons.append(pi_reason)
-        except Exception as exc:
-            notice = _failure_notice(payload, "pi-wait.py", exc)
-            if notice:
-                reasons.append(notice)
-                failures.append(notice)
     if reasons:
         unique_reasons = list(dict.fromkeys(reasons))[:MAX_SECTIONS]
         reason_text = "\n\n".join(unique_reasons)
@@ -373,8 +361,7 @@ def _stop(payload: dict) -> None:
 
 def _health(payload: dict) -> None:
     failures = []
-    modules = HEALTH_MODULES + (("_pi_wait.py",) if _pi_wait_enabled() else ())
-    for filename in modules:
+    for filename in HEALTH_MODULES:
         try:
             _load_module(filename)
         except (Exception, SystemExit) as exc:
@@ -402,11 +389,6 @@ def _health(payload: dict) -> None:
                 + "; ".join(failures)
             ),
         )
-
-
-def _pi_wait_enabled() -> bool:
-    codex_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
-    return (codex_home / "mainframe" / "pi-wait-enabled.json").is_file()
 
 
 def _emit_context(
@@ -558,12 +540,7 @@ def main() -> None:
             else:
                 _capture(payload)
         elif event == "PostToolUse":
-            if payload.get("tool_name") == "Bash":
-                if _pi_wait_enabled():
-                    note = importlib.import_module("_pi_wait").complete_launch(payload)
-                    if note:
-                        _emit_context("PostToolUse", note)
-            else:
+            if payload.get("tool_name") != "Bash":
                 _quality(payload)
         elif event in {"Stop", "SubagentStop"}:
             _stop(payload)

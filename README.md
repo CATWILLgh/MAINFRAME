@@ -43,7 +43,6 @@ The aim is simple: improve the minimum quality of agent work without turning del
 | Hooks | Adapter-native checks around relevant tool and session events, with current-change attribution and bounded feedback. |
 | Settings and secrets | Adapter-owned settings where justified, plus a shared secret helper and local credentials index without secret values. |
 | Development mode | Adapter-owned telemetry, feedback tools, and a desktop observability page for improving MAINFRAME itself. |
-| Pi execution adapter | Project-scoped business analysis plus a bounded implementation worker with an independent internal verifier; the primary agent keeps architecture, acceptance, and commits. |
 
 Hooks support engineering judgment; they do not replace tests, product checks, or a real review of risky work.
 
@@ -54,10 +53,8 @@ flowchart LR
     R["MAINFRAME repository"] --> D["Small adapter dispatcher"]
     D --> C["Claude Code adapter"]
     D --> X["Codex adapter"]
-    D --> I["Pi execution adapter"]
     C --> P["Claude-native skills, agents, hooks, and settings"]
     X --> B["Codex-native instructions, skills, agents, rules, and hooks"]
-    I --> W["Profile pipelines, validators, and durable project reviews"]
     R --> S["Shared secret helper and local index"]
 ```
 
@@ -70,7 +67,6 @@ Only the small global baseline is present everywhere. Primary-session orchestrat
 ### Requirements
 
 - Claude Code `2.1.226` or newer for the Claude adapter, or a current Codex Desktop/CLI installation for the Codex adapter;
-- Pi `0.84.2` and Node.js `24` or newer for the Pi execution adapter;
 - Git;
 - Bash `3.2` or newer;
 - Python `3`.
@@ -104,30 +100,6 @@ it, the adapter remains standalone; reinstalling without the flag removes only
 the managed peer-review skill. The peer never implements work or owns final
 acceptance.
 
-To add the Pi worker used by the digital business-analysis skill, first install
-and authorize Pi's providers, then run:
-
-```bash
-./install.sh --pi
-```
-
-Pi does not enter the ordinary Codex installation. To let Codex delegate to
-the installed Pi worker, opt in explicitly:
-
-```bash
-./install.sh --codex --with-pi
-```
-
-That variant adds only the two Pi skills and a native completion bridge. Codex
-can keep working while Pi runs in its terminal session; when the primary turn
-would otherwise end, the bridge waits without model turns and resumes Codex
-once Pi has a terminal result. Reinstalling Codex without `--with-pi` removes
-only these optional artifacts and restores the ordinary short Stop hook.
-
-The Pi installer keeps provider authorization in Pi, creates no shared secret
-copy, and installs one `mainframe-pi` launcher. Its machine-local model routing
-lives in `adapters/pi/config/profiles.local.json` beside the tracked example.
-
 The installer explains every changed path and backs up conflicting files before replacing them. Run it again at any time; the operation is idempotent.
 
 To see the result without changing anything:
@@ -137,28 +109,6 @@ To see the result without changing anything:
 ```
 
 Replace `--claude` with `--codex` to inspect Codex delivery. Codex installs a recipient-neutral global `AGENTS.md`, explicit skills, native specialist agents, a narrow Git-plumbing guard, reviewed native hooks, and the shared credentials index for Desktop, CLI, and the IDE extension. MAINFRAME does not install or select a permission profile or approval default: each user keeps Codex's native permission controls and can change them without reinstalling the adapter. MAINFRAME also avoids `prompt` command rules because native Full access disables approval prompts and would turn them into hard denials. The installer merges only its owned hook groups and development-only telemetry settings, preserves unrelated configuration, and can remove only its own changes later. New or changed hooks still require review through `/hooks`.
-
-Use `--pi --dry-run` to inspect the Pi command delivery. From a target project,
-the direct analysis form is `mainframe-pi business-analysis --initiative <slug>` with at
-least one explicitly supplied `--statement`, project-local `--entry`, or
-external `--input-file`; file options may be repeated. Ordinary agent
-conversation is never treated as the requirements package. Claude
-Code and Codex expose the same result through their native MAINFRAME skills.
-
-The Pi engineer is invoked from one Git worktree with a short block
-request and architect-selected session mode. MAINFRAME fills the block ID,
-current Git `HEAD`, acceptance/check IDs, and internal manifest fields:
-
-```bash
-mainframe-pi engineer --mode new --request .agents/runtime/pi/requests/block-001.json
-```
-
-`mainframe-pi engineer --mode resume` continues that worktree's recorded active
-block without repeating the request. Another worktree receives another Pi
-session by construction. Claude Code and Codex expose the same flow through
-their native `pi-engineer` / `mainframe-pi-engineer` skills when their Pi
-integration is installed. After independent
-acceptance, the primary agent creates the Conventional Commit; Pi never commits.
 
 Start a new Claude Code session after installation. For a MAINFRAME-guided primary session, run:
 
@@ -236,7 +186,6 @@ An interactive terminal asks before replacing them. For automation, use
 `--replace-modified`; MAINFRAME saves the changed copy under the adapter's
 `.mainframe-backups/` directory before continuing. `--yes` does not grant this
 data-loss permission.
-Use `--pi` to update the Pi launcher and its pinned SDK dependencies.
 
 ### Development mode
 
@@ -245,7 +194,6 @@ Development mode is enabled independently for each adapter:
 ```bash
 ./install.sh --claude --dev
 ./install.sh --codex --dev
-./install.sh --pi --dev
 ```
 
 Development mode adds local instrumentation for maintaining this repository. Claude Code and Codex keep separate adapter-owned SQLite databases. Their normal telemetry stays on the machine and records operational metadata rather than prompts, code, file paths, tool input or output, findings, or hook messages.
@@ -298,17 +246,12 @@ Installing an adapter again without `--dev` disables only that adapter's develop
 ```
 
 Use `--codex --uninstall` for Codex. Uninstall removes only MAINFRAME-owned files and links. Credentials, the repository index, unrelated user configuration, backups, telemetry, and feedback data are preserved.
-Use `--pi --uninstall` to remove only the installed `mainframe-pi` launcher;
-provider authorization, local routing, dependencies, sessions, and reviews are
-preserved.
-
 ## Repository map
 
 ```text
 MAINFRAME/
 ├── adapters/claude-code/   Claude Code delivery, agents, skills, hooks, and settings
 ├── adapters/codex/         Codex-native cross-surface baseline and delivery
-├── adapters/pi/            Pi profiles, validators, launcher, and SDK runtime
 ├── shared/credentials/     adapter-independent secret helper and local index template
 ├── dev/                    opt-in tools used while developing MAINFRAME
 ├── tools/                  validators, tests, and local observability builders

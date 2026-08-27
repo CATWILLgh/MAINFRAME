@@ -25,10 +25,6 @@ SKILL_NAMES=(
     mainframe-curl-requests
     mainframe-ops-app-server-safety
 )
-PI_SKILL_NAMES=(
-    mainframe-pi-business-analysis
-    mainframe-pi-engineer
-)
 PRIVATE_SKILL_NAMES=(
     mainframe-research-method
     mainframe-decision-review
@@ -74,8 +70,6 @@ OPENCODE_LAUNCHER_SOURCE="${ADAPTER_ROOT}/bin/mainframe-opencode"
 OPENCODE_LAUNCHER_TARGET="$HOME/.local/bin/mainframe-opencode"
 PEER_ADVISOR_SOURCE="${ADAPTER_ROOT}/optional/skills/mainframe-peer-review"
 PEER_ADVISOR_TARGET="${GLOBAL_SKILLS_DIR}/mainframe-peer-review"
-PI_WAIT_SOURCE="${ADAPTER_ROOT}/optional/pi/enabled.json"
-PI_WAIT_TARGET="${CODEX_DIR}/mainframe/pi-wait-enabled.json"
 MANAGED_DELIVERY="${REPO_ROOT}/shared/managed-delivery/manage-artifact.py"
 MANAGED_STATE_DIR="${CODEX_DIR}/.mainframe-managed-artifacts"
 MANAGED_BACKUP_ROOT="${CODEX_DIR}/.mainframe-backups/${TIMESTAMP}"
@@ -87,14 +81,13 @@ PREFLIGHT=0
 DEV_MODE=0
 REPLACE_MODIFIED=0
 WITH_PEER_ADVISOR=0
-WITH_PI=0
 
 usage() {
     cat <<'EOF'
 MAINFRAME Codex adapter installer
 
 Usage:
-  install.sh [--dry-run] [--dev] [--with-peer-advisor] [--with-pi] [--yes] [--replace-modified] [--uninstall]
+  install.sh [--dry-run] [--dev] [--with-peer-advisor] [--yes] [--replace-modified] [--uninstall]
   install.sh --preflight [--dry-run] [--yes] [--replace-modified]
 
 The baseline is delivered directly so Desktop, CLI, and the IDE extension can
@@ -106,10 +99,6 @@ installation keeps both inactive.
 --with-peer-advisor verifies an authenticated Claude Code CLI and installs the
 optional Claude review skill. Reinstalling without it removes only that managed
 optional skill.
---with-pi requires the separately installed MAINFRAME Pi launcher and installs
-the two Pi delegation skills plus the native background-completion bridge.
-Reinstalling without it removes only those optional Pi artifacts.
-
 Adapter artifacts are managed regular copies. Local changes block update or
 uninstall unless confirmed interactively or with --replace-modified; changed
 content is backed up before replacement.
@@ -126,7 +115,6 @@ parse_args() {
             --yes) ASSUME_YES=1 ;;
             --replace-modified) REPLACE_MODIFIED=1 ;;
             --with-peer-advisor) WITH_PEER_ADVISOR=1 ;;
-            --with-pi) WITH_PI=1 ;;
             --uninstall) UNINSTALL=1 ;;
             --preflight) PREFLIGHT=1 ;;
             -h|--help) usage; exit 0 ;;
@@ -184,12 +172,9 @@ check_managed() {
 managed_state_is_current() {
     local state_id="$1" name
     case "$state_id" in
-        global-agents|rules|opencode-launcher|peer-advisor|pi-wait|dev-harness-feedback) return 0 ;;
+        global-agents|rules|opencode-launcher|peer-advisor|dev-harness-feedback) return 0 ;;
     esac
     for name in "${SKILL_NAMES[@]}"; do
-        [[ "$state_id" == "skill-${name}" ]] && return 0
-    done
-    for name in "${PI_SKILL_NAMES[@]}"; do
         [[ "$state_id" == "skill-${name}" ]] && return 0
     done
     for name in "${PRIVATE_SKILL_NAMES[@]}"; do
@@ -284,20 +269,6 @@ delivery_preflight() {
         target="${GLOBAL_SKILLS_DIR}/$(basename "$source")"
         check_managed install "$source" "$target" "skill-${name}"
     done
-    for name in "${PI_SKILL_NAMES[@]}"; do
-        source="${ADAPTER_ROOT}/skills/${name}"
-        target="${GLOBAL_SKILLS_DIR}/${name}"
-        if [[ $WITH_PI -eq 1 ]]; then
-            check_managed install "$source" "$target" "skill-${name}"
-        else
-            check_managed uninstall "$source" "$target" "skill-${name}"
-        fi
-    done
-    if [[ $WITH_PI -eq 1 ]]; then
-        check_managed install "$PI_WAIT_SOURCE" "$PI_WAIT_TARGET" "pi-wait"
-    else
-        check_managed uninstall "$PI_WAIT_SOURCE" "$PI_WAIT_TARGET" "pi-wait"
-    fi
     for name in "${PRIVATE_SKILL_NAMES[@]}"; do
         check_managed install "${ADAPTER_ROOT}/skills/${name}" \
             "${PRIVATE_SKILLS_DIR}/${name}" "private-skill-${name}"
@@ -354,7 +325,6 @@ check_sources() {
         "$CONFIG_TOOL" \
         "$HOOKS_SOURCE" \
         "$HOOKS_SCRIPT" \
-        "${ADAPTER_ROOT}/hooks/scripts/_pi_wait.py" \
         "$TELEMETRY_SCRIPT" \
         "$TELEMETRY_CONTRACT" \
         "$DEV_FEEDBACK_SOURCE/SKILL.md" \
@@ -364,7 +334,6 @@ check_sources() {
         "$OPENCODE_LAUNCHER_SOURCE" \
         "$PEER_ADVISOR_SOURCE/SKILL.md" \
         "$PEER_ADVISOR_SOURCE/agents/openai.yaml" \
-        "$PI_WAIT_SOURCE" \
         "$MANAGED_DELIVERY" \
         "$HOOKS_TOOL"; do
         if [[ ! -f "$path" ]]; then
@@ -378,16 +347,6 @@ check_sources() {
             "${ADAPTER_ROOT}/skills/${name}/agents/openai.yaml"; do
             if [[ ! -f "$path" ]]; then
                 error "Codex adapter skill source is missing: $path"
-                return 1
-            fi
-        done
-    done
-    for name in "${PI_SKILL_NAMES[@]}"; do
-        for path in \
-            "${ADAPTER_ROOT}/skills/${name}/SKILL.md" \
-            "${ADAPTER_ROOT}/skills/${name}/agents/openai.yaml"; do
-            if [[ ! -f "$path" ]]; then
-                error "Codex adapter Pi skill source is missing: $path"
                 return 1
             fi
         done
@@ -420,18 +379,6 @@ check_peer_advisor() {
     fi
 }
 
-check_pi() {
-    [[ $WITH_PI -eq 1 ]] || return 0
-    if ! command -v mainframe-pi >/dev/null 2>&1; then
-        error "--with-pi requires the separately installed MAINFRAME Pi adapter; run './install.sh --pi' and retry. No Codex adapter files were changed."
-        return 1
-    fi
-    if ! mainframe-pi --help >/dev/null 2>&1; then
-        error "--with-pi found mainframe-pi but its launcher is not working; repair the Pi adapter and retry. No Codex adapter files were changed."
-        return 1
-    fi
-}
-
 manage_config() {
     local action="$1"
     shift
@@ -450,7 +397,6 @@ manage_hooks() {
     local action="$1"
     shift
     local args=()
-    if [[ "$action" == "install" && $WITH_PI -eq 1 ]]; then args+=(--with-pi); fi
     python3 "$HOOKS_TOOL" "$action" \
         --target "$HOOKS_TARGET" \
         --source "$HOOKS_SOURCE" \
@@ -489,11 +435,6 @@ preflight() {
             check_managed uninstall "${ADAPTER_ROOT}/skills/${name}" \
                 "${GLOBAL_SKILLS_DIR}/${name}" "skill-${name}"
         done
-        for name in "${PI_SKILL_NAMES[@]}"; do
-            check_managed uninstall "${ADAPTER_ROOT}/skills/${name}" \
-                "${GLOBAL_SKILLS_DIR}/${name}" "skill-${name}"
-        done
-        check_managed uninstall "$PI_WAIT_SOURCE" "$PI_WAIT_TARGET" "pi-wait"
         for name in "${PRIVATE_SKILL_NAMES[@]}"; do
             check_managed uninstall "${ADAPTER_ROOT}/skills/${name}" \
                 "${PRIVATE_SKILLS_DIR}/${name}" "private-skill-${name}"
@@ -517,7 +458,6 @@ preflight() {
         check_sources
         runtime_preflight
         check_peer_advisor
-        check_pi
         validate_rules
         delivery_preflight
         manage_config install --dry-run >/dev/null
@@ -744,23 +684,6 @@ configure_peer_advisor() {
     fi
 }
 
-configure_pi() {
-    local name
-    if [[ $WITH_PI -eq 1 ]]; then
-        for name in "${PI_SKILL_NAMES[@]}"; do
-            install_managed "${ADAPTER_ROOT}/skills/${name}" \
-                "${GLOBAL_SKILLS_DIR}/${name}" "skill-${name}"
-        done
-        install_managed "$PI_WAIT_SOURCE" "$PI_WAIT_TARGET" "pi-wait"
-    else
-        for name in "${PI_SKILL_NAMES[@]}"; do
-            uninstall_managed "${ADAPTER_ROOT}/skills/${name}" \
-                "${GLOBAL_SKILLS_DIR}/${name}" "skill-${name}"
-        done
-        uninstall_managed "$PI_WAIT_SOURCE" "$PI_WAIT_TARGET" "pi-wait"
-    fi
-}
-
 install_adapter() {
     local name
     install_agents
@@ -779,7 +702,6 @@ install_adapter() {
     bootstrap_semgrep
     configure_dev_feedback
     configure_peer_advisor
-    configure_pi
     process_stale_managed_states uninstall
     configure_dev_telemetry
     if [[ $DRY_RUN -eq 1 ]]; then
@@ -868,10 +790,6 @@ uninstall_adapter() {
     for name in "${SKILL_NAMES[@]}"; do
         uninstall_managed "${ADAPTER_ROOT}/skills/${name}" "${GLOBAL_SKILLS_DIR}/${name}" "skill-${name}"
     done
-    for name in "${PI_SKILL_NAMES[@]}"; do
-        uninstall_managed "${ADAPTER_ROOT}/skills/${name}" "${GLOBAL_SKILLS_DIR}/${name}" "skill-${name}"
-    done
-    uninstall_managed "$PI_WAIT_SOURCE" "$PI_WAIT_TARGET" "pi-wait"
     for name in "${PRIVATE_SKILL_NAMES[@]}"; do
         uninstall_managed "${ADAPTER_ROOT}/skills/${name}" "${PRIVATE_SKILLS_DIR}/${name}" "private-skill-${name}"
     done

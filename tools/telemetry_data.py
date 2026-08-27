@@ -29,11 +29,6 @@ CLAUDE_REPOSITORY_DB = (
 CODEX_REPOSITORY_DB = (
     ROOT / "workspace" / "runtime" / "codex" / "telemetry" / "telemetry.db"
 )
-PI_REPOSITORY_DB = (
-    ROOT / "workspace" / "runtime" / "pi" / "telemetry" / "telemetry.db"
-)
-
-
 def _load_contract(adapter_id, path):
     spec = importlib.util.spec_from_file_location(
         "mainframe_telemetry_contract_" + adapter_id.replace("-", "_"), path
@@ -56,11 +51,8 @@ CONTRACTS = {
         ROOT / "adapters" / "codex" / "hooks" / "scripts"
         / "_telemetry_contract.py",
     ),
-    "pi": _load_contract(
-        "pi", ROOT / "adapters" / "pi" / "telemetry_contract.py",
-    ),
 }
-ADAPTER_LABELS = {"claude-code": "Claude Code", "codex": "Codex", "pi": "Pi"}
+ADAPTER_LABELS = {"claude-code": "Claude Code", "codex": "Codex"}
 
 BREAKDOWN_FIELDS = {
     "session": ("phase",),
@@ -75,8 +67,6 @@ BREAKDOWN_FIELDS = {
     "hook_run": ("status", "recipient"),
     "analyzer_run": ("analyzer", "status"),
     "tool_decision": ("decision", "source"),
-    "engineer_run": ("mode", "status", "verifier_status"),
-    "engineer_tool_summary": ("stage",),
 }
 
 # Why a row never reached a metric. "Excluded" alone reads as data loss; naming
@@ -271,7 +261,6 @@ def default_db_path(adapter_id="claude-code"):
     candidates = {
         "claude-code": (CLAUDE_INSTALLED_DB, CLAUDE_REPOSITORY_DB),
         "codex": (CODEX_INSTALLED_DB, CODEX_REPOSITORY_DB),
-        "pi": (PI_REPOSITORY_DB, PI_REPOSITORY_DB),
     }[adapter_id]
     installed, repository = candidates
     return installed if installed.is_file() else repository
@@ -473,8 +462,8 @@ def _empty_token_usage():
 def _normalized_token_dimensions(adapter_id, data):
     """Return comparable token dimensions without double-counting cache.
 
-    Anthropic and Pi expose uncached input, cache reads, and cache writes as
-    separate counters. OpenAI exposes cached input as a detail of input, so it
+    Anthropic exposes uncached input, cache reads, and cache writes as separate
+    counters. OpenAI exposes cached input as a detail of input, so it
     must be subtracted to obtain fresh input and must not be added to request
     context again.
     """
@@ -512,16 +501,6 @@ def _empty_context_cost():
         "estimated_tokens_high": 0,
         "method": "character-range-2-to-6",
         "causal_overhead": "unproven",
-    }
-
-
-def _empty_engineer_runs():
-    return {
-        "runs": 0, "ready": 0, "blocked": 0, "new": 0, "resume": 0,
-        "rounds": 0, "correction_rounds": 0, "checks_total": 0,
-        "checks_passed": 0, "tool_calls": 0, "repeated_tool_calls": 0,
-        "failed_tool_calls": 0, "compactions": 0, "retries": 0,
-        "duration_ms": 0, "by_status": [], "by_verdict": [],
     }
 
 
@@ -578,8 +557,6 @@ def _empty_report(
         "hook_effectiveness": [],
         "hook_invocations": [],
         "telemetry_queue": {"pending": 0, "claimed": 0, "invalid": 0},
-        "engineer_runs": _empty_engineer_runs(),
-        "engineer_tools": [],
         "workload": _empty_workload(),
         "token_usage": _empty_token_usage(),
         "cost": _empty_cost(),
@@ -642,10 +619,6 @@ def build_report(
     tools = {}
     decisions = collections.Counter()
     hook_health = {}
-    engineer_runs = collections.Counter()
-    engineer_statuses = collections.Counter()
-    engineer_verdicts = collections.Counter()
-    engineer_tools = collections.Counter()
     global_agent_types = {}
     period_agent_instances = collections.defaultdict(set)
     period_agent_starts = collections.Counter()
@@ -881,25 +854,6 @@ def build_report(
                         hook_invocation_first_seen.setdefault(hook, row["timestamp"])
                 item["durations"].append(data["duration_ms"])
 
-            if row["event"] == "engineer_run" and row["valid"]:
-                data = row["data"]
-                engineer_runs["runs"] += 1
-                engineer_runs[data["mode"]] += 1
-                engineer_runs["ready"] += int(data["status"] == "ready-for-architect-review")
-                engineer_runs["blocked"] += int(data["status"] != "ready-for-architect-review")
-                for key in (
-                    "rounds", "correction_rounds", "checks_total", "checks_passed",
-                    "tool_calls", "repeated_tool_calls", "failed_tool_calls",
-                    "compactions", "retries", "duration_ms",
-                ):
-                    engineer_runs[key] += data[key]
-                engineer_statuses[data["status"]] += 1
-                engineer_verdicts[data["verifier_status"]] += 1
-
-            if row["event"] == "engineer_tool_summary" and row["valid"]:
-                data = row["data"]
-                engineer_tools[(data["stage"], data["tool_name"])] += data["calls"]
-
             if recent.maxlen:
                 recent.append({key: row[key] for key in (
                     "id", "timestamp", "project", "event", "agent_type", "agent_id",
@@ -1045,21 +999,6 @@ def build_report(
         ),
         key=lambda item: (-item["errors"], -item["runs"], item["hook_event"]),
     )
-    report["engineer_runs"] = {
-        **report["engineer_runs"],
-        **{key: engineer_runs[key] for key in (
-            "runs", "ready", "blocked", "new", "resume", "rounds",
-            "correction_rounds", "checks_total", "checks_passed", "tool_calls",
-            "repeated_tool_calls", "failed_tool_calls", "compactions", "retries",
-            "duration_ms",
-        )},
-        "by_status": [[key, value] for key, value in engineer_statuses.most_common()],
-        "by_verdict": [[key, value] for key, value in engineer_verdicts.most_common()],
-    }
-    report["engineer_tools"] = [
-        {"stage": stage, "tool_name": tool, "calls": calls}
-        for (stage, tool), calls in engineer_tools.most_common()
-    ]
     report["latency"] = {
         "evidence": "exact" if request_latencies else "unavailable",
         **_duration_summary(request_latencies),
@@ -1350,35 +1289,13 @@ def build_multi_report(
     }
     for key in (
         "agent_lifecycle", "breakdowns", "hook_effectiveness", "hook_invocations",
-        "tool_reliability", "tool_decisions", "hook_health", "engineer_tools",
+        "tool_reliability", "tool_decisions", "hook_health",
     ):
         result[key] = []
         for item in adapters:
             result[key].extend([
                 {**row, "adapter_id": item["adapter_id"]} for row in item[key]
             ])
-    engineer_number_keys = (
-        "runs", "ready", "blocked", "new", "resume", "rounds",
-        "correction_rounds", "checks_total", "checks_passed", "tool_calls",
-        "repeated_tool_calls", "failed_tool_calls", "compactions", "retries",
-        "duration_ms",
-    )
-    result["engineer_runs"] = {
-        **result["engineer_runs"],
-        **{
-            key: sum(item["engineer_runs"][key] for item in adapters)
-            for key in engineer_number_keys
-        },
-        "by_status": [],
-        "by_verdict": [],
-    }
-    for source_key, target_key in (("by_status", "by_status"), ("by_verdict", "by_verdict")):
-        counts = collections.Counter()
-        for item in adapters:
-            counts.update(dict(item["engineer_runs"][source_key]))
-        result["engineer_runs"][target_key] = [
-            [key, value] for key, value in counts.most_common()
-        ]
     recent = []
     for item in adapters:
         recent.extend([

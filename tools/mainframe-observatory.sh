@@ -56,7 +56,7 @@ platform_name() {
 }
 
 valid_adapter() {
-    [[ "${1:-}" == "claude-code" || "${1:-}" == "codex" || "${1:-}" == "pi" ]]
+    [[ "${1:-}" == "claude-code" || "${1:-}" == "codex" ]]
 }
 
 check_prerequisites() {

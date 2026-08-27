@@ -50,9 +50,7 @@ def _load_document(path: Path) -> dict:
     return value
 
 
-def _render_source(
-    source: Path, script: Path, *, with_pi: bool = False
-) -> dict[str, list[dict]]:
+def _render_source(source: Path, script: Path) -> dict[str, list[dict]]:
     marker = "@MAINFRAME_HOOK_SCRIPT@"
     semgrep_marker = "@MAINFRAME_SEMGREP_SCRIPT@"
     body = source.read_text(encoding="utf-8")
@@ -73,15 +71,6 @@ def _render_source(
     for groups in hooks.values():
         if not isinstance(groups, list) or not groups:
             raise ValueError("MAINFRAME hook source contains an empty event")
-    if with_pi:
-        stop_groups = hooks.get("Stop")
-        if not isinstance(stop_groups, list) or len(stop_groups) != 1:
-            raise ValueError("MAINFRAME Pi integration requires one Stop hook group")
-        handlers = stop_groups[0].get("hooks")
-        if not isinstance(handlers, list) or len(handlers) != 1:
-            raise ValueError("MAINFRAME Pi integration requires one Stop hook handler")
-        handlers[0]["timeout"] = 7260
-        handlers[0]["statusMessage"] = "MAINFRAME: checking findings and Pi work"
     return hooks
 
 
@@ -149,8 +138,6 @@ def install(
     script: Path,
     state_path: Path,
     dry_run: bool,
-    *,
-    with_pi: bool = False,
 ) -> str:
     existed = target.exists()
     document = _load_document(target)
@@ -159,7 +146,7 @@ def install(
         _remove_exact(document, state["managed"])
     elif _contains_mainframe_script(document):
         raise ValueError("MAINFRAME hook command exists without installation state")
-    managed = _render_source(source, script, with_pi=with_pi)
+    managed = _render_source(source, script)
     _merge(document, managed)
     rendered = _render_document(document)
     if state is not None and state["managed"] == managed:
@@ -205,14 +192,12 @@ def main() -> None:
     parser.add_argument("--script", type=Path, required=True)
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--with-pi", action="store_true")
     args = parser.parse_args()
 
     if args.dry_run:
         if args.action == "install":
             result = install(
                 args.target, args.source, args.script, args.state, args.dry_run,
-                with_pi=args.with_pi,
             )
         else:
             result = uninstall(args.target, args.state, args.dry_run)
@@ -226,7 +211,6 @@ def main() -> None:
         if args.action == "install":
             result = install(
                 args.target, args.source, args.script, args.state, False,
-                with_pi=args.with_pi,
             )
         else:
             result = uninstall(args.target, args.state, False)

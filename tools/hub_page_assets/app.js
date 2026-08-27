@@ -704,7 +704,7 @@
     const report = telemetry();
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
-        t("No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev, ./install.sh --codex --dev, or ./install.sh --pi --dev.")));
+        t("No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev or ./install.sh --codex --dev.")));
       if (report.error) {
         root.appendChild(el("div", { class: "notice" },
           f("Telemetry read error: {error}", { error: report.error })));
@@ -957,32 +957,6 @@
       ])))));
     }
 
-    const engineer = report.engineer_runs || {};
-    if (engineer.runs) {
-      root.appendChild(section(t("Pi engineer runs"), "agents", engineer.runs,
-        el("div", { class: "panel-stack" }, [
-          explain(t("Bounded implementation blocks run by Pi. Ready means the internal verifier passed; the primary agent still owns final review and commit.")),
-          statRow([
-            [num(engineer.runs), t("runs")],
-            [num(engineer.ready), t("ready")],
-            [num(engineer.blocked), t("not ready")],
-            [num(engineer.correction_rounds), t("corrections")],
-            [num(engineer.checks_passed) + " / " + num(engineer.checks_total), t("checks passed")],
-            [num(engineer.compactions), t("compactions")],
-            [num(engineer.tool_calls), t("tool calls")],
-            [fmtMs(engineer.duration_ms), t("total duration")],
-          ]),
-          (report.engineer_tools || []).length ? table([
-            [t("adapter")], [t("stage")], [t("tool")], [t("calls"), true],
-          ], report.engineer_tools.map((row) => cells([
-            [row.adapter_id || "pi", "mono"],
-            [row.stage, "mono"],
-            [row.tool_name, "mono"],
-            [num(row.calls), "num"],
-          ]))) : null,
-        ])));
-    }
-
     // Raw counts.
     if ((report.event_counts || []).length) {
       root.appendChild(section(t("Event counts"), "events", report.event_counts.length,
@@ -1034,7 +1008,7 @@
 
     if (!ds.active) {
       root.appendChild(el("div", { class: "notice" },
-        t("No adapter telemetry is active yet. Install Claude Code, Codex, or Pi in dev mode and start a fresh session.")));
+        t("No adapter telemetry is active yet. Install Claude Code or Codex in dev mode and start a fresh session.")));
       return;
     }
     root.appendChild(periodLine(report));

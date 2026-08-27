@@ -194,8 +194,8 @@ window.HUB_STRINGS_RU = {
   "How the data gets here": "Как данные сюда попадают",
   "Each adapter writes its own local database. The page reads them read-only and never merges their storage.":
     "Каждый адаптор пишет в свою локальную базу. Страница читает их только на чтение и не объединяет хранилища.",
-  "No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev, ./install.sh --codex --dev, or ./install.sh --pi --dev.":
-    "Телеметрия ещё не записана — либо dev-режим не установлен, либо с момента установки не было сессий. Включите нужный адаптор: ./install.sh --claude --dev, ./install.sh --codex --dev или ./install.sh --pi --dev.",
+  "No telemetry recorded yet — either dev mode is not installed, or no sessions have run since it was. Enable the intended adapter with ./install.sh --claude --dev or ./install.sh --codex --dev.":
+    "Телеметрия ещё не записана — либо dev-режим не установлен, либо с момента установки не было сессий. Включите нужный адаптор: ./install.sh --claude --dev или ./install.sh --codex --dev.",
   "Telemetry read error: {error}": "Ошибка чтения телеметрии: {error}",
   "Collector": "Приёмник",
   "The collector receives the harness's own usage stream over local OTLP. If it fails, the page would otherwise show a confident zero.":
@@ -276,16 +276,13 @@ window.HUB_STRINGS_RU = {
   "Breakdowns": "Разбивки",
   "Recent validated rows": "Последние проверенные строки",
   "Files waiting in the local feedback queue.": "Файлы, ожидающие в локальной очереди обратной связи.",
-  "Pi engineer runs": "Запуски Pi-инженера",
-  "Bounded implementation blocks run by Pi. Ready means the internal verifier passed; the primary agent still owns final review and commit.":
-    "Ограниченные блоки реализации, выполненные Pi. «Готово» означает, что внутренний проверяющий пропустил результат; финальная проверка и коммит всё равно остаются за главным агентом.",
 
   // usage tab
   "Spend and tokens": "Затраты и токены",
   "Only exact native counters are used. Cached input is normalized per adapter so it is counted once; an adapter that reports nothing stays visible and is never treated as zero.":
     "Используются только точные счётчики самой среды. Вход из кэша нормализуется для каждого адаптора и считается один раз; адаптор без данных остаётся видимым и никогда не считается нулём.",
-  "No adapter telemetry is active yet. Install Claude Code, Codex, or Pi in dev mode and start a fresh session.":
-    "Телеметрия адапторов ещё не активна. Установите Claude Code, Codex или Pi в dev-режиме и начните новую сессию.",
+  "No adapter telemetry is active yet. Install Claude Code or Codex in dev mode and start a fresh session.":
+    "Телеметрия адапторов ещё не активна. Установите Claude Code или Codex в dev-режиме и начните новую сессию.",
   "Total spend": "Всего затрат",
   "Cost is reported by {reporting} of {total} requests.":
     "Стоимость сообщают {reporting} из {total} запросов.",

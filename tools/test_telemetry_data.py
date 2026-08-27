@@ -251,37 +251,6 @@ def test_session_concurrency_restarts_after_missing_end_without_inventing_gap():
     assert summary["overlap_ms"] == 0
 
 
-def test_pi_engineer_events_feed_shared_report_and_multi_adapter_view():
-    db = fresh_db()
-    run = {
-        "sample_id": "pi-run", "mode": "new",
-        "status": "ready-for-architect-review", "rounds": 2,
-        "correction_rounds": 1, "checks_total": 2, "checks_passed": 2,
-        "verifier_status": "ready-for-architect-review", "duration_ms": 1200,
-        "tool_calls": 8, "repeated_tool_calls": 1, "failed_tool_calls": 0,
-        "compactions": 1, "retries": 0, "executor_effort": "low",
-        "verifier_effort": "high",
-    }
-    tool = {"sample_id": "pi-tool", "stage": "executor", "tool_name": "read", "calls": 3}
-    with sqlite3.connect(db) as connection:
-        for index, (event, payload) in enumerate((("engineer_run", run), ("engineer_tool_summary", tool)), 1):
-            connection.execute(
-                "INSERT INTO events(ts,schema_version,session_id,agent_type,project,model,origin,event,payload) "
-                "VALUES(?,?,?,?,?,?,?,?,?)",
-                (f"2026-08-18T00:00:0{index}Z", 2, "hashed-session", "engineer", "hashed-project",
-                 "provider/model", "runtime", event, json.dumps(payload)),
-            )
-    report = telemetry_data.build_report(db, adapter_id="pi")
-    assert report["engineer_runs"]["runs"] == 1
-    assert report["engineer_runs"]["ready"] == 1
-    assert report["engineer_runs"]["correction_rounds"] == 1
-    assert report["engineer_runs"]["checks_passed"] == 2
-    assert report["engineer_tools"] == [{"stage": "executor", "tool_name": "read", "calls": 3}]
-    combined = telemetry_data.build_multi_report({"pi": db})
-    assert combined["engineer_runs"]["runs"] == 1
-    assert combined["engineer_tools"][0]["adapter_id"] == "pi"
-
-
 def test_incremental_stream_uses_after_id_and_limit():
     db = fresh_db()
     for size in range(5):

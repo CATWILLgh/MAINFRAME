@@ -48,8 +48,6 @@ def test_cross_adapter_skill_meaning_stays_aligned():
         "infrastructure": ("mainframe-infrastructure", ("project deployment and infrastructure", "ordinary application or ui")),
         "init": ("mainframe-init", ("explicit primary-session collaboration context",)),
         "ops-app-server-safety": ("mainframe-ops-app-server-safety", ("long-running application process", "one-shot build")),
-        "pi-business-analysis": ("mainframe-pi-business-analysis", ("project-scoped pi business analyst", "ordinary discussion")),
-        "pi-engineer": ("mainframe-pi-engineer", ("project-scoped pi coding worker", "requirements discovery")),
         "project-instructions-audit": ("mainframe-project-instructions-audit", ("instruction hierarchy", "conflicts", "duplication")),
         "project-instructions-init": ("mainframe-project-instructions-init", ("instruction hierarchy", "explicitly")),
         "python-backend-patterns": ("mainframe-python-backend", ("server-side python", "data or ml pipelines", "node.js services")),

@@ -35,9 +35,6 @@ _DEFAULT_DB = os.path.expanduser(
     "~/.claude/mainframe/claude-code/telemetry/telemetry.db")
 _DEFAULT_CODEX_DB = os.path.expanduser(
     "~/.codex/mainframe/codex/telemetry/telemetry.db")
-_DEFAULT_PI_DB = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..",
-    "workspace", "runtime", "pi", "telemetry", "telemetry.db")
 _DEFAULT_FEEDBACK = os.path.expanduser(
     "~/.claude/mainframe/claude-code/feedback")
 _DEFAULT_PROJECTS = os.path.expanduser("~/.claude/projects")
@@ -193,7 +190,7 @@ def build_edges(skills, agents, hooks):
 
 
 def collect_dev_state(
-    db_path, feedback_dir, codex_db_path=None, pi_db_path=None,
+    db_path, feedback_dir, codex_db_path=None,
     start_timestamp=None, end_timestamp=None, include_sensitive=False,
 ):
     """Build the UI from the same validated stream exposed to machine readers."""
@@ -201,9 +198,8 @@ def collect_dev_state(
         build_multi_telemetry_report({
             **{"claude-code": db_path},
             **({"codex": codex_db_path} if codex_db_path is not None else {}),
-            **({"pi": pi_db_path} if pi_db_path is not None else {}),
         }, start_timestamp=start_timestamp, end_timestamp=end_timestamp)
-        if codex_db_path is not None or pi_db_path is not None
+        if codex_db_path is not None
         else build_telemetry_report(
             db_path, adapter_id="claude-code",
             start_timestamp=start_timestamp, end_timestamp=end_timestamp,
@@ -261,13 +257,7 @@ def collect_installation_state(root):
         bucket["items"].append({
             "name": name, "status": "present" if os.path.isfile(target) else "missing",
         })
-    pi_source = os.path.realpath(os.path.join(root, "adapters/pi/bin/mainframe-pi"))
-    pi_target = os.path.join(home, ".local", "bin", "mainframe-pi")
-    pi_present = os.path.islink(pi_target) and os.path.realpath(pi_target) == pi_source
-    pi = {"adapter_id": "pi", "items": [{
-        "name": "launcher", "status": "present" if pi_present else "missing",
-    }]}
-    return [claude, codex, pi]
+    return [claude, codex]
 
 
 def _model_lab_findings(payload, limit=5):
@@ -760,7 +750,7 @@ def compute_layout(nodes, layer_order):
 
 def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
                    projects_dir=_DEFAULT_PROJECTS, usage_cache=_DEFAULT_USAGE_CACHE,
-                   codex_db_path=None, pi_db_path=None,
+                   codex_db_path=None,
                    start_timestamp=None, end_timestamp=None,
                    include_sensitive=False):
     skills = collect_skills(root)
@@ -777,8 +767,6 @@ def build_manifest(root, db_path=_DEFAULT_DB, feedback_dir=_DEFAULT_FEEDBACK,
             db_path, feedback_dir,
             _DEFAULT_CODEX_DB if codex_db_path is None and db_path == _DEFAULT_DB
             else codex_db_path,
-            _DEFAULT_PI_DB if pi_db_path is None and db_path == _DEFAULT_DB
-            else pi_db_path,
             start_timestamp=start_timestamp,
             end_timestamp=end_timestamp,
             include_sensitive=include_sensitive,
