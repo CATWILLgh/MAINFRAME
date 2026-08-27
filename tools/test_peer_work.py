@@ -40,6 +40,62 @@ def _wait_for_state(root: Path, *, status: str = "completed") -> dict:
     raise AssertionError("peer worker did not publish terminal state")
 
 
+def _load_peer_wait(codex_home: Path):
+    os.environ["CODEX_HOME"] = str(codex_home)
+    spec = importlib.util.spec_from_file_location("peer_wait_test", PEER_WAIT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _write_finished_peer(
+    codex_home: Path,
+    project: Path,
+    run_id: str,
+    session_id: str,
+    started_at: str,
+    result_text: str,
+) -> None:
+    key = hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:24]
+    run_dir = codex_home / "mainframe" / "peer-runs" / "claude" / key / run_id
+    run_dir.mkdir(parents=True)
+    result = run_dir / "result.json"
+    result.write_text(json.dumps({"result": result_text}), encoding="utf-8")
+    (run_dir / "state.json").write_text(json.dumps({
+        "schemaVersion": 1,
+        "runId": run_id,
+        "role": "review",
+        "sessionId": session_id,
+        "phase": "finished",
+        "status": "completed",
+        "startedAt": started_at,
+        "resultPath": str(result),
+    }), encoding="utf-8")
+
+
+def _active_peer_lock(home: Path, target: str, project: Path) -> Path:
+    key = hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:24]
+    lock = home / "mainframe" / "peer-locks" / target / f"{key}.json"
+    lock.parent.mkdir(parents=True)
+    value = {"schemaVersion": 1, "pid": os.getpid()}
+    if target == "claude":
+        value["runId"] = "active"
+    lock.write_text(json.dumps(value), encoding="utf-8")
+    return lock
+
+
+def _claude_test_env(root: Path, project: Path, fake_bin: Path, log: Path) -> dict:
+    codex_home = root / "codex-home"
+    _active_peer_lock(codex_home, "claude", project)
+    return dict(
+        os.environ,
+        CODEX_HOME=str(codex_home),
+        PATH=f"{fake_bin}:{os.environ['PATH']}",
+        PEER_TEST_LOG=str(log),
+    )
+
+
 def test_claude_launcher_keeps_customizations_and_resumes_exact_session():
     root = Path(tempfile.mkdtemp())
     project = root / "project"
@@ -58,12 +114,7 @@ def test_claude_launcher_keeps_customizations_and_resumes_exact_session():
         "sys.stdin.read()\n"
         "print(json.dumps({'session_id':'claude-session-1','result':'checked','subtype':'success','is_error':False}))\n",
     )
-    env = dict(
-        os.environ,
-        CODEX_HOME=str(root / "codex-home"),
-        PATH=f"{fake_bin}:{os.environ['PATH']}",
-        PEER_TEST_LOG=str(log),
-    )
+    env = _claude_test_env(root, project, fake_bin, log)
     first = subprocess.run(
         [
             sys.executable, str(CLAUDE_LAUNCHER), "new",
@@ -101,34 +152,25 @@ def test_claude_launcher_keeps_customizations_and_resumes_exact_session():
     assert second_args[second_args.index("--resume") + 1] == "claude-session-1"
 
 
-def test_claude_launcher_refuses_an_ambiguous_concurrent_peer():
+def test_claude_launcher_locks_only_implementation_peers():
     root = Path(tempfile.mkdtemp())
     project = root / "project"
     project.mkdir()
     request = root / "request.md"
-    request.write_text("Review.\n", encoding="utf-8")
+    request.write_text("Work.\n", encoding="utf-8")
     codex_home = root / "codex-home"
-    key = hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:24]
-    state_dir = codex_home / "mainframe" / "peer-runs" / "claude" / key / "active"
-    state_dir.mkdir(parents=True)
-    (state_dir / "state.json").write_text(json.dumps({
-        "schemaVersion": 1,
-        "runId": "active",
-        "role": "review",
-        "phase": "running",
-        "pid": os.getpid(),
-    }), encoding="utf-8")
+    _active_peer_lock(codex_home, "claude", project)
     env = dict(os.environ, CODEX_HOME=str(codex_home))
     result = subprocess.run(
         [
             sys.executable, str(CLAUDE_LAUNCHER), "new",
-            "--role", "review", "--project", str(project),
+            "--role", "implement", "--project", str(project),
             "--request", str(request), "--model", "opus", "--effort", "medium",
         ],
         capture_output=True, text=True, timeout=10, env=env,
     )
     assert result.returncode == 2
-    assert "another Claude peer is active" in result.stderr
+    assert "another Claude implementation peer is active" in result.stderr
 
 
 def test_codex_launcher_preserves_role_model_and_exact_session():
@@ -190,7 +232,54 @@ def test_codex_launcher_preserves_role_model_and_exact_session():
     assert 'model_reasoning_effort="medium"' in second_args
 
 
-def test_codex_wait_bridge_creates_one_result_continuation_without_polling():
+def test_codex_launcher_locks_only_implementation_peers():
+    root = Path(tempfile.mkdtemp())
+    project = root / "project"
+    project.mkdir()
+    request = root / "request.md"
+    request.write_text("Work.\n", encoding="utf-8")
+    fake_bin = root / "bin"
+    fake_bin.mkdir()
+    _executable(
+        fake_bin / "codex",
+        "#!/usr/bin/env python3\n"
+        "import json, pathlib, sys\n"
+        "args=sys.argv[1:]; sys.stdin.read()\n"
+        "pathlib.Path(args[args.index('-o')+1]).write_text('reviewed\\n')\n"
+        "print(json.dumps({'type':'thread.started','thread_id':'review-session'}))\n",
+    )
+    claude_home = root / "claude-home"
+    _active_peer_lock(claude_home, "codex", project)
+    env = dict(
+        os.environ,
+        CLAUDE_CONFIG_DIR=str(claude_home),
+        PATH=f"{fake_bin}:{os.environ['PATH']}",
+    )
+    result = subprocess.run(
+        [
+            sys.executable, str(CODEX_LAUNCHER), "new",
+            "--role", "implement", "--project", str(project),
+            "--request", str(request), "--model", "gpt-5.6-terra",
+            "--effort", "medium",
+        ],
+        capture_output=True, text=True, timeout=10, env=env,
+    )
+    assert result.returncode == 2
+    assert "another Codex implementation peer is active" in result.stderr
+    review = subprocess.run(
+        [
+            sys.executable, str(CODEX_LAUNCHER), "new",
+            "--role", "review", "--project", str(project),
+            "--request", str(request), "--model", "gpt-5.6-terra",
+            "--effort", "medium",
+        ],
+        capture_output=True, text=True, timeout=10, env=env,
+    )
+    assert review.returncode == 0, review.stderr
+    assert "peer_session_id=review-session" in review.stdout
+
+
+def test_codex_wait_bridge_collects_multiple_results_without_polling():
     root = Path(tempfile.mkdtemp())
     codex_home = root / "codex-home"
     project = root / "project"
@@ -203,12 +292,8 @@ def test_codex_wait_bridge_creates_one_result_continuation_without_polling():
         "startupGraceSeconds": 1,
     }), encoding="utf-8")
     old_home = os.environ.get("CODEX_HOME")
-    os.environ["CODEX_HOME"] = str(codex_home)
     try:
-        spec = importlib.util.spec_from_file_location("peer_wait_test", PEER_WAIT)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        module = _load_peer_wait(codex_home)
         payload = {
             "session_id": "root-session",
             "turn_id": "turn-1",
@@ -219,26 +304,23 @@ def test_codex_wait_bridge_creates_one_result_continuation_without_polling():
             },
         }
         module.register(payload)
-        key = hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:24]
-        run_dir = codex_home / "mainframe" / "peer-runs" / "claude" / key / "run-one"
-        run_dir.mkdir(parents=True)
-        result = run_dir / "result.json"
-        result.write_text(json.dumps({"result": "independent result"}), encoding="utf-8")
-        state = {
-            "schemaVersion": 1,
-            "runId": "run-one",
-            "role": "review",
-            "sessionId": "claude-session-1",
-            "phase": "finished",
-            "status": "completed",
-            "startedAt": "2026-08-27T00:00:00+00:00",
-            "resultPath": str(result),
-        }
-        (run_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
+        _write_finished_peer(
+            codex_home, project, "run-one", "claude-session-1",
+            "2026-08-27T00:00:00+00:00", "independent result",
+        )
+        second_payload = dict(payload)
+        second_payload["tool_use_id"] = "tool-2"
+        module.register(second_payload)
+        _write_finished_peer(
+            codex_home, project, "run-two", "claude-session-2",
+            "2026-08-27T00:00:01+00:00", "second independent result",
+        )
         continuation = module.wait_for_completion(payload)
         assert continuation is not None
         assert "claude-session-1" in continuation
         assert "independent result" in continuation
+        assert "claude-session-2" in continuation
+        assert "second independent result" in continuation
         assert module.wait_for_completion(payload) is None
     finally:
         if old_home is None:

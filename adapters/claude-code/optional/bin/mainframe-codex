@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,12 +25,68 @@ def _session_path(session_id: str) -> Path:
     return _claude_root() / "mainframe" / "peer-sessions" / "codex" / f"{session_id}.json"
 
 
+def _project_key(project: Path) -> str:
+    return hashlib.sha256(str(project).encode()).hexdigest()[:24]
+
+
 def _atomic_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     temporary.chmod(0o600)
     os.replace(temporary, path)
+
+
+def _pid_alive(raw: object) -> bool:
+    if not isinstance(raw, int) or raw <= 0:
+        return False
+    try:
+        os.kill(raw, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _implementation_lock_path(project: Path) -> Path:
+    return (
+        _claude_root() / "mainframe" / "peer-locks" / "codex"
+        / f"{_project_key(project)}.json"
+    )
+
+
+def _acquire_implementation_lock(project: Path) -> Path:
+    path = _implementation_lock_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for _attempt in range(2):
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            try:
+                owner = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                owner = {}
+            if isinstance(owner, dict) and _pid_alive(owner.get("pid")):
+                raise ValueError("another Codex implementation peer is active in this project")
+            path.unlink(missing_ok=True)
+            continue
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump({"schemaVersion": 1, "pid": os.getpid()}, handle)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        return path
+    raise ValueError("could not acquire the Codex implementation peer lock")
+
+
+def _release_implementation_lock(path: Path) -> None:
+    try:
+        owner = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if isinstance(owner, dict) and owner.get("pid") == os.getpid():
+        path.unlink(missing_ok=True)
 
 
 def _request(path: str) -> Path:
@@ -90,65 +147,72 @@ def _run(args: argparse.Namespace) -> int:
         effort = args.effort or metadata["effort"]
         session = args.session
 
-    with tempfile.TemporaryDirectory(prefix="mainframe-codex-peer-") as raw:
-        temporary = Path(raw)
-        events = temporary / "events.jsonl"
-        answer = temporary / "answer.md"
-        diagnostics = temporary / "diagnostics.log"
-        if args.action == "new":
-            command = ["codex", "exec", "--strict-config", "-C", str(project)]
-        else:
-            command = ["codex", "exec", "resume", "--strict-config", session]
-        command.extend([
-            "-m", model,
-            "-c", f'model_reasoning_effort="{effort}"',
-            "--json",
-            "-o", str(answer),
-        ])
-        if role == "review":
-            command.extend(["-c", 'sandbox_mode="read-only"', "-c", 'approval_policy="never"'])
-        elif access == "full":
-            command.extend(["-c", 'sandbox_mode="danger-full-access"', "-c", 'approval_policy="never"'])
-        elif args.action == "new":
-            command.append("--approve-for-me")
-        command.append("-")
+    implementation_lock = (
+        _acquire_implementation_lock(project) if role == "implement" else None
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="mainframe-codex-peer-") as raw:
+            temporary = Path(raw)
+            events = temporary / "events.jsonl"
+            answer = temporary / "answer.md"
+            diagnostics = temporary / "diagnostics.log"
+            if args.action == "new":
+                command = ["codex", "exec", "--strict-config", "-C", str(project)]
+            else:
+                command = ["codex", "exec", "resume", "--strict-config", session]
+            command.extend([
+                "-m", model,
+                "-c", f'model_reasoning_effort="{effort}"',
+                "--json",
+                "-o", str(answer),
+            ])
+            if role == "review":
+                command.extend(["-c", 'sandbox_mode="read-only"', "-c", 'approval_policy="never"'])
+            elif access == "full":
+                command.extend(["-c", 'sandbox_mode="danger-full-access"', "-c", 'approval_policy="never"'])
+            elif args.action == "new":
+                command.append("--approve-for-me")
+            command.append("-")
 
-        with request.open("rb") as source, events.open("wb") as out, diagnostics.open("wb") as err:
-            completed = subprocess.run(
-                command,
-                cwd=project,
-                stdin=source,
-                stdout=out,
-                stderr=err,
-                check=False,
-            )
-        thread_id = _thread_id(events)
-        if thread_id:
-            _atomic_json(_session_path(thread_id), {
-                "schemaVersion": 1,
-                "sessionId": thread_id,
-                "projectRoot": str(project),
-                "role": role,
-                "access": access,
-                "model": model,
-                "effort": effort,
-            })
-        if completed.returncode != 0 or not thread_id or not answer.is_file():
-            detail = diagnostics.read_text(encoding="utf-8", errors="replace")[-4000:]
-            print("Codex peer run failed.", file=sys.stderr)
+            with request.open("rb") as source, events.open("wb") as out, diagnostics.open("wb") as err:
+                completed = subprocess.run(
+                    command,
+                    cwd=project,
+                    stdin=source,
+                    stdout=out,
+                    stderr=err,
+                    check=False,
+                )
+            thread_id = _thread_id(events)
             if thread_id:
-                print(f"peer_session_id={thread_id}", file=sys.stderr)
-            if detail.strip():
-                print(detail.strip(), file=sys.stderr)
-            return completed.returncode or 1
-        result = answer.read_text(encoding="utf-8", errors="replace")
-        print(f"peer_session_id={thread_id}")
-        print(f"peer_role={role}")
-        print(f"peer_model={model}")
-        print(f"peer_effort={effort}")
-        print("---")
-        print(result.rstrip())
-        return 0
+                _atomic_json(_session_path(thread_id), {
+                    "schemaVersion": 1,
+                    "sessionId": thread_id,
+                    "projectRoot": str(project),
+                    "role": role,
+                    "access": access,
+                    "model": model,
+                    "effort": effort,
+                })
+            if completed.returncode != 0 or not thread_id or not answer.is_file():
+                detail = diagnostics.read_text(encoding="utf-8", errors="replace")[-4000:]
+                print("Codex peer run failed.", file=sys.stderr)
+                if thread_id:
+                    print(f"peer_session_id={thread_id}", file=sys.stderr)
+                if detail.strip():
+                    print(detail.strip(), file=sys.stderr)
+                return completed.returncode or 1
+            result = answer.read_text(encoding="utf-8", errors="replace")
+            print(f"peer_session_id={thread_id}")
+            print(f"peer_role={role}")
+            print(f"peer_model={model}")
+            print(f"peer_effort={effort}")
+            print("---")
+            print(result.rstrip())
+            return 0
+    finally:
+        if implementation_lock is not None:
+            _release_implementation_lock(implementation_lock)
 
 
 def _parser() -> argparse.ArgumentParser:

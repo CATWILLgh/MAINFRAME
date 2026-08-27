@@ -17,8 +17,8 @@ and evidence before accepting it.
 - Use `resume` for feedback, missing work, or another review pass on the same
   agreed result in the same checkout. Resume the exact returned session ID so
   Claude keeps its repository context.
-- Run only one Claude peer in a checkout at a time. The completion bridge owns
-  one pending peer for that checkout and refuses an ambiguous concurrent run.
+- Only one implementation peer may modify a checkout at a time. Read-only
+  review peers do not take that lock.
 
 Write a bounded English request to a temporary file. Include the result to
 produce, relevant constraints and evidence, allowed scope, acceptance checks,

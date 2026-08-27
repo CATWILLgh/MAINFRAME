@@ -78,19 +78,51 @@ def _pid_alive(raw: object) -> bool:
     return True
 
 
-def _assert_no_active_peer(project: Path) -> None:
-    for state_path in _runs_root(project).glob("*/state.json"):
+def _implementation_lock_path(project: Path) -> Path:
+    return (
+        _codex_home() / "mainframe" / "peer-locks" / "claude"
+        / f"{_project_key(project)}.json"
+    )
+
+
+def _acquire_implementation_lock(project: Path, run_id: str) -> Path:
+    path = _implementation_lock_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for _attempt in range(2):
         try:
-            state = _read_json(state_path)
-        except (OSError, ValueError, json.JSONDecodeError):
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            try:
+                owner = _read_json(path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                owner = {}
+            if _pid_alive(owner.get("pid")):
+                raise ValueError(
+                    "another Claude implementation peer is active in this project: "
+                    + str(owner.get("runId") or "unknown")
+                )
+            path.unlink(missing_ok=True)
             continue
-        if (
-            state.get("phase") in {"starting", "running"}
-            and _pid_alive(state.get("pid"))
-        ):
-            raise ValueError(
-                f"another Claude peer is active in this project: {state.get('runId')}"
-            )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump({"schemaVersion": 1, "runId": run_id, "pid": os.getpid()}, handle)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        return path
+    raise ValueError("could not acquire the Claude implementation peer lock")
+
+
+def _update_implementation_lock(path: Path, run_id: str, pid: int) -> None:
+    _atomic_json(path, {"schemaVersion": 1, "runId": run_id, "pid": pid})
+
+
+def _release_implementation_lock(path: Path, run_id: str) -> None:
+    try:
+        owner = _read_json(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return
+    if owner.get("runId") == run_id:
+        path.unlink(missing_ok=True)
 
 
 def _load_session(session_id: str) -> dict:
@@ -123,9 +155,11 @@ def _launch(args: argparse.Namespace) -> int:
         model = args.model or metadata["model"]
         effort = args.effort or metadata["effort"]
         session_id = args.session
-    _assert_no_active_peer(project)
-
     run_id = uuid.uuid4().hex[:16]
+    implementation_lock = (
+        _acquire_implementation_lock(project, run_id)
+        if role == "implement" else None
+    )
     run_dir = _runs_root(project) / run_id
     run_dir.mkdir(parents=True, mode=0o700)
     request_copy = run_dir / "request.md"
@@ -148,6 +182,8 @@ def _launch(args: argparse.Namespace) -> int:
         "startedAt": datetime.now(timezone.utc).isoformat(),
         "resultPath": str(run_dir / "result.json"),
     }
+    if implementation_lock is not None:
+        state["implementationLockPath"] = str(implementation_lock)
     _atomic_json(state_path, state)
     command = [
         sys.executable,
@@ -156,18 +192,25 @@ def _launch(args: argparse.Namespace) -> int:
         "--state", str(state_path),
         "--request", str(request_copy),
     ]
-    worker = subprocess.Popen(
-        command,
-        cwd=project,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        close_fds=True,
-    )
+    try:
+        worker = subprocess.Popen(
+            command,
+            cwd=project,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
+    except Exception:
+        if implementation_lock is not None:
+            _release_implementation_lock(implementation_lock, run_id)
+        raise
     state["pid"] = worker.pid
     state["phase"] = "running"
     _atomic_json(state_path, state)
+    if implementation_lock is not None:
+        _update_implementation_lock(implementation_lock, run_id, worker.pid)
     print(f"peer_run_id={run_id}")
     print(f"peer_role={role}")
     print("Claude peer started in the background. Do not poll it; end the turn when ready.")
@@ -247,6 +290,10 @@ def _worker(args: argparse.Namespace) -> int:
         state["finishedAt"] = datetime.now(timezone.utc).isoformat()
         _atomic_json(state_path, state)
         return 1
+    finally:
+        raw_lock = state.get("implementationLockPath")
+        if isinstance(raw_lock, str) and raw_lock:
+            _release_implementation_lock(Path(raw_lock), state["runId"])
 
 
 def _parser() -> argparse.ArgumentParser:
