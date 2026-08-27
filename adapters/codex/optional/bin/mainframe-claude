@@ -78,19 +78,18 @@ def _pid_alive(raw: object) -> bool:
     return True
 
 
-def _assert_no_writer(project: Path) -> None:
+def _assert_no_active_peer(project: Path) -> None:
     for state_path in _runs_root(project).glob("*/state.json"):
         try:
             state = _read_json(state_path)
         except (OSError, ValueError, json.JSONDecodeError):
             continue
         if (
-            state.get("role") == "implement"
-            and state.get("phase") in {"starting", "running"}
+            state.get("phase") in {"starting", "running"}
             and _pid_alive(state.get("pid"))
         ):
             raise ValueError(
-                f"another Claude implementation peer is active in this project: {state.get('runId')}"
+                f"another Claude peer is active in this project: {state.get('runId')}"
             )
 
 
@@ -124,8 +123,7 @@ def _launch(args: argparse.Namespace) -> int:
         model = args.model or metadata["model"]
         effort = args.effort or metadata["effort"]
         session_id = args.session
-    if role == "implement":
-        _assert_no_writer(project)
+    _assert_no_active_peer(project)
 
     run_id = uuid.uuid4().hex[:16]
     run_dir = _runs_root(project) / run_id

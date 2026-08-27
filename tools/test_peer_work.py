@@ -101,6 +101,36 @@ def test_claude_launcher_keeps_customizations_and_resumes_exact_session():
     assert second_args[second_args.index("--resume") + 1] == "claude-session-1"
 
 
+def test_claude_launcher_refuses_an_ambiguous_concurrent_peer():
+    root = Path(tempfile.mkdtemp())
+    project = root / "project"
+    project.mkdir()
+    request = root / "request.md"
+    request.write_text("Review.\n", encoding="utf-8")
+    codex_home = root / "codex-home"
+    key = hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:24]
+    state_dir = codex_home / "mainframe" / "peer-runs" / "claude" / key / "active"
+    state_dir.mkdir(parents=True)
+    (state_dir / "state.json").write_text(json.dumps({
+        "schemaVersion": 1,
+        "runId": "active",
+        "role": "review",
+        "phase": "running",
+        "pid": os.getpid(),
+    }), encoding="utf-8")
+    env = dict(os.environ, CODEX_HOME=str(codex_home))
+    result = subprocess.run(
+        [
+            sys.executable, str(CLAUDE_LAUNCHER), "new",
+            "--role", "review", "--project", str(project),
+            "--request", str(request), "--model", "opus", "--effort", "medium",
+        ],
+        capture_output=True, text=True, timeout=10, env=env,
+    )
+    assert result.returncode == 2
+    assert "another Claude peer is active" in result.stderr
+
+
 def test_codex_launcher_preserves_role_model_and_exact_session():
     root = Path(tempfile.mkdtemp())
     project = root / "project"
