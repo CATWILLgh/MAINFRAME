@@ -119,7 +119,7 @@
           {
             "type": "command",
             "command": "python3 -B @MAINFRAME_HOOK_SCRIPT@",
-            "timeout": 210,
+            "timeout": "@MAINFRAME_STOP_TIMEOUT@",
             "statusMessage": "MAINFRAME: checking current-session findings"
           }
         ]

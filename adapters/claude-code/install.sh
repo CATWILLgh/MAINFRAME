@@ -65,7 +65,7 @@ DEV=0
 ASSUME_YES=0
 REPLACE_MODIFIED=0
 PREFLIGHT_ONLY=0
-WITH_PEER_ADVISOR=0
+WITH_PEER=0
 
 usage() {
     cat <<EOF
@@ -100,10 +100,11 @@ Usage:
                       (claude-code/telemetry/ — a local SQLite DB; nothing
                       leaves the machine).
                       Ordinary users do not need this.
-  $0 --with-peer-advisor
+  $0 --with-peer
                       Verify an authenticated Codex CLI and install the
-                      optional Codex review skill. Reinstalling without this
-                      flag removes only that managed optional skill.
+                      optional Codex review/implementation skill and launcher.
+                      Reinstalling without this flag removes only those
+                      managed optional artifacts.
   $0 --dry-run        Show what would happen, no changes.
   $0 --yes            Approve a required Claude Code update without prompting.
   $0 --replace-modified
@@ -129,7 +130,7 @@ while [[ $# -gt 0 ]]; do
         --dev)       DEV=1 ;;
         --yes)       ASSUME_YES=1 ;;
         --replace-modified) REPLACE_MODIFIED=1 ;;
-        --with-peer-advisor) WITH_PEER_ADVISOR=1 ;;
+        --with-peer) WITH_PEER=1 ;;
         --preflight) PREFLIGHT_ONLY=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)   usage; exit 0 ;;
@@ -185,8 +186,12 @@ SETTINGS_DEV_OVERLAY="${ADAPTER_ROOT}/dev/settings-telemetry.json"
 DEV_MANAGED_ARTIFACTS=(
     "adapters/claude-code/dev/skills/harness-feedback:${CLAUDE_DIR}/skills/harness-feedback:dev-harness-feedback"
 )
-PEER_ADVISOR_SOURCE="adapters/claude-code/optional/skills/mainframe-peer-review"
-PEER_ADVISOR_TARGET="${CLAUDE_DIR}/skills/mainframe-peer-review"
+PEER_WORK_SOURCE="adapters/claude-code/optional/skills/mainframe-peer-work"
+PEER_WORK_TARGET="${CLAUDE_DIR}/skills/mainframe-peer-work"
+PEER_LAUNCHER_SOURCE="adapters/claude-code/optional/bin/mainframe-codex"
+PEER_LAUNCHER_TARGET="$HOME/.local/bin/mainframe-codex"
+LEGACY_PEER_SOURCE="adapters/claude-code/optional/skills/mainframe-peer-review"
+LEGACY_PEER_TARGET="${CLAUDE_DIR}/skills/mainframe-peer-review"
 DEV_LINKED_ARTIFACTS=(
     "workspace/runtime:${CLAUDE_DIR}/mainframe"
 )
@@ -348,10 +353,13 @@ check_managed_inputs() {
             check_managed install "$src" "$target" "$state_id"
         fi
     done
-    if [[ $UNINSTALL -eq 1 || $WITH_PEER_ADVISOR -eq 0 ]]; then
-        check_managed uninstall "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    check_managed uninstall "$LEGACY_PEER_SOURCE" "$LEGACY_PEER_TARGET" "peer-advisor"
+    if [[ $UNINSTALL -eq 1 || $WITH_PEER -eq 0 ]]; then
+        check_managed uninstall "$PEER_WORK_SOURCE" "$PEER_WORK_TARGET" "peer-work-skill"
+        check_managed uninstall "$PEER_LAUNCHER_SOURCE" "$PEER_LAUNCHER_TARGET" "peer-work-launcher"
     else
-        check_managed install "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+        check_managed install "$PEER_WORK_SOURCE" "$PEER_WORK_TARGET" "peer-work-skill"
+        check_managed install "$PEER_LAUNCHER_SOURCE" "$PEER_LAUNCHER_TARGET" "peer-work-launcher"
     fi
     for entry in "${MANAGED_DIRS[@]}"; do
         src="${entry%%:*}"
@@ -362,14 +370,14 @@ check_managed_inputs() {
     done
 }
 
-check_peer_advisor() {
-    [[ $WITH_PEER_ADVISOR -eq 1 ]] || return 0
+check_peer_work() {
+    [[ $WITH_PEER -eq 1 ]] || return 0
     if ! command -v codex >/dev/null 2>&1; then
-        log_error "--with-peer-advisor requires the Codex CLI on PATH; no Claude adapter files were changed."
+        log_error "--with-peer requires the Codex CLI on PATH; no Claude adapter files were changed."
         return 1
     fi
     if ! codex login status >/dev/null 2>&1; then
-        log_error "--with-peer-advisor requires an authenticated Codex CLI; run 'codex login' and retry."
+        log_error "--with-peer requires an authenticated Codex CLI; run 'codex login' and retry."
         return 1
     fi
 }
@@ -859,7 +867,7 @@ main() {
     if [[ $UNINSTALL -eq 0 ]]; then
         check_claude_version
         check_python
-        check_peer_advisor
+        check_peer_work
         check_settings_inputs
         check_managed_inputs
     else
@@ -904,7 +912,9 @@ main() {
             local state_id="${entry##*:}"
             uninstall_managed "$src" "$tgt" "$state_id"
         done
-        uninstall_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+        uninstall_managed "$LEGACY_PEER_SOURCE" "$LEGACY_PEER_TARGET" "peer-advisor"
+        uninstall_managed "$PEER_WORK_SOURCE" "$PEER_WORK_TARGET" "peer-work-skill"
+        uninstall_managed "$PEER_LAUNCHER_SOURCE" "$PEER_LAUNCHER_TARGET" "peer-work-launcher"
         for entry in "${DEV_LINKED_ARTIFACTS[@]}"; do
             uninstall_one "${entry%%:*}" "${entry##*:}"
         done
@@ -953,10 +963,14 @@ main() {
     for entry in "${LINKED_ARTIFACTS[@]}"; do
         install_one "${entry%%:*}" "${entry##*:}"
     done
-    if [[ $WITH_PEER_ADVISOR -eq 1 ]]; then
-        install_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+    uninstall_managed "$LEGACY_PEER_SOURCE" "$LEGACY_PEER_TARGET" "peer-advisor"
+    if [[ $WITH_PEER -eq 1 ]]; then
+        install_managed "$PEER_WORK_SOURCE" "$PEER_WORK_TARGET" "peer-work-skill"
+        install_managed "$PEER_LAUNCHER_SOURCE" "$PEER_LAUNCHER_TARGET" "peer-work-launcher"
+        if [[ $DRY_RUN -eq 0 ]]; then chmod 755 "$PEER_LAUNCHER_TARGET"; fi
     else
-        uninstall_managed "$PEER_ADVISOR_SOURCE" "$PEER_ADVISOR_TARGET" "peer-advisor"
+        uninstall_managed "$PEER_WORK_SOURCE" "$PEER_WORK_TARGET" "peer-work-skill"
+        uninstall_managed "$PEER_LAUNCHER_SOURCE" "$PEER_LAUNCHER_TARGET" "peer-work-launcher"
     fi
 
     install_settings

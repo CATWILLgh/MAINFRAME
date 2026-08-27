@@ -223,7 +223,10 @@ def test_hook_source_has_one_dispatcher_and_one_bounded_async_analyzer():
         assert handler["statusMessage"].startswith("MAINFRAME:")
         assert "mainframe-hook.py" not in handler["command"]
         assert "@MAINFRAME_HOOK_SCRIPT@" in handler["command"]
-        assert 0 < handler["timeout"] <= 210
+        if event == "Stop":
+            assert handler["timeout"] == "@MAINFRAME_STOP_TIMEOUT@"
+        else:
+            assert 0 < handler["timeout"] <= 210
         if "additionalContextLimit" in handler:
             assert 0 < handler["additionalContextLimit"] <= 1600
         else:
@@ -415,9 +418,10 @@ def test_startup_health_covers_every_runtime_module():
     expected = {
         path.name
         for path in HOOK.parent.glob("*.py")
-        if path.name != HOOK.name
+        if path.name not in {HOOK.name, "_peer_wait.py"}
     }
     assert set(module.HEALTH_MODULES) == expected
+    assert "_peer_wait.py" in HOOK.read_text(encoding="utf-8")
     dispatcher = HOOK.read_text(encoding="utf-8")
     assert "fallow-quality-note.py" not in dispatcher
     assert not (HOOK.parent / "fallow-quality-note.py").exists()

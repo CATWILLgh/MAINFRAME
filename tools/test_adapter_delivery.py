@@ -127,26 +127,30 @@ def test_root_dispatches_claude_dry_run():
     assert "claude code adapter" in proc.stdout.lower()
 
 
-def test_peer_advisor_is_explicit_optional_and_reversible():
-    missing, missing_home = _run_installer("--claude", "--with-peer-advisor")
+def test_peer_work_is_explicit_optional_and_reversible():
+    missing, missing_home = _run_installer("--claude", "--with-peer")
     assert missing.returncode != 0
     assert "requires the Codex CLI" in missing.stderr
-    assert not (missing_home / ".claude" / "skills" / "mainframe-peer-review").exists()
+    assert not (missing_home / ".claude" / "skills" / "mainframe-peer-work").exists()
 
     installed, home = _run_installer(
-        "--claude", "--with-peer-advisor", codex_peer=True
+        "--claude", "--with-peer", codex_peer=True
     )
     assert installed.returncode == 0, installed.stderr
-    target = home / ".claude" / "skills" / "mainframe-peer-review"
+    target = home / ".claude" / "skills" / "mainframe-peer-work"
+    launcher = home / ".local" / "bin" / "mainframe-codex"
     assert target.is_dir() and not target.is_symlink()
+    assert launcher.is_file() and os.access(launcher, os.X_OK)
     body = (target / "SKILL.md").read_text(encoding="utf-8")
-    assert "codex exec --ignore-user-config" in body
-    assert "never use `--last`" in body
-    assert "allowed-tools: Bash(codex *)," in body
+    assert "mainframe-codex new --role <review|implement>" in body
+    assert "mainframe-codex resume --session <session-id>" in body
+    assert "same result" in body
+    assert "--ignore-user-config" not in body
 
     plain, _ = _run_installer("--claude", home=home, codex_peer=True)
     assert plain.returncode == 0, plain.stderr
     assert not target.exists()
+    assert not launcher.exists()
 
 
 def test_reinstall_removes_unchanged_retired_managed_artifact():
@@ -1225,10 +1229,10 @@ def test_init_replaces_automatic_task_workflow():
     init_dir = PLUGIN / "skills" / "init"
     body = (init_dir / "SKILL.md").read_text(encoding="utf-8")
     assert "[workflow.md](workflow.md)" in body
-    assert "mainframe-peer-review" in body
+    assert "mainframe-peer-work" in body
     assert (init_dir / "workflow.md").is_file()
     assert not (init_dir / "codex-exec.md").exists()
-    assert (ADAPTER / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md").is_file()
+    assert (ADAPTER / "optional" / "skills" / "mainframe-peer-work" / "SKILL.md").is_file()
     assert not (PLUGIN / "skills" / "task-workflow").exists()
     assert not (PLUGIN / "hooks" / "scripts" / "session-posture.py").exists()
     assert not (PLUGIN / "hooks" / "scripts" / "task-workflow-engagement.py").exists()
@@ -1241,7 +1245,7 @@ def test_init_separates_bounded_dod_from_complex_review():
     init_dir = PLUGIN / "skills" / "init"
     workflow = (init_dir / "workflow.md").read_text(encoding="utf-8")
     codex = (
-        ADAPTER / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md"
+        ADAPTER / "optional" / "skills" / "mainframe-peer-work" / "SKILL.md"
     ).read_text(encoding="utf-8")
     assert "A formal DoD alone does not make a task complex" in workflow
     assert "### Bounded formal route" in workflow
@@ -1250,20 +1254,23 @@ def test_init_separates_bounded_dod_from_complex_review():
     assert "These checkpoints are required for the complex route" in workflow
     assert "The bounded route ends after direct proof" in " ".join(workflow.split())
     assert "bounded formal" not in codex
-    assert "gpt-5.6-terra" not in codex
-    assert "`gpt-5.6-sol` with `medium`" in codex
-    assert "Use `xhigh` only" in codex
+    assert "gpt-5.6-terra" in codex
+    assert "`gpt-5.6-sol`, `medium`" in codex
+    assert "use `xhigh` only" in codex
 
 
-def test_codex_review_isolated_from_user_configuration():
+def test_codex_peer_uses_installed_harness_and_exact_sessions():
     codex = (
-        ADAPTER / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md"
+        ADAPTER / "optional" / "skills" / "mainframe-peer-work" / "SKILL.md"
     ).read_text(encoding="utf-8")
-    assert codex.count("--ignore-user-config") == 2
-    assert codex.count("--strict-config") == 2
-    assert "--ignore-rules" not in codex
-    assert "-s read-only" in codex
-    assert "sandbox_mode=\"read-only\"" in codex
+    launcher = (ADAPTER / "optional" / "bin" / "mainframe-codex").read_text(
+        encoding="utf-8"
+    )
+    assert "mainframe-codex new" in codex
+    assert "mainframe-codex resume" in codex
+    assert "--strict-config" in launcher
+    assert "--ignore-user-config" not in launcher
+    assert "sandbox_mode=\"read-only\"" in launcher
 
 
 def test_workflow_preserves_only_non_reproducible_acceptance_evidence():

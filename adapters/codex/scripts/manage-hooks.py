@@ -50,13 +50,22 @@ def _load_document(path: Path) -> dict:
     return value
 
 
-def _render_source(source: Path, script: Path) -> dict[str, list[dict]]:
+def _render_source(
+    source: Path, script: Path, stop_timeout: int = 210
+) -> dict[str, list[dict]]:
     marker = "@MAINFRAME_HOOK_SCRIPT@"
     semgrep_marker = "@MAINFRAME_SEMGREP_SCRIPT@"
     body = source.read_text(encoding="utf-8")
     if marker not in body:
         raise ValueError("MAINFRAME hook source has no script marker")
     rendered = body.replace(marker, shlex.quote(str(script.resolve())))
+    stop_marker = "@MAINFRAME_STOP_TIMEOUT@"
+    quoted_stop_marker = json.dumps(stop_marker)
+    if quoted_stop_marker not in rendered:
+        raise ValueError("MAINFRAME hook source has no Stop timeout marker")
+    if not 1 <= stop_timeout <= 14_460:
+        raise ValueError("MAINFRAME Stop timeout is outside the supported installer range")
+    rendered = rendered.replace(quoted_stop_marker, str(stop_timeout))
     if semgrep_marker in rendered:
         semgrep_script = script.resolve().parent / "semgrep-informational.py"
         if not semgrep_script.is_file():
@@ -138,6 +147,7 @@ def install(
     script: Path,
     state_path: Path,
     dry_run: bool,
+    stop_timeout: int = 210,
 ) -> str:
     existed = target.exists()
     document = _load_document(target)
@@ -146,7 +156,7 @@ def install(
         _remove_exact(document, state["managed"])
     elif _contains_mainframe_script(document):
         raise ValueError("MAINFRAME hook command exists without installation state")
-    managed = _render_source(source, script)
+    managed = _render_source(source, script, stop_timeout)
     _merge(document, managed)
     rendered = _render_document(document)
     if state is not None and state["managed"] == managed:
@@ -192,12 +202,14 @@ def main() -> None:
     parser.add_argument("--script", type=Path, required=True)
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--stop-timeout", type=int, default=210)
     args = parser.parse_args()
 
     if args.dry_run:
         if args.action == "install":
             result = install(
                 args.target, args.source, args.script, args.state, args.dry_run,
+                args.stop_timeout,
             )
         else:
             result = uninstall(args.target, args.state, args.dry_run)
@@ -211,6 +223,7 @@ def main() -> None:
         if args.action == "install":
             result = install(
                 args.target, args.source, args.script, args.state, False,
+                args.stop_timeout,
             )
         else:
             result = uninstall(args.target, args.state, False)

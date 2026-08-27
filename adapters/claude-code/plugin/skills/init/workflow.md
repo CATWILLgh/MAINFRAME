@@ -35,8 +35,9 @@ facts and switch routes before asking the user to agree the DoD.
    and affected paths. Have it challenge the decision, then reconcile each
    grounded objection against the repository and sources. Do not refer to
    conversation context that the subagent does not receive.
-4. If `mainframe-peer-review` is installed, run its independent external-model
-   review. Otherwise continue without inventing an unavailable dependency.
+4. If `mainframe-peer-work` is installed, use its `review` route for the
+   independent external-model check. Otherwise continue without inventing an
+   unavailable dependency.
 5. Invoke `mainframe-advisor` last with a preparation-readiness task. Its start
    hook supplies the filtered parent conversation; name only the review phase
    and unclear affected paths. Reconcile findings, then present the checked
@@ -62,6 +63,11 @@ choices without narrating internal routing. Investigate suspected blockers and
 continue when they are false. Return only for a proven product or business-logic
 choice, material infrastructure choice, missing action authority, or external condition that changes the goal.
 
+When `mainframe-peer-work` is installed and a bounded implementation block is
+better executed in Codex, use its `implement` route. Resume that Codex session
+for corrections to the same result; start a new one for the next accepted
+block. Claude remains responsible for reviewing the diff and evidence.
+
 Do not fix out-of-scope findings inline. Use `ticket` only to search, record a
 minimal observation, or update a clear match, then resume the goal. A finding
 that blocks the DoD is in scope. After coherent, verified units, create ordinary
@@ -80,4 +86,4 @@ authority, or an unavailable external condition. For impossibility, report the
 blocker, evidence, checked alternatives, and why preparation missed it. Do not
 repeat an unchanged attempt without a new hypothesis or evidence.
 
-An additional installed peer review after the final `mainframe-advisor` is reserved for irreversible data, money, security, broad production impact, or hard-to-reverse architecture.
+An additional installed peer `review` after the final `mainframe-advisor` is reserved for irreversible data, money, security, broad production impact, or hard-to-reverse architecture.

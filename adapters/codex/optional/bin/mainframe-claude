@@ -1,0 +1,290 @@
+#!/usr/bin/env python3
+"""Launch a persistent Claude peer session without making Codex poll it."""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+import uuid
+
+
+VALID_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+MAX_REQUEST_BYTES = 512_000
+
+
+def _codex_home() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser().resolve()
+
+
+def _project(path: str) -> Path:
+    value = Path(path).expanduser().resolve()
+    if not value.is_dir():
+        raise ValueError(f"project directory does not exist: {value}")
+    return value
+
+
+def _request(path: str) -> Path:
+    value = Path(path).expanduser().resolve()
+    if not value.is_file():
+        raise ValueError(f"request file does not exist: {value}")
+    if value.stat().st_size > MAX_REQUEST_BYTES:
+        raise ValueError("request file is larger than 512 KB")
+    return value
+
+
+def _project_key(project: Path) -> str:
+    return hashlib.sha256(str(project).encode()).hexdigest()[:24]
+
+
+def _runs_root(project: Path) -> Path:
+    return _codex_home() / "mainframe" / "peer-runs" / "claude" / _project_key(project)
+
+
+def _session_path(session_id: str) -> Path:
+    return _codex_home() / "mainframe" / "peer-sessions" / "claude" / f"{session_id}.json"
+
+
+def _atomic_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    temporary.chmod(0o600)
+    os.replace(temporary, path)
+
+
+def _read_json(path: Path) -> dict:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"expected JSON object in {path}")
+    return value
+
+
+def _pid_alive(raw: object) -> bool:
+    if not isinstance(raw, int) or raw <= 0:
+        return False
+    try:
+        os.kill(raw, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _assert_no_writer(project: Path) -> None:
+    for state_path in _runs_root(project).glob("*/state.json"):
+        try:
+            state = _read_json(state_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if (
+            state.get("role") == "implement"
+            and state.get("phase") in {"starting", "running"}
+            and _pid_alive(state.get("pid"))
+        ):
+            raise ValueError(
+                f"another Claude implementation peer is active in this project: {state.get('runId')}"
+            )
+
+
+def _load_session(session_id: str) -> dict:
+    path = _session_path(session_id)
+    if not path.is_file():
+        raise ValueError(
+            "unknown peer session; resume only a session created by mainframe-claude"
+        )
+    value = _read_json(path)
+    if value.get("schemaVersion") != 1:
+        raise ValueError("peer session metadata is invalid")
+    return value
+
+
+def _launch(args: argparse.Namespace) -> int:
+    project = _project(args.project)
+    request = _request(args.request)
+    if args.action == "new":
+        role = args.role
+        access = "read-only" if role == "review" else args.access
+        model = args.model
+        effort = args.effort
+        session_id = None
+    else:
+        metadata = _load_session(args.session)
+        if Path(metadata["projectRoot"]).resolve() != project:
+            raise ValueError("the resumed peer session belongs to a different project")
+        role = metadata["role"]
+        access = metadata["access"]
+        model = args.model or metadata["model"]
+        effort = args.effort or metadata["effort"]
+        session_id = args.session
+    if role == "implement":
+        _assert_no_writer(project)
+
+    run_id = uuid.uuid4().hex[:16]
+    run_dir = _runs_root(project) / run_id
+    run_dir.mkdir(parents=True, mode=0o700)
+    request_copy = run_dir / "request.md"
+    request_copy.write_bytes(request.read_bytes())
+    request_copy.chmod(0o600)
+    state_path = run_dir / "state.json"
+    state = {
+        "schemaVersion": 1,
+        "runId": run_id,
+        "target": "claude",
+        "projectRoot": str(project),
+        "role": role,
+        "access": access,
+        "mode": args.action,
+        "sessionId": session_id,
+        "model": model,
+        "effort": effort,
+        "phase": "starting",
+        "status": "pending",
+        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "resultPath": str(run_dir / "result.json"),
+    }
+    _atomic_json(state_path, state)
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "_worker",
+        "--state", str(state_path),
+        "--request", str(request_copy),
+    ]
+    worker = subprocess.Popen(
+        command,
+        cwd=project,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        close_fds=True,
+    )
+    state["pid"] = worker.pid
+    state["phase"] = "running"
+    _atomic_json(state_path, state)
+    print(f"peer_run_id={run_id}")
+    print(f"peer_role={role}")
+    print("Claude peer started in the background. Do not poll it; end the turn when ready.")
+    return 0
+
+
+def _worker(args: argparse.Namespace) -> int:
+    state_path = Path(args.state).resolve()
+    state = _read_json(state_path)
+    project = Path(state["projectRoot"]).resolve()
+    request = Path(args.request).resolve()
+    result_path = Path(state["resultPath"]).resolve()
+    diagnostics = state_path.parent / "diagnostics.log"
+    command = [
+        "claude", "-p",
+        "--model", state["model"],
+        "--output-format", "json",
+        "--name", f"mainframe-peer-{state['role']}-{state['runId']}",
+    ]
+    if state.get("effort"):
+        command.extend(["--effort", state["effort"]])
+    if state["mode"] == "resume":
+        command.extend(["--resume", state["sessionId"]])
+    if state["role"] == "review":
+        command.extend([
+            "--permission-mode", "dontAsk",
+            "--tools", "Read,Grep,Glob,WebSearch,WebFetch",
+        ])
+    elif state["access"] == "full":
+        command.append("--dangerously-skip-permissions")
+    else:
+        command.extend(["--permission-mode", "auto"])
+    state["pid"] = os.getpid()
+    state["phase"] = "running"
+    _atomic_json(state_path, state)
+    try:
+        with request.open("rb") as source, result_path.open("wb") as out, diagnostics.open("wb") as err:
+            completed = subprocess.run(
+                command,
+                cwd=project,
+                stdin=source,
+                stdout=out,
+                stderr=err,
+                check=False,
+            )
+        result = _read_json(result_path) if result_path.is_file() else {}
+        session_id = result.get("session_id")
+        successful = (
+            completed.returncode == 0
+            and isinstance(session_id, str)
+            and bool(session_id)
+            and isinstance(result.get("result"), str)
+            and not result.get("is_error", False)
+            and result.get("subtype") in {None, "success"}
+        )
+        state["sessionId"] = session_id if isinstance(session_id, str) else state.get("sessionId")
+        state["phase"] = "finished"
+        state["status"] = "completed" if successful else "failed"
+        state["returnCode"] = completed.returncode
+        state["finishedAt"] = datetime.now(timezone.utc).isoformat()
+        _atomic_json(state_path, state)
+        if isinstance(session_id, str) and session_id:
+            _atomic_json(_session_path(session_id), {
+                "schemaVersion": 1,
+                "sessionId": session_id,
+                "projectRoot": str(project),
+                "role": state["role"],
+                "access": state["access"],
+                "model": state["model"],
+                "effort": state["effort"],
+            })
+        return 0 if successful else 1
+    except Exception as exc:
+        state["phase"] = "finished"
+        state["status"] = "failed"
+        state["failure"] = type(exc).__name__
+        state["finishedAt"] = datetime.now(timezone.utc).isoformat()
+        _atomic_json(state_path, state)
+        return 1
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Start or resume a Claude peer session in the background."
+    )
+    subparsers = parser.add_subparsers(dest="action", required=True)
+    new = subparsers.add_parser("new")
+    new.add_argument("--role", choices=("review", "implement"), required=True)
+    new.add_argument("--project", required=True)
+    new.add_argument("--request", required=True)
+    new.add_argument("--model", required=True)
+    new.add_argument("--effort", choices=sorted(VALID_EFFORTS))
+    new.add_argument("--access", choices=("auto", "full"), default="auto")
+    resume = subparsers.add_parser("resume")
+    resume.add_argument("--session", required=True)
+    resume.add_argument("--project", required=True)
+    resume.add_argument("--request", required=True)
+    resume.add_argument("--model")
+    resume.add_argument("--effort", choices=sorted(VALID_EFFORTS))
+    worker = subparsers.add_parser("_worker", help=argparse.SUPPRESS)
+    worker.add_argument("--state", required=True)
+    worker.add_argument("--request", required=True)
+    return parser
+
+
+def main() -> int:
+    args = _parser().parse_args()
+    try:
+        if args.action == "_worker":
+            return _worker(args)
+        return _launch(args)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

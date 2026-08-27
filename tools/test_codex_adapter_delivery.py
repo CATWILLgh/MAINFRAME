@@ -974,25 +974,37 @@ def test_normal_install_leaves_codex_telemetry_inactive():
     assert launcher.is_file() and not launcher.is_symlink()
 
 
-def test_peer_advisor_is_explicit_optional_and_reversible():
-    missing, missing_home = _run("--codex", "--with-peer-advisor")
+def test_peer_work_is_explicit_optional_and_reversible():
+    missing, missing_home = _run("--codex", "--with-peer")
     assert missing.returncode != 0
     assert "requires the Claude Code CLI" in missing.stderr
-    assert not (missing_home / ".agents" / "skills" / "mainframe-peer-review").exists()
+    assert not (missing_home / ".agents" / "skills" / "mainframe-peer-work").exists()
 
-    installed, home = _run("--codex", "--with-peer-advisor", claude_peer=True)
+    installed, home = _run("--codex", "--with-peer", claude_peer=True)
     assert installed.returncode == 0, installed.stderr
-    target = home / ".agents" / "skills" / "mainframe-peer-review"
+    target = home / ".agents" / "skills" / "mainframe-peer-work"
+    launcher = home / ".local" / "bin" / "mainframe-claude"
+    marker = home / ".codex" / "mainframe" / "peer-work-enabled.json"
     assert target.is_dir() and not target.is_symlink()
+    assert launcher.is_file() and os.access(launcher, os.X_OK)
+    assert marker.is_file()
     body = (target / "SKILL.md").read_text(encoding="utf-8")
-    assert "claude -p --safe-mode" in body
-    assert "--dangerously-skip-permissions" in body
+    assert "mainframe-claude new --role <review|implement>" in body
+    assert "mainframe-claude resume --session <session-id>" in body
+    assert "Do not poll it" in body
+    assert "--safe-mode" not in body
     metadata = (target / "agents" / "openai.yaml").read_text(encoding="utf-8")
     assert "allow_implicit_invocation: false" not in metadata
+    hooks = json.loads((home / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    assert hooks["hooks"]["Stop"][0]["hooks"][0]["timeout"] == 7260
 
     plain, _ = _run("--codex", home=home, claude_peer=True)
     assert plain.returncode == 0, plain.stderr
     assert not target.exists()
+    assert not launcher.exists()
+    assert not marker.exists()
+    hooks = json.loads((home / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+    assert hooks["hooks"]["Stop"][0]["hooks"][0]["timeout"] == 210
 
 
 def test_baseline_uses_native_standalone_layers_only():

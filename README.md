@@ -87,18 +87,20 @@ For the first Codex baseline instead:
 ./install.sh --codex
 ```
 
-If both subscriptions are available, add one adapter's optional independent
-review skill explicitly:
+If both subscriptions are available, add the optional peer-work bridge to the
+adapter that should call the other CLI:
 
 ```bash
-./install.sh --claude --with-peer-advisor  # Claude may ask Codex for review
-./install.sh --codex --with-peer-advisor   # Codex may ask Claude for review
+./install.sh --claude --with-peer  # Claude may ask Codex to review or implement
+./install.sh --codex --with-peer   # Codex may ask Claude to review or implement
 ```
 
 The flag verifies that the peer CLI is installed and authenticated. Without
 it, the adapter remains standalone; reinstalling without the flag removes only
-the managed peer-review skill. The peer never implements work or owns final
-acceptance.
+the managed peer skill, launcher, and completion bridge. A peer session may
+review or implement one bounded result. Corrections to that result resume its
+exact session; a new result starts a new session. The calling agent still owns
+scope, verification, and acceptance.
 
 The installer explains every changed path and backs up conflicting files before replacing them. Run it again at any time; the operation is idempotent.
 

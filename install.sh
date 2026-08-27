@@ -9,8 +9,8 @@ usage() {
 MAINFRAME installer
 
 Usage:
-  ./install.sh --claude [--dry-run] [--dev] [--with-peer-advisor] [--yes] [--replace-modified] [--uninstall]
-  ./install.sh --codex [--dry-run] [--dev] [--with-peer-advisor] [--yes] [--replace-modified] [--uninstall]
+  ./install.sh --claude [--dry-run] [--dev] [--with-peer] [--yes] [--replace-modified] [--uninstall]
+  ./install.sh --codex [--dry-run] [--dev] [--with-peer] [--yes] [--replace-modified] [--uninstall]
   ./install.sh --help
 
 With no arguments, this help is shown and no changes are made.
@@ -21,7 +21,8 @@ Targets:
 
 Adapter options are forwarded unchanged to its installer.
 Use --yes to approve a required Claude Code update without an interactive prompt.
-Use --with-peer-advisor to add the optional authenticated peer-CLI review skill.
+Use --with-peer to add the optional authenticated peer-CLI work bridge for
+bounded review or implementation sessions.
 Use --replace-modified only to back up and replace/remove locally customized
 managed artifacts; otherwise they are preserved and the operation stops.
 For Codex, --yes can back up and replace a conflicting credentials-index link;
@@ -65,7 +66,7 @@ main() {
         if [[ "$argument" == "--uninstall" ]]; then
             uninstall=1
         fi
-        if [[ "$argument" != "--with-peer-advisor" ]]; then
+        if [[ "$argument" != "--with-peer" ]]; then
             shared_args+=("$argument")
         fi
     done

@@ -63,6 +63,11 @@ HEALTH_MODULES = (
 )
 
 
+def _peer_wait_enabled() -> bool:
+    codex_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+    return (codex_home / "mainframe" / "peer-work-enabled.json").is_file()
+
+
 def _payload() -> dict:
     value = json.load(sys.stdin)
     if not isinstance(value, dict):
@@ -323,6 +328,8 @@ def _command(payload: dict) -> None:
     if reasons:
         _emit_deny("\n\n".join(dict.fromkeys(reasons))[:5000])
     else:
+        if _peer_wait_enabled():
+            _load_module("_peer_wait.py").register(payload)
         notes.extend(_notes(_run_module("_bash_patterns.py", payload)))
         if notes:
             _emit_context("PreToolUse", "\n\n".join(dict.fromkeys(notes)))
@@ -347,6 +354,15 @@ def _stop(payload: dict) -> None:
             reasons.append(reason.strip())
     reasons.extend(_notes(rows))
     reasons.extend(failures)
+    if not reasons and _peer_wait_enabled():
+        try:
+            peer_reason = _load_module("_peer_wait.py").wait_for_completion(payload)
+            if peer_reason:
+                reasons.append(peer_reason)
+        except Exception as exc:
+            notice = _failure_notice(payload, "peer-wait.py", exc)
+            if notice:
+                reasons.append(notice)
     if reasons:
         unique_reasons = list(dict.fromkeys(reasons))[:MAX_SECTIONS]
         reason_text = "\n\n".join(unique_reasons)
@@ -361,7 +377,8 @@ def _stop(payload: dict) -> None:
 
 def _health(payload: dict) -> None:
     failures = []
-    for filename in HEALTH_MODULES:
+    modules = HEALTH_MODULES + (("_peer_wait.py",) if _peer_wait_enabled() else ())
+    for filename in modules:
         try:
             _load_module(filename)
         except (Exception, SystemExit) as exc:

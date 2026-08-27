@@ -86,13 +86,13 @@ def test_cross_adapter_agent_meaning_stays_aligned():
         )
 
 
-def test_optional_peer_review_meaning_stays_aligned():
+def test_optional_peer_work_meaning_stays_aligned():
     assert_shared_meaning(
-        CLAUDE / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md",
-        CODEX / "optional" / "skills" / "mainframe-peer-review" / "SKILL.md",
-        "bounded independent review",
-        "peer-review checkpoint",
-        "ordinary second opinions",
+        CLAUDE / "optional" / "skills" / "mainframe-peer-work" / "SKILL.md",
+        CODEX / "optional" / "skills" / "mainframe-peer-work" / "SKILL.md",
+        "independent review or implementation",
+        "same result",
+        "start a new session",
     )
 
 
