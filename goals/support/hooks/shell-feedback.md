@@ -1,6 +1,6 @@
 # Correct a concrete shell invocation mistake
 
-Source: [_bash_patterns.py](scripts/_bash_patterns.py).
+Source: [_bash_patterns.py](../../../templates/hooks/scripts/_bash_patterns.py).
 
 Adapt the shell-tool name and payload, preserve parsing of quoted values and explicit replacement options, and use the shared notice helper to deduplicate.
 

@@ -1,6 +1,6 @@
 # Keep hook failures visible and bounded
 
-Source: [_hooklib.py](scripts/_hooklib.py), [_notice_state.py](scripts/_notice_state.py).
+Source: [_hooklib.py](../../../templates/hooks/scripts/_hooklib.py), [_notice_state.py](../../../templates/hooks/scripts/_notice_state.py).
 
 The reference runner exits nonzero on execution failure and prints only the error class. The native binding must map that signal to bounded feedback or guard refusal; the helper alone is not a complete failure lifecycle.
 

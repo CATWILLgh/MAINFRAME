@@ -1,6 +1,6 @@
 # Protect credential access
 
-Source: [_secret_read.py](scripts/_secret_read.py).
+Source: [_secret_read.py](../../../templates/hooks/scripts/_secret_read.py).
 
 The current detector covers standalone `secret get NAME` commands only. Direct store reads and shell composition require the target's native access controls; this detector is not a credential sandbox.
 

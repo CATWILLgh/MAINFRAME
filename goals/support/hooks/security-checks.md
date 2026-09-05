@@ -1,8 +1,8 @@
 # Check security-sensitive changes
 
-Source: [Python scan](scripts/python-security-scan.py), [Python completion check](scripts/python-security-stop-gate.py), [Node scan](scripts/nodejs-security-scan.py), [Node completion check](scripts/nodejs-security-stop-gate.py), [Semgrep advice](scripts/semgrep-informational.py).
+Source: [Python scan](../../../templates/hooks/scripts/python-security-scan.py), [Python completion check](../../../templates/hooks/scripts/python-security-stop-gate.py), [Node scan](../../../templates/hooks/scripts/nodejs-security-scan.py), [Node completion check](../../../templates/hooks/scripts/nodejs-security-stop-gate.py), [Semgrep advice](../../../templates/hooks/scripts/semgrep-informational.py).
 
-Keep the [rules](rules/semgrep-informational.yml) and [fixtures](rules/semgrep-informational.js) for Semgrep. Adapt executable discovery, event deltas and failure reporting; do not install scanners as a side effect of an edit.
+Keep the [rules](../../../templates/hooks/rules/semgrep-informational.yml) and [fixtures](../../../templates/hooks/rules/semgrep-informational.js) for Semgrep. Adapt executable discovery, event deltas and failure reporting; do not install scanners as a side effect of an edit.
 
 Purpose: surface high-confidence security regressions in edited Python and
 JavaScript/TypeScript code, using the project's established tools when useful.

@@ -204,7 +204,9 @@ def _run_semgrep(targets: dict[Path, set[int]]) -> tuple[list[dict], int]:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=12)
         if completed.returncode != 0:
             raise RuntimeError(f"semgrep exit {completed.returncode}")
-        value = json.loads(completed.stdout or "{}")
+        value = json.loads(completed.stdout)
+        if not isinstance(value, dict) or not isinstance(value.get("results"), list):
+            raise RuntimeError("semgrep returned invalid result structure")
         if value.get("errors"):
             raise RuntimeError("semgrep reported scan errors")
         rows = []

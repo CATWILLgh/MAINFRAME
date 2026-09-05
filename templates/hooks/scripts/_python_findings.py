@@ -55,9 +55,11 @@ def findings(text, file_ext, file_path=None):
         suffix = f": {detail[0][:240]}" if detail else ""
         raise RuntimeError(f"Python safety checks failed to run{suffix}")
     try:
-        raw = json.loads(proc.stdout) if proc.stdout.strip() else []
+        raw = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError("Python safety checks returned invalid Ruff JSON") from exc
+    if not isinstance(raw, list) or any(not isinstance(item, dict) for item in raw):
+        raise RuntimeError("Python safety checks returned invalid Ruff result structure")
     rows = []
     for item in raw:
         code = item.get("code")

@@ -108,7 +108,7 @@ def main():
     before_findings = Counter(finding_counts(before, file_ext))
     after_findings = Counter(finding_counts(after, file_ext))
     deltas = after_findings - before_findings
-    _, _, resolved = update(
+    newly_owned, _, resolved = update(
         payload.get("session_id"), payload.get("agent_id"), file_path,
         dict(deltas), counter=finding_counts, namespace="comments",
     )
@@ -116,6 +116,9 @@ def main():
     # Targeted layer — precise candidates, with the original text still present.
     flagged = added(before, after, file_ext)
     if flagged:
+        flagged = [row for row in flagged if row[0] in newly_owned]
+        if not flagged:
+            return
         name = display_path(file_path, payload.get("cwd"))
         locations = "".join(
             f"  - {name}:{line} ({kind})\n"

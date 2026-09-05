@@ -13,7 +13,7 @@ purpose; the table is not a list of features to enable everywhere.
 | `{{SUBAGENT_ROLE}}` | Role, bounded task, allowed files, expected evidence, and acceptance boundary for one useful delegation. | Execute directly within the same authority; disclose lack of independence when it matters. |
 | `{{TOOL_SCOPE}}` | Documented native tool or permission restriction for that task. | Preserve the instruction boundary but do not claim technical enforcement. |
 | `{{MODEL_CHOICE}}` | Available model and effort suited to the bounded job and operator preferences. | Keep the environment's supported defaults. |
-| `{{HOOK_BINDING}}` | Native event, matcher, payload, output, timeout, and activation form implementing a hook's purpose. | Use an equivalent native guard, or report the unsupported boundary. |
+| `{{HOOK_BINDING}}` | Native event, matcher, payload, output, timeout, and activation form implementing a hook's purpose. | Attempt a faithful documented mapping or native equivalent; if unavailable, skip the hook and report missing coverage. |
 | `{{COMMAND_BINDING}}` | Native invocation for the named workflow or goal. | Provide an ordinary copyable prompt; do not invent a slash command. |
 
 Example delegation block to adapt where useful:

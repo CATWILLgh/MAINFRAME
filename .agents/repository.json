@@ -13,7 +13,7 @@
         "goals",
         "examples/progress.json"
       ],
-      "purpose": "Install/update objectives and disposable boolean progress"
+      "purpose": "Repository-only management commands, supporting procedures, and deliverable-only boolean checklist"
     },
     {
       "paths": [

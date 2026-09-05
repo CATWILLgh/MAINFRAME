@@ -72,12 +72,16 @@ def findings(text: str, file_ext: str, file_path=None) -> list[dict]:
         suffix = f": {detail[0][:240]}" if detail else ""
         raise RuntimeError(f"Node safety checks failed to run{suffix}")
     try:
-        data = json.loads(proc.stdout) if proc.stdout.strip() else {}
+        data = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError("Node safety checks returned invalid Oxlint JSON") from exc
 
+    if not isinstance(data, dict) or not isinstance(data.get("diagnostics"), list):
+        raise RuntimeError("Node safety checks returned invalid Oxlint result structure")
+    diagnostics = data["diagnostics"]
+    if any(not isinstance(item, dict) for item in diagnostics):
+        raise RuntimeError("Node safety checks returned invalid Oxlint diagnostic")
     rows = []
-    diagnostics = data.get("diagnostics", []) if isinstance(data, dict) else []
     for item in diagnostics:
         code = _normalized_code(item.get("code"))
         if code not in CURATED_RULES:

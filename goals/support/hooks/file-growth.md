@@ -1,6 +1,6 @@
 # Notice substantial new file growth
 
-Source: [length-quality-note.py](scripts/length-quality-note.py), [_length_check.py](scripts/_length_check.py).
+Source: [length-quality-note.py](../../../templates/hooks/scripts/length-quality-note.py), [_length_check.py](../../../templates/hooks/scripts/_length_check.py).
 
 Call `note_for_changes(cwd, changes)` with exact `path`, `before`, `after` values. The source thresholds are heuristics to review for the target; the result is advisory.
 

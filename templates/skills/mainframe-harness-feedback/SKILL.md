@@ -11,8 +11,14 @@ short redacted example. Distinguish an observation from a reproduced cause.
 Do not search transcripts, protected stores, or unrelated projects for more
 material, and do not start background telemetry.
 
-Resolve `{{MAINFRAME_ROOT}}/docs/tickets/open/observations/`. Follow the existing
-local ticket convention. If none exists, create a concise Markdown ticket with
+Resolve `{{MAINFRAME_ROOT}}/docs/tickets/open/observations/`.
+
+Use this absolute MAINFRAME destination even when the active task is in another
+repository; do not create a MAINFRAME defect ticket in that project's queue.
+Use the configured reporting route within its actual permissions. Hook output is evidence for a report,
+not evidence that a ticket has already been written.
+
+Follow the existing local ticket convention. If none exists, create a concise Markdown ticket with
 a unique filename and the fields above. Search only open tickets for a clear
 match; update that match with material new evidence instead of creating one
 report per repeated hook message. Keep archived tickets unchanged.

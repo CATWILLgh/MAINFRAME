@@ -18,8 +18,9 @@ docs/tickets/
 ```
 
 - `observations`: plausible findings not deliberately confirmed.
-- `needs-scope-review`: confirmed problems whose locations, consequences, and
-  blast radius still need scope review.
+- `needs-scope-review`: claims requiring further evidence or clarification of
+  current relevance, locations, consequences, or blast radius; not necessarily
+  confirmed problems.
 - `needs-decision`: reviewed problems needing a product, infrastructure, or
   authority decision from the user.
 - `ready`: reviewed work whose execution route is recorded explicitly.
@@ -38,7 +39,7 @@ frontmatter:
   project evidence and no product, business-logic, material infrastructure,
   destructive-action, data, authority, or irreducible preference choice remains.
 - `execution: user-approved` means the user resolved the recorded choice through
-  `mainframe-init` for that ticket. It may be implemented only by that route's
+  `mainframe-ticket-decision` for that ticket. It may be implemented only by that route's
   exact one-ticket Goal, never by the queue-wide autonomous implementation run.
 
 Before assigning `execution: autonomous`, add an `## Autonomous implementation
@@ -55,6 +56,14 @@ verification returns the same ticket to:
 - `ready` when the implementation is incomplete or incorrect;
 - `needs-scope-review` when affected locations or blast radius were missed;
 - `needs-decision` when a user-owned choice emerged.
+
+A required verification check blocked on operator access, authority, or a
+decision also moves the same ticket to `needs-decision`. Keep its implementation
+evidence and execution route; record the missing check and intended return to
+verification in the ticket body, without introducing another state field.
+After `mainframe-ticket-decision` resolves that blocker and prerequisites are
+available, return it to `needs-verification` for a separately started verification
+goal. Approval alone does not prove the fix or require reimplementation.
 
 Archive files are immutable. Do not reopen, edit, move, or rename them. A later
 occurrence gets a new id and may link to a known archived ticket without

@@ -20,9 +20,9 @@ def check_catalog(root, templates, skills):
     errors = []
     resources = (templates / "skills", templates / "hooks/scripts", templates / "hooks/rules")
     units = {str(p.relative_to(root)) for p in templates.rglob("*")
-             if p.is_file() and not any(p.is_relative_to(area) for area in resources)}
+             if p.is_file() and "__pycache__" not in p.parts and not any(p.is_relative_to(area) for area in resources)}
     units.update(str(p.relative_to(root)) for p in skills)
-    units.update({"docs/official-sources.md", "goals/adapt.md", "shared/credentials/"})
+    units.update({"templates/hooks/", "shared/credentials/"})
 
     try:
         catalog = json.loads((root / "examples/progress.json").read_text())
@@ -83,6 +83,7 @@ def source_files(root, templates):
     sources.extend(root / p for p in (
         "README.md", "CONTRIBUTING.md", "AGENTS.md", ".agents/repository.json",
         "docs/principles.md", "docs/migration.md", "docs/official-sources.md",
+        "docs/hook-quality.md", "docs/installation-test.md",
         "shared/credentials/credentials-index.template.md",
     ))
     return sources
@@ -121,6 +122,8 @@ def check_sources(root, sources):
             candidate = (path.parent / target).resolve()
             if not candidate.is_relative_to(root) or not candidate.exists():
                 errors.append(f"Broken or escaping reference: {rel} -> {target}")
+            elif rel.startswith("templates/") and candidate.relative_to(root).parts[0] in {"goals", "docs", "examples", "scripts"}:
+                errors.append(f"Delivered source depends on management material: {rel} -> {target}")
             elif any(part in {"adapters", "tools", "dev", "workspace", ".local"}
                      for part in candidate.relative_to(root).parts):
                 errors.append(f"Reference depends on retired/local runtime: {rel} -> {target}")

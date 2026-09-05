@@ -5,6 +5,10 @@ description: Independently verify implemented tickets, archive proven fixes, and
 
 # Verify implemented tickets
 
+Follow the [goal invocation contract](../../commands/workflows.md#goal-plus-ticket-skill).
+Load this method afresh even when earlier session context describes ticket work.
+
+
 Treat the native Goal objective and any plain-language scope supplied with the
 explicit invocation as the run boundary. An empty scope means every eligible
 ticket in `docs/tickets/open/needs-verification/`. Process one ticket at a time
@@ -50,6 +54,16 @@ into evidence for a claim it cannot prove. Report only observations made in
 this verification task.
 
 ## Record the verdict
+
+If a required check cannot proceed, first resolve ordinary local setup problems
+within the assigned authority without changing product behavior or weakening
+tests. When the remaining blocker requires operator access, authorization, or
+a decision, move the same ticket to `open/needs-decision/` and continue the
+other eligible tickets. Preserve the execution route and implementation evidence.
+Record the blocked check, checks already completed, attempted safe remedies,
+the exact operator action needed, and that verification is the intended return
+stage. Do not call unavailable evidence a failed implementation or a proven fix.
+Do not repeatedly retry an unchanged blocker during this run.
 
 Do not repair implementation code or tests inline during this run. Preserve the
 ticket id and its accumulated history, append concise independent evidence, and

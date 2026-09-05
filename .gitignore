@@ -33,6 +33,8 @@ docs/*
 !docs/principles.md
 !docs/migration.md
 !docs/official-sources.md
+!docs/hook-quality.md
+!docs/installation-test.md
 
 # Local compatibility links to the archived runtime; never part of delivery.
 /adapters

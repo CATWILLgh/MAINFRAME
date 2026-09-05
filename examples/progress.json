@@ -1,16 +1,6 @@
 {
   "items": [
     {
-      "source": "docs/official-sources.md",
-      "purpose": "Consult current official documentation for every relevant native layer before installation writes.",
-      "done": false
-    },
-    {
-      "source": "templates/adaptation-points.md",
-      "purpose": "Resolve native capability placeholders and their unsupported-capability behavior.",
-      "done": false
-    },
-    {
       "source": "templates/instructions/global.md",
       "purpose": "Install small recipient-neutral global rules, including harness issue reporting.",
       "done": false
@@ -41,8 +31,8 @@
       "done": false
     },
     {
-      "source": "templates/skills/mainframe-init/SKILL.md",
-      "purpose": "Carry an assigned task through execution and verification without changing the recipient role.",
+      "source": "templates/skills/mainframe-ticket-decision/SKILL.md",
+      "purpose": "Resolve one operator decision and prepare a separate implementation or resumed-verification goal for that ticket.",
       "done": false
     },
     {
@@ -102,7 +92,7 @@
     },
     {
       "source": "templates/skills/mainframe-tickets-find/SKILL.md",
-      "purpose": "Inspect a bounded repository scope and record plausible problems.",
+      "purpose": "Refresh open-ticket relevance against current code, then discover new concrete problems with fresh coverage and deduplication.",
       "done": false
     },
     {
@@ -126,56 +116,6 @@
       "done": false
     },
     {
-      "source": "templates/hooks/README.md",
-      "purpose": "Inspect shared working hook source, reference IO, dependencies and native adaptation boundaries.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/code-quality.md",
-      "purpose": "Identify changed-code suppressions, deferred implementation, and temporary process comments without re-reporting untouched repository debt.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/destructive-paths.md",
-      "purpose": "Stop recursive deletion of the filesystem root, the user's home root, or the active project root while preserving authorized narrower cleanup.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/failure-feedback.md",
-      "purpose": "A broken hook produces actionable feedback once instead of silent loss of protection, transcript spam, or an endless completion loop.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/file-growth.md",
-      "purpose": "Prompt a useful structure check when current edits materially enlarge a file, without treating a fixed line count as proof of poor design.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/git-authority.md",
-      "purpose": "Permit normal local work while respecting the caller's authority for publication, history changes, and destructive Git operations.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/secret-access.md",
-      "purpose": "Keep protected credential values out of model context while allowing the authorized consumer to authenticate.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/security-checks.md",
-      "purpose": "Surface high-confidence security regressions in edited Python and JavaScript/TypeScript code, using the project's established tools when useful.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/shell-feedback.md",
-      "purpose": "Prevent a known ambiguous tool option from silently producing the wrong evidence, without policing every shell command.",
-      "done": false
-    },
-    {
-      "source": "templates/hooks/staged-secrets.md",
-      "purpose": "Prevent a commit from including likely credential values introduced by the staged change, without scanning protected stores or unrelated history.",
-      "done": false
-    },
-    {
       "source": "templates/roles/task-brief.md",
       "purpose": "Assign bounded roles dynamically when delegation is useful and supported.",
       "done": false
@@ -196,8 +136,43 @@
       "done": false
     },
     {
-      "source": "goals/adapt.md",
-      "purpose": "Reconcile ownership and obsolete delivery, inspect effective semantics, and verify actual installed behavior.",
+      "source": "templates/roles/python-backend-engineer.md",
+      "purpose": "Provide an optional bounded python backend engineer brief with relevant methods and native capability choices.",
+      "done": false
+    },
+    {
+      "source": "templates/roles/typescript-backend-engineer.md",
+      "purpose": "Provide an optional bounded typescript backend engineer brief with relevant methods and native capability choices.",
+      "done": false
+    },
+    {
+      "source": "templates/roles/react-frontend-engineer.md",
+      "purpose": "Provide an optional bounded react frontend engineer brief with relevant methods and native capability choices.",
+      "done": false
+    },
+    {
+      "source": "templates/roles/researcher.md",
+      "purpose": "Provide an optional bounded researcher brief with relevant methods and native capability choices.",
+      "done": false
+    },
+    {
+      "source": "templates/roles/test-auditor.md",
+      "purpose": "Provide an optional bounded test auditor brief with relevant methods and native capability choices.",
+      "done": false
+    },
+    {
+      "source": "templates/roles/decision-reviewer.md",
+      "purpose": "Provide an optional bounded decision reviewer brief with relevant methods and native capability choices.",
+      "done": false
+    },
+    {
+      "source": "templates/roles/readiness-reviewer.md",
+      "purpose": "Provide an optional bounded readiness reviewer brief with relevant methods and native capability choices.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/",
+      "purpose": "Adapt and verify supplied hook scripts, shared helpers and rules using the repository-only hook descriptions; preserve detection semantics.",
       "done": false
     }
   ]

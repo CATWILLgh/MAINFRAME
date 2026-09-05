@@ -1,6 +1,6 @@
 # Protect critical directory roots
 
-Source: [_path_validation.py](scripts/_path_validation.py).
+Source: [_path_validation.py](../../../templates/hooks/scripts/_path_validation.py).
 
 This is a conservative recognizer for catastrophic literal `rm` targets, not a complete shell sandbox. Preserve that honest boundary when wiring native permissions.
 

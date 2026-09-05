@@ -1,6 +1,6 @@
 # Check the exact staged content
 
-Source: [_secret_commit.py](scripts/_secret_commit.py).
+Source: [_secret_commit.py](../../../templates/hooks/scripts/_secret_commit.py).
 
 Preserve exact-index inspection, command parsing, redacted findings and failure behavior. Adapt the shell payload and permission output, not the staged-content guarantee.
 

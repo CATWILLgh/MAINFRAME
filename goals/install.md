@@ -1,9 +1,12 @@
 # Install MAINFRAME
 
-Use this text as the objective of your product's native goal mechanism. Resolve
-the MAINFRAME checkout from the supplied context; ask for its path only if it
-cannot be identified unambiguously. Do not invent a goal command or a custom
-persistence loop if this surface has no documented native goal mechanism.
+Execute this installation objective when the operator invokes this file through
+the native goal mechanism. First load the agreed installation brief from the
+explicitly supplied local file or current conversation. The brief must identify
+this product and checkout and settle the choices in [brief.md](brief.md).
+If it is missing, ambiguous, or still has pending answers, perform no installation
+writes: explain that the briefing must be completed first. Do not invent choices
+or begin an interview inside this execution goal. Do not create a second goal.
 
 Install the materials in this repository into the current agent product's
 global environment, adapting them to its actual capabilities.
@@ -15,7 +18,7 @@ Identify the actual product surface and version. Use the repository's templates
 to identify the layers you need, not as evidence of product support. Do not
 write installation files before this documentation pass.
 
-Then follow [the adaptation procedure](adapt.md). Copy
+Then follow [the adaptation procedure](support/adapt.md). Copy
 [the progress example](../examples/progress.json) into a fresh local working
 file and process every item sequentially, including its supporting resources.
 Use only the boolean `done` marks to preserve progress for this run.

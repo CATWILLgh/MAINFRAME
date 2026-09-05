@@ -5,6 +5,10 @@ description: Implement explicitly autonomous ready tickets one at a time, establ
 
 # Implement ready tickets
 
+Follow the [goal invocation contract](../../commands/workflows.md#goal-plus-ticket-skill).
+Load this method afresh even when earlier session context describes ticket work.
+
+
 Treat the native Goal objective and any plain-language scope supplied with the
 explicit invocation as the run boundary. An empty scope means every ticket in
 `docs/tickets/open/ready/` carrying `execution: autonomous` and the complete
@@ -12,7 +16,7 @@ evidenced autonomous boundary. Process one ticket at a time until that selected
 queue is exhausted, the user pauses or cancels the run, or no eligible work can
 continue because of an evidenced external blocker. Never consume
 `execution: user-approved`; only the exact one-ticket Goal produced by
-`mainframe-init` may implement it.
+`mainframe-ticket-decision` may implement it.
 
 Before changing a ticket, read
 [ticket-format.md](../mainframe-record-project-problem/references/ticket-format.md). Use the

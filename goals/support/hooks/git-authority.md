@@ -1,6 +1,6 @@
 # Preserve Git authority
 
-Source: [_git_authority.py](scripts/_git_authority.py).
+Source: [_git_authority.py](../../../templates/hooks/scripts/_git_authority.py).
 
 `authority_decision(command)` returns a classification, not proof of caller authorization. Bind `ask` to the target's actual authority context; there is no special subagent staging/commit ban.
 

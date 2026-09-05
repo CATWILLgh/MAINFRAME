@@ -5,6 +5,18 @@ description: Use another available agent product for a bounded review or impleme
 
 # Work with an external peer
 
+Use only the operator's selected and authorized peer products. Availability
+of a CLI does not grant permission to use its account or substitute a different
+product. Do not download CLIs, change subscriptions, or create accounts as an
+implicit part of peer work.
+
+Load only the selected product's supporting reference:
+
+- [Antigravity CLI](references/antigravity.md)
+- [Codex CLI](references/codex.md)
+- [Claude Code CLI](references/claude-code.md)
+- [OpenCode CLI](references/opencode.md)
+
 Use an already available authorized product. First consult its current official
 documentation for invocation, authentication, permissions, session continuation,
 output, and completion signaling. Do not guess flags, depend on a MAINFRAME

@@ -5,6 +5,10 @@ description: Verify, scope, atomize, and consolidate open ticket observations, r
 
 # Refine open tickets
 
+Follow the [goal invocation contract](../../commands/workflows.md#goal-plus-ticket-skill).
+Load this method afresh even when earlier session context describes ticket work.
+
+
 Treat the native Goal objective and any plain-language scope supplied with the
 explicit invocation as the run boundary. An empty scope means every eligible
 ticket in `docs/tickets/open/observations/` and
@@ -17,17 +21,64 @@ Before changing a ticket, read
 
 ## Verify the problem
 
+Keep exactly one active ticket. Complete its investigation, evidence record,
+scope, and routing before opening the next. Any delegates work on that same
+ticket; do not distribute different tickets concurrently. Queue enumeration
+and duplicate lookup do not authorize batch investigation. Refresh the queue
+after routing, including newly split eligible records. Do not retry an unchanged
+evidence-blocked ticket endlessly within the same run.
+
 Restate the ticket as a falsifiable claim. Confirm or challenge it using the
-current repository, existing tests or saved outputs, and current owning
-documentation when the claim depends on a changing external contract. Check at
+current repository, existing tests or saved outputs, and external primary
+sources actually opened during this investigation. External research is required
+for every ticket, with strict priority for current authoritative primary
+sources: the owning product's official documentation, applicable standards,
+and upstream source or release notes. Verify publisher provenance and the
+version that applies to the repository; newer documentation for a different
+version is not automatically applicable. Use secondary material only as a lead
+or clearly qualified context, never as a substitute when primary evidence is
+needed. Search snippets, model memory, and session summaries are not evidence.
+
+Cite the URL, applicable version or date, and the precise contract each source
+supports. Open the relevant source rather than copying a remembered link.
+If sources conflict, state the conflict and establish which contract applies;
+do not select the convenient answer. Unrelated authoritative links do not count.
+External documentation establishes a contract, while local evidence establishes
+the project's actual behavior; neither substitutes for the other.
+
+For a purely internal claim with no applicable external contract, record the
+external search and why it cannot determine the expected behavior. The ticket
+may still be confirmed from an explicit repository requirement and reproducible
+local evidence. A disagreement between two implementations alone does not tell
+which is correct; an unresolved product choice still needs the operator.
+Unavailable required external evidence is a gap, not proof that the claim is
+purely internal. Do not confirm a claim that depends on an unverified external
+contract. Check at
 least one plausible alternative explanation before treating the observation as
 a confirmed problem.
 
-Do not run project code, tests, builds, linters, servers, containers, migrations,
-benchmarks, or external environments. Do not create verification code and do
-not implement a fix. If confirmation requires a new measurement and no existing
-contract supplies the boundary, preserve the exact evidence gap instead of
-inventing certainty. Continue with other eligible tickets.
+Use focused tests and safe local reproductions when they can resolve the
+ticket's claim or a plausible alternative explanation. Inspect the command,
+test setup, and actual target first: a locally launched test may still contact
+a shared service. Choose the smallest relevant check with bounded execution.
+Do not run broad builds, full suites, or benchmarks without a concrete need
+for this ticket's evidence.
+
+Prefer existing tests. When needed, create a small disposable verification
+example in an isolated temporary location using synthetic data; do not modify
+product behavior or weaken tests to make the observation pass. Keep enough
+redacted commands, inputs, expected/observed results, and environment details
+in the ticket to reproduce the evidence after temporary files are removed.
+Never execute dangerous examples merely because they are test fixtures.
+
+Preserve user work and existing processes. Use the environment's process and
+data safety rules if a local dependency is necessary. Remote or shared writes,
+deployments, destructive actions, and infrastructure changes require separate
+explicit authority; refinement alone does not grant it. Do not install tools
+or change shared configuration implicitly. Clean up only resources created
+for this investigation. If required evidence cannot be obtained safely within
+the assignment, record the exact missing check and continue to the next ticket.
+Do not implement a fix during refinement.
 
 ## Establish scope and identity
 
@@ -55,8 +106,12 @@ ticket.
   ordinary engineering judgment into a user decision, but never infer autonomy
   merely from confidence in a proposed solution or an existing `ready` path.
 - Leave an unconfirmed ticket in `open/needs-scope-review/` only when the
-  forbidden new measurement or unavailable evidence is genuinely required.
-  Record exactly what is missing and why inspection alone cannot establish it.
+  unavailable or unauthorized measurement or other evidence is genuinely required,
+  including unresolved external-source support when the claim depends on an
+  external contract. Absence of an applicable external contract alone does not
+  block a fully evidenced internal claim after the required source search.
+  Record exactly what is missing and why the permitted inspection and focused
+  local checks cannot establish it.
 
 Do not prioritize tickets or prescribe an implementation beyond what the next
 stage needs to understand the problem, its acceptance boundary, and its known

@@ -1,9 +1,13 @@
 ---
 name: mainframe-tickets-find
-description: Search the current local repository or a named scope broadly for concrete plausible problems and record deduplicated ticket observations without fixing or fully confirming them. Use only when the user explicitly starts a ticket-discovery run in native Goal mode. Do not use for ordinary incidental findings, focused investigation, implementation, or closure verification.
+description: Refresh the relevance of open tickets against the current repository, then search broadly for new concrete problems and record deduplicated observations. Use only for an explicitly requested native Goal discovery run. Do not implement fixes, perform full refinement, or independently close tickets.
 ---
 
 # Find ticket candidates
+
+Follow the [goal invocation contract](../../commands/workflows.md#goal-plus-ticket-skill).
+Load this method afresh even when earlier session context describes ticket work.
+
 
 Treat the native Goal objective and any plain-language scope supplied with the
 explicit invocation as the run boundary. An empty scope means the whole current
@@ -19,7 +23,38 @@ not ask how to classify an ambiguous legacy record: use the safe canonical
 fallback. Keep this as a separate coherent change, and do not count it as a
 finding or silently refine ticket claims.
 
+## Refresh the open queue
+
+Before new discovery, inspect every open ticket within the selected repository
+scope, regardless of its current queue. With no narrower scope, cover the full
+open queue. Recheck the current paths, triggering conditions, and claimed
+mechanism against actual code and relevant history. Follow renamed or moved
+code into its new callers and consumers; a missing path alone does not prove
+the problem disappeared. Prior memory, ticket age, and earlier freshness notes
+cannot replace this inspection.
+
+Append a concise relevance note only when evidence materially changes: current
+location, changed premise, apparent prior correction, or exact unresolved gap.
+Preserve the id, original claim, decisions, implementation evidence, and queue
+state. A suspected stale claim is not automatically a verified fix or grounds
+for deletion. Keep full confirmation and routing in refine or the appropriate
+later workflow, and closure of implemented fixes in verify. Do not create new
+statuses or rewrite unchanged tickets just to timestamp a pass.
+
+Use this refreshed queue for deduplication throughout discovery. A match must
+share the current failure mechanism, not just old words or filenames. Existing
+tickets do not exempt an area from fresh searching. Queue refresh is only the
+first part of the goal: it must not replace the subsequent discovery passes.
+Keep run-local coverage of checked records and report any unresolved relevance
+questions so the next workflow does not mistake old claims for current proof.
+
 ## Map the scope
+
+Every new invocation starts a fresh investigation of the current tree, even in
+the same session after earlier runs. Memory, previous coverage, and existing
+tickets are leads and deduplication aids, never evidence that an area is done.
+Reopen the relevant files and trace current behavior. After compaction resume
+this run's actual unfinished coverage; do not confuse resumption with a new run.
 
 Build a concise working coverage map from the repository's actual boundaries:
 manifests, entry points, modules or services, interfaces, data paths, and major
@@ -66,15 +101,25 @@ Work only in the current local checkout and stay on its starting branch. Preserv
 unrelated dirty work. Do not create or switch branches or worktrees, or pull,
 merge, rebase, reset, cherry-pick, revert, amend, stash, clean, or push. If the
 active task authority permits local commits, use coherent
-Conventional Commits only as recovery points for ticket records created by this
+Conventional Commits only as recovery points for ticket records created or updated by this
 run.
 
 ## Complete the goal
 
-After covering the map, perform one control pass for unprocessed findings. The
-run is complete when every mapped area was inspected along its relevant risk
-directions and every concrete plausible finding was recorded, merged with a
-clear open-ticket match, or discarded for a stated non-ticket reason.
+After covering the map, change the search direction: trace cross-component
+contracts, failure and recovery paths, authority boundaries, state transitions,
+concurrency, and edge inputs where relevant. Follow concrete new leads through
+their callers and consumers. Expand the working map when inspection exposes
+an omitted boundary. Repeat while a pass produces a new plausible candidate
+or an unexplored evidence-backed lead; process both before a further pass.
+
+Finish only after a fresh control sweep across the selected scope produces no
+new defensible candidates or unexamined concrete leads, and all coverage gaps
+are reconciled. State which different directions were actually inspected and
+why remaining hypotheses were discarded or blocked. Ticket counts, a fixed
+number of passes, familiar code, prior memory, and declining novelty are never
+completion criteria. Do not invent findings to meet a quota or promise that
+finite inspection proves the absence of defects.
 
 Do not claim that the repository has no remaining defects. In the final response,
 state in plain language:
@@ -82,6 +127,7 @@ state in plain language:
 - the exact scope and coverage completed;
 - the normalization performed and any open records safely routed for later
   scope review;
+- open-queue relevance coverage and material changed or unresolved premises;
 - every remaining unexamined area and the concrete reason it is outside the
   run, or an explicit statement that none remains after reconciling delegated
   limitations;
