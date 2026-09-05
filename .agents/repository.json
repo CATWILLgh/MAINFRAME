@@ -1,0 +1,37 @@
+{
+  "purpose": "Navigation hints; verify against current source.",
+  "areas": [
+    {
+      "paths": [
+        "docs/principles.md",
+        "README.md"
+      ],
+      "purpose": "Confirmed hub design and operator entry points"
+    },
+    {
+      "paths": [
+        "goals",
+        "examples/progress.json"
+      ],
+      "purpose": "Install/update objectives and disposable boolean progress"
+    },
+    {
+      "paths": [
+        "templates"
+      ],
+      "purpose": "Portable instructions, skills, hook behavior, roles, commands, settings"
+    },
+    {
+      "paths": [
+        "shared/credentials"
+      ],
+      "purpose": "Independent credential helper and non-secret index example"
+    },
+    {
+      "paths": [
+        "scripts/check-hub.py"
+      ],
+      "purpose": "Structural catalog and reference validation"
+    }
+  ]
+}

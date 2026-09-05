@@ -1,6 +1,0 @@
-interface:
-  display_name: "MAINFRAME Ticket Refinement"
-  short_description: "Verify, split, and route open tickets"
-  default_prompt: "Use $mainframe-tickets-refine to verify, scope, consolidate, and give every eligible ticket an evidenced execution route."
-policy:
-  allow_implicit_invocation: false

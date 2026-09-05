@@ -1,49 +1,41 @@
-# macOS
+# Local operating systems and tools
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Editor
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Claude Code project-local config
-.claude/
-.claude/settings.local.json
-
-# Python venv (local toolchain — tiktoken, pyyaml)
+*~
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 .ruff_cache/
 .mypy_cache/
-
-# Node dependencies and generated output
+.fallow/
 node_modules/
 
-# OS temp
-*~
-
-# install.sh backup files (may contain references to private project paths)
+# Personal configuration, goals, working records, and backups
+.claude/
+.codex/
+.local/
+workspace/
+todo
 *.backup
 *.backup-*
 *.bak
-
-# Personal scratch (private)
-todo
-
-# Project-name blacklist (per-fork; contains private project identifiers).
-# Template lives at tools/agnostic-blacklist.txt.example.
-tools/agnostic-blacklist.txt
-
-# User-maintained credential descriptions. The adjacent template is tracked.
 shared/credentials/credentials-index.md
+docs/tickets/
 
-# Private documents
+# Other existing private documents stay private; only product docs are public.
 docs/*
+!docs/principles.md
+!docs/migration.md
+!docs/official-sources.md
 
-# Hub-development workspace — queue (inbox), used-for-hub sources (reference),
-# rejected/kept project artifacts (archive). All local, never published.
-workspace/
+# Local compatibility links to the archived runtime; never part of delivery.
+/adapters
+/tools
+/dev
+CLAUDE.md

@@ -1,6 +1,0 @@
-interface:
-  display_name: "Project Instructions Audit"
-  short_description: "Find conflicts, drift, and bloat in project guidance"
-  default_prompt: "Use $mainframe-project-instructions-audit to audit this repository's effective Codex instruction structure."
-policy:
-  allow_implicit_invocation: false

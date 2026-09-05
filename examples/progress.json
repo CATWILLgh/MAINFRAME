@@ -1,0 +1,199 @@
+{
+  "items": [
+    {
+      "source": "docs/official-sources.md",
+      "purpose": "Consult current official documentation for every relevant native layer before installation writes.",
+      "done": false
+    },
+    {
+      "source": "templates/adaptation-points.md",
+      "purpose": "Resolve native capability placeholders and their unsupported-capability behavior.",
+      "done": false
+    },
+    {
+      "source": "templates/instructions/global.md",
+      "purpose": "Install small recipient-neutral global rules, including harness issue reporting.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-curl-requests/SKILL.md",
+      "purpose": "Send bounded HTTP requests with safe credentials, retries and redirects.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-decision-review/SKILL.md",
+      "purpose": "Challenge consequential proposals with grounded evidence and realistic failure modes.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-frontend/SKILL.md",
+      "purpose": "Implement and verify React user journeys, accessibility and visual behavior.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-harness-feedback/SKILL.md",
+      "purpose": "Record an observed harness problem in MAINFRAME and notify the operator.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-infrastructure/SKILL.md",
+      "purpose": "Operate the resolved infrastructure environment with verified authority and recovery.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-init/SKILL.md",
+      "purpose": "Carry an assigned task through execution and verification without changing the recipient role.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-instruction-authoring/SKILL.md",
+      "purpose": "Adapt instruction wording and placement to actual recipients and documented product behavior.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-ops-app-server-safety/SKILL.md",
+      "purpose": "Identify and reuse or safely replace the actual project-owned local server.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-peer-work/SKILL.md",
+      "purpose": "Use an available external agent for one bounded result and verify its output.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-project-instructions-audit/SKILL.md",
+      "purpose": "Inspect and maintain effective project guidance without semantic drift.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-project-instructions-init/SKILL.md",
+      "purpose": "Establish a small native project instruction hierarchy while preserving existing knowledge.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-python-backend/SKILL.md",
+      "purpose": "Implement and verify Python service behavior with the established stack.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-readiness-review/SKILL.md",
+      "purpose": "Check material acceptance claims against the actual final evidence.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-record-project-problem/SKILL.md",
+      "purpose": "Preserve a concrete out-of-scope repository observation without deferring the active work.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-research-method/SKILL.md",
+      "purpose": "Verify current external claims, numbers and provenance through authoritative sources.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-secrets/SKILL.md",
+      "purpose": "Use registered credentials without exposing protected values to the agent.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-testing-strategy/SKILL.md",
+      "purpose": "Choose or audit meaningful test boundaries, reliability, coverage and execution cost.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-tickets-find/SKILL.md",
+      "purpose": "Inspect a bounded repository scope and record plausible problems.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-tickets-implement/SKILL.md",
+      "purpose": "Implement eligible autonomous tickets and queue validated fixes for independent verification.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-tickets-refine/SKILL.md",
+      "purpose": "Verify, consolidate and scope existing observations without implementing them.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-tickets-verify/SKILL.md",
+      "purpose": "Independently verify implemented tickets and record evidence-backed closure or return.",
+      "done": false
+    },
+    {
+      "source": "templates/skills/mainframe-typescript-backend/SKILL.md",
+      "purpose": "Implement and verify Node.js and Next.js server behavior with the established stack.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/code-quality.md",
+      "purpose": "Identify changed-code suppressions, deferred implementation, and temporary process comments without re-reporting untouched repository debt.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/destructive-paths.md",
+      "purpose": "Stop recursive deletion of the filesystem root, the user's home root, or the active project root while preserving authorized narrower cleanup.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/failure-feedback.md",
+      "purpose": "A broken hook produces actionable feedback once instead of silent loss of protection, transcript spam, or an endless completion loop.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/file-growth.md",
+      "purpose": "Prompt a useful structure check when current edits materially enlarge a file, without treating a fixed line count as proof of poor design.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/git-authority.md",
+      "purpose": "Permit normal local work while respecting the caller's authority for publication, history changes, and destructive Git operations.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/secret-access.md",
+      "purpose": "Keep protected credential values out of model context while allowing the authorized consumer to authenticate.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/security-checks.md",
+      "purpose": "Surface high-confidence security regressions in edited Python and JavaScript/TypeScript code, using the project's established tools when useful.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/shell-feedback.md",
+      "purpose": "Prevent a known ambiguous tool option from silently producing the wrong evidence, without policing every shell command.",
+      "done": false
+    },
+    {
+      "source": "templates/hooks/staged-secrets.md",
+      "purpose": "Prevent a commit from including likely credential values introduced by the staged change, without scanning protected stores or unrelated history.",
+      "done": false
+    },
+    {
+      "source": "templates/roles/task-brief.md",
+      "purpose": "Assign bounded roles dynamically when delegation is useful and supported.",
+      "done": false
+    },
+    {
+      "source": "templates/commands/workflows.md",
+      "purpose": "Expose native workflow invocations without duplicated logic or invented commands.",
+      "done": false
+    },
+    {
+      "source": "templates/settings/native-options.md",
+      "purpose": "Use supported model and tool options and make skills available to all suitable recipients.",
+      "done": false
+    },
+    {
+      "source": "shared/credentials/",
+      "purpose": "Preserve the working credential helper and private index; the shipped catalog is only an example.",
+      "done": false
+    },
+    {
+      "source": "goals/adapt.md",
+      "purpose": "Reconcile ownership and obsolete delivery, inspect effective semantics, and verify actual installed behavior.",
+      "done": false
+    }
+  ]
+}

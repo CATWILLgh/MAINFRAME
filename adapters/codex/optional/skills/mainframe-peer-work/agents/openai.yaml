@@ -1,4 +1,0 @@
-interface:
-  display_name: "Claude Peer Work"
-  short_description: "Run Claude for review or implementation"
-  default_prompt: "Use $mainframe-peer-work to start or continue one bounded Claude review or implementation session."

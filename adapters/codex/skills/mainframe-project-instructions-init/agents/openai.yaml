@@ -1,6 +1,0 @@
-interface:
-  display_name: "Project Instructions Init"
-  short_description: "Build a coherent native project instruction hierarchy"
-  default_prompt: "Use $mainframe-project-instructions-init to initialize or repair this repository's Codex instruction structure."
-policy:
-  allow_implicit_invocation: false
