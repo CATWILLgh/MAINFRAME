@@ -18,8 +18,9 @@ MARKERS = {
 
 def check_catalog(root, templates, skills):
     errors = []
+    resources = (templates / "skills", templates / "hooks/scripts", templates / "hooks/rules")
     units = {str(p.relative_to(root)) for p in templates.rglob("*")
-             if p.is_file() and "skills" not in p.relative_to(templates).parts}
+             if p.is_file() and not any(p.is_relative_to(area) for area in resources)}
     units.update(str(p.relative_to(root)) for p in skills)
     units.update({"docs/official-sources.md", "goals/adapt.md", "shared/credentials/"})
 
@@ -76,7 +77,7 @@ def check_skills(root, skills):
 
 
 def source_files(root, templates):
-    sources = [p for p in templates.rglob("*") if p.is_file()]
+    sources = [p for p in templates.rglob("*") if p.is_file() and "__pycache__" not in p.parts]
     for directory in ("goals", "examples", "scripts"):
         sources.extend(p for p in (root / directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
     sources.extend(root / p for p in (

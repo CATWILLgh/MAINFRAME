@@ -1,5 +1,9 @@
 # Notice substantial new file growth
 
+Source: [length-quality-note.py](scripts/length-quality-note.py), [_length_check.py](scripts/_length_check.py).
+
+Call `note_for_changes(cwd, changes)` with exact `path`, `before`, `after` values. The source thresholds are heuristics to review for the target; the result is advisory.
+
 Purpose: prompt a useful structure check when current edits materially enlarge
 a file, without treating a fixed line count as proof of poor design.
 

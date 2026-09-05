@@ -1,5 +1,9 @@
 # Report quality regressions introduced by the task
 
+Source: [comment checks](scripts/comment-discipline-reminder.py), [comment completion check](scripts/stop-gate-comment-discipline.py), [marker checks](scripts/scan-suppression-markers.py), [marker completion check](scripts/stop-gate-suppression-markers.py).
+
+Keep the shared extractors and finding state listed in the [source guide](README.md). Attribute edits and completion events to the same session and writer; review heuristics before making them blocking.
+
 Purpose: identify changed-code suppressions, deferred implementation, and
 temporary process comments without re-reporting untouched repository debt.
 

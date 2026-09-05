@@ -1,5 +1,9 @@
 # Protect critical directory roots
 
+Source: [_path_validation.py](scripts/_path_validation.py).
+
+This is a conservative recognizer for catastrophic literal `rm` targets, not a complete shell sandbox. Preserve that honest boundary when wiring native permissions.
+
 Purpose: stop recursive deletion of the filesystem root, the user's home root,
 or the active project root while preserving authorized narrower cleanup.
 

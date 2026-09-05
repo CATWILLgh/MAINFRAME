@@ -126,6 +126,11 @@
       "done": false
     },
     {
+      "source": "templates/hooks/README.md",
+      "purpose": "Inspect shared working hook source, reference IO, dependencies and native adaptation boundaries.",
+      "done": false
+    },
+    {
       "source": "templates/hooks/code-quality.md",
       "purpose": "Identify changed-code suppressions, deferred implementation, and temporary process comments without re-reporting untouched repository debt.",
       "done": false

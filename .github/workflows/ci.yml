@@ -12,5 +12,7 @@ jobs:
           python-version: '3.12'
       - name: Validate the template hub
         run: python3 scripts/check-hub.py
+      - name: Check hook source behavior
+        run: python3 -m unittest discover -s scripts -p 'test_hook_sources.py'
       - name: Check whitespace
         run: git diff --check

@@ -1,0 +1,29 @@
+rules:
+  - id: mainframe.javascript.dynamic-child-process-exec
+    languages: [javascript, typescript]
+    message: Review this dynamically constructed child-process command and prefer argument arrays with execFile or spawn.
+    severity: WARNING
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: CWE-78
+    pattern-either:
+      - pattern: child_process.exec(`...${$VALUE}...`, ...)
+      - pattern: child_process.execSync(`...${$VALUE}...`, ...)
+      - pattern: require("child_process").exec(`...${$VALUE}...`, ...)
+      - pattern: require("child_process").execSync(`...${$VALUE}...`, ...)
+      - pattern: require("node:child_process").exec(`...${$VALUE}...`, ...)
+      - pattern: require("node:child_process").execSync(`...${$VALUE}...`, ...)
+
+  - id: mainframe.javascript.tls-verification-disabled
+    languages: [javascript, typescript]
+    message: TLS certificate verification is disabled for this HTTPS agent.
+    severity: WARNING
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: CWE-295
+    pattern-either:
+      - pattern: 'new https.Agent({..., rejectUnauthorized: false, ...})'
+      - pattern: 'new require("https").Agent({..., rejectUnauthorized: false, ...})'
+      - pattern: 'new require("node:https").Agent({..., rejectUnauthorized: false, ...})'

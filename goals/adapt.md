@@ -45,8 +45,8 @@ approval again for ordinary reversible installation work already authorized.
 
 Create a uniquely named local copy of `examples/progress.json` under `.local/`,
 outside tracked source. Remember its absolute path in the native goal context.
-Each row is one source unit; a skill row includes all its references, scripts,
-and assets. Keep the example itself unchanged. Do not add a lifecycle schema,
+Each row is one source unit; skills and hooks include their linked scripts,
+references, rules, and fixtures. Keep the example itself unchanged. Do not add a lifecycle schema,
 event log, evidence store, or a second inventory.
 
 Read the working copy when resuming after interruption or context compaction.
@@ -82,8 +82,10 @@ Use native tool restrictions when they enforce the assigned boundary; ordinary
 prose is not a technical permission control. Without subagents, perform the
 method directly and do not claim independent review of your own work.
 
-For hooks, implement the described behavior using documented native events and
-payloads. Prefer an equivalent existing native mechanism. Apply each hook's
+For hooks, start with the supplied working source and its short description.
+Inspect sibling dependencies and retained reference-protocol assumptions. Adapt
+the code using documented native events and payloads; preserve tested detection
+logic instead of rebuilding it from prose. Prefer an equivalent existing native mechanism. Apply each hook's
 positive, negative, malformed-input, and repetition checks in an isolated
 workspace before activation. If the runtime cannot enforce a required boundary,
 report that limitation; do not silently downgrade a guard to a reminder.

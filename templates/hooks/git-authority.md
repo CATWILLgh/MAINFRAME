@@ -1,5 +1,9 @@
 # Preserve Git authority
 
+Source: [_git_authority.py](scripts/_git_authority.py).
+
+`authority_decision(command)` returns a classification, not proof of caller authorization. Bind `ask` to the target's actual authority context; there is no special subagent staging/commit ban.
+
 Purpose: permit normal local work while respecting the caller's authority for
 publication, history changes, and destructive Git operations.
 

@@ -1,5 +1,9 @@
 # Correct a concrete shell invocation mistake
 
+Source: [_bash_patterns.py](scripts/_bash_patterns.py).
+
+Adapt the shell-tool name and payload, preserve parsing of quoted values and explicit replacement options, and use the shared notice helper to deduplicate.
+
 Purpose: prevent a known ambiguous tool option from silently producing the
 wrong evidence, without policing every shell command.
 
