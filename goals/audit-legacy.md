@@ -2,13 +2,21 @@
 
 Execute this file as a standalone read-only audit, including when invoked as a
 native goal. Identify the current hosting product, surface, and version from
-native evidence. That is the target; adjacent CLIs and archive directories do
-not expand it. Use only this surface's own current official loading contract.
+native evidence using [the environment check](support/environment.md), and state
+that identity before layer discovery. That is the target; adjacent CLIs and archive directories do
+not automatically expand it. Officially shared Desktop/CLI mechanisms are in
+scope when they apply to this host. Establish applicability per layer; neither
+the documentation URL's section name nor a shared product name proves it alone.
 
 The result is an evidence-backed inspection of installed MAINFRAME traces,
 not a repository health check or a search for old project names. Nothing may
 be installed, removed, disabled, or stopped. Do not run discovery or cleanup
 scripts. Read [the procedure](support/legacy-audit.md), then follow these steps:
+
+Read only material needed to identify this host or resolve the current audit
+layer: its official contract, actual loading configuration, and evidence for
+specific referenced objects. Apply the procedure's reading boundary before
+each read or search. Do not load unrelated skills or broad product manuals.
 
 1. Set up one coverage table with the layers listed below. Establish documented
    package/plugin discovery first, since packages can supply other layers.

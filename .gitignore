@@ -17,6 +17,17 @@ __pycache__/
 node_modules/
 
 # Personal configuration, goals, working records, and backups
+/AGENTS.md
+/AGENTS.override.md
+/GEMINI.md
+/.agents/
+/.agent/
+/_agents/
+/_agent/
+/.cursor/
+/.cursorrules
+/.windsurf/
+/.windsurfrules
 .claude/
 .codex/
 .local/

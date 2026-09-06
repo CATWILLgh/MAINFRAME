@@ -2,7 +2,7 @@
 
 Execute this objective only for the product and exact removal scope agreed in
 the supplied local brief or current conversation. If that scope is missing or
-ambiguous, change nothing and direct the operator to [brief.md](brief.md) in
+ambiguous, change nothing and direct the operator to [the brief](../prompts/brief.md) in
 uninstall mode. Do not start a second goal or invent approval.
 
 Consult current official configuration and reload documentation. Apply

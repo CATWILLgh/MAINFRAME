@@ -3,7 +3,7 @@
 Execute this installation objective when the operator invokes this file through
 the native goal mechanism. First load the agreed installation brief from the
 explicitly supplied local file or current conversation. The brief must identify
-this product and checkout and settle the choices in [brief.md](brief.md).
+this product and checkout and settle the choices in [the brief](../prompts/brief.md).
 If it is missing, ambiguous, or still has pending answers, perform no installation
 writes: explain that the briefing must be completed first. Do not invent choices
 or begin an interview inside this execution goal. Do not create a second goal.

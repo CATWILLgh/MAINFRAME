@@ -5,11 +5,19 @@ a goal, or change global settings during preparation.
 
 ## Inspect capabilities before asking
 
+First perform [the environment check](../goals/support/environment.md) and state the
+observed host, operation, and material unknowns. Do not ask the operator to
+repeat an identity already established by native evidence.
+
 Unless the operator explicitly names another target, prepare management only
 for the current product and surface hosting this invocation. Establish that
 surface from native environment evidence and its own official documentation;
 do not require a redundant product qualifier. Adjacent CLI installations or
 shared configuration roots do not make other adapters part of this scope.
+Documented mechanisms shared by this product's Desktop/CLI surfaces remain
+relevant. Establish the actual consumers per layer and explain effects on both
+surfaces in the brief. A native root shared within this product is a
+product-specific destination, not a general cross-product installation.
 
 Identify the current product, surface, version, MAINFRAME checkout, and intended
 install, update, or uninstall mode. Consult current official documentation for the relevant
@@ -18,8 +26,15 @@ tool restrictions, and reload requirements. Inspect relevant non-secret local
 configuration and existing MAINFRAME ownership. Distinguish documented support,
 observed availability, unsupported features, and unresolved facts.
 
+If this inspection exposes unexplained inherited customization, discuss it
+through [the environment review](review-environment.md) before finalizing the
+brief. Its relevance does not depend on MAINFRAME ownership or a conflict with
+MAINFRAME. Inspection and discussion are part of preparation; changes to those
+user settings require the concrete authority established in that review.
+Reuse a recent review after checking its evidence still applies.
+
 When an earlier MAINFRAME installation is present, inspect its relevant traces
-using [legacy-audit](support/legacy-audit.md) before
+using [legacy-audit](../goals/support/legacy-audit.md) before
 proposing replacements. Reuse an existing audit only after checking that its
 evidence still matches the current configuration. Include exact owned
 replacements and uncertain retained material in the brief; no scripted cleanup.
@@ -143,7 +158,7 @@ and final reload boundaries. Do not store secrets or a transcript. The note
 preserves agreed decisions; the execution JSON separately tracks boolean work.
 
 Return a copyable invocation of the existing command file:
-[install](install.md), [update](update.md), or [uninstall](uninstall.md), with the
+[install](../goals/install.md), [update](../goals/update.md), or [uninstall](../goals/uninstall.md), with the
 absolute path to that agreed brief. Where the native product actually supports
 it, the intended interaction is `/goal @goals/install.md` plus the brief path.
 Verify file-mention and goal syntax in official documentation or actual native

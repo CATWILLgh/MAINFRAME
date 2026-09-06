@@ -3,7 +3,7 @@
 Execute this update objective when the operator invokes this file through the
 native goal mechanism. Load the agreed update brief from its explicitly supplied
 local file or current conversation. It must identify the chosen source and
-current product and settle the choices in [brief.md](brief.md). If the brief is
+current product and settle the choices in [the brief](../prompts/brief.md). If the brief is
 missing, ambiguous, or incomplete, do not modify the installation or invent
 answers. Explain the missing preparation. Do not repeat the interview or create
 a second goal during execution.

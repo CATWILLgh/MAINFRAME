@@ -3,7 +3,7 @@
 This procedure is shared by the install and update goals. It is installation
 guidance, not an always-loaded global instruction.
 
-Execute only after [the pre-goal briefing](../brief.md). Follow the configuration
+Execute only after [the pre-goal briefing](../../prompts/brief.md). Follow the configuration
 and authority recorded in the agreed brief supplied with the command invocation. Do not reopen
 settled preferences. Handle routine adaptation choices independently. A newly
 discovered material conflict is a blocker for dependent work: preserve the
@@ -12,11 +12,20 @@ without claiming the goal complete or broadening authority.
 
 ## Establish the documented contract first
 
+Recheck and state [the current environment](environment.md) against the agreed
+brief before layer discovery. A brief for another host does not authorize
+installing into the current one; resolve that mismatch before dependent writes.
+
 Open the current official documentation for the product and surface you are
 using. Discover its documentation index from the publisher; do not substitute
 another product's docs, model memory, search snippets, or this hub's examples.
 For each relevant layer establish discovery paths, scope, recipients,
 precedence, supported fields, permissions, lifecycle events, and reload rules.
+Use documented shared Desktop/CLI mechanisms where they apply to this host;
+do not reject a source merely because it is under another surface's docs.
+Verify sharing per layer and preserve surface-specific differences. A native
+configuration root shared by this product's surfaces satisfies the preference
+for product-specific placement; account for all affected consumers in the brief.
 Use the product's official model prompting guidance when choosing wording.
 
 Confirm native goal support separately from hooks, task lists, and background
@@ -308,7 +317,7 @@ command bindings. Do not install management prompts or legacy-audit as skills.
 ## Management is not delivered
 
 Only cataloged materials from `templates/` and the preserved credential helper
-are candidates for delivery. `goals/`, `docs/`, `examples/`, and repository
+are candidates for delivery. `prompts/`, `goals/`, `docs/`, `examples/`, and repository
 validators are management resources and must not be installed. Hook purpose
 and acceptance descriptions under `goals/support/hooks/` guide adaptation but
 do not become runtime instructions. Strip authoring and installation guidance

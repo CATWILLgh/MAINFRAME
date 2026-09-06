@@ -4,6 +4,7 @@
 import ast
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -78,10 +79,10 @@ def check_skills(root, skills):
 
 def source_files(root, templates):
     sources = [p for p in templates.rglob("*") if p.is_file() and "__pycache__" not in p.parts]
-    for directory in ("goals", "examples", "scripts"):
+    for directory in ("prompts", "goals", "examples", "scripts"):
         sources.extend(p for p in (root / directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts)
     sources.extend(root / p for p in (
-        "README.md", "CONTRIBUTING.md", "AGENTS.md", ".agents/repository.json",
+        "README.md", "CONTRIBUTING.md",
         "docs/principles.md", "docs/migration.md", "docs/official-sources.md",
         "docs/hook-quality.md", "docs/installation-test.md",
         "shared/credentials/credentials-index.template.md",
@@ -122,7 +123,7 @@ def check_sources(root, sources):
             candidate = (path.parent / target).resolve()
             if not candidate.is_relative_to(root) or not candidate.exists():
                 errors.append(f"Broken or escaping reference: {rel} -> {target}")
-            elif rel.startswith("templates/") and candidate.relative_to(root).parts[0] in {"goals", "docs", "examples", "scripts"}:
+            elif rel.startswith("templates/") and candidate.relative_to(root).parts[0] in {"prompts", "goals", "docs", "examples", "scripts"}:
                 errors.append(f"Delivered source depends on management material: {rel} -> {target}")
             elif any(part in {"adapters", "tools", "dev", "workspace", ".local"}
                      for part in candidate.relative_to(root).parts):
@@ -130,11 +131,32 @@ def check_sources(root, sources):
     return errors
 
 
+def check_tracked_local_config(root):
+    """Local agent configuration must not become part of a consumer checkout."""
+    if not (root / ".git").exists():
+        return []
+    try:
+        tracked = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z"],
+            check=True, capture_output=True,
+        ).stdout.decode().split("\0")
+    except (OSError, subprocess.CalledProcessError, UnicodeError):
+        return ["Cannot inspect tracked files for local agent configuration"]
+    local_names = {
+        "AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "GEMINI.md",
+        ".agents", ".agent", "_agents", "_agent", ".claude", ".codex",
+        ".cursor", ".cursorrules", ".windsurf", ".windsurfrules",
+    }
+    return [f"Local agent configuration is tracked: {name}"
+            for name in tracked if name and Path(name).parts[0] in local_names]
+
+
 def check(root):
     root = root.resolve()
     templates = root / "templates"
     skills = sorted((templates / "skills").glob("*/SKILL.md"))
-    return (check_catalog(root, templates, skills)
+    return (check_tracked_local_config(root)
+            + check_catalog(root, templates, skills)
             + check_skills(root, skills)
             + check_sources(root, source_files(root, templates)))
 
