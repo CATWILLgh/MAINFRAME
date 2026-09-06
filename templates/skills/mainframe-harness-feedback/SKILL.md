@@ -8,8 +8,8 @@ description: Record an observed harness fault and notify the operator, including
 Use the observation already available. Capture the component, triggering action,
 observed behavior, expected behavior when known, practical consequence, and a
 short redacted example. Distinguish an observation from a reproduced cause.
-Do not search transcripts, protected stores, or unrelated projects for more
-material, and do not start background telemetry.
+Keep evidence collection within the observed problem; exclude transcripts,
+protected stores, and unrelated projects.
 
 Resolve `{{MAINFRAME_ROOT}}/docs/tickets/open/observations/`.
 

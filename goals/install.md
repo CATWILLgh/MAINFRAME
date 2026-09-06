@@ -1,9 +1,8 @@
 # Install MAINFRAME
 
-Execute this installation objective when the operator invokes this file through
-the native goal mechanism. First load the agreed installation brief from the
-explicitly supplied local file or current conversation. The brief must identify
-this product and checkout and settle the choices in [the brief](../prompts/brief.md).
+Load the agreed installation brief from the explicitly supplied local file or
+current conversation. It must identify this product and checkout and settle
+the choices in [the brief](../prompts/brief.md).
 If it is missing, ambiguous, or still has pending answers, perform no installation
 writes: explain that the briefing must be completed first. Do not invent choices
 or begin an interview inside this execution goal. Do not create a second goal.
@@ -25,9 +24,8 @@ Use only the boolean `done` marks to preserve progress for this run.
 
 Deliver a small coherent installation, with all placeholders resolved, skills
 usable by any authorized agent, and checks of the actual installed result.
-Preserve unrelated configuration and credentials. Replace confirmed old
-MAINFRAME delivery as part of installation; remove its obsolete telemetry
-registrations without changing the user's unrelated observability settings.
+Preserve unrelated configuration and credentials. Replace obsolete
+MAINFRAME-owned files and registrations within the agreed scope.
 
 Complete the goal only when every item is accounted for and the installed
 behavior has been verified to the extent the current surface permits. Report

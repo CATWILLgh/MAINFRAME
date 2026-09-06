@@ -14,7 +14,7 @@ as a conversation. It records the decision and returns the appropriate
 implementation or resumed-verification objective for separate operator
 submission; it does not execute that next stage.
 If there is no native command surface, expose copyable prompts referring to
-the installed workflows. Do not create a shell dispatcher or custom lifecycle.
+the installed workflows.
 
 ## Goal plus ticket skill
 

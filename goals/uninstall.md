@@ -16,7 +16,7 @@ privately. Detach approved registrations before their targets. In mixed files,
 remove only proven MAINFRAME-owned sections; preserve user rules and changes.
 Preserve ambiguous files, shared credentials and helpers, external scanners,
 other adapters, source and archive checkouts, backups, ticket history, and
-historical telemetry data unless exact removal was separately agreed. Stopping
+historical data unless exact removal was separately agreed. Stopping
 a service requires specific scope and authority, not a matching name alone.
 
 Track the agreed finite removal list in a local copy of the same simple

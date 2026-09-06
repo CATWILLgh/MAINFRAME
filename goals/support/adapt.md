@@ -1,7 +1,6 @@
 # Adapt the hub to the current environment
 
-This procedure is shared by the install and update goals. It is installation
-guidance, not an always-loaded global instruction.
+Use this procedure for installation and updates.
 
 Execute only after [the pre-goal briefing](../../prompts/brief.md). Follow the configuration
 and authority recorded in the agreed brief supplied with the command invocation. Do not reopen
@@ -33,14 +32,13 @@ jobs. A similar feature name does not prove identical semantics. If documentatio
 is inaccessible or a needed contract remains uncertain, leave dependent items
 unfinished and report the exact gap. Continue independent documented work.
 
-The installation must use the native surface's real capabilities. Do not build
-an adapter directory, compiler, plugin generator, custom goal loop, or telemetry
-service in MAINFRAME to compensate for a missing capability.
+Map source behavior to supported native capabilities. Report a capability gap
+when no faithful mapping exists.
 
 ## Inspect and preserve
 
-Read the checkout's [principles](../../docs/principles.md), catalog, source items,
-and their supporting files. Confirm the checkout revision and dirty state.
+Read the [catalog](../../examples/progress.json), selected source items, and
+their supporting files. Confirm the checkout revision and dirty state.
 Use the source revision and local changes agreed in preparation. Do not update
 the source checkout mid-goal. If its contents have changed since the brief,
 resolve the mismatch before dependent installation writes.
@@ -270,7 +268,7 @@ Use the native installation mechanism's ownership metadata where it exists.
 Otherwise keep one short local note next to the installation with the source
 checkout and revision, installed destinations or managed section identifiers,
 and the backup location. This is only enough to recognize and recover owned
-files during the next update, not another progress system or telemetry log.
+files during the next update.
 Include the already agreed optional-component choices and dependency ownership
 in this same note. An update must not infer opt-in from a missing record.
 
@@ -280,8 +278,8 @@ Apply [the model-led legacy inspection method](legacy-audit.md)
 to the approved candidates. Do not use a bulk uninstaller, cleanup script, or
 name-based deletion rule; inspect and change each owned registration or file
 individually, preserving unproven ownership and unrelated consumers.
-Preserve unrelated native telemetry and observability preferences. Retire a
-legacy MAINFRAME service only with confirmed ownership and authority to stop it.
+Retire a legacy MAINFRAME service only with confirmed ownership and authority
+to stop it.
 Do not delete historical data merely because its producer is being removed.
 
 Finish with a concise operator report: actual changes, official source links,

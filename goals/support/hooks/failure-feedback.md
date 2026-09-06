@@ -15,7 +15,7 @@ error class, consequence, and the allowed next step without raw tool input.
 Apply these behavior requirements to every installed hook rather than adding
 another hook when the runtime already handles failures correctly. Use only the
 small temporary state needed to deduplicate a task's active failure and avoid
-cross-task races; do not retain event histories or create telemetry.
+cross-task races.
 
 An advisory hook failure must not loop forever at completion. A required guard
 failure must not silently permit the protected action. Report concrete harness

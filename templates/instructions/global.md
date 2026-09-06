@@ -51,5 +51,4 @@ notify the operator. Include the component, trigger, observed behavior, and
 practical consequence with redacted evidence. Use the harness-feedback skill
 when available. If your authority or tools cannot write there or reach the
 operator, return the ticket-ready observation and notification need to your
-caller. Do not silently lose the report or broaden access. Do not collect
-background telemetry or copy transcripts to diagnose it.
+caller. Keep the report within the available evidence and reporting authority.

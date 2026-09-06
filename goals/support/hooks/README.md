@@ -2,8 +2,7 @@
 
 Start with the working source, then adapt its binding using the target product's
 current official documentation. The short documents beside this guide describe
-intent and limitations. These are source templates, not an installed adapter:
-there is no native manifest, dispatcher, installer, or telemetry service here.
+intent and limitations.
 
 ## Responsibility boundary
 
@@ -29,11 +28,6 @@ the contract, skip that hook and continue installing the supported set. State
 the missing capability, attempted mapping, and resulting coverage gap. This
 fallback is already authorized; do not ask again for each unsupported hook.
 Never activate a broken approximation or claim the skipped check is enforced.
-
-The scripts were recovered from archive commit `53ad1e5`. Detection logic and
-supporting state were retained; telemetry calls, event storage, peer/session
-machinery, and the subagent-only staging/commit ban were removed. Execution and
-dependency failures now exit nonzero instead of silently succeeding.
 
 ## Bindings to adapt
 
