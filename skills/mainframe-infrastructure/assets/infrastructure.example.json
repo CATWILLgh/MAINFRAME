@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "environments": {
+    "production": {
+      "purpose": "Serves real users",
+      "platform": {
+        "type": "dokploy",
+        "instanceRef": "DOKPLOY_PRODUCTION"
+      },
+      "deployment": {
+        "source": "main",
+        "method": "dokploy"
+      },
+      "resources": [
+        "application:web",
+        "postgres:primary"
+      ],
+      "credentialRefs": [
+        "DOKPLOY_PRODUCTION_API_KEY"
+      ],
+      "references": [
+        {
+          "purpose": "deploy-and-rollback",
+          "path": "docs/runbooks/production-deploy.md"
+        }
+      ],
+      "approvalRequired": [
+        "deploy",
+        "restart",
+        "migration",
+        "rollback"
+      ],
+      "lastVerified": null,
+      "notes": []
+    }
+  }
+}

@@ -1,0 +1,62 @@
+name: Bug report
+description: Report reproducible incorrect behavior in a delivered MAINFRAME component.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve MAINFRAME. Do not include secrets or private session data.
+  - type: input
+    id: product
+    attributes:
+      label: Agent product and version
+      description: For example, Codex CLI 1.2.3 or Claude Code 4.5.6.
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      options:
+        - CLI
+        - Desktop
+        - Both
+        - Other or unknown
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: MAINFRAME component
+      description: Name the instruction, skill, agent, command, hook, credential helper, or installation guide.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Describe what happened and the smallest reproducible sequence.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Describe what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add sanitized logs, screenshots, or validation output if useful.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I removed secrets, credentials, and private session data.
+          required: true

@@ -1,116 +1,144 @@
 # MAINFRAME
 
-MAINFRAME — хаб заготовок для настройки среды AI-агента. В репозитории хранятся
-назначение и содержательные методы; агент сам адаптирует их в свои глобальные
-файлы по актуальной официальной документации своего продукта.
+MAINFRAME is a product-neutral set of instructions, skills, agents, commands,
+and hooks for coding agents. The repository stores one canonical version of
+each component. The agent installing MAINFRAME adapts copies to the current
+native format of its own product.
 
-## Как начать
+MAINFRAME does not ship prebuilt adapters. Product paths, metadata,
+permissions, registrations, and compatibility code belong only to installed
+copies.
 
-Если в среде могли остаться забытые правила или скиллы, начните обычным
-сообщением, без `/goal`:
+## Verified baselines
 
-> @prompts/review-environment.md Проведи ревизию пользовательских настроек текущей среды.
+Each badge shows the lowest version that has actually run the relevant
+MAINFRAME checks in this rebuild as of 2026-09-07. It is verification evidence,
+not a claim that older releases are incompatible or that every newer release is
+automatically supported.
 
-Агент проверит их происхождение и загрузку, покажет конкретные вопросы и
-обсудит, что ещё нужно. Изменения выполняются только после согласования точных
-объектов. Это самостоятельная ревизия, а не только поиск следов MAINFRAME;
-она не запускает установку. Новая пустая среда не требует обязательной очистки.
+Core runtimes used by the canonical sources and repository checks:
 
-Откройте репозиторий в нужной среде и напишите агенту:
+![Python: minimum tested 3.9.6](https://img.shields.io/badge/Python-min%20tested%203.9.6-3776AB?logo=python&logoColor=white)
+![Bash: minimum tested 3.2.57](https://img.shields.io/badge/Bash-min%20tested%203.2.57-4EAA25?logo=gnubash&logoColor=white)
+![Git: minimum tested 2.39.5](https://img.shields.io/badge/Git-min%20tested%202.39.5-F05032?logo=git&logoColor=white)
+![Node.js: minimum tested 25.9.0](https://img.shields.io/badge/Node.js-min%20tested%2025.9.0-5FA04E?logo=nodedotjs&logoColor=white)
 
-> @prompts/brief.md Подготовь установку MAINFRAME в текущую среду.
+Optional runtime support used by specific hook capabilities:
 
-Для обновления замените «установку» на «обновление». Пока не запускайте goal.
+![ripgrep: minimum tested 15.2.0](https://img.shields.io/badge/ripgrep-min%20tested%2015.2.0-CC342D)
+![Ruff: minimum tested 0.15.15](https://img.shields.io/badge/Ruff-min%20tested%200.15.15-D7FF64)
+![Oxlint: minimum tested 1.67.0](https://img.shields.io/badge/Oxlint-min%20tested%201.67.0-7C3AED)
+![Semgrep: minimum tested 1.164.0](https://img.shields.io/badge/Semgrep-min%20tested%201.164.0-00A9A5)
+![Fallow: minimum tested 2.92.1](https://img.shields.io/badge/Fallow-min%20tested%202.92.1-6B7280)
 
-При обновлении агент перед брифом проверит новую версию репозитория и предложит
-подтянуть её. После согласия обновит исходники, сохраняя локальную работу,
-и проведёт бриф по выбранной версии. Во время цели версия уже не меняется.
+Python runs the canonical hooks and Python reconnaissance; Bash runs the
+credential helper; Git supports repository-aware safety; Node.js runs the
+TypeScript and React reconnaissance scripts. The second group is not required
+for every installation: an adapter installs or reuses each analyzer only when
+its corresponding hook is supported.
 
-1. Агент проверяет свои возможности по официальной документации и текущим
-   настройкам: какие слои поддерживаются и что реально доступно.
-2. Коротко объясняет варианты и согласует с вами состав установки, поведение
-   хуков, доступ для записи тикетов и необходимость внешних CLI. При обновлении
-   сохраняет прежний выбор и обсуждает только изменения.
-3. После согласования агент сохраняет локальную заметку с решениями и даёт
-   вызов готового файла, например `/goal @goals/install.md`, с путём к заметке.
-4. Цель читает этот файл и решения брифа, адаптирует и проверяет выбранный набор.
-   При перезапуске продолжает тот же прогресс.
+### Adapter acceptance
 
-В `prompts/` лежат обычные сообщения для разговора, в корне `goals/` — цели:
+No adapter is marked verified yet. Add an adapter badge only after installation
+from a clean repository copy proves native discovery and behavior. Each badge
+must identify the agent product version, tested interface (`CLI`, `Desktop`, or
+both), and model. Different verified combinations receive separate badges; a
+source validation or successful installation alone is not enough.
 
-| Файл | Результат |
+## Install or update
+
+MAINFRAME has one supported installation path:
+
+1. Clone or update this repository.
+2. Open this repository itself as the current project in the agent product you
+   want to configure.
+3. Give the agent [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md) and ask it to
+   complete the installation.
+
+The agent checks its current official documentation, installs every applicable
+component into its own global environment, and verifies native discovery or
+behavior. It records progress in an ignored
+`ADAPTATION.<product-id>.json` copied from
+[ADAPTATION.example.json](ADAPTATION.example.json). Repeating the same process
+updates one effective installation instead of creating duplicates.
+
+The tracked root [AGENTS.md](AGENTS.md) tells compatible agents how to treat this
+repository as the product and installation workspace. [CLAUDE.md](CLAUDE.md) is
+a minimal Claude Code bridge to the same guidance. The complete maintained
+installation route starts at
+[docs/installation/README.md](docs/installation/README.md). These files ship
+with the repository so a zero-context installer can orient itself, but they are
+repository control-plane support rather than globally installed payload.
+
+Do not run the installation from another project. MAINFRAME is installed
+globally; project-specific configuration is created later through installed
+capabilities such as `project-skill`.
+
+## Product payload
+
+[ADAPTATION.example.json](ADAPTATION.example.json) is the complete list of
+installable component identities and canonical sources.
+
+| Source | Installed result |
 | --- | --- |
-| [prompts/review-environment.md](prompts/review-environment.md) | Разбор унаследованных пользовательских настроек и точечная очистка по решению пользователя; разговор до цели. |
-| [prompts/brief.md](prompts/brief.md) | Проверка возможностей и бриф установки, обновления или удаления; обычный разговор до цели. |
-| [audit-legacy.md](goals/audit-legacy.md) | Отдельная цель ревизии старых следов, без изменений. |
-| [install.md](goals/install.md) | Установка по согласованному брифу. |
-| [update.md](goals/update.md) | Полный повторный проход по актуальному набору. |
-| [uninstall.md](goals/uninstall.md) | Точечное удаление по согласованному списку. |
+| [instructions/global.md](instructions/global.md) | One MAINFRAME-owned section in the product's global instruction |
+| Listed directories under [skills/](skills/) | Native global skills, including their required references, scripts, and assets |
+| Listed files under [agents/](agents/) | Native global agent or subagent roles |
+| Listed files under [commands/](commands/) | Explicit user commands or the closest supported native equivalent |
+| Listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
+| [shared/credentials/secret](shared/credentials/secret) | The global `secret` helper when a compatible command is not already present |
 
-`/goal @goals/имя.md` — желаемый формат там, где среда поддерживает цель и
-упоминание файла. Точную нативную форму агент проверяет до запуска. Общая
-процедура и справки лежат в `goals/support/`, это не отдельные команды.
+Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are direct runtime
+support for listed hooks, not separate MAINFRAME components. An adapter reuses
+or installs them only when the hook requires them and the target product can
+support the behavior.
 
-**Управление доставкой не доставляется.** `prompts/`, `goals/`, документация, проверки и
-пример JSON остаются в репозитории. Глобально устанавливаются только выбранные
-материалы `templates/` и необходимый helper из `shared/`. Команд управления
-MAINFRAME среди устанавливаемых скиллов и команд нет. Описания адаптации хуков
-хранятся отдельно от их [рабочих исходников](templates/hooks/).
+Nothing else is product payload. In particular, the following stay in this
+repository and are never installed globally:
 
-Если нативной цели нет, агент сообщает об этом до запуска и согласует обычное
-ограниченное выполнение. Хаб не создаёт свой цикл продолжения или расписание.
-Обновление запускайте по необходимости, например раз в месяц.
+- root `AGENTS.md` and `CLAUDE.md`, this README,
+  [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md), the adaptation JSON, the canonical
+  [installation guide](docs/installation/README.md),
+  [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
+  [LICENSE](LICENSE);
+- hook documentation and tests;
+- `shared/credentials/install.sh`, the credential-index template, the ignored
+  local credential index, and credential-helper tests;
+- local development agent state under `.agents/`, archives, project tickets,
+  caches, generated files, and Git history.
 
-Отдельно можно попросить: «Проведи ревизию по goals/audit-legacy.md».
-Это проверка следов старого MAINFRAME моделью, без скриптов очистки и без
-автоматического удаления. Сначала результат с доказательствами и предложениями.
-Для первого прогона есть [короткий сценарий теста](docs/installation-test.md).
+The installer must stop on an inventory mismatch. It must not discover extra
+payload from directory contents, archives, older adapters, or ignored files.
 
-## Что внутри
+## User commands
 
-| Материал | Назначение |
+The installed product exposes these stable command identities through its
+closest explicit user-command mechanism:
+
+| Command | Purpose |
 | --- | --- |
-| [Глобальные инструкции](templates/instructions/global.md) | Короткие общие правила, корректные для любого исполнителя. |
-| [Скиллы](templates/skills/) | Инженерия, исследования, проверки, инфраструктура, работа с задачами и инструкциями. |
-| [Хуки](templates/hooks/) | Рабочие исходники и правила проверок; инструкции по адаптации остаются в goals/support/hooks/. |
-| [Команды](templates/commands/workflows.md) | Входы в существующие методы без дублирования их логики. |
-| [Роли](templates/roles/task-brief.md) | Ограниченное поручение под конкретную задачу вместо обязательных профилей. |
-| [Настройки](templates/settings/native-options.md) | Уместные нативные ограничения инструментов, модели и доступность скиллов. |
-| [Точки адаптации](goals/support/adaptation-points.md) | Плейсхолдеры с назначением и поведением при отсутствии возможности. |
-| [Пример прогресса](examples/progress.json) | Список материалов, краткий смысл и один флаг `done`. |
-| [Учётные данные](shared/credentials/) | Независимый helper и пример несекретного каталога; личные данные не входят в Git. |
+| [mainframe-init](commands/mainframe-init.md) | Establish ownership and verification for one user-facing coordinating session |
+| [project-skill](commands/project-skill.md) | Initialize, update, or extend the current project's evolving skill |
+| [tickets-find](commands/tickets-find.md) | Find and record current project problems from scratch |
+| [tickets-refine](commands/tickets-refine.md) | Expand the project's existing ticket queue |
+| [tickets-implement](commands/tickets-implement.md) | Implement every ready project ticket one at a time |
+| [tickets-verify](commands/tickets-verify.md) | Independently verify every eligible implemented ticket |
 
-Скиллы доступны главному агенту и сабагентам по задаче и полномочиям. Это не
-означает загрузку всех текстов в каждый контекст. Ненужная нативная возможность
-может быть опущена; неподдерживаемая защита должна быть явно обозначена.
+Exact slash syntax and delayed loading depend on the installed product. The
+adapter records any unsupported or degraded capability instead of claiming
+equivalence.
 
-На каждый запуск агент создаёт свежую локальную копию JSON с `done: false`.
-После прерывания продолжает ту же копию; при следующем обновлении начинает
-заново. Галочка означает обработанный и проверенный пункт, а не гарантию
-безошибочности модели. Детальный журнал и телеметрия не нужны.
+## Safety and privacy
 
-## Проблемы харнеса
+Installation preserves unrelated global configuration, authentication,
+history, sessions, memories, projects, and user-owned instructions. Secret
+values are never part of this repository or its adaptation state. MAINFRAME
+does not include telemetry collectors or a permanent activity log.
 
-Глобальная инструкция направляет конкретные сбои, шум хуков и конфликты в
-локальные тикеты MAINFRAME и требует уведомить оператора. Если у исполнителя
-нет доступа, он передаёт подготовленное наблюдение вызывающему агенту.
-Телеметрии, панели наблюдения и фоновых анализаторов в новой доставке нет.
+Canonical source validation does not prove that a product discovered or ran an
+installed component. Each adapter must verify Desktop and CLI separately when
+their configuration or runtime differs.
 
-## Проверка и изменение хаба
-
-```sh
-python3 scripts/check-hub.py
-```
-
-Проверка контролирует каталог, структуру, ссылки и синтаксис вспомогательных
-Python-файлов. Поведение конкретной установки проверяется её агентом во время
-цели. Подробности: [принципы](docs/principles.md),
-[правила изменения](CONTRIBUTING.md), [переход со старой системы](docs/migration.md).
-
-Старая система сохранена в ветке
-`archive/adapters-before-template-hub-20260905` на коммите `53ad1e5`.
-Перестройка репозитория сама по себе не означает переустановку глобальных
-настроек. Для этого запускается цель установки в соответствующей среде.
-
-Личный проект, [MIT](LICENSE). Совместимость и качество конкретного результата
-подтверждаются проверкой; универсальной гарантии для всех продуктов нет.
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and security
+boundaries, [CONTRIBUTING.md](CONTRIBUTING.md) for change rules, and
+[LICENSE](LICENSE) for the MIT license.

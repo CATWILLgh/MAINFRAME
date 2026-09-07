@@ -1,18 +1,53 @@
 name: CI
+
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
+    name: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.12'
-      - name: Validate the template hub
-        run: python3 scripts/check-hub.py
-      - name: Check hook source behavior
-        run: python3 -m unittest discover -s scripts -p 'test_hook_sources.py'
-      - name: Check whitespace
-        run: git diff --check
+          python-version: "3.12"
+
+      - name: Validate repository structure
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Test hooks
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s hooks/tests -p 'test_*.py'
+
+      - name: Test credential helper
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s shared/credentials/tests -p 'test_*.py'
+
+      - name: Check shell syntax
+        run: bash -n shared/credentials/secret shared/credentials/install.sh
+
+      - name: Check changed whitespace
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+          else
+            git diff-tree --check --no-commit-id -r "${{ github.sha }}"
+          fi

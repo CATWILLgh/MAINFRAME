@@ -1,54 +1,30 @@
-# Local operating systems and tools
-.DS_Store
-.AppleDouble
-.LSOverride
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.fallow/
-node_modules/
-
-# Personal configuration, goals, working records, and backups
-/AGENTS.md
+# Local archive and agent instructions
+/archive/
 /AGENTS.override.md
 /GEMINI.md
 /.agents/
 /.agent/
-/_agents/
-/_agent/
-/.cursor/
-/.cursorrules
-/.windsurf/
-/.windsurfrules
-.claude/
-.codex/
-.local/
-workspace/
-todo
-*.backup
-*.backup-*
-*.bak
-shared/credentials/credentials-index.md
-docs/tickets/
+/.claude/
+/.codex/
 
-# Other existing private documents stay private; only product docs are public.
-docs/*
-!docs/principles.md
-!docs/migration.md
-!docs/official-sources.md
-!docs/hook-quality.md
-!docs/installation-test.md
+# Local tools and generated files
+.DS_Store
+.idea/
+.vscode/
+.venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.fallow/
 
-# Local compatibility links to the archived runtime; never part of delivery.
-/adapters
-/tools
-/dev
-CLAUDE.md
+# Private local configuration
+.env
+.env.*
+!.env.example
+/ADAPTATION.*.json
+!/ADAPTATION.example.json
+/shared/credentials/credentials-index.md
+/docs/tickets/
