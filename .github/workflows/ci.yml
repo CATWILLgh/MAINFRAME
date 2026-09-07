@@ -1,74 +1,55 @@
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    name: tests + validators
+  validate:
+    name: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "24"
+      - name: Validate repository structure
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
 
-      # Two hook tests build throwaway git repos; a runner has git but no identity.
-      - name: Configure git identity
+      - name: Test hooks
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s hooks/tests -p 'test_*.py'
+
+      - name: Test credential helper
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s shared/credentials/tests -p 'test_*.py'
+
+      - name: Check shell syntax
+        run: bash -n shared/credentials/secret shared/credentials/install.sh
+
+      - name: Check changed whitespace
+        shell: bash
         run: |
-          git config --global user.email "ci@mainframe.local"
-          git config --global user.name "mainframe-ci"
-
-      # The hook tests exercise the real Ruff and Oxlint binaries. Validator tests and
-      # the hub-page generator parse YAML; the skill validator also counts
-      # tokens. The OTLP receiver tests decode real protobuf batches, so the
-      # observatory's own requirements are installed here too. Install the
-      # verified test toolchain before any test discovers it.
-      - name: Install test and validator dependencies
-        run: |
-          pip install ruff==0.15.15 tiktoken pyyaml
-          pip install -r tools/telemetry-requirements.txt
-          npm install --global oxlint@1.67.0
-
-      - name: Hook test suite
-        run: |
-          fail=0
-          for t in tools/test_*.py; do
-            # test_build_hub_page needs pyyaml; it runs after Validator dependencies.
-            [ "$t" = "tools/test_build_hub_page.py" ] && continue
-            echo "::group::$t"
-            python3 "$t" || fail=1
-            echo "::endgroup::"
-          done
-          exit $fail
-
-      # The hub-page generator parses YAML frontmatter, so its test needs pyyaml
-      # from the shared test toolchain above.
-      - name: Hub page generator tests
-        run: python3 tools/test_build_hub_page.py
-
-      - name: Validate skills
-        run: python3 tools/validate-skill.py --all
-
-      - name: Validate agent profiles
-        run: python3 tools/validate-agent.py
-
-      - name: Validate agent-skill boundaries
-        run: python3 tools/validate-layers.py
-
-      # Root CLAUDE.md is gitignored (not in the checkout); validate the shipped one.
-      - name: Validate umbrella CLAUDE.md
-        run: python3 tools/validate-claude-md.py adapters/claude-code/export/CLAUDE.md
-
-      - name: Pi pilot tests
-        working-directory: adapters/pi
-        run: |
-          npm ci --ignore-scripts
-          npm run build
-          npm test
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.sha }}"
+          else
+            git diff-tree --check --no-commit-id -r "${{ github.sha }}"
+          fi

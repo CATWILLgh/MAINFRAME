@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "mainframe_root": null,
+  "target": {
+    "product": null,
+    "product_id": null,
+    "version": null,
+    "installation_method": null,
+    "desktop": null,
+    "cli": null,
+    "desktop_cli_share_configuration": null,
+    "global_paths": {}
+  },
+  "status_values": [
+    "pending",
+    "installed",
+    "unsupported"
+  ],
+  "components": {
+    "shared": {
+      "credentials": {
+        "source": "shared/credentials/secret",
+        "status": "pending"
+      }
+    },
+    "skills": {
+      "mainframe-secrets": {
+        "source": "skills/mainframe-secrets",
+        "status": "pending"
+      },
+      "mainframe-curl-requests": {
+        "source": "skills/mainframe-curl-requests",
+        "status": "pending"
+      },
+      "mainframe-infrastructure": {
+        "source": "skills/mainframe-infrastructure",
+        "status": "pending"
+      },
+      "mainframe-ops-app-server-safety": {
+        "source": "skills/mainframe-ops-app-server-safety",
+        "status": "pending"
+      },
+      "mainframe-project-harness": {
+        "source": "skills/mainframe-project-harness",
+        "status": "pending"
+      },
+      "mainframe-peer-work": {
+        "source": "skills/mainframe-peer-work",
+        "status": "pending"
+      },
+      "mainframe-consequential-review": {
+        "source": "skills/mainframe-consequential-review",
+        "status": "pending"
+      },
+      "mainframe-record-project-problem": {
+        "source": "skills/mainframe-record-project-problem",
+        "status": "pending"
+      },
+      "mainframe-harness-feedback": {
+        "source": "skills/mainframe-harness-feedback",
+        "status": "pending"
+      },
+      "mainframe-typescript-backend": {
+        "source": "skills/mainframe-typescript-backend",
+        "status": "pending"
+      },
+      "mainframe-python-backend": {
+        "source": "skills/mainframe-python-backend",
+        "status": "pending"
+      },
+      "mainframe-frontend": {
+        "source": "skills/mainframe-frontend",
+        "status": "pending"
+      },
+      "mainframe-research": {
+        "source": "skills/mainframe-research",
+        "status": "pending"
+      },
+      "mainframe-test-audit": {
+        "source": "skills/mainframe-test-audit",
+        "status": "pending"
+      }
+    },
+    "agents": {
+      "mainframe-typescript-backend-engineer": {
+        "source": "agents/mainframe-typescript-backend-engineer.md",
+        "status": "pending"
+      },
+      "mainframe-python-backend-engineer": {
+        "source": "agents/mainframe-python-backend-engineer.md",
+        "status": "pending"
+      },
+      "mainframe-react-frontend-engineer": {
+        "source": "agents/mainframe-react-frontend-engineer.md",
+        "status": "pending"
+      },
+      "mainframe-consequential-reviewer": {
+        "source": "agents/mainframe-consequential-reviewer.md",
+        "status": "pending"
+      },
+      "mainframe-researcher": {
+        "source": "agents/mainframe-researcher.md",
+        "status": "pending"
+      },
+      "mainframe-test-auditor": {
+        "source": "agents/mainframe-test-auditor.md",
+        "status": "pending"
+      }
+    },
+    "commands": {
+      "mainframe-init": {
+        "source": "commands/mainframe-init.md",
+        "status": "pending"
+      },
+      "project-skill": {
+        "source": "commands/project-skill.md",
+        "status": "pending"
+      },
+      "tickets-find": {
+        "source": "commands/tickets-find.md",
+        "status": "pending"
+      },
+      "tickets-refine": {
+        "source": "commands/tickets-refine.md",
+        "status": "pending"
+      },
+      "tickets-implement": {
+        "source": "commands/tickets-implement.md",
+        "status": "pending"
+      },
+      "tickets-verify": {
+        "source": "commands/tickets-verify.md",
+        "status": "pending"
+      }
+    },
+    "hooks": {
+      "destructive-operations": {
+        "source": "hooks/destructive-operations.py",
+        "status": "pending"
+      },
+      "secret-access": {
+        "source": "hooks/secret-access.py",
+        "status": "pending"
+      },
+      "rg-short-replace": {
+        "source": "hooks/rg-short-replace.py",
+        "status": "pending"
+      },
+      "commit-secrets": {
+        "source": "hooks/commit-secrets.py",
+        "status": "pending"
+      },
+      "code-quality": {
+        "source": "hooks/code-quality.py",
+        "status": "pending"
+      },
+      "fallow-quality": {
+        "source": "hooks/fallow-quality.py",
+        "status": "pending"
+      }
+    },
+    "mcp": {},
+    "plugins": {},
+    "runtime": {},
+    "settings": {},
+    "instructions": {
+      "global": {
+        "source": "instructions/global.md",
+        "status": "pending"
+      }
+    }
+  }
+}
