@@ -8,8 +8,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from installer.zcode import ZCode, HOOK_NAMES, SHELL_HOOK_NAMES, role_body, command_body
+from installer.zcode import (ZCode, HOOK_NAMES, SHELL_HOOK_NAMES,
+    _is_validated_hook_config_update, _legacy_hook_registration,
+    role_body, command_body)
 from installer.core import Conflict, transact, restore
+from installer.runtime import runtime_bin
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -101,10 +104,12 @@ class ZCodeInstallationTests(unittest.TestCase):
         })
         self.assertEqual(len(events['PreToolUse'][0]['hooks']), 1)
         self.assertEqual(events['PreToolUse'][0]['hooks'][0]['args'][-2], 'mainframe-pre-shell')
+        self.assertEqual(events['PreToolUse'][0]['hooks'][0]['args'][-3], str(runtime_bin(self.home)))
         self.assertEqual(events['PreToolUse'][1]['matcher'], 'Write|Edit')
         self.assertEqual(events['PreToolUse'][1]['hooks'][0]['args'][-2], 'mainframe-code-quality')
         self.assertEqual(events['PostToolUse'][0]['matcher'], 'Write|Edit')
         self.assertEqual(events['PostToolUse'][0]['hooks'][0]['args'][-2], 'mainframe-code-quality')
+        self.assertEqual(events['PostToolUse'][0]['hooks'][0]['args'][-3], str(runtime_bin(self.home)))
         self.assertEqual(events['PostToolUseFailure'][0]['matcher'], 'Write|Edit')
         self.assertEqual(events['PostToolUseFailure'][0]['hooks'][0]['args'][-2], 'mainframe-code-quality')
         self.assertNotIn('matcher', events['Stop'][0])
@@ -121,6 +126,30 @@ class ZCodeInstallationTests(unittest.TestCase):
             self.assertEqual(row['delivery'], 'unsupported')
             self.assertIn('Stop', row['reason'])
             self.assertNotIn('verification', row)
+
+    def test_bounded_update_accepts_only_the_exact_runtime_path_upgrade(self):
+        self.apply()
+        after = json.loads(self.adapter.config.read_text())
+        before = json.loads(self.adapter.config.read_text())
+        for groups in before['hooks']['events'].values():
+            for group in groups:
+                for index, callback in enumerate(group['hooks']):
+                    name = callback['args'][-2]
+                    group['hooks'][index] = _legacy_hook_registration(
+                        self.adapter.hooks, name, self.adapter.event_state,
+                        callback['timeoutMs'],
+                    )
+        self.assertTrue(_is_validated_hook_config_update(
+            (json.dumps(before) + '\n').encode(),
+            (json.dumps(after) + '\n').encode(),
+            self.adapter.hooks, self.adapter.event_state, runtime_bin(self.home),
+        ))
+        after['unrelated'] = True
+        self.assertFalse(_is_validated_hook_config_update(
+            (json.dumps(before) + '\n').encode(),
+            (json.dumps(after) + '\n').encode(),
+            self.adapter.hooks, self.adapter.event_state, runtime_bin(self.home),
+        ))
 
     def test_native_evidence_survives_non_rendering_adapter_change_and_clears_reload_handoff(self):
         self.apply()

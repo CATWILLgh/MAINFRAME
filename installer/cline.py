@@ -15,6 +15,7 @@ import sys
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
 from .shared import _instruction, inventory
 from .state import reconcile_state
+from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 
 HOOK_NAMES = (
@@ -22,6 +23,7 @@ HOOK_NAMES = (
     "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality",
 )
+RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 HOOK_FILES = {"PreToolUse": "tool_call", "PostToolUse": "tool_result"}
 TRANSPORT = "mainframe-cline-hook"
 # Cline file hooks have one synchronous pre-action event and one post-action
@@ -87,19 +89,24 @@ def cli_version(executable: str = "cline") -> str:
     return version
 
 
-def launcher(event: str, transport: str) -> bytes:
+def launcher(event: str, transport: str, analyzer_bin: Path | None = None) -> bytes:
     """Return a fail-open launcher that never imports a missing implementation."""
-    return (
-        "#!/bin/sh\n"
-        "# MAINFRAME Cline hook launcher. It fails open: an unavailable interpreter\n"
-        "# or transport produces no hook result instead of a finding.\n"
-        f'event={shlex.quote(event)}\n'
-        'base=$(dirname "$0") || exit 0\n'
-        f'transport="$base/{transport}"\n'
-        '[ -f "$transport" ] || exit 0\n'
-        'command -v python3 >/dev/null 2>&1 || exit 0\n'
-        'exec python3 -B "$transport" "$event" "$base/../data/mainframe/hook-state"\n'
-    ).encode()
+    environment = (
+        f'PATH={shlex.quote(str(analyzer_bin))}:"$PATH"\nexport PATH\n'
+        if analyzer_bin else ""
+    )
+    return "".join((
+        "#!/bin/sh\n",
+        "# MAINFRAME Cline hook launcher. It fails open: an unavailable interpreter\n",
+        "# or transport produces no hook result instead of a finding.\n",
+        f"event={shlex.quote(event)}\n",
+        environment,
+        'base=$(dirname "$0") || exit 0\n',
+        f'transport="$base/{transport}"\n',
+        '[ -f "$transport" ] || exit 0\n',
+        'command -v python3 >/dev/null 2>&1 || exit 0\n',
+        'exec python3 -B "$transport" "$event" "$base/../data/mainframe/hook-state"\n',
+    )).encode()
 
 
 def workflow_body(text: str, name: str) -> bytes:
@@ -250,7 +257,7 @@ class Cline:
         add(self.hooks / TRANSPORT, Path(__file__).with_name("cline_hook.py").read_bytes(),
             "hook transport", 0o700)
         for file_name, event_key in HOOK_FILES.items():
-            add(self.hooks / file_name, launcher(event_key, TRANSPORT), "hook transport", 0o755)
+            add(self.hooks / file_name, launcher(event_key, TRANSPORT, runtime_bin(self.home)), "hook transport", 0o755)
         add(self.index, (self.root / "shared/credentials/credentials-index.template.md").read_bytes(),
             "shared.credentials index", 0o600, True)
 

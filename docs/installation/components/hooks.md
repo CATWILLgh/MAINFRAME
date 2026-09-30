@@ -97,12 +97,19 @@ repeatedly inspecting only one fixed directory prefix can starve cleanup.
 ## Runtime support
 
 Ruff, Oxlint, Semgrep, and Fallow are dependencies of their listed hooks, not
-separate MAINFRAME components. Prepare them before the active hook's behavior
-probe. Reuse compatible installed distributions or install current official
-ones only when required. Preserve bounded execution, isolated scanner
+separate MAINFRAME components. The maintained installer prepares them before
+changing an active hook's files or registration. It reuses compatible resolved
+executables or installs the tested official distributions in shared
+MAINFRAME-owned user storage, then gives native hook launchers that explicit
+runtime path. Plan reports missing support without mutation; verify fails while
+required support is unavailable. Preserve bounded execution, isolated scanner
 configuration, disabled metrics and telemetry, and the catalog's representative
-checks. Do not install a tool's own hooks as a substitute for the
-MAINFRAME trigger contract.
+checks. Do not install a tool's own hooks as a substitute for the MAINFRAME
+trigger contract.
+
+Product uninstall retains this shared runtime because another MAINFRAME adapter
+may still use it. A later apply or verify rechecks every required executable and
+its exact tested version.
 
 ## Verify
 

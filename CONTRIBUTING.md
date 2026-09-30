@@ -59,6 +59,12 @@ and native modules such as [installer/zcode.py](installer/zcode.py),
 another implemented product actually uses it. Canonical texts and
 detectors remain single sources; never copy their bodies into the installer.
 
+[installer/runtime.py](installer/runtime.py) owns shared analyzer provisioning.
+Provision every dependency required by an active hook before changing its files
+or registration. Reuse a compatible executable or install the tested official
+distribution into MAINFRAME-owned user storage, expose it through the adapter's
+hook environment, and make verification fail when it is unavailable.
+
 Changes to native packaging, configuration, or lifecycle behavior require tests
 against disposable homes, including update, convergence, foreign-file
 preservation, interrupted writes, and removal. Use actual native probes for

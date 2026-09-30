@@ -58,6 +58,10 @@ class ClineInstallerTests(unittest.TestCase):
         self.assertEqual((self.adapter.hooks / "PreToolUse").stat().st_mode & 0o777, 0o755)
         self.assertEqual((self.adapter.hooks / "PostToolUse").stat().st_mode & 0o777, 0o755)
         self.assertEqual((self.adapter.hooks / "mainframe-cline-hook").stat().st_mode & 0o777, 0o700)
+        self.assertIn(
+            str(self.home / ".local/share/mainframe/runtime/bin"),
+            (self.adapter.hooks / "PreToolUse").read_text(),
+        )
         go_role = (self.adapter.agents / "mainframe-go-backend-engineer.yml").read_text()
         self.assertIn("skills: mainframe-go-backend", go_role)
         self.assertIn("server-side Go", go_role)

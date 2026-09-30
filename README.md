@@ -28,15 +28,18 @@ Runtimes verified for the canonical components:
 Optional runtime support used by specific hook capabilities:
 
 ![ripgrep: minimum tested 15.2.0](https://img.shields.io/badge/ripgrep-min%20tested%2015.2.0-CC342D)
-![Ruff: minimum tested 0.15.15](https://img.shields.io/badge/Ruff-min%20tested%200.15.15-D7FF64)
-![Oxlint: minimum tested 1.67.0](https://img.shields.io/badge/Oxlint-min%20tested%201.67.0-7C3AED)
-![Semgrep: minimum tested 1.164.0](https://img.shields.io/badge/Semgrep-min%20tested%201.164.0-00A9A5)
-![Fallow: minimum tested 2.92.1](https://img.shields.io/badge/Fallow-min%20tested%202.92.1-6B7280)
+![Ruff: pinned 0.15.15](https://img.shields.io/badge/Ruff-pinned%200.15.15-D7FF64)
+![Oxlint: pinned 1.67.0](https://img.shields.io/badge/Oxlint-pinned%201.67.0-7C3AED)
+![Semgrep: pinned 1.164.0](https://img.shields.io/badge/Semgrep-pinned%201.164.0-00A9A5)
+![Fallow: pinned 2.92.1](https://img.shields.io/badge/Fallow-pinned%202.92.1-6B7280)
 
 The maintained installer requires Python 3.11 or newer and is tested locally on
-Python 3.13.0. CI is configured to run its repository tests on Python 3.12; that
-run must pass before publication. The older Python badge above applies to
-the separately tested canonical components, not the new installer.
+Python 3.13.0. Active JavaScript analyzers also require `npm` when their tested
+distributions are not already available. Missing package infrastructure stops
+the apply before hook registration changes. CI runs the repository tests on
+Python 3.12 with the analyzer versions shown above; that run must pass before
+publication. The older Python badge applies to separately tested canonical
+components, not the installer.
 
 Python runs the canonical hooks and Python reconnaissance; Bash runs the
 credential helper; Git supports repository-aware safety; Node.js runs the
@@ -135,11 +138,16 @@ installable component identities and canonical sources.
 | Listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
 | [shared/credentials/mainframe-secret](shared/credentials/mainframe-secret) | The global `mainframe-secret` helper when a compatible command is not already present |
 
-Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are optional runtime
-support for listed hooks, not separate MAINFRAME components. An adapter uses an
-already available analyzer when the hook requires it and reports unavailable
-coverage when it is absent. The MAINFRAME installer does not install or update
-these third-party tools.
+Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are runtime support for
+listed hooks, not separate MAINFRAME components. Before registering an active
+hook, the installer reuses a compatible executable or provisions the tested
+official distribution in MAINFRAME's shared user runtime. Hook launchers use
+that managed runtime explicitly instead of depending on an app's inherited
+`PATH`. A dependency failure stops installation before hook files or
+registrations change.
+
+The shared runtime is retained when one product adapter is uninstalled because
+another installed MAINFRAME adapter may still use the same executables.
 
 Nothing else is product payload. In particular, the following stay in this
 repository and are never installed globally:

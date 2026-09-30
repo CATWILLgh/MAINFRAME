@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import plistlib
+import shlex
 import shutil
 import subprocess
 import sys
@@ -79,6 +80,11 @@ class AntigravityInstallationTests(unittest.TestCase):
         self.assertEqual(set(hooks), {"mainframe-adaptation"})
         self.assertEqual(set(hooks["mainframe-adaptation"]), {"PostInvocation", "Stop"})
         self.assertNotIn("PreToolUse", hooks["mainframe-adaptation"])
+        analyzer_path = str((self.home / ".local/share/mainframe/runtime/bin").resolve())
+        self.assertTrue(all(
+            any(token == f"PATH={analyzer_path}:$PATH" for token in shlex.split(row["command"]))
+            for rows in hooks["mainframe-adaptation"].values() for row in rows
+        ))
         self.assertTrue(self.adapter.hooks_config.exists())
         self.assertEqual(set(json.loads(self.adapter.hooks_config.read_text())), {"mainframe-adaptation"})
         self.assertIn("pre-tool timing is unavailable",

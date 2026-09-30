@@ -56,6 +56,10 @@ class MiniMaxInstallationTests(unittest.TestCase):
         })
         self.assertEqual(hooks["PreToolUse"][0]["matcher"], "bash|write|edit")
         self.assertEqual(hooks["PostToolUse"][0]["matcher"], "write|edit")
+        self.assertTrue(all(
+            "MAINFRAME_RUNTIME_BIN=" in handler["command"]
+            for groups in hooks.values() for group in groups for handler in group["hooks"]
+        ))
         state = json.loads(self.adapter.state_path.read_text())
         self.assertEqual(state["components"]["agents"]["mainframe-researcher"]["reason"], AGENT_REASON)
         self.assertEqual(state["components"]["agents"]["mainframe-go-backend-engineer"]["reason"], AGENT_REASON)

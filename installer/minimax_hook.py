@@ -391,6 +391,9 @@ def dispatch(data: dict, state: Path) -> dict | None:
 def main() -> None:
     if len(sys.argv) != 2: return
     try:
+        runtime_bin = os.environ.get("MAINFRAME_RUNTIME_BIN")
+        if runtime_bin and Path(runtime_bin).is_absolute():
+            os.environ["PATH"] = runtime_bin + os.pathsep + os.environ.get("PATH", "")
         state = _state_root(Path(sys.argv[1]))
         data = _read_payload(sys.stdin.buffer)
         if state is None or data is None: return

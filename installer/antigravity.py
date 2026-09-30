@@ -18,6 +18,7 @@ from .core import (Change, Conflict, digest, encode_json, migrate_disabled_marke
                    observed, regular_bytes, reconcile_files, retire_recorded_legacy_file)
 from .shared import inventory, _instruction
 from .state import reconcile_state
+from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 
 KNOWN_RUNTIME = "2.13.0"
@@ -25,6 +26,7 @@ HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality",
 )
+RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
     "rg-short-replace": "mainframe-rg-short-replace",
@@ -93,14 +95,16 @@ HOOK_SCOPE = (
 )
 
 
-def hook_command(event: str, bridge: Path, state: Path) -> str:
+def hook_command(event: str, bridge: Path, state: Path, analyzer_bin: Path | None = None) -> str:
     neutral = '{"decision":"stop"}' if event == "Stop" else "{}"
     command = " ".join(shlex.quote(value) for value in (
         str(Path(sys.executable).resolve()), "-B", str(bridge), event, str(state),
     ))
+    environment = f"PATH={shlex.quote(str(analyzer_bin))}:\"$PATH\" " if analyzer_bin else ""
     return (
         f"[ -f {shlex.quote(str(bridge))} ] || {{ printf '%s\\n' {shlex.quote(neutral)}; exit 0; }}; "
-        f"PYTHONDONTWRITEBYTECODE=1 {command} 2>/dev/null || printf '%s\\n' {shlex.quote(neutral)}"
+        + environment
+        + f"PYTHONDONTWRITEBYTECODE=1 {command} 2>/dev/null || printf '%s\\n' {shlex.quote(neutral)}"
     )
 
 
@@ -270,12 +274,12 @@ class Antigravity:
             "mainframe-adaptation": {
                 "PostInvocation": [{
                     "type": "command",
-                    "command": hook_command("PostInvocation", bridge, self.event_state),
+                    "command": hook_command("PostInvocation", bridge, self.event_state, runtime_bin(self.home)),
                     "timeout": 30,
                 }],
                 "Stop": [{
                     "type": "command",
-                    "command": hook_command("Stop", bridge, self.event_state),
+                    "command": hook_command("Stop", bridge, self.event_state, runtime_bin(self.home)),
                     "timeout": 10,
                 }],
             }

@@ -15,6 +15,7 @@ import sys
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
 from .shared import inventory
 from .state import reconcile_state
+from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 
 HOOK_NAMES = (
@@ -22,6 +23,7 @@ HOOK_NAMES = (
     "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality",
 )
+RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 COMMAND_REASON = (
     "MiniMax Code exposes Plugin Skills to both autonomous selection and explicit invocation; "
     "Plugin V1 has no explicit-only command capability."
@@ -68,12 +70,13 @@ def command_body(text: str, name: str) -> bytes:
     ).encode()
 
 
-def hook_command(python: Path) -> str:
-    return " ".join((
-        shlex.quote(str(python.resolve())), "-B",
-        '"${PLUGIN_ROOT}/scripts/mainframe_hook.py"',
-        '"${PLUGIN_DATA}"',
-    ))
+def hook_command(python: Path, analyzer_bin: Path | None = None) -> str:
+    values = ["/usr/bin/env"]
+    if analyzer_bin:
+        values.append("MAINFRAME_RUNTIME_BIN=" + str(analyzer_bin))
+    values.extend((str(python.resolve()), "-B"))
+    command = " ".join(shlex.quote(value) for value in values)
+    return command + ' "${PLUGIN_ROOT}/scripts/mainframe_hook.py" "${PLUGIN_DATA}"'
 
 
 class MiniMax:
@@ -157,22 +160,22 @@ class MiniMax:
             (self.root / "instructions/global.md").read_bytes(), "instructions.global")
         add(self.plugin / "hooks/hooks.json", encode_json({"hooks": {
             "SessionStart": [{"hooks": [{
-                "type": "command", "command": hook_command(self.python), "timeout": 5,
+                "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 5,
             }]}],
             "SubagentStart": [{"hooks": [{
-                "type": "command", "command": hook_command(self.python), "timeout": 5,
+                "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 5,
             }]}],
             "PreToolUse": [{"matcher": "bash|write|edit", "hooks": [{
-                "type": "command", "command": hook_command(self.python), "timeout": 10,
+                "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
             "PostToolUse": [{"matcher": "write|edit", "hooks": [{
-                "type": "command", "command": hook_command(self.python), "timeout": 10,
+                "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
             "Stop": [{"hooks": [{
-                "type": "command", "command": hook_command(self.python), "timeout": 10,
+                "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
             "SubagentStop": [{"hooks": [{
-                "type": "command", "command": hook_command(self.python), "timeout": 10,
+                "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
         }}), "native registrations")
         add(self.plugin / "icon.png", Path(__file__).with_name("assets").joinpath("mainframe-icon.png").read_bytes(),

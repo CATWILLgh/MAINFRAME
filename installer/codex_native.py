@@ -10,6 +10,7 @@ import time
 
 from .codex import HOOK_NAMES, PRE_SHELL_TRANSPORT, SHELL_HOOK_NAMES, hook_command, inventory
 from .core import Conflict
+from .runtime import runtime_bin
 
 
 class Native:
@@ -114,7 +115,9 @@ def summarize(adapter, source, skill_result, hook_result, cwd):
             result[category][name] = {"discovered": valid}
     for name in HOOK_NAMES:
         transport = PRE_SHELL_TRANSPORT if name in SHELL_HOOK_NAMES else name
-        command = hook_command(adapter.hooks, transport, adapter.event_state)
+        command = hook_command(
+            adapter.hooks, transport, adapter.event_state, runtime_bin(adapter.home)
+        )
         found = [h for h in hooks if h.get("command") == command]
         expected = (
             [

@@ -15,6 +15,7 @@ import tempfile
 
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, regular_bytes, reconcile_files, retire_recorded_legacy_file)
+from .runtime import CODE_QUALITY_TOOLS, runtime_bin
 from .shared import inventory, _instruction
 from .state import reconcile_state, set_component
 
@@ -23,6 +24,7 @@ CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality")
+RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
     "rg-short-replace": "mainframe-rg-short-replace",
@@ -63,8 +65,21 @@ def desktop_version(app: Path) -> str:
     return version
 
 
-def hook_registration(base: Path, name: str, state: Path, timeout_ms: int = 5000) -> dict:
+def hook_registration(base: Path, name: str, state: Path, timeout_ms: int = 5000,
+                      analyzer_bin: Path | None = None) -> dict:
     # The system-shell guard is stored in native config, not in a removable file.
+    script = ('[ -e "$1/.disabled-$4" ] && exit 0; '
+              '[ -f "$1/bridge.py" ] || exit 0; [ -x "$2" ] || exit 0; '
+              'PATH="$3:$PATH" PYTHONDONTWRITEBYTECODE=1 '
+              '"$2" -B "$1/bridge.py" "$4" "$5" 2>/dev/null || :')
+    return {"type": "process", "command": "/bin/sh", "args": ["-c", script, "mainframe-hook",
+            str(base), str(Path(sys.executable).resolve()), str(analyzer_bin or ""), name, str(state)],
+            "enabled": True, "timeoutMs": timeout_ms}
+
+
+def _legacy_hook_registration(base: Path, name: str, state: Path,
+                              timeout_ms: int = 5000) -> dict:
+    """Return the exact pre-runtime-path callback for bounded upgrades."""
     script = ('[ -e "$1/.disabled-$3" ] && exit 0; '
               '[ -f "$1/bridge.py" ] || exit 0; [ -x "$2" ] || exit 0; '
               'PYTHONDONTWRITEBYTECODE=1 "$2" -B "$1/bridge.py" "$3" "$4" 2>/dev/null || :')
@@ -73,7 +88,8 @@ def hook_registration(base: Path, name: str, state: Path, timeout_ms: int = 5000
             "enabled": True, "timeoutMs": timeout_ms}
 
 
-def _is_validated_hook_config_update(before: bytes, after: bytes) -> bool:
+def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, state: Path,
+                                     analyzer_bin: Path) -> bool:
     try:
         old = json.loads(before)
         new = json.loads(after)
@@ -94,17 +110,34 @@ def _is_validated_hook_config_update(before: bytes, after: bytes) -> bool:
             return False
         expected["hooks"]["events"]["PreToolUse"][0]["hooks"] = new_group["hooks"]
         changed = True
-    if old_start != new_start:
+    if old_start.get("matcher") != new_start.get("matcher"):
         if (
             old_start.get("matcher") != "startup|resume"
             or new_start.get("matcher") != "startup|clear|compact|resume"
-            or old_start.get("hooks") != new_start.get("hooks")
             or set(old_start) != {"matcher", "hooks"}
             or set(new_start) != {"matcher", "hooks"}
         ):
             return False
         expected["hooks"]["events"]["SessionStart"][0]["matcher"] = new_start["matcher"]
         changed = True
+    variants = {
+        ("PreToolUse", "Bash"): [(PRE_SHELL_TRANSPORT, 5000)],
+        ("PreToolUse", "Write|Edit"): [("mainframe-code-quality", 30000)],
+        ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000)],
+        ("PostToolUseFailure", "Write|Edit"): [("mainframe-code-quality", 30000)],
+        ("Stop", None): [("mainframe-code-quality", 60000)],
+        ("SessionStart", "startup|resume"): [("mainframe-destructive-operations", 5000)],
+        ("SessionStart", "startup|clear|compact|resume"): [("mainframe-destructive-operations", 5000)],
+    }
+    for event, groups in expected.get("hooks", {}).get("events", {}).items():
+        for group in groups:
+            for name, timeout in variants.get((event, group.get("matcher")), []):
+                old_callback = _legacy_hook_registration(base, name, state, timeout)
+                new_callback = hook_registration(base, name, state, timeout, analyzer_bin)
+                for index, callback in enumerate(group.get("hooks", [])):
+                    if callback == old_callback:
+                        group["hooks"][index] = new_callback
+                        changed = True
     return changed and expected == new
 
 
@@ -395,17 +428,24 @@ class ZCode:
         owned = {}
         if not remove:
             quality = lambda timeout: hook_registration(
-                self.hooks, "mainframe-code-quality", self.event_state, timeout
+                self.hooks, "mainframe-code-quality", self.event_state, timeout,
+                runtime_bin(self.home),
             )
             desired_groups = {
                 "PreToolUse": [
-                    {"matcher": "Bash", "hooks": [hook_registration(self.hooks, PRE_SHELL_TRANSPORT, self.event_state)]},
+                    {"matcher": "Bash", "hooks": [hook_registration(
+                        self.hooks, PRE_SHELL_TRANSPORT, self.event_state,
+                        analyzer_bin=runtime_bin(self.home),
+                    )]},
                     {"matcher": "Write|Edit", "hooks": [quality(30000)]},
                 ],
                 "PostToolUse": [{"matcher": "Write|Edit", "hooks": [quality(60000)]}],
                 "PostToolUseFailure": [{"matcher": "Write|Edit", "hooks": [quality(30000)]}],
                 "Stop": [{"hooks": [quality(60000)]}],
-                "SessionStart": [{"matcher": "startup|clear|compact|resume", "hooks": [hook_registration(self.hooks, "mainframe-destructive-operations", self.event_state)]}],
+                "SessionStart": [{"matcher": "startup|clear|compact|resume", "hooks": [hook_registration(
+                    self.hooks, "mainframe-destructive-operations", self.event_state,
+                    analyzer_bin=runtime_bin(self.home),
+                )]}],
             }
             expected_callbacks = [h for groups in desired_groups.values() for group in groups for h in group["hooks"]]
             for event, candidates in events.items():
@@ -693,7 +733,10 @@ class ZCode:
                 continue
             if (change.component == "native registrations" and change.before is not None
                     and change.after is not None and change.before_mode == change.mode
-                    and _is_validated_hook_config_update(change.before, change.after)):
+                    and _is_validated_hook_config_update(
+                        change.before, change.after, self.hooks, self.event_state,
+                        runtime_bin(self.home),
+                    )):
                 continue
             if (not change.component.startswith("skills.") or not record
                     or change.before is None or change.after is None

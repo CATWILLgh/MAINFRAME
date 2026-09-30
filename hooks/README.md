@@ -321,11 +321,11 @@ time limits, version checks disabled, and metrics off. Semgrep findings are
 review advice only and are never persisted as completion blockers.
 
 `ruff`, `oxlint`, and `semgrep` are direct runtime support for this one hook,
-not separate hook components. During adaptation, reuse compatible resolved
-executables or install their current official distributions through the
-target's supported global method. Prove each with a harmless representative
-sample and record a precise pending blocker or unsupported limitation when a
-required scanner cannot be supplied. A missing, timed-out, malformed, or failed
+not separate hook components. During adaptation, reuse executables at the
+tested versions or install those exact official distributions through the
+maintained shared runtime. Prove each with a harmless representative sample and
+stop installation before hook activation when a required scanner cannot be
+supplied. A missing, timed-out, malformed, or failed
 scanner must leave the action and completion unblocked and emit only its
 deduplicated unavailable-check advisory.
 
@@ -336,7 +336,7 @@ detector. It complements the per-edit `mainframe-code-quality` checks with Fallo
 cross-file structural view; it does not share the completion guard, create a
 second blocking gate, or own project architecture policy.
 
-Reuse or install a compatible current official Fallow distribution and verify
+Reuse or install the tested official Fallow distribution and verify
 that its `audit` command supports `--diff-stdin`, `--gate new-only`, JSON output,
 an explicit project root, and `--no-cache`. Set `FALLOW_TELEMETRY=off`, the
 stronger `FALLOW_TELEMETRY_DISABLED=1` kill switch, and

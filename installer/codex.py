@@ -20,6 +20,7 @@ from .core import (Change, Conflict, digest, encode_json, migrate_disabled_marke
                    observed, reconcile_files, regular_bytes, retire_recorded_legacy_file)
 from .shared import BEGIN, END, _instruction, inventory
 from .state import component_keys, reconcile_state, set_component
+from .runtime import CODE_QUALITY_TOOLS, runtime_bin
 
 SHELL_HOOK_NAMES = (
     "mainframe-secret-access",
@@ -29,6 +30,7 @@ SHELL_HOOK_NAMES = (
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality")
+RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
     "rg-short-replace": "mainframe-rg-short-replace",
@@ -89,9 +91,19 @@ def native_version(executable: str | None) -> str | None:
     return match.group(1) if result.returncode == 0 and match else None
 
 
-def hook_command(base: Path, name: str, state: Path) -> str:
+def hook_command(base: Path, name: str, state: Path, analyzer_bin: Path | None = None) -> str:
     # This guard is in the registered command itself. It stays callable even
     # after Codex caches it and every MAINFRAME-owned file has been removed.
+    script = ('[ -e "$1/.disabled-$3" ] && exit 0; '
+              '[ -f "$1/bridge.py" ] || exit 0; '
+              '[ -x "$2" ] || exit 0; '
+              'PATH="${5:+$5:}$PATH" PYTHONDONTWRITEBYTECODE=1 "$2" -B "$1/bridge.py" "$3" "$4" 2>/dev/null || :')
+    return shlex.join(["/bin/sh", "-c", script, "mainframe-hook", str(base),
+                       str(Path(sys.executable).resolve()), name, str(state),
+                       str(analyzer_bin) if analyzer_bin else ""])
+
+
+def _legacy_hook_command(base: Path, name: str, state: Path) -> str:
     script = ('[ -e "$1/.disabled-$3" ] && exit 0; '
               '[ -f "$1/bridge.py" ] || exit 0; '
               '[ -x "$2" ] || exit 0; '
@@ -104,8 +116,10 @@ def _commands(group: dict) -> set[str]:
     return {hook.get("command", "") for hook in group.get("hooks", []) if isinstance(hook, dict)}
 
 
-def _is_stop_context_limit_repair(change: Change, previous: dict) -> bool:
-    """Accept only removal of the invalid limit from one owned Stop handler."""
+def _is_validated_hook_registration_update(change: Change, previous: dict,
+                                           base: Path, state: Path,
+                                           analyzer_bin: Path) -> bool:
+    """Accept exact owned runtime-path migration and Stop schema repair."""
     if change.before is None or change.after is None:
         return False
     try:
@@ -115,20 +129,42 @@ def _is_stop_context_limit_repair(change: Change, previous: dict) -> bool:
         return False
     expected = deepcopy(before)
     stop_groups = expected.get("hooks", {}).get("Stop", []) if isinstance(expected, dict) else []
-    prior_groups = previous.get("hook_groups", {}).get("Stop", [])
-    owned_commands = {command for group in prior_groups for command in _commands(group)}
-    removed = 0
+    all_prior_groups = previous.get("hook_groups", {})
+    owned_commands = {
+        command for groups in all_prior_groups.values()
+        for group in groups for command in _commands(group)
+    }
+    replacements = {
+        _legacy_hook_command(base, transport, state):
+        hook_command(base, transport, state, analyzer_bin)
+        for transport in (PRE_SHELL_TRANSPORT, "mainframe-code-quality")
+    }
+    changed = 0
     if not isinstance(stop_groups, list):
         return False
+    for event, groups in expected.get("hooks", {}).items():
+        if not isinstance(groups, list):
+            return False
+        for group in groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks", []), list):
+                return False
+            for handler in group.get("hooks", []):
+                if not isinstance(handler, dict):
+                    return False
+                command = handler.get("command")
+                if command in replacements and command in owned_commands:
+                    handler["command"] = replacements[command]
+                    changed += 1
     for group in stop_groups:
         if not isinstance(group, dict) or not isinstance(group.get("hooks", []), list):
             return False
         for handler in group.get("hooks", []):
-            if (isinstance(handler, dict) and handler.get("command") in owned_commands
+            if (isinstance(handler, dict)
+                    and handler.get("command") in {*owned_commands, *replacements.values()}
                     and handler.get("additionalContextLimit") == 6000):
                 handler.pop("additionalContextLimit")
-                removed += 1
-    return removed == 1 and expected == after
+                changed += 1
+    return changed > 0 and expected == after
 
 
 def merge_hooks(raw: bytes | None, desired: dict, prior: dict, base: Path):
@@ -415,16 +451,16 @@ class Codex:
         changes.append(Change.from_snapshot(instruction_path, instruction_snapshot, instruction,
                        mode=instruction_snapshot[1] or 0o600, component="instructions.global"))
         desired_hooks = {} if remove else {"PreToolUse": [
-            {"matcher": "^Bash$", "hooks": [{"type": "command", "command": hook_command(self.hooks, PRE_SHELL_TRANSPORT, self.event_state),
+            {"matcher": "^Bash$", "hooks": [{"type": "command", "command": hook_command(self.hooks, PRE_SHELL_TRANSPORT, self.event_state, runtime_bin(self.home)),
               "timeout": 5, "additionalContextLimit": 6000}]},
             {"matcher": "^apply_patch$", "hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state),
+              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180, "additionalContextLimit": 6000}]}],
         "PostToolUse": [{"matcher": "^apply_patch$", "hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state),
+              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180, "additionalContextLimit": 6000}]}],
         "Stop": [{"hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state),
+              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180}]}]}
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
@@ -572,7 +608,11 @@ class Codex:
                     or change.before_mode != change.mode):
                 raise Conflict("Content update cannot create, remove, or change file modes: " + str(change.path))
             component = change.component
-            if component == "hook registration" and _is_stop_context_limit_repair(change, previous):
+            if (component == "hook registration"
+                    and _is_validated_hook_registration_update(
+                        change, previous, self.hooks, self.event_state,
+                        runtime_bin(self.home),
+                    )):
                 continue
             if component == "instructions.global":
                 if previous.get("instruction", {}).get("path") != str(change.path):

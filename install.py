@@ -19,8 +19,10 @@ if os.name != "posix":
     print('{"error": "This installer currently targets macOS and Linux."}', file=sys.stderr)
     raise SystemExit(2)
 
-from installer.codex import Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES, desktop_version, native_version
+from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES,
+                             RUNTIME_TOOLS, desktop_version, native_version)
 from installer.core import Conflict, installation_lock, restore, transact
+from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
 
 
 def show(report, details=False):
@@ -37,6 +39,19 @@ def show(report, details=False):
         report["components_changed"] = {name: {"files": group["files"], "actions": sorted(group["actions"]),
             "destination": os.path.commonpath(group["paths"])} for name, group in grouped.items()}
     print(json.dumps(report, indent=2))
+
+
+def add_runtime_status(report, adapter, tools):
+    support = runtime_status(adapter.home, tools)
+    report["runtime_support"] = support
+    return support
+
+
+def provision_runtime(report, adapter, tools, hook=None):
+    selected = tools_for_hook(tools, hook)
+    support = ensure_runtime(adapter.home, selected)
+    report["runtime_support"] = support
+    return support
 
 
 def main(argv=None):
@@ -107,11 +122,12 @@ def main(argv=None):
     adapter = Codex(root, args.home, codex_home, version, surface=args.surface)
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
+        support = add_runtime_status(report, adapter, RUNTIME_TOOLS)
         if version in CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = "existing-installation bounded update; content changes and validated Stop schema repair only"
         if args.action == "verify":
-            report["structure_matches"] = not report["changes"]
+            report["structure_matches"] = not report["changes"] and support["ready"]
             if args.native:
                 if not executable:
                     raise Conflict("Specify the installed Codex executable for native discovery.")
@@ -132,10 +148,13 @@ def main(argv=None):
             restore(adapter.journal, adapter.allowed)
             report = {"recovered": True, "note": "Prior file state restored; recheck native behavior before continuing."}
         elif args.action in ("disable", "enable"):
+            report = {}
+            if args.action == "enable":
+                provision_runtime(report, adapter, RUNTIME_TOOLS, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable":
                 time.sleep(6)  # Registered synchronous hooks have a five-second native timeout.
-            report = {"hook_control": args.action, "hooks": [args.hook] if args.hook else list(HOOK_NAMES)}
+            report.update({"hook_control": args.action, "hooks": [args.hook] if args.hook else list(HOOK_NAMES)})
         else:
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
@@ -145,6 +164,8 @@ def main(argv=None):
             if not remove and version in CONTENT_UPDATE_RUNTIMES:
                 adapter.validate_content_update(changes, old_receipt)
                 report["delivery_mode"] = "existing-installation bounded update; content changes and validated Stop schema repair only"
+            if not remove:
+                provision_runtime(report, adapter, RUNTIME_TOOLS)
             if remove and old_receipt:
                 transact(adapter.control(False, None), adapter.journal, adapter.allowed)
                 time.sleep(6)
@@ -168,6 +189,7 @@ def main(argv=None):
 def zcode_main(args, root, parser):
     from installer.zcode import (ZCode, KNOWN_RUNTIME as ZCODE_RUNTIME,
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
+        RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
         desktop_version as zcode_version)
     if (args.codex_home or args.gemini_home or args.antigravity_app or args.minimax_home
             or args.minimax_app or args.cline_home or args.cline_app
@@ -192,10 +214,11 @@ def zcode_main(args, root, parser):
     adapter = ZCode(root, args.home, args.zcode_home, version, args.surface, args.adopt_existing)
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
+        support = add_runtime_status(report, adapter, ZCODE_RUNTIME_TOOLS)
         if version in ZCODE_CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
-        if args.action == "verify": report["structure_matches"] = not report["changes"]
+        if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
     with installation_lock(adapter.lock_path):
@@ -203,9 +226,12 @@ def zcode_main(args, root, parser):
             restore(adapter.journal, adapter.allowed)
             report = {"recovered": True}
         elif args.action in ("disable", "enable"):
+            report = {}
+            if args.action == "enable":
+                provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable": time.sleep(6)
-            report = {"hook_control": args.action, "hooks": [args.hook] if args.hook else list(ZCODE_HOOK_NAMES)}
+            report.update({"hook_control": args.action, "hooks": [args.hook] if args.hook else list(ZCODE_HOOK_NAMES)})
         else:
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
@@ -214,6 +240,8 @@ def zcode_main(args, root, parser):
             if not remove and version in ZCODE_CONTENT_UPDATE_RUNTIMES:
                 adapter.validate_content_update(changes, previous)
                 report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
+            if not remove:
+                provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS)
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
                 time.sleep(6)
@@ -245,7 +273,8 @@ def antigravity_runtime(args, version_reader):
 def antigravity_main(args, root, parser):
     from installer.antigravity import (
         Antigravity, HOOK_NAMES as ANTIGRAVITY_HOOK_NAMES,
-        KNOWN_RUNTIME as ANTIGRAVITY_RUNTIME, desktop_version as antigravity_version,
+        KNOWN_RUNTIME as ANTIGRAVITY_RUNTIME, RUNTIME_TOOLS as ANTIGRAVITY_RUNTIME_TOOLS,
+        desktop_version as antigravity_version,
     )
     if (args.codex_home or args.zcode_home or args.zcode_app or args.adopt_existing
             or args.minimax_home or args.minimax_app or args.cline_home or args.cline_app
@@ -257,8 +286,9 @@ def antigravity_main(args, root, parser):
     adapter = Antigravity(root, args.home, args.gemini_home, version, args.surface)
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
+        support = add_runtime_status(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
         if args.action == "verify":
-            report["structure_matches"] = not report["changes"]
+            report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
     if args.action == "apply" and version != ANTIGRAVITY_RUNTIME:
@@ -268,16 +298,21 @@ def antigravity_main(args, root, parser):
             restore(adapter.journal, adapter.allowed)
             report = {"recovered": True}
         elif args.action in ("disable", "enable"):
+            report = {}
+            if args.action == "enable":
+                provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable":
                 time.sleep(6)
-            report = {"hook_control": args.action,
-                      "hooks": [args.hook] if args.hook else list(ANTIGRAVITY_HOOK_NAMES)}
+            report.update({"hook_control": args.action,
+                           "hooks": [args.hook] if args.hook else list(ANTIGRAVITY_HOOK_NAMES)})
         else:
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
             if report.get("instruction_review"):
                 raise Conflict(report["instruction_review"])
+            if not remove:
+                provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
             previous = adapter.receipt()
             if not remove and report.get("retiring_hooks"):
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
@@ -307,6 +342,7 @@ def antigravity_main(args, root, parser):
 def minimax_main(args, root, parser):
     from installer.minimax import (
         MiniMax, HOOK_NAMES as MINIMAX_HOOK_NAMES,
+        RUNTIME_TOOLS as MINIMAX_RUNTIME_TOOLS,
         desktop_version as minimax_version,
     )
     if (args.codex_home or args.zcode_home or args.zcode_app or args.gemini_home
@@ -325,7 +361,8 @@ def minimax_main(args, root, parser):
     adapter = MiniMax(root, args.home, args.minimax_home, version, args.surface)
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
-        if args.action == "verify": report["structure_matches"] = not report["changes"]
+        support = add_runtime_status(report, adapter, MINIMAX_RUNTIME_TOOLS)
+        if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
     with installation_lock(adapter.lock_path):
@@ -333,13 +370,18 @@ def minimax_main(args, root, parser):
             restore(adapter.journal, adapter.allowed)
             report = {"recovered": True}
         elif args.action in ("disable", "enable"):
+            report = {}
+            if args.action == "enable":
+                provision_runtime(report, adapter, MINIMAX_RUNTIME_TOOLS, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable": time.sleep(11)
-            report = {"hook_control": args.action,
-                      "hooks": [args.hook] if args.hook else list(MINIMAX_HOOK_NAMES)}
+            report.update({"hook_control": args.action,
+                           "hooks": [args.hook] if args.hook else list(MINIMAX_HOOK_NAMES)})
         else:
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
+            if not remove:
+                provision_runtime(report, adapter, MINIMAX_RUNTIME_TOOLS)
             previous = adapter.receipt()
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
@@ -360,6 +402,7 @@ def minimax_main(args, root, parser):
 def cline_main(args, root, parser):
     from installer.cline import (
         Cline, HOOK_NAMES as CLINE_HOOK_NAMES,
+        RUNTIME_TOOLS as CLINE_RUNTIME_TOOLS,
         cli_version as cline_cli_version, desktop_version as cline_desktop_version,
     )
     if (args.codex_home or args.zcode_home or args.zcode_app or args.gemini_home
@@ -378,8 +421,9 @@ def cline_main(args, root, parser):
     adapter = Cline(root, args.home, args.cline_home, version, args.surface)
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
+        support = add_runtime_status(report, adapter, CLINE_RUNTIME_TOOLS)
         if args.action == "verify":
-            report["structure_matches"] = not report["changes"]
+            report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
     with installation_lock(adapter.lock_path):
@@ -387,12 +431,17 @@ def cline_main(args, root, parser):
             restore(adapter.journal, adapter.allowed)
             report = {"recovered": True}
         elif args.action in ("disable", "enable"):
+            report = {}
+            if args.action == "enable":
+                provision_runtime(report, adapter, CLINE_RUNTIME_TOOLS, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
-            report = {"hook_control": args.action,
-                      "hooks": [args.hook] if args.hook else list(CLINE_HOOK_NAMES)}
+            report.update({"hook_control": args.action,
+                           "hooks": [args.hook] if args.hook else list(CLINE_HOOK_NAMES)})
         else:
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
+            if not remove:
+                provision_runtime(report, adapter, CLINE_RUNTIME_TOOLS)
             previous = adapter.receipt()
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)

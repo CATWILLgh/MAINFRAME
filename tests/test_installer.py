@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -23,6 +24,7 @@ from installer.core import Change, Conflict, installation_lock, observed, restor
 from installer import core
 from installer import codex
 from installer.codex_native import summarize
+from installer.runtime import runtime_bin
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -97,6 +99,9 @@ class InstallationTests(unittest.TestCase):
         bash = [group for group in native_hooks["PreToolUse"] if group.get("matcher") == "^Bash$"]
         self.assertEqual(len(bash), 1)
         self.assertIn(PRE_SHELL_TRANSPORT, bash[0]["hooks"][0]["command"])
+        self.assertEqual(
+            shlex.split(bash[0]["hooks"][0]["command"])[-1], str(runtime_bin(self.home))
+        )
         self.assertNotIn("additionalContextLimit", native_hooks["Stop"][0]["hooks"][0])
         self.assertEqual(native_hooks["PostToolUse"][0]["hooks"][0]["additionalContextLimit"], 6000)
 
@@ -812,6 +817,43 @@ class InstallationTests(unittest.TestCase):
         )
         with self.assertRaises(Conflict):
             self.adapter.validate_content_update([bad], receipt)
+
+    def test_prerelease_upgrades_only_owned_hook_commands_to_managed_runtime(self):
+        self.adapter.surface = "desktop"
+        self.install()
+        hook_path = self.adapter.codex / "hooks.json"
+        hooks = json.loads(hook_path.read_bytes())
+        receipt = self.adapter.receipt()
+        replacements = {
+            codex.hook_command(
+                self.adapter.hooks, transport, self.adapter.event_state,
+                runtime_bin(self.home),
+            ): codex._legacy_hook_command(
+                self.adapter.hooks, transport, self.adapter.event_state,
+            )
+            for transport in (codex.PRE_SHELL_TRANSPORT, "mainframe-code-quality")
+        }
+        for source in (hooks["hooks"], receipt["hook_groups"]):
+            for groups in source.values():
+                for group in groups:
+                    for handler in group["hooks"]:
+                        if handler.get("command") in replacements:
+                            handler["command"] = replacements[handler["command"]]
+        hook_path.write_bytes(json.dumps(hooks, indent=2).encode() + b"\n")
+        self.adapter.receipt_path.write_bytes(json.dumps(receipt, indent=2).encode() + b"\n")
+        self.adapter.version = "0.154.0-alpha.6.2"
+
+        changes, _ = self.adapter.plan(instructions_reviewed=True)
+        registration = next(change for change in changes if change.component == "hook registration")
+        self.adapter.validate_content_update(changes, receipt)
+        upgraded = json.loads(registration.after)
+        commands = {
+            handler["command"]
+            for groups in upgraded["hooks"].values()
+            for group in groups for handler in group["hooks"]
+        }
+        self.assertTrue(commands.isdisjoint(replacements.values()))
+        self.assertTrue(set(replacements).issubset(commands))
 
     def test_content_update_rejects_packaging_and_permission_changes(self):
         self.adapter.surface = "desktop"
