@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -8,6 +9,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
+
+from scanner_fixtures import scanner_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +30,11 @@ class ClineHookTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="mainframe-cline-hook-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
+        self.path_patch = mock.patch.dict(
+            os.environ, {"PATH": scanner_path(self.root)}
+        )
+        self.path_patch.start()
+        self.addCleanup(self.path_patch.stop)
         self.hooks = self.root / "hooks"
         self.detectors = self.hooks / "detectors"
         self.detectors.mkdir(parents=True)

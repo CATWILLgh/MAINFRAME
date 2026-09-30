@@ -1,11 +1,14 @@
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 from installer import minimax_hook
+from scanner_fixtures import scanner_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +19,11 @@ class MiniMaxHookTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="mainframe-minimax-hook-")
         self.addCleanup(self.temporary.cleanup)
         base = Path(self.temporary.name).resolve()
+        self.path_patch = mock.patch.dict(
+            os.environ, {"PATH": scanner_path(base)}
+        )
+        self.path_patch.start()
+        self.addCleanup(self.path_patch.stop)
         self.plugin = base / "plugin"
         (self.plugin / "hooks/detectors").mkdir(parents=True)
         (self.plugin / "instructions").mkdir()
