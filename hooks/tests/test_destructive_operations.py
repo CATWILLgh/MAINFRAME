@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "destructive-operations.py"
+SOURCE = Path(__file__).resolve().parents[1] / "mainframe-destructive-operations.py"
 SPEC = importlib.util.spec_from_file_location("destructive_operations", SOURCE)
 assert SPEC is not None and SPEC.loader is not None
 DETECTOR = importlib.util.module_from_spec(SPEC)
@@ -102,6 +102,22 @@ class DestructiveOperationsTests(unittest.TestCase):
     def test_directory_change_does_not_obscure_an_absolute_root(self) -> None:
         self.assertIn("filesystem root", self.decide("cd child && rm -rf /") or "")
         self.assertIsNone(self.decide(f"cd child && rm -rf {self.outside}"))
+
+    def test_nested_shell_after_cd_checks_actual_recursive_targets(self) -> None:
+        for command in (
+            "cd child && sh -c 'rm artifact.txt'",
+            "cd child && sh -c 'printf \"rm -rf /\"'",
+            f"cd child && sh -c 'rm -rf {self.outside}'",
+        ):
+            with self.subTest(command=command):
+                self.assertIsNone(self.decide(command))
+        self.assertIn(
+            "filesystem root", self.decide("cd child && sh -c 'rm -rf /'") or ""
+        )
+        self.assertIn(
+            "working-directory change",
+            self.decide("cd child && sh -c 'rm -rf ../project'") or "",
+        )
 
     def test_symlink_operand_matches_rm_traversal_behavior(self) -> None:
         external_link = self.project / "external-link"
@@ -226,6 +242,31 @@ class DestructiveOperationsTests(unittest.TestCase):
             DETECTOR.decision_reason("rm -rf .", "", str(self.project), str(self.home))
         with self.assertRaises(ValueError):
             DETECTOR.decision_reason("rm -rf .", str(self.project), "", str(self.home))
+
+    def test_context_free_binding_keeps_only_workdir_independent_guards(self) -> None:
+        cases = {
+            "rm -rf /": "filesystem root",
+            "rm -rf $HOME": "home root",
+            "git reset --hard": "hard reset",
+            "cd child && rm -rf .": "working-directory change",
+            "sh -c 'git push --force origin main'": "Force or mirror push",
+        }
+        for command, expected in cases.items():
+            with self.subTest(command=command):
+                self.assertIn(
+                    expected,
+                    DETECTOR.context_free_decision_reason(command, str(self.home)) or "",
+                )
+        for command in (
+            "rm -rf .",
+            f"rm -rf {self.project}",
+            "rm -rf child",
+            "git status --short",
+        ):
+            with self.subTest(command=command):
+                self.assertIsNone(
+                    DETECTOR.context_free_decision_reason(command, str(self.home))
+                )
 
     def test_malformed_shell_text_defers_to_native_permissions(self) -> None:
         self.assertIsNone(self.decide("rm -rf 'unterminated"))

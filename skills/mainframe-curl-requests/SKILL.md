@@ -1,6 +1,6 @@
 ---
 name: mainframe-curl-requests
-description: Build and run bounded HTTP(S) requests with curl while preserving request authority, credential safety, time limits, response evidence, and safe retry and redirect behavior. Use for terminal endpoint checks, API verification, health checks, and URL-based uploads or downloads when no purpose-built client provides the same evidence more safely.
+description: Run bounded HTTP(S) requests with curl when no narrower client can provide the needed evidence.
 ---
 
 # Bounded curl requests
@@ -57,11 +57,12 @@ application behavior.
 
 ## Authentication and output
 
-Use `mainframe-secrets` for the central credential catalog and protected value
-delivery. Follow the exact authentication scheme recorded for the resolved
+When authentication is needed, use `mainframe-secrets` for credential resolution
+and protected delivery. Public unauthenticated requests need no credential lookup.
+Follow the exact authentication scheme recorded for the resolved
 service; never assume Bearer authentication.
 
-Prefer native authentication or process-scoped `secret run` delivery. Do not
+Prefer native authentication or process-scoped `mainframe-secret run` delivery. Do not
 show the expanded secret-bearing command. Never read a credential file such as
 `.netrc`, even when curl may consume it natively.
 

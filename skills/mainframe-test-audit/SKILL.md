@@ -1,6 +1,6 @@
 ---
 name: mainframe-test-audit
-description: Audit an existing test system for meaningful regression coverage, reliability, and execution cost. Use when a test audit is requested or when observed flakiness, false confidence, hidden cost, or a material coverage gap makes test-system quality the actual problem. Do not use for routine implementation, writing or fixing tests, final product acceptance, or general code review.
+description: Audit test quality when requested or when coverage, reliability, or cost is an evidenced problem. Excludes routine test work and product acceptance.
 ---
 
 # Test-system audit
@@ -53,7 +53,7 @@ Do not author, rewrite, weaken, suppress, or repair tests, source, fixtures, sna
 
 Run an existing focused or fast check only when it supplies evidence needed by the audit. Inspect the exact command, lifecycle scripts, configuration, setup, fixtures, destinations, and external effects first. Do not install dependencies, start services or containers, update snapshots, use a fix mode, or invoke a deployed environment unless that action is explicitly included in the supplied authority and the required environment is deliberately prepared.
 
-Run a broad or expensive suite only when measuring or evaluating that suite is part of the audit. Use the project's recorded infrastructure boundary; do not assume that a service is disposable or permitted from its technology or location alone. Never retry until green and call that reliability evidence.
+Run a broad or expensive suite only when measuring or evaluating that suite is part of the audit. Use the infrastructure boundary established by the effective instructions and current authority, and verify that the target satisfies its conditions; do not assume that a service is disposable or permitted from its technology or location alone. Never retry until green and call that reliability evidence.
 
 ## Return actionable findings
 

@@ -1,6 +1,6 @@
 ---
 name: mainframe-python-backend
-description: Develop, debug, review, or test server-side Python in FastAPI, Django, Flask, and other established services. Use proactively for backend APIs, business rules, persistence, workers, realtime behavior, server integrations, and focused backend tests. Do not use for data or ML pipelines, substantial client-only UI, Node.js services, or infrastructure ownership.
+description: Develop, debug, review, or test server-side Python services. Excludes data or ML pipelines, client UI, Node.js, and infrastructure.
 ---
 
 # Python backend engineering
@@ -9,9 +9,9 @@ Apply this method whenever the active work matches the description, whether you 
 
 ## Establish the active server boundary
 
-Identify the nearest Python package that owns the affected behavior. Run the bounded [recon script](scripts/recon.py) against that explicit package root, or follow [manual reconnaissance](references/recon.md). Treat the report as routing evidence, not as a decision engine: declared dependencies, filenames, and repository names do not prove the active runtime path.
+Identify the package that owns the affected behavior. If ownership or runtime wiring is unclear, use the bounded [recon script](scripts/recon.py) or [manual reconnaissance](references/recon.md) for that package. Reuse current inspected evidence; declared dependencies and filenames do not prove the active runtime path.
 
-Trace the requested behavior through its real entrypoint, runtime validation, business rules, data or external boundary, side effects, callers, and observable output. Inspect the effective project instructions and use only the infrastructure allowed by the project layer.
+Trace the requested behavior through its real entrypoint, runtime validation, business rules, data or external boundary, side effects, callers, and observable output. Inspect the effective project instructions and use only infrastructure authorized by effective instructions or the immediate caller.
 
 Several frameworks, validators, ORMs, workers, or test runners may legitimately coexist. Resolve ownership from imports, registration, configuration, entrypoints, runtime wiring, and affected files. Surface a decision only when evidence cannot resolve a product, business, data, infrastructure, permission, or authority choice with material consequences.
 
@@ -43,7 +43,7 @@ Verify installed versions before relying on version-sensitive behavior. Prefer t
 
 Make the smallest complete change across every affected location inside the assigned boundary. Keep non-trivial business rules independent of transport when the established architecture supports that separation. Validate untrusted data at the real runtime boundary, authorize the concrete action and resource server-side, and make transactions, retries, idempotency, context cleanup, cache invalidation, and side effects explicit when correctness depends on them.
 
-Use the project's native commands and the smallest faithful failing evidence when a behavior change can be demonstrated before implementation. Then run the focused proof and the nearest relevant fast checks that protect the changed risk. Use a real database, broker, storage service, browser, or deployed boundary only when its semantics are the risk and the effective project instructions and current authority permit it.
+Use the project's native commands and the smallest faithful failing evidence when practical and useful for the changed risk. Then run the focused proof and the nearest relevant fast checks that protect the changed risk. Use a real database, broker, storage service, browser, or deployed boundary only when its semantics are the risk and the effective project instructions and current authority permit it.
 
 Do not replace completion with TODOs, placeholders, weakened validation or assertions, skipped checks, suppressed failures, compatibility debris, or an unrecorded follow-up. State what was actually observed and every material verification gap.
 

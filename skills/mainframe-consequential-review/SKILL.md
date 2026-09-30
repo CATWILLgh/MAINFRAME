@@ -1,6 +1,6 @@
 ---
 name: mainframe-consequential-review
-description: Challenge consequential decisions and completion claims against evidence before they are accepted. Use proactively when the cost of a wrong decision is material, a proposal depends on uncertain assumptions, evidence conflicts, or a substantial result is about to be declared ready; also use when a decision challenge, adversarial review, or readiness check is requested. Do not use for routine choices, ordinary implementation checks, or broad defect discovery.
+description: Challenge consequential decisions or readiness claims when wrong acceptance is costly or load-bearing evidence is uncertain. Excludes routine reviews.
 ---
 
 # Review consequential decisions and results
@@ -39,27 +39,15 @@ Use a separate reviewer only when independence materially improves confidence an
 
 ## Return the assessment
 
-Begin with exactly one of these lines:
-
-```text
-ASSESSMENT: proceed
-ASSESSMENT: proceed-with-mitigations
-ASSESSMENT: reconsider
-ASSESSMENT: unverifiable
-```
+Lead with one clear verdict using the recipient's language and requested format:
 
 - Use `proceed` when no material grounded objection remains.
 - Use `proceed-with-mitigations` when acceptance is reasonable with explicit bounded safeguards.
 - Use `reconsider` when a grounded issue invalidates a load-bearing assumption or makes the proposed acceptance materially unsafe or unreliable.
 - Use `unverifiable` only when essential evidence is unavailable and bounded inspection cannot recover it.
 
-After the first line, report only material items:
-
-```text
-Assumption: <what must hold> — <holds | false | unknown> — <evidence>
-Objection: <falsifiable failure> — <practical consequence> — <evidence>
-Mitigation: <smallest action needed before or after acceptance>
-Missing evidence: <exact observation needed to resolve an unknown>
-```
-
-Omit empty categories. Use the recipient's language. If the assessment is `proceed`, explain briefly why the available evidence is sufficient and stop.
+Use exact `ASSESSMENT: <verdict>` tokens only when the caller or consuming
+integration requires that machine-readable contract. Otherwise translate the
+verdict naturally. Report only material assumptions, evidence, objections,
+mitigations, and missing observations; omit empty categories. When proceeding,
+briefly explain why the evidence is sufficient and finish the assessment.

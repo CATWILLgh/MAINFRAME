@@ -20,6 +20,8 @@ Read the current eligible queue afresh. Select one ticket and keep it as the onl
 
 After routing the active ticket, refresh the queue and select the next eligible ticket, including tickets created by a justified split. Do not retry a ticket again in the same run when its recorded evidence gap and available conditions have not changed. Continue with every other eligible ticket.
 
+If a ticket update cannot be written, retain its complete proposed update and missing write action in the current run and continue with the next ticket. Treat that ticket as handled only for this run; reconsider it only if its state, evidence, or available authority materially changes. Do not claim that the persistent queue changed.
+
 ## Establish what is actually known
 
 Restate the active ticket as a falsifiable claim. Confirm or challenge it using current project evidence rather than memory, ticket age, earlier agent conclusions, or confidence.
@@ -63,7 +65,7 @@ Ordinary engineering and architecture judgment does not become a user decision m
 
 ## Complete the command
 
-Continue the one-ticket cycle until a refreshed control pass finds no eligible ticket that this command can further expand or route under current evidence and authority. A blocked ticket is complete for this run only after its exact evidence gap or decision is recorded; it must not prevent processing later tickets.
+Continue the one-ticket cycle until a refreshed control pass finds no additional ticket that this command can further expand or route under current evidence and authority. A blocked ticket is handled for this run only after its exact evidence gap or decision is recorded or returned as a complete proposed update; it must not prevent processing later tickets.
 
 Return:
 
@@ -71,4 +73,4 @@ Return:
 - every ticket expanded, split, consolidated, rejected, made ready, or routed to a decision or evidence gap;
 - the decisive evidence and remaining uncertainty for each outcome;
 - ticket updates that could not be written and the exact reason;
-- confirmation that the final refreshed queue contains no ticket still eligible for additional refinement under the current conditions.
+- confirmation that the refreshed queue and this run's handled tickets leave no further permitted refinement, distinguishing persisted transitions from proposed updates still awaiting a write.

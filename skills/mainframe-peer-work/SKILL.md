@@ -1,13 +1,16 @@
 ---
 name: mainframe-peer-work
-description: Use Codex, Claude Code, OpenCode, Pi, or Antigravity through its CLI when the user explicitly requests that product or an established project agreement assigns suitable work to it. Do not invoke an external agent merely because its CLI or account is available.
+description: Use an external coding-agent CLI only when the user or project agreement explicitly assigns that product work.
 ---
 
 # Work with an external agent peer
 
 Use only the product selected by the user or by an applicable project agreement. Availability of a binary, login, subscription, or model is not authority to invoke it. Do not substitute a different product, install a CLI, create an account, change authentication, enable sharing, or broaden permissions implicitly.
 
-Read only the selected product reference, then verify its current official documentation and installed CLI help before execution:
+Read only the selected product reference. Verify version-sensitive flags and
+permission behavior against installed CLI help; consult current official
+documentation for unresolved behavior. Reuse that evidence for subsequent calls
+to the same installed version:
 
 - [Codex CLI](references/codex.md)
 - [Claude Code CLI](references/claude-code.md)

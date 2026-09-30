@@ -6,11 +6,11 @@ installation.
 
 ## Resolve the owner
 
-Use current native documentation and a fresh-session probe to find the effective
-global instruction owner and precedence. Inspect only the files that actually
-affect the installed product. A repository root instruction such as MAINFRAME's
-own `AGENTS.md` or `CLAUDE.md` is project control-plane support, not the global
-destination.
+During adapter development, use current native documentation and a fresh-session
+probe to find the effective global instruction owner and precedence. Inspect
+only the files that actually affect the installed product. A repository root
+instruction such as MAINFRAME's own `AGENTS.md` or `CLAUDE.md` is project
+control-plane support, not the global destination.
 
 ## Merge by semantics
 
@@ -29,6 +29,10 @@ semantic demands, stop on the exact conflict. Do not silently choose, weaken
 both into vague wording, or overwrite the user's rule.
 
 ## Verify
+
+Run this fresh-session behavior check during adapter development or explicitly
+requested acceptance. An ordinary maintained installation delivers the owner
+and may return one fresh-session handoff with verification still pending.
 
 Validate native syntax and effective precedence. Start a new session when the
 product reads instructions only at launch. Use a harmless question or diagnostic

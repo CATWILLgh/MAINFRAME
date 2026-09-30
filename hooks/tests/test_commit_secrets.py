@@ -11,7 +11,7 @@ import unittest
 from unittest import mock
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "commit-secrets.py"
+SOURCE = Path(__file__).resolve().parents[1] / "mainframe-commit-secrets.py"
 SPEC = importlib.util.spec_from_file_location("commit_secrets", SOURCE)
 assert SPEC is not None and SPEC.loader is not None
 DETECTOR = importlib.util.module_from_spec(SPEC)
@@ -61,6 +61,30 @@ class CommitSecretsTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.check(command), DETECTOR.CheckResult())
 
+    def test_context_free_binding_checks_only_independent_commit_metadata(self) -> None:
+        token = _token()
+        inline = DETECTOR.check_context_free_metadata(f"git commit -m {token}")
+        self.assertIn("github_pat in message", inline.block_reason or "")
+        self.assertNotIn(token, inline.block_reason or "")
+
+        absolute = self.root / "message.txt"
+        absolute.write_text(token, encoding="utf-8")
+        file_result = DETECTOR.check_context_free_metadata(
+            f"git commit -F {absolute}"
+        )
+        self.assertIn("github_pat in commit-message-file", file_result.block_reason or "")
+
+        relative = self.root / "relative.txt"
+        relative.write_text(token, encoding="utf-8")
+        self.assertEqual(
+            DETECTOR.check_context_free_metadata("git commit -F relative.txt"),
+            DETECTOR.CheckResult(),
+        )
+        self.assertEqual(
+            DETECTOR.check_context_free_metadata("git commit -m '$TOKEN'"),
+            DETECTOR.CheckResult(),
+        )
+
     def test_staged_secret_blocks_without_exposing_value(self) -> None:
         token = _token()
         (self.root / ".env").write_text(f"TOKEN={token}\n", encoding="utf-8")
@@ -70,6 +94,26 @@ class CommitSecretsTests(unittest.TestCase):
         self.assertIsNone(result.advisory)
         self.assertIn("github_pat in .env:1", result.block_reason or "")
         self.assertNotIn(token, result.block_reason or "")
+
+    def test_recorded_commit_is_reported_without_claiming_a_block(self) -> None:
+        token = _token()
+        (self.root / ".env").write_text(f"TOKEN={token}\n", encoding="utf-8")
+        self.git("add", ".env")
+        self.git("commit", "-qm", "recorded")
+        result = DETECTOR.check_recorded_command("git commit -m recorded", str(self.root))
+        self.assertIsNone(result.block_reason)
+        self.assertIn("newly recorded", result.advisory or "")
+        self.assertIn("github_pat in .env:1", result.advisory or "")
+        self.assertNotIn(token, result.advisory or "")
+
+    def test_failed_late_commit_attempt_does_not_attribute_an_old_head(self) -> None:
+        (self.root / ".env").write_text(f"TOKEN={_token()}\n", encoding="utf-8")
+        self.git("add", ".env")
+        self.git("commit", "-qm", "old")
+        result = DETECTOR.check_recorded_command(
+            "git commit -m failed", str(self.root), started_at=10**12
+        )
+        self.assertEqual(result, DETECTOR.CheckResult())
 
     def test_initial_commit_is_checked(self) -> None:
         root = Path(tempfile.mkdtemp(prefix="mainframe-initial-commit-"))
@@ -112,6 +156,27 @@ class CommitSecretsTests(unittest.TestCase):
                 self.assertIsNotNone(result.block_reason)
                 (self.root / "base.txt").write_text("base\n", encoding="utf-8")
 
+    def test_attached_message_does_not_change_partial_staging_scope(self) -> None:
+        target = self.root / "base.txt"
+        target.write_text(f"TOKEN={_token()}\n", encoding="utf-8")
+        self.git("add", "base.txt")
+        target.write_text("base\n", encoding="utf-8")
+        for command in ("git commit -mupdate", "git commit -qmupdate"):
+            with self.subTest(command=command):
+                self.assertIsNotNone(self.check(command).block_reason)
+        self.git("commit", "-qmupdate")
+        self.assertIn(_token().encode(), self.git("show", "HEAD:base.txt").stdout)
+
+    def test_attached_metadata_and_clustered_flags_preserve_option_boundaries(self) -> None:
+        message = self.root / "message.txt"
+        message.write_text(f"release {_token()}\n", encoding="utf-8")
+        self.assertIn(
+            "commit-message-file", self.check("git commit -Fmessage.txt").block_reason or ""
+        )
+        (self.root / "base.txt").write_text(f"TOKEN={_token()}\n", encoding="utf-8")
+        self.assertIsNotNone(self.check("git commit -qamupdate").block_reason)
+        self.assertIsNotNone(self.check("git commit -mupdate -a").block_reason)
+
     def test_commit_all_matches_git_for_staged_new_file_changed_after_add(self) -> None:
         token = _token()
         target = self.root / "new.env"
@@ -147,6 +212,21 @@ class CommitSecretsTests(unittest.TestCase):
         message.write_text(f"release {token}\n", encoding="utf-8")
         result = self.check("git commit -F message.txt")
         self.assertIn("github_pat in commit-message-file", result.block_reason or "")
+
+    def test_multiline_commit_message_preserves_staged_content_inspection(self) -> None:
+        token = _token()
+        (self.root / ".env").write_text(f"TOKEN={token}\n", encoding="utf-8")
+        self.git("add", ".env")
+
+        result = self.check(
+            'git status --short | head; git commit -m "feat: release\n\n'
+            'Explain the change across physical shell lines." | tail -3'
+        )
+
+        self.assertIsNotNone(result.block_reason)
+        self.assertIsNone(result.advisory)
+        self.assertIn("github_pat in .env:1", result.block_reason or "")
+        self.assertNotIn(token, result.block_reason or "")
 
     def test_existing_secret_and_unchanged_rename_do_not_create_a_new_finding(self) -> None:
         token = _token()
@@ -205,6 +285,32 @@ class CommitSecretsTests(unittest.TestCase):
         for command in commands:
             with self.subTest(command=command):
                 self.assertIsNotNone(self.check(command, parent).block_reason)
+
+    def test_unrelated_pipelines_do_not_make_a_literal_cd_uninspectable(self) -> None:
+        token = _token()
+        (self.root / ".env").write_text(f"TOKEN={token}\n", encoding="utf-8")
+        self.git("add", ".env")
+        parent = self.root.parent
+
+        result = self.check(
+            f"printf ready | head -1; cd {self.root.name} && "
+            'git commit -m "feat: release\n\nDetails." | tail -1',
+            parent,
+        )
+
+        self.assertIsNotNone(result.block_reason)
+        self.assertIsNone(result.advisory)
+
+    def test_cd_in_pipeline_or_or_list_remains_uninspectable(self) -> None:
+        parent = self.root.parent
+        for command in (
+            f"cd {self.root.name} | cat; git commit -m update",
+            f"false || cd {self.root.name}; git commit -m update",
+        ):
+            with self.subTest(command=command):
+                result = self.check(command, parent)
+                self.assertIsNone(result.block_reason)
+                self.assertIn("conditional_directory_change", result.advisory or "")
 
     def test_unavailable_inspection_warns_without_blocking(self) -> None:
         for command in (

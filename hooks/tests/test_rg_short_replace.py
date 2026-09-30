@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "rg-short-replace.py"
+SOURCE = Path(__file__).resolve().parents[1] / "mainframe-rg-short-replace.py"
 SPEC = importlib.util.spec_from_file_location("rg_short_replace", SOURCE)
 assert SPEC is not None and SPEC.loader is not None
 DETECTOR = importlib.util.module_from_spec(SPEC)

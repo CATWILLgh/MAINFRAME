@@ -1,6 +1,6 @@
 ---
 name: mainframe-harness-feedback
-description: Preserve an observed fault in MAINFRAME or its effective agent harness in MAINFRAME's central feedback queue. Use proactively for instruction conflicts, faulty or noisy hooks, lost context, incorrect adaptation, duplicate registration, unsupported claimed behavior, or inconsistent agent, subagent, Desktop, and CLI behavior; do not use for application defects or routine successful checks.
+description: Record an observed MAINFRAME or effective harness fault in its configured feedback queue. Excludes project application defects.
 ---
 
 # Report a MAINFRAME harness fault
@@ -17,7 +17,7 @@ Do not require a proven root cause before preserving a useful observation. State
 
 ## Use the resolved MAINFRAME destination
 
-The installed copy of this skill must contain the normalized absolute MAINFRAME source root supplied during adaptation in place of `{{MAINFRAME_ROOT}}`. Its only feedback destination is:
+Use only the configured feedback destination:
 
 `{{MAINFRAME_ROOT}}/docs/tickets/open/observations/`
 
@@ -25,7 +25,7 @@ Treat an unresolved placeholder as an installation defect. Do not scan the home 
 
 Use only the access needed to list open observations and create or update a matching record. Do not use the feedback permission to inspect or modify unrelated MAINFRAME content.
 
-The destination may be absent before the first report. Create only the exact destination directory when writing the first real observation and the configured authority permits it; do not initialize empty ticket states during installation.
+The destination may be absent before the first report. Create only the exact destination directory when writing the first real observation and the configured authority permits it.
 
 ## Preserve useful evidence
 
@@ -55,4 +55,4 @@ Preserve the existing record identity and history. Repeating the same report wit
 
 After a successful write, return the record path or identity and whether it was created or reconciled. If you cannot write, return the complete feedback-ready record and the exact handoff required. Continue the assigned task when the fault does not make its result invalid or unsafe. Fix MAINFRAME only when that work is separately assigned and authorized; never disable a safety guard merely to avoid its refusal.
 
-Test this reporting route only with a clearly synthetic observation in an isolated temporary destination. Do not create a real MAINFRAME defect ticket merely to prove that the skill can write one.
+Do not create a real MAINFRAME defect ticket merely to prove that the reporting route works.

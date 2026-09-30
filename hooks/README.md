@@ -38,29 +38,43 @@ advisories, omit secrets and unnecessary raw input, and bound each message to
 the finding, its exact locus when available, and the decision-useful next
 action. An advisory failure does not block the original action; report an
 unavailable advisory check only when that fact can change the next decision.
-A guard blocks only a positively recognized dangerous condition. Missing input,
+A guard blocks only a positively recognized dangerous condition or explicitly
+documented forbidden command form. Missing input,
 timeouts, unavailable dependencies, parser limits, and detector exceptions are
 not dangerous findings and must not create a hard lock. Represent a
 decision-relevant protection failure as a distinct non-blocking advisory rule;
 otherwise fail silently. Test both semantic findings and operational failures
 during adaptation.
 
+An explicitly disabled hook produces no finding, state, injected context, or
+completion continuation. Its adapter must tolerate late callbacks and launch
+failures under the [hook component guide](../docs/installation/components/hooks.md#preserve-failure-behavior);
+removing a registered executable is not a disable mechanism.
+
 | Hook | Class | Trigger and result | State |
 | --- | --- | --- | --- |
-| `destructive-operations` | `guard` | Before a shell action, hard-block a recognized catastrophic filesystem deletion or a narrow Git operation that bypasses recovery and safety mechanisms | Stateless |
-| `secret-access` | `guard` | Before a shell action, hard-block direct credential output or value-bearing registration through the `secret` helper and point to its protected route | Stateless |
-| `rg-short-replace` | `advisory` | Before a shell action, warn when an actual ripgrep invocation uses short `-r`, which selects output replacement rather than recursion | Stateless; adapter deduplicates duplicate delivery of one native event |
-| `commit-secrets` | `guard` plus unavailable-check `advisory` | Before an agent-initiated `git commit`, block newly introduced high-confidence secret material; warn without blocking when the prospective commit cannot be inspected | Stateless |
-| `code-quality` | Post-edit quality, security, and structure advisories plus an attributed-finding completion guard | Around a successful file edit, report new high-confidence residue, security findings, or a size-review threshold crossing; before completion, revalidate and block only attributed blocking findings | One private temporary JSON file per adapter namespace, native execution scope, and workspace |
-| `fallow-quality` | `advisory` | At a continuation-capable completion event after exact-scope TS/JS edits, report newly introduced structural findings or a decision-relevant unavailable check without blocking | Canonical detector is stateless; adapter may retain only bounded short-lived attribution state |
+| `mainframe-destructive-operations` | `guard` | Before a shell action, hard-block a recognized catastrophic filesystem deletion or a narrow Git operation that bypasses recovery and safety mechanisms | Stateless |
+| `mainframe-secret-access` | `guard` | Before a shell action, hard-block direct credential output or value-bearing registration through the `mainframe-secret` helper and point to its protected route | Stateless |
+| `mainframe-rg-short-replace` | `advisory` | Before a shell action, warn when an actual ripgrep invocation uses short `-r`, which selects output replacement rather than recursion | Stateless; adapter deduplicates duplicate delivery of one native event |
+| `mainframe-commit-secrets` | `guard` plus unavailable-check `advisory` | Before an agent-initiated `git commit`, block newly introduced high-confidence secret material; warn without blocking when the prospective commit cannot be inspected | Stateless |
+| `mainframe-code-quality` | Post-edit quality, security, and structure advisories plus an attributed-finding completion guard | Around a successful file edit, report new high-confidence residue, security findings, or a size-review threshold crossing; before completion, revalidate and block only attributed blocking findings | One private temporary JSON file per adapter namespace, native execution scope, and workspace |
+| `mainframe-fallow-quality` | `advisory` | At a continuation-capable completion event after exact-scope TS/JS edits, report newly introduced structural findings or a decision-relevant unavailable check without blocking | Canonical detector is stateless; adapter may retain only bounded short-lived attribution state |
 
-## Adapt `destructive-operations`
+## Adapt `mainframe-destructive-operations`
 
-Copy `destructive-operations.py` unchanged when the product can call a Python
+Copy `mainframe-destructive-operations.py` unchanged when the product can call a Python
 detector from its native hook. Keep any required payload/output wrapper in the
 installed adapter, not in the canonical file. Pass the exact shell command,
 tool working directory, active project root, and current user's home root to
 `decision_reason`.
+
+When a product exposes the exact command and a pre-action denial but does not
+expose the shell tool's actual working directory, call
+`context_free_decision_reason` as an explicit degraded binding. It preserves
+only command-structural Git decisions, filesystem/home-root targets, and the
+fixed directory-change plus relative-recursive-delete form. Keep the inventory
+row unsupported for the missing project-root and ordinary-relative-target
+guarantees; never pass a session or workspace cwd as if it were the tool cwd.
 
 A returned reason must become a documented native hard denial for the action.
 `None` means no decision: emit nothing and leave the product's native permission
@@ -72,7 +86,12 @@ not equivalent.
 The filesystem check blocks recursive deletion of the filesystem root, current
 user's home root, or active project root. It also blocks a relative recursive
 deletion after an earlier directory-changing command when the effective target
-cannot be determined without emulating the shell.
+cannot be determined without emulating the shell. That combination is a fixed
+forbidden command form; it does not assert that an unknown target is a root.
+Carry that directory
+uncertainty into supported nested shells, but inspect the actual command and
+target: nonrecursive deletion, quoted examples, and absolute narrower targets
+do not become catastrophic merely because a prior command changed directory.
 
 The Git check is a hallucination circuit breaker, not an authorization system.
 It blocks force or mirror push, verification and low-level delivery bypasses,
@@ -93,7 +112,7 @@ the failure can change the next decision. An intentionally unrecognized shell
 expression remains under the native permission boundary and must not be
 reported as checked.
 
-## Adapt `secret-access`
+## Adapt `mainframe-secret-access`
 
 Call `decision_reason` immediately before a shell action with the exact command.
 A returned reason must become a documented native hard denial. `None` emits
@@ -101,12 +120,16 @@ nothing and leaves the product's native permission layer authoritative. A
 missing or malformed command and detector failure are unavailable protection,
 not reasons to deny the action.
 
-The detector blocks only two direct helper mistakes: standalone `secret get
-NAME`, which would print the value into agent context, and `secret set NAME
-VALUE`, which would place the value in command arguments. It allows `secret set
-NAME --clipboard`, the protected `--prompt` fallback, `secret copy NAME`,
-`secret run NAME -- COMMAND`, and a nested `secret get` used only inside its
+The detector blocks only two direct helper mistakes: standalone `mainframe-secret get
+NAME`, which would print the value into agent context, and `mainframe-secret set NAME
+VALUE`, which would place the value in command arguments. It allows `mainframe-secret set
+NAME --clipboard`, the protected `--prompt` fallback, `mainframe-secret copy NAME`,
+`mainframe-secret run NAME -- COMMAND`, and a nested `mainframe-secret get` used only inside its
 consumer invocation. Its denial never quotes the credential name or value.
+For a direct `set`, a following unquoted shell control operator ends that
+invocation; the next command is not a positional credential value. Quoted or
+escaped operator literals remain arguments, and an actual extra value still
+causes a denial. Keep the standalone `get` boundary unchanged.
 
 Keep the detector stateless and silent on allowed actions. It is deliberately
 not a shell parser, authorization mechanism, or credential sandbox. Protect
@@ -116,12 +139,14 @@ when no such boundary exists. If the product cannot deny a recognized command
 before execution, mark this hook `unsupported` instead of replacing it with a
 warning.
 
-## Adapt `rg-short-replace`
+## Adapt `mainframe-rg-short-replace`
 
 Before registration, inspect the installed ripgrep help and confirm that short
 `-r` takes replacement text while recursion is already the default. If the
-installed executable has different semantics or cannot be identified, mark the
-component `unsupported` rather than guessing from another search tool.
+installed executable has demonstrably different semantics, mark the component
+`unsupported`. If the executable or its semantics cannot yet be identified,
+leave it `pending` with the missing evidence rather than guessing from another
+search tool.
 
 Call `advisory_message` immediately before a shell action with the exact
 command. A returned message is non-blocking context for the recipient
@@ -140,7 +165,7 @@ canonical detector creates no state. Suppress only duplicate delivery of the
 same native event identity in the adapter; do not suppress a later, separately
 executed mistaken command merely because an earlier event warned about it.
 
-## Adapt `commit-secrets`
+## Adapt `mainframe-commit-secrets`
 
 Call `check_command` immediately before a shell action with the exact command
 and native working directory. A non-empty `block_reason` is a hard denial. A
@@ -148,12 +173,22 @@ non-empty `advisory` is non-blocking context for the recipient responsible for
 the next action. An empty result emits nothing. Never turn an advisory or a
 detector exception into a denial.
 
+When the same pre-action event omits the shell tool's actual working directory,
+`check_context_free_metadata` is the safe degraded binding. It inspects literal
+commit metadata and absolute commit-message files only. It deliberately emits
+no unavailable advisory and does not claim staged, worktree, or relative-file
+coverage. Keep the full inventory row unsupported and name those missing
+guarantees.
+
 The detector activates only for an agent-initiated `git commit`. It examines
 new high-confidence credential shapes in the effective index, supported
 auto-staged or path-selected worktree content, literal commit metadata, and
 binary blobs. It compares prospective content with the base tree so removed
 values, pre-existing values, and unchanged renames do not create a finding.
 Partial staging remains isolated from unrelated dirty worktree content.
+Preserve option-value boundaries: `-mupdate` supplies a message, `-Fmessage.txt`
+supplies a metadata file, and `-amupdate` additionally selects auto-staging.
+Letters inside an attached value must never change the prospective commit scope.
 
 The detector does not scan repository history, unrelated files, credential
 stores, commands outside the receiving agent, or generic password and entropy
@@ -170,9 +205,9 @@ unavailable, a timeout occurs, input is malformed, or a supported boundary
 cannot be established; deliver the canonical advisory when the product has a
 documented non-blocking context channel.
 
-## Adapt `code-quality`
+## Adapt `mainframe-code-quality`
 
-Treat `code-quality.py` as one component. It has five fixed effects:
+Treat `mainframe-code-quality.py` as one component. It has five fixed effects:
 
 - a post-edit advisory for newly introduced high-confidence quality residue;
 - a post-edit advisory for newly introduced high-confidence Ruff or Oxlint
@@ -208,11 +243,23 @@ limitation instead of scanning unrelated sessions or the whole machine.
 Immediately before a file-edit tool, resolve only its explicit code paths inside
 the current workspace and call `capture_before`. Immediately after the same
 successful operation, call `record_after` with the same identifiers; pass
-`succeeded=False` after a failed edit so its snapshot is consumed without
-creating a finding. Deliver a returned advisory once to the recipient
-responsible for the edit. Do not call the component for unrelated tools,
+`succeeded=False` when a native failed-edit callback is available so its snapshot
+is consumed without creating a finding. When the product emits no failed-edit
+callback, retain the unmatched snapshot until its bounded expiry. Never invent
+success or failure, consume it for another operation, or discard it at completion.
+Prove that a later successful edit is still attributed independently and that
+the unmatched snapshot alone cannot block completion. Deliver a returned
+advisory once to the recipient responsible for the edit. Do not call the component for unrelated tools,
 unsupported extensions, paths outside the current workspace, or changes not
 made through the bound native event.
+
+Deduplicate native pre/post event redelivery in the adapter. Preserve the first
+before snapshot for an operation and consume it through its matching success or
+failure event only once; a missing snapshot is unavailable attribution, not
+proof of a clean edit. A completion callback must not discard another in-flight
+operation's snapshot in the same scope. It can report unavailable attribution
+without blocking, while the matching post event or bounded expiry retains
+ownership of that snapshot.
 
 From a documented continuation-capable completion event, call
 `check_completion`. Map a returned `block_reason` to native continuation of that
@@ -233,6 +280,8 @@ abandoned-state expiry, workspace confinement, source-size bounds, successful
 cleanup, and revalidation before blocking. Scanners run outside the state lock;
 unique temporary scanner directories are removed after each call. Do not
 replace this with a repository-wide scan or persist it in the receiving project.
+Expiry must also apply when the abandoned scope itself resumes; cleanup by
+another scope is not a prerequisite.
 
 Preserve the high-signal detector set: TODO/FIXME/HACK/XXX comments, diagnostic
 suppressions, skipped or focused tests, explicit debugger residue, and comments
@@ -280,10 +329,10 @@ required scanner cannot be supplied. A missing, timed-out, malformed, or failed
 scanner must leave the action and completion unblocked and emit only its
 deduplicated unavailable-check advisory.
 
-## Adapt `fallow-quality`
+## Adapt `mainframe-fallow-quality`
 
-Keep [fallow-quality.py](fallow-quality.py) as a separate stateless advisory
-detector. It complements the per-edit `code-quality` checks with Fallow's
+Keep [mainframe-fallow-quality.py](mainframe-fallow-quality.py) as a separate stateless advisory
+detector. It complements the per-edit `mainframe-code-quality` checks with Fallow's
 cross-file structural view; it does not share the completion guard, create a
 second blocking gate, or own project architecture policy.
 
@@ -310,14 +359,17 @@ product exposes reliable lineage to the same result. If short-lived attribution
 state is required, keep it outside the receiving repository, key it by a fixed
 adapter namespace plus native session and workspace identities, use atomic
 replacement and locking, expire abandoned state, and never retain source or
-diff text. Reuse the proven state mechanics of `code-quality` when practical;
+diff text. Reuse the proven state mechanics of `mainframe-code-quality` when practical;
 do not merge the semantic components or inventory rows.
 
 The detector runs Fallow with the diff on standard input and reports only
 findings marked newly introduced that intersect the supplied paths. It reports
 an unused file only when the adapter also supplied whole-file ownership. Output
-is bounded and asks the recipient to verify findings rather than treating the
-analyzer as authoritative.
+is limited to six rows of at most 240 displayed characters plus a truncation
+suffix per row, with control characters neutralized, and asks the recipient to
+verify findings rather than treating the analyzer as authoritative. Validate
+the audit envelope, finding-list shapes, and Boolean `introduced` attribution;
+an unsupported analyzer shape is an unavailable check, not a clean result.
 
 A normal clean result is silent. Missing Fallow, invalid input, oversized
 scope, timeout, nonzero analyzer failure, or unsupported output returns at most

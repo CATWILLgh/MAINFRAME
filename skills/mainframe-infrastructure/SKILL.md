@@ -1,6 +1,6 @@
 ---
 name: mainframe-infrastructure
-description: Diagnose, change, and verify project infrastructure across environments, containers, CI/CD, domains, TLS, observability, backups, operational data stores, and Dokploy. Use for infrastructure-owned work, not ordinary application or UI implementation.
+description: Diagnose, change, or verify project-owned infrastructure. Excludes ordinary application and UI implementation.
 ---
 
 # Infrastructure work

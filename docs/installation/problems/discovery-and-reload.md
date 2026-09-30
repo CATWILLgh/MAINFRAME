@@ -24,13 +24,16 @@ reload, refresh, or reindex exactly as current native documentation requires.
 ## Verify
 
 Use native listing and one harmless invocation or event. Start a new session
-when launch-time discovery is documented. Test Desktop and CLI separately when
-their loaders differ.
+when launch-time discovery is documented. For a routine installation, hand a
+required fresh session to the user instead of creating one. Test Desktop and CLI
+separately only when both are explicitly requested and their loaders differ.
 
 ## Record
 
-Set `installed` only after native proof. Keep `pending` with the exact missing
-discovery evidence if another ordinary fix remains.
+Keep completed target delivery as `delivery: installed`. Until native discovery
+and behavior proof passes, keep `verification: pending` and put the exact reload
+or probe step in `next_action`. A failed listing is not by itself proof that the
+product cannot support the component.
 
 ## Never do
 

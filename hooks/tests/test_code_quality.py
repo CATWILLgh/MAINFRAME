@@ -12,7 +12,7 @@ import unittest
 from unittest import mock
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "code-quality.py"
+SOURCE = Path(__file__).resolve().parents[1] / "mainframe-code-quality.py"
 SPEC = importlib.util.spec_from_file_location("code_quality", SOURCE)
 assert SPEC is not None and SPEC.loader is not None
 QUALITY = importlib.util.module_from_spec(SPEC)
@@ -671,6 +671,61 @@ class CodeQualityTests(unittest.TestCase):
         result = self.completion("scope")
         self.assertIn("protection unavailable", (result.advisory or "").lower())
         self.assertIsNone(result.block_reason)
+
+    def test_completion_does_not_consume_an_inflight_edit_snapshot(self) -> None:
+        file = self.workspace / "module.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        self.capture("scope", "inflight", file)
+        first = self.completion("scope")
+        self.assertIsNone(first.block_reason)
+        self.assertIn("protection unavailable", (first.advisory or "").lower())
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+        file.write_text("# TODO: finish\n", encoding="utf-8")
+        self.assertIn("TODO/FIXME/HACK/XXX", self.after("scope", "inflight").advisory or "")
+        self.assertIn("Completion blocked", self.completion("scope").block_reason or "")
+
+    def test_missing_failed_post_does_not_own_a_later_edit_or_block_its_repair(self) -> None:
+        file = self.workspace / "module.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        self.capture("scope", "failed-without-post", file)
+        self.assertIsNone(self.completion("scope").block_reason)
+
+        self.capture("scope", "successful-edit", file)
+        file.write_text("# TODO: finish\n", encoding="utf-8")
+        self.assertIn("TODO/FIXME/HACK/XXX", self.after("scope", "successful-edit").advisory or "")
+        self.assertIn("Completion blocked", self.completion("scope").block_reason or "")
+
+        self.capture("scope", "repair", file)
+        file.write_text("value = 2\n", encoding="utf-8")
+        self.after("scope", "repair")
+        self.assertIsNone(self.completion("scope").block_reason)
+
+        state_file = QUALITY._state_path("scope", self.workspace, "test-adapter", self.state)
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        self.assertEqual(set(state["pending"]), {QUALITY._operation_key("failed-without-post")})
+        next(iter(state["pending"].values()))["created"] = (
+            time.time() - QUALITY.PENDING_MAX_AGE_SECONDS - 1
+        )
+        state_file.write_text(json.dumps(state), encoding="utf-8")
+        self.assertIsNone(self.completion("scope").block_reason)
+        remaining = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else {}
+        self.assertFalse(remaining.get("pending"))
+        self.assertFalse(remaining.get("findings"))
+
+    def test_resuming_an_abandoned_scope_expires_its_own_state(self) -> None:
+        file = self.workspace / "module.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        self.capture("scope", "old", file)
+        file.write_text("# TODO: old scope finding\n", encoding="utf-8")
+        self.after("scope", "old")
+        state_file = QUALITY._state_path("scope", self.workspace, "test-adapter", self.state)
+        expired = time.time() - QUALITY.STATE_MAX_AGE_SECONDS - 1
+        os.utime(state_file, (expired, expired))
+
+        result = self.completion("scope")
+        self.assertIsNone(result.block_reason)
+        self.assertIn("protection unavailable", (result.advisory or "").lower())
+        self.assertFalse(state_file.exists())
 
     def test_message_output_is_bounded(self) -> None:
         paths = []

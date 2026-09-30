@@ -1,6 +1,6 @@
 ---
 name: mainframe-ops-app-server-safety
-description: Prevent duplicate or disruptive local application servers. Use before starting, restarting, or stopping a long-running native process, managed service, or Compose stack; do not use for one-shot build, test, lint, or inspection commands.
+description: Safely start, restart, or stop local application servers, managed services, or Compose stacks. Excludes one-shot commands.
 ---
 
 # Local application server safety

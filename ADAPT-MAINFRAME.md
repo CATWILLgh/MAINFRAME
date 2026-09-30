@@ -1,149 +1,105 @@
-# Adapt MAINFRAME to your global environment
+# Install MAINFRAME into the running product
 
-This is the executable bootstrap for the agent product running in this
-repository. Complete the installation or update; do not stop after describing a
-plan.
+This is the installation entrypoint. The file-selection rule in
+[AGENTS.md](AGENTS.md) defines sending this file alone as the request to install
+or update MAINFRAME. Start the route below without asking for another launch
+phrase. An explicit request to review, explain, or edit this file means that
+separate task; incidental reading does not invoke installation.
 
-## Use the only supported trajectory
+## Establish the source and target
 
-1. The user downloads or clones MAINFRAME.
-2. The user opens this repository itself as the current project in the product
-   to be configured.
-3. You install the canonical MAINFRAME components into that product's global
-   environment.
+The user opens this MAINFRAME repository in the product to be configured.
+Resolve the current workspace root and require this file,
+[ADAPTATION.example.json](ADAPTATION.example.json), `install.py`, `installer/`,
+`docs/installation/`, and every listed canonical source to be present there.
+Do not search other checkouts, archives, backups, or the home directory for a
+replacement source. Run the installer from this root.
 
-Do not run this protocol from another project or install MAINFRAME into a
-receiving project. Do not search the home directory, other repositories,
-archives, backups, recovery directories, mounted volumes, or Trash for another
-MAINFRAME checkout.
+Target only the surface running the request. Desktop does not launch a CLI
+agent or a separate app-server; CLI does not operate Desktop. Shared files do
+not expand authority. An installer shell command is permitted: it runs the
+file-delivery program, not another agent product.
 
-Resolve the current project root through the active workspace or Git. Continue
-only when the same root contains this file, `ADAPTATION.example.json`,
-`docs/installation/`, `instructions/`, `skills/`, `agents/`, `commands/`,
-`hooks/`, and `shared/`. Normalize that absolute path as `MAINFRAME_ROOT`.
+Preserve authentication, credentials, protected stores, sessions, history,
+projects, worktrees, user instructions, unrelated configuration, and dirty
+repository work. Do not change canonical source during installation. Repository
+writes are limited to ignored adaptation state, the non-secret credential index,
+and explicitly authorized feedback. Only the exact inventory is payload;
+repository documentation, tests, development skills, and local state are not.
 
-Treat tracked repository files as immutable input during installation.
-Product-specific paths, metadata, permissions, wrappers, and registrations
-belong only in globally installed copies. Repository-local writes are limited to
-the ignored product state, centralized non-secret credential index, and later
-feedback records explicitly described by the component guides.
+## Select the maintained installer
 
-## Read the canonical installation guide
+Read exactly the matching procedure:
 
-Read [docs/installation/README.md](docs/installation/README.md), then follow its
-progressive route. The guide owns installation mechanics and problem recovery.
-Canonical component sources own behavior. Tests own executable source
-guarantees.
+- **Codex:** [codex-installer.md](docs/installation/codex-installer.md).
+- **ZCode Desktop:** [zcode-installer.md](docs/installation/zcode-installer.md).
+- **Antigravity Desktop 2.0:** [antigravity-installer.md](docs/installation/antigravity-installer.md).
+- **MiniMax Code Desktop:** [minimax-installer.md](docs/installation/minimax-installer.md).
+- **Cline Desktop or CLI:** [cline-installer.md](docs/installation/cline-installer.md).
 
-Do not preload every guide or component. For each component, read only:
+Follow that procedure's `plan`, `apply`, and `verify` commands. Reuse the
+maintained mapping; do not write another installer, copy components manually,
+run the generic adaptation loop, or ask another model to adapt the inventory.
+The agent resolves actual instruction conflicts and unexpected environments;
+the program owns deterministic rendering, file ownership, writes, and recovery.
 
-1. its row in your adaptation state;
-2. the matching component guide;
-3. the page for your installed product;
-4. the canonical source and directly required resources;
-5. a problem note only when its `Use when` condition matches.
+For a product or version without a maintained supported mapping, report the
+exact missing adapter or compatibility work. Do not silently turn an ordinary
+installation into adapter development. Native orientation documents are research
+inputs for separately assigned development, not executable installers.
 
-## Initialize or resume exact state
+## Complete the bounded delivery pass
 
-Determine a stable lowercase product identifier. Desktop and CLI share it only
-when they are interfaces of the same product and actually share configuration.
-Use `ADAPTATION.<product-id>.json` in this repository root and verify that exact
-path is ignored before writing it.
+1. Run the product's read-only plan. Resolve only the concrete conflicts it
+   reports. A required instruction review means read the existing owner and
+   canonical body; it does not mean asking the user to approve compatible text.
+2. Apply the reviewed plan. Use the product's explicit legacy-adoption route
+   only when its evidence checks recognize the existing installation.
+3. Run its deterministic verification once. Investigate a failure at its exact
+   owner; do not repeat a failed check unchanged or overwrite user edits.
+4. Report delivery, precise limitations, and the one necessary user activation
+   or new-session handoff. Finish independent delivery even when one native
+   capability remains unresolved.
 
-If absent, copy `ADAPTATION.example.json`. If present, reconcile it with the
-example by stable component identity and source path:
+The installer checks delivered files, required resources, substitutions,
+configuration, preservation, and convergence. It does not start model turns,
+invoke operational commands, test credentials, launch a browser, or trigger
+native hook lifecycles to fill the state file. Those belong to a separately
+requested adapter validation run. Follow the
+[verification boundary](docs/installation/verification.md#routine-installation-and-adapter-validation).
 
-- add new entries as `pending`;
-- retain status only for an unchanged identity and source;
-- reset changed entries to `pending`;
-- remove entries no longer in the example;
-- never copy target-specific state back into the example.
+## Keep state small and truthful
 
-Record the resolved root, product/version/install method, Desktop and CLI
-surfaces, whether those surfaces share configuration, and exact native global
-destinations. Keep the file a small state document. Do not add transcripts,
-timestamps, command output, telemetry, secret values, or diagnostic history.
+[ADAPTATION.example.json](ADAPTATION.example.json) owns schema and exact component
+identity. The maintained installer creates or migrates the ignored product state.
+Do not rewrite its structure into a session report.
 
-Only these states are valid:
+- `delivery: pending`: files or a representable binding have not been delivered.
+- `delivery: installed`: the intended files and registrations passed delivery
+  checks. This does not claim the host has loaded or exercised them.
+- `delivery: unsupported`: the target cannot represent the required capability;
+  `reason` names the established limitation.
+- `verification: pending` or `passed`: native behavior evidence is independent
+  of delivery. Unsupported rows omit verification.
+- `next_action` names only the remaining component-specific action. Shared
+  activation or reload belongs once in the state's `next_actions` list.
 
-- `pending`: not yet installed and natively verified;
-- `installed`: installed and proven through native discovery or behavior;
-- `unsupported`: the installed product cannot represent the required
-  capability, with the exact reason in a short `note`.
+Existing schema-1 statuses do not prove present delivery. The installer reconciles
+actual files and conservatively retains applicable verification evidence. Do not
+mark verification passed from file presence, successful parsing, or an agent's
+unsupported claim. Do not treat an untested capability as unsupported.
 
-File presence, valid syntax, a successful build, or a plausible path is not
-enough for `installed`.
+## Recovery and final report
 
-## Establish the target and preserve it
+Use only the procedure's maintained recovery, disable, and removal operations.
+Never remove a hook's callable entrypoint while an old session may still invoke
+it. Follow [safe retirement](docs/installation/problems/rollback-and-recovery.md#retire-hooks-safely);
+keep a necessary inert legacy callback and its exact cleanup handoff until old
+scopes are known to have unloaded it. Preserve scoped rollback material while
+recovery remains pending, without creating a full-profile archive or logs.
 
-Use current official documentation plus the installed product's own version,
-help, and harmless probes. Determine the effective global instruction, skills,
-agents, commands, hooks, integrations, permissions, and settings layers. Treat
-Desktop and CLI as separate proof surfaces when their runtime differs.
-
-Inspect only this product's known relevant global roots. Preserve its existing:
-
-- authentication, accounts, credentials, history, sessions, memories, drafts,
-  projects, and worktrees;
-- user-owned instructions and built-in or application-generated components;
-- unrelated skills, agents, commands, hooks, MCP servers, plugins, permissions,
-  settings, and native caches;
-- unrelated Git work and local files in this repository.
-
-Never print secret values. Create a rollback copy only for a file you will
-change, store it outside tracked content with suitable protection, and remove it
-after verification. Never create a full-profile archive or rewrite a Git
-worktree as part of installation.
-
-## Process the complete inventory
-
-First run the bounded inventory check in the guide. Then process one component
-at a time in this order:
-
-1. shared credentials support;
-2. skills;
-3. agents;
-4. commands;
-5. hooks;
-6. MCP, plugins, runtime support, settings, and permissions;
-7. the global instruction;
-8. final Desktop and CLI verification.
-
-Within a category, keep state-file order. Complete this loop before moving on:
-
-1. Read the matching [component guide](docs/installation/README.md#component-guides).
-2. Recheck the relevant [native product page](docs/installation/README.md#native-product-pages)
-   against current official documentation and installed behavior.
-3. Inspect the canonical source and only its required resources.
-4. Inspect the existing native registration with the same stable identity.
-5. Adapt a copy into the exact native global owner; never modify canonical
-   product-neutral source for one target.
-6. Merge or replace only the MAINFRAME-owned identity. Preserve unrelated state
-   and prevent duplicate files, registrations, permissions, and aliases.
-7. Run source validation, reload through the documented native mechanism, and
-   prove the smallest safe native discovery or behavior.
-8. Immediately record `installed`, `unsupported`, or the precise `pending`
-   blocker.
-
-Do not ask for confirmation between ordinary successful components. Continue
-past an independently unsupported component. Stop when proceeding requires a
-secret-storage decision, destructive ambiguity, missing authority, unavailable
-canonical material, or a semantic choice that belongs to the user.
-
-## Finish only on evidence
-
-Follow [verification.md](docs/installation/verification.md) and
-[rollback-and-recovery.md](docs/installation/problems/rollback-and-recovery.md).
-Remove temporary staging, verified obsolete MAINFRAME-owned adapter residue,
-stale links, stopped test processes, targeted rollback copies, and empty
-MAINFRAME-owned directories. Keep the product state file and native
-application-owned caches. Never create a permanent archive unless requested.
-
-Installation is complete only when every inventory entry is `installed` or
-`unsupported` with a precise reason. Any `pending` entry means incomplete work.
-
-Return one concise evidence-based report covering the target and surfaces,
-validated root and destinations, installed evidence, unsupported limitations,
-credentials integration without values, permissions, preservation and cleanup,
-and any exact remaining blocker. Separate observations, documentation-backed
-mappings, inferences, and unknowns.
+Return a concise report: product/surface, whether delivery verification passed,
+components not delivered or unsupported, necessary activation, and any recovery
+blocker. Do not list every successful file or repeat the same target metadata per
+component. A completed delivery pass with pending native verification is a valid
+bounded result; full native acceptance is a separate claim requiring its evidence.

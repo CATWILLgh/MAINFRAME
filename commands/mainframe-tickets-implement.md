@@ -18,6 +18,8 @@ Read the ready queue afresh. Select one ticket and keep it as the only active ti
 
 After routing the active ticket, refresh the queue and select the next eligible ticket. Do not retry a rerouted or unchanged blocked ticket again in the same run unless its recorded condition has materially changed. Continue with every other ready ticket.
 
+If a ticket update cannot be written, retain its complete proposed update and missing write action in the current run and continue with the next ticket. Treat that ticket as handled only for this run; reconsider it only if its state, evidence, or available authority materially changes. Do not repeat an implementation or claim that the persistent queue changed.
+
 ## Revalidate readiness
 
 Confirm against the current project that the ticket still describes an observable problem, the expected behavior is fixed by reliable evidence, its meaningful affected scope is known, its acceptance boundary is testable, and no required premise has become stale. Treat a ready label and earlier conclusions as leads rather than current proof.
@@ -26,7 +28,11 @@ Return the ticket to the project's scope-review state without changing implement
 
 ## Apply the final decision gate
 
-Immediately before changing implementation code, inspect the proposed correction and its meaningful consequences one final time. Determine whether it changes or selects any of the following beyond the behavior already fixed by project instructions, accepted requirements, or an explicit decision recorded in the ticket:
+Before changing implementation code, evaluate the proposed correction using the
+readiness evidence already collected; inspect further only for unresolved
+consequences. Determine whether it changes or selects any of the following beyond
+the behavior already fixed by project instructions, accepted requirements, or an
+explicit decision recorded in the ticket:
 
 - product behavior, business rules, user-visible semantics, or contractual behavior;
 - data meaning, ownership, retention, migration, destructive transformation, or compatibility guarantees;
@@ -62,7 +68,7 @@ Append concise implementation locations, pre-change evidence, observed validatio
 
 ## Complete the command
 
-Continue the one-ticket cycle until a refreshed control pass finds no ready ticket that this command can safely implement under the current evidence and authority. A rerouted ticket is complete for this run only after its exact missing scope, decision, or authority is recorded; it must not prevent processing later tickets.
+Continue the one-ticket cycle until a refreshed control pass finds no additional ready ticket that this command can safely implement under the current evidence and authority. A rerouted ticket is handled for this run only after its exact missing scope, decision, or authority is recorded or returned as a complete proposed update; it must not prevent processing later tickets.
 
 Return:
 
@@ -71,4 +77,4 @@ Return:
 - the decisive readiness and final-gate result for each ticket;
 - the pre-change evidence, implementation locations, and validation actually observed;
 - any ticket or code update that could not be completed and the exact reason;
-- confirmation that the final refreshed queue contains no ticket still eligible for implementation under the current conditions.
+- confirmation that the refreshed queue and this run's handled tickets leave no further permitted implementation, distinguishing persisted transitions from proposed updates still awaiting a write.

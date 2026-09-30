@@ -7,9 +7,9 @@ Git.
 This file contains service metadata and credential references only. Never put
 passwords, tokens, private keys, cookies, recovery codes, or other secret values
 here. Actual values live outside the repository and are delivered through the
-`secret` command or a native credential mechanism.
+`mainframe-secret` command or a native credential mechanism.
 
-Credential names used with `secret` must match `[A-Z_][A-Z0-9_]*`.
+Credential names used with `mainframe-secret` must match `[A-Z_][A-Z0-9_]*`.
 
 ## Servers
 

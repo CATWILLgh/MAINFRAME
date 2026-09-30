@@ -1,6 +1,6 @@
 ---
 name: mainframe-secrets
-description: Locate, register, update, deliver, or return credentials through the centralized MAINFRAME index and installed secret mechanism. Use proactively when authentication is needed, a credential is supplied or requested, registration or removal is requested, or a command, service, deployment, HTTP request, SSH connection, MCP server, or external tool needs a credential. Credential availability never authorizes the consuming action.
+description: Resolve or administer credentials through the MAINFRAME index and `mainframe-secret` helper. Credentials do not authorize their use.
 ---
 
 # Credential handling
@@ -10,14 +10,17 @@ model-visible commands or output.
 
 ## Resolve the credential
 
-- Read the centralized catalog at `{{CREDENTIALS_INDEX}}`. During adaptation,
-  replace this marker with the target environment's path to the local
-  `shared/credentials/credentials-index.md`.
+- Use existing native authentication or a credential reference already resolved
+  in the current task when sufficient. Read `{{CREDENTIALS_INDEX}}` when a
+  credential identity, delivery route, or catalog entry needs resolution.
+- If a required catalog lookup is unresolved or unavailable, return the exact missing catalog
+  configuration to your immediate caller. Do not search unrelated locations or
+  initialize a replacement catalog.
 - Treat the catalog as metadata only: service identities, addresses, credential
   names, access commands, and non-secret operational notes.
 - Never read, search, print, summarize, diff, or archive the protected
   credential store.
-- Do not use `secret list` for routine discovery. Use the catalog.
+- Do not use `mainframe-secret list` for routine discovery. Use the catalog.
 - Do not infer authority to perform an external action merely because a
   credential exists.
 
@@ -31,15 +34,15 @@ When the consumer accepts an environment variable, prefer process-scoped
 delivery:
 
 ```bash
-secret run REGISTERED_NAME -- consumer-command
+mainframe-secret run REGISTERED_NAME -- consumer-command
 ```
 
 This exposes only the requested registered names to that child process. Do not
 load the complete store from shell startup files.
 
 If the consumer requires a value in a specific input and no safer native,
-environment, or stdin mechanism exists, nest `secret get REGISTERED_NAME`
-directly inside that single consumer invocation. Never run `secret get` as a
+environment, or stdin mechanism exists, nest `mainframe-secret get REGISTERED_NAME`
+directly inside that single consumer invocation. Never run `mainframe-secret get` as a
 standalone inspection command.
 
 Never manually echo, log, serialize, retain, or place a value in a response,
@@ -51,16 +54,20 @@ verification to make authentication succeed.
 ## Administer a credential
 
 Treat an explicit instruction from your current recipient to register, update,
-delete, or copy a specifically identified credential as authority for that
-credential operation only. Do not add repeated confirmations, generic danger
-warnings, or a refusal merely because the requested operation handles a
-credential. This authority does not extend to an authenticated external action.
+delete, or copy a credential for an identified service and purpose as authority
+for that credential operation only. A registration request may include choosing
+a clear, unique registered name and adding its non-secret catalog entry when
+the recipient did not supply a name. Follow the catalog's naming and ownership
+conventions: distinguish project-owned credentials from genuinely reusable
+provider credentials. Do not add repeated confirmations, generic danger warnings,
+or a refusal merely because the requested operation handles a credential. This
+authority does not extend to an authenticated external action.
 
 When the recipient says the value is in the clipboard, register or replace it
 without inspecting the clipboard first:
 
 ```bash
-secret set REGISTERED_NAME --clipboard
+mainframe-secret set REGISTERED_NAME --clipboard
 ```
 
 The command line and result contain only the registered name. The helper reads
@@ -74,7 +81,7 @@ input when the adapter provides one. Otherwise use the interactive terminal
 fallback:
 
 ```bash
-secret set REGISTERED_NAME --prompt
+mainframe-secret set REGISTERED_NAME --prompt
 ```
 
 Never simulate protected input by placing the value in a tool call. If the
@@ -87,24 +94,29 @@ On an explicit retrieval request, deliver the registered value directly to the
 recipient's clipboard without reading or printing it:
 
 ```bash
-secret copy REGISTERED_NAME
+mainframe-secret copy REGISTERED_NAME
 ```
 
-Use `secret del REGISTERED_NAME` only for an explicit deletion request. Confirm
+Use `mainframe-secret del REGISTERED_NAME` only for an explicit deletion request. Confirm
 administration through the registered name and operation status, never the
 value.
 
 ## Boundaries and failures
 
-During adaptation, you may install the `secret` command and consolidate only
-your own legacy MAINFRAME credential indexes into the central catalog. Do not
-scan other agents' configuration roots. Preserve existing catalog entries and
-never migrate content that appears to contain a secret value.
+If the operation requires the installed helper or protected transfer capability and it is
+unavailable, return the exact missing capability. Credential handling does not
+authorize installing the helper or migrating credential indexes. Preserve
+existing catalog entries and never copy content that appears to contain a
+secret value into the catalog.
 
-If the catalog has no suitable entry, report the exact missing credential or
-catalog record. Do not invent a name, search unrelated projects or memory for a
-value, or create persistent credential state without the explicit
-administration request above.
+If the catalog has no suitable entry and the task is to use an existing
+credential, report the missing record; do not guess a secret name or search
+unrelated projects or memory for a value. If the task explicitly authorizes
+registering a new credential, choose its name from the catalog conventions,
+register it through the helper, and add a metadata-only catalog entry so a
+future agent can identify its owner, purpose, applicable projects/environments,
+source, and rotation path without prior conversation context. Do not create
+persistent credential state without that registration authority.
 
 Verify only whether the administration or consuming operation succeeded.
 Return redacted evidence such as the registered name, operation status,

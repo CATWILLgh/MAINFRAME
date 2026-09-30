@@ -29,8 +29,9 @@ content after reload.
 
 ## Record
 
-Leave the component `pending` for an unresolved ownership decision. Do not use
-`unsupported` for a decision that has not been made.
+Leave component delivery `pending` and put the unresolved ownership decision in
+`next_action`. Do not use `reason` or `unsupported` for a decision that has not
+been made.
 
 ## Never do
 

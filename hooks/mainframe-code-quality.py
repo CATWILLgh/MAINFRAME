@@ -1146,6 +1146,8 @@ def _locked(path: Path):
 
 def _load(path: Path) -> tuple[dict[str, object], bool]:
     try:
+        if time.time() - path.stat().st_mtime > STATE_MAX_AGE_SECONDS:
+            return _empty_state(), True
         value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, dict) or value.get("version") != 1:
             raise ValueError("invalid state version")
@@ -1866,14 +1868,21 @@ def check_completion(
             expired_before = _prune_pending(state)
             pending = state.get("pending")
             incomplete_edits = bool(pending)
-            if isinstance(pending, dict):
-                pending.clear()
+            # A completion callback can overlap another operation in the same
+            # scope. Only its matching post event or expiry owns that snapshot.
             active = _active_records(state)
             paths = list(active)
             _save(path, state)
 
         scans: dict[str, ScanResult] = {}
         issues: list[ScanIssue] = []
+        if incomplete_edits:
+            issues.append(
+                ScanIssue(
+                    "boundary:incomplete-edit",
+                    "An edit has no matching post event yet; its snapshot remains available for attribution.",
+                )
+            )
         for raw_path in paths:
             candidate = Path(raw_path)
             scan = _read_scan(candidate, workspace, include_advisory=False)
@@ -1896,7 +1905,7 @@ def check_completion(
                 reason += "\n" + issue_note
             return QualityResult(block_reason=reason)
         note = _issue_advisory(claimed)
-        if recovered_before or recovered_after or expired_before or expired_after or incomplete_edits:
+        if recovered_before or recovered_after or expired_before or expired_after:
             note = _join_notes(note, _unavailable("completion verification").advisory)
         return QualityResult(advisory=note)
     except Exception:

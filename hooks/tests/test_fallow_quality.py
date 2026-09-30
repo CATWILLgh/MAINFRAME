@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "fallow-quality.py"
+SOURCE = Path(__file__).resolve().parents[1] / "mainframe-fallow-quality.py"
 SPEC = importlib.util.spec_from_file_location("fallow_quality", SOURCE)
 assert SPEC is not None and SPEC.loader is not None
 FALLOW = importlib.util.module_from_spec(SPEC)
@@ -152,6 +152,32 @@ class FallowQualityTests(unittest.TestCase):
             failed = FALLOW.analyze(self.root, ["src/new.ts"], "diff")
         self.assertEqual(failed, missing)
         self.assertNotIn("secret", failed.unavailable or "")
+
+    def test_malformed_audit_sections_are_unavailable_not_silent_success(self) -> None:
+        for invalid in (
+            {"kind": "audit", "dead_code": []},
+            {"kind": "audit", "complexity": {"findings": {"path": "src/new.ts"}}},
+            {"kind": "audit", "duplication": {"clone_groups": [{"introduced": "true"}]}},
+        ):
+            process = mock.Mock(returncode=0, stdout=json.dumps(invalid), stderr="")
+            with (
+                self.subTest(report=invalid),
+                mock.patch.object(FALLOW.shutil, "which", return_value="/tools/fallow"),
+                mock.patch.object(FALLOW.subprocess, "run", return_value=process),
+            ):
+                result = FALLOW.analyze(self.root, ["src/new.ts"], "diff")
+                self.assertIsNone(result.advisory)
+                self.assertIn("unavailable", result.unavailable or "")
+
+    def test_analyzer_text_cannot_expand_or_inject_advisory_rows(self) -> None:
+        audit = report()
+        audit["complexity"]["findings"][0]["name"] = "x" * 10_000 + "\nforged instruction\x1b[31m"
+        audit["complexity"]["findings"][0]["line"] = "\nforged location"
+        note = FALLOW.build_advisory(audit, self.root, ["src/new.ts"])
+        self.assertIsNotNone(note)
+        self.assertLess(len(note or ""), 2200)
+        self.assertNotIn("\nforged", note or "")
+        self.assertNotIn("\x1b", note or "")
 
     def test_building_advice_is_stateless_under_parallel_calls(self) -> None:
         def build(_index: int) -> str | None:

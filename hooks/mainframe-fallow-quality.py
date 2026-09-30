@@ -33,6 +33,7 @@ JS_EXTENSIONS = frozenset(
 MAX_DIFF_BYTES = 2_000_000
 MAX_PATHS = 64
 MAX_MESSAGE_ROWS = 6
+MAX_ROW_CHARS = 240
 ANALYZE_TIMEOUT_SECONDS = 180
 
 
@@ -108,6 +109,44 @@ def _introduced(rows: object) -> list[dict[str, object]]:
     ]
 
 
+def _supported_report(report: object) -> bool:
+    if not isinstance(report, dict) or report.get("kind") != "audit" or report.get("error") is True:
+        return False
+    collections = {
+        "dead_code": (
+            "unused_files", "circular_dependencies", "boundary_violations",
+            "boundary_call_violations",
+        ),
+        "complexity": ("findings",),
+        "duplication": ("clone_groups",),
+    }
+    for key, names in collections.items():
+        section = report.get(key)
+        if section is None:
+            continue
+        if not isinstance(section, dict):
+            return False
+        for name in names:
+            rows = section.get(name)
+            if rows is None:
+                continue
+            if not isinstance(rows, list) or any(
+                not isinstance(row, dict) or not isinstance(row.get("introduced"), bool)
+                for row in rows
+            ):
+                return False
+    return True
+
+
+def _bounded_row(value: str) -> str:
+    safe = "".join(character if character.isprintable() else "?" for character in value)
+    return safe[:MAX_ROW_CHARS] + ("..." if len(safe) > MAX_ROW_CHARS else "")
+
+
+def _number(value: object) -> str:
+    return str(value) if type(value) is int and 0 <= value <= 1_000_000_000 else "?"
+
+
 def _touches(root: Path, finding: dict[str, object], owned: set[Path]) -> bool:
     values: list[object] = []
     for key in ("path", "from_path", "to_path", "callee"):
@@ -139,7 +178,7 @@ def build_advisory(
     if not affected or wholly_owned is None:
         return None
     wholly_owned &= affected
-    if not isinstance(report, dict) or report.get("kind") != "audit":
+    if not _supported_report(report):
         return None
 
     dead = report.get("dead_code") or {}
@@ -191,15 +230,15 @@ def build_advisory(
         rows.append(
             "boundary: "
             f"{_display(root, finding.get('from_path') or finding.get('path'))}:"
-            f"{finding.get('line', '?')} -> "
+            f"{_number(finding.get('line'))} -> "
             f"{_display(root, finding.get('to_path') or finding.get('callee'))}"
         )
     for finding in complex_rows:
         rows.append(
             "complexity: "
-            f"{_display(root, finding.get('path'))}:{finding.get('line', '?')} "
+            f"{_display(root, finding.get('path'))}:{_number(finding.get('line'))} "
             f"`{finding.get('name', '?')}` "
-            f"(cyclomatic {finding.get('cyclomatic', '?')})"
+            f"(cyclomatic {_number(finding.get('cyclomatic'))})"
         )
     for finding in duplicate_rows:
         instances = finding.get("instances") or []
@@ -207,13 +246,13 @@ def build_advisory(
         first = first if isinstance(first, dict) else {}
         rows.append(
             "duplication: "
-            f"{_display(root, first.get('file'))}:{first.get('start_line', '?')} "
-            f"({finding.get('line_count', '?')} lines)"
+            f"{_display(root, first.get('file'))}:{_number(first.get('start_line'))} "
+            f"({_number(finding.get('line_count'))} lines)"
         )
 
     if not rows:
         return None
-    shown = rows[:MAX_MESSAGE_ROWS]
+    shown = [_bounded_row(row) for row in rows[:MAX_MESSAGE_ROWS]]
     remainder = len(rows) - len(shown)
     more = f"\n  - ...and {remainder} more" if remainder else ""
     return (
@@ -286,7 +325,7 @@ def analyze(
         if process.returncode not in (0, 1):
             return _unavailable()
         report = json.loads(process.stdout)
-        if not isinstance(report, dict) or report.get("error") is True:
+        if not _supported_report(report):
             return _unavailable()
         note = build_advisory(
             report,
@@ -294,8 +333,6 @@ def analyze(
             relevant,
             wholly_owned_paths=wholly_owned,
         )
-        if report.get("kind") != "audit":
-            return _unavailable()
         return FallowResult(advisory=note)
     except (
         json.JSONDecodeError,

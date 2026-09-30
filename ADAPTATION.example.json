@@ -1,6 +1,5 @@
 {
-  "schema_version": 1,
-  "mainframe_root": null,
+  "schema_version": 2,
   "target": {
     "product": null,
     "product_id": null,
@@ -11,152 +10,199 @@
     "desktop_cli_share_configuration": null,
     "global_paths": {}
   },
-  "status_values": [
+  "delivery_values": [
     "pending",
     "installed",
     "unsupported"
   ],
+  "verification_values": [
+    "pending",
+    "passed"
+  ],
   "components": {
     "shared": {
       "credentials": {
-        "source": "shared/credentials/secret",
-        "status": "pending"
+        "source": "shared/credentials/mainframe-secret",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "skills": {
       "mainframe-secrets": {
         "source": "skills/mainframe-secrets",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-curl-requests": {
         "source": "skills/mainframe-curl-requests",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-infrastructure": {
         "source": "skills/mainframe-infrastructure",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-ops-app-server-safety": {
         "source": "skills/mainframe-ops-app-server-safety",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-project-harness": {
         "source": "skills/mainframe-project-harness",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-peer-work": {
         "source": "skills/mainframe-peer-work",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-consequential-review": {
         "source": "skills/mainframe-consequential-review",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-record-project-problem": {
         "source": "skills/mainframe-record-project-problem",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-harness-feedback": {
         "source": "skills/mainframe-harness-feedback",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-typescript-backend": {
         "source": "skills/mainframe-typescript-backend",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-python-backend": {
         "source": "skills/mainframe-python-backend",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-go-backend": {
+        "source": "skills/mainframe-go-backend",
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-frontend": {
         "source": "skills/mainframe-frontend",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-research": {
         "source": "skills/mainframe-research",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-test-audit": {
         "source": "skills/mainframe-test-audit",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {
       "mainframe-typescript-backend-engineer": {
         "source": "agents/mainframe-typescript-backend-engineer.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-python-backend-engineer": {
         "source": "agents/mainframe-python-backend-engineer.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-go-backend-engineer": {
+        "source": "agents/mainframe-go-backend-engineer.md",
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-react-frontend-engineer": {
         "source": "agents/mainframe-react-frontend-engineer.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-consequential-reviewer": {
         "source": "agents/mainframe-consequential-reviewer.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-researcher": {
         "source": "agents/mainframe-researcher.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
       "mainframe-test-auditor": {
         "source": "agents/mainframe-test-auditor.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "commands": {
       "mainframe-init": {
         "source": "commands/mainframe-init.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "project-skill": {
-        "source": "commands/project-skill.md",
-        "status": "pending"
+      "mainframe-project-skill": {
+        "source": "commands/mainframe-project-skill.md",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "tickets-find": {
-        "source": "commands/tickets-find.md",
-        "status": "pending"
+      "mainframe-tickets-find": {
+        "source": "commands/mainframe-tickets-find.md",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "tickets-refine": {
-        "source": "commands/tickets-refine.md",
-        "status": "pending"
+      "mainframe-tickets-refine": {
+        "source": "commands/mainframe-tickets-refine.md",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "tickets-implement": {
-        "source": "commands/tickets-implement.md",
-        "status": "pending"
+      "mainframe-tickets-implement": {
+        "source": "commands/mainframe-tickets-implement.md",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "tickets-verify": {
-        "source": "commands/tickets-verify.md",
-        "status": "pending"
+      "mainframe-tickets-verify": {
+        "source": "commands/mainframe-tickets-verify.md",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "hooks": {
-      "destructive-operations": {
-        "source": "hooks/destructive-operations.py",
-        "status": "pending"
+      "mainframe-destructive-operations": {
+        "source": "hooks/mainframe-destructive-operations.py",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "secret-access": {
-        "source": "hooks/secret-access.py",
-        "status": "pending"
+      "mainframe-secret-access": {
+        "source": "hooks/mainframe-secret-access.py",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "rg-short-replace": {
-        "source": "hooks/rg-short-replace.py",
-        "status": "pending"
+      "mainframe-rg-short-replace": {
+        "source": "hooks/mainframe-rg-short-replace.py",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "commit-secrets": {
-        "source": "hooks/commit-secrets.py",
-        "status": "pending"
+      "mainframe-commit-secrets": {
+        "source": "hooks/mainframe-commit-secrets.py",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "code-quality": {
-        "source": "hooks/code-quality.py",
-        "status": "pending"
+      "mainframe-code-quality": {
+        "source": "hooks/mainframe-code-quality.py",
+        "delivery": "pending",
+        "verification": "pending"
       },
-      "fallow-quality": {
-        "source": "hooks/fallow-quality.py",
-        "status": "pending"
+      "mainframe-fallow-quality": {
+        "source": "hooks/mainframe-fallow-quality.py",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "mcp": {},
@@ -166,7 +212,8 @@
     "instructions": {
       "global": {
         "source": "instructions/global.md",
-        "status": "pending"
+        "delivery": "pending",
+        "verification": "pending"
       }
     }
   }

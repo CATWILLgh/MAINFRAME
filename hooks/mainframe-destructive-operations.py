@@ -2,7 +2,7 @@
 """Recognize a small set of catastrophic shell and Git operations.
 
 This is the canonical, product-agnostic detector for the
-``destructive-operations`` hook. Call :func:`decision_reason` immediately
+``mainframe-destructive-operations`` hook. Call :func:`decision_reason` immediately
 before a shell action. A returned string is a hard-block reason. ``None``
 means that this detector makes no decision and the receiving product's native
 permission layer remains authoritative.
@@ -469,6 +469,86 @@ def _target_reason(
     return None
 
 
+def _context_free_target_reason(path: str, home_root: str) -> str | None:
+    """Recognize catastrophic absolute roots without assuming a shell cwd."""
+    if path in {"$HOME", "${HOME}"}:
+        resolved = home_root
+    elif "$" in path or "`" in path or any(char in path for char in "?*[]{}"):
+        return None
+    else:
+        expanded = _expand_home(path, home_root)
+        if not os.path.isabs(expanded):
+            return None
+        if not path.endswith(os.sep) and os.path.islink(expanded):
+            resolved = os.path.join(
+                os.path.realpath(os.path.dirname(expanded)),
+                os.path.basename(os.path.normpath(expanded)),
+            )
+        else:
+            resolved = os.path.realpath(expanded)
+    if resolved == os.path.realpath(os.sep):
+        return "recursive rm targets the filesystem root"
+    if resolved == home_root:
+        return f"recursive rm targets the home root: {home_root}"
+    return None
+
+
+def context_free_decision_reason(
+    command: str,
+    home_root: str | None = None,
+    *,
+    depth: int = 0,
+    _cwd_may_have_changed: bool = False,
+) -> str | None:
+    """Return only decisions whose correctness does not require the tool cwd.
+
+    This degraded adapter boundary retains command-structural Git guards,
+    filesystem/home-root deletion guards, and the fixed directory-change plus
+    relative recursive-delete form. It deliberately cannot identify an active
+    project root or resolve an ordinary relative target.
+    """
+    if not isinstance(command, str) or not command or depth > 3:
+        return None
+    if RM_HINT_RE.search(command) is None and GIT_HINT_RE.search(command) is None:
+        return None
+    home = os.path.realpath(home_root or os.path.expanduser("~"))
+    tokens = tokenize(command)
+    if tokens is None:
+        return None
+    directory_may_have_changed = _cwd_may_have_changed
+    for segment in split_subcommands(tokens):
+        nested = _nested_shell_command(segment)
+        if nested is not None and (
+            RM_HINT_RE.search(nested) or GIT_HINT_RE.search(nested)
+        ):
+            reason = context_free_decision_reason(
+                nested,
+                home,
+                depth=depth + 1,
+                _cwd_may_have_changed=directory_may_have_changed,
+            )
+            if reason:
+                return reason
+        git_reason = _git_destruction_reason(segment)
+        if git_reason:
+            return git_reason
+        index = _direct_rm_index(segment)
+        if index is not None and _recursive_rm_at(segment, index):
+            for path in _paths_after_rm(segment, index):
+                if directory_may_have_changed and _depends_on_current_directory(path, home):
+                    return (
+                        "recursive rm follows a working-directory change that "
+                        "cannot be verified safely; run the deletion separately "
+                        "with the intended working directory"
+                    )
+                reason = _context_free_target_reason(path, home)
+                if reason:
+                    return reason
+        if _changes_directory(segment):
+            directory_may_have_changed = True
+    return None
+
+
 def decision_reason(
     command: str,
     cwd: str,
@@ -476,6 +556,7 @@ def decision_reason(
     home_root: str | None = None,
     *,
     depth: int = 0,
+    _cwd_may_have_changed: bool = False,
 ) -> str | None:
     """Return a hard-block reason, otherwise leave the decision to the host."""
     if not isinstance(command, str) or not command:
@@ -483,9 +564,9 @@ def decision_reason(
     if RM_HINT_RE.search(command) is None and GIT_HINT_RE.search(command) is None:
         return None
     if not isinstance(cwd, str) or not cwd:
-        raise ValueError("destructive-operations requires the shell working directory")
+        raise ValueError("mainframe-destructive-operations requires the shell working directory")
     if not isinstance(project_root, str) or not project_root:
-        raise ValueError("destructive-operations requires the active project root")
+        raise ValueError("mainframe-destructive-operations requires the active project root")
     if depth > 3:
         return None
 
@@ -494,24 +575,19 @@ def decision_reason(
     if tokens is None:
         return None
 
-    directory_may_have_changed = False
+    directory_may_have_changed = _cwd_may_have_changed
     for segment in split_subcommands(tokens):
         nested = _nested_shell_command(segment)
         if nested is not None and (
             RM_HINT_RE.search(nested) or GIT_HINT_RE.search(nested)
         ):
-            if directory_may_have_changed and RM_HINT_RE.search(nested):
-                return (
-                    "recursive rm follows a working-directory change that "
-                    "cannot be verified safely; run the deletion separately "
-                    "with the intended working directory"
-                )
             reason = decision_reason(
                 nested,
                 cwd,
                 project_root,
                 home,
                 depth=depth + 1,
+                _cwd_may_have_changed=directory_may_have_changed,
             )
             if reason:
                 return reason

@@ -1,6 +1,6 @@
 ---
 name: mainframe-research
-description: Verify and connect current or disputed external claims through authoritative sources, provenance tracing, cross-checking, and quantitative validation. Use proactively when several dependent claims, conflicting evidence, or a consequential time-sensitive fact requires a bounded research block. Do not use for repository exploration, one routine lookup, implementation, or a user-owned decision.
+description: Verify several dependent, disputed, or consequential external claims through authoritative sources. Excludes routine lookups and implementation.
 ---
 
 # External research
@@ -13,7 +13,8 @@ Treat certainty as claim-specific. Keep facts supplied by the current recipient,
 
 State the bounded question and the date on which the answer must be current. Resolve the exact entities, jurisdiction, product or dataset version, surface, reference period, comparison baseline, units, and definitions that could change the answer. Return a missing load-bearing input to the current recipient when it cannot be recovered without guessing.
 
-Split the question into atomic claims that could be supported or falsified independently. Read every reference applicable to each material claim before evaluating its evidence:
+Separate claims that need different evidence. Read a reference when its
+domain-specific method is needed, reusing material already loaded:
 
 - [Software documentation](references/software-documentation.md) for products, APIs, libraries, tools, protocols, releases, compatibility, incidents, and security notices.
 - [News and current events](references/news.md) for events, announcements, disputes, allegations, investigations, and developing public claims.
@@ -29,7 +30,10 @@ Trace provenance. Syndicated reports, copied tables, mirrors, screenshots, summa
 
 Match every material date, number, unit, version, qualifier, and attribution to the source before using it. Keep contradictions instead of averaging them or silently choosing the convenient account. Explain whether a conflict follows from timing, definitions, versions, methodology, correction, interest, or an unresolved factual disagreement.
 
-Use the source and browsing capabilities available through the current environment. Do not require, install, or simulate a particular research service. After two genuinely different retrieval paths fail to expose claim-supporting content, record the limitation and continue with other evidence or stop when the missing source is load-bearing.
+Use available source and browsing capabilities without requiring a particular
+service. Try an alternate retrieval route when it is likely to resolve a material
+gap. Stop repeating failed retrievals when no useful route remains; report the
+limitation and continue with other evidence, leaving unsupported claims unresolved.
 
 Before returning, verify that each load-bearing citation supports the exact nearby claim and remains current enough for the stated research date. Re-fetch only when the earlier retrieval was incomplete or could have materially changed during the research.
 

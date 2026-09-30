@@ -5,7 +5,7 @@ central non-secret index it supports.
 
 ## Canonical boundary
 
-Only [shared/credentials/secret](../../../shared/credentials/secret) is global
+Only [shared/credentials/mainframe-secret](../../../shared/credentials/mainframe-secret) is global
 payload. Run [install.sh](../../../shared/credentials/install.sh) from the
 repository; do not copy it globally. The adjacent index template, ignored local
 index, and tests remain repository support. Never copy the complete directory.
@@ -13,12 +13,16 @@ index, and tests remain repository support. Never copy the complete directory.
 The centralized index is `shared/credentials/credentials-index.md`. It contains
 service descriptions, addresses, credential references, access commands, and
 notes, never secret values. Verify it is ignored before creating it from the
-template.
+template. The installer checks the actual ignore rules before any target
+writes, including for downloaded archives through temporary Git metadata; it
+does not initialize the source as a Git repository.
 
 ## Reconcile the helper
 
-Inspect the helper and installer before execution. Resolve the current global
-`secret` command identity without printing its body from a protected location.
+Inspect the helper and installer before execution. Ensure source and ignore
+preflight passes before installing the helper, preparing storage, or writing the
+index; a failed preflight must leave those targets unchanged. Resolve the current global
+`mainframe-secret` command identity without printing its body from a protected location.
 
 - Preserve an existing compatible command.
 - Install the canonical helper only when absent or when the installer positively
@@ -26,9 +30,10 @@ Inspect the helper and installer before execution. Resolve the current global
 - Never overwrite an unrelated command with the same name.
 - Never load a credential store through a shell startup file.
 
-The preferred human path registers clipboard content with `secret set NAME
---clipboard`. Protected interactive `--prompt` input is the fallback. `secret
-copy NAME` returns a requested value to the user's clipboard. Process-scoped or
+The preferred human path registers clipboard content with
+`mainframe-secret set NAME --clipboard`. Protected interactive `--prompt` input
+is the fallback. `mainframe-secret copy NAME` returns a requested value to the
+user's clipboard. Process-scoped or
 direct nested delivery passes a value straight to its consumer. These paths
 must not place values in command arguments or print them.
 
@@ -45,6 +50,9 @@ identified obsolete index owned by this same product after the merged index and
 helper are verified.
 
 ## Verify
+
+Run these credential lifecycle checks during adapter development or explicitly
+requested acceptance, not as an ordinary maintained-installation tail.
 
 Use the helper's repository tests first. Then prove the resolved global command
 supports protected registration and clipboard retrieval without exposing the

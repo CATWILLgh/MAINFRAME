@@ -13,9 +13,10 @@ Before an operation that can affect shared data, establish:
 - expected locks, downtime, replication effects, and failure modes;
 - available backup, verified recovery path, and post-change observation.
 
-A local database is disposable only when the active task or project instruction
-explicitly establishes that boundary. Never infer disposability from localhost,
-a container name, or test-looking data.
+A local database is disposable only when the effective instructions or current
+task authority explicitly establish that boundary and the target satisfies its
+conditions. Never infer disposability from localhost, a container name, or
+test-looking data alone.
 
 For PostgreSQL, use the exact version's official documentation for DDL,
 vacuuming, locking, replication, and configuration. Measure workload and
