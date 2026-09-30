@@ -74,8 +74,8 @@ moved, or removed.
 Only listed sources are product payload. A listed skill includes its required
 relative resources. A listed hook includes only its canonical source file, not
 `hooks/README.md` or `hooks/tests/`. The shared credential component installs
-only `shared/credentials/secret`; its installer, template, local index, and
-tests remain repository support.
+only `shared/credentials/mainframe-secret`; its installer, template, local
+index, and tests remain repository support.
 
 A listed hook may require the maintained native transport accompanying its
 binding. Install only that support file and the binding's canonical detector;

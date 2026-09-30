@@ -4,8 +4,8 @@ MAINFRAME is a product-neutral set of instructions, skills, agents, commands,
 and hooks for coding agents. The repository stores one canonical version of
 each component. A maintained installer generates native copies from these sources
 and a small product-specific mapping. Maintained implementations target Codex,
-ZCode Desktop, Antigravity Desktop 2.0, and MiniMax Code Desktop. Other products
-require separately assigned adapter development.
+ZCode Desktop, Antigravity Desktop 2.0, MiniMax Code Desktop, and Cline Desktop
+or CLI. Other products require separately assigned adapter development.
 
 Canonical content stays product-neutral. Native packaging, registration,
 lifecycle handling, and installation checks live under [installer/](installer/).
@@ -54,8 +54,9 @@ source validation or successful installation alone is not enough.
 
 The [Codex](docs/installation/codex-installer.md),
 [ZCode Desktop](docs/installation/zcode-installer.md),
-[Antigravity Desktop 2.0](docs/installation/antigravity-installer.md), and
-[MiniMax Code Desktop](docs/installation/minimax-installer.md) installers
+[Antigravity Desktop 2.0](docs/installation/antigravity-installer.md),
+[MiniMax Code Desktop](docs/installation/minimax-installer.md), and
+[Cline](docs/installation/cline-installer.md) installers
 implement packaging, ownership, updates, recovery, and safe hook removal for
 their documented versions. The installation-procedure trials below do not
 establish full native acceptance; each adapter records its own exact limitations.
@@ -90,12 +91,14 @@ MAINFRAME has one supported installation path:
 3. Send [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md) to the agent on its own, as an
    attachment or file reference. No additional prompt is needed.
 
-For Codex, ZCode Desktop, Antigravity Desktop 2.0, and MiniMax Code Desktop, the agent runs [install.py](install.py), reviews existing instruction
-semantics when required by the plan, verifies the delivered structure, and checks
-available discovery evidence on the current surface. If activation or reload
-requires user action, it leaves a short handoff and records the remaining gaps.
-It does not regenerate installation scripts or start a model session for each
-file. The installer does not change product versions or choose a model.
+For Codex, ZCode Desktop, Antigravity Desktop 2.0, MiniMax Code Desktop, and
+Cline Desktop or CLI, the agent runs [install.py](install.py), reviews existing
+instruction semantics when required by the plan, verifies the delivered
+structure, and checks available discovery evidence on the current surface. If
+activation or reload requires user action, it leaves a short handoff and records
+the remaining gaps. It does not regenerate installation scripts or start a model
+session for each file. The installer does not change product versions or choose
+a model.
 
 The agent checks the applicable native contract, installs every applicable
 component into its own global environment, and records which discovery and
@@ -132,10 +135,11 @@ installable component identities and canonical sources.
 | Listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
 | [shared/credentials/mainframe-secret](shared/credentials/mainframe-secret) | The global `mainframe-secret` helper when a compatible command is not already present |
 
-Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are direct runtime
-support for listed hooks, not separate MAINFRAME components. An adapter reuses
-or installs them only when the hook requires them and the target product can
-support the behavior.
+Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are optional runtime
+support for listed hooks, not separate MAINFRAME components. An adapter uses an
+already available analyzer when the hook requires it and reports unavailable
+coverage when it is absent. The MAINFRAME installer does not install or update
+these third-party tools.
 
 Nothing else is product payload. In particular, the following stay in this
 repository and are never installed globally:

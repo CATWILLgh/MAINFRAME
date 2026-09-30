@@ -25,7 +25,7 @@ Security problems include behavior that:
 
 - overwrites unrelated global configuration or native product state;
 - adapts permissions, sandboxing, tools, hooks, or roles unsafely;
-- exposes a value handled by the `secret` helper;
+- exposes a value handled by the `mainframe-secret` helper;
 - lets a positively recognized protected operation pass, or blocks unrelated
   work only because a guard had an operational failure;
 - mixes attribution across projects, sessions, agents, or concurrent work;
