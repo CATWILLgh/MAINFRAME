@@ -43,7 +43,7 @@ jobs:
         run: python3 -m unittest discover -s shared/credentials/tests -p 'test_*.py'
 
       - name: Check shell syntax
-        run: bash -n shared/credentials/secret shared/credentials/install.sh
+        run: bash -n shared/credentials/mainframe-secret shared/credentials/install.sh
 
       - name: Check changed whitespace
         shell: bash
