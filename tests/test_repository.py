@@ -8,50 +8,6 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "ADAPTATION.example.json"
 
-EXPECTED_COMPONENTS = {
-    "skills": {
-        "mainframe-secrets",
-        "mainframe-curl-requests",
-        "mainframe-infrastructure",
-        "mainframe-ops-app-server-safety",
-        "mainframe-project-harness",
-        "mainframe-peer-work",
-        "mainframe-consequential-review",
-        "mainframe-record-project-problem",
-        "mainframe-harness-feedback",
-        "mainframe-typescript-backend",
-        "mainframe-python-backend",
-        "mainframe-frontend",
-        "mainframe-research",
-        "mainframe-test-audit",
-    },
-    "agents": {
-        "mainframe-typescript-backend-engineer",
-        "mainframe-python-backend-engineer",
-        "mainframe-react-frontend-engineer",
-        "mainframe-consequential-reviewer",
-        "mainframe-researcher",
-        "mainframe-test-auditor",
-    },
-    "commands": {
-        "mainframe-init",
-        "project-skill",
-        "tickets-find",
-        "tickets-refine",
-        "tickets-implement",
-        "tickets-verify",
-    },
-    "hooks": {
-        "destructive-operations",
-        "secret-access",
-        "rg-short-replace",
-        "commit-secrets",
-        "code-quality",
-        "fallow-quality",
-    },
-}
-
-
 def load_manifest():
     return json.loads(MANIFEST.read_text(encoding="utf-8"))
 
@@ -66,7 +22,7 @@ def markdown_files():
         ROOT / "ADAPT-MAINFRAME.md",
         ROOT / "hooks" / "README.md",
     ]
-    for directory in ("docs", "skills", "agents", "commands"):
+    for directory in ("docs/installation", "instructions", "skills", "agents", "commands"):
         roots.extend((ROOT / directory).rglob("*.md"))
     return sorted(set(roots))
 
@@ -80,36 +36,41 @@ def prose_without_fenced_code(text):
             continue
         if not in_fence:
             lines.append(line)
-    return "\n".join(lines)
+    return re.sub(r"`[^`\n]*`", "", "\n".join(lines))
 
 
 class RepositoryContractTests(unittest.TestCase):
     def test_manifest_uses_the_supported_state_model(self):
         manifest = load_manifest()
-        self.assertEqual(manifest["schema_version"], 1)
+        self.assertEqual(manifest["schema_version"], 2)
         self.assertEqual(
-            manifest["status_values"], ["pending", "installed", "unsupported"]
+            manifest["delivery_values"], ["pending", "installed", "unsupported"]
         )
+        self.assertEqual(manifest["verification_values"], ["pending", "passed"])
+        self.assertNotIn("status_values", manifest)
+        self.assertNotIn("mainframe_root", manifest)
 
         for group in manifest["components"].values():
-            if not isinstance(group, dict):
-                continue
             for component in group.values():
-                if isinstance(component, dict) and "status" in component:
-                    self.assertEqual(component["status"], "pending")
+                self.assertEqual(
+                    set(component), {"source", "delivery", "verification"}
+                )
+                self.assertEqual(component["delivery"], "pending")
+                self.assertEqual(component["verification"], "pending")
 
     def test_manifest_matches_the_delivered_component_inventory(self):
         components = load_manifest()["components"]
-        for group, expected in EXPECTED_COMPONENTS.items():
-            self.assertEqual(set(components[group]), expected, group)
-
-        self.assertEqual(set(components["instructions"]), {"global"})
+        self.assertEqual(set(components), {
+            "shared", "instructions", "skills", "agents", "commands", "hooks",
+            "mcp", "plugins", "runtime", "settings",
+        })
         self.assertEqual(
             components["shared"],
             {
                 "credentials": {
-                    "source": "shared/credentials/secret",
-                    "status": "pending",
+                    "source": "shared/credentials/mainframe-secret",
+                    "delivery": "pending",
+                    "verification": "pending",
                 }
             },
         )
@@ -118,16 +79,35 @@ class RepositoryContractTests(unittest.TestCase):
 
     def test_manifest_inventory_matches_files_on_disk(self):
         actual = {
-            "skills": {
-                path.parent.name for path in (ROOT / "skills").glob("*/SKILL.md")
+            "instructions": {
+                path.stem: path.relative_to(ROOT).as_posix()
+                for path in (ROOT / "instructions").glob("*.md")
             },
-            "agents": {path.stem for path in (ROOT / "agents").glob("*.md")},
-            "commands": {path.stem for path in (ROOT / "commands").glob("*.md")},
+            "skills": {
+                path.name: path.relative_to(ROOT).as_posix()
+                for path in (ROOT / "skills").iterdir() if path.is_dir()
+            },
+            "agents": {
+                path.stem: path.relative_to(ROOT).as_posix()
+                for path in (ROOT / "agents").glob("*.md")
+            },
+            "commands": {
+                path.stem: path.relative_to(ROOT).as_posix()
+                for path in (ROOT / "commands").glob("*.md")
+            },
             "hooks": {
-                path.stem for path in (ROOT / "hooks").glob("*.py")
+                path.stem: path.relative_to(ROOT).as_posix()
+                for path in (ROOT / "hooks").glob("*.py")
             },
         }
-        self.assertEqual(actual, EXPECTED_COMPONENTS)
+        components = load_manifest()["components"]
+        for group, sources in actual.items():
+            self.assertEqual(
+                {name: row["source"] for name, row in components[group].items()},
+                sources, group,
+            )
+        for source in actual["skills"].values():
+            self.assertTrue((ROOT / source / "SKILL.md").is_file(), source)
 
     def test_every_manifest_source_exists_inside_the_repository(self):
         components = load_manifest()["components"]
@@ -136,6 +116,9 @@ class RepositoryContractTests(unittest.TestCase):
             for component in group.values():
                 if isinstance(component, dict) and "source" in component:
                     sources.append(component["source"])
+
+        self.assertEqual(len(sources), 36, "unexpected payload identity count")
+        self.assertEqual(len(sources), len(set(sources)), "duplicate payload source")
 
         forbidden = {
             "README.md",

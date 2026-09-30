@@ -26,7 +26,11 @@ Use an international harmonizer or aggregator only after checking whether it tra
 
 Take values from the table or machine-readable series that defines the measure rather than from a chart, snippet, or article paraphrase. Preserve source precision and do not add meaningful digits through calculation.
 
-For every derived result, retain the source operands, formula, direction, denominator, rounding rule, and resulting unit. Recalculate it independently. When the available tools cannot verify the arithmetic reliably, return the operands instead of asserting the derived value.
+For derived results, retain the source operands, formula, denominator, rounding,
+and unit so the calculation is reproducible. Use a calculation tool when needed
+for reliable arithmetic; independently cross-check consequential, complex, or
+error-prone calculations. If a result cannot be verified reliably, return the
+operands and limitation instead of asserting the value.
 
 Use an exchange rate for the stated date or period and identify its source. Compare like definitions and vintages. If harmonization would require an unsupported assumption, report the values separately instead of manufacturing a ranking.
 

@@ -12,13 +12,17 @@ Use this reference when the backend boundary makes the faithful local evidence u
 
 ## Protect the behavior economically
 
-- Start with the smallest reproduction that can fail for the reported defect. Confirm a red result fails for the intended reason.
+- Use a pre-change failing reproduction when practical and useful for the changed
+  risk, confirming its failure reason. Do not manufacture a red run when direct
+  inspection provides stronger evidence.
 - Cover the meaningful success, rejection, boundary, concurrency, and failure branches introduced by the contract; do not enumerate branches that do not exist.
 - Assert observable outcomes and protected side effects rather than private call order or implementation structure.
 - Preserve deterministic control over time, retries, scheduling, and interleavings. Do not replace synchronization claims with arbitrary waits.
 - Reconcile overlapping tests when behavior changes instead of accumulating near-duplicates.
 - Do not trust a mock for a contract it does not implement, update snapshots blindly, weaken types or assertions, retry flakes until green, or suppress a failing path.
 
-Run the focused proof first and then the nearest relevant fast package checks. Inspect the exact script, runner configuration, lifecycle hooks, setup, and fixtures before execution because a familiar script name does not establish its scope or side effects.
+Run the focused proof and relevant fast package checks. Establish command scope
+and side effects from its script, configuration, and fixtures when unknown or
+changed; reuse that evidence for subsequent runs of the same check.
 
 Current owning references: [Node.js test runner](https://nodejs.org/api/test.html), [Next.js testing](https://nextjs.org/docs/app/guides/testing), and [NestJS testing](https://docs.nestjs.com/fundamentals/testing).

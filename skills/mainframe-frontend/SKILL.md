@@ -1,6 +1,6 @@
 ---
 name: mainframe-frontend
-description: Develop, debug, review, test, or visually refine client-facing React web applications and established React layers. Use proactively for user journeys, components, browser state, accessibility, responsive behavior, UI and UX, and focused frontend tests. Do not use for React Native, substantial backend work, infrastructure ownership, or standalone design-system development.
+description: Develop, debug, review, or test React web interfaces. Excludes React Native, substantial backend, infrastructure, and standalone design systems.
 ---
 
 # Frontend engineering
@@ -11,9 +11,12 @@ Deliver one coherent user-facing result. Treat implementation, interaction quali
 
 ## Establish the active surface
 
-Identify the nearest package that owns the affected route or surface. Run the bounded [recon script](scripts/recon.mjs) against that explicit package root, or follow [manual reconnaissance](references/recon.md). Treat its report as routing evidence, not runtime proof.
+Identify the package that owns the affected surface. If ownership or runtime wiring is unclear, use the bounded [recon script](scripts/recon.mjs) or [manual reconnaissance](references/recon.md) for that package. Reuse current inspected evidence; the report is routing evidence, not runtime proof.
 
-Trace the changed journey through its route, rendering boundary, component tree, state, browser APIs, server contract, reachable states, and existing tests. Inspect the running product, nearby surfaces, tokens, primitives, representative content, and effective project instructions before choosing an implementation or visual direction.
+Trace the parts of the user journey affected by the change and their contracts
+and tests. Inspect nearby surfaces and the running product when needed to resolve
+interaction or visual decisions. Reuse established tokens, primitives, and current
+project evidence without repeating unrelated discovery.
 
 Several routers, state libraries, validators, or component systems may legitimately coexist. Resolve ownership from imports, providers, configuration, registration, runtime wiring, and affected files. Surface a decision only when evidence cannot resolve a product, business, data, infrastructure, permission, or assigned visual-direction choice with material consequences.
 
@@ -44,6 +47,10 @@ Keep tokens, typography, spacing, geometry, density, iconography, motion, states
 
 Implement every affected location inside the assigned boundary. Represent the loading, empty, pending, error, retry, stale, forbidden, offline, success, and recovery states that are actually reachable. Keep the server authoritative for permissions, durable business state, and protected transitions; keep substantial server work with its backend owner.
 
-Use the project's native commands and the smallest faithful failing evidence when practical. Then run the focused proof and nearest relevant fast checks. For any visual or interactive change, also exercise the actual rendered result through the browser-verification route; a build, unit test, DOM snapshot, or screenshot alone is not user-level proof.
+Use the project's native commands and the smallest faithful failing evidence when
+practical. Run checks covering the changed risk. For appearance changes, inspect
+the rendered surface; for interaction changes, exercise the affected behavior
+through the browser-verification route. A screenshot can demonstrate static
+appearance, but cannot prove interaction.
 
 Do not replace completion with TODOs, placeholders, weakened checks, suppressions, invented product state, duplicate components, or an unrecorded follow-up. Keep secrets out of bundles, storage, logs, errors, fixtures, telemetry, and browser traces. Preserve unrelated work and report every material verification gap.

@@ -20,7 +20,8 @@ Prepare protected credential delivery before registering a server. Use the
 target's documented field names and secret references. Merge by stable server
 identity and preserve unrelated registrations.
 
-Verify native discovery and a harmless capability listing without printing
+During adapter development or explicitly requested acceptance, verify native
+discovery and a harmless capability listing without printing
 commands, headers, tokens, environment values, or protected paths. A process
 that starts successfully does not prove tool exposure or authentication.
 
@@ -36,8 +37,9 @@ that path. Do not grant the whole repository, and do not create the directory
 until the first real report requires it.
 
 Never weaken a user's broader security policy to make MAINFRAME pass. If a
-required capability conflicts with managed policy, preserve the policy and mark
-the component pending or unsupported with the exact reason.
+required capability conflicts with managed policy, preserve the policy. Keep
+delivery `pending` with the missing decision in `next_action`, or set delivery
+to `unsupported` with the established product limitation in `reason`.
 
 ## Settings and cleanup
 

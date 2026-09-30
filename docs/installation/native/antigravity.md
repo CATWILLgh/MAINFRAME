@@ -1,59 +1,94 @@
-# Antigravity orientation
+# Antigravity Desktop 2.0 native mapping
 
-Last reviewed: 2026-09-07.
+Reviewed 2026-09-15 against the installed macOS application and current official
+documentation for **Antigravity 2.0 v2.13.0**. This page owns product evidence;
+the executable route is [the maintained installer](../antigravity-installer.md).
 
-Antigravity CLI and IDE surfaces can evolve independently. Recheck the installed
-versions, customization roots, plugin support, browser availability, and current
-official documentation before adapting.
+## Native destinations
 
-## Official sources
-
-- [Plugins and skills](https://antigravity.google/docs/cli/plugins/)
-- [Hooks](https://antigravity.google/docs/hooks)
-- [Rules](https://antigravity.google/docs/rules-workflows)
-- [Workflows to skills migration](https://antigravity.google/docs/migration/workflows-to-skills)
-
-## Current orientation
-
-| MAINFRAME concern | Native direction to verify |
+| Inventory category | Desktop global destination |
 | --- | --- |
-| Global instruction | Global Rules owner in the active CLI or IDE surface |
-| Skills | Native Agent Skills, either directly or inside an installed product-specific plugin |
-| Agents | Native agent/subagent templates when supported by the installed surface |
-| Commands | Prefer a current explicitly invoked skill representation; workflows are a migration concern, not a default new target |
-| Hooks | Native `hooks.json`, directly or in a plugin, with documented pre/post/invocation/stop events |
-| Frontend browser proof | Native Antigravity browser when available and adequate for real user interaction and console evidence |
+| Global instruction | `~/.gemini/GEMINI.md` |
+| Skills and resources | `~/.gemini/config/skills/<name>/SKILL.md` |
+| Custom agents | `~/.gemini/config/agents/<name>.md` |
+| Hooks | One owned composite binding in `~/.gemini/config/hooks.json`; foreign entries are preserved |
+| Credentials | Compatible global `mainframe-secret` helper plus the canonical non-secret index |
 
-A generated Antigravity plugin may be a clean installed container for native
-skills, agents, hooks, MCP, and rules. It remains target-specific adapter output,
-not a directory to commit as canonical MAINFRAME source. Keep one stable plugin
-identity if this packaging is chosen.
+The installed application reports bundle identifier `com.google.antigravity`
+and release `2.13.0`. Its Desktop transcripts live below
+`~/.gemini/antigravity`; CLI uses `~/.gemini/antigravity-cli`. The maintained
+entrypoint accepts only the Desktop surface, so the shared customization root
+does not authorize a CLI or IDE installation run.
 
-## Adaptation decisions
+Official references: [rules](https://antigravity.google/docs/rules-workflows/),
+[skills](https://antigravity.google/docs/skills/),
+[subagents](https://antigravity.google/docs/subagents/), and
+[hooks](https://antigravity.google/docs/hooks/).
 
-1. Separate CLI and IDE customization roots and versions before deciding whether
-   one installation serves both.
-2. Choose direct native components or one generated plugin based on current
-   product ownership and precedence. Do not install both representations.
-3. Translate explicit MAINFRAME commands to the current user-invocable mechanism
-   without converting them to automatically selected skills. Record any
-   inability to prevent autonomous invocation.
-4. Map hooks only to documented events with equivalent timing and effect. Verify
-   collaboration events separately when subagents must receive the rule.
-5. Keep plugin manifests, schemas, event names, and absolute paths only in the
-   globally installed adapter copy.
-6. Use the native browser for `mainframe-frontend` only after a harmless probe
-   proves it can operate the real target and expose the required evidence.
+## Represented components
 
-## Useful probes
+The global rule file has a documented 12,000-character limit. The installer
+merges one owned block, preserves outside content, and rejects an oversized
+result instead of truncating it. Complete skill packages are copied to the
+documented global root with resources and resolved local placeholders.
 
-- List active plugins, skills, agents, and rules in both relevant surfaces.
-- Validate a generated plugin with the current schema and native tooling.
-- Invoke one command-like skill only through the user path and observe whether
-  the model can also select it autonomously.
-- Trigger each hook using the documented synthetic or harmless action path.
-- Perform one visible browser interaction, navigation check, and console check.
+Custom agents use only documented frontmatter. They are subagent-only, use
+sandbox command policy, name one installed skill, and list exact current tool
+identifiers. Independent research, test audit, and consequential review use the
+documented `pro` tier; implementation roles inherit the caller because their
+bounded scope alone does not establish one always-sufficient lower tier.
+Read-only roles omit file-edit tools. Implementation roles also omit
+`list_permissions` and `ask_permission`: a native A106 attempt rejected the
+generated role because `list_permissions` was not registered in that execution
+surface, matching the documentation's warning that an unmapped tool name can
+break custom-agent execution.
 
-Do not restore a deprecated workflow simply because an old adapter used one.
-Do not claim a CLI plugin proves IDE discovery unless both surfaces expose the
-same effective component.
+Antigravity skills support both slash invocation and autonomous selection.
+Version 2.13.0 documents no explicit-only switch. The six canonical MAINFRAME
+commands therefore remain `unsupported` as complete contracts. The installer
+retains their useful slash behavior as ordinary skill packages whose discovery
+description and body both require the exact `/command` invocation. This is a
+prompt-level guard rather than native enforcement, and the state reports that
+limitation instead of claiming full equivalence.
+
+## Hook capability boundary
+
+The native schema supports `PreToolUse`, `PostToolUse`, `PreInvocation`,
+`PostInvocation`, and `Stop`. For `PreToolUse`, the current contract requires a
+decision and offers no neutral/defer value. `allow` authorizes the tool,
+`deny` blocks it, and `ask` or `force_ask` forces permission handling. A
+conditional MAINFRAME guard cannot return silence on a clean command while
+leaving the user's existing native permission decision unchanged.
+
+| MAINFRAME hook | Installed native route | Missing full-contract guarantee |
+| --- | --- | --- |
+| `mainframe-secret-access` | Positive completed-command match becomes a `PostInvocation` ephemeral remediation message | Automatic pre-tool denial |
+| `mainframe-destructive-operations` | Positive completed-command match becomes immediate recovery context | Deterministic pre-tool denial |
+| `mainframe-commit-secrets` | A just-recorded HEAD is checked and a redacted positive finding is injected | Prospective staged-content denial |
+| `mainframe-rg-short-replace` | Canonical detector advice is injected before the next model decision | Pre-tool timing |
+| `mainframe-code-quality` | Exact inserted-text findings are injected after supported edits and revalidated at `Stop` | Pre-edit external diagnostics, growth attribution, and unsupported edit-tool shapes |
+| `mainframe-fallow-quality` | Exact supported TS/JS edit diffs are analyzed and injected at `PostInvocation` | Completion-event timing and unsupported edit-tool shapes |
+
+All six exact native hook contracts remain `unsupported` in schema-2 delivery.
+That status describes the missing event guarantee; it does not erase the retained
+instruction and skill behavior reported under `retained_partial_bindings`.
+
+The earlier adapter incorrectly returned `{}` as a clean `PreToolUse` result.
+A real A106 Desktop task then lost every shell and edit result while reads kept
+working. The maintained update removes those registrations rather than changing
+them to `allow` and bypassing native permissions. It uses `PostInvocation` for
+informational delivery and reserves `Stop` continuation for a revalidated positive
+finding. The documented `executionNum` bounds a stable finding to one automatic
+continuation in that execution; a later execution can recheck it, and repair
+releases it. Project-owned hooks remain
+untouched and can still choose a complete native decision when the project owns
+that policy.
+
+## Evidence boundary
+
+Disposable tests cover rendering, ownership, convergence, foreign hook
+preservation, instruction limits, removal of the unsafe earlier registrations,
+post-event deduplication, code-finding revalidation, and Desktop/CLI separation.
+They do not prove that a fresh Desktop conversation
+discovered or executed skills and agents. That native check belongs to separately
+requested acceptance and must not be replaced by launching Antigravity CLI.

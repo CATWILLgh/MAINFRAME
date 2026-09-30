@@ -29,6 +29,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install hook analyzer dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check ruff==0.15.15 semgrep==1.164.0
+          npm install --global --no-audit --no-fund oxlint@1.67.0 fallow@2.92.1
+
       - name: Validate repository structure
         run: python3 -m unittest discover -s tests -p 'test_*.py'
 
@@ -43,7 +48,7 @@ jobs:
         run: python3 -m unittest discover -s shared/credentials/tests -p 'test_*.py'
 
       - name: Check shell syntax
-        run: bash -n shared/credentials/secret shared/credentials/install.sh
+        run: bash -n shared/credentials/mainframe-secret shared/credentials/install.sh
 
       - name: Check changed whitespace
         shell: bash

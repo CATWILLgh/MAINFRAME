@@ -1,6 +1,6 @@
 ---
 name: mainframe-record-project-problem
-description: Preserve a concrete problem in the receiving project's configured issue queue when work reveals that it will remain unresolved outside the assigned result. Use proactively for evidenced application, data, infrastructure, or project-documentation problems; do not use for unfinished in-scope work, speculative concerns, or faults in MAINFRAME and its agent harness.
+description: Record an evidenced out-of-scope project problem in its configured issue queue. Excludes unfinished work and MAINFRAME harness faults.
 ---
 
 # Record a project problem

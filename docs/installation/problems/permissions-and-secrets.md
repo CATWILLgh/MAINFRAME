@@ -18,7 +18,7 @@ protected value or whole credential store.
 
 ## Adapt
 
-Reference the existing protected mechanism or the canonical `secret` helper.
+Reference the existing protected mechanism or the canonical `mainframe-secret` helper.
 Pass values directly to consumers. Merge only the required path, tool, network,
 or server permission under a stable owned key.
 
@@ -31,7 +31,8 @@ denied action when native enforcement is claimed.
 ## Record
 
 Record the permission boundary and evidence without paths or details that reveal
-protected storage. Leave `pending` when the user must choose storage or access.
+protected storage. Leave delivery `pending` and put the required choice in
+`next_action` when the user must choose storage or access.
 
 ## Never do
 

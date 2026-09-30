@@ -2,8 +2,10 @@
 
 ## Use when
 
-Desktop and CLI expose different versions, configuration roots, component
-catalogs, reload behavior, permissions, or hook events.
+The user explicitly requested both Desktop and CLI, and they expose different
+versions, configuration roots, component catalogs, reload behavior, permissions,
+or hook events. An ordinary installation on one surface does not open this route
+merely because another surface is installed.
 
 ## Desired result
 
@@ -29,8 +31,12 @@ behavior, use visible interaction; for CLI behavior, use its actual command path
 
 ## Record
 
-State whether configuration is shared and name any surface-specific unsupported
-capability. Do not hide divergence behind one combined success claim.
+State whether configuration is shared and name each surface's version, delivery,
+proof, and established limitation. Apply the aggregate rule in
+[verification.md](../verification.md#desktop-and-cli): completed shared delivery
+can be `installed` while an untested requested surface keeps verification
+`pending`. An established product limitation makes delivery `unsupported` and
+omits verification. Do not hide divergence behind one combined success claim.
 
 ## Never do
 

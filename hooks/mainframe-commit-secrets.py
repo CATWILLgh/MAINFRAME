@@ -169,6 +169,7 @@ def _line_heredocs(line: str) -> list[tuple[str, bool]]:
 def _strip_heredoc_bodies(command: str) -> str:
     output: list[str] = []
     pending: list[tuple[str, bool]] = []
+    lexical_buffer = ""
     for line in command.splitlines(keepends=True):
         if pending:
             delimiter, strip_tabs = pending[0]
@@ -181,9 +182,21 @@ def _strip_heredoc_bodies(command: str) -> str:
                     output.append(";\n")
             continue
         output.append(line)
-        pending.extend(_line_heredocs(line))
+        lexical_buffer += line
+        try:
+            declarations = _line_heredocs(lexical_buffer)
+        except InspectionUnavailable:
+            # Shell quotes and escaped newlines may legitimately span physical
+            # lines, notably in a multi-line `git commit -m` message. Keep the
+            # fragment until shlex can decide it as a whole. A truly malformed
+            # command is still rejected by the final parse below.
+            continue
+        lexical_buffer = ""
+        pending.extend(declarations)
     if pending:
         raise InspectionUnavailable("shell_parse")
+    if lexical_buffer:
+        _line_heredocs(lexical_buffer)
     return "".join(output)
 
 
@@ -293,12 +306,20 @@ def _parse_commit_args(args: list[str], cwd: str) -> CommitInvocation:
             after_separator = True
             index += 1
             continue
+        if token.startswith("-") and not token.startswith("--") and len(token) > 2:
+            short, suffix = token[:2], token[2:]
+            # Signing keys and untracked-file modes accept attached values;
+            # neither that value nor commit metadata is a flag cluster.
+            if short in {"-S", "-u"}:
+                index += 1
+                continue
+            remainder = suffix if short in value_options else "-" + suffix
+            args = args[:index] + [short, remainder] + args[index + 1 :]
+            token = short
         option = token.split("=", 1)[0]
         if option in unsupported:
             raise InspectionUnavailable("interactive_or_external_pathspec")
-        if token in {"-a", "--all"} or (
-            token.startswith("-") and not token.startswith("--") and "a" in token[1:]
-        ):
+        if token in {"-a", "--all"}:
             stages_all = True
         if token in {"-i", "--include"}:
             include = True
@@ -324,15 +345,6 @@ def _parse_commit_args(args: list[str], cwd: str) -> CommitInvocation:
             index += 1
             continue
         if token.startswith("-"):
-            if not token.startswith("--") and "m" in token[1:]:
-                suffix = token[token.index("m") + 1 :]
-                if suffix:
-                    inline_metadata.append(("message", suffix))
-                else:
-                    index += 1
-                    if index >= len(args):
-                        raise InspectionUnavailable("commit_option_missing_value")
-                    inline_metadata.append(("message", args[index]))
             index += 1
             continue
         pathspecs.append(token)
@@ -432,12 +444,26 @@ def parse_commit_invocations(command: str, cwd: str, *, depth: int = 0) -> list[
     if any(operator in {"(", ")"} for operator in operators):
         if any("commit" in segment for segment in segments):
             raise InspectionUnavailable("shell_group")
-    if any(
-        os.path.basename(segment[_command_index(segment)]) == "cd"
-        for segment in segments
-        if _command_index(segment) < len(segment)
-    ) and any(operator not in {"&&", ";"} for operator in operators):
-        raise InspectionUnavailable("conditional_directory_change")
+    for segment_index, segment in enumerate(segments):
+        command_index = _command_index(segment)
+        if (
+            command_index >= len(segment)
+            or os.path.basename(segment[command_index]) != "cd"
+        ):
+            continue
+        # A pipe, background operator, or OR-list adjacent to `cd` makes the
+        # directory seen by a later commit conditional or confined to another
+        # shell. Operators elsewhere in the command do not: for example, a
+        # commit may safely pipe its own output after an earlier `cd &&`.
+        previous = operators[segment_index - 1] if segment_index else None
+        following = operators[segment_index] if segment_index < len(operators) else None
+        if previous in {"||", "|", "|&", "&"} or following in {
+            "||",
+            "|",
+            "|&",
+            "&",
+        }:
+            raise InspectionUnavailable("conditional_directory_change")
 
     invocations: list[CommitInvocation] = []
     effective_cwd = os.path.realpath(cwd)
@@ -648,6 +674,35 @@ def _scan_metadata(invocation: CommitInvocation) -> list[tuple[str, str, int | N
     return findings
 
 
+def _scan_context_free_metadata(
+    invocation: CommitInvocation,
+) -> list[tuple[str, str, int | None]]:
+    """Inspect literal and absolute-file metadata without trusting a tool cwd."""
+    findings: list[tuple[str, str, int | None]] = []
+    for label, value in invocation.inline_metadata:
+        if DYNAMIC_TEXT_RE.search(value):
+            continue
+        findings.extend(
+            (item.kind, label, item.line)
+            for item in _introduced(b"", os.fsencode(value))
+        )
+    for label, value in invocation.file_metadata:
+        if DYNAMIC_PATH_RE.search(value) or not os.path.isabs(value):
+            continue
+        try:
+            size = os.path.getsize(value)
+            if size > MAX_BLOB_BYTES:
+                continue
+            with open(value, "rb") as handle:
+                data = handle.read(MAX_BLOB_BYTES + 1)
+        except OSError:
+            continue
+        findings.extend(
+            (item.kind, label, item.line) for item in _introduced(b"", data)
+        )
+    return findings
+
+
 def _scan_invocation(invocation: CommitInvocation) -> list[tuple[str, str, int | None]]:
     if invocation.mode == "dry-run":
         return []
@@ -734,4 +789,110 @@ def check_command(command: str, cwd: str) -> CheckResult:
         return CheckResult(advisory=_advisory(code))
     if findings:
         return CheckResult(block_reason=_block_reason(findings))
+    return CheckResult()
+
+
+def check_context_free_metadata(command: str) -> CheckResult:
+    """Block only commit metadata findings independent of the Bash workdir.
+
+    This is a safe degraded binding for hosts that provide the exact command but
+    omit the tool execution directory. It intentionally does not inspect staged
+    or worktree content and emits no unavailable-check advisory.
+    """
+    if not isinstance(command, str) or not command or len(command) > MAX_COMMAND_CHARS:
+        return CheckResult()
+    if GIT_HINT_RE.search(command) is None or COMMIT_HINT_RE.search(command) is None:
+        return CheckResult()
+    try:
+        invocations = parse_commit_invocations(command, os.path.realpath(os.sep))
+    except (InspectionUnavailable, OSError, RuntimeError, ValueError):
+        return CheckResult()
+    findings: list[tuple[str, str, int | None]] = []
+    for invocation in invocations:
+        if invocation.mode != "dry-run":
+            findings.extend(_scan_context_free_metadata(invocation))
+    return CheckResult(block_reason=_block_reason(findings)) if findings else CheckResult()
+
+
+def _recorded_reason(findings: list[tuple[str, str, int | None]]) -> str:
+    unique = list(dict.fromkeys(findings))[:MAX_FINDINGS]
+    listed = "; ".join(
+        f"{kind} in {location}{f':{line}' if line is not None else ''}"
+        for kind, location, line in unique
+    )
+    return (
+        "Post-commit review found high-confidence secret material newly recorded in "
+        f"the current HEAD: {listed}. Stop before sharing it, remove the material from "
+        "the commit safely, and rotate any credential that may have been exposed. The "
+        "matched value is intentionally not shown."
+    )
+
+
+def _committed_head_findings(root: str, started_at: float | None) -> list[tuple[str, str, int | None]]:
+    commit_time = float(_git(root, ["show", "-s", "--format=%ct", "HEAD"]).decode().strip())
+    if started_at is not None and commit_time + 2 < started_at:
+        return []
+    tree = _git(root, ["rev-parse", "--verify", "HEAD^{tree}"]).decode().strip()
+    try:
+        base = _git(root, ["rev-parse", "--verify", "HEAD^1^{tree}"]).decode().strip()
+    except InspectionUnavailable as exc:
+        if exc.code != "git_inspection_failed":
+            raise
+        base = _git(root, ["hash-object", "-t", "tree", "--stdin"], input_bytes=b"").decode().strip()
+    changes = _parse_name_status(
+        _git(root, ["diff", "--name-status", "-z", "--find-renames", base, tree])
+    )
+    if len(changes) > MAX_CHANGED_PATHS:
+        raise InspectionUnavailable("too_many_changed_paths")
+    findings: list[tuple[str, str, int | None]] = []
+    total = 0
+    for change in changes:
+        if change.new_path is None:
+            continue
+        old = _blob(root, f"{base}:{change.old_path}", missing_ok=True) if change.old_path else b""
+        new = _blob(root, f"{tree}:{change.new_path}")
+        total += len(new)
+        if total > MAX_TOTAL_BYTES:
+            raise InspectionUnavailable("commit_too_large")
+        findings.extend(
+            (item.kind, _display_path(change.new_path), item.line)
+            for item in _introduced(old, new)
+        )
+    message = _git(root, ["show", "-s", "--format=%B", "HEAD"])
+    findings.extend((item.kind, "commit message", item.line) for item in _introduced(b"", message))
+    return findings
+
+
+def check_recorded_command(
+    command: str,
+    cwd: str,
+    *,
+    started_at: float | None = None,
+) -> CheckResult:
+    """Inspect a just-finished commit when only a post-tool event is available.
+
+    ``started_at`` prevents a failed commit command from attributing an older HEAD
+    to the current event. This fallback never claims that it blocked the commit.
+    """
+    if not isinstance(command, str) or not isinstance(cwd, str) or not command or not cwd:
+        return CheckResult(advisory=_advisory("missing_hook_input"))
+    if len(command) > MAX_COMMAND_CHARS:
+        return CheckResult(advisory=_advisory("command_too_large"))
+    if GIT_HINT_RE.search(command) is None or COMMIT_HINT_RE.search(command) is None:
+        return CheckResult()
+    try:
+        invocations = [row for row in parse_commit_invocations(command, cwd) if row.mode != "dry-run"]
+        findings: list[tuple[str, str, int | None]] = []
+        inspected: set[str] = set()
+        for invocation in invocations:
+            root = _repo_root(invocation.cwd)
+            if root is None or root in inspected:
+                continue
+            inspected.add(root)
+            findings.extend(_committed_head_findings(root, started_at))
+    except Exception as exc:
+        code = exc.code if isinstance(exc, InspectionUnavailable) else "detector_failure"
+        return CheckResult(advisory=_advisory(code))
+    if findings:
+        return CheckResult(advisory=_recorded_reason(findings))
     return CheckResult()

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 
-SOURCE = Path(__file__).resolve().parents[1] / "secret"
+SOURCE = Path(__file__).resolve().parents[1] / "mainframe-secret"
 
 
 class SecretCommandTests(unittest.TestCase):

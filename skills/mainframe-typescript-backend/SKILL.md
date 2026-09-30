@@ -1,6 +1,6 @@
 ---
 name: mainframe-typescript-backend
-description: Develop, debug, review, or test server-side TypeScript in Node.js services and established Next.js server layers. Use proactively for backend APIs, business rules, persistence, jobs, realtime behavior, server integrations, and focused backend tests. Do not use for substantial client-only UI, Python services, data or ML pipelines, or infrastructure ownership.
+description: Develop, debug, review, or test TypeScript services and Next.js server layers. Excludes client UI, Python, data or ML, and infrastructure.
 ---
 
 # TypeScript backend engineering
@@ -9,9 +9,9 @@ Apply this method whenever the active work matches the description, whether you 
 
 ## Establish the active server boundary
 
-Identify the nearest package that owns the affected behavior. Run the bounded [recon script](scripts/recon.mjs) against that explicit package root, or follow [manual reconnaissance](references/recon.md). Treat the report as routing evidence, not as a decision engine: declared dependencies, filenames, and repository names do not prove the active runtime path.
+Identify the package that owns the affected behavior. If ownership or runtime wiring is unclear, use the bounded [recon script](scripts/recon.mjs) or [manual reconnaissance](references/recon.md) for that package. Reuse current inspected evidence; declared dependencies and filenames do not prove the active runtime path.
 
-Trace the requested behavior through its real entrypoint, runtime validation, business rules, data or external boundary, side effects, callers, and observable output. Inspect the effective project instructions and use only the infrastructure allowed by the project layer.
+Trace the requested behavior through its real entrypoint, runtime validation, business rules, data or external boundary, side effects, callers, and observable output. Inspect the effective project instructions and use only infrastructure authorized by effective instructions or the immediate caller.
 
 Several frameworks, routers, validators, database clients, or test runners may legitimately coexist. Resolve ownership from imports, registration, configuration, entrypoints, runtime wiring, and affected files. Surface a decision only when evidence cannot resolve a product, business, data, infrastructure, permission, or authority choice with material consequences.
 
@@ -41,7 +41,7 @@ Verify installed versions before relying on version-sensitive behavior. Prefer t
 
 Make the smallest complete change across every affected location inside the assigned boundary. Keep non-trivial business rules independent of transport when the established architecture supports that separation. Validate untrusted data at the real runtime boundary, authorize the concrete action and resource server-side, and make transactions, retries, idempotency, cache invalidation, and side effects explicit when correctness depends on them.
 
-Use the project's native commands and the smallest faithful failing evidence when a behavior change can be demonstrated before implementation. Then run the focused proof and the nearest relevant fast checks that protect the changed risk. Use a real database, broker, storage service, browser, or deployed boundary only when its semantics are the risk and the effective project instructions and current authority permit it.
+Use the project's native commands and the smallest faithful failing evidence when practical and useful for the changed risk. Then run the focused proof and the nearest relevant fast checks that protect the changed risk. Use a real database, broker, storage service, browser, or deployed boundary only when its semantics are the risk and the effective project instructions and current authority permit it.
 
 Do not replace completion with TODOs, placeholders, weakened types or assertions, skipped checks, suppressed failures, compatibility debris, or an unrecorded follow-up. State what was actually observed and every material verification gap.
 

@@ -1,6 +1,9 @@
 # Frontend testing
 
-Use the project's existing runner, setup, fixtures, and browser harness. Inspect the selected package script, lifecycle hooks, configuration, and reached setup before execution; a test command may start services, migrate data, launch a browser, or rewrite generated files.
+Use the project's existing runner, setup, fixtures, and browser harness. Establish
+the command's scope and side effects when unknown or changed: it may start
+services, migrate data, launch a browser, or rewrite files. Reuse current evidence
+for subsequent runs of the same check.
 
 Choose the smallest faithful boundary. Test business-facing transformations and state transitions without rendering when possible. Use component tests for rendered interaction, focus, accessibility state, form feedback, and data presentation. Use a real browser when navigation, layout, focus, motion, browser APIs, downloads, or a complete journey are the risk.
 

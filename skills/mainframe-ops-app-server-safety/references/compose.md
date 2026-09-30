@@ -12,7 +12,8 @@ Before a lifecycle command, establish:
 - project directory and effective project name;
 - environment-file inputs without exposing secret values;
 - selected profiles and target services;
-- current containers, labels, networks, volumes, ports, and health state.
+- current target containers and ownership labels; inspect ports, health, networks,
+  and volumes when needed to identify the target or assess the operation's effects.
 
 Run status inspection with the same resolved project arguments that the
 lifecycle command would use. Prefer Compose project labels and metadata for
@@ -42,10 +43,11 @@ recreation that may affect data.
 
 ## Verify
 
-After lifecycle work, inspect the exact project and services again. Verify
-container state, declared health, bounded relevant logs, expected listeners,
-and the actual application route. A running container or successful Compose
-command does not alone prove readiness.
+Verify the requested lifecycle outcome on the exact project and services. After
+start or restart, check relevant health, listeners, and the application route
+when readiness is required; command success alone does not prove readiness.
+After stop or removal, verify the intended targets stopped or were removed and
+resources that should be preserved remain. Do not require a stopped route to respond.
 
 If the runtime reports a port conflict, identify the listener separately and
 prove ownership. Do not stop it or change the Compose project name merely to

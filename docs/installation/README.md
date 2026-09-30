@@ -5,9 +5,13 @@ from this repository into one agent product's global environment. It supports
 the executable bootstrap in [ADAPT-MAINFRAME.md](../../ADAPT-MAINFRAME.md); it is
 not itself global product payload.
 
-MAINFRAME has no prebuilt target adapters. You must translate canonical
-semantics into the installed product's current native mechanisms and prove the
-result. Never make the canonical source imitate one product.
+Use a maintained product installer when one exists. It translates canonical
+sources through maintained native mappings; the agent handles semantic conflicts,
+unexpected environments, current-surface discovery, and user activation handoffs.
+Keep adapter acceptance separate from routine installation under
+[verification.md](verification.md#routine-installation-and-adapter-validation). Keep
+generated content out of the source tree and never make a canonical component
+imitate one product.
 
 ## Authority map
 
@@ -16,6 +20,7 @@ result. Never make the canonical source imitate one product.
 | [ADAPT-MAINFRAME.md](../../ADAPT-MAINFRAME.md) | Fixed entry path, sequence, state loop, completion boundary | Per-product syntax or component semantics |
 | [ADAPTATION.example.json](../../ADAPTATION.example.json) | Exact installable identities, source paths, and state shape | Discovery mechanics or evidence |
 | This guide | Adaptation method, native orientation, verification, and recovery | Canonical component behavior |
+| [Maintained installer](../../install.py) | Deterministic packaging, owned writes, update, recovery, and executable checks | Rewriting canonical content, deciding user instruction conflicts, or assuming untested native behavior |
 | Canonical component source | Product-neutral behavior and boundaries | Target paths, metadata, registration, or permissions |
 | Component tests | Executable source guarantees covered by those tests | Native discovery or host enforcement |
 | [README.md](../../README.md) | Human-facing product overview | Installation procedure |
@@ -24,6 +29,17 @@ When text conflicts, do not combine both versions. Identify the owner in this
 table, use current evidence, and correct or escalate the actual owner.
 
 ## Progressive reading route
+
+For Codex, read [codex-installer.md](codex-installer.md). For ZCode Desktop,
+read [zcode-installer.md](zcode-installer.md). For Antigravity Desktop 2.0,
+read [antigravity-installer.md](antigravity-installer.md). For MiniMax Code
+Desktop, read [minimax-installer.md](minimax-installer.md). For Cline Desktop
+or the Cline CLI, read [cline-installer.md](cline-installer.md). Follow the
+selected executable route; do not run a manual adaptation loop in parallel.
+
+Products without a maintained installer require separately assigned adapter
+development. Their native pages are orientation, not ready installation routes.
+The following progressive reading route is for that development work.
 
 Do not load the whole documentation tree for every component. Use this route:
 
@@ -57,8 +73,11 @@ questions that still require verification against the installed version.
 - [Codex](native/codex.md)
 - [Claude Code](native/claude-code.md)
 - [OpenCode](native/opencode.md)
-- [Antigravity](native/antigravity.md)
+- [ZCode Desktop](native/zcode.md)
+- [Antigravity Desktop 2.0](native/antigravity.md)
+- [MiniMax Code Desktop](native/minimax.md)
 - [Pi](native/pi.md)
+- [Cline](native/cline.md)
 
 If the product is not listed, apply [process.md](process.md) directly and add a
 native page only after authoritative documentation and a reproducible probe
@@ -87,8 +106,12 @@ globally installable. Root instructions, this documentation, adaptation state,
 tests, installers, templates, local `.agents/` knowledge, archives, tickets,
 caches, and Git data remain repository support.
 
+A listed hook may require the maintained adapter's small native transport.
+That support is installed only as part of its binding; it does not make the
+whole installer directory or another component installable.
+
 The exception is not a directory: the inventory explicitly lists the exact
-`shared/credentials/secret` file as payload. Its sibling installer, template,
+`shared/credentials/mainframe-secret` file as payload. Its sibling installer, template,
 index, and tests remain here.
 
 ## Maintaining this guide

@@ -23,14 +23,41 @@ Update a current owned identity in place. Install the replacement beside an
 obsolete identity only when required for safe verification, then remove the old
 one. Preserve unknown ownership.
 
+For hooks, replacement proof does not establish that an older session forgot
+the previous callback. Follow the
+[hook retirement sequence](rollback-and-recovery.md#retire-hooks-safely)
+before moving or deleting its executable, dependencies, or state.
+
+When the current inventory removes an old identity, first inspect its existing
+state and owned target references. Remove only positively identified obsolete
+MAINFRAME content and registrations after proving current components no longer
+depend on them. Remove the old state row after cleanup; if ownership or
+dependencies remain ambiguous, keep the recovery pending and report the exact
+blocker instead of losing the only record of the obsolete identity.
+
+If a maintained global instruction receipt exists but its ownership markers no
+longer do, stop before appending another copy. First compare the effective file,
+the current canonical instruction, and the preserved receipt. When the entire
+effective file is exactly the current canonical body and the user has authorized
+that body as the sole global instruction, wrap that same body in the maintained
+boundary and reconcile the receipt atomically. This changes ownership without
+changing instruction semantics. Preserve or explicitly reconcile any other
+content; never restore an archival copy as current user intent merely because
+its hash matches an older receipt.
+
 ## Verify
 
 Reload the product, prove one effective identity and behavior, and check for
 duplicate discovery, events, commands, permission rows, or skill descriptions.
+Reconcile the same current inputs a second time and confirm equivalent content
+and registrations without another write. Recheck after removing a predecessor
+so proof does not depend on the obsolete copy.
 
 ## Record
 
-Keep the final component status and a short limitation only if unsupported.
+Keep delivery and verification separate under
+[verification.md](../verification.md). Put an unfinished cleanup or proof step
+in `next_action`; reserve `reason` for an actual product limitation.
 Report what obsolete owned material was removed.
 
 ## Never do

@@ -26,6 +26,8 @@ Read the verification queue afresh. Select one independently eligible ticket and
 
 After routing the active ticket, refresh the queue and select the next independently eligible ticket. Do not retry a ticket again in the same run when its recorded evidence gap and available conditions have not changed. Continue with every other eligible ticket.
 
+If a ticket update cannot be written, retain its complete proposed update and missing write action in the current run and continue with the next ticket. Treat that ticket as handled only for this run; reconsider it only if its state, evidence, or available authority materially changes. Do not claim that the persistent queue changed.
+
 ## Reconstruct the claim
 
 Confirm that the ticket still awaits verification. Inspect its full recorded history, the actual current implementation, relevant changes and repository history, affected callers and consumers, regression protection, and generated or delivered artifacts when they are part of the contract.
@@ -46,7 +48,12 @@ Do not modify implementation code, tests, assertions, fixtures, or tracked expec
 
 ## Apply the final acceptance gate
 
-Before accepting the ticket as resolved, inspect the actual implementation and the meaningful affected boundary one final time. Establish whether the correction unintentionally changes product behavior, business rules, data meaning or compatibility, public contracts, security, privacy, access boundaries, or infrastructure behavior beyond the requirements and decisions already recorded for the ticket.
+Before accepting the ticket as resolved, evaluate the collected implementation
+and verification evidence for unintended changes to product behavior, business
+rules, data meaning or compatibility, public contracts, security, privacy, access
+boundaries, or infrastructure beyond the ticket's requirements and decisions.
+Repeat inspection or checks only when changed state or an unresolved material gap
+makes the existing evidence insufficient.
 
 Require proportionate evidence for the material adjacent risks revealed by that inspection. Do not claim exhaustive absence of regression; state every relevant boundary that was not observable under the available authority and environment.
 
@@ -56,20 +63,20 @@ If verification exposes an unresolved material choice owned by the user or anoth
 
 Preserve the ticket identity and accumulated evidence. Append only the new independent observations, commands or checks actually performed, their results, and material limitations. Do not duplicate unchanged history. Apply exactly one transition through the project's configured lifecycle:
 
-- Move a proven correction to the immutable resolved archive only when the original problem is no longer reproducible for the intended reason, the acceptance boundary is demonstrated, and the final acceptance gate is satisfied.
+- Move a proven correction to the configured resolved terminal state or archive only when the original problem is no longer reproducible for the intended reason, the acceptance boundary is demonstrated, and the final acceptance gate is satisfied.
 - Return an incomplete or incorrect implementation to ready work with precise failed-verification evidence and without repairing it inline.
 - Return work with a materially missed or stale affected boundary to scope review.
 - Route a newly exposed material product, business, data, security, infrastructure, destructive-action, or authority choice to the decision state.
-- Move a disproved, superseded, or confirmed duplicate claim to the immutable rejected archive.
+- Move a disproved, superseded, or confirmed duplicate claim to the configured rejected terminal state or archive.
 - Leave it awaiting verification only when a specific unavailable environment, permission, dependency, observation, or independent trajectory prevents a reliable verdict; record exactly what would unlock verification.
 
-Never edit, reopen, rename, or move an archived ticket. A later occurrence is a new observation with its own identity. If verification reveals a separate concrete problem, record or reconcile it through the receiving project's problem-recording route when that capability and authority are available, then return to the active ticket without investigating or fixing it inline.
+Preserve terminal records and their accumulated evidence as immutable history; do not edit, reopen, rename, or move them in this command. A later occurrence is a new observation with its own identity through the configured project route. Do not create filesystem archives when the project uses tracker states. If verification reveals a separate concrete problem, record or reconcile it through the receiving project's problem-recording route when that capability and authority are available, then return to the active ticket without investigating or fixing it inline.
 
 Repeated verification against unchanged state must converge: do not append the same evidence, repeat an unchanged blocked check, duplicate a transition, or touch an already archived ticket.
 
 ## Complete the command
 
-Continue the one-ticket cycle until a refreshed control pass finds no independently eligible ticket that this command can further verify under the current evidence, environment, and authority. A blocked or non-independent ticket is complete for this run only after the exact missing condition is recorded; it must not prevent processing later tickets.
+Continue the one-ticket cycle until a refreshed control pass finds no additional independently eligible ticket that this command can further verify under the current evidence, environment, and authority. A blocked or non-independent ticket is handled for this run only after the exact missing condition is recorded or returned to the current recipient; it must not prevent processing later tickets.
 
 Return:
 
@@ -78,4 +85,4 @@ Return:
 - every ticket's verdict and resulting lifecycle state;
 - the independently observed evidence and the meaningful adjacent contracts checked;
 - every unobserved material boundary and the exact reason;
-- confirmation that the final refreshed queue contains no ticket still eligible for verification under the current conditions.
+- confirmation that the refreshed queue and this run's handled tickets leave no further permitted independent verification, distinguishing persisted transitions from proposed updates still awaiting a write.

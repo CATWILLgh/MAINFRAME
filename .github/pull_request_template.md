@@ -16,7 +16,7 @@
 
 ## Delivery boundary
 
-- [ ] I changed only product files that should ship to users.
+- [ ] I did not expand product payload beyond the exact inventory; repository-only support remains repository-only.
 - [ ] I did not add secrets, credentials, machine-local state, telemetry, generated output, or private development material.
 - [ ] I kept adapter-specific behavior in installation guidance or native adapters instead of duplicating product semantics.
 - [ ] I updated the manifest and canonical installation documentation when the delivered component set or adaptation contract changed.

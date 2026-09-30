@@ -2,13 +2,15 @@
 
 ## Use when
 
-Current authoritative documentation and a harmless probe show that the installed
-product cannot represent a required MAINFRAME semantic.
+Current evidence establishes that the installed product and surface cannot
+represent a required MAINFRAME semantic, under the
+[verification threshold](../verification.md#unsupported-is-evidence-not-failure-concealment).
 
 ## Desired result
 
-A precise, honest `unsupported` state that does not fabricate parity and does
-not prevent independent components from being installed.
+A precise, honest `delivery: unsupported` state with no `verification` field
+that does not fabricate parity and does not prevent independent components from
+being installed.
 
 ## Inspect
 
@@ -19,18 +21,23 @@ attribution, role routing, permission enforcement, or another exact boundary.
 ## Adapt
 
 Use a narrower representation only when it still satisfies the complete
-canonical component. A partial fallback may be noted, but it does not change the
-component to `installed` when a required rule is absent.
+canonical component. A partial fallback may be reported, but delivery remains
+`unsupported` when a required rule is absent.
 
 ## Verify
 
-Capture a reproducible harmless probe or explicit current documentation showing
-the limitation. Recheck after relevant product upgrades.
+Apply the evidence threshold from [verification.md](../verification.md).
+Distinguish an actual capability limit from a failed setup, unavailable probe,
+untested surface, or deprecation. Recheck after relevant source, adapter,
+configuration, or product changes.
 
 ## Record
 
-Set `unsupported` with one short exact reason. Continue with independent
-inventory entries.
+Set delivery to `unsupported`, omit `verification`, and put the exact missing
+semantic in `reason`. State the product version, surface, concise evidence, and
+any retained partial implementation in the final report. Missing proof is not a
+limitation: keep verification `pending` with the missing step in `next_action`.
+Continue with independent inventory entries.
 
 ## Never do
 

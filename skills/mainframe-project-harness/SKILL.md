@@ -1,19 +1,22 @@
 ---
 name: mainframe-project-harness
-description: Detect and surface conflicts in a project's effective agent harness, including conflicts between applicable global and project instructions, and establish or repair project-owned configuration when authorized. Use proactively whenever instructions, skills, agents, hooks, commands, permissions, or MCP configuration appear contradictory, duplicated, shadowed, stale, misplaced, unsupported by available capabilities, or inconsistent with observed behavior; also use when inspection, initialization, cleanup, or repair of them is requested. Do not use for ordinary application defects or unrequested global configuration changes.
+description: Inspect or repair project agent configuration during a harness audit or an evidenced discovery, precedence, or execution conflict.
 ---
 
 # Maintain the project harness
 
-Use this skill as soon as you notice credible evidence that the harness affecting your project work may be inconsistent. Do not wait for the skill to be named or for a full audit to be requested.
-
-Work from the project root. Consult the current official documentation for your installed product version and interface before relying on paths, discovery, precedence, nesting, imports, permissions, or reload behavior. Do not apply another product's filenames or mechanics to your environment.
+Start with the configuration implicated by the request or observed fault. Use
+current native tool contracts and established project evidence; consult official
+documentation when discovery, precedence, permissions, or reload behavior is
+uncertain or version-sensitive. Reuse current evidence already available.
 
 ## Establish the effective harness
 
 Read only the global configuration that can affect the project. Treat it as a preserved baseline and record its exact source and effect without changing it.
 
-Inspect every project-owned component your product can discover from the repository root and relevant working directories, including applicable:
+For a local repair, trace only the affected instruction chain and its owners.
+For an explicit project-wide harness audit, inventory discoverable components
+and inspect the relevant bodies, including:
 
 - root and nested instructions, overrides, and imports;
 - project settings and permissions;
@@ -58,19 +61,31 @@ Give every durable rule or component one owner:
 
 Place a correction at its owner. Do not edit generated material directly when a canonical source or documented rebuild route exists. Keep global configuration unchanged unless a global change is separately and explicitly included in your authority.
 
-Resolve clear mechanical defects within the authorized project work. Discuss changes that alter the meaning of a unique rule, remove user-owned knowledge, change ownership, or require choosing between valid behaviors. Preserve unrelated and pre-existing work.
+For a shell-command policy, classify execution from parsed shell boundaries
+rather than matching dangerous words in the raw command string. A remote-command
+exception applies only after identifying the actual launcher, its exact allowed
+destination, and the quoted remote payload. Local commands composed before or
+after it, local command or process substitutions, executable launcher options,
+shell wrappers, and other destinations retain their own policy. Cover the exact
+reported compound command plus genuine local, mixed local/remote, and local
+expansion controls; the mere presence of `ssh` or an allowed host name is never
+an exception.
+
+Complete authorized repairs, including semantic corrections supported by the
+request and evidence. Ask only when a material ownership, policy, or behavior
+choice remains unresolved; several valid implementations alone are not a reason
+to stop. Preserve unrelated rules, user-owned knowledge, and pre-existing work.
 
 ## Verify and report
 
-After a change, reconstruct every affected instruction chain and validate references, symlinks, discovery paths, metadata, and native parsing. Use the product's native reload, new-session, discovery, or safe representative invocation when available and authorized.
+Validate the changed contract: wording needs an instruction-chain review and
+link checks; changed packaging or registration also needs native parsing and
+discovery evidence. Use a new-session or behavioral probe only when changed
+behavior or unresolved risk requires it and the assignment permits it. Do not
+repeat unchanged discovery or launch another product surface for a text edit.
 
 Do not treat file presence or structural validation as proof that the product loaded or followed the harness.
 
-Tell the current recipient or your immediate caller exactly where future changes belong:
-
-- “To change behavior everywhere, edit `<global path>`.”
-- “To change only this project, edit `<project path>`.”
-- “To change only this subtree, edit `<nested path>`.”
-- “Do not edit this generated file; edit `<canonical path>` and rebuild it through `<route>`.”
-
-Separate the preserved global baseline, project-owned configuration, effective combined behavior, generated material, completed repairs, and unresolved decisions. Claim only the verification level you actually observed.
+Report the corrected behavior, canonical edit location, verification, and any
+remaining decision or activation step. Identify a generated copy's rebuild route
+when relevant. Claim only the verification level actually observed.
