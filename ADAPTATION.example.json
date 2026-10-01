@@ -43,6 +43,11 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-k3s": {
+        "source": "skills/mainframe-k3s",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-ops-app-server-safety": {
         "source": "skills/mainframe-ops-app-server-safety",
         "delivery": "pending",
