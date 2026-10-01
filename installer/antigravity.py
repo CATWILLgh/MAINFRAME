@@ -24,7 +24,7 @@ from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 KNOWN_RUNTIME = "2.13.0"
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 HOOK_RENAMES = {
@@ -402,7 +402,7 @@ class Antigravity:
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and category != "commands"
-                and category != "hooks"
+                and (category != "hooks" or name == "mainframe-commit-checkpoint")
             ]
             actions = [] if remove else [
                 "Open a new Antigravity Desktop 2.0 conversation to load global skills, agents, and instructions."
@@ -486,7 +486,8 @@ class Antigravity:
             raise Conflict("Temporary Antigravity hook state is not a private directory owned by this user.")
         for path in self.event_state.iterdir():
             if path.is_file() and not path.is_symlink() and (
-                path.name.startswith("events.sqlite3") or re.fullmatch(r"[0-9a-f]{64}\.json", path.name)
+                path.name in {"events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm",
+                              "commit-checkpoint.sqlite3", "commit-checkpoint.sqlite3-journal", "commit-checkpoint.sqlite3-wal", "commit-checkpoint.sqlite3-shm"} or re.fullmatch(r"[0-9a-f]{64}\.json", path.name)
             ):
                 path.unlink()
             elif path.is_dir() and not path.is_symlink() and re.fullmatch(r"[0-9a-f]{64}\.json\.lock", path.name):

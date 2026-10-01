@@ -316,3 +316,13 @@ Full 0.154.0-alpha.6.2 installation and native hook acceptance remain unverified
 Do not generalize this bounded-update support to another runtime or use it
 to introduce bindings. The [procedure](../codex-installer.md) reports the mode and
 retains a fresh-task handoff for updated text.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostToolUse (apply_patch) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.

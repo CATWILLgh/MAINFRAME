@@ -162,3 +162,13 @@ four pre-shell effects and the primary-runtime `mainframe-code-quality` post-edi
 positive Stop lifecycle have live Desktop evidence on this build. The
 advisory-only Stop limitation, default-subagent omission, and cached-callback
 retirement boundary remain unproven or unsupported as stated above.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostToolUse (Write/Edit) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.

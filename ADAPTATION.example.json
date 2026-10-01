@@ -199,6 +199,11 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-commit-checkpoint": {
+        "source": "hooks/mainframe-commit-checkpoint.py",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-code-quality": {
         "source": "hooks/mainframe-code-quality.py",
         "delivery": "pending",

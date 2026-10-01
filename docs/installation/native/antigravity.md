@@ -69,7 +69,8 @@ leaving the user's existing native permission decision unchanged.
 | `mainframe-code-quality` | Exact inserted-text findings are injected after supported edits and revalidated at `Stop` | Pre-edit external diagnostics, growth attribution, and unsupported edit-tool shapes |
 | `mainframe-fallow-quality` | Exact supported TS/JS edit diffs are analyzed and injected at `PostInvocation` | Completion-event timing and unsupported edit-tool shapes |
 
-All six exact native hook contracts remain `unsupported` in schema-2 delivery.
+The six preventive/quality contracts above remain `unsupported` in schema-2 delivery;
+the separate post-edit checkpoint advisory is fully mapped.
 That status describes the missing event guarantee; it does not erase the retained
 instruction and skill behavior reported under `retained_partial_bindings`.
 
@@ -92,3 +93,13 @@ post-event deduplication, code-finding revalidation, and Desktop/CLI separation.
 They do not prove that a fresh Desktop conversation
 discovered or executed skills and agents. That native check belongs to separately
 requested acceptance and must not be replaced by launching Antigravity CLI.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostInvocation (attributable supported edit fragments) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.

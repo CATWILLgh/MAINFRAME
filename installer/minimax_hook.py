@@ -26,7 +26,7 @@ HOOKS = PLUGIN_ROOT / "hooks"
 HOOK_NAMES = frozenset({
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
 })
 MAX_INPUT_BYTES = 1_048_576
 MAX_MESSAGE_CHARS = 6_000
@@ -347,10 +347,22 @@ def pre_tool(data: dict, state: Path) -> dict | None:
                    deny="\n\n".join(dict.fromkeys(denials)))
 
 
+def _checkpoint_note(data: dict, cwd: Path, state: Path) -> str | None:
+    identity, tool, path = _identity(data), _tool(data), _path(data, cwd)
+    response = _value(data, "tool_response", "toolResponse")
+    if isinstance(response, dict) and any(response.get(key) is True for key in ("isError", "is_error", "error")):
+        return None
+    detector = _load_detector("mainframe-commit-checkpoint")
+    if identity is None or tool is None or path is None or detector is None:
+        return None
+    size = detector.text_lines(*(tool[1].get(key, "") for key in ("content", "old_string", "new_string")))
+    return detector.observe(identity[0], str(cwd), identity[1], size, state_root=state)
+
+
 def post_tool(data: dict, state: Path) -> dict | None:
     cwd, tool = _cwd(data), _tool(data)
     if cwd is None or tool is None or tool[0] not in {"write", "edit"}: return None
-    notes = [n for n in (_quality_post(data, cwd, state), _fallow_post(data, cwd, state)) if n]
+    notes = [n for n in (_quality_post(data, cwd, state), _fallow_post(data, cwd, state), _checkpoint_note(data, cwd, state)) if n]
     identity = _identity(data)
     if not notes or identity is None: return None
     message = "\n\n".join(dict.fromkeys(notes))

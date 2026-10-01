@@ -48,7 +48,7 @@ class AntigravityInstallationTests(unittest.TestCase):
         self.assertEqual(report["changes"], [])
         self.assertFalse(report["retiring_hooks"])
         state = json.loads(self.adapter.state_path.read_text())
-        self.assertEqual(report["planned_delivery"], {"installed": 25, "pending": 0, "unsupported": 12})
+        self.assertEqual(report["planned_delivery"], {"installed": 26, "pending": 0, "unsupported": 12})
         self.assertEqual(set(report["retained_partial_bindings"]), {
             "mainframe-init", "mainframe-project-skill", "mainframe-tickets-find", "mainframe-tickets-refine", "mainframe-tickets-implement",
             "mainframe-tickets-verify",
@@ -90,7 +90,9 @@ class AntigravityInstallationTests(unittest.TestCase):
         self.assertIn("pre-tool timing is unavailable",
                       self.adapter.plan()[1]["retained_partial_bindings"]["mainframe-rg-short-replace"])
         state = json.loads(self.adapter.state_path.read_text())
-        self.assertTrue(all(row["delivery"] == "unsupported" for row in state["components"]["hooks"].values()))
+        self.assertEqual(state["components"]["hooks"]["mainframe-commit-checkpoint"]["delivery"], "installed")
+        self.assertTrue(all(row["delivery"] == "unsupported" for name, row in state["components"]["hooks"].items()
+                            if name != "mainframe-commit-checkpoint"))
 
     def test_user_instruction_and_foreign_hook_are_preserved_and_restored(self):
         self.adapter.instruction.parent.mkdir(parents=True)

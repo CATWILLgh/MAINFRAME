@@ -38,7 +38,7 @@ HOOKS = Path(__file__).resolve().parent
 HOOK_NAMES = frozenset({
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
 })
 SHELL_TOOLS = frozenset({"run_commands"})
 EDIT_TOOLS = frozenset({"apply_patch", "editor"})
@@ -515,6 +515,16 @@ def pre_tool(data: dict, state: Path) -> dict | None:
     return _output(contexts=contexts, denials=denials)
 
 
+def _checkpoint_note(identity: tuple[str, str], workspace: Path, inputs: dict, state: Path, succeeded: bool) -> str | None:
+    if not succeeded or not _enabled("mainframe-commit-checkpoint"):
+        return None
+    detector = _load_detector("mainframe-commit-checkpoint")
+    if detector is None:
+        return None
+    size = detector.text_lines(*(inputs.get(key, "") for key in ("input", "patch", "content", "old_string", "new_string")))
+    return detector.observe(identity[0], str(workspace), identity[1], size, state_root=state)
+
+
 def post_tool(data: dict, state: Path) -> dict | None:
     workspace, tool = _workspace(data), _tool(data)
     identity = _identity(data)
@@ -533,6 +543,7 @@ def post_tool(data: dict, state: Path) -> dict | None:
         _quality_record(identity[0], str(_project_root(workspace)), identity[1],
                         succeeded, state),
         _fallow_post(identity, workspace, state),
+        _checkpoint_note(identity, workspace, inputs, state, succeeded),
     ) if note]
     if not notes:
         return None

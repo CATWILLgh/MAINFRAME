@@ -21,7 +21,7 @@ from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 COMMAND_REASON = (

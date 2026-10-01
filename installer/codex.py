@@ -29,7 +29,7 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -458,7 +458,9 @@ class Codex:
               "timeout": 180, "additionalContextLimit": 6000}]}],
         "PostToolUse": [{"matcher": "^apply_patch$", "hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
-              "timeout": 180, "additionalContextLimit": 6000}]}],
+              "timeout": 180, "additionalContextLimit": 6000},
+              {"type": "command", "command": hook_command(self.hooks, "mainframe-commit-checkpoint", self.event_state),
+               "timeout": 5, "additionalContextLimit": 1000}]}],
         "Stop": [{"hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180}]}]}
@@ -688,7 +690,8 @@ class Codex:
             return
         if self.event_state.stat().st_uid != os.getuid():
             raise Conflict("Temporary hook state has unexpected ownership.")
-        for name in ("events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm"):
+        for name in ("events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm",
+                     "commit-checkpoint.sqlite3", "commit-checkpoint.sqlite3-journal", "commit-checkpoint.sqlite3-wal", "commit-checkpoint.sqlite3-shm"):
             path = self.event_state / name
             if path.exists() and not path.is_symlink() and path.is_file():
                 path.unlink()

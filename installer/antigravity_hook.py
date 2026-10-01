@@ -249,6 +249,7 @@ def _fragment_diff(path: Path, workspace: Path, before: str, after: str, line: i
 def _edit_messages(calls: list[dict], data: dict, workspace: Path, state: Path) -> list[str]:
     quality = None if (ROOT / ".disabled-mainframe-code-quality").exists() else _load_detector("mainframe-code-quality")
     fallow = None if (ROOT / ".disabled-mainframe-fallow-quality").exists() else _load_detector("mainframe-fallow-quality")
+    checkpoint = None if (ROOT / ".disabled-mainframe-commit-checkpoint").exists() else _load_detector("mainframe-commit-checkpoint")
     conversation = data.get("conversationId")
     scope = hashlib.sha256(f"{conversation}\0{workspace}".encode()).hexdigest()
     messages: list[str] = []
@@ -258,6 +259,11 @@ def _edit_messages(calls: list[dict], data: dict, workspace: Path, state: Path) 
         if edit is None or not claim_event(state, call["id"] + "\0edit"):
             continue
         path, before, after, line, whole = edit
+        if checkpoint is not None:
+            message = checkpoint.observe(str(conversation), str(workspace), hashlib.sha256(call["id"].encode()).hexdigest(),
+                                         checkpoint.text_lines(before, after), state_root=state)
+            if message:
+                messages.append(message)
         if quality is not None and path.suffix.lower() in quality.CODE_EXTENSIONS:
             before_rows = Counter(row.fingerprint for row in quality.scan_text(before, path.suffix))
             after_rows = quality.scan_text(after, path.suffix)
@@ -317,8 +323,10 @@ def stop(data: dict, state: Path) -> dict:
             or (ROOT / ".disabled-mainframe-code-quality").exists()):
         return {"decision": "stop"}
     detector = _load_detector("mainframe-code-quality")
+    if detector is None:
+        return {"decision": "stop"}
     connection = open_state(state)
-    if detector is None or connection is None:
+    if connection is None:
         return {"decision": "stop"}
     scope = hashlib.sha256(f"{conversation}\0{workspace}".encode()).hexdigest()
     unresolved = []

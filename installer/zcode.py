@@ -23,7 +23,7 @@ KNOWN_RUNTIME = "3.11.2.6792"
 CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -123,7 +123,7 @@ def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, st
     variants = {
         ("PreToolUse", "Bash"): [(PRE_SHELL_TRANSPORT, 5000)],
         ("PreToolUse", "Write|Edit"): [("mainframe-code-quality", 30000)],
-        ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000)],
+        ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000), ("mainframe-commit-checkpoint", 5000)],
         ("PostToolUseFailure", "Write|Edit"): [("mainframe-code-quality", 30000)],
         ("Stop", None): [("mainframe-code-quality", 60000)],
         ("SessionStart", "startup|resume"): [("mainframe-destructive-operations", 5000)],
@@ -439,7 +439,7 @@ class ZCode:
                     )]},
                     {"matcher": "Write|Edit", "hooks": [quality(30000)]},
                 ],
-                "PostToolUse": [{"matcher": "Write|Edit", "hooks": [quality(60000)]}],
+                "PostToolUse": [{"matcher": "Write|Edit", "hooks": [quality(60000), hook_registration(self.hooks, "mainframe-commit-checkpoint", self.event_state, 5000, runtime_bin(self.home))]}],
                 "PostToolUseFailure": [{"matcher": "Write|Edit", "hooks": [quality(30000)]}],
                 "Stop": [{"hooks": [quality(60000)]}],
                 "SessionStart": [{"matcher": "startup|clear|compact|resume", "hooks": [hook_registration(
@@ -786,7 +786,8 @@ class ZCode:
         metadata = self.event_state.stat()
         if not self.event_state.is_dir() or metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:
             raise Conflict("Temporary ZCode hook state is not a private directory owned by this user.")
-        for name in ("events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm"):
+        for name in ("events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm",
+                     "commit-checkpoint.sqlite3", "commit-checkpoint.sqlite3-journal", "commit-checkpoint.sqlite3-wal", "commit-checkpoint.sqlite3-shm"):
             p = self.event_state / name
             if p.is_file() and not p.is_symlink(): p.unlink()
         for p in self.event_state.iterdir():

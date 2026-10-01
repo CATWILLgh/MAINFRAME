@@ -160,5 +160,8 @@ acceptance checks; an ordinary installation follows the bounded product
 procedure without replaying this development suite or starting model probes.
 
 When handing off a change, state what changed, what was tested, what the tests
-prove, and what remains unverified. Do not commit, push, publish, or change
-external systems unless the current task authorizes that action.
+prove, and what remains unverified. Make local Conventional Commits of coherent
+completed and verified work, following the ownership and checkpoint rules in
+[instructions/global.md](instructions/global.md).
+Do not push, publish, rewrite history destructively, or change external systems
+unless the current task authorizes that action.

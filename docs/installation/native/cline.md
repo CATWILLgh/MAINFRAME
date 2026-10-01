@@ -133,3 +133,13 @@ Cline UI, and workspace rules win over global rules. `~/.agents/AGENTS.md` is a
 cross-tool compatibility path, not a Cline-owned file; a Cline-only installation
 therefore owns exactly one new file under `~/.cline/rules/` and never writes
 another product's global instruction system.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostToolUse (apply_patch/editor) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.

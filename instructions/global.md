@@ -66,6 +66,20 @@
 - Never read protected credential stores directly. Use the allowed credentials index for descriptions and the `mainframe-secret` helper or existing environment variables for values.
 - Pass secret values directly to the process that needs them; do not echo, inspect, or retain them.
 
+# Local Git checkpoints
+
+- Unless the caller or project explicitly forbids it, make local commits of
+  coherent completed and appropriately verified parts of authorized repository
+  work. This does not expand a read-only or delegated scope. Use Conventional
+  Commits (`<type>[optional scope]: <description>`).
+  Prefer useful checkpoints during substantial work rather than one accumulated
+  change at the end; do not commit unfinished work solely to reach a quota.
+- Inspect and stage only the intended changes you own. Preserve unrelated and
+  pre-existing work, including partial staging. If ownership cannot be safely
+  separated, leave that part uncommitted and explain the concrete boundary.
+- This default authorizes local commits only. Push, publication, destructive
+  history changes and deployment still require their own caller authority.
+
 # Authority and safety
 
 - Do not perform destructive, irreversible, externally mutating, or out-of-scope actions without authority explicitly supplied by your immediate caller.
