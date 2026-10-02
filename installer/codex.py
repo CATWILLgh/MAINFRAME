@@ -39,6 +39,9 @@ HOOK_RENAMES = {
 READ_ONLY_ROLES = {"mainframe-researcher", "mainframe-test-auditor", "mainframe-consequential-reviewer"}
 READ_ONLY_ROLE_ACTION = "Verify parent permission overrides preserve the read-only role boundary."
 KNOWN_RUNTIME = "0.153.4"
+# Exact Desktop mapping revalidated against the tagged native schemas/sources.
+# This is delivery compatibility, not observed lifecycle/role acceptance.
+INSPECTED_DESKTOP_RUNTIMES = {"0.159.2"}
 # Current Desktop discovery exposes the same instruction/skill/role text formats.
 # This permits only an existing installation's bounded update, including the
 # exact Stop registration repair validated against the native schema.
@@ -49,6 +52,12 @@ LIMITATIONS = {
     "mainframe-code-quality": "The core pre-edit, post-edit, and revalidating completion guard is installed. The full contract remains unsupported because Stop lacks non-blocking model context for completion-only unavailable-check advice.",
     "mainframe-fallow-quality": "No safe partial binding is installed: Codex lacks the exact attributed post-edit diff, dirty-worktree reconstruction can include unrelated changes, persisting source content violates the hook state boundary, and Stop would force a model continuation for an advisory.",
 }
+
+
+def mapping_supported(version: str | None, surface: str | None) -> bool:
+    return version == KNOWN_RUNTIME or (
+        surface == "desktop" and version in INSPECTED_DESKTOP_RUNTIMES
+    )
 
 
 def _validate_mapping(source: dict) -> None:
@@ -541,8 +550,8 @@ class Codex:
             pending = {}
             for name, limitation in LIMITATIONS.items():
                 component = ("hooks", name)
-                if self.version == KNOWN_RUNTIME:
-                    unsupported[component] = limitation + " Confirmed for Codex 0.153.4."
+                if mapping_supported(self.version, self.surface):
+                    unsupported[component] = limitation + f" Confirmed mapping for Codex {self.version}."
                 else:
                     pending[component] = "Recheck this hook limitation for the current runtime."
             if permission_note:
@@ -589,7 +598,7 @@ class Codex:
         report["changes"] = [change.summary() for change in changes if change.needed]
         if not remove:
             report["unsupported_full_contracts"] = (
-                LIMITATIONS if self.version == KNOWN_RUNTIME else {}
+                LIMITATIONS if mapping_supported(self.version, self.surface) else {}
             )
             report["retained_partial_bindings"] = {
                 "mainframe-destructive-operations": LIMITATIONS["mainframe-destructive-operations"],

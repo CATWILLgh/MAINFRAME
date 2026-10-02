@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-09-22.
+Last reviewed: 2026-10-02.
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -8,6 +8,54 @@ the installer owns repeatable packaging and lifecycle operations. Recheck the
 version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
+
+## Desktop 0.159.2 delivery revalidation
+
+The current Desktop task reported engine `0.159.2`. Compare the exact upstream
+tags [0.153.4](https://github.com/openai/codex/tree/rust-v0.153.4) and
+[0.159.2](https://github.com/openai/codex/tree/rust-v0.159.2), not a latest branch.
+The non-truncated Git trees resolve to `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`
+and `ff6aec96948b70d94983af2641a6b67c94faeff5`. Downloaded relevant files were
+checked against their Git blob hashes.
+
+- Native config definitions used by MAINFRAME (`AgentsToml`, `SkillsConfig`,
+  `HooksToml`, `HookHandlerConfig`, `SandboxWorkspaceWrite`, `SandboxMode`,
+  `PermissionsToml`) are unchanged in the tagged
+  [config schema](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/core/config.schema.json).
+  The [custom-role configuration](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/agent-roles/src/agent_role_config.rs)
+  is also unchanged. This preserves packaging, not proof of parent permission
+  enforcement for read-only roles.
+- [Host skill roots](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/ext/skills/src/host_roots.rs),
+  metadata parsing and host merge rules are unchanged. `$CODEX_HOME/skills`
+  remains a supported compatibility root. Host discovery now passes an
+  unrestricted filesystem accessor; it preserves that root's previous access
+  semantics. Cloud-provider renaming does not change local skill packaging.
+- [Global instructions](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/codex-home/src/instructions/mod.rs)
+  still prefer `AGENTS.override.md` then `AGENTS.md`. The newer reader retains
+  its last good value on read failures and deduplicates warnings. Confirmed
+  absence still clears the cache; a failed read does not prove an update loaded.
+- `PreToolUse`, `PostToolUse`, and `Stop` event implementations and generated
+  input/output schemas, hook configuration, and tool-name mapping have identical
+  Git blob hashes. The actual-tool-workdir, exact attributed diff, and
+  non-blocking completion-context limitations remain. Preserve useful partial
+  bindings and do not claim those missing guarantees became supported.
+- The [runtime dispatcher](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/core/src/hook_runtime.rs)
+  now supplies the local environment's `cwd` for pre/post tool events, falling
+  back to the turn directory. This still does not identify a shell call's own
+  working directory. `Stop` retains the turn directory. Forked subagents now
+  receive start events; MAINFRAME does not bind that event.
+- The [command runner](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/hooks/src/engine/command_runner.rs)
+  drains output while writing input and includes both in the timeout. Unix
+  handlers launch in a new process session; restricted environment names are
+  filtered from both the session snapshot and hook overrides. No MAINFRAME
+  transport change follows from these inspected differences.
+
+The maintained adapter permits this exact Desktop version; unknown versions and
+CLI 0.159.2 remain outside this revalidation. Disposable-home checks cover full
+skill resource delivery, state truthfulness, convergence, preservation and
+rejection before writes for an uninspected surface/version. Native discovery,
+trust, lifecycle execution and read-only role behavior remain separate pending
+acceptance. A fresh task is the shared loading handoff after delivery changes.
 
 ## Official sources
 

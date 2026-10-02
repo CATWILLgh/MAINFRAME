@@ -20,7 +20,8 @@ if os.name != "posix":
     raise SystemExit(2)
 
 from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES,
-                             RUNTIME_TOOLS, desktop_version, native_version)
+                             INSPECTED_DESKTOP_RUNTIMES, RUNTIME_TOOLS,
+                             desktop_version, native_version, mapping_supported)
 from installer.core import Conflict, installation_lock, restore, transact
 from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
 
@@ -140,8 +141,9 @@ def main(argv=None):
                 )
         show(report, args.details)
         return 0 if args.action == "plan" or (report["structure_matches"] and report.get("native_discovery_passed", True)) else 1
-    if args.action == "apply" and version not in {KNOWN_RUNTIME, *CONTENT_UPDATE_RUNTIMES}:
+    if args.action == "apply" and not mapping_supported(version, args.surface) and version not in CONTENT_UPDATE_RUNTIMES:
         raise Conflict("This installer targets the inspected Codex mapping for runtime " + KNOWN_RUNTIME +
+                       " and Desktop " + ", ".join(sorted(INSPECTED_DESKTOP_RUNTIMES)) +
                        "; revalidate the native mapping for the detected runtime before activation. No runtime is upgraded automatically.")
     with installation_lock(adapter.lock_path):
         if args.action == "recover":

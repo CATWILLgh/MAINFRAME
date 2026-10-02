@@ -8,12 +8,21 @@ the user-facing file-only invocation unchanged.
 
 On macOS or Linux, use Python 3.11 or newer and Git. Select the surface running
 this request under the [surface rule](verification.md#desktop-and-cli).
-The current native mapping was inspected against engine **0.153.4**; its live
-Desktop acceptance remains incomplete. Do not upgrade Codex,
+The native mapping was inspected against engine **0.153.4** and revalidated for
+**Desktop 0.159.2** on 2026-10-02. Delivery compatibility is established from
+tagged source/schema comparison and disposable-home installer checks; live
+Desktop lifecycle and role acceptance remain separate. See the
+[0.159.2 evidence](native/codex.md#desktop-01592-delivery-revalidation).
+Do not upgrade Codex,
 switch the user's model, or claim another version is verified. `plan` works
 read-only; a full installation requires the tested runtime. To support a different version,
 revalidate the affected native contract and update the maintained module with
 its evidence, rather than bypassing the version check or writing a second installer.
+
+CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2
+supports the full maintained delivery route, including new complete skill
+packages and the checkpoint hook. It does not require launching a CLI agent,
+app-server, model probe or trust UI automation.
 
 Desktop **0.154.0-alpha.6.2** also supports a bounded update of an existing
 same-source installation. The installer recognizes the exact prerelease string

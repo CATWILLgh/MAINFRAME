@@ -692,6 +692,7 @@ class InstallationTests(unittest.TestCase):
             ("apply", ["--surface", "desktop", "--executable", "/nonexistent/codex"], "does not launch"),
             ("apply", ["--surface", "cli", "--runtime-version", "0.153.4"], "applies only to Desktop"),
             ("apply", ["--surface", "desktop", "--runtime-version", "0.147.0"], "inspected Codex mapping"),
+            ("apply", ["--surface", "desktop", "--runtime-version", "0.159.3"], "inspected Codex mapping"),
         ]
         for action, options, error in cases:
             with self.subTest(action=action, options=options):
@@ -702,6 +703,47 @@ class InstallationTests(unittest.TestCase):
                 self.assertFalse(self.adapter.receipt_path.exists())
                 self.assertFalse(self.adapter.state_path.exists())
                 self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_current_desktop_mapping_delivers_complete_skills_and_converges(self):
+        executable = self.home / "codex"
+        executable.write_text('#!/bin/sh\nprintf called > "$0.called"\n')
+        executable.chmod(0o755)
+        environment = dict(os.environ, PATH=str(self.home) + os.pathsep + os.environ.get("PATH", ""))
+        base = [sys.executable, "-B", str(self.source / "install.py"), "codex"]
+        options = ["--surface", "desktop", "--runtime-version", "0.159.2",
+                   "--home", str(self.home), "--instructions-reviewed"]
+        for action in ("plan", "apply", "verify"):
+            result = subprocess.run(base + [action] + options, cwd=self.source,
+                env=environment, text=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["runtime_version"], "0.159.2")
+            if action == "verify":
+                self.assertTrue(report["structure_matches"])
+                self.assertEqual(report["file_change_count"], 0)
+        for source in (self.source / "skills/mainframe-clickhouse").rglob("*"):
+            if source.is_file():
+                installed = self.adapter.skills / "mainframe-clickhouse" / source.relative_to(self.source / "skills/mainframe-clickhouse")
+                self.assertEqual(installed.read_bytes(), source.read_bytes())
+        state = json.loads(self.adapter.state_path.read_bytes())
+        self.assertEqual(state["components"]["skills"]["mainframe-clickhouse"]["delivery"], "installed")
+        self.assertEqual(state["components"]["skills"]["mainframe-clickhouse"]["verification"], "pending")
+        self.assertTrue(all(state["components"]["hooks"][name]["delivery"] == "unsupported"
+                            for name in codex.LIMITATIONS))
+        self.assertFalse(Path(str(executable) + ".called").exists())
+
+    def test_current_mapping_does_not_authorize_an_uninspected_cli(self):
+        executable = self.home / "fake-codex"
+        executable.write_text('#!/bin/sh\nprintf "codex-cli 0.159.2\\n"\n')
+        executable.chmod(0o755)
+        result = subprocess.run([sys.executable, "-B", str(self.source / "install.py"),
+            "codex", "apply", "--surface", "cli", "--home", str(self.home),
+            "--executable", str(executable), "--instructions-reviewed"],
+            cwd=self.source, text=True, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("inspected Codex mapping", result.stderr)
+        self.assertFalse(self.adapter.receipt_path.exists())
+        self.assertFalse(self.adapter.state_path.exists())
 
     def test_desktop_reads_only_current_task_version_and_rejects_a_conflicting_override(self):
         self.assertIsNone(codex.desktop_version(self.adapter.codex, "current-task"))
