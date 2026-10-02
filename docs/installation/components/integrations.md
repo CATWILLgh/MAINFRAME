@@ -14,6 +14,24 @@ Reuse compatible native tools and runtimes. Install only what an active listed
 component requires. Never install development harnesses, test fixtures,
 telemetry collectors, optional integrations, or generated adapters by default.
 
+## Analyzer ownership
+
+[Small tool profiles](../../../skills/mainframe-testing/references/tooling.md)
+own project analyzer selection and execution policy. The maintained
+[hook runtime installer](../../../installer/runtime.py) owns dependencies of
+registered MAINFRAME hooks. Its catalog is a tested hook contract, not a
+universal project language catalog. Do not install a language tool merely
+because its ecosystem exists somewhere on the machine, or substitute a
+project analyzer without checking the hook's flags and output semantics.
+
+Provision required hook executables before activating their registrations.
+Keep package download/update logic out of hook execution. Verify compatible
+availability and the adapter's relevant analyzer contract; report unavailable
+checks distinctly from clean results. Reuse compatible installations through
+the maintained installer and preserve unrelated project environments.
+SonarQube and comparable server/hosted platforms are not default dependencies;
+adding them requires an explicit user request and an agreed operating scope.
+
 ## MCP and external capabilities
 
 Prepare protected credential delivery before registering a server. Use the

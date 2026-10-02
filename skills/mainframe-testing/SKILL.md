@@ -1,6 +1,6 @@
 ---
 name: mainframe-testing
-description: Design, write, run, or repair tests and GitHub/GitLab CI during development. Use for test strategy, TDD, fixtures, local/CI boundaries, and verification evidence. Use mainframe-test-audit to assess an existing test system.
+description: Design, write, run, or repair tests and GitHub/GitLab CI during development. Use for test strategy, TDD, analysis tools, fixtures, local/CI boundaries, and verification evidence. Use mainframe-test-audit to assess an existing test system.
 ---
 
 # Own the behavior and its verification
@@ -26,6 +26,7 @@ For an assignment that includes both audit and repair, keep findings and impleme
 | Project strategy, test levels, or the project verification map | [Shared strategy](references/strategy.md) |
 | Red/green/refactor, regression design, or an inherited implementation | [Behavior and TDD](references/tdd.md) |
 | Local scope, fixtures, PostgreSQL identity, or an unavailable real dependency | [Local test boundary](references/local.md) |
+| Analyzer selection, installation, reuse, or hook execution | [Small tool profiles](references/tooling.md) |
 | Required CI checks, triggers, cost, caching, failures, or evidence ownership | [CI contract](references/ci.md) |
 | GitHub workflow authoring or troubleshooting | [GitHub Actions](references/github.md) |
 | GitLab pipeline authoring or troubleshooting | [GitLab CI](references/gitlab.md) |

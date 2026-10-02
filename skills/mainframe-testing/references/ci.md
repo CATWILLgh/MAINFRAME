@@ -22,6 +22,8 @@ Cache reproducible dependencies keyed by relevant lockfiles, OS, architecture an
 
 Cancel superseded test runs when safe; do not interrupt deployment, data migration or a publication operation midway simply because a newer commit exists. Serialize shared-state mutations with the host's appropriate control. Keep bounded timeouts and cleanup. Retry only classified transient infrastructure failures, with bounded attempts; test assertions failing repeatedly are not green results. Quarantined flaky coverage needs an owner, tracked repair and explicit acceptance consequences.
 
+Select analyzers through [small tool profiles](tooling.md). Reuse project configuration and version ownership, and distinguish a missing or failed analyzer from a successful check. Introducing a hosted/server analysis platform requires the user agreement defined there even when it runs only in CI.
+
 ## Trust boundaries
 
 Untrusted contributions must not receive privileged tokens, production credentials, writable deployment environments or persistent trusted runner state. Minimize job permissions, separate test and publish/deploy identities, and use short-lived identity where supported. Review externally supplied actions/includes/images; use immutable verified references with a maintained update path when supported. Do not hard-code invented SHAs or disable all updates through abandoned pins.
