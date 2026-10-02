@@ -181,6 +181,11 @@
         "source": "commands/mainframe-tickets-verify.md",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-tickets-init": {
+        "source": "commands/mainframe-tickets-init.md",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "hooks": {

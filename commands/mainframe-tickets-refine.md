@@ -6,11 +6,15 @@ Investigate each eligible ticket deeply: establish its code execution path, caus
 
 When the user first starts a native goal and then invokes this command in a separate message, perform the campaign under that existing goal. Do not create a second goal or interpret the command as a request to investigate just one ticket.
 
+## Read the initialized ticket contract
+
+Read `docs/tickets/AGENTS.md` and require the `mainframe-tickets-v1` contract before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+
+Select from `docs/tickets/open/observations/` and `open/needs-scope-review/`. Investigate one record at a time, adding `Investigation` (trace, mechanism, alternatives and blast radius), `Acceptance`, and any applicable `Relationships`, `User decision` or `Blocker` sections. Consolidate evidence before moving or retiring records. Route to `open/ready/` with `execution: autonomous` and an evidence-backed `Autonomous implementation boundary` only when no user-owned decision remains; otherwise use `open/needs-decision/`, retain `open/needs-scope-review/` for unavailable evidence, or use `archive/rejected/` for a proved rejection, supersession or duplicate. Preserve an existing `execution: user-approved` route when a re-investigated ticket returns to ready; do not convert it to autonomous queue work without explicit authority. Assign autonomous only to work without that preserved route and with the demonstrated autonomous boundary. Do not fabricate user approval. Save campaign progress under `.campaigns/` and validate each record's required YAML fields and links after moves.
+
 ## Establish the queue and authority
 
-Resolve the current project root, its configured issue route, ticket identity and YAML/Markdown requirements, and the lifecycle states that represent new observations or tickets awaiting more scope evidence. Preserve the project's schema and validate ticket structure and links after updates. Do not use another project's queue or MAINFRAME's central harness-feedback queue.
-
-If the project has no configured issue route or refinement lifecycle, return the exact missing configuration and stop without inventing one. If the queue is external, mutate it only when the current caller supplied that authority. Otherwise perform the permitted investigation and return the complete ticket updates with the exact missing write action.
+Use the initialized local queue and the stage-specific destinations above. A missing or conflicting contract is an initialization issue, not permission to invent lifecycle states. Preserve the project's tracked or ignored ownership.
 
 The invocation authorizes only the project inspection, safe focused checks, and ticket mutations required for refinement within the supplied environment and authority. It does not authorize implementation, deployment, remote or shared writes, destructive operations, dependency installation, broad infrastructure changes, repository-history changes, commits, or pushes.
 

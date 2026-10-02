@@ -44,7 +44,7 @@ surface, matching the documentation's warning that an unmapped tool name can
 break custom-agent execution.
 
 Antigravity skills support both slash invocation and autonomous selection.
-Version 2.13.0 documents no explicit-only switch. The six canonical MAINFRAME
+Version 2.13.0 documents no explicit-only switch. The seven canonical MAINFRAME
 commands therefore remain `unsupported` as complete contracts. The installer
 retains their useful slash behavior as ordinary skill packages whose discovery
 description and body both require the exact `/command` invocation. This is a

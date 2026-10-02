@@ -63,7 +63,7 @@ Do not delete an old wrapper merely to make cleanup look complete.
 ## Delivered mapping and known gaps
 
 The program prepares the 15 complete skill packages, seven native agent roles,
-six native slash commands, the narrow `mainframe-tickets-find` skill projection
+seven native slash commands, the narrow `mainframe-tickets-find` skill projection
 needed by noninteractive automations, shared credential helper/index integration,
 and the global instruction. It preserves unrelated target files and configuration.
 Commands retain explicit invocation, and shared command-skill collisions are

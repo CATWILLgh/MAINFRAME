@@ -4,11 +4,15 @@ This is a user-invocable command. Execute it only because the current invocation
 
 Repeatedly choose a random project area, investigate it, immediately persist a supported problem or consolidate new evidence into its existing ticket, then choose another area. Do not implement fixes, assign priorities, decide unresolved product behavior, or advance tickets through later lifecycle stages.
 
+## Read the initialized ticket contract
+
+Read `docs/tickets/AGENTS.md` and require the `mainframe-tickets-v1` contract before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+
+Read only relevant matches across the five `docs/tickets/open/` queues for deduplication. Create new records in `open/observations/` with `id`, `title`, `component`, `created`, `created-from` and an `Evidence` section. New IDs are quoted four-character lowercase hexadecimal strings checked against open and archived IDs; retain existing IDs. Add new facts to matching open records without changing their lifecycle or execution marker. Record trigger/location, actual and expected behavior with sources, consequence, and uncertainty. Keep this campaign's random-point history and duplicate streak under `.campaigns/`; never count state files, migration snapshots, or terminal records as open duplicates.
+
 ## Resolve project storage and authority
 
-Resolve the exact current project, effective instructions, configured issue directory or tracker, ticket identity scheme, lifecycle, and required YAML frontmatter and Markdown template. Use explicit project rules first and valid existing records as examples. Write only to the configured destination and validate required fields, Markdown structure, and links before saving. Do not invent a universal ticket directory, schema, or tracker. For a native external tracker, follow its configured fields rather than creating a parallel Markdown queue.
-
-Resolve the project's permitted campaign-state location as well. Use an existing campaign or goal record when available; otherwise use the established project-local agent-state convention. Do not put campaign progress in a defect ticket or an evolving knowledge skill. If the storage route or ownership is unresolved, return that exact missing configuration; do not guess another repository, global location, or Git policy.
+Use the initialized project contract for ticket identity, fields, destinations and `.campaigns/` storage. Follow its template and validate required fields, Markdown structure and links before saving. Preserve existing tracked or ignored ownership; campaign state is not a defect ticket or durable project skill.
 
 The invocation authorizes project investigation and local ticket and campaign-state writes within the effective project policy. External ticket writes and access to shared or remote environments require the applicable caller authority. Preserve unrelated work and processes. Do not change application behavior, switch branches, alter history, commit, push, deploy, or broaden access during this command.
 

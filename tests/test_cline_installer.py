@@ -54,6 +54,12 @@ class ClineInstallerTests(unittest.TestCase):
         self.install()
         _, repeated = self.adapter.plan(instructions_reviewed=True)
         self.assertEqual(repeated["changes"], [])
+        init_command = (self.adapter.workflows / "mainframe-tickets-init.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
         self.assertEqual(self.adapter.rules.stat().st_mode & 0o777, 0o600)
         self.assertEqual((self.adapter.hooks / "PreToolUse").stat().st_mode & 0o777, 0o755)
         self.assertEqual((self.adapter.hooks / "PostToolUse").stat().st_mode & 0o777, 0o755)

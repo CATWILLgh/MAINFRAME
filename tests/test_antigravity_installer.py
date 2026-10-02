@@ -47,11 +47,17 @@ class AntigravityInstallationTests(unittest.TestCase):
         _, report = self.adapter.plan()
         self.assertEqual(report["changes"], [])
         self.assertFalse(report["retiring_hooks"])
+        init_command = (self.adapter.skills / "mainframe-tickets-init/SKILL.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
         state = json.loads(self.adapter.state_path.read_text())
-        self.assertEqual(report["planned_delivery"], {"installed": 27, "pending": 0, "unsupported": 12})
+        self.assertEqual(report["planned_delivery"], {"installed": 27, "pending": 0, "unsupported": 13})
         self.assertEqual(set(report["retained_partial_bindings"]), {
             "mainframe-init", "mainframe-project-skill", "mainframe-tickets-find", "mainframe-tickets-refine", "mainframe-tickets-implement",
-            "mainframe-tickets-verify",
+            "mainframe-tickets-verify", "mainframe-tickets-init",
             *PARTIAL_HOOKS,
         })
         self.assertEqual(state["components"]["commands"]["mainframe-project-skill"]["reason"], COMMAND_REASON)

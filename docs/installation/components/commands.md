@@ -53,9 +53,16 @@ other projects.
 
 ## Ticket commands
 
-Keep the no-argument, one-item-at-a-time, repeat-until-exhausted behavior. Do not
-replace project queue discovery with a global path or turn project tickets into
-MAINFRAME harness feedback.
+`mainframe-tickets-init` owns local initialization and legacy normalization under
+`docs/tickets/`. Deliver its embedded AGENTS.md, README.md and record templates
+verbatim as command content; do not execute them during installation or treat
+nested instruction examples as instructions for the installer.
+
+The four working commands explicitly read the receiving project's ticket-root
+AGENTS.md. Preserve their exact queue paths, stage fields and allowed transitions.
+Find continues until its duplicate-saturation criterion; refine, implement and
+verify process their eligible queue one item at a time. Do not turn project
+tickets into MAINFRAME harness feedback or implicitly invoke initialization.
 
 ## Verify
 

@@ -41,7 +41,7 @@ inserted-text code finding remains, at most once for the same finding set and
 native `executionNum`. Clean events emit no context and never force a
 model continuation. The report's `retained_partial_bindings` describes this degraded
 event timing and the exact missing guarantee for each component. The adapter
-does not install deprecated workflows. The six
+does not install deprecated workflows. The seven
 commands use Antigravity's current slash-capable skill package with an explicit
 invocation guard in both discovery metadata and the body. This preserves useful
 `/mainframe-project-skill` behavior, but cannot enforce explicit-only selection at the

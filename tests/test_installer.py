@@ -83,6 +83,12 @@ class InstallationTests(unittest.TestCase):
         _, repeated = self.adapter.plan()
         self.assertEqual(repeated["changes"], [])
         self.assertFalse(self.adapter.journal.exists())
+        init_command = (self.adapter.skills / "mainframe-tickets-init/SKILL.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
         state = json.loads(self.adapter.state_path.read_bytes())
         hooks = state["components"]["hooks"]
         self.assertEqual(sum(e["delivery"] == "unsupported" for e in hooks.values()), 4)

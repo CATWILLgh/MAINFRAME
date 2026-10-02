@@ -26,7 +26,7 @@ release evidence, `--cline-home` selects an explicit configuration root, and
 | `~/.cline/rules/mainframe.md` | The canonical global instruction inside one MAINFRAME-managed block |
 | `~/.cline/skills/mainframe-*/` | The 15 canonical skills, complete with references, scripts, and assets; markers resolved only in the copies |
 | `~/.cline/agents/mainframe-*.yml` | The seven roles as YAML profiles; read-only roles are restricted to `read_files, search_codebase` and every profile binds its required method through the native `skills:` field |
-| `~/.cline/workflows/<command>.md` | The six commands as explicit user-invoked slash workflows |
+| `~/.cline/workflows/<command>.md` | The seven commands as explicit user-invoked slash workflows |
 | `~/.cline/hooks/PreToolUse`, `PostToolUse` | Two fail-open launchers that call one Python transport |
 | `~/.cline/hooks/mainframe-cline-hook` and `hooks/detectors/` | The unchanged canonical detectors behind the transport |
 | `~/.local/bin/mainframe-secret` | The credential helper, installed only when absent |

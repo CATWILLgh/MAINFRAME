@@ -6,11 +6,15 @@ Implement each eligible ticket completely within its evidenced boundary, validat
 
 When the user starts a native goal and then invokes this command separately, process the campaign under that existing goal. Preserve progress through continuations; do not create another goal or stop after the first completed ticket.
 
+## Read the initialized ticket contract
+
+Read `docs/tickets/AGENTS.md` and require the `mainframe-tickets-v1` contract before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+
+Select only `docs/tickets/open/ready/` records with `execution: autonomous` and an evidenced `Autonomous implementation boundary`. Do not consume `user-approved` records through this queue-wide command. Keep the active record in ready while implementing. Add `Implementation` with source locations, pre-change evidence, checks, limitations and checkpoint references; preserve investigation, acceptance, identity and execution metadata. Move a completed verified correction to `open/needs-verification/`; route missing evidence to `open/needs-scope-review/`, unresolved user choices to `open/needs-decision/`, and disproved or duplicate claims to `archive/rejected/` with evidence. Save continuation and resulting commit identities under `.campaigns/`. Preserve ignored record ownership and validate YAML, destination and links after each move.
+
 ## Establish the queue and authority
 
-Resolve the current project root, its configured issue route, YAML/Markdown requirements, and lifecycle states and directories for ready work, scope review, user decisions, and implemented work awaiting independent verification. Select only tickets whose requirements and necessary decisions are settled enough for autonomous engineering. Leave tickets explicitly awaiting user work in their configured state. Do not use another project's queue or MAINFRAME's central harness-feedback queue.
-
-If the project has no configured issue route or implementation lifecycle, return the exact missing configuration and stop without inventing one. If the queue is external, mutate it only when the current caller supplied that authority. Otherwise return the exact missing write action instead of claiming a completed transition.
+Use the initialized local queue and the stage-specific destinations above. A missing or conflicting contract is an initialization issue, not permission to invent lifecycle states. Preserve the project's tracked or ignored ownership.
 
 The explicit invocation authorizes the local, reversible project and ticket changes required to implement ready tickets in the current checkout. It does not authorize deployment, writes to remote or shared environments, destructive data operations, material infrastructure changes, destructive history changes, or pushes. Unless the caller or effective project policy forbids commits, the invocation also authorizes a local Conventional Commit for each completed, verified ticket. It does not authorize a push. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
 
@@ -28,7 +32,7 @@ If a ticket update cannot be written, preserve its complete proposed update and 
 
 Confirm against the current project that the ticket still describes an observable problem, the expected behavior is fixed by reliable evidence, its meaningful affected scope is known, its acceptance boundary is testable, and no required premise has become stale. Treat a ready label and earlier conclusions as leads rather than current proof.
 
-Return the ticket to the project's scope-review state and directory without changing implementation code when its evidence, affected boundary, expected behavior, or acceptance condition is materially incomplete or stale. Reject or reroute a disproved or duplicate claim through the configured lifecycle. Continue with the remaining queue.
+Return the ticket to the project's scope-review state and directory without changing implementation code when its evidence, affected boundary, expected behavior, or acceptance condition is materially incomplete or stale. Reject or reroute a disproved or duplicate claim through the initialized lifecycle. Continue with the remaining queue.
 
 ## Apply the final decision gate
 

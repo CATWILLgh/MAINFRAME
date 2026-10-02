@@ -52,6 +52,12 @@ class ZCodeInstallationTests(unittest.TestCase):
         _, second = self.adapter.plan()
         self.assertEqual(second['changes'], [])
         state = json.loads(self.adapter.state_path.read_text())
+        init_command = (self.adapter.commands / "mainframe-tickets-init.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
         self.assertEqual(state['components']['commands']['mainframe-project-skill']['delivery'], 'installed')
         self.assertEqual(state['components']['commands']['mainframe-project-skill']['verification'], 'pending')
         self.assertEqual(state['components']['hooks']['mainframe-code-quality']['delivery'], 'unsupported')

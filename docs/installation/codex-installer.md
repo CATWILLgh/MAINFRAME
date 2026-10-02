@@ -242,7 +242,7 @@ mapping; a successful offline fixture test does not update an acceptance badge.
 ## Migration from the shared skill root
 
 The maintained adapter now uses `$CODEX_HOME/skills` for its 15 skill packages
-and six explicit-only commands. Ordinary `plan`, `apply`, and `verify` perform
+and seven explicit-only commands. Ordinary `plan`, `apply`, and `verify` perform
 the migration using the existing ownership receipt. Old shared copies are
 removed only when installer-owned and unchanged; customizations stop the plan
 before writes, and unrelated resources remain. Role method links follow the

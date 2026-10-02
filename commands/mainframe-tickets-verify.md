@@ -6,11 +6,15 @@ Independently verify each eligible implementation, record one evidence-backed ve
 
 When the user starts a native goal and then invokes this command separately, process the queue under that existing goal. The ticket-only write boundary applies to the entire verification campaign, including continuations and delegated work. Do not create a second goal or switch to implementation after finding a failed check.
 
+## Read the initialized ticket contract
+
+Read `docs/tickets/AGENTS.md` and require the `mainframe-tickets-v1` contract before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+
+Select only `docs/tickets/open/needs-verification/`, preserving the recorded execution route. Add `Verification` with the independence basis, current checks, verdict, adjacent risk evidence and limitations, plus a `Blocker` or `User decision` section when required. Move a proved correction to `archive/resolved/`, a failed implementation to `open/ready/`, missed investigation to `open/needs-scope-review/`, user-owned choices to `open/needs-decision/`, and disproved, superseded or duplicate claims to `archive/rejected/`. A blocked observation may remain in needs-verification with the exact resumption condition. Preserve IDs, required YAML and execution markers; returning a user-approved record to ready does not convert it into autonomous work. Update only ticket records and their paths/links; progress stays in them and native goal state. Do not edit `.campaigns/`, root rules, README, or recovery files during verification.
+
 ## Establish the queue and authority
 
-Resolve the current project root, its configured issue route, required YAML/Markdown structure, and the lifecycle states and directories that represent implemented work awaiting verification, resolved work, rejected work, ready work, scope review, and decisions. Do not use another project's queue or MAINFRAME's central harness-feedback queue.
-
-If the project has no configured issue route or verification lifecycle, return the exact missing configuration and stop without inventing one. If the queue is external, mutate it only when the current caller supplied that authority. Otherwise perform the permitted checks and return the complete ticket updates with the exact missing write action.
+Use the initialized local queue and the stage-specific destinations above. A missing or conflicting contract is an initialization issue, not permission to invent lifecycle states. Preserve the project's tracked or ignored ownership.
 
 The invocation authorizes project inspection, safe local verification, and ticket mutations required to preserve evidence and record verdicts. Only ticket records may receive persistent project edits: do not change source code, tests, fixtures, snapshots, dependencies, lockfiles, configuration, project instructions, skills, or other documentation, even to repair an obvious typo or unblock a check. It does not authorize changes to implementation code or tests, deployment, writes to remote or shared environments, destructive operations, material infrastructure changes, repository-history changes, commits, or pushes. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
 
@@ -67,7 +71,7 @@ If verification exposes an unresolved material choice owned by the user or anoth
 
 ## Record exactly one verdict
 
-Preserve the ticket identity and accumulated evidence. Append only the new independent observations, commands or checks actually performed, their results, and material limitations. Do not duplicate unchanged history. Apply exactly one transition through the project's configured lifecycle, updating the required fields and moving the ticket to the corresponding directory when the project uses directory-based states. Validate YAML/Markdown, links, and record identity so the transition leaves no stale duplicate. For a tracker, use its native state rather than inventing filesystem moves:
+Preserve the ticket identity and accumulated evidence. Append only the new independent observations, commands or checks actually performed, their results, and material limitations. Do not duplicate unchanged history. Apply exactly one transition through the initialized lifecycle, updating the required fields and moving the ticket to the corresponding directory. Validate YAML/Markdown, writable ticket links, and record identity so the transition leaves no stale duplicate:
 
 - Move a proven correction to the configured resolved terminal state or archive only when the original problem is no longer reproducible for the intended reason, the acceptance boundary is demonstrated, and the final acceptance gate is satisfied.
 - Return an incomplete or incorrect implementation to ready work with precise failed-verification evidence and without repairing it inline.
@@ -76,7 +80,7 @@ Preserve the ticket identity and accumulated evidence. Append only the new indep
 - Move a disproved, superseded, or confirmed duplicate claim to the configured rejected terminal state or archive.
 - Leave it awaiting verification only when a specific unavailable environment, permission, dependency, observation, or independent trajectory prevents a reliable verdict; record exactly what would unlock verification.
 
-Preserve terminal records and their accumulated evidence as immutable history; do not edit, reopen, rename, or move them in this command. A later occurrence is a new observation with its own identity through the configured project route. Do not create filesystem archives when the project uses tracker states. If verification reveals a separate concrete problem, record or reconcile it through the receiving project's problem-recording route when that capability and authority are available, then return to the active ticket without investigating or fixing it inline.
+Preserve terminal records and their accumulated evidence as immutable history; do not edit, reopen, rename, or move them in this command. A later occurrence is a new observation with its own identity through the configured project route. If verification reveals a separate concrete problem, record or reconcile it through the receiving project's problem-recording route when that capability and authority are available, then return to the active ticket without investigating or fixing it inline.
 
 Repeated verification against unchanged state must converge: do not append the same evidence, repeat an unchanged blocked check, duplicate a transition, or touch an already archived ticket.
 

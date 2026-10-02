@@ -23,7 +23,7 @@ Neither option changes the other adapters.
 
 ## Delivered shape
 
-The Plugin manifest declares the 15 canonical MAINFRAME Skills, six command
+The Plugin manifest declares the 17 canonical MAINFRAME Skills, seven command
 workflows rendered as Skills, and one Hook document. The Hook document starts
 one composite command for each relevant event rather than one process per
 canonical detector:
@@ -42,7 +42,7 @@ under MiniMax's host-owned `PLUGIN_DATA`, and disable markers affect only the
 selected canonical Hook. The Plugin package itself remains immutable at runtime.
 
 MiniMax exposes Plugin Skills to autonomous selection as well as explicit
-invocation. The six commands are therefore useful partial bindings, but their
+invocation. The seven commands are therefore useful partial bindings, but their
 explicit-only contract cannot be enforced. MiniMax custom Agents are managed by
 the native `mavis` service and are not representable in local Plugin V1, so the
 seven role components remain unsupported rather than being written into private
