@@ -45,10 +45,10 @@ class MiniMaxInstallationTests(unittest.TestCase):
         report = self.apply()
         _, converged = self.adapter.plan()
         self.assertEqual(converged["changes"], [])
-        self.assertEqual(report["planned_delivery"], {"installed": 25, "pending": 0, "unsupported": 13})
+        self.assertEqual(report["planned_delivery"], {"installed": 26, "pending": 0, "unsupported": 13})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
-        self.assertEqual(len(manifest["skills"]), 22)
+        self.assertEqual(len(manifest["skills"]), 23)
         self.assertEqual(manifest["hooks"], ["hooks/hooks.json"])
         hooks = json.loads((self.adapter.plugin / "hooks/hooks.json").read_text())["hooks"]
         self.assertEqual(set(hooks), {

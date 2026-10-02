@@ -48,7 +48,7 @@ class AntigravityInstallationTests(unittest.TestCase):
         self.assertEqual(report["changes"], [])
         self.assertFalse(report["retiring_hooks"])
         state = json.loads(self.adapter.state_path.read_text())
-        self.assertEqual(report["planned_delivery"], {"installed": 26, "pending": 0, "unsupported": 12})
+        self.assertEqual(report["planned_delivery"], {"installed": 27, "pending": 0, "unsupported": 12})
         self.assertEqual(set(report["retained_partial_bindings"]), {
             "mainframe-init", "mainframe-project-skill", "mainframe-tickets-find", "mainframe-tickets-refine", "mainframe-tickets-implement",
             "mainframe-tickets-verify",

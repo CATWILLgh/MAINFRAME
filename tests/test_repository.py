@@ -117,7 +117,7 @@ class RepositoryContractTests(unittest.TestCase):
                 if isinstance(component, dict) and "source" in component:
                     sources.append(component["source"])
 
-        self.assertEqual(len(sources), 38, "unexpected payload identity count")
+        self.assertEqual(len(sources), 39, "unexpected payload identity count")
         self.assertEqual(len(sources), len(set(sources)), "duplicate payload source")
 
         forbidden = {

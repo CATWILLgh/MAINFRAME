@@ -47,6 +47,8 @@ configuration, database, and API behavior.
 - K3s cluster design, installation, networking, storage, hardening, upgrades,
   or recovery: load `mainframe-k3s`. Keep general infrastructure ownership and
   cross-service coordination here; that skill owns the K3s operational method.
+- ClickHouse queries, ingestion, data/schema changes, maintenance, or recovery:
+  load `mainframe-clickhouse` for its environment, cost, and data-safety boundaries.
 - Dockerfile, image, container runtime, or Compose work: read
   [containers.md](references/containers.md).
 - Operational PostgreSQL, Redis, backup, restore, replication, or failover

@@ -48,6 +48,11 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-clickhouse": {
+        "source": "skills/mainframe-clickhouse",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-ops-app-server-safety": {
         "source": "skills/mainframe-ops-app-server-safety",
         "delivery": "pending",
