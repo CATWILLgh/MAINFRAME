@@ -67,10 +67,4 @@ Ordinary engineering and architecture judgment does not become a user decision m
 
 Continue the one-ticket cycle until a refreshed control pass finds no additional ticket that this command can further expand or route under current evidence and authority. A blocked ticket is handled for this run only after its exact evidence gap or decision is recorded or returned as a complete proposed update; it must not prevent processing later tickets.
 
-Return:
-
-- the project queue processed;
-- every ticket expanded, split, consolidated, rejected, made ready, or routed to a decision or evidence gap;
-- the decisive evidence and remaining uncertainty for each outcome;
-- ticket updates that could not be written and the exact reason;
-- confirmation that the refreshed queue and this run's handled tickets leave no further permitted refinement, distinguishing persisted transitions from proposed updates still awaiting a write.
+Return the queue processed and each changed ticket's outcome, decisive evidence, and material uncertainty. Include proposed updates that could not be written and the exact missing action. State whether the refreshed queue leaves further permitted refinement. Omit empty categories and distinguish persisted transitions from proposals.

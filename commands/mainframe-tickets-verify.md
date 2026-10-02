@@ -78,11 +78,4 @@ Repeated verification against unchanged state must converge: do not append the s
 
 Continue the one-ticket cycle until a refreshed control pass finds no additional independently eligible ticket that this command can further verify under the current evidence, environment, and authority. A blocked or non-independent ticket is handled for this run only after the exact missing condition is recorded or returned to the current recipient; it must not prevent processing later tickets.
 
-Return:
-
-- the project verification queue processed;
-- the independence basis for every checked ticket;
-- every ticket's verdict and resulting lifecycle state;
-- the independently observed evidence and the meaningful adjacent contracts checked;
-- every unobserved material boundary and the exact reason;
-- confirmation that the refreshed queue and this run's handled tickets leave no further permitted independent verification, distinguishing persisted transitions from proposed updates still awaiting a write.
+Return the queue processed and, for each checked ticket, the independence basis, verdict, resulting state, decisive observations, and material verification gaps. State whether the refreshed queue leaves further permitted independent verification. Omit empty categories and distinguish persisted transitions from proposals.

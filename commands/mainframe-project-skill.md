@@ -49,22 +49,24 @@ Use this `SKILL.md` template and replace every angle-bracket token with verified
 ```markdown
 ---
 name: <mainframe-project-skill-id>
-description: Use verified <project-name> source ownership, design decisions, and checks for substantive repository work. Preserve knowledge that changes future decisions.
+description: Plan, implement, debug, review, or maintain <project-name> using its source owners, established decisions, and verification routes. Use when project-specific context affects the work.
 ---
 
 # Use and maintain <project-name> project knowledge
 
-Consult [references/project-knowledge.md](references/project-knowledge.md) when source ownership, a design decision, or a verification route needs context. A localized wording fix needs only its owner and relevant constraints. Read only supporting files relevant to the current decision and reuse current material already loaded. Investigate gaps and verify facts that could have changed.
+Use this skill during substantive project work and discussion when project-specific constraints, source ownership, design decisions, or verification affect the next step; do not wait for the user to name it. Consult [references/project-knowledge.md](references/project-knowledge.md) and follow only the relevant supporting links. Apply the knowledge to the actual decision. Reuse current material already loaded; a localized wording fix needs only its owner and relevant constraints. Investigate gaps and verify facts that could have changed.
 
 Work from the current project state. Separate user decisions, implemented behavior, verified runtime evidence, and unknowns. Preserve unrelated work and keep global configuration unchanged unless the current request separately authorizes a global change.
 
 ## Keep the knowledge useful
 
-Proactively update this skill within the current assignment's write authority when the work establishes knowledge that will materially improve a future task through an explicit durable user decision, direct inspection of the current project, current authoritative documentation, or a reproducible check. Update stale entries in place and merge duplicates. If the assignment is read-only or excludes this skill, return the supported knowledge and exact proposed update to the current recipient instead of writing it.
+Maintain this skill as part of ordinary authorized project work; no repeat invocation of the creation command is needed. Update the narrowest existing entry when the task establishes a durable user decision, resolves a recurring trap, changes a source owner or verification route, or disproves maintained knowledge. Ground updates in the user decision, current source, authoritative documentation, or a reproducible check, and state the consequence for future work.
+
+Before handing back a completed substantive task, check whether its findings changed any such knowledge. Persist a useful change within the assignment's write authority and mention it briefly in the handoff. If nothing durable changed, leave the skill untouched; do not add a per-task log or completion ritual. If the assignment is read-only or excludes this skill, return the exact supported correction instead of writing it.
 
 Keep the shared working procedure and reading triggers in this `SKILL.md`. Keep `references/project-knowledge.md` short: essential project constraints and routes to the sources needed for common decisions. Put substantial domain knowledge, evidence, schemas, and examples in focused supporting files, each linked with a concrete reason to read it. Use scripts for useful deterministic operations and assets for reusable output material. Add them when the current task demonstrates their value; do not wait for repeated failures or create empty structure.
 
-Before adding a finding, find its existing owner. Replace an obsolete conclusion and merge repeated evidence there. Keep one current actionable account; put detailed experiment evidence behind a link. A historical instruction for the next session must not remain a current rule after that session has happened.
+Replace obsolete conclusions and merge repeated evidence at their existing owner. Keep one current actionable account; link detailed evidence. Remove expired next-session instructions from current guidance.
 
 Do not record guesses, proposals awaiting approval, session chronology, temporary status, task notes, raw output, secrets, credentials, prompts, responses, telemetry, personal data, or copied project documentation. Link to an existing source of truth instead of duplicating it.
 
@@ -90,12 +92,16 @@ When several project skills already evolve, update the narrowest existing owner.
 
 ## Bind, validate, and report
 
-Locate the current product's effective project-root instruction owner inside the resolved project. Add or reconcile one minimal reference from that owner to the evolving project skill so a new session can discover the durable project knowledge before substantive work. Reference the stable skill identity and native project path; do not paste the skill body into the root instruction.
+Locate the current product's effective project-root instruction owner inside the resolved project. Add or reconcile one short use-and-maintain reference so a fresh session knows both when to load the skill and when to evolve it. Adapt this binding to the verified identity and native path:
+
+> For substantive project work or discussion, use `<skill-id>` at `<native-project-path>/SKILL.md` when available and project-specific knowledge can affect the decision. Apply its relevant references and maintain durable findings or corrections during authorized work; do not wait for another command invocation. Read-only assignments return proposed corrections.
+
+Reference the stable identity and path; keep detailed maintenance rules in the skill.
 
 Reuse an existing shared cross-agent root instruction when it is natively effective. If that instruction is tracked but the skill is intentionally local, make the binding conditional on local availability rather than making a clean checkout depend on an ignored file. Add a thin product-specific bridge only when the installed product cannot consume that owner directly. Do not create every product's conventional root file, add a global binding, or duplicate the reference across several instruction layers.
 
 If no effective root instruction exists, create the current product's smallest native project instruction only after resolving whether that project-owned file is tracked, ignored, or split. If the project's evidence does not decide that ownership and the choice would determine whether the instruction is shared through Git, stop on that one decision instead of guessing. Repeated invocation must update the same managed reference without adding duplicate lines or generated sections.
 
-Validate frontmatter or native metadata, links, executable resources, project confinement, Git ownership, and the actual root binding. Confirm that a representative project question reaches its relevant source owner or check through the entrypoint without loading unrelated references. Reuse current native catalog and loading evidence when adequate; use a fresh session only for an unresolved discovery boundary. Catalog presence proves discovery, not useful decisions. If the product cannot expose a project skill reliably, return the exact limitation instead of installing a global copy as a substitute.
+Validate frontmatter or native metadata, links, executable resources, project confinement, Git ownership, and the actual root binding. Check that a representative project question reaches its relevant source owner or check, and that a durable correction reaches the existing knowledge owner without another command invocation. Also check that read-only work proposes a correction and work with no new durable knowledge leaves the skill unchanged. Reuse current native catalog and loading evidence when adequate; use a fresh session only for an unresolved discovery boundary. Catalog presence proves discovery, not useful decisions. If the product cannot expose a project skill reliably, return the exact limitation instead of installing a global copy as a substitute.
 
-Repeated invocation against unchanged project evidence must produce no semantic or structural churn. Return the project root, skill identity and path, tracked or ignored ownership, whether it was initialized or reconciled, durable knowledge added or corrected, discovery evidence, and any exact unresolved ownership or capability decision.
+Repeated invocation against unchanged project evidence must produce no semantic or structural churn. Return the skill path and ownership, whether it was initialized or reconciled, useful knowledge changes, binding/validation evidence, and material unresolved limitations. Omit empty categories.

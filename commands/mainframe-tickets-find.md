@@ -49,12 +49,4 @@ Repeated discovery over unchanged project state and evidence must converge: it m
 
 Follow concrete new leads through their relevant callers and consumers and extend the temporary coverage map when they expose an omitted boundary. Finish only after every area in the complete project map is examined or explicitly excluded for a concrete project-boundary, capability, authority, or evidence reason, every defensible candidate is recorded or returned as ticket-ready content, and a final control sweep produces no unprocessed project material or concrete lead.
 
-Do not claim that the project has no remaining defects. Return:
-
-- the exact project inspected;
-- the meaningful areas and risk directions covered;
-- open-ticket relevance changes, if any;
-- tickets created or reconciled, with identities or links;
-- ticket-ready records that could not be written and the exact reason;
-- remaining unexamined areas and their concrete exclusion or blocker;
-- the evidence that no discovered candidate or lead from this run remains unprocessed.
+Return the project and meaningful coverage, records created or reconciled, material open-ticket relevance changes, and any unexamined area with its concrete reason. Include ticket-ready findings that could not be written. State whether any discovered candidate or lead remains unprocessed; do not claim absence of all defects. Omit empty categories.

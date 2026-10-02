@@ -10,7 +10,7 @@ Resolve the current project root, its configured issue route, and the lifecycle 
 
 If the project has no configured issue route or implementation lifecycle, return the exact missing configuration and stop without inventing one. If the queue is external, mutate it only when the current caller supplied that authority. Otherwise return the exact missing write action instead of claiming a completed transition.
 
-The explicit invocation authorizes the local, reversible project and ticket changes required to implement ready tickets in the current checkout. It does not authorize deployment, writes to remote or shared environments, destructive data operations, material infrastructure changes, repository-history changes, commits, or pushes. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
+The explicit invocation authorizes the local, reversible project and ticket changes required to implement ready tickets in the current checkout. It does not authorize deployment, writes to remote or shared environments, destructive data operations, material infrastructure changes, destructive history changes, or pushes. Existing caller or project authorization for verified local commits still applies; this command does not grant it independently. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
 
 ## Process exactly one ticket at a time
 
@@ -70,11 +70,4 @@ Append concise implementation locations, pre-change evidence, observed validatio
 
 Continue the one-ticket cycle until a refreshed control pass finds no additional ready ticket that this command can safely implement under the current evidence and authority. A rerouted ticket is handled for this run only after its exact missing scope, decision, or authority is recorded or returned as a complete proposed update; it must not prevent processing later tickets.
 
-Return:
-
-- the project queue processed;
-- every ticket implemented or rerouted and its resulting state;
-- the decisive readiness and final-gate result for each ticket;
-- the pre-change evidence, implementation locations, and validation actually observed;
-- any ticket or code update that could not be completed and the exact reason;
-- confirmation that the refreshed queue and this run's handled tickets leave no further permitted implementation, distinguishing persisted transitions from proposed updates still awaiting a write.
+Return the queue processed, tickets implemented or rerouted, resulting states, implementation locations, and observed validation. Include any material decision or incomplete write and what is needed next. State whether the refreshed queue leaves further permitted implementation. Omit empty categories and distinguish persisted transitions from proposals.
