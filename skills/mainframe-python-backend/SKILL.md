@@ -1,6 +1,6 @@
 ---
 name: mainframe-python-backend
-description: Develop, debug, review, or test server-side Python services. Excludes data or ML pipelines, client UI, Node.js, and infrastructure.
+description: Design, implement, debug, or review Python web services, APIs, and workers, including async lifecycle, persistence, and backend tests. Not data science or ML pipelines.
 ---
 
 # Python backend engineering

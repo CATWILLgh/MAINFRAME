@@ -1,6 +1,6 @@
 ---
 name: mainframe-test-audit
-description: Audit test quality when requested or when coverage, reliability, or cost is an evidenced problem. Excludes routine test work and product acceptance.
+description: Audit existing tests when regressions escape, checks are flaky or costly, or coverage quality is questioned. Not routine test implementation or product acceptance.
 ---
 
 # Test-system audit

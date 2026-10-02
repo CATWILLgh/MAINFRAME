@@ -1,6 +1,6 @@
 ---
 name: mainframe-clickhouse
-description: Query, integrate, troubleshoot, or operate ClickHouse with explicit production, shared-test, and disposable-fixture boundaries. Use for ClickHouse query cost, data changes, or recovery decisions.
+description: Plan, query, integrate, or troubleshoot ClickHouse, including query cost, ingestion, schema changes, deletion, and recovery across production, shared test, and disposable targets.
 ---
 
 # Use ClickHouse within a verified boundary

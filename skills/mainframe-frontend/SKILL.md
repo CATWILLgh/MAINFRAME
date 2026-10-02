@@ -1,6 +1,6 @@
 ---
 name: mainframe-frontend
-description: Develop, debug, review, or test React web interfaces. Excludes React Native, substantial backend, infrastructure, and standalone design systems.
+description: Design, implement, debug, or review React web interfaces, including forms, browser state, accessibility, and interaction tests. Not React Native or standalone design systems.
 ---
 
 # Frontend engineering

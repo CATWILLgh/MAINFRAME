@@ -1,6 +1,6 @@
 ---
 name: mainframe-harness-feedback
-description: Record an observed MAINFRAME or effective harness fault in its configured feedback queue. Excludes project application defects.
+description: Record an observed MAINFRAME or agent-harness fault, including missing skills, broken hooks, conflicting instructions, or adapter failures. Not application bug reports.
 ---
 
 # Report a MAINFRAME harness fault

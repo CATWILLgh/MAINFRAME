@@ -1,6 +1,6 @@
 ---
 name: mainframe-go-backend
-description: Develop, debug, review, or test server-side Go services. Excludes client UI, non-Go services, data or ML pipelines, and infrastructure ownership.
+description: Design, implement, debug, or review Go services, APIs, and workers, including transactions, concurrency, retries, and backend tests.
 ---
 
 # Go backend engineering

@@ -1,6 +1,6 @@
 ---
 name: mainframe-research
-description: Verify several dependent, disputed, or consequential external claims through authoritative sources. Excludes routine lookups and implementation.
+description: Resolve dependent, disputed, or consequential external claims through authoritative sources, including compatibility comparisons and conflicting documentation. Not routine single-fact lookups.
 ---
 
 # External research

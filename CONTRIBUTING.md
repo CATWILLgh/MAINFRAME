@@ -29,6 +29,13 @@ commands, and product-specific representation in the maintained adapter.
 - Give each skill a short description that names its actual trigger. Avoid
   broad neighboring keywords and repeated urgency that can route unrelated
   work into the skill.
+  Describe the useful method and recognizable task or symptom, including
+  planning and discussion when the method supports them. Keep procedures,
+  provenance, tool inventories, and repeated safety rules in the body or
+  supporting files. Add an exclusion only for a plausible competing route.
+  Check selection with realistic requests that do not name the skill and
+  nearby requests where it should stay unused; distinguish catalog selection
+  from observed native invocation. Keep explicit-command workflows explicit.
 - Use a skill entrypoint as a small router when it covers several workflows.
   Link only the relevant supporting references, scripts, and assets instead of
   loading the full domain for every invocation.

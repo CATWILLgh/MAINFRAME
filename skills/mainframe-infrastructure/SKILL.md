@@ -1,6 +1,6 @@
 ---
 name: mainframe-infrastructure
-description: Diagnose, change, or verify project-owned infrastructure. Excludes ordinary application and UI implementation.
+description: "Plan, diagnose, change, or verify project infrastructure: deployment, CI/CD, containers, networking, TLS, storage, and recovery. Not application implementation."
 ---
 
 # Infrastructure work

@@ -1,6 +1,6 @@
 ---
 name: mainframe-k3s
-description: Design, install, troubleshoot, secure, upgrade, or recover K3s clusters and their networking or storage. Excludes unrelated Kubernetes distributions and application-only changes.
+description: Plan, install, troubleshoot, secure, upgrade, or recover K3s clusters, including topology, networking, storage, and datastore backups. Not application-only changes or other Kubernetes distributions.
 ---
 
 # Operate K3s with evidence
