@@ -1,6 +1,6 @@
 ---
 name: mainframe-test-audit
-description: Audit existing tests when regressions escape, checks are flaky or costly, or coverage quality is questioned. Not routine test implementation or product acceptance.
+description: Assess existing tests and CI when their quality is questioned, regressions escape, checks are flaky or costly, or green results are misleading. Read-only audit; use mainframe-testing to write, run, or repair checks.
 ---
 
 # Test-system audit
@@ -8,6 +8,14 @@ description: Audit existing tests when regressions escape, checks are flaky or c
 Apply this method when the active work matches the description, whether you are the primary auditor or a delegated specialist. Follow the scope and authority supplied through the current execution path; this skill does not expand either.
 
 Audit the existing test system rather than redesigning it from preference. Tests protect observable guarantees, not a target count, coverage percentage, framework fashion, or universal ratio of test levels.
+
+## Apply the same standard from the audit side
+
+`mainframe-testing` owns the shared testing and CI criteria. Use its relevant reference as an evaluation standard, not as authority to implement: behavior/TDD for regression sensitivity, local boundaries for fixtures and infrastructure, and CI plus the applicable GitHub/GitLab reference for triggers, required results, trust and cost. Read only the branch needed by the audited risk; keep shared policy there rather than maintaining a second version here. If unavailable, report that limitation and continue the evidence-backed audit that remains possible.
+
+Mirror the implementation guarantees in the findings: behavior is actually observed; relevant defects make the check fail; fixtures preserve the claimed semantics and remain isolated; local work respects the lightweight/verified PostgreSQL boundary; required CI work runs for the correct revision and event; green results and cost claims have supporting evidence. Do not infer missing TDD history from the current files or demand reconstruction of every historical red run.
+
+Apply this method proactively when a concrete test-system concern falls within the current assignment, not for every ordinary regression run. Its result is supported findings and acceptance conditions, not edited tests or a product readiness verdict. Use `mainframe-testing` for authorized creation or repair. When the caller already assigned audit and repair, separate the read-only investigation from implementation without asking again for supplied authority; a delegated audit-only role returns findings and retains its boundary.
 
 ## Establish the audit boundary
 

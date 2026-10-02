@@ -1,6 +1,6 @@
 ---
 name: mainframe-testing
-description: Use TDD for behavior changes, choose fast local regression tests, and design or repair reliable GitHub Actions and GitLab CI checks. Use when deciding test boundaries, fixtures, CI gates, or failure evidence.
+description: Design, write, run, or repair tests and GitHub/GitLab CI during development. Use for TDD, fixtures, local/CI boundaries, and verification evidence. Use mainframe-test-audit to assess an existing test system.
 ---
 
 # Own the behavior and its verification
@@ -10,6 +10,14 @@ Apply this method as the primary agent or a delegated engineer within the same t
 For a behavior change, use test-driven development: demonstrate the relevant failing behavior before the fix, implement the smallest complete correction, then refactor while the focused checks remain green. A compiler, import, setup, credential, or network failure is not the intended red result. Reuse an existing test that already demonstrates the defect; do not add a duplicate solely to claim TDD.
 
 State what observable behavior must change, what must remain true, and which boundary can prove it. Test user-visible results and protected side effects rather than private implementation details. Include meaningful rejection, boundary, failure, retry, concurrency, and cleanup cases when the contract contains them; do not generate an indiscriminate test matrix.
+
+## Choose the operation
+
+Use this method proactively when implementation requires tests, test changes, or CI work; an explicit request to “use TDD” is unnecessary. It owns how verification is built and run, including ordinary regression checks after a change. Its result is the authorized change with meaningful tests and accurately bounded evidence.
+
+Use `mainframe-test-audit` when the task is to assess the quality of an existing test system, or concrete escaped regressions, flakiness, misleading green results, or measured cost warrant investigation within scope. That method evaluates the same criteria without changing the audited system. Do not start an audit for every test run or load both full methods by default.
+
+For an assignment that includes both audit and repair, keep findings and implementation as explicit phases and reuse the caller's existing repair authority. A delegated read-only auditor returns findings to its caller; it does not become an implementer. An author may review their own work but must not claim an independent audit.
 
 ## Load the method needed now
 
