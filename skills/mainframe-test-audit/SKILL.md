@@ -11,7 +11,7 @@ Audit the existing test system rather than redesigning it from preference. Tests
 
 ## Apply the same standard from the audit side
 
-`mainframe-testing` owns the shared testing and CI criteria. Use its relevant reference as an evaluation standard, not as authority to implement: behavior/TDD for regression sensitivity, local boundaries for fixtures and infrastructure, and CI plus the applicable GitHub/GitLab reference for triggers, required results, trust and cost. Read only the branch needed by the audited risk; keep shared policy there rather than maintaining a second version here. If unavailable, report that limitation and continue the evidence-backed audit that remains possible.
+`mainframe-testing` owns the shared testing and CI criteria. Use its relevant reference as an evaluation standard, not as authority to implement: `references/strategy.md` for the shared test-level selection and project verification map, behavior/TDD for regression sensitivity, local boundaries for fixtures and infrastructure, and CI plus the applicable GitHub/GitLab reference for triggers, required results, trust and cost. Read only the branch needed by the audited risk; keep shared policy there rather than maintaining a second version here. If unavailable, report that limitation and continue the evidence-backed audit that remains possible.
 
 Mirror the implementation guarantees in the findings: behavior is actually observed; relevant defects make the check fail; fixtures preserve the claimed semantics and remain isolated; local work respects the lightweight/verified PostgreSQL boundary; required CI work runs for the correct revision and event; green results and cost claims have supporting evidence. Do not infer missing TDD history from the current files or demand reconstruction of every historical red run.
 
@@ -22,6 +22,8 @@ Apply this method proactively when a concrete test-system concern falls within t
 Identify the exact package, component, journey, test layer, suite, or execution contour under review. State the observable product guarantees inside that boundary and the concrete regressions the tests are expected to detect.
 
 Inspect the effective project instructions, relevant product decisions and contracts, owning code paths, test configuration, existing tests, fixtures and lifecycle setup, native commands, and applicable CI configuration. Do not broaden a bounded audit into a repository-wide review.
+
+Inspect the existing project verification map and reconcile its claims against tests and CI, following the shared strategy. Return missing or stale entries as proposed corrections; do not create or update the map during a read-only audit. A missing level or preferred document format alone is not a defect.
 
 Map how the project obtains each kind of evidence:
 

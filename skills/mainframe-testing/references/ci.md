@@ -2,7 +2,7 @@
 
 ## Establish the verification contract
 
-Map each material guarantee to an actual test/job, supported platform/version, trigger, runner and required result. Preserve existing project-required checks and their names unless an authorized migration also updates branch/ruleset protection. Repository YAML alone does not prove server-side merge requirements. Missing access to those settings is a reported verification gap, not permission to assume enforcement.
+Use the existing project verification map from [the shared strategy](strategy.md); reconcile its CI routes rather than creating a separate inventory. Map each material guarantee to an actual test/job, supported platform/version, trigger, runner and required result. Preserve existing project-required checks and their names unless an authorized migration also updates branch/ruleset protection. Repository YAML alone does not prove server-side merge requirements. Missing access to those settings is a reported verification gap, not permission to assume enforcement.
 
 Separate fast validation, correct-engine integration, build/package checks, security/compatibility checks and deliberately scheduled expensive work where that improves feedback or cost. Required change risks must run before acceptance; do not move essential regression protection to an optional nightly job merely to make pull requests fast. Schedule exploratory performance, extended combinations or long-running resilience tests only when their acceptance role allows it. Do not introduce every possible scanner or platform without an actual supported guarantee.
 

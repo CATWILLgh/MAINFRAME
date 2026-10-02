@@ -1,6 +1,6 @@
 ---
 name: mainframe-testing
-description: Design, write, run, or repair tests and GitHub/GitLab CI during development. Use for TDD, fixtures, local/CI boundaries, and verification evidence. Use mainframe-test-audit to assess an existing test system.
+description: Design, write, run, or repair tests and GitHub/GitLab CI during development. Use for test strategy, TDD, fixtures, local/CI boundaries, and verification evidence. Use mainframe-test-audit to assess an existing test system.
 ---
 
 # Own the behavior and its verification
@@ -23,6 +23,7 @@ For an assignment that includes both audit and repair, keep findings and impleme
 
 | Decision | Reference |
 | --- | --- |
+| Project strategy, test levels, or the project verification map | [Shared strategy](references/strategy.md) |
 | Red/green/refactor, regression design, or an inherited implementation | [Behavior and TDD](references/tdd.md) |
 | Local scope, fixtures, PostgreSQL identity, or an unavailable real dependency | [Local test boundary](references/local.md) |
 | Required CI checks, triggers, cost, caching, failures, or evidence ownership | [CI contract](references/ci.md) |
@@ -32,6 +33,8 @@ For an assignment that includes both audit and repair, keep findings and impleme
 Keep the normal local loop lightweight: pure or in-process checks first, isolated verified local PostgreSQL when its semantics are needed. Other service-backed, expensive, compatibility, and end-to-end suites run in CI by default. Do not start a local service fleet or replace an engine with PostgreSQL merely to fit this policy. A more permissive local pass requires explicit caller/project authority for that pass; cheap tests are not proof of a dependency's untested semantics.
 
 A prose-only or reversible low-impact change needs the smallest meaningful validation, not an artificial failing test. For a behavior change that cannot be faithfully observed locally, demonstrate the local portion, provide the CI test at its real boundary, and record the missing red/green evidence honestly. Never weaken the requirement just to obtain a green local result.
+
+For substantive behavior or CI work, use the project’s existing verification map to connect the affected guarantee to its test boundary, runnable command, execution route and acceptance condition. Establish or reconcile only the relevant missing entries under [the shared strategy](references/strategy.md); do not perform a repository-wide inventory for each change.
 
 ## Finish with evidence
 
