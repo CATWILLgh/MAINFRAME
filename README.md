@@ -180,7 +180,7 @@ closest explicit user-command mechanism:
 | [mainframe-tickets-find](commands/mainframe-tickets-find.md) | Investigate random project areas and record or enrich deduplicated problem tickets |
 | [mainframe-tickets-refine](commands/mainframe-tickets-refine.md) | Deeply investigate ticket execution paths, blast radius, and duplicates; route each outcome |
 | [mainframe-tickets-implement](commands/mainframe-tickets-implement.md) | Implement, validate, and locally commit each ready engineering ticket sequentially |
-| [mainframe-tickets-verify](commands/mainframe-tickets-verify.md) | Independently verify every eligible implemented ticket |
+| [mainframe-tickets-verify](commands/mainframe-tickets-verify.md) | Independently verify implemented tickets; edit only ticket records |
 
 Exact slash syntax and delayed loading depend on the installed product. The
 adapter records any unsupported or degraded capability instead of claiming
