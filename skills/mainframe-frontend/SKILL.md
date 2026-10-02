@@ -9,6 +9,8 @@ Apply this method whenever the active work matches the description, whether you 
 
 Deliver one coherent user-facing result. Treat implementation, interaction quality, visual language, accessibility, component reuse, and verification as parts of the same frontend task.
 
+For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
+
 ## Establish the active surface
 
 Identify the package that owns the affected surface. If ownership or runtime wiring is unclear, use the bounded [recon script](scripts/recon.mjs) or [manual reconnaissance](references/recon.md) for that package. Reuse current inspected evidence; the report is routing evidence, not runtime proof.

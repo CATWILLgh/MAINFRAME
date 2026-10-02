@@ -60,6 +60,15 @@ class ClineInstallerTests(unittest.TestCase):
         self.assertIn("execution: user-approved", init_command)
         self.assertFalse((self.home / "docs/tickets").exists())
 
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.skills) / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
         self.assertEqual(self.adapter.rules.stat().st_mode & 0o777, 0o600)
         self.assertEqual((self.adapter.hooks / "PreToolUse").stat().st_mode & 0o777, 0o755)
         self.assertEqual((self.adapter.hooks / "PostToolUse").stat().st_mode & 0o777, 0o755)

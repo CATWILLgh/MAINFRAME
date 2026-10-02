@@ -58,6 +58,15 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertIn("execution: user-approved", init_command)
         self.assertFalse((self.home / "docs/tickets").exists())
 
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.skills) / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
         self.assertEqual(state['components']['commands']['mainframe-project-skill']['delivery'], 'installed')
         self.assertEqual(state['components']['commands']['mainframe-project-skill']['verification'], 'pending')
         self.assertEqual(state['components']['hooks']['mainframe-code-quality']['delivery'], 'unsupported')

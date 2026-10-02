@@ -58,7 +58,9 @@ Use current authoritative internet sources and available MCP resources to resolv
 
 ## Establish pre-change evidence
 
-Before changing behavior, obtain the smallest faithful failing test, reproduction, measurement, or structural proof when it can demonstrate the reported gap. Confirm that it fails for the intended reason rather than unrelated setup. Do not manufacture a ceremonial failing test when a deterministic inspection is stronger or the work is documentation-only, generated, or purely structural.
+Use `mainframe-testing` for TDD, lightweight local verification and required CI evidence; retain the ticket's established behavior and authority boundary.
+
+Before changing behavior, obtain the smallest faithful failing test or reproducible behavioral check and confirm its failure reason. Follow the shared method when the real boundary can only run in CI. Use direct structural or documentation validation for changes that do not alter behavior; generated output still requires behavioral proof when its consumer contract changes.
 
 Inspect a command, script, fixture, setup step, service, or external dependency before using it. Use only the minimum local infrastructure permitted by the effective project instructions. Access to project remote, shared, staging, or production environments requires existing explicit authority; reuse it when supplied. This boundary does not prohibit public documentation research.
 

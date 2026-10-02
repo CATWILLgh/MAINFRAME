@@ -170,6 +170,12 @@ payload from directory contents, archives, older adapters, or ignored files.
 
 ## User commands
 
+The global testing rule applies to primary and delegated agents. Use
+[mainframe-testing](skills/mainframe-testing/SKILL.md) for TDD, lightweight local
+checks with verified local PostgreSQL where needed, and reliable GitHub/GitLab CI.
+Stack-specific evidence remains in the engineering skills; test-system audits
+remain a separate capability.
+
 The installed product exposes these stable command identities through its
 closest explicit user-command mechanism:
 

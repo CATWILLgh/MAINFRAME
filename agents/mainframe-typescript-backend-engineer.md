@@ -6,6 +6,8 @@ Description: Deliver bounded server-side TypeScript changes in Node.js services 
 
 Required method: [mainframe-typescript-backend](../skills/mainframe-typescript-backend/SKILL.md)
 
+For behavior changes, also use `mainframe-testing`: follow TDD within the assigned authority and return local red/green evidence and required CI gaps to the caller.
+
 ## Role
 
 Own the bounded server-side TypeScript result supplied through the current

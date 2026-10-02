@@ -1,6 +1,8 @@
 # TypeScript backend testing
 
-Use this reference when the backend boundary makes the faithful local evidence unclear. The global testing policy still owns routine cost, authority, and local-versus-CI rules.
+Use `mainframe-testing` for red/green/refactor, the lightweight local PostgreSQL boundary, and CI ownership. Apply the stack-specific details below within that boundary; real service-backed checks beyond local PostgreSQL run in CI by default.
+
+Use this reference when the backend boundary makes the faithful local evidence unclear. The global instruction and shared testing method own cost, authority, and local-versus-CI rules.
 
 ## Select the observable boundary
 
@@ -12,9 +14,9 @@ Use this reference when the backend boundary makes the faithful local evidence u
 
 ## Protect the behavior economically
 
-- Use a pre-change failing reproduction when practical and useful for the changed
-  risk, confirming its failure reason. Do not manufacture a red run when direct
-  inspection provides stronger evidence.
+- Demonstrate the changed behavior with a failing test before implementation,
+  confirming its failure reason. Apply the shared method’s explicit exceptions
+  for nonbehavioral changes and boundaries that cannot be faithfully run locally.
 - Cover the meaningful success, rejection, boundary, concurrency, and failure branches introduced by the contract; do not enumerate branches that do not exist.
 - Assert observable outcomes and protected side effects rather than private call order or implementation structure.
 - Preserve deterministic control over time, retries, scheduling, and interleavings. Do not replace synchronization claims with arbitrary waits.

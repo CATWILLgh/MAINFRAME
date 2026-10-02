@@ -52,13 +52,13 @@
 
 - When referring to a known file, use a Markdown link to its path instead of a bare file name. Add a line suffix when useful, for example `[config.ts](src/config.ts:42)`.
 
-# Tests
+# Testing and CI
 
-- Keep routine local tests fast while protecting business rules, logical behavior, functional behavior, and the relevant regression boundaries.
-- Use the smallest test set and minimum infrastructure that can faithfully observe the changed risk. Do not start services or containers that add no relevant behavior.
-- Leave broad, expensive, compatibility, and full-system suites to CI or an explicitly assigned full verification pass.
-- Use local test infrastructure authorized by the effective instructions or your immediate caller. If a required infrastructure boundary is missing, return that exact decision and continue checks that do not depend on it. Ordinary one-shot checks using disposable files need no separate infrastructure approval.
-- Do not weaken assertions, suppress failures, or retry flaky checks until they pass and call that verification. Report what ran, what it proves, and any material gap.
+- For behavior changes, both the primary agent and subagents use `mainframe-testing` when available and follow red → green → refactor: observe a focused failure for the intended behavior before the fix, implement it, then refactor with relevant checks green. Reuse an existing failing test; do not manufacture tests for prose-only or reversible low-impact changes.
+- Keep the normal local loop lightweight: pure/in-process tests, plus isolated verified local PostgreSQL when its semantics matter. Other service-backed, expensive, compatibility, and end-to-end suites belong in CI by default. Run a broader local pass only under explicit caller/project authority; do not replace missing engine semantics with misleading mocks.
+- Give delegated work its behavior, permitted test boundary, and required evidence. Each implementer reports observed failures and checks; the primary agent verifies the integrated result and required CI coverage. The method never expands a read-only assignment into test or code edits.
+- Use the testing skill's relevant GitHub Actions or GitLab CI reference when creating, changing, or diagnosing pipeline checks. Preserve meaningful required coverage while reducing avoidable setup, duplicate runs, and infrastructure.
+- Do not weaken assertions, suppress failures, or retry flaky checks until green. Distinguish local results, configuration validation, actual CI results for the tested revision/event, and live acceptance. If faithful red/green or required CI evidence is unavailable, name the exact gap; do not claim it passed or silently omit the check.
 
 # Secrets
 

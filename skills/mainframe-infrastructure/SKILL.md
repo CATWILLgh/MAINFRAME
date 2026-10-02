@@ -44,6 +44,10 @@ configuration, database, and API behavior.
 
 ## Load only the applicable branch
 
+- Test-pipeline design, required checks, GitHub Actions or GitLab CI: load
+  `mainframe-testing` for its CI references. Keep runner provisioning and live
+  deployment ownership here.
+
 - K3s cluster design, installation, networking, storage, hardening, upgrades,
   or recovery: load `mainframe-k3s`. Keep general infrastructure ownership and
   cross-service coordination here; that skill owns the K3s operational method.

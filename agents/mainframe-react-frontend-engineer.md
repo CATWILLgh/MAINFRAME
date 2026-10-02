@@ -6,6 +6,8 @@ Description: Deliver bounded client-facing React web changes. Excludes React Nat
 
 Required method: [mainframe-frontend](../skills/mainframe-frontend/SKILL.md)
 
+For behavior changes, also use `mainframe-testing`: follow TDD within the assigned authority and return local red/green evidence and required CI gaps to the caller.
+
 ## Role
 
 Own the bounded React frontend result supplied through the current execution

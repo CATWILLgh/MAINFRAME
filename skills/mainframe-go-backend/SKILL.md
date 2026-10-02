@@ -10,6 +10,8 @@ are the primary implementer, a delegated engineer, or a reviewer. Follow the
 scope and authority supplied through the current execution path; this skill does
 not expand either.
 
+For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
+
 ## Establish the active service boundary
 
 Identify the Go module and package that own the behavior. Trace the real process

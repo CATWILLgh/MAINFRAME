@@ -73,6 +73,8 @@ Do not record guesses, proposals awaiting approval, session chronology, temporar
 After changing the skill, validate its native structure, links, and any executable resources. Confirm that the project still discovers the same effective skill and that the edit did not change its tracked or ignored ownership.
 ```
 
+When testing or CI has project-specific decisions, preserve its owning commands, fast local route, required CI jobs/events and known evidence boundaries in the existing knowledge reference. Link those owners and use `mainframe-testing` for shared method rather than copying the testing policy into every project skill.
+
 Create `references/project-knowledge.md` with the title `# Verified <project-name> project knowledge` and only directly supported entries. Each fact states its practical consequence and links to the evidence or source needed to judge it. When material has several distinct readers or tasks, split it into focused references now and route them from the short index; do not require every task to read every reference. Use headings only for real knowledge. If initialization finds no decision-changing fact beyond identity and source ownership, state that rather than inventing content.
 
 ## Update and extend deliberately

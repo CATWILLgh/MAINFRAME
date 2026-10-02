@@ -51,10 +51,19 @@ class MiniMaxInstallationTests(unittest.TestCase):
         self.assertIn("execution: user-approved", init_command)
         self.assertFalse((self.home / "docs/tickets").exists())
 
-        self.assertEqual(report["planned_delivery"], {"installed": 26, "pending": 0, "unsupported": 14})
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.plugin / "skills") / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
+        self.assertEqual(report["planned_delivery"], {"installed": 27, "pending": 0, "unsupported": 14})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
-        self.assertEqual(len(manifest["skills"]), 24)
+        self.assertEqual(len(manifest["skills"]), 25)
         self.assertEqual(manifest["hooks"], ["hooks/hooks.json"])
         hooks = json.loads((self.adapter.plugin / "hooks/hooks.json").read_text())["hooks"]
         self.assertEqual(set(hooks), {

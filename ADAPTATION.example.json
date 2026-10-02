@@ -112,6 +112,11 @@
         "source": "skills/mainframe-test-audit",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-testing": {
+        "source": "skills/mainframe-testing",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {

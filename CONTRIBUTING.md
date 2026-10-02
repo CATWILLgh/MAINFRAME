@@ -137,6 +137,8 @@ bootstrap.
 
 ## Validate the change
 
+Use [mainframe-testing](skills/mainframe-testing/SKILL.md) for behavioral changes and CI work. Keep the local loop lightweight; tests needing other service infrastructure belong in CI unless a specific local pass is authorized.
+
 Select checks for the changed surface. Documentation and instruction-only edits
 need link/inventory checks and review of the affected decision boundaries, not
 unrelated executable suites. The source-structure check is:
