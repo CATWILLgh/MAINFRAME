@@ -29,7 +29,9 @@ credentials are available outside the failed cluster; the S3 configuration
 Secret cannot be fetched from an unavailable API during restore. Check local
 versus S3 restore flags explicitly.
 
-For multi-server recovery, stop servers, restore one selected server from a
+For multi-server recovery, stop or fence every old server so an unavailable
+host cannot restart into the old membership during recovery. Preserve original
+disks and datastore state. Restore one selected server from a
 trusted snapshot with its matching token, restart normally without reset flags,
 then rebuild peer etcd membership using the official procedure. Preserve peer
 state before authorized cleanup and verify actual data-dir. `--cluster-reset`
@@ -37,6 +39,19 @@ without a restore path resets membership, not data from a snapshot. Do not use
 it during routine diagnosis. Resolve restore-version compatibility from current
 docs; do not claim every restore requires an identical binary version.
 Source: [snapshot and restore procedure](https://docs.k3s.io/cli/etcd-snapshot).
+
+Before starting workloads from restored cluster state, reconcile its recovery
+point with persistent volumes and external databases. Older objects can resume
+controllers, jobs or writers against newer external state. Establish which
+writers must stay fenced until application consistency is checked; a restored
+API is not permission to replay external effects. Establish the external-effect
+barrier before restored controllers can run: suspending a CronJob after API
+startup can race, and suspension does not stop its already-started Jobs.
+Source: [CronJob suspension](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/).
+
+A rotated token does not
+replace the snapshot's historical token.
+Source: [token rotation](https://docs.k3s.io/cli/token).
 
 ## Prove recovery
 

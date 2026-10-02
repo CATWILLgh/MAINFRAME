@@ -18,6 +18,7 @@ the active operation. Do not upgrade or enable a feature merely to fit an exampl
 | Source correction and materialized dependencies | [Incremental materialized views](https://clickhouse.com/docs/materialized-view/incremental-materialized-view) |
 | Cluster DDL propagation | [Distributed DDL](https://clickhouse.com/docs/sql-reference/distributed-ddl) |
 | Cancellation and lack of mutation rollback | [KILL](https://clickhouse.com/docs/sql-reference/statements/kill) |
+| Exact mutation progress and buffered delivery evidence | [Mutations](https://clickhouse.com/docs/operations/system-tables/mutations), [distribution queue](https://clickhouse.com/docs/operations/system-tables/distribution_queue) |
 | Forced merges versus query FINAL | [Avoid OPTIMIZE FINAL](https://clickhouse.com/docs/best-practices/avoid-optimize-final) |
 | Backup completion and verified restoration | [Backup and restore](https://clickhouse.com/docs/operations/backup) |
 

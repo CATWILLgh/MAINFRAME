@@ -8,6 +8,35 @@ headroom, query concurrency and selected resource counters. Pick only evidence
 that distinguishes the suspected failure. Do not fan out across every replica
 merely because a system-table example uses `clusterAllReplicas`.
 
+Use typed parameters through the existing client and its permitted finite
+resource profile. For an identified table, these local metadata projections
+avoid query text, storage paths and exception contents:
+
+```sql
+SELECT mutation_id, create_time, is_done, parts_to_do, latest_fail_time
+FROM system.mutations
+WHERE database = {db:String} AND table = {table:String}
+  AND mutation_id = {mutation:String}
+LIMIT 1;
+
+SELECT is_blocked, error_count, data_files, data_compressed_bytes,
+       broken_data_files, last_exception_time
+FROM system.distribution_queue
+WHERE database = {db:String} AND table = {table:String}
+LIMIT 20;
+```
+
+Check available columns for the installed release. The row limits bound output,
+not work. Choose only the relevant query on the verified submitting server or
+affected replica; local system tables do not establish cluster-wide completion.
+`parts_to_do=0` is not sufficient: an in-flight insert can introduce another part
+while `is_done` remains false. An empty distribution queue can mean sent, absent,
+wrong node, or no queued work; it does not prove a particular batch arrived.
+Correlate its identity with destination/reader evidence. Missing or delayed log
+entries likewise do not prove that a timed-out insert wrote nothing.
+Sources: [Mutations](https://clickhouse.com/docs/operations/system-tables/mutations),
+[Distribution queue](https://clickhouse.com/docs/operations/system-tables/distribution_queue).
+
 Do not run `OPTIMIZE TABLE ... FINAL` as routine cleanup, duplicate removal,
 disk-recovery, or a generic fix for slow queries. It rewrites parts and can
 bypass ordinary merge-size safeguards. When a specific maintenance task genuinely

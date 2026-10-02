@@ -27,12 +27,13 @@ context/namespace rather than changing global kubectl context implicitly.
 Useful initial queries, selected for the symptom:
 
 ```sh
-kubectl --context "$K3S_CONTEXT" get nodes -o wide
-kubectl --context "$K3S_CONTEXT" -n "$K3S_NAMESPACE" get pods -o wide
-kubectl --context "$K3S_CONTEXT" -n "$K3S_NAMESPACE" get events --sort-by=.metadata.creationTimestamp
+kubectl --context "$K3S_CONTEXT" --request-timeout="$K3S_API_TIMEOUT" get nodes -o wide
+kubectl --context "$K3S_CONTEXT" --request-timeout="$K3S_API_TIMEOUT" -n "$K3S_NAMESPACE" get pods -o wide
+kubectl --context "$K3S_CONTEXT" --request-timeout="$K3S_API_TIMEOUT" -n "$K3S_NAMESPACE" get events --sort-by=.metadata.creationTimestamp
 ```
 
-Define these variables from verified target metadata; they contain no secrets.
+Define context/namespace from verified target metadata and a finite timeout
+from the task's observation budget (a duration such as `10s`); these contain no secrets.
 Use timeouts and bounded output where supported. Events, pod descriptions and
 logs can contain sensitive application values: inspect only needed fields and
 redact before sharing. Do not dump Secrets, raw kubeconfigs or service env files.
@@ -51,6 +52,15 @@ Docker CLI evidence is not a substitute unless Docker is explicitly configured.
 Host journal access belongs on the verified host, not automatically your laptop.
 Sources: [CLI tools](https://docs.k3s.io/cli),
 [advanced configuration](https://docs.k3s.io/advanced).
+
+For ingress, inspect the named Ingress's class and backend, its Service selector
+and ports, and EndpointSlices selected by `kubernetes.io/service-name`. Compare
+endpoint readiness with the serving controller's bounded logs. Separately check
+controller LoadBalancer Services and ServiceLB pod host ports, placement and
+scheduler events. Empty upstreams and a host-port collision require different
+repairs; identify which controller the actual client reached before changing
+exposure. Preserve its Host header and TLS/SNI when verifying the route.
+Source: [network services](https://docs.k3s.io/networking/networking-services).
 
 Make one evidence-supported change at a time, then repeat the observation that
 failed. Do not install a monitoring stack just to investigate one incident.
