@@ -179,7 +179,7 @@ closest explicit user-command mechanism:
 | [mainframe-project-skill](commands/mainframe-project-skill.md) | Initialize, update, or extend the current project's evolving skill |
 | [mainframe-tickets-find](commands/mainframe-tickets-find.md) | Investigate random project areas and record or enrich deduplicated problem tickets |
 | [mainframe-tickets-refine](commands/mainframe-tickets-refine.md) | Deeply investigate ticket execution paths, blast radius, and duplicates; route each outcome |
-| [mainframe-tickets-implement](commands/mainframe-tickets-implement.md) | Implement every ready project ticket one at a time |
+| [mainframe-tickets-implement](commands/mainframe-tickets-implement.md) | Implement, validate, and locally commit each ready engineering ticket sequentially |
 | [mainframe-tickets-verify](commands/mainframe-tickets-verify.md) | Independently verify every eligible implemented ticket |
 
 Exact slash syntax and delayed loading depend on the installed product. The
