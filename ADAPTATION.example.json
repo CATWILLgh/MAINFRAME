@@ -122,6 +122,11 @@
         "source": "skills/mainframe-keycloak-sso",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-notifications": {
+        "source": "skills/mainframe-notifications",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {
