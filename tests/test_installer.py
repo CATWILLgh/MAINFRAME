@@ -797,13 +797,16 @@ class InstallationTests(unittest.TestCase):
             if action == "verify":
                 self.assertTrue(report["structure_matches"])
                 self.assertEqual(report["file_change_count"], 0)
-        for source in (self.source / "skills/mainframe-clickhouse").rglob("*"):
-            if source.is_file():
-                installed = self.adapter.skills / "mainframe-clickhouse" / source.relative_to(self.source / "skills/mainframe-clickhouse")
-                self.assertEqual(installed.read_bytes(), source.read_bytes())
         state = json.loads(self.adapter.state_path.read_bytes())
-        self.assertEqual(state["components"]["skills"]["mainframe-clickhouse"]["delivery"], "installed")
-        self.assertEqual(state["components"]["skills"]["mainframe-clickhouse"]["verification"], "pending")
+        for name in ("mainframe-clickhouse", "mainframe-keycloak-sso"):
+            with self.subTest(skill=name):
+                root = self.source / "skills" / name
+                for source in root.rglob("*"):
+                    if source.is_file():
+                        installed = self.adapter.skills / name / source.relative_to(root)
+                        self.assertEqual(installed.read_bytes(), source.read_bytes())
+                self.assertEqual(state["components"]["skills"][name]["delivery"], "installed")
+                self.assertEqual(state["components"]["skills"][name]["verification"], "pending")
         self.assertTrue(all(state["components"]["hooks"][name]["delivery"] == "unsupported"
                             for name in codex.LIMITATIONS))
         self.assertFalse(Path(str(executable) + ".called").exists())

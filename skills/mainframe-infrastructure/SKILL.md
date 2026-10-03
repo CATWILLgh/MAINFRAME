@@ -53,6 +53,9 @@ configuration, database, and API behavior.
   cross-service coordination here; that skill owns the K3s operational method.
 - ClickHouse queries, ingestion, data/schema changes, maintenance, or recovery:
   load `mainframe-clickhouse` for its environment, cost, and data-safety boundaries.
+- Application Keycloak/OIDC login, admin SSO settings or group-to-role mapping:
+  load `mainframe-keycloak-sso`; keep server deployment, TLS and proxy ownership
+  here. That method owns the application integration and acceptance.
 - Dockerfile, image, container runtime, or Compose work: read
   [containers.md](references/containers.md).
 - Operational PostgreSQL, Redis, backup, restore, replication, or failover
