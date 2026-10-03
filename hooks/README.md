@@ -60,7 +60,7 @@ removing a registered executable is not a disable mechanism.
 | `mainframe-commit-checkpoint` | `advisory` | After a successful native edit, remind the responsible agent to checkpoint a coherent verified part when editing has accumulated | Expiring hashes, counters and timestamps only |
 | `mainframe-code-quality` | Post-edit quality, security, and structure advisories plus an attributed-finding completion guard | Around a successful file edit, report new high-confidence residue, security findings, or a size-review threshold crossing; before completion, revalidate and block only attributed blocking findings | One private temporary JSON file per adapter namespace, native execution scope, and workspace |
 | `mainframe-fallow-quality` | `advisory` | At a continuation-capable completion event after exact-scope TS/JS edits, report newly introduced structural findings or a decision-relevant unavailable check without blocking | Canonical detector is stateless; adapter may retain only bounded short-lived attribution state |
-| `mainframe-skill-reminder` | `advisory` | After a successful attributable read, suggest one relevant readable skill without changing task authority | Expiring recipient/workspace hashes and skill identities; bounded suggestion count |
+| `mainframe-skill-reminder` | `advisory` | After a bounded read attempt, suggest one relevant readable skill without changing task authority | Expiring recipient/workspace hashes and skill identities; bounded suggestion count |
 
 ## Adapt `mainframe-destructive-operations`
 
@@ -445,8 +445,8 @@ and policy, native events and recipient-scoped state. It must never execute shel
 text, infer permissions, block a tool, force a continuation or inject file content
 or skill descriptions as instructions.
 
-On Codex use synchronous `PostToolUse` for `Bash`. Require a successful output,
-a session identity and operation identity; distinguish child `agent_id` from
+On Codex use synchronous `PostToolUse` for `Bash`. Reject a known failed outcome; native raw output may leave success unknown.
+Require a session identity and operation identity; distinguish child `agent_id` from
 root. Literal absolute targets remain useful without a workdir. For relative
 reads, a unique explicit literal workdir from bounded recent native transcript
 arguments can supply an advisory hint, not exact operation attribution. Unknown,
@@ -465,8 +465,9 @@ extension alone. Unknown domains remain governed by ordinary proactive selection
 
 Send one brief conditional suggestion. Deduplicate by session, recipient,
 workspace and skill, with at most three suggestions per scope and seven-day
-expiry. An observed explicit skill read suppresses another reminder but is not
-proof of application. Bounded private state contains hashes and skill identities,
+expiry. An explicit skill read with independently known success suppresses another
+reminder but is not proof of application. Raw output cannot prove read success;
+never parse file content as an exit-status envelope. Bounded private state contains hashes and skill identities,
 never source or raw native IDs. Disable/missing identity/state failures are silent;
 a cached launcher must remain harmless after files are retired. Native receipt
 and useful application require separate observations from a successful callback.

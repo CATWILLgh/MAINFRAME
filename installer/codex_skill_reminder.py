@@ -215,9 +215,10 @@ def _advisory(data, state, hooks, detector):
     response = data.get('tool_response')
     success = (isinstance(response,dict) and type(response.get('exit_code')) is int
                and response['exit_code'] == 0 and response.get('isError') is not True)
-    if isinstance(response,str):
-        success = bool(re.search(r'^Process exited with code 0\s*$', response.split('Output:',1)[0][:512], re.M))
-    if not success:
+    # Native Bash exposes raw output text, not an exit-status envelope. A
+    # completed read attempt can warrant advice even when success is unknown.
+    # Never parse file content as a status or proof that a method was read.
+    if not success and not isinstance(response, str):
         return None
     command = data.get('tool_input',{}).get('command')
     # Cheap relevance gate before catalog or transcript IO.
@@ -245,7 +246,7 @@ def _advisory(data, state, hooks, detector):
     for raw in paths:
         path = Path(raw).resolve()
         for name, skillpath in all_methods.items():
-            if path == skillpath.resolve(): reserve(state,scope,name,seen=True)
+            if success and path == skillpath.resolve(): reserve(state,scope,name,seen=True)
         if not path.is_relative_to(project):
             continue
         rel = path.relative_to(project)

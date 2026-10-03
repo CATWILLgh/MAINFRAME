@@ -19,7 +19,7 @@ class ReminderTests(unittest.TestCase):
         self.skill=self.home/'skills/mainframe-python-backend/SKILL.md'
         self.skill.parent.mkdir(parents=True);self.skill.write_text('---\nname: mainframe-python-backend\ndescription: Backend\n---\n')
         self.data={'session_id':'parent','tool_use_id':'nested','cwd':str(self.project),
-                   'tool_input':{'command':'cat server/app.py'},'tool_response':'Process exited with code 0\nOutput:\ntext'}
+                   'tool_input':{'command':'cat server/app.py'},'tool_response':{'exit_code':0}}
         self.transcript=self.home/'sessions/test.jsonl';self.data['transcript_path']=str(self.transcript)
         self.write_call({'cmd':'cat server/app.py','workdir':str(self.project)})
 
@@ -55,7 +55,7 @@ class ReminderTests(unittest.TestCase):
         self.assertIsNone(self.invoke());self.assertFalse(self.state.exists())
 
     def test_failure_and_native_disabled_skill(self):
-        self.data['tool_response']='Process exited with code 1\nOutput:\nProcess exited with code 0'
+        self.data['tool_response']={'exit_code':1,'output':'Process exited with code 0'}
         self.assertIsNone(self.invoke())
         self.data['tool_response']={'exit_code':0}
         (self.home/'config.toml').write_text('[[skills.config]]\npath = '+json.dumps(str(self.skill))+'\nenabled = false\n')
@@ -110,3 +110,14 @@ class ReminderTests(unittest.TestCase):
         self.assertIsNone(self.invoke())
         self.data['tool_input']['command']='cat server/app.py'
         self.assertIsNone(self.invoke())
+
+    def test_native_raw_output_is_not_a_status_envelope(self):
+        self.data['tool_response']='ordinary file content'
+        self.assertIn('mainframe-python-backend', self.invoke())
+
+    def test_raw_skill_output_does_not_prove_successful_read(self):
+        self.data['tool_response']='Process exited with code 0\nOutput:\nnot a native status'
+        self.data['tool_input']['command']='cat '+str(self.skill)
+        self.assertIsNone(self.invoke())
+        self.data['tool_input']['command']='cat server/app.py'
+        self.assertIn('mainframe-python-backend', self.invoke())

@@ -407,3 +407,16 @@ files/backups remain for recovery and harmless late callbacks. Changed or foreig
 registrations are preserved for reconciliation. Normal enable/disable/remove
 then follows the maintained hook lifecycle. New registration trust remains a
 user action; do not claim active delivery from installer convergence alone.
+
+Trusted live acceptance exposed raw stdout/stderr in Bash `tool_response`, with
+no exit status (including failed commands). Advice therefore concerns a bounded
+read attempt when success is unknown; known structured failures stay silent.
+Raw output is never parsed as status or successful skill-read evidence.
+
+Live acceptance on 2026-10-03 after native user trust: root and a native child
+each received a project-method suggestion and a testing-method suggestion, then
+a third read produced no further context. The child used an explicit-workdir
+relative read for the testing suggestion and read/applied the suggested method
+to distinguish synthetic test assertions from native delivery evidence. This
+proves those two recipient sequences, not a universal rate of useful selection
+or coverage of arbitrary shell syntax. Temporary callback probes were removed.
