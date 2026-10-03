@@ -798,7 +798,7 @@ class InstallationTests(unittest.TestCase):
                 self.assertTrue(report["structure_matches"])
                 self.assertEqual(report["file_change_count"], 0)
         state = json.loads(self.adapter.state_path.read_bytes())
-        for name in ("mainframe-clickhouse", "mainframe-keycloak-sso", "mainframe-notifications"):
+        for name in ("mainframe-clickhouse", "mainframe-keycloak-sso", "mainframe-notifications", "mainframe-self-monitoring"):
             with self.subTest(skill=name):
                 root = self.source / "skills" / name
                 for source in root.rglob("*"):

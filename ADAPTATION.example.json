@@ -127,6 +127,11 @@
         "source": "skills/mainframe-notifications",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-self-monitoring": {
+        "source": "skills/mainframe-self-monitoring",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {

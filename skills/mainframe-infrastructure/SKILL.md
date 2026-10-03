@@ -97,3 +97,6 @@ return the exact proposed map update without writing it.
 
 For application event routing, notification delivery and channel settings, use
 `mainframe-notifications`; keep deployment, DNS, TLS and service operations here.
+
+For an embedded System/Diagnostics page, scoped runtime controls or data previews,
+use `mainframe-self-monitoring`; retain live infrastructure operations here.
