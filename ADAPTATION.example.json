@@ -228,6 +228,11 @@
         "source": "hooks/mainframe-fallow-quality.py",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-skill-reminder": {
+        "source": "hooks/mainframe-skill-reminder.py",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "mcp": {},

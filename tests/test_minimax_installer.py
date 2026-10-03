@@ -60,7 +60,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
                     source.read_bytes(),
                 )
 
-        self.assertEqual(report["planned_delivery"], {"installed": 27, "pending": 0, "unsupported": 14})
+        self.assertEqual(report["planned_delivery"], {"installed": 27, "pending": 1, "unsupported": 14})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
         self.assertEqual(len(manifest["skills"]), 25)
@@ -76,6 +76,15 @@ class MiniMaxInstallationTests(unittest.TestCase):
             for groups in hooks.values() for group in groups for handler in group["hooks"]
         ))
         state = json.loads(self.adapter.state_path.read_text())
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "pending")
+        self.assertEqual(reminder["next_action"],
+                         "Codex pilot first; native adaptation and acceptance are pending.")
+        self.assertNotIn("reason", reminder)
+        self.assertFalse((self.adapter.plugin / "hooks/detectors" / "mainframe-skill-reminder.py").exists())
+        self.assertFalse(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.plugin / "hooks/hooks.json").read_text())
         self.assertEqual(state["components"]["agents"]["mainframe-researcher"]["reason"], AGENT_REASON)
         self.assertEqual(state["components"]["agents"]["mainframe-go-backend-engineer"]["reason"], AGENT_REASON)
         self.assertEqual(state["components"]["commands"]["mainframe-project-skill"]["reason"], COMMAND_REASON)

@@ -81,6 +81,16 @@ class ClineInstallerTests(unittest.TestCase):
         self.assertIn("skills: mainframe-go-backend", go_role)
         self.assertIn("server-side Go", go_role)
         state = json.loads(self.adapter.state_path.read_text())
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "pending")
+        self.assertEqual(reminder["next_action"],
+                         "Codex pilot first; native adaptation and acceptance are pending.")
+        self.assertNotIn("reason", reminder)
+        self.assertFalse((self.adapter.detectors / "mainframe-skill-reminder.py").exists())
+        self.assertFalse(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PreToolUse").read_text())
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PostToolUse").read_text())
         self.assertEqual(state["target"]["version"], "0.0.33")
         self.assertEqual(
             sum(row["delivery"] == "unsupported" for row in state["components"]["hooks"].values()),

@@ -63,7 +63,16 @@ class AntigravityInstallationTests(unittest.TestCase):
                 )
 
         state = json.loads(self.adapter.state_path.read_text())
-        self.assertEqual(report["planned_delivery"], {"installed": 28, "pending": 0, "unsupported": 13})
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "pending")
+        self.assertEqual(reminder["next_action"],
+                         "Codex pilot first; native adaptation and acceptance are pending.")
+        self.assertNotIn("reason", reminder)
+        self.assertFalse((self.adapter.hooks / "detectors" / "mainframe-skill-reminder.py").exists())
+        self.assertFalse(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks_config).read_text())
+        self.assertEqual(report["planned_delivery"], {"installed": 28, "pending": 1, "unsupported": 13})
         self.assertEqual(set(report["retained_partial_bindings"]), {
             "mainframe-init", "mainframe-project-skill", "mainframe-tickets-find", "mainframe-tickets-refine", "mainframe-tickets-implement",
             "mainframe-tickets-verify", "mainframe-tickets-init",
@@ -107,7 +116,7 @@ class AntigravityInstallationTests(unittest.TestCase):
         state = json.loads(self.adapter.state_path.read_text())
         self.assertEqual(state["components"]["hooks"]["mainframe-commit-checkpoint"]["delivery"], "installed")
         self.assertTrue(all(row["delivery"] == "unsupported" for name, row in state["components"]["hooks"].items()
-                            if name != "mainframe-commit-checkpoint"))
+                            if name not in {"mainframe-commit-checkpoint", "mainframe-skill-reminder"}))
 
     def test_user_instruction_and_foreign_hook_are_preserved_and_restored(self):
         self.adapter.instruction.parent.mkdir(parents=True)

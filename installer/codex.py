@@ -29,7 +29,7 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -41,7 +41,7 @@ READ_ONLY_ROLE_ACTION = "Verify parent permission overrides preserve the read-on
 KNOWN_RUNTIME = "0.153.4"
 # Exact Desktop mapping revalidated against the tagged native schemas/sources.
 # This is delivery compatibility, not observed lifecycle/role acceptance.
-INSPECTED_DESKTOP_RUNTIMES = {"0.159.2"}
+INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1"}
 # Current Desktop discovery exposes the same instruction/skill/role text formats.
 # This permits only an existing installation's bounded update, including the
 # exact Stop registration repair validated against the native schema.
@@ -176,6 +176,33 @@ def _is_validated_hook_registration_update(change: Change, previous: dict,
     return changed > 0 and expected == after
 
 
+def retire_reminder_pilot(raw: bytes | None, support: Path):
+    """Retire only the exact receipted pilot; keep its backups and executable."""
+    pilot = support / "experiments/skill-reminder"
+    receipt_raw = regular_bytes(pilot / "receipt.json")
+    if raw is None or receipt_raw is None:
+        return raw, []
+    record = json.loads(receipt_raw)
+    registration = record.get("registration")
+    document = json.loads(raw)
+    groups = document.get("hooks", {}).get("PostToolUse", [])
+    if registration not in groups:
+        return raw, []
+    commands = _commands(registration)
+    if len(commands) != 1 or str(pilot / "codex.py") not in next(iter(commands)):
+        raise Conflict("Pilot reminder receipt has an unexpected registration; preserve it for review.")
+    config_path = pilot / "config.json"
+    snapshot = observed(config_path)
+    if snapshot[0] is None:
+        raise Conflict("Pilot reminder configuration is missing; reconcile its registration first.")
+    config = json.loads(snapshot[0])
+    config["disabled"] = True
+    changes = [Change.from_snapshot(config_path, snapshot, encode_json(config),
+                                   mode=snapshot[1] or 0o600, component="retire reminder pilot")]
+    document["hooks"]["PostToolUse"] = [g for g in groups if g != registration]
+    return encode_json(document), changes
+
+
 def merge_hooks(raw: bytes | None, desired: dict, prior: dict, base: Path):
     document = json.loads(raw) if raw is not None else {}
     if not isinstance(document, dict) or not isinstance(document.get("hooks", {}), dict):
@@ -196,7 +223,16 @@ def merge_hooks(raw: bytes | None, desired: dict, prior: dict, base: Path):
                 groups = [g for index, g in enumerate(groups) if g != previous or index == first]
                 owned.setdefault(event, []).append(previous)
             else:
-                groups = [g for g in groups if g != previous]
+                replacements = [g for g in desired.get(event, [])
+                                if g.get("matcher") == previous.get("matcher")]
+                if previous in groups and len(replacements) == 1:
+                    replacement = replacements[0]
+                    first = groups.index(previous)
+                    groups = [replacement if index == first else g
+                              for index, g in enumerate(groups) if g != previous or index == first]
+                    owned.setdefault(event, []).append(replacement)
+                else:
+                    groups = [g for g in groups if g != previous]
         if groups:
             hooks[event] = groups
         else:
@@ -314,6 +350,7 @@ class Codex:
             return False
         exact = {self.codex / "AGENTS.md", self.codex / "AGENTS.override.md", self.codex / "hooks.json",
                  self.codex / "config.toml", self.receipt_path, self.state_path, self.index,
+                 self.support / "experiments/skill-reminder/config.json",
                  self.home / ".local/bin/mainframe-secret", self.home / ".local/bin/secret"}
         if path in exact or path in (self.hooks, self.support) or path.is_relative_to(self.hooks):
             return True
@@ -389,6 +426,7 @@ class Codex:
             source_path = self.root / source["components"]["hooks"][name]["source"]
             add(self.hooks / "detectors" / source_path.name, source_path.read_bytes(), "hooks." + name)
         add(self.hooks / "bridge.py", Path(__file__).with_name("codex_hook.py").read_bytes(), "hook transport")
+        add(self.hooks / "skill_reminder.py", Path(__file__).with_name("codex_skill_reminder.py").read_bytes(), "hooks.mainframe-skill-reminder")
         helper = self.home / ".local/bin/mainframe-secret"
         existing_helper = helper if helper.exists() else None
         if self.home == Path.home().resolve():
@@ -469,13 +507,19 @@ class Codex:
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180, "additionalContextLimit": 6000},
               {"type": "command", "command": hook_command(self.hooks, "mainframe-commit-checkpoint", self.event_state),
-               "timeout": 5, "additionalContextLimit": 1000}]}],
+               "timeout": 5, "additionalContextLimit": 1000}]},
+            {"matcher": "^Bash$", "hooks": [{"type": "command",
+              "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
+              "timeout": 2, "additionalContextLimit": 300}]}],
         "Stop": [{"hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180}]}]}
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
         old_hooks = hook_snapshot[0]
+        if not remove:
+            old_hooks, retirement = retire_reminder_pilot(old_hooks, self.support)
+            changes.extend(retirement)
         hooks, hook_groups = merge_hooks(old_hooks, desired_hooks, previous, self.hooks)
         changes.append(Change.from_snapshot(hook_path, hook_snapshot, hooks,
                        mode=hook_snapshot[1] or 0o600, component="hook registration"))
@@ -589,7 +633,7 @@ class Codex:
         # the global instruction is last, followed only by local bookkeeping.
         def order(change):
             for rank, prefix in enumerate(("shared.", "skills.", "agents.", "commands.", "hooks.",
-                                            "hook transport", "feedback permission", "hook registration",
+                                            "hook transport", "feedback permission", "retire reminder pilot", "hook registration",
                                             "instructions.", "disabled hook marker", "adaptation state", "ownership receipt")):
                 if change.component.startswith(prefix):
                     return rank
@@ -699,7 +743,8 @@ class Codex:
             return
         if self.event_state.stat().st_uid != os.getuid():
             raise Conflict("Temporary hook state has unexpected ownership.")
-        for name in ("events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm",
+        for name in ("skill-reminders.sqlite3", "skill-reminders.sqlite3-journal", "skill-reminders.sqlite3-wal", "skill-reminders.sqlite3-shm",
+                     "events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm",
                      "commit-checkpoint.sqlite3", "commit-checkpoint.sqlite3-journal", "commit-checkpoint.sqlite3-wal", "commit-checkpoint.sqlite3-shm"):
             path = self.event_state / name
             if path.exists() and not path.is_symlink() and path.is_file():

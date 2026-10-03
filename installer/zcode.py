@@ -25,6 +25,7 @@ SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "ma
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
+SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
     "rg-short-replace": "mainframe-rg-short-replace",
@@ -643,9 +644,12 @@ class ZCode:
             )
             state_source = source if not remove else inventory(self.root, "zcode")
             unsupported = {("hooks", n): why for n, why in UNSUPPORTED.items()} if not remove else {}
+            pending = {("hooks", n): SKILL_REMINDER_ACTION
+                       for n in state_source["components"]["hooks"]
+                       if n == "mainframe-skill-reminder"}
             delivered = [(cat, n) for cat, group in state_source["components"].items() for n in group
                          if not remove and (cat != "hooks" or n in HOOK_NAMES)
-                         and (cat, n) not in unsupported]
+                         and (cat, n) not in unsupported and (cat, n) not in pending]
             hooks_loaded = bool(
                 unchanged
                 and all(
@@ -670,7 +674,8 @@ class ZCode:
             if not remove and new_receipt["adopted_legacy"]:
                 actions.append("Legacy callable files remain inert for old sessions; retire them only after those sessions stop using their callbacks.")
             state = reconcile_state(state_source, prior_state, target, unchanged=unchanged,
-                                    delivered=delivered, unsupported=unsupported, next_actions=actions)
+                                    delivered=delivered, unsupported=unsupported,
+                                    pending=pending if not remove else {}, next_actions=actions)
             if not remove:
                 for n in HOOK_NAMES:
                     if n in UNSUPPORTED:

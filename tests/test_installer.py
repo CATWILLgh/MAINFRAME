@@ -74,6 +74,45 @@ class InstallationTests(unittest.TestCase):
         return subprocess.run(["/bin/sh", "-c", callback], input=json.dumps(data),
                               text=True, capture_output=True, timeout=timeout)
 
+    def test_receipted_reminder_pilot_retires_without_foreign_loss(self):
+        self.install()
+        pilot = self.adapter.support / "experiments/skill-reminder"
+        pilot.mkdir(parents=True)
+        group = {"matcher": "^Bash$", "hooks": [{"type": "command", "command": str(pilot / "codex.py")}]}
+        hook_path = self.adapter.codex / "hooks.json"
+        hooks = json.loads(hook_path.read_text())
+        foreign = {"matcher": "^Other$", "hooks": [{"type": "command", "command": "true"}]}
+        hooks["hooks"]["PostToolUse"].extend([group, foreign])
+        hook_path.write_text(json.dumps(hooks))
+        (pilot / "receipt.json").write_text(json.dumps({"registration": group}))
+        (pilot / "config.json").write_text(json.dumps({"disabled": False, "profiles": []}))
+        (pilot / "codex.py").write_text("# preserve late-callback executable")
+        self.install()
+        after = json.loads(hook_path.read_text())["hooks"]["PostToolUse"]
+        self.assertNotIn(group, after)
+        self.assertIn(foreign, after)
+        self.assertTrue(json.loads((pilot / "config.json").read_text())["disabled"])
+        self.assertTrue((pilot / "codex.py").exists())
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+
+    def test_skill_reminder_delivery_dispatch_disable_and_repeat(self):
+        self.install()
+        (self.home / "server").mkdir()
+        path = self.home / "server/app.py"
+        path.write_text("fixture")
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash",
+                   "session_id": "reminder-scope", "tool_use_id": "read",
+                   "cwd": str(self.home), "tool_input": {"command": "cat " + shlex.quote(str(path))},
+                   "tool_response": {"exit_code": 0}}
+        result = self.invoke_payload("mainframe-skill-reminder", payload)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("mainframe-python-backend", result.stdout)
+        self.assertNotIn("permissionDecision", result.stdout)
+        self.assertEqual(self.invoke_payload("mainframe-skill-reminder", payload).stdout, "")
+        (self.adapter.hooks / ".disabled-mainframe-skill-reminder").write_text("")
+        payload["agent_id"] = "child"
+        self.assertEqual(self.invoke_payload("mainframe-skill-reminder", payload).stdout, "")
+
     def test_plan_is_read_only_and_repeat_install_converges(self):
         _, report = self.adapter.plan()
         self.assertTrue(report["changes"])

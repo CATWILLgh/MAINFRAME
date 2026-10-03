@@ -374,3 +374,36 @@ bounds, reset/deduplication, failure behavior and coverage are owned by the
 [canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
 The maintained installer includes its detector and post-edit binding; native
 activation remains a separate observation after installation.
+
+## Skill reminder and Desktop 0.159.0-alpha.12.1
+
+On 2026-10-03 the current parent and native child task metadata and bundled
+`codex-package.json` identified **0.159.0-alpha.12.1**. The installed executable's
+embedded `post-tool-use.command.input` schema includes optional `agent_id` and
+`agent_type`; an in-place, keys-only temporary probe observed root and child
+`Bash` callbacks with string output and `tool_input.command` only. No actual
+shell working directory is supplied. These findings validate the reminder's
+native payload/output route; they do not establish discovery or behavior of all
+other installed components. Disposable-home packaging checks cover delivery.
+
+[Hooks](https://learn.chatgpt.com/docs/hooks) documents nonblocking
+`PostToolUse.additionalContext`. Nearby public source
+[`rust-v0.159.0-alpha.12` hook runtime](https://github.com/openai/codex/blob/rust-v0.159.0-alpha.12/codex-rs/core/src/hook_runtime.rs)
+corroborates child attribution. The exact local schema/probe is stronger evidence
+for the current build than assuming nearby source is identical.
+
+The maintained reminder reads at most 256 KiB of the current native transcript
+in memory to find unambiguous explicit literal command/workdir hints. Code Mode
+nested call IDs are random and transient exec-begin events are not persisted;
+this is advisory context, not exact call attribution. Omitted workdir, dynamic
+arguments, conflicts and unknown formats do not authorize a cwd guess. No raw
+source is retained. Installed readable skill paths are distinguished from native
+catalog exposure, which is budgeted. See the
+[canonical contract](../../../hooks/README.md#adapt-mainframe-skill-reminder).
+
+The installer retires only the exact receipted experimental registration and
+sets its configuration disabled in the same transaction. Original experiment
+files/backups remain for recovery and harmless late callbacks. Changed or foreign
+registrations are preserved for reconciliation. Normal enable/disable/remove
+then follows the maintained hook lifecycle. New registration trust remains a
+user action; do not claim active delivery from installer convergence alone.

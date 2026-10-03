@@ -24,6 +24,7 @@ HOOK_NAMES = (
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
+SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 HOOK_FILES = {"PreToolUse": "tool_call", "PostToolUse": "tool_result"}
 TRANSPORT = "mainframe-cline-hook"
 # Cline file hooks have one synchronous pre-action event and one post-action
@@ -373,9 +374,12 @@ class Cline:
                 ("hooks", "mainframe-fallow-quality"): COMPLETION_REASON + " " + FALLOW_PARTIAL,
                 ("hooks", "mainframe-code-quality"): COMPLETION_REASON + " " + CODE_QUALITY_PARTIAL,
             }
+            pending = {("hooks", n): SKILL_REMINDER_ACTION
+                       for n in source["components"]["hooks"]
+                       if n == "mainframe-skill-reminder"}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
-                if (category, name) not in unsupported
+                if (category, name) not in unsupported and (category, name) not in pending
             ]
             if remove:
                 from .state import component_keys
@@ -392,7 +396,7 @@ class Cline:
                 ]
                 state = reconcile_state(source, prior_state, target, unchanged=unchanged,
                                         delivered=delivered, unsupported=unsupported,
-                                        next_actions=actions)
+                                        pending=pending, next_actions=actions)
             changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state),
                                                 component="adaptation state"))
         if remove:

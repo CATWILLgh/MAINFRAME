@@ -27,6 +27,7 @@ HOOK_NAMES = (
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
+SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
     "rg-short-replace": "mainframe-rg-short-replace",
@@ -399,16 +400,21 @@ class Antigravity:
                              and not any(change.needed for change in changes))
             unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
             unsupported.update({("hooks", name): reason for name, reason in UNSUPPORTED.items()})
+            pending = {("hooks", n): SKILL_REMINDER_ACTION
+                       for n in source["components"]["hooks"]
+                       if n == "mainframe-skill-reminder"}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
-                if (category, name) not in unsupported and category != "commands"
+                if (category, name) not in unsupported and (category, name) not in pending
+                and category != "commands"
                 and (category != "hooks" or name == "mainframe-commit-checkpoint")
             ]
             actions = [] if remove else [
                 "Open a new Antigravity Desktop 2.0 conversation to load global skills, agents, and instructions."
             ]
             state = reconcile_state(source, prior_state, target, unchanged=unchanged, delivered=delivered,
-                                    unsupported=unsupported if not remove else {}, next_actions=actions)
+                                    unsupported=unsupported if not remove else {},
+                                    pending=pending if not remove else {}, next_actions=actions)
             changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state),
                                                 component="adaptation state"))
         changes.append(Change.from_snapshot(self.receipt_path, receipt_snapshot,

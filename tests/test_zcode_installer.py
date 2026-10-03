@@ -52,6 +52,15 @@ class ZCodeInstallationTests(unittest.TestCase):
         _, second = self.adapter.plan()
         self.assertEqual(second['changes'], [])
         state = json.loads(self.adapter.state_path.read_text())
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "pending")
+        self.assertEqual(reminder["next_action"],
+                         "Codex pilot first; native adaptation and acceptance are pending.")
+        self.assertNotIn("reason", reminder)
+        self.assertFalse((self.adapter.hooks / "detectors" / "mainframe-skill-reminder.py").exists())
+        self.assertFalse(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.config).read_text())
         init_command = (self.adapter.commands / "mainframe-tickets-init.md").read_text()
         self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
         self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
@@ -459,8 +468,8 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertTrue(reports[1]['applied'])
         self.assertTrue(reports[2]['structure_matches'])
         self.assertEqual(reports[2]['file_change_count'], 0)
-        self.assertEqual(reports[2]['planned_delivery'], {'installed': 37, 'pending': 0, 'unsupported': 2})
-        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 37})
+        self.assertEqual(reports[2]['planned_delivery'], {'installed': 39, 'pending': 1, 'unsupported': 2})
+        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 40})
         self.assertEqual(len(reports[2]['next_actions']), 1)
         state = json.loads(self.adapter.state_path.read_text())
         self.assertFalse(any(row.get('verification') == 'passed' for group in state['components'].values() for row in group.values()))

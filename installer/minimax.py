@@ -24,6 +24,7 @@ HOOK_NAMES = (
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
+SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 COMMAND_REASON = (
     "MiniMax Code exposes Plugin Skills to both autonomous selection and explicit invocation; "
     "Plugin V1 has no explicit-only command capability."
@@ -293,16 +294,19 @@ class MiniMax:
                              and not any(change.needed for change in changes))
             unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
             unsupported.update({("agents", name): AGENT_REASON for name in source["components"]["agents"]})
+            pending = {("hooks", n): SKILL_REMINDER_ACTION
+                       for n in source["components"]["hooks"]
+                       if n == "mainframe-skill-reminder"}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
-                if (category, name) not in unsupported
+                if (category, name) not in unsupported and (category, name) not in pending
             ]
             actions = [] if remove else [
                 "Wait for MiniMax Code's automatic local Plugin rescan, then open one new conversation to confirm MAINFRAME appears without scan diagnostics."
             ]
             state = reconcile_state(source, prior_state, target, unchanged=unchanged,
                                     delivered=delivered, unsupported=unsupported if not remove else {},
-                                    next_actions=actions)
+                                    pending=pending if not remove else {}, next_actions=actions)
             changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state),
                                                 component="adaptation state"))
         if remove:

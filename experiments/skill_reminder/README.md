@@ -4,6 +4,8 @@ This experiment is not installed by `install.py` and is not part of the canonica
 inventory. It tests a narrow read-time advisory before committing to a new
 cross-product component. Normal installation does not change global settings for this experiment; explicit experimental registration is separate.
 
+The maintained successor is [mainframe-skill-reminder](../../hooks/README.md#adapt-mainframe-skill-reminder), delivered through the Codex installer. A matching receipted experimental registration is retired during that update; its configuration is disabled and its executable retained for cached callbacks. This directory remains historical experiment evidence, not the current installation route.
+
 ## Contract
 
 Codex [hooks documentation](https://learn.chatgpt.com/docs/hooks) inspected
