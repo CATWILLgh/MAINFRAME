@@ -694,6 +694,25 @@ class InstallationTests(unittest.TestCase):
         self.assertFalse(result["skills"]["mainframe-research"]["discovered"])
         self.assertFalse(result["hooks"]["mainframe-secret-access"]["discovered"])
 
+    def test_native_discovery_recognizes_post_tool_advisories(self):
+        source = json.loads((self.source / "ADAPTATION.example.json").read_bytes())
+        cwd = self.home / "isolated"
+        hooks = []
+        for name, matcher, timeout, limit in (
+            ("mainframe-skill-reminder", "^Bash$", 2, 300),
+            ("mainframe-commit-checkpoint", "^apply_patch$", 5, 1000),
+        ):
+            hooks.append({"command": hook_command(self.adapter.hooks, name, self.adapter.event_state),
+                          "eventName": "postToolUse", "matcher": matcher,
+                          "timeoutSec": timeout, "additionalContextLimit": limit,
+                          "enabled": True, "trustStatus": "trusted", "handlerType": "command",
+                          "source": "user", "sourcePath": str(self.adapter.codex / "hooks.json")})
+        result = summarize(self.adapter, source, {"data": [{"cwd": str(cwd), "skills": []}]},
+                           {"data": [{"cwd": str(cwd), "hooks": hooks}]}, cwd)
+        for name in ("mainframe-skill-reminder", "mainframe-commit-checkpoint"):
+            self.assertTrue(result["hooks"][name]["discovered"], name)
+            self.assertTrue(result["hooks"][name]["trusted"], name)
+
     def test_cli_requires_instruction_review_before_applying(self):
         self.adapter.codex.mkdir(parents=True)
         (self.adapter.codex / "AGENTS.md").write_text("User instruction")

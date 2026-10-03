@@ -116,7 +116,8 @@ def summarize(adapter, source, skill_result, hook_result, cwd):
     for name in HOOK_NAMES:
         transport = PRE_SHELL_TRANSPORT if name in SHELL_HOOK_NAMES else name
         command = hook_command(
-            adapter.hooks, transport, adapter.event_state, runtime_bin(adapter.home)
+            adapter.hooks, transport, adapter.event_state,
+            runtime_bin(adapter.home) if name not in ("mainframe-skill-reminder", "mainframe-commit-checkpoint") else None
         )
         found = [h for h in hooks if h.get("command") == command]
         expected = (
@@ -129,6 +130,10 @@ def summarize(adapter, source, skill_result, hook_result, cwd):
                  "additionalContextLimit": None},
             ]
             if name == "mainframe-code-quality"
+            else [{"eventName": "postToolUse", "matcher": "^Bash$", "timeoutSec": 2,
+                   "additionalContextLimit": 300}] if name == "mainframe-skill-reminder"
+            else [{"eventName": "postToolUse", "matcher": "^apply_patch$", "timeoutSec": 5,
+                   "additionalContextLimit": 1000}] if name == "mainframe-commit-checkpoint"
             else [{"eventName": "preToolUse", "matcher": "^Bash$", "timeoutSec": 5,
                    "additionalContextLimit": 6000}]
         )
