@@ -2,7 +2,7 @@
 
 This experiment is not installed by `install.py` and is not part of the canonical
 inventory. It tests a narrow read-time advisory before committing to a new
-cross-product component. No installed hooks or global settings are changed.
+cross-product component. Normal installation does not change global settings for this experiment; explicit experimental registration is separate.
 
 ## Contract
 
@@ -66,7 +66,9 @@ and append a `PostToolUse` group with matcher `^Bash$`. Its command handler runs
 <absolute-python> -B <absolute-repo>/experiments/skill_reminder/codex.py <absolute-config.json> <absolute-private-state-directory>
 ```
 
-Shell-quote each argument when rendering the actual registration. Set `timeout`
+For a global experimental registration covering several approved workspaces, use a top-level `profiles` array of the objects above (maximum 16). The callback selects the most specific workspace containing its native `cwd`; unmatched workspaces stay silent. A top-level `disabled: true` silences all profiles.
+
+Shell-quote each argument when rendering the actual registration. Use an outer launcher guard that silently exits when the script, configuration or interpreter is absent; preserve the executable during normal disable/removal. Set `timeout`
 to 2 seconds and `additionalContextLimit` to 150. Do not add `Stop`, a permission
 decision, or forced continuation. Native trust remains a user UI action.
 The experiment currently has no automated installer/uninstaller; this recipe

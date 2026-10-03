@@ -120,6 +120,20 @@ def _respond(data, config, state):
     paths = read_paths(inputs.get('command')) if isinstance(inputs, dict) else []
     if not paths:
         return None
+    if 'profiles' in config:
+        profiles = config['profiles']
+        cwd = data.get('cwd')
+        if not isinstance(profiles, list) or len(profiles) > 16 or not isinstance(cwd, str) or not Path(cwd).is_absolute():
+            return None
+        cwd = Path(cwd).resolve(strict=True)
+        matches = [p for p in profiles if isinstance(p, dict) and isinstance(p.get('workspace'), str)
+                   and Path(p['workspace']).is_absolute()
+                   and cwd.is_relative_to(Path(p['workspace']).resolve(strict=True))]
+        if not matches:
+            return None
+        config = max(matches, key=lambda p: len(Path(p['workspace']).resolve().parts))
+        if config.get('disabled') is True:
+            return None
     root = Path(config['workspace']).resolve(strict=True)
     skills = config.get('skills', {})
     if not root.is_dir() or not isinstance(skills, dict) or len(skills) > 16:

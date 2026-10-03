@@ -150,3 +150,14 @@ class ReminderTests(unittest.TestCase):
         config.write_text(json.dumps({**self.config, 'disabled': True}))
         result = subprocess.run(command, input=payload, text=True, capture_output=True)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+
+    def test_profile_selection_confines_global_registration(self):
+        data = self.event(); data['cwd'] = str(self.workspace)
+        config = {'profiles': [self.config]}
+        self.assertIsNotNone(codex.respond(data, config, self.state))
+        other = self.root / 'other'; other.mkdir()
+        data['session_id'] = 'other'; data['cwd'] = str(other)
+        self.assertIsNone(codex.respond(data, config, self.state))
+        config['disabled'] = True
+        data['cwd'] = str(self.workspace)
+        self.assertIsNone(codex.respond(data, config, self.state))
