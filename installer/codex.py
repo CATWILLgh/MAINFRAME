@@ -16,6 +16,7 @@ import sys
 import tempfile
 import tomllib
 
+from .codex_skill_reminder import ROLE_MATCHER
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, reconcile_files, regular_bytes, retire_recorded_legacy_file)
 from .shared import BEGIN, END, _instruction, inventory
@@ -426,6 +427,7 @@ class Codex:
             source_path = self.root / source["components"]["hooks"][name]["source"]
             add(self.hooks / "detectors" / source_path.name, source_path.read_bytes(), "hooks." + name)
         add(self.hooks / "bridge.py", Path(__file__).with_name("codex_hook.py").read_bytes(), "hook transport")
+        add(self.hooks / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
         add(self.hooks / "skill_reminder.py", Path(__file__).with_name("codex_skill_reminder.py").read_bytes(), "hooks.mainframe-skill-reminder")
         helper = self.home / ".local/bin/mainframe-secret"
         existing_helper = helper if helper.exists() else None
@@ -499,10 +501,15 @@ class Codex:
                        mode=instruction_snapshot[1] or 0o600, component="instructions.global"))
         desired_hooks = {} if remove else {"PreToolUse": [
             {"matcher": "^Bash$", "hooks": [{"type": "command", "command": hook_command(self.hooks, PRE_SHELL_TRANSPORT, self.event_state, runtime_bin(self.home)),
-              "timeout": 5, "additionalContextLimit": 6000}]},
+              "timeout": 5, "additionalContextLimit": 6000},
+              {"type": "command", "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
+               "timeout": 2, "additionalContextLimit": 300}]},
             {"matcher": "^apply_patch$", "hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180, "additionalContextLimit": 6000}]}],
+        "SubagentStart": [{"matcher": ROLE_MATCHER, "hooks": [{"type": "command",
+              "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
+              "timeout": 2, "additionalContextLimit": 300}]}],
         "PostToolUse": [{"matcher": "^apply_patch$", "hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180, "additionalContextLimit": 6000},

@@ -60,7 +60,7 @@ removing a registered executable is not a disable mechanism.
 | `mainframe-commit-checkpoint` | `advisory` | After a successful native edit, remind the responsible agent to checkpoint a coherent verified part when editing has accumulated | Expiring hashes, counters and timestamps only |
 | `mainframe-code-quality` | Post-edit quality, security, and structure advisories plus an attributed-finding completion guard | Around a successful file edit, report new high-confidence residue, security findings, or a size-review threshold crossing; before completion, revalidate and block only attributed blocking findings | One private temporary JSON file per adapter namespace, native execution scope, and workspace |
 | `mainframe-fallow-quality` | `advisory` | At a continuation-capable completion event after exact-scope TS/JS edits, report newly introduced structural findings or a decision-relevant unavailable check without blocking | Canonical detector is stateless; adapter may retain only bounded short-lived attribution state |
-| `mainframe-skill-reminder` | `advisory` | After a bounded read attempt, suggest one relevant readable skill without changing task authority | Expiring recipient/workspace hashes and skill identities; bounded suggestion count |
+| `mainframe-skill-reminder` | `advisory` | At a recognized operation, read or specialized role start, suggest one relevant readable skill without changing task authority | Expiring recipient/workspace hashes and skill identities; bounded suggestion count |
 
 ## Adapt `mainframe-destructive-operations`
 
@@ -438,16 +438,20 @@ prove a live app has trusted or activated it.
 
 ## Adapt `mainframe-skill-reminder`
 
-This advisory suggests a readable relevant method after read intent. The canonical
+This advisory suggests a readable relevant method at a recognized work boundary. The canonical
 parser extracts bounded literal file/directory targets and conservative skill
 candidates without IO or execution. The adapter owns workspace context, catalog
 and policy, native events and recipient-scoped state. It must never execute shell
 text, infer permissions, block a tool, force a continuation or inject file content
 or skill descriptions as instructions.
 
-On Codex use synchronous `PostToolUse` for `Bash`. Reject a known failed outcome; native raw output may leave success unknown.
-Require a session identity and operation identity; distinguish child `agent_id` from
-root. Literal absolute targets remain useful without a workdir. For relative
+On Codex use `PreToolUse` Bash for explicit operation advice, `PostToolUse`
+Bash for read-related advice, and `SubagentStart` for exact specialized native
+roles. Only the role event supplies advice before the child starts work. A
+pre-tool callback does not prove that the model reconsidered its first submitted
+operation. Reject a known failed read outcome; raw output may leave success unknown.
+Require a session identity and tool-operation identity for tool events, and a
+child identity for role-start events; distinguish child `agent_id` from root. Literal absolute targets remain useful without a workdir. For relative
 reads, a unique explicit literal workdir from bounded recent native transcript
 arguments can supply an advisory hint, not exact operation attribution. Unknown,
 dynamic, conflicting or nonlocal execution contexts stay silent. Never treat
@@ -457,17 +461,22 @@ on format changes. This approximation must not be reused for blocking guards.
 
 Use readable native skills and explicit invocation policy; an on-disk skill is
 not proof that the budgeted native catalog displayed it. Include its canonical
-path so the recipient can read it. Respect disabled skills and user-only commands.
+path so the recipient can read it. Respect disabled skills and user-only commands. Existing unreadable or complex
+invocation-policy metadata stays silent; the bounded fallback accepts only a
+simple explicit opt-in mapping, rather than guessing YAML semantics.
 A uniquely identified project engineering skill must be bound by project guidance.
 Testing routes to the implementation method, not automatically to test audit.
-React candidates need package evidence. Do not infer a backend from a language
-extension alone. Unknown domains remain governed by ordinary proactive selection.
+React candidates need package and application-entry evidence; standalone
+component libraries and React Native stay silent. Source profiles use bounded
+reads of relevant non-secret source and nearest package metadata. At most eight
+targets are profiled; symlinks, fixtures, generated files and obvious credential
+files stay silent. Do not infer a backend from a language extension alone. Unknown domains remain governed by ordinary proactive selection.
 
 Send one brief conditional suggestion. Deduplicate by session, recipient,
 workspace and skill, with at most three suggestions per scope and seven-day
-expiry. An explicit skill read with independently known success suppresses another
-reminder but is not proof of application. Raw output cannot prove read success;
-never parse file content as an exit-status envelope. Bounded private state contains hashes and skill identities,
+expiry. An explicit attempt to read an available skill suppresses a redundant reminder
+because it demonstrates awareness, not successful reading or application. Raw
+output cannot prove read success; never parse content as a status envelope. Bounded private state contains hashes and skill identities,
 never source or raw native IDs. Disable/missing identity/state failures are silent;
 a cached launcher must remain harmless after files are retired. Native receipt
 and useful application require separate observations from a successful callback.
@@ -475,6 +484,6 @@ and useful application require separate observations from a successful callback.
 The initial maintained adapter is Codex only. Other products record pending
 adaptation, not an invented impossibility or a generic instruction substitute.
 
-Candidate extensions and per-skill counterexamples are documented in
-[the routing design](skill-reminder-routing.md). These candidates are not
-installed routes; activate them only with their required evidence and tests.
+Implemented routes, deferred candidates and per-skill counterexamples are
+documented in [the routing design](skill-reminder-routing.md). Its status table
+distinguishes delivered bindings from ideas that still lack sufficient evidence.

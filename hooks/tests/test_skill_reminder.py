@@ -153,5 +153,202 @@ class CandidateSkillTests(unittest.TestCase):
                 self.assertIsNone(DETECTOR.candidate_skill(path))
 
 
+class OperationSkillTests(unittest.TestCase):
+    def test_documented_codex_headless_peer_commands_without_authority_inference(self) -> None:
+        session_id = "12345678-1234-4567-89ab-0123456789ab"
+        for command in (
+            "codex exec --json -C /workspace 'Review only backend/a.py'",
+            "codex exec --sandbox read-only --json 'Review this change'",
+            "codex exec -s workspace-write -C /workspace -- 'Run focused tests'",
+            "codex exec --cd=/workspace --output-last-message result.txt 'Summarize the change'",
+            "cat prompt.txt | codex exec --json -",
+            "codex exec -",
+            f"codex exec resume --json {session_id} 'Check the returned fix'",
+            f"codex exec --json resume {session_id} 'Continue the same result'",
+            f"codex exec resume {session_id}",
+            f"cat correction.txt | codex exec resume --json {session_id} -",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), {"mainframe-peer-work"})
+        for command in (
+            "echo 'codex exec --json prompt'", "rg 'codex exec' README.md",
+            "codex --version", "codex exec --help", "codex exec help",
+            "codex install", "codex login", "codex auth status", "codex resume --last",
+            "codex exec", "codex exec ''", "cat prompt.txt | codex exec", "codex exec --unknown prompt",
+            "codex exec --sandbox unknown prompt", "codex exec --json=true prompt",
+            "codex exec --dangerously-bypass-approvals-and-sandbox prompt",
+            "codex exec resume --last correction", "codex exec resume named-session correction",
+            "codex exec resume invalid-id correction", "codex exec resume",
+            f"codex exec -- resume {session_id} correction",
+            f"codex exec resume {session_id} correction extra",
+            "codex exec --json \"$PROMPT\"", "bash -c 'codex exec prompt'",
+            "claude -p prompt", "opencode run prompt", "pi -p prompt",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), set())
+
+    def test_canonical_bounded_curl_options_remain_http_transfers(self) -> None:
+        for command in (
+            r"curl --disable -sS --fail --connect-timeout 3 --max-time 15 --proto '=https' --write-out '\nHTTP_CODE:%{http_code}\n' https://example.invalid/resource",
+            "curl -q -sS --proto '=https' --proto-redir '=https' --max-redirs 3 -w '%{http_code}' https://example.invalid",
+            "curl --disable --proto=https --write-out='%{http_code}' --url=https://example.invalid",
+            "curl --disable --proto '-all,+https' --proto-redir '-all,+https' https://example.invalid",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), {"mainframe-curl-requests"})
+        for command in (
+            "curl --disable --proto '=https' --write-out https://example.invalid",
+            "curl --disable --write-out https://example.invalid --proto '=https' local-file",
+            "curl --disable --proto '=https' ftp://example.invalid/file",
+            "curl -q --proto '=https' --config settings https://example.invalid",
+            "curl --disable --proto --config https://example.invalid",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), set())
+
+    def test_explicit_clickhouse_query_file_and_pipeline_input_operations(self) -> None:
+        for command in (
+            "clickhouse-client --host database.invalid --secure --query 'SELECT 1'",
+            "clickhouse client -q 'SELECT 1; SELECT 2' --database app --format JSONEachRow",
+            "clickhouse-client --queries-file queries.sql",
+            "clickhouse-client --query='SELECT 1' --max_execution_time=5 --readonly=1",
+            "cat queries.sql | clickhouse-client --host database.invalid",
+            "cat rows.tsv | sudo -n clickhouse client --query 'INSERT INTO app.events FORMAT TSV'",
+            "ssh server 'clickhouse-client --queries-file queries.sql'",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), {"mainframe-clickhouse"})
+        self.assertEqual(DETECTOR.operation_skills(
+            "mainframe-secret run CLICKHOUSE_PASSWORD -- clickhouse-client --query 'SELECT 1'"
+        ), {"mainframe-secrets", "mainframe-clickhouse"})
+        for command in (
+            "echo 'clickhouse-client --query SELECT'", "rg clickhouse-client queries.sql",
+            "clickhouse-client", "clickhouse client --host localhost --port 9000",
+            "curl http://localhost:8123", "clickhouse local -q 'SELECT 1'",
+            "clickhouse-client --query", "clickhouse-client --query=''",
+            "clickhouse-client --config-file client.xml --query 'SELECT 1'",
+            "clickhouse-client --unknown --query 'SELECT 1'",
+            "clickhouse-client --version", "clickhouse client --help --query 'SELECT 1'",
+            "clickhouse-client --query 'SELECT 1' --version-clean",
+            "clickhouse-client --query \"$QUERY\"", "clickhouse-client < queries.sql",
+        ):
+            with self.subTest(command=command):
+                expected = {"mainframe-curl-requests"} if command == "curl http://localhost:8123" else set()
+                self.assertEqual(DETECTOR.operation_skills(command), expected)
+
+    def test_literal_credential_and_http_operations(self) -> None:
+        cases = {
+            "mainframe-secret list": {"mainframe-secrets"},
+            "mainframe-secret set API_TOKEN --clipboard": {"mainframe-secrets"},
+            "mainframe-secret get API_TOKEN": {"mainframe-secrets"},
+            "mainframe-secret run API_TOKEN OTHER_TOKEN -- curl -fsS --max-time 5 https://example.invalid/health":
+                {"mainframe-secrets", "mainframe-curl-requests"},
+            "/usr/bin/curl -X POST -H 'Content-Type: application/json' -d '{}' --url https://example.invalid":
+                {"mainframe-curl-requests"},
+            "curl -sSI 'https://example.invalid/path?q=one'": {"mainframe-curl-requests"},
+            "curl --output https://example.invalid/output local-file": set(),
+            "curl -H https://example.invalid": set(),
+            "curl ftp://example.invalid/file": set(),
+        }
+        for command, expected in cases.items():
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), expected)
+
+    def test_known_wrappers_preserve_remote_boundary_and_compound_operations(self) -> None:
+        cases = {
+            "ssh -T -o BatchMode=yes -p 22 operator@server 'sudo -n k3s kubectl get nodes -o wide'":
+                {"mainframe-k3s"},
+            "mainframe-secret run SSH_KEY -- ssh server 'curl -fsS https://example.invalid; docker compose ps'":
+                {"mainframe-secrets", "mainframe-curl-requests", "mainframe-infrastructure"},
+            "ssh server 'sudo -n docker compose restart api'": {"mainframe-infrastructure"},
+            "sudo -n -- terraform plan && python3 -B -m unittest discover":
+                {"mainframe-infrastructure", "mainframe-testing"},
+            "cd /workspace && pytest -q; echo 'curl https://example.invalid'": {"mainframe-testing"},
+        }
+        for command, expected in cases.items():
+            with self.subTest(command=command):
+                result = DETECTOR.operation_skills(command)
+                self.assertEqual(result, expected)
+                self.assertNotIn("mainframe-ops-app-server-safety", result)
+
+    def test_cluster_operations_require_k3s_identity_and_cluster_resource(self) -> None:
+        for command in (
+            "k3s server --cluster-init", "k3s agent --server https://cluster.invalid",
+            "k3s etcd-snapshot save", "k3s kubectl describe node worker",
+            "k3s kubectl drain worker --ignore-daemonsets", "k3s kubectl get storageclasses",
+            "sudo -n systemctl restart k3s", "systemctl status k3s-agent",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), {"mainframe-k3s"})
+        for command in (
+            "kubectl get nodes", "kubectl get pods", "k3s kubectl get pods -A",
+            "k3s kubectl logs api", "k3s kubectl exec api -- curl https://example.invalid",
+            "k3s kubectl apply -f cluster.yaml", "k3s kubectl get nodes,pods",
+            "k3s kubectl get nodes --unknown value", "k3s kubectl version",
+            "k3s kubectl -n k3s get deployments", "systemctl restart application",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), set())
+
+    def test_infrastructure_and_named_test_runners(self) -> None:
+        for command in (
+            "docker compose -f compose.yml up -d", "docker --context production ps",
+            "docker -H tcp://remote.invalid:2376 inspect api", "docker exec api cat /etc/os-release",
+            "docker container inspect api", "docker volume ls", "docker system df",
+            "terraform plan", "terraform state list", "terraform -chdir=infra plan",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), {"mainframe-infrastructure"})
+        for command in (
+            "pytest", "python -m pytest tests", "python3 -m unittest discover -s tests",
+            "go test ./...", "node --test test.js", "npm test -- --runInBand",
+            "cargo test", "vitest run", "jest --runInBand",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), {"mainframe-testing"})
+
+    def test_examples_help_versions_unknown_and_dynamic_forms_stay_silent(self) -> None:
+        for command in (
+            "echo 'mainframe-secret run API_TOKEN -- curl https://example.invalid'",
+            "rg 'docker compose up|k3s|pytest' source.py", "cat terraform-plan.txt",
+            "python -c 'print(\"pytest\")'", "bash -c 'curl https://example.invalid'",
+            "env MODE=x pytest", "command curl https://example.invalid",
+            "npm run verify", "npm run deploy", "docker mystery api", "terraform mystery",
+            "docker container mystery", "docker context use", "terraform -chdir= plan",
+            "mainframe-secret help", "mainframe-secret --version", "mainframe-secret run TOKEN --",
+            "mainframe-secret run invalid-name -- pytest", "mainframe-secret list extra",
+            "curl --help all", "curl --version", "curl --config settings https://example.invalid",
+            "curl --unknown https://example.invalid", "k3s server --help",
+            "docker compose --help", "terraform version", "pytest --version",
+            "python3 -m unittest --help", "go help test", "node --version",
+            "sudo pytest", "sudo -u root -n pytest", "ssh -V server 'pytest'",
+            "ssh -o Unknown=yes server 'pytest'", "ssh server pytest -q",
+            "ssh server 'curl \"$URL\"'", "curl \"$URL\"", "curl $(echo https://example.invalid)",
+            "pytest; ssh server 'curl \"$URL\"'", "ssh server 'pytest || echo failed'",
+            "curl https://example.invalid > out", "pytest || echo failed", "pytest &",
+            "pytest; if true; then terraform plan; fi", "pytest 'unterminated",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), set())
+
+    def test_shared_limits_wrapper_depth_and_purity(self) -> None:
+        for command in (
+            "pytest " + "x" * DETECTOR.MAX_COMMAND_BYTES,
+            ";".join("pytest" for _ in range(DETECTOR.MAX_SEGMENTS + 1)),
+            "pytest " + " ".join("x" for _ in range(DETECTOR.MAX_TOKENS + 1)),
+            "sudo -n " * 10 + "pytest", None, "pytest\x00",
+            "ssh server '" + ";".join("pytest" for _ in range(DETECTOR.MAX_SEGMENTS)) + "'",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(DETECTOR.operation_skills(command), set())
+        command = "mainframe-secret run API_TOKEN -- ssh server 'docker compose ps'"
+        expected = {"mainframe-secrets", "mainframe-infrastructure"}
+        with patch("builtins.open", side_effect=AssertionError("content read")), patch(
+            "io.open", side_effect=AssertionError("content read")
+        ), patch("os.stat", side_effect=AssertionError("filesystem inspection")):
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                self.assertEqual(list(executor.map(DETECTOR.operation_skills, [command] * 16)), [expected] * 16)
+
+
 if __name__ == "__main__":
     unittest.main()

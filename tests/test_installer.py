@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from installer.codex import (
     Codex,
+    ROLE_MATCHER,
     HOOK_NAMES,
     PRE_SHELL_TRANSPORT,
     SHELL_HOOK_NAMES,
@@ -99,7 +100,7 @@ class InstallationTests(unittest.TestCase):
         self.install()
         (self.home / "server").mkdir()
         path = self.home / "server/app.py"
-        path.write_text("fixture")
+        path.write_text("from fastapi import FastAPI\napp = FastAPI()\n")
         payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash",
                    "session_id": "reminder-scope", "tool_use_id": "read",
                    "cwd": str(self.home), "tool_input": {"command": "cat " + shlex.quote(str(path))},
@@ -698,12 +699,14 @@ class InstallationTests(unittest.TestCase):
         source = json.loads((self.source / "ADAPTATION.example.json").read_bytes())
         cwd = self.home / "isolated"
         hooks = []
-        for name, matcher, timeout, limit in (
-            ("mainframe-skill-reminder", "^Bash$", 2, 300),
-            ("mainframe-commit-checkpoint", "^apply_patch$", 5, 1000),
+        for name, event, matcher, timeout, limit in (
+            ("mainframe-skill-reminder", "preToolUse", "^Bash$", 2, 300),
+            ("mainframe-skill-reminder", "postToolUse", "^Bash$", 2, 300),
+            ("mainframe-skill-reminder", "subagentStart", ROLE_MATCHER, 2, 300),
+            ("mainframe-commit-checkpoint", "postToolUse", "^apply_patch$", 5, 1000),
         ):
             hooks.append({"command": hook_command(self.adapter.hooks, name, self.adapter.event_state),
-                          "eventName": "postToolUse", "matcher": matcher,
+                          "eventName": event, "matcher": matcher,
                           "timeoutSec": timeout, "additionalContextLimit": limit,
                           "enabled": True, "trustStatus": "trusted", "handlerType": "command",
                           "source": "user", "sourcePath": str(self.adapter.codex / "hooks.json")})
@@ -1084,6 +1087,28 @@ class InstallationTests(unittest.TestCase):
         self.assertFalse(self.adapter.receipt_path.exists())
         result = self.invoke("mainframe-secret-access", "mainframe-secret get synthetic", "Stop", cached=cached)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+    def test_reminder_pretool_and_role_context_use_managed_dispatch(self):
+        self.install()
+        payload={'hook_event_name':'PreToolUse','tool_name':'Bash',
+                 'session_id':'operation','tool_use_id':'call','cwd':str(self.home),
+                 'tool_input':{'command':'curl --disable https://example.invalid/status'}}
+        result=self.invoke_payload('mainframe-skill-reminder',payload)
+        self.assertEqual(result.returncode,0)
+        context=json.loads(result.stdout)['hookSpecificOutput']
+        self.assertEqual(context['hookEventName'],'PreToolUse')
+        self.assertIn('mainframe-curl-requests',context['additionalContext'])
+        self.assertNotIn('permissionDecision',context)
+        payload={'hook_event_name':'SubagentStart','session_id':'operation',
+                 'agent_id':'research-child','agent_type':'mainframe-researcher','cwd':str(self.home)}
+        result=self.invoke_payload('mainframe-skill-reminder',payload)
+        context=json.loads(result.stdout)['hookSpecificOutput']
+        self.assertEqual(context['hookEventName'],'SubagentStart')
+        self.assertIn('mainframe-research',context['additionalContext'])
+        self.assertEqual(self.invoke_payload('mainframe-skill-reminder',payload).stdout,'')
+        (self.adapter.hooks/'.disabled-mainframe-skill-reminder').write_text('')
+        payload['agent_id']='another-child'
+        self.assertEqual(self.invoke_payload('mainframe-skill-reminder',payload).stdout,'')
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ from contextlib import closing
 from datetime import datetime
 import ast
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -14,7 +15,20 @@ import tomllib
 MAX_BYTES = 262144
 TTL = 7 * 86400
 NAMES = {'mainframe-python-backend', 'mainframe-go-backend', 'mainframe-typescript-backend',
-         'mainframe-frontend', 'mainframe-testing', 'mainframe-infrastructure'}
+         'mainframe-frontend', 'mainframe-testing', 'mainframe-infrastructure',
+         'mainframe-secrets', 'mainframe-curl-requests', 'mainframe-clickhouse', 'mainframe-k3s',
+         'mainframe-research', 'mainframe-test-audit', 'mainframe-consequential-review',
+         'mainframe-peer-work'}
+ROLE_SKILLS = {
+    'mainframe-researcher': 'mainframe-research',
+    'mainframe-test-auditor': 'mainframe-test-audit',
+    'mainframe-consequential-reviewer': 'mainframe-consequential-review',
+    'mainframe-go-backend-engineer': 'mainframe-go-backend',
+    'mainframe-python-backend-engineer': 'mainframe-python-backend',
+    'mainframe-typescript-backend-engineer': 'mainframe-typescript-backend',
+    'mainframe-react-frontend-engineer': 'mainframe-frontend',
+}
+ROLE_MATCHER = '^(?:' + '|'.join(ROLE_SKILLS) + ')$'
 
 
 def small_text(path, limit=65536):
@@ -165,9 +179,18 @@ def catalog(home, project, cwd=None):
             if not match:
                 continue
             name = match[1]
-            policy = small_text(directory / 'agents/openai.yaml', 4096)
-            if re.search(r'allow_implicit_invocation:\s*false', policy):
-                continue
+            policy_path = directory / 'agents/openai.yaml'
+            if policy_path.exists() or policy_path.is_symlink():
+                if policy_path.is_symlink() or policy_path.parent.is_symlink():
+                    continue
+                policy = small_text(policy_path, 4096)
+                # Do not reinterpret unreadable/complex YAML as absent policy.
+                # Accept the small explicit opt-in form; richer metadata needs
+                # a native effective-policy source, not a permissive regex.
+                simple = re.fullmatch(
+                    r'''\s*(?P<outer>["']?)policy(?P=outer):[ \t]*\n[ \t]+(?P<inner>["']?)allow_implicit_invocation(?P=inner):[ \t]*true\s*''', policy)
+                if not simple:
+                    continue
             if root == home / 'skills' and name in NAMES:
                 available[name] = path
             elif root != home / 'skills' and name.endswith('-engineering') and name in binding:
@@ -209,70 +232,107 @@ def advisory(data, state, hooks, detector):
 
 
 def _advisory(data, state, hooks, detector):
-    session, operation, cwd = (data.get(k) for k in ('session_id','tool_use_id','cwd'))
-    if not all(isinstance(v,str) and 0 < len(v) <= 4096 for v in (session,operation,cwd)) or not Path(cwd).is_absolute():
+    event = data.get('hook_event_name', 'PostToolUse')
+    if event not in {'PreToolUse', 'PostToolUse', 'SubagentStart'}:
         return None
-    response = data.get('tool_response')
-    success = (isinstance(response,dict) and type(response.get('exit_code')) is int
-               and response['exit_code'] == 0 and response.get('isError') is not True)
-    # Native Bash exposes raw output text, not an exit-status envelope. A
-    # completed read attempt can warrant advice even when success is unknown.
-    # Never parse file content as a status or proof that a method was read.
-    if not success and not isinstance(response, str):
+    session, cwd = (data.get(k) for k in ('session_id', 'cwd'))
+    if not all(isinstance(v, str) and 0 < len(v) <= 4096 for v in (session, cwd)) or not Path(cwd).is_absolute():
         return None
-    command = data.get('tool_input',{}).get('command')
-    # Cheap relevance gate before catalog or transcript IO.
-    if not isinstance(command,str) or not re.search(r'\b(cat|sed|head|tail|rg)\b', command):
+    agent = data.get('agent_id')
+    if agent is not None and (not isinstance(agent, str) or not agent or len(agent) > 512):
         return None
-    home = hooks.parent.parent
-    try:
-        hint = workdir_hint(data, home)
-    except (OSError, ValueError, TypeError):
-        hint = None
-    paths = detector.read_targets(command, hint)
-    if not paths:
-        return None
+    if event == 'SubagentStart':
+        if not agent or data.get('agent_type') not in ROLE_SKILLS:
+            return None
+        role = ROLE_SKILLS[data['agent_type']]
+        command = ''; paths = []; operations = set()
+    else:
+        operation = data.get('tool_use_id')
+        if not isinstance(operation, str) or not 0 < len(operation) <= 4096:
+            return None
+        command = data.get('tool_input', {}).get('command')
+        if not isinstance(command, str) or len(command) > 32768:
+            return None
+        if event == 'PostToolUse':
+            response = data.get('tool_response')
+            success = (isinstance(response, dict) and type(response.get('exit_code')) is int
+                       and response['exit_code'] == 0 and response.get('isError') is not True)
+            if not success and not isinstance(response, str):
+                return None
+        operations = detector.operation_skills(command) if event == 'PreToolUse' else set()
+        if event == 'PreToolUse' and not operations:
+            return None
+        paths = []
+        if event == 'PostToolUse' and re.search(r'\b(cat|sed|head|tail|rg)\b', command):
+            try:
+                hint = workdir_hint(data, hooks.parent.parent)
+            except (OSError, ValueError, TypeError):
+                hint = None
+            paths = detector.read_targets(command, hint)
+        if len(paths) > 8:
+            return None
+        if event == 'PostToolUse' and not paths:
+            return None
+        role = None
     project = project_root(cwd)
     if project is None:
         return None
-    agent = data.get('agent_id')
-    if agent is not None and (not isinstance(agent,str) or not agent or len(agent)>512):
-        return None
     scope = hashlib.sha256((session+'\0'+(agent or 'root')+'\0'+str(project)).encode()).hexdigest()
-    methods, project_method = catalog(home,project,cwd)
-    candidates = set(); project_read = False
+    methods, project_method = catalog(hooks.parent.parent, project, cwd)
+    candidates = set(operations) & methods.keys()
+    if role:
+        candidates = {role} & methods.keys()
+    project_read = False
     all_methods = dict(methods)
-    if project_method: all_methods[project_method[0]]=project_method[1]
+    if project_method:
+        all_methods[project_method[0]] = project_method[1]
+    profile = None
+    profile_path = Path(__file__).with_name('skill_profiles.py')
+    if paths and profile_path.is_file() and not profile_path.is_symlink():
+        spec = importlib.util.spec_from_file_location('mainframe_skill_profiles', profile_path)
+        if spec and spec.loader:
+            profile = importlib.util.module_from_spec(spec); spec.loader.exec_module(profile)
     for raw in paths:
-        path = Path(raw).resolve()
+        original = Path(raw)
+        if original.is_symlink() or any(parent.is_symlink() and parent.resolve().is_relative_to(project) for parent in original.parents):
+            continue
+        path = original.resolve()
+        # An explicit attempt already demonstrates method awareness; it does not
+        # prove read success or application. Repeating advice cannot repair a read.
         for name, skillpath in all_methods.items():
-            if success and path == skillpath.resolve(): reserve(state,scope,name,seen=True)
+            if path == skillpath.resolve():
+                reserve(state, scope, name, seen=True)
         if not path.is_relative_to(project):
             continue
         rel = path.relative_to(project)
-        if any(p in {'.git','.agents','.codex','node_modules','vendor','dist','build','.venv'} for p in rel.parts):
+        if any(p.lower() in {'.git', '.agents', '.codex', 'node_modules', 'vendor', 'dist', 'build', '.venv', 'fixtures', '__fixtures__', 'examples', 'testdata'} for p in rel.parts):
+            continue
+        if not path.is_file() or Path(raw).is_symlink():
             continue
         project_read = True
-        candidate = detector.candidate_skill(str(rel))
-        if candidate == 'mainframe-frontend':
-            package = {}
-            for parent in (path.parent,*list(path.parents)[:6]):
-                if parent.is_relative_to(project):
-                    text=small_text(parent/'package.json')
-                    if text: package=json.loads(text);break
-            if 'react' not in {**package.get('dependencies',{}),**package.get('devDependencies',{})}:
-                continue
-        if candidate in methods:candidates.add(candidate)
-    if project_read and project_method and reserve(state,scope,project_method[0]):
-        chosen=project_method
-    elif len(candidates)==1:
-        name=candidates.pop()
-        if not reserve(state,scope,name):return None
-        chosen=(name,methods[name])
+        if detector.candidate_skill(str(rel)) == 'mainframe-testing':
+            candidates.add('mainframe-testing')
+        elif profile:
+            candidates.update(profile.candidates(path, project))
+    candidates &= methods.keys()
+    if candidates & {'mainframe-k3s', 'mainframe-clickhouse'}:
+        candidates.discard('mainframe-infrastructure')
+    # Credential delivery is an independent operation; prefer it once before
+    # the consumer method, while preserving the shared per-recipient budget.
+    if 'mainframe-secrets' in candidates and reserve(state, scope, 'mainframe-secrets'):
+        chosen = ('mainframe-secrets', methods['mainframe-secrets'])
     else:
-        return None
-    name,path=chosen
-    # Encode untrusted path text, never splice skill descriptions or file content.
-    location=json.dumps(str(path),ensure_ascii=True)
+        candidates.discard('mainframe-secrets')
+        if len(candidates) == 1:
+            name = candidates.pop()
+            if not reserve(state, scope, name):
+                return None
+            chosen = (name, methods[name])
+        elif not candidates and project_read and project_method and reserve(state, scope, project_method[0]):
+            chosen = project_method
+        else:
+            return None
+    name, path = chosen
+    location = json.dumps(str(path), ensure_ascii=True)
     return (f'MAINFRAME skill reminder: consider `{name}` at {location} for this work. '
             'Read it if relevant and not already applied. This advisory does not change your task or authority.')

@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-10-02.
+Last reviewed: 2026-10-03.
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -43,7 +43,7 @@ checked against their Git blob hashes.
   now supplies the local environment's `cwd` for pre/post tool events, falling
   back to the turn directory. This still does not identify a shell call's own
   working directory. `Stop` retains the turn directory. Forked subagents now
-  receive start events; MAINFRAME does not bind that event.
+  receive start events; the later reminder extension below binds exact specialized roles.
 - The [command runner](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/hooks/src/engine/command_runner.rs)
   drains output while writing input and includes both in the timeout. Unix
   handlers launch in a new process session; restricted environment names are
@@ -420,3 +420,32 @@ relative read for the testing suggestion and read/applied the suggested method
 to distinguish synthetic test assertions from native delivery evidence. This
 proves those two recipient sequences, not a universal rate of useful selection
 or coverage of arbitrary shell syntax. Temporary callback probes were removed.
+
+
+### Expanded reminder bindings
+
+The same current Desktop binary embeds `subagent-start.command.input/output`:
+`agent_id`, `agent_type`, and nonblocking `additionalContext` are available. The
+[official event contract](https://learn.chatgpt.com/docs/hooks) directs this
+context to the child before work. The adapter matches only its seven exact
+MAINFRAME roles, retaining recipient isolation. Generic roles remain silent.
+
+Explicit supported operations use `PreToolUse` Bash; bounded source/package
+profiles use `PostToolUse` Bash. A pre-tool advisory is not a guard and does not
+prove the model reconsidered its already-submitted command. Both share the same
+three-suggestion budget and once-per-method state with role-start advice.
+Explicit attempts to read an available skill suppress redundant advice as
+awareness evidence, without claiming successful reading or application.
+
+Disposable-home tests exercise all three native output envelopes, packaging,
+disablement, reconciliation and duplicate suppression. Native activation of new
+registrations remains separate from these checks and may require user trust.
+See the [routing matrix](../../../hooks/skill-reminder-routing.md) for supported
+forms and deliberate silence; historical acceptance above covers the earlier
+read-only bindings, not these new event sequences.
+
+Expanded bindings were delivered on 2026-10-03; managed verification converged
+with zero changes. A subsequent bounded HTTP probe produced no new reminder
+state or model receipt in the existing task. Native trust/reload acceptance for
+these new bindings remains pending; no claim of live role-start delivery follows
+from registration or the packaged tests.

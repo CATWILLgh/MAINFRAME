@@ -8,7 +8,7 @@ import tempfile
 import threading
 import time
 
-from .codex import HOOK_NAMES, PRE_SHELL_TRANSPORT, SHELL_HOOK_NAMES, hook_command, inventory
+from .codex import ROLE_MATCHER, HOOK_NAMES, PRE_SHELL_TRANSPORT, SHELL_HOOK_NAMES, hook_command, inventory
 from .core import Conflict
 from .runtime import runtime_bin
 
@@ -130,8 +130,10 @@ def summarize(adapter, source, skill_result, hook_result, cwd):
                  "additionalContextLimit": None},
             ]
             if name == "mainframe-code-quality"
-            else [{"eventName": "postToolUse", "matcher": "^Bash$", "timeoutSec": 2,
-                   "additionalContextLimit": 300}] if name == "mainframe-skill-reminder"
+            else [{"eventName": event, "matcher": matcher, "timeoutSec": 2,
+                   "additionalContextLimit": 300} for event, matcher in
+                  (("preToolUse", "^Bash$"), ("postToolUse", "^Bash$"), ("subagentStart", ROLE_MATCHER))]
+            if name == "mainframe-skill-reminder"
             else [{"eventName": "postToolUse", "matcher": "^apply_patch$", "timeoutSec": 5,
                    "additionalContextLimit": 1000}] if name == "mainframe-commit-checkpoint"
             else [{"eventName": "preToolUse", "matcher": "^Bash$", "timeoutSec": 5,

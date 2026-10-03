@@ -305,7 +305,7 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
         ]
         return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
     if name == "mainframe-skill-reminder":
-        if event != "PostToolUse" or data.get("tool_name") != "Bash":
+        if event != "SubagentStart" and (event not in {"PreToolUse", "PostToolUse"} or data.get("tool_name") != "Bash"):
             return None
         helper = ROOT / "skill_reminder.py"
         if not helper.is_file() or helper.is_symlink():

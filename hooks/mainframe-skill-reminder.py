@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract bounded literal read intent; never execute or inspect source content.
+"""Extract bounded literal read/operation intent without execution or source IO.
 
 Accepted shell grammar is a sequence of simple commands separated by ``;``,
 newlines, or ``&&``, optionally with pipelines of supported readers. Readers
@@ -20,6 +20,10 @@ not claims about file existence, symlink resolution, or actual command execution
 Calls have no IO, subprocess, network, state, environment, or content reads.
 Commands over 32768 UTF-8 bytes, 512 tokens, 64 simple commands, 128 unique
 targets, or paths over 4096 UTF-8 bytes return no targets (never a partial list).
+
+The separate ``operation_skills`` API reuses that literal grammar for narrow
+credential, HTTP transfer, cluster, infrastructure and test-runner candidates.
+Its documented wrapper subset does not expand the read-target grammar.
 """
 
 from __future__ import annotations
@@ -336,6 +340,340 @@ def read_targets(command: str, cwd: str | None) -> list[str]:
         return result
     except (UnicodeError, ValueError, TypeError):
         return []
+
+
+MAX_OPERATION_DEPTH = 6
+_HELP_VERSION = {"--help", "-h", "--version", "-V"}
+
+
+def _operation_operands(
+    args: list[str], flags: set[str], values: set[str],
+    option_values: dict[str, list[str]] | None = None,
+) -> list[str] | None:
+    """Separate known options from literal operands; unknown syntax is silent."""
+    operands: list[str] = []
+    index = 0
+    options = True
+    while index < len(args):
+        arg = args[index]
+        option: str | None = None
+        value: str | None = None
+        if options and arg == "--":
+            options = False
+        elif options and arg.startswith("--"):
+            name, equal, attached = arg.partition("=")
+            if name in flags and not equal:
+                pass
+            elif name in values:
+                option, value = name, attached if equal else None
+            else:
+                return None
+        elif options and arg.startswith("-") and arg != "-":
+            for offset, letter in enumerate(arg[1:]):
+                name = "-" + letter
+                if name in flags:
+                    continue
+                if name in values:
+                    option, value = name, arg[offset + 2 :] or None
+                    break
+                return None
+        else:
+            operands.append(arg)
+        if option is not None:
+            if value is None:
+                index += 1
+                if index == len(args):
+                    return None
+                value = args[index]
+            protocol_mask = option in {"--proto", "--proto-redir"} and re.fullmatch(
+                r"[=+-]?[A-Za-z0-9]+(?:,[=+-]?[A-Za-z0-9]+)*", value
+            )
+            if not value or (value.startswith("-") and not protocol_mask):
+                return None
+            if option_values is not None:
+                option_values.setdefault(option, []).append(value)
+            if option == "--url":
+                operands.append(value)
+        index += 1
+    return operands
+
+
+def _curl_transfer(args: list[str]) -> bool:
+    operands = _operation_operands(
+        args,
+        {"-f", "-s", "-S", "-I", "-L", "-k", "-v", "-i", "-O", "-N", "-q", "--disable",
+         "--fail", "--fail-with-body", "--silent", "--show-error", "--head",
+         "--location", "--insecure", "--verbose", "--include", "--compressed",
+         "--remote-name", "--no-buffer", "--http1.1", "--http2"},
+        {"-X", "-H", "-d", "-o", "-u", "-A", "-m", "-T", "-F", "-b", "-c", "-w",
+         "--request", "--header", "--data", "--data-raw", "--data-binary", "--data-urlencode",
+         "--output", "--user", "--user-agent", "--max-time", "--connect-timeout",
+         "--retry", "--retry-delay", "--upload-file", "--form", "--cookie",
+         "--cookie-jar", "--cacert", "--cert", "--key", "--url", "--proto",
+         "--proto-redir", "--write-out", "--max-redirs"},
+    )
+    # Every positional operand is a transfer URL, not a guessed default protocol.
+    return bool(operands) and all(re.fullmatch(r"https?://[^/\s?#]+(?:[^\s]*)", url) for url in operands)
+
+
+def _clickhouse_operation(args: list[str], piped_input: bool) -> bool:
+    """Recognize explicit native-client input, without reading SQL or config."""
+    option_values: dict[str, list[str]] = {}
+    operands = _operation_operands(
+        args,
+        {"--secure", "--multiquery", "-n", "--multiline", "-m", "--time", "-t", "--vertical", "-E"},
+        {"--query", "-q", "--queries-file", "--host", "--port", "--user", "-u", "--password",
+         "--database", "-d", "--format", "-f", "--input-format", "--output-format", "--query_id",
+         "--max_execution_time", "--max_result_rows", "--max_result_bytes", "--max_memory_usage", "--readonly"},
+        option_values,
+    )
+    return operands == [] and (piped_input or bool(
+        option_values.keys() & {"--query", "-q", "--queries-file"}
+    ))
+
+
+def _codex_peer_operation(args: list[str]) -> bool:
+    """Match documented headless syntax; relevance never establishes authority."""
+    if not args or args[0] != "exec":
+        return False
+    option_values: dict[str, list[str]] = {}
+    operands = _operation_operands(
+        args[1:], {"--json"},
+        {"-C", "--cd", "-s", "--sandbox", "-o", "--output-last-message"},
+        option_values,
+    )
+    if not operands or any(not operand for operand in operands):
+        return False
+    if any(value not in {"read-only", "workspace-write", "danger-full-access"}
+           for option in {"-s", "--sandbox"} for value in option_values.get(option, [])):
+        return False
+    if operands[0] == "resume":
+        if "--" in args:
+            prefix = _operation_operands(
+                args[1:args.index("--")], {"--json"},
+                {"-C", "--cd", "-s", "--sandbox", "-o", "--output-last-message"},
+            )
+            if not prefix or prefix[0] != "resume":
+                return False  # A word after -- is prompt data, not a subcommand.
+        return len(operands) in {2, 3} and bool(re.fullmatch(
+            r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", operands[1]
+        ))
+    # One literal prompt or explicit '-' input; implicit input and other native
+    # subcommands are outside this route, as are most-recent/name-based resumes.
+    return len(operands) == 1 and operands[0] not in {"help", "review"}
+
+
+def _ssh_remote(args: list[str]) -> str | None:
+    index = 0
+    while index < len(args) and args[index].startswith("-"):
+        arg = args[index]
+        if arg == "--":
+            index += 1
+            break
+        if arg in {"-T", "-t", "-n", "-q", "-v", "-vv", "-vvv", "-4", "-6"}:
+            index += 1
+            continue
+        if arg not in {"-p", "-l", "-i", "-o"} or index + 1 == len(args):
+            return None
+        value = args[index + 1]
+        if not value or value.startswith("-"):
+            return None
+        if arg == "-p" and not re.fullmatch(r"\d{1,5}", value):
+            return None
+        if arg == "-o" and value.partition("=")[0] not in {
+            "BatchMode", "ConnectTimeout", "StrictHostKeyChecking", "UserKnownHostsFile",
+            "LogLevel", "IdentitiesOnly", "ServerAliveInterval",
+        }:
+            return None
+        if arg == "-o" and "=" not in value:
+            return None
+        index += 2
+    # OpenSSH joins command operands, losing their original quoting. Only one
+    # literal remote shell string can be reparsed without inventing that syntax.
+    if len(args) - index != 2 or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.@:-]*", args[index]):
+        return None
+    return args[index + 1]
+
+
+def _k3s_operation(args: list[str]) -> bool:
+    if not args:
+        return False
+    if args[0] in {"server", "agent"}:
+        return True
+    if args[0] == "etcd-snapshot":
+        return len(args) > 1 and args[1] in {"save", "list", "delete", "prune"}
+    if args[0] != "kubectl":
+        return False
+    operands = _operation_operands(
+        args[1:],
+        {"-A", "--all-namespaces", "--all", "--no-headers", "--show-labels",
+         "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--watch", "-w"},
+        {"-n", "--namespace", "-o", "--output", "-l", "--selector", "--context",
+         "--kubeconfig", "--request-timeout", "--timeout", "--grace-period", "--field-selector"},
+    )
+    if not operands:
+        return False
+    if operands[0] in {"drain", "cordon", "uncordon"}:
+        return len(operands) >= 2
+    if operands[0] == "cluster-info":
+        return len(operands) == 1
+    resources = {"node", "nodes", "no", "namespace", "namespaces", "ns",
+                 "persistentvolume", "persistentvolumes", "pv", "storageclass", "storageclasses", "sc",
+                 "customresourcedefinition", "customresourcedefinitions", "crd", "crds",
+                 "clusterrole", "clusterroles", "clusterrolebinding", "clusterrolebindings"}
+    if operands[0] not in {"get", "describe", "delete", "taint", "label", "annotate"} or len(operands) < 2:
+        return False
+    return all(resource in resources for resource in operands[1].split(","))
+
+
+def _infrastructure_operation(executable: str, args: list[str]) -> bool:
+    if executable == "terraform":
+        if args and args[0].startswith("-chdir="):
+            if args[0] == "-chdir=":
+                return False
+            args = args[1:]
+        return bool(args) and args[0] in {
+            "init", "plan", "apply", "destroy", "validate", "fmt", "show", "output",
+            "state", "workspace", "import", "refresh", "taint", "untaint", "providers",
+        }
+    if executable != "docker":
+        return False
+    index = 0
+    while index < len(args) and args[index].startswith("-"):
+        arg = args[index]
+        if arg in {"--tls", "--tlsverify", "-D", "--debug"}:
+            index += 1
+        elif arg in {"--context", "-c", "--host", "-H", "--config", "--tlscacert", "--tlscert", "--tlskey"}:
+            if index + 1 == len(args) or not args[index + 1] or args[index + 1].startswith("-"):
+                return False
+            index += 2
+        elif any(arg.startswith(option + "=") and arg != option + "=" for option in {"--context", "--host", "--config"}):
+            index += 1
+        else:
+            return False
+    args = args[index:]
+    if not args:
+        return False
+    if args[0] == "compose":
+        # Only parse Compose global options before its subcommand. Operation
+        # options belong to that subcommand and do not need to become operands.
+        for offset, arg in enumerate(args[1:]):
+            if arg in {"up", "down", "start", "stop", "restart", "ps", "logs", "build", "pull", "push", "config", "exec", "run"}:
+                prefix = _operation_operands(args[1:offset + 1], {"--compatibility"},
+                                              {"-f", "--file", "-p", "--project-name", "--profile", "--project-directory"})
+                return prefix == []
+        return False
+    resource_operations = {
+        "container": {"ls", "inspect", "logs", "run", "exec", "start", "stop", "restart", "kill", "rm", "prune"},
+        "image": {"ls", "inspect", "build", "pull", "push", "rm", "prune", "tag"},
+        "network": {"ls", "inspect", "create", "rm", "prune", "connect", "disconnect"},
+        "volume": {"ls", "inspect", "create", "rm", "prune"},
+        "system": {"df", "info", "prune"},
+    }
+    if args[0] in resource_operations:
+        return len(args) >= 2 and args[1] in resource_operations[args[0]]
+    return args[0] in {"ps", "inspect", "logs", "run", "exec", "start", "stop", "restart", "kill",
+                       "build", "pull", "push", "info", "stats", "wait", "rm", "rmi", "images"}
+
+
+def _operation_argv(
+    argv: list[str], depth: int, remote: bool, budget: list[int], piped_input: bool = False,
+) -> set[str]:
+    if depth > MAX_OPERATION_DEPTH:
+        raise ValueError("wrapper depth limit")
+    if not argv or any(arg in _HELP_VERSION for arg in argv[1:]):
+        return set()
+    executable, args = posixpath.basename(argv[0]), argv[1:]
+    if executable == "sudo":
+        if not args or args[0] != "-n":
+            return set()
+        consumer = args[2:] if len(args) > 1 and args[1] == "--" else args[1:]
+        return _operation_argv(consumer, depth + 1, remote, budget, piped_input)
+    if executable == "ssh":
+        command = _ssh_remote(args)
+        return _operation_sequence(command, depth + 1, True, budget) if command else set()
+    if executable == "mainframe-secret":
+        if not args:
+            return set()
+        valid_name = lambda name: bool(re.fullmatch(r"[A-Z_][A-Z0-9_]*", name))
+        if args[0] == "run" and "--" in args:
+            boundary = args.index("--")
+            if boundary < 2 or boundary + 1 == len(args) or not all(valid_name(name) for name in args[1:boundary]):
+                return set()
+            return {"mainframe-secrets"} | _operation_argv(args[boundary + 1:], depth + 1, remote, budget, piped_input)
+        if (args[0] in {"list", "edit"} and len(args) == 1) or (
+            args[0] in {"get", "copy", "del"} and len(args) == 2 and valid_name(args[1])
+        ) or (args[0] == "set" and len(args) == 3 and valid_name(args[1]) and args[2] in {"--clipboard", "--prompt"}):
+            return {"mainframe-secrets"}
+        return set()
+    if executable == "curl" and _curl_transfer(args):
+        return {"mainframe-curl-requests"}
+    if executable == "clickhouse-client" or (executable == "clickhouse" and args and args[0] == "client"):
+        client_args = args[1:] if executable == "clickhouse" else args
+        return {"mainframe-clickhouse"} if _clickhouse_operation(client_args, piped_input) else set()
+    if executable == "codex" and _codex_peer_operation(args):
+        return {"mainframe-peer-work"}
+    if executable == "k3s" and _k3s_operation(args):
+        return {"mainframe-k3s"}
+    if executable == "systemctl" and len(args) == 2 and args[0] in {"start", "stop", "restart", "status", "show", "is-active"} and args[1] in {"k3s", "k3s.service", "k3s-agent", "k3s-agent.service"}:
+        return {"mainframe-k3s"}
+    if _infrastructure_operation(executable, args):
+        return {"mainframe-infrastructure"}
+    if executable in {"pytest", "py.test", "jest", "vitest"} or (
+        executable in {"go", "cargo", "npm"} and args and args[0] == "test"
+    ) or (executable == "node" and args and args[0] == "--test"):
+        return {"mainframe-testing"}
+    if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable):
+        while args and args[0] in {"-B", "-I", "-E", "-s"}:
+            args = args[1:]
+        if len(args) >= 2 and args[0] == "-m" and args[1] in {"pytest", "unittest"}:
+            return {"mainframe-testing"}
+    return set()
+
+
+def _operation_sequence(command: str, depth: int, remote: bool, budget: list[int]) -> set[str]:
+    if depth > MAX_OPERATION_DEPTH or len(command.encode("utf-8")) > MAX_COMMAND_BYTES:
+        raise ValueError("operation size/depth limit")
+    tokens = _tokens(command)
+    if tokens is None:
+        raise ValueError("non-literal shell")
+    commands = _commands(tokens)
+    budget[0] += len(tokens)
+    budget[1] += len(commands)
+    if budget[0] > MAX_TOKENS or budget[1] > MAX_SEGMENTS:
+        raise ValueError("aggregate operation limit")
+    result: set[str] = set()
+    for index, (argv, _) in enumerate(commands):
+        piped_input = index > 0 and commands[index - 1][1] == "|"
+        result.update(_operation_argv(argv, depth, remote, budget, piped_input))
+    return result
+
+
+def operation_skills(command: str) -> set[str]:
+    """Return literal operation candidates, without IO, execution or authority.
+
+    The read tokenizer's shell and size limits also apply here, including across
+    nested SSH strings. Only ``sudo -n [--]``, the canonical credential helper,
+    and SSH with known options and one literal remote command string unwrap.
+    Remote identity remains explicit throughout recursion; no command, including
+    a direct local-looking lifecycle command, establishes the independent local
+    executor evidence needed for ``mainframe-ops-app-server-safety``.
+
+    Known HTTP curl transfers, native ClickHouse clients with explicit query/file
+    or pipeline input, K3s cluster operations, Docker/Terraform operations and
+    named test runners and documented Codex exec/exact-ID resume forms are
+    candidates. Peer relevance does not establish product-assignment authority.
+    Bare kubectl, application-only K3s
+    pod work, opaque shell wrappers, config-loaded/dynamic commands, arbitrary
+    package scripts and help/version requests stay silent. A malformed nested
+    string or exceeded limit silences the complete result, never a partial set.
+    """
+    if not isinstance(command, str):
+        return set()
+    try:
+        return _operation_sequence(command, 0, False, [0, 0])
+    except (UnicodeError, ValueError, TypeError):
+        return set()
 
 
 def candidate_skill(relative_path: str) -> str | None:

@@ -1,10 +1,10 @@
 # Skill reminder route candidates
 
-This is an extension design, not the installed routing table. The current
-[hook contract](README.md#adapt-mainframe-skill-reminder) and detector remain
-unchanged. Candidate rules need positive and negative regression cases and
-native adapter evidence before activation. Do not turn this matrix into
-keyword matching or claim every row is available in the Codex Bash event.
+This matrix records both implemented and deferred routes. See the current
+[hook contract](README.md#adapt-mainframe-skill-reminder) for delivery behavior.
+Rows below retain candidate reasoning; the implementation status table is
+authoritative for which subsets are active. Do not turn the matrix into keyword
+matching or claim every row is available in the Codex Bash event.
 
 A bounded local investigation of real receiving-project sessions found literal
 commands, credential wrappers, remote command strings, inline programs, project
@@ -79,3 +79,23 @@ miss, ambiguity/disable/duplicate cases, and a bounded native receipt check.
 Corpus search hits are candidates; manual interpretation is not a trained or
 validated production classifier. Keep emitted-message counts separate from
 actual relevance and subsequent method application.
+
+## Implementation status
+
+| Subset | Event / outcome | Explicit remaining boundary |
+| --- | --- | --- |
+| Credential helper, HTTP curl, ClickHouse client, K3s cluster operation, Docker/Terraform, named test runners, explicit Codex headless peer work | Codex `PreToolUse` Bash | Only bounded literal supported syntax; no command rewrite or guard; no proof the first operation used the method |
+| Backend module, React web application, ClickHouse integration, infrastructure configuration | Codex `PostToolUse` Bash reads with bounded source/package evidence | Eight read targets maximum; fixtures, generated files, secret/key files, unsafe paths and ambiguous ownership stay silent |
+| Researcher, test auditor, consequential reviewer and four engineering roles | Codex `SubagentStart` exact native MAINFRAME role | Generic/default/explorer roles do not establish the specialized task |
+| Project engineering method | Project-guidance-bound unique method after an otherwise unclassified project read | Does not displace a recognized specialist or repeat after the specialist was already suggested |
+| Local application-server safety | Not automatically selected; identifiable Docker/runtime work can receive infrastructure advice | Current Bash payload and outer-call workdir hint do not prove local executor/target identity. Remote and tunneled endpoints remain possible |
+| Project-problem and harness-feedback recording | Deferred, existing explicit skill selection remains | Queue reads also occur in triage/implementation; native payload does not establish an unresolved out-of-scope issue or an actual harness defect. Permission refusal alone is not such evidence |
+| Project-harness audit/repair | Deferred, existing explicit skill selection remains | Ordinary configuration reads/edits do not establish the required fault/audit purpose; no stable structured finding is available to this adapter |
+| External-agent peer work | Narrow documented `codex exec` / exact-ID resume syntax uses `PreToolUse`; other products remain unclassified | No actual invocation in the bounded corpus: positive cases are documented-syntax fixtures, not historical use. Invocation syntax identifies method relevance, never assigned-product authority. No CLI is launched merely to invent a test |
+
+Deferred does not mean intrinsically impossible. Revisit a route when a native
+role, attributable structured finding or established project workflow supplies
+the missing distinction. Do not use UserPromptSubmit/Stop to guess intent from
+keywords or force extra model turns, and do not scan full conversations in the
+hook. The current native tool inventory exposed no ClickHouse/K3s MCP tool with
+a verified identity to bind; unknown MCP tool names remain unclassified.
