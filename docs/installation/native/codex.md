@@ -445,7 +445,15 @@ forms and deliberate silence; historical acceptance above covers the earlier
 read-only bindings, not these new event sequences.
 
 Expanded bindings were delivered on 2026-10-03; managed verification converged
-with zero changes. A subsequent bounded HTTP probe produced no new reminder
-state or model receipt in the existing task. Native trust/reload acceptance for
-these new bindings remains pending; no claim of live role-start delivery follows
-from registration or the packaged tests.
+with zero changes. Before user trust a bounded HTTP probe produced no new state
+or model receipt. After trust, the root received `mainframe-curl-requests` on
+PreToolUse, read the method and applied its request guidance; a second bounded
+HTTP request produced no duplicate. Existing recipient state was not reset.
+
+A fresh native `mainframe-test-auditor` received `mainframe-test-audit` context
+before its first tool and applied that method. An absolute test-file read then
+received `mainframe-testing` through PostToolUse; the identical repeated read
+was silent. Earlier relative reads without explicit workdir remained silent,
+as designed. Reading a supporting reference alone does not mark SKILL.md as
+read. These sequences establish all three event routes and recipient-level
+repeat suppression, not universal relevance or every command/profile variant.
