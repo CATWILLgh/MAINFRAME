@@ -474,3 +474,7 @@ and useful application require separate observations from a successful callback.
 
 The initial maintained adapter is Codex only. Other products record pending
 adaptation, not an invented impossibility or a generic instruction substitute.
+
+Candidate extensions and per-skill counterexamples are documented in
+[the routing design](skill-reminder-routing.md). These candidates are not
+installed routes; activate them only with their required evidence and tests.
