@@ -102,3 +102,8 @@ the missing distinction. Do not use UserPromptSubmit/Stop to guess intent from
 keywords or force extra model turns, and do not scan full conversations in the
 hook. The current native tool inventory exposed no ClickHouse/K3s MCP tool with
 a verified identity to bind; unknown MCP tool names remain unclassified.
+
+Explicit initial literal `cat .../SKILL.md` attempts suppress later advice even
+when a complex suffix prevents full read-command parsing. This suppression-only
+fallback does not classify source files, inspect later branches, or prove that
+the method was read successfully or applied.

@@ -115,6 +115,22 @@ class ReminderTests(unittest.TestCase):
         self.data['tool_input']['command']='cat server/app.py'
         self.assertIsNone(self.invoke())
 
+    def test_initial_skill_cat_in_complex_command_suppresses_advice(self):
+        self.data['tool_input']['command']='cat '+str(self.skill)+'; sed -n "1,40p" server/app.py 2>/dev/null || true'
+        self.assertIsNone(self.invoke())
+        self.data['tool_input']['command']='cat server/app.py'
+        self.assertIsNone(self.invoke())
+
+    def test_initial_skill_read_fallback_does_not_expand_routing(self):
+        skill=str(self.skill)
+        for command in ('echo "cat '+skill+'"; true',
+                        'false && cat '+skill,
+                        'cat "$(echo '+skill+')"; true',
+                        'cat server/app.py; unsupported > /dev/null'):
+            with self.subTest(command=command):
+                self.assertEqual(reminder.initial_skill_read(command,None,detector),[])
+        self.assertEqual(reminder.initial_skill_read('cat "'+skill+'" 2>/dev/null || true',None,detector),[skill])
+
     def test_native_raw_output_is_not_a_status_envelope(self):
         self.data['tool_response']='ordinary file content'
         self.assertIn('mainframe-python-backend', self.invoke())

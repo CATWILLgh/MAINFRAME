@@ -75,6 +75,21 @@ def literal_calls(source):
     return results
 
 
+def initial_skill_read(command, hint, detector):
+    """Suppress advice for an explicit initial cat; never infer other candidates.
+
+    A complex suffix can prevent whole-command parsing. The first literal read
+    still demonstrates awareness, regardless of whether its output was retained.
+    Do not scan later branches, printed examples, substitutions or arbitrary files.
+    """
+    match = re.match(
+        r'''^\s*(?:cat|/bin/cat)\s+(?:'[^']*'|"[^"\\]*(?:\\.[^"\\]*)*"|[^\s;|&<>]+)(?=\s*(?:;|&&|\|\||[12]?>|$))''', command)
+    if not match:
+        return []
+    paths = detector.read_targets(match[0], hint)
+    return [path for path in paths if Path(path).name == 'SKILL.md']
+
+
 def workdir_hint(data, home):
     """Unique recent literal command/workdir hint, not exact nested-call attribution.
 
@@ -269,6 +284,8 @@ def _advisory(data, state, hooks, detector):
             except (OSError, ValueError, TypeError):
                 hint = None
             paths = detector.read_targets(command, hint)
+            if not paths:
+                paths = initial_skill_read(command, hint, detector)
         if len(paths) > 8:
             return None
         if event == 'PostToolUse' and not paths:
