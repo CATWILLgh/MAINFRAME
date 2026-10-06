@@ -19,7 +19,7 @@ import tomllib
 from .codex_skill_reminder import ROLE_MATCHER
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, reconcile_files, regular_bytes, retire_recorded_legacy_file)
-from .shared import BEGIN, END, _instruction, inventory
+from .shared import BEGIN, END, _instruction, inventory, skill_resources
 from .state import component_keys, reconcile_state, set_component
 from .runtime import CODE_QUALITY_TOOLS, runtime_bin
 
@@ -389,13 +389,10 @@ class Codex:
             if path in artifacts:
                 raise Conflict(f"Two components map to the same destination: {path}")
             artifacts[path] = (data, mode, component, retain)
+        resources = skill_resources(self.root, source)
         for name, entry in source["components"]["skills"].items():
             skill = self.root / entry["source"]
-            for path in sorted(skill.rglob("*")):
-                if path.is_symlink():
-                    raise Conflict(f"Canonical skill resource is a symlink: {path}")
-                if not path.is_file() or "__pycache__" in path.parts or path.name == ".DS_Store":
-                    continue
+            for path in resources[name]:
                 data = path.read_bytes()
                 if path.suffix in {".md", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml", ".txt"}:
                     data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode())

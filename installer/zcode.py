@@ -16,7 +16,7 @@ import tempfile
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, regular_bytes, reconcile_files, retire_recorded_legacy_file)
 from .runtime import CODE_QUALITY_TOOLS, runtime_bin
-from .shared import inventory, _instruction
+from .shared import inventory, _instruction, skill_resources
 from .state import reconcile_state, set_component
 
 KNOWN_RUNTIME = "3.11.2.6792"
@@ -324,13 +324,10 @@ class ZCode:
             if path in result:
                 raise Conflict("Duplicate ZCode destination: " + str(path))
             result[path] = (data, mode, component, retain)
+        resources = skill_resources(self.root, source)
         for name, entry in source["components"]["skills"].items():
             base = self.root / entry["source"]
-            for p in sorted(base.rglob("*")):
-                if p.is_symlink():
-                    raise Conflict("Canonical skill resources cannot be symlinks.")
-                if not p.is_file() or "__pycache__" in p.parts or p.name == ".DS_Store":
-                    continue
+            for p in resources[name]:
                 data = p.read_bytes()
                 if p.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
                     data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(b"{{CREDENTIALS_INDEX}}", str(self.index).encode())

@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import inventory
+from .shared import inventory, skill_resources
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -121,13 +121,10 @@ class MiniMax:
 
     def _skill_files(self, source: dict, add) -> list[str]:
         manifest_skills = []
+        resources = skill_resources(self.root, source)
         for name, entry in source["components"]["skills"].items():
             base = self.root / entry["source"]
-            for path in sorted(base.rglob("*")):
-                if path.is_symlink():
-                    raise Conflict("Canonical skill resources cannot be symlinks.")
-                if not path.is_file() or "__pycache__" in path.parts or path.name == ".DS_Store":
-                    continue
+            for path in resources[name]:
                 data = path.read_bytes()
                 if path.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
                     data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(

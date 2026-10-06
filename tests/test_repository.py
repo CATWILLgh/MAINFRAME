@@ -20,9 +20,8 @@ def markdown_files():
         ROOT / "AGENTS.md",
         ROOT / "CLAUDE.md",
         ROOT / "ADAPT-MAINFRAME.md",
-        ROOT / "hooks" / "README.md",
     ]
-    for directory in ("docs/installation", "instructions", "skills", "agents", "commands"):
+    for directory in ("docs/installation", "instructions", "skills", "agents", "commands", "hooks", "experiments"):
         roots.extend((ROOT / directory).rglob("*.md"))
     return sorted(set(roots))
 

@@ -16,7 +16,7 @@ import tempfile
 
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, regular_bytes, reconcile_files, retire_recorded_legacy_file)
-from .shared import inventory, _instruction
+from .shared import inventory, _instruction, skill_resources
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -229,13 +229,10 @@ class Antigravity:
                 raise Conflict("Duplicate Antigravity destination: " + str(path))
             result[path] = data, mode, component, retain
 
+        resources = skill_resources(self.root, source)
         for name, entry in source["components"]["skills"].items():
             base = self.root / entry["source"]
-            for path in sorted(base.rglob("*")):
-                if path.is_symlink():
-                    raise Conflict("Canonical skill resources cannot be symlinks.")
-                if not path.is_file() or "__pycache__" in path.parts or path.name == ".DS_Store":
-                    continue
+            for path in resources[name]:
                 data = path.read_bytes()
                 if path.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
                     data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(

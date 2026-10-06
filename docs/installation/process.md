@@ -43,9 +43,12 @@ writes:
 python3 -B -m unittest discover -s tests -p 'test_repository.py'
 ```
 
-A listed skill owns its complete relative resource tree. Those nested files are
-not separate inventory entries. Shared credentials are narrower: only the exact
-listed helper file is payload.
+A listed skill owns its approved relative resource tree under the
+[skill resource boundary](components/skills.md#preserve-the-complete-skill).
+Those nested files are not separate inventory entries. Local ignored files and
+Git control files are excluded; an untracked non-ignored resource in a Git
+checkout stops planning. Shared credentials are narrower: only the exact listed
+helper file is payload.
 
 ## 3. Create or reconcile local state
 

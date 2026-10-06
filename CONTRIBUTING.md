@@ -85,7 +85,14 @@ inventory. Update it whenever an installable component is added, renamed,
 moved, or removed.
 
 Only listed sources are product payload. A listed skill includes its required
-relative resources. A listed hook includes only its canonical source file, not
+relative resources. [installer/shared.py](installer/shared.py) selects skill
+resources through the source's ignore rules before reading their contents.
+In a Git checkout, intended new resources must be added to the index;
+untracked non-ignored resources stop planning rather than entering delivery.
+Ignored files and Git control files are never skill payload. Downloaded source
+archives use the same ignore rules through temporary Git metadata without
+initializing the source. Keep private notes and experiment data outside listed
+skill packages. A listed hook includes only its canonical source file, not
 `hooks/README.md` or `hooks/tests/`. The shared credential component installs
 only `shared/credentials/mainframe-secret`; its installer, template, local
 index, and tests remain repository support.
