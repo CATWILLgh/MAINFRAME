@@ -62,28 +62,8 @@ The [Codex](docs/installation/codex-installer.md),
 [MiniMax Code Desktop](docs/installation/minimax-installer.md), and
 [Cline](docs/installation/cline-installer.md) installers
 implement packaging, ownership, updates, recovery, and safe hook removal for
-their documented versions. The installation-procedure trials below do not
-establish full native acceptance; each adapter records its own exact limitations.
-
-### Installer model trials
-
-Codex **Desktop 0.153.4**, **2026-09-08**. One fresh task per tested combination,
-using the same source and file-only request after removing the previous
-MAINFRAME installation. Models are ordered from lightest to strongest;
-reasoning levels with the same observed outcome are grouped.
-
-| Model | Reasoning | Result |
-| --- | --- | --- |
-| `gpt-5.3-codex-spark` | low, medium, xhigh | Partial: correct files; instruction review skipped |
-| `gpt-5.3-codex-spark` | high | Failed: installation never started |
-| `gpt-5.6-luna` | low | Passed |
-| `gpt-5.6-terra` | low, medium, high, xhigh | Passed |
-| `gpt-5.6-sol` | — | Not tested; expected to pass |
-| `gpt-6-astra` | — | Not tested; expected to pass |
-
-Passed covers file delivery, preservation, convergence, and required instruction
-review. Full adapter acceptance is tracked separately. These are single-run
-results; the Sol/Astra expectations are untested assumptions.
+their documented versions. Successful file delivery does not establish full
+native acceptance; each adapter records its own exact limitations.
 
 ## Install or update
 
