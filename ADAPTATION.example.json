@@ -43,6 +43,16 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-k3s": {
+        "source": "skills/mainframe-k3s",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-clickhouse": {
+        "source": "skills/mainframe-clickhouse",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-ops-app-server-safety": {
         "source": "skills/mainframe-ops-app-server-safety",
         "delivery": "pending",
@@ -100,6 +110,26 @@
       },
       "mainframe-test-audit": {
         "source": "skills/mainframe-test-audit",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-testing": {
+        "source": "skills/mainframe-testing",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-keycloak-sso": {
+        "source": "skills/mainframe-keycloak-sso",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-notifications": {
+        "source": "skills/mainframe-notifications",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-self-monitoring": {
+        "source": "skills/mainframe-self-monitoring",
         "delivery": "pending",
         "verification": "pending"
       }
@@ -171,6 +201,11 @@
         "source": "commands/mainframe-tickets-verify.md",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-tickets-init": {
+        "source": "commands/mainframe-tickets-init.md",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "hooks": {
@@ -194,6 +229,11 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-commit-checkpoint": {
+        "source": "hooks/mainframe-commit-checkpoint.py",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-code-quality": {
         "source": "hooks/mainframe-code-quality.py",
         "delivery": "pending",
@@ -201,6 +241,11 @@
       },
       "mainframe-fallow-quality": {
         "source": "hooks/mainframe-fallow-quality.py",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-skill-reminder": {
+        "source": "hooks/mainframe-skill-reminder.py",
         "delivery": "pending",
         "verification": "pending"
       }

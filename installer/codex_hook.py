@@ -24,7 +24,7 @@ PRE_SHELL_HOOKS = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality"})
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder"})
 MAX_INPUT_BYTES = 262_144
 MAX_MESSAGE_CHARS = 6_000
 MAX_OUTPUT_BYTES = 32_768
@@ -269,6 +269,30 @@ def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
     return output
 
 
+def _dispatch_checkpoint(data: dict, state: Path, event: str) -> dict | None:
+    if event != "PostToolUse" or data.get("tool_name") != "apply_patch" or not _tool_succeeded(data):
+        return None
+    scope, operation, workspace = _identity(data, "session_id"), _identity(data, "tool_use_id"), _workspace(data)
+    patch = _patch(data)
+    if not scope or not operation or not workspace or not patch or not _patch_paths(patch):
+        return None
+    try:
+        root = Path(workspace)
+        cwd = Path(data["cwd"])
+        for raw in _patch_paths(patch):
+            path = Path(raw)
+            (path if path.is_absolute() else cwd / path).resolve().relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    detector = _load_detector("mainframe-commit-checkpoint")
+    if detector is None:
+        return None
+    size = min(100_000, sum(line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
+                            for line in patch.splitlines()))
+    message = detector.observe(scope, workspace, operation, size, state_root=state)
+    return _context(event, message) if message else None
+
+
 def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
@@ -280,6 +304,22 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
             if (output := _dispatch_data(hook, state, data)) is not None
         ]
         return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
+    if name == "mainframe-skill-reminder":
+        if event != "SubagentStart" and (event not in {"PreToolUse", "PostToolUse"} or data.get("tool_name") != "Bash"):
+            return None
+        helper = ROOT / "skill_reminder.py"
+        if not helper.is_file() or helper.is_symlink():
+            return None
+        spec = importlib.util.spec_from_file_location("mainframe_codex_skill_reminder", helper)
+        if spec is None or spec.loader is None:
+            return None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        detector = _load_detector(name)
+        message = module.advisory(data, state, ROOT, detector) if detector else None
+        return _context(event, message) if message else None
+    if name == "mainframe-commit-checkpoint":
+        return _dispatch_checkpoint(data, state, event)
     if name == "mainframe-code-quality":
         return _dispatch_quality(data, state, event)
     if event != "PreToolUse" or data.get("tool_name") != "Bash":

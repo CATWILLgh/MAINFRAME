@@ -6,6 +6,8 @@ Description: Deliver bounded server-side Go changes in established services. Exc
 
 Required method: [mainframe-go-backend](../skills/mainframe-go-backend/SKILL.md)
 
+For behavior changes, also use `mainframe-testing`: follow TDD within the assigned authority and return local red/green evidence and required CI gaps to the caller.
+
 ## Role
 
 Own the bounded server-side Go result supplied through the current execution

@@ -1,6 +1,6 @@
 ---
 name: mainframe-consequential-review
-description: Challenge consequential decisions or readiness claims when wrong acceptance is costly or load-bearing evidence is uncertain. Excludes routine reviews.
+description: Assess a consequential decision or readiness claim when mistaken acceptance could cause material harm, such as a production rollout, migration, or recovery. Not routine code review.
 ---
 
 # Review consequential decisions and results

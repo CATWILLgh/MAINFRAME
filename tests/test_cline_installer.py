@@ -54,6 +54,21 @@ class ClineInstallerTests(unittest.TestCase):
         self.install()
         _, repeated = self.adapter.plan(instructions_reviewed=True)
         self.assertEqual(repeated["changes"], [])
+        init_command = (self.adapter.workflows / "mainframe-tickets-init.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.skills) / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
         self.assertEqual(self.adapter.rules.stat().st_mode & 0o777, 0o600)
         self.assertEqual((self.adapter.hooks / "PreToolUse").stat().st_mode & 0o777, 0o755)
         self.assertEqual((self.adapter.hooks / "PostToolUse").stat().st_mode & 0o777, 0o755)
@@ -66,6 +81,15 @@ class ClineInstallerTests(unittest.TestCase):
         self.assertIn("skills: mainframe-go-backend", go_role)
         self.assertIn("server-side Go", go_role)
         state = json.loads(self.adapter.state_path.read_text())
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "installed")
+        self.assertEqual(reminder["verification"], "pending")
+        self.assertNotIn("reason", reminder)
+        self.assertTrue((self.adapter.detectors / "mainframe-skill-reminder.py").exists())
+        self.assertTrue(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PreToolUse").read_text())
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PostToolUse").read_text())
         self.assertEqual(state["target"]["version"], "0.0.33")
         self.assertEqual(
             sum(row["delivery"] == "unsupported" for row in state["components"]["hooks"].values()),

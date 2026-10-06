@@ -23,7 +23,8 @@ Neither option changes the other adapters.
 
 ## Delivered shape
 
-The Plugin manifest declares the 15 canonical MAINFRAME Skills, six command
+The Plugin manifest declares every canonical MAINFRAME Skill in the
+[inventory](../../ADAPTATION.example.json), seven command
 workflows rendered as Skills, and one Hook document. The Hook document starts
 one composite command for each relevant event rather than one process per
 canonical detector:
@@ -42,7 +43,7 @@ under MiniMax's host-owned `PLUGIN_DATA`, and disable markers affect only the
 selected canonical Hook. The Plugin package itself remains immutable at runtime.
 
 MiniMax exposes Plugin Skills to autonomous selection as well as explicit
-invocation. The six commands are therefore useful partial bindings, but their
+invocation. The seven commands are therefore useful partial bindings, but their
 explicit-only contract cannot be enforced. MiniMax custom Agents are managed by
 the native `mavis` service and are not representable in local Plugin V1, so the
 seven role components remain unsupported rather than being written into private
@@ -81,3 +82,13 @@ The mapping and its limitations are documented in
 [native/minimax.md](native/minimax.md). Adapter code lives in
 [installer/minimax.py](../../installer/minimax.py), and the small installed Hook
 transport comes from [installer/minimax_hook.py](../../installer/minimax_hook.py).
+
+
+## Skill reminders
+
+The installer delivers the shared positive-only reminder method and this
+product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
+An already considered skill stays quiet; reminders neither block nor continue
+a model. Existing disable choices are preserved. Start a fresh Desktop
+conversation after updating registrations; file convergence does not establish
+native receipt or skill application.

@@ -21,11 +21,9 @@ Do not turn this initialization into a ceremonial plan. Start or continue the as
 
 ## Coordinate without losing ownership
 
-Remain responsible for the complete user-facing result even when another agent, tool, or external peer performs a bounded part. Give delegated work an exact result, scope, authority, evidence requirement, file ownership when applicable, and recipient. Verify the returned evidence before relying on it.
+Remain responsible for the complete user-facing result when delegating. Apply the effective delegation rules and verify returned evidence before relying on it.
 
 Background delegation is an optional collaboration agreement, not a default obligation. Use it only when the user or effective project harness has agreed to that posture, the receiving product can preserve the coordinating session reliably, and the bounded work benefits from running separately. Otherwise work directly or use the agreed foreground mechanism. Never infer permission to invoke another paid product, account, or external agent merely because its CLI is available.
-
-All messages exchanged with agents or external peers are in English. User-facing communication follows the applicable user language.
 
 <!-- MAINFRAME OPTIONAL BLOCK: native-primary-memory
 Adaptation instruction: keep the section below only when current official documentation and a harmless native probe establish persistent memory available to this user-facing session. Remove this comment, the closing marker, and the entire section from the installed copy when the product has no such capability. If kept, remove both marker comments before installation and verify the native memory path without reading protected values. Never emulate missing native memory with a hidden global file.
@@ -39,8 +37,8 @@ Treat memory as orientation rather than proof of current behavior. Re-verify tim
 
 ## Preserve recoverability
 
-Keep the active result recoverable through the project's existing mechanisms. Inspect the actual diff and durable evidence at meaningful boundaries. Use a branch, worktree, checkpoint, stage, commit, push, deployment, external mutation, or generated recovery artifact only when the effective project policy and current authority permit that exact action. This command grants none of those actions by itself.
+Keep the active result recoverable through the project's existing mechanisms. Inspect the actual diff and durable evidence at meaningful boundaries. Use the recovery and checkpoint actions already authorized by the caller or project policy. This command grants no additional authority.
 
-Before declaring completion, compare the result with the current completion conditions, inspect the changed surface, run the smallest faithful checks, and account for every relevant failure. Complete in-scope work rather than replacing it with TODOs, suppressions, or tickets. Surface an evidenced out-of-scope project problem through the configured project route and a MAINFRAME harness fault through the harness-feedback route.
+Before declaring completion, compare the result with the current completion conditions, inspect the changed surface, run the smallest faithful checks, and account for every relevant failure. Complete in-scope work and use the effective reporting rules for unresolved out-of-scope findings.
 
 Return a concise user-facing outcome: what is complete, what evidence proves it, what material boundary was not exercised, and what exact user decision remains, if any.

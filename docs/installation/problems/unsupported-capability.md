@@ -20,9 +20,14 @@ attribution, role routing, permission enforcement, or another exact boundary.
 
 ## Adapt
 
-Use a narrower representation only when it still satisfies the complete
-canonical component. A partial fallback may be reported, but delivery remains
-`unsupported` when a required rule is absent.
+Use a narrower representation as full delivery only when it still satisfies the
+complete canonical component. For hooks, follow the
+[native placement search](../components/hooks.md#keep-native-integration-thin):
+evaluate safe post-action, completion, and other relevant lifecycle bindings,
+and install useful partial effects even when full parity is impossible.
+Report them separately; delivery remains `unsupported` when a required rule
+is absent. Omit a binding only when the available alternatives would be unsafe,
+misleading, wrongly attributed, or noisier than their useful signal.
 
 ## Verify
 
@@ -41,5 +46,5 @@ Continue with independent inventory entries.
 
 ## Never do
 
-Never substitute a prompt for a guard, an ordinary prompt file for a subagent, a
-warning for a required block, or file presence for native discovery.
+Never claim a prompt enforces a guard, an ordinary prompt file is a subagent,
+an advisory is a required block, or file presence proves native discovery.

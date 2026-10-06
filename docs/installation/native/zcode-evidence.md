@@ -183,3 +183,22 @@ nonblocking completion advice. Keep those delivery limitations explicit.
 Cached-callback disable behavior and
 the other component-specific behavior boundaries remain separate from this
 bounded pass, as described by the [native adaptation guide](zcode.md).
+
+
+## 3.14.4.7912 reminder revalidation (2026-10-06)
+
+The shipped `Contents/Resources/glm/zcode.cjs` SHA-256 is
+`fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f`.
+The bounded [source probe](../../../tests/probes/zcode_reminder_contract.cjs)
+executes only the reviewed pure output parser in an isolated VM. PreToolUse
+and PostToolUse accept additionalContext without a permission decision; the
+actual consumer merges both into model content. Native session/tool IDs and
+snake-case aliases remain present. The default child constructor still omits
+hook runners, so primary-only scope is retained. The old pinned full probe
+remains historical evidence; do not repin its renamed functions blindly.
+
+The current [official hooks reference](https://zcode.z.ai/en/docs/hooks)
+confirms user configuration, process argv, tool matchers and fresh-session
+snapshot semantics. Together with disposable ownership/transport tests, this
+supports the maintained full delivery route on this build, without claiming
+fresh Desktop acceptance or replaying model probes.

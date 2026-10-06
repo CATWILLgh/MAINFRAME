@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import inventory
+from .shared import inventory, skill_resources
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -21,7 +21,7 @@ from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 COMMAND_REASON = (
@@ -121,13 +121,10 @@ class MiniMax:
 
     def _skill_files(self, source: dict, add) -> list[str]:
         manifest_skills = []
+        resources = skill_resources(self.root, source)
         for name, entry in source["components"]["skills"].items():
             base = self.root / entry["source"]
-            for path in sorted(base.rglob("*")):
-                if path.is_symlink():
-                    raise Conflict("Canonical skill resources cannot be symlinks.")
-                if not path.is_file() or "__pycache__" in path.parts or path.name == ".DS_Store":
-                    continue
+            for path in resources[name]:
                 data = path.read_bytes()
                 if path.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
                     data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(
@@ -156,6 +153,10 @@ class MiniMax:
                 (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
         add(self.plugin / "scripts/mainframe_hook.py",
             Path(__file__).with_name("minimax_hook.py").read_bytes(), "hook transport")
+        for filename, sourcefile in (("skill_reminder.py", "codex_skill_reminder.py"),
+                                     ("native_skill_reminder.py", "native_skill_reminder.py")):
+            add(self.plugin / "scripts" / filename, Path(__file__).with_name(sourcefile).read_bytes(), "hooks.mainframe-skill-reminder")
+        add(self.plugin / "scripts" / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
         add(self.plugin / "instructions/global.md",
             (self.root / "instructions/global.md").read_bytes(), "instructions.global")
         add(self.plugin / "hooks/hooks.json", encode_json({"hooks": {
@@ -168,7 +169,7 @@ class MiniMax:
             "PreToolUse": [{"matcher": "bash|write|edit", "hooks": [{
                 "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
-            "PostToolUse": [{"matcher": "write|edit", "hooks": [{
+            "PostToolUse": [{"matcher": "bash|read|write|edit", "hooks": [{
                 "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
             "Stop": [{"hooks": [{
@@ -293,16 +294,17 @@ class MiniMax:
                              and not any(change.needed for change in changes))
             unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
             unsupported.update({("agents", name): AGENT_REASON for name in source["components"]["agents"]})
+            pending = {}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
-                if (category, name) not in unsupported
+                if (category, name) not in unsupported and (category, name) not in pending
             ]
             actions = [] if remove else [
                 "Wait for MiniMax Code's automatic local Plugin rescan, then open one new conversation to confirm MAINFRAME appears without scan diagnostics."
             ]
             state = reconcile_state(source, prior_state, target, unchanged=unchanged,
                                     delivered=delivered, unsupported=unsupported if not remove else {},
-                                    next_actions=actions)
+                                    pending=pending if not remove else {}, next_actions=actions)
             changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state),
                                                 component="adaptation state"))
         if remove:

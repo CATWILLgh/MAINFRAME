@@ -20,10 +20,10 @@ def markdown_files():
         ROOT / "AGENTS.md",
         ROOT / "CLAUDE.md",
         ROOT / "ADAPT-MAINFRAME.md",
-        ROOT / "hooks" / "README.md",
     ]
-    for directory in ("docs/installation", "instructions", "skills", "agents", "commands"):
+    for directory in ("docs/installation", "instructions", "skills", "agents", "commands", "hooks", "experiments"):
         roots.extend((ROOT / directory).rglob("*.md"))
+    roots.extend((ROOT / "docs").glob("*.md"))
     return sorted(set(roots))
 
 
@@ -117,7 +117,7 @@ class RepositoryContractTests(unittest.TestCase):
                 if isinstance(component, dict) and "source" in component:
                     sources.append(component["source"])
 
-        self.assertEqual(len(sources), 36, "unexpected payload identity count")
+        self.assertEqual(len(sources), 45, "unexpected payload identity count")
         self.assertEqual(len(sources), len(set(sources)), "duplicate payload source")
 
         forbidden = {

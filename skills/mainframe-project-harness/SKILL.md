@@ -1,6 +1,6 @@
 ---
 name: mainframe-project-harness
-description: Inspect or repair project agent configuration during a harness audit or an evidenced discovery, precedence, or execution conflict.
+description: Audit or repair project agent configuration when instructions conflict, skills are missing, or hooks, permissions, and tool policies misbehave. Not a routine setup check.
 ---
 
 # Maintain the project harness

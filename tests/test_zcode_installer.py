@@ -52,6 +52,29 @@ class ZCodeInstallationTests(unittest.TestCase):
         _, second = self.adapter.plan()
         self.assertEqual(second['changes'], [])
         state = json.loads(self.adapter.state_path.read_text())
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "installed")
+        self.assertEqual(reminder["verification"], "pending")
+        self.assertNotIn("reason", reminder)
+        self.assertTrue((self.adapter.hooks / "detectors" / "mainframe-skill-reminder.py").exists())
+        self.assertTrue(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertIn("mainframe-skill-reminder", (self.adapter.config).read_text())
+        init_command = (self.adapter.commands / "mainframe-tickets-init.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.skills) / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
         self.assertEqual(state['components']['commands']['mainframe-project-skill']['delivery'], 'installed')
         self.assertEqual(state['components']['commands']['mainframe-project-skill']['verification'], 'pending')
         self.assertEqual(state['components']['hooks']['mainframe-code-quality']['delivery'], 'unsupported')
@@ -80,6 +103,7 @@ class ZCodeInstallationTests(unittest.TestCase):
             'injectAgentsMd': False,
         }
         role.write_bytes(role_body(source, name, settings))
+        (self.source / 'agents' / (name + '.md')).write_text(source + '\nUpdated canonical method boundary.\n')
         command = self.adapter.commands / 'mainframe-tickets-find.md'
         command.write_bytes(command.read_bytes().rstrip(b'\n'))
 
@@ -87,6 +111,7 @@ class ZCodeInstallationTests(unittest.TestCase):
         body = role.read_text()
         self.assertIn('model: "account:zai-individual-coding-plan/GLM-5.3-Flash"', body)
         self.assertIn('thoughtLevel: low', body)
+        self.assertIn('Updated canonical method boundary.', body)
         self.assertIn('injectAgentsMd: false', body)
         self.assertFalse(command.read_bytes().endswith(b'\n'))
         self.assertEqual(self.adapter.plan()[1]['changes'], [])
@@ -444,8 +469,8 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertTrue(reports[1]['applied'])
         self.assertTrue(reports[2]['structure_matches'])
         self.assertEqual(reports[2]['file_change_count'], 0)
-        self.assertEqual(reports[2]['planned_delivery'], {'installed': 34, 'pending': 0, 'unsupported': 2})
-        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 34})
+        self.assertEqual(reports[2]['planned_delivery'], {'installed': 43, 'pending': 0, 'unsupported': 2})
+        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 43})
         self.assertEqual(len(reports[2]['next_actions']), 1)
         state = json.loads(self.adapter.state_path.read_text())
         self.assertFalse(any(row.get('verification') == 'passed' for group in state['components'].values() for row in group.values()))

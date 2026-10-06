@@ -1,6 +1,6 @@
 ---
 name: mainframe-frontend
-description: Develop, debug, review, or test React web interfaces. Excludes React Native, substantial backend, infrastructure, and standalone design systems.
+description: Design, implement, debug, or review React web interfaces, including forms, browser state, accessibility, and interaction tests. Not React Native or standalone design systems.
 ---
 
 # Frontend engineering
@@ -8,6 +8,8 @@ description: Develop, debug, review, or test React web interfaces. Excludes Reac
 Apply this method whenever the active work matches the description, whether you are the primary implementer, a delegated engineer, or a reviewer. Follow the scope and authority supplied through the current execution path; this skill does not expand either.
 
 Deliver one coherent user-facing result. Treat implementation, interaction quality, visual language, accessibility, component reuse, and verification as parts of the same frontend task.
+
+For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
 
 ## Establish the active surface
 

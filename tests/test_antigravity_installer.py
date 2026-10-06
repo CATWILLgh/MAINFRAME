@@ -32,7 +32,7 @@ class AntigravityInstallationTests(unittest.TestCase):
             shutil.copyfile(ROOT / "shared/credentials" / name, credentials / name)
         self.home = base / "home with 'quotes'"
         self.home.mkdir()
-        self.adapter = Antigravity(self.source, self.home, version="2.13.0")
+        self.adapter = Antigravity(self.source, self.home, version="2.16.0")
         self.addCleanup(self.adapter.clean_event_state)
 
     def apply(self, reviewed=False):
@@ -47,11 +47,34 @@ class AntigravityInstallationTests(unittest.TestCase):
         _, report = self.adapter.plan()
         self.assertEqual(report["changes"], [])
         self.assertFalse(report["retiring_hooks"])
+        init_command = (self.adapter.skills / "mainframe-tickets-init/SKILL.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.skills) / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
         state = json.loads(self.adapter.state_path.read_text())
-        self.assertEqual(report["planned_delivery"], {"installed": 24, "pending": 0, "unsupported": 12})
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "installed")
+        self.assertEqual(reminder["verification"], "pending")
+        self.assertNotIn("reason", reminder)
+        self.assertTrue((self.adapter.hooks / "detectors" / "mainframe-skill-reminder.py").exists())
+        self.assertTrue(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks_config).read_text())
+        self.assertEqual(report["planned_delivery"], {"installed": 32, "pending": 0, "unsupported": 13})
         self.assertEqual(set(report["retained_partial_bindings"]), {
             "mainframe-init", "mainframe-project-skill", "mainframe-tickets-find", "mainframe-tickets-refine", "mainframe-tickets-implement",
-            "mainframe-tickets-verify",
+            "mainframe-tickets-verify", "mainframe-tickets-init",
             *PARTIAL_HOOKS,
         })
         self.assertEqual(state["components"]["commands"]["mainframe-project-skill"]["reason"], COMMAND_REASON)
@@ -90,7 +113,9 @@ class AntigravityInstallationTests(unittest.TestCase):
         self.assertIn("pre-tool timing is unavailable",
                       self.adapter.plan()[1]["retained_partial_bindings"]["mainframe-rg-short-replace"])
         state = json.loads(self.adapter.state_path.read_text())
-        self.assertTrue(all(row["delivery"] == "unsupported" for row in state["components"]["hooks"].values()))
+        self.assertEqual(state["components"]["hooks"]["mainframe-commit-checkpoint"]["delivery"], "installed")
+        self.assertTrue(all(row["delivery"] == "unsupported" for name, row in state["components"]["hooks"].items()
+                            if name not in {"mainframe-commit-checkpoint", "mainframe-skill-reminder"}))
 
     def test_user_instruction_and_foreign_hook_are_preserved_and_restored(self):
         self.adapter.instruction.parent.mkdir(parents=True)
@@ -101,7 +126,7 @@ class AntigravityInstallationTests(unittest.TestCase):
         _, report = self.adapter.plan()
         self.assertIsNotNone(report["instruction_review"])
         self.apply(reviewed=True)
-        self.assertLessEqual(len(self.adapter.instruction.read_text()), 12_000)
+        self.assertLessEqual(len(self.adapter.instruction.read_bytes()), 24_000)
         self.assertTrue(self.adapter.instruction.read_text().startswith("User instruction.\n"))
         self.assertEqual(json.loads(self.adapter.hooks_config.read_text())["foreign"], foreign["foreign"])
         changes, _ = self.adapter.plan(remove=True)
@@ -119,7 +144,7 @@ class AntigravityInstallationTests(unittest.TestCase):
         receipt = json.loads(self.adapter.receipt_path.read_text())
         receipt["files"][str(target)]["sha256"] = __import__("hashlib").sha256(target.read_bytes()).hexdigest()
         self.adapter.receipt_path.write_text(json.dumps(receipt))
-        self.adapter.instruction.write_text("x" * 12_001)
+        self.adapter.instruction.write_text("x" * 24_001)
         with self.assertRaises(Conflict):
             self.adapter.plan()
 
@@ -160,7 +185,7 @@ class AntigravityInstallationTests(unittest.TestCase):
             "--home", str(self.home), "--surface", "desktop", "--runtime-version", "2.12.2",
         ], cwd=self.source, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 2)
-        self.assertIn("supported release is 2.13.0", result.stderr)
+        self.assertIn("supported release is 2.16.0", result.stderr)
         result = subprocess.run([
             sys.executable, "-B", str(self.source / "install.py"), "antigravity", "plan",
             "--home", str(self.home), "--surface", "cli", "--runtime-version", "2.13.0",

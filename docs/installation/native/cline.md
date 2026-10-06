@@ -133,3 +133,29 @@ Cline UI, and workspace rules win over global rules. `~/.agents/AGENTS.md` is a
 cross-tool compatibility path, not a Cline-owned file; a Cline-only installation
 therefore owns exactly one new file under `~/.cline/rules/` and never writes
 another product's global instruction system.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostToolUse (apply_patch/editor) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.
+
+
+## Skill-reminder input evidence (2026-10-06)
+
+The locally shipped `@cline/core` 0.0.83 definitions at
+`dist/extensions/tools/schemas.d.ts` define `read_files` with
+`files: [{path, start_line?, end_line?}]`, not a `read_file` event. The adapter
+normalizes up to eight literal `files[].path` targets after the tool result;
+stringified structured input is decoded as input, never as raw output.
+Known structured failed results are silent. Absolute paths remain useful;
+unknown shell workdirs are not replaced with workspace metadata. Native task,
+operation and optional child identity share the same budgeted state used by
+other adapters. The
+[native binding table](../../../hooks/skill-reminder-routing.md#native-bindings)
+owns timing and acceptance limits. Shared-runtime code evidence does not prove
+that a new Desktop 0.0.43 conversation delivered the reminder.

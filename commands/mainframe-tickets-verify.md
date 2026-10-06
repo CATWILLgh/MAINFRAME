@@ -4,13 +4,19 @@ This is a user-invocable command. Execute it only because the current invocation
 
 Independently verify each eligible implementation, record one evidence-backed verdict, and continue until no ticket remains that this command can reliably process. Do not discover unrelated problems, repair code or tests, deploy, or perform product-wide or release acceptance during this command.
 
+When the user starts a native goal and then invokes this command separately, process the queue under that existing goal. The ticket-only write boundary applies to the entire verification campaign, including continuations and delegated work. Do not create a second goal or switch to implementation after finding a failed check.
+
+## Read the initialized ticket contract
+
+Read `docs/tickets/AGENTS.md` and require the `mainframe-tickets-v1` contract before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+
+Select only `docs/tickets/open/needs-verification/`, preserving the recorded execution route. Add `Verification` with the independence basis, current checks, verdict, adjacent risk evidence and limitations, plus a `Blocker` or `User decision` section when required. Move a proved correction to `archive/resolved/`, a failed implementation to `open/ready/`, missed investigation to `open/needs-scope-review/`, user-owned choices to `open/needs-decision/`, and disproved, superseded or duplicate claims to `archive/rejected/`. A blocked observation may remain in needs-verification with the exact resumption condition. Preserve IDs, required YAML and execution markers; returning a user-approved record to ready does not convert it into autonomous work. Update only ticket records and their paths/links; progress stays in them and native goal state. Do not edit `.campaigns/`, root rules, README, or recovery files during verification.
+
 ## Establish the queue and authority
 
-Resolve the current project root, its configured issue route, and the lifecycle states that represent implemented work awaiting verification, resolved work, rejected work, ready work, scope review, and decisions. Do not use another project's queue or MAINFRAME's central harness-feedback queue.
+Use the initialized local queue and the stage-specific destinations above. A missing or conflicting contract is an initialization issue, not permission to invent lifecycle states. Preserve the project's tracked or ignored ownership.
 
-If the project has no configured issue route or verification lifecycle, return the exact missing configuration and stop without inventing one. If the queue is external, mutate it only when the current caller supplied that authority. Otherwise perform the permitted checks and return the complete ticket updates with the exact missing write action.
-
-The invocation authorizes project inspection, safe local verification, and the ticket mutations required to record verdicts. It does not authorize changes to implementation code or tests, deployment, writes to remote or shared environments, destructive operations, material infrastructure changes, repository-history changes, commits, or pushes. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
+The invocation authorizes project inspection, safe local verification, and ticket mutations required to preserve evidence and record verdicts. Only ticket records may receive persistent project edits: do not change source code, tests, fixtures, snapshots, dependencies, lockfiles, configuration, project instructions, skills, or other documentation, even to repair an obvious typo or unblock a check. It does not authorize changes to implementation code or tests, deployment, writes to remote or shared environments, destructive operations, material infrastructure changes, repository-history changes, commits, or pushes. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
 
 ## Establish independent execution
 
@@ -22,11 +28,13 @@ Independence is evaluated per ticket. Continue with other queued tickets only wh
 
 ## Process exactly one ticket at a time
 
-Read the verification queue afresh. Select one independently eligible ticket and keep it as the only active ticket until its verdict and lifecycle transition are complete. Do not verify separate tickets concurrently. Delegated work must remain bounded to the same active ticket and return its sources, observed results, limitations, and unverified assumptions.
+Read the verification queue afresh. Select one independently eligible ticket and keep it as the only active ticket until its verdict and lifecycle transition are complete. Do not verify separate tickets concurrently. Delegated work must remain bounded to the same active ticket and inherit the ticket-only write restriction. Return sources, observed results, limitations, and unverified assumptions. Delegation must never be used to perform a prohibited repair.
 
 After routing the active ticket, refresh the queue and select the next independently eligible ticket. Do not retry a ticket again in the same run when its recorded evidence gap and available conditions have not changed. Continue with every other eligible ticket.
 
-If a ticket update cannot be written, retain its complete proposed update and missing write action in the current run and continue with the next ticket. Treat that ticket as handled only for this run; reconsider it only if its state, evidence, or available authority materially changes. Do not claim that the persistent queue changed.
+Persist material verification evidence and remaining checks in the active ticket as work proceeds. Use those ticket records and the existing native goal state to resume after context changes; do not create or edit a separate project progress file. Recheck the current implementation revision or diff before reusing saved evidence. A context change does not justify replaying unchanged blocked checks.
+
+If a ticket update cannot be written, retain the complete proposed update and missing action through the available native goal mechanism, report the limitation, and continue with other eligible tickets. Do not claim persistence or successful campaign completion while required ticket writes remain pending.
 
 ## Reconstruct the claim
 
@@ -34,7 +42,7 @@ Confirm that the ticket still awaits verification. Inspect its full recorded his
 
 Restate the original observable problem, the claimed correction, and the business or technical contract that distinguishes success from a plausible false positive. Verify that the ticket identity and acceptance boundary still match the current project. Check the most plausible alternative explanation rather than assuming the implementation caused an observed success.
 
-Use current authoritative primary documentation only when verification depends on a changing external contract. Confirm the version that applies to the project. Repository evidence remains authoritative for project-owned behavior.
+Use current authoritative internet sources and available MCP resources when they can establish the expected contract, compatibility, or correctness of the implementation. Confirm applicable versions and save specific sources and their conclusions in the ticket. Inspect evidence from prior stages rather than accepting their interpretation as independent proof; reuse applicable sources without ceremonial repeated searches. Repository evidence remains authoritative for project-owned behavior. External access stays within existing authority and must not expose secrets or private project material.
 
 ## Obtain independent evidence
 
@@ -44,7 +52,9 @@ Run focused checks first, followed by the nearest relevant fast checks needed to
 
 When the result depends on generated output, serialization, installation, migration, concurrency, or another consumer boundary, inspect the real produced shape or deterministic behavior rather than only source code or a mock. Do not convert an unavailable environment, passing mock, coverage percentage, unrelated green suite, prior implementation result, or confidence into evidence for a claim it cannot establish.
 
-Do not modify implementation code, tests, assertions, fixtures, or tracked expected output to obtain a passing result. A disposable verification probe may be created only when it does not change project behavior or persistent state; remove it before recording the verdict.
+Do not modify implementation code, tests, assertions, fixtures, or expected output for any reason. Run checks without autofix, snapshot updates, code generation into project paths, dependency installation, or other persistent project changes. If a faithful check requires such a repair, record the blocker and route the ticket instead of making the repair.
+
+A disposable verification probe and transient check output may live outside the project in an authorized temporary location, without modifying the implementation under review or contacting unauthorized systems. Remove only resources created by that probe. Inspect the relevant diff before and after checks to detect accidental non-ticket edits; preserve pre-existing or concurrent work. If a check unexpectedly mutates project files, stop that check, report the exact change and do not treat the modified result as verification evidence or blindly reset user work.
 
 ## Apply the final acceptance gate
 
@@ -61,7 +71,7 @@ If verification exposes an unresolved material choice owned by the user or anoth
 
 ## Record exactly one verdict
 
-Preserve the ticket identity and accumulated evidence. Append only the new independent observations, commands or checks actually performed, their results, and material limitations. Do not duplicate unchanged history. Apply exactly one transition through the project's configured lifecycle:
+Preserve the ticket identity and accumulated evidence. Append only the new independent observations, commands or checks actually performed, their results, and material limitations. Do not duplicate unchanged history. Apply exactly one transition through the initialized lifecycle, updating the required fields and moving the ticket to the corresponding directory. Validate YAML/Markdown, writable ticket links, and record identity so the transition leaves no stale duplicate:
 
 - Move a proven correction to the configured resolved terminal state or archive only when the original problem is no longer reproducible for the intended reason, the acceptance boundary is demonstrated, and the final acceptance gate is satisfied.
 - Return an incomplete or incorrect implementation to ready work with precise failed-verification evidence and without repairing it inline.
@@ -70,7 +80,7 @@ Preserve the ticket identity and accumulated evidence. Append only the new indep
 - Move a disproved, superseded, or confirmed duplicate claim to the configured rejected terminal state or archive.
 - Leave it awaiting verification only when a specific unavailable environment, permission, dependency, observation, or independent trajectory prevents a reliable verdict; record exactly what would unlock verification.
 
-Preserve terminal records and their accumulated evidence as immutable history; do not edit, reopen, rename, or move them in this command. A later occurrence is a new observation with its own identity through the configured project route. Do not create filesystem archives when the project uses tracker states. If verification reveals a separate concrete problem, record or reconcile it through the receiving project's problem-recording route when that capability and authority are available, then return to the active ticket without investigating or fixing it inline.
+Preserve terminal records and their accumulated evidence as immutable history; do not edit, reopen, rename, or move them in this command. A later occurrence is a new observation with its own identity through the configured project route. If verification reveals a separate concrete problem, record or reconcile it through the receiving project's problem-recording route when that capability and authority are available, then return to the active ticket without investigating or fixing it inline.
 
 Repeated verification against unchanged state must converge: do not append the same evidence, repeat an unchanged blocked check, duplicate a transition, or touch an already archived ticket.
 
@@ -78,11 +88,6 @@ Repeated verification against unchanged state must converge: do not append the s
 
 Continue the one-ticket cycle until a refreshed control pass finds no additional independently eligible ticket that this command can further verify under the current evidence, environment, and authority. A blocked or non-independent ticket is handled for this run only after the exact missing condition is recorded or returned to the current recipient; it must not prevent processing later tickets.
 
-Return:
+Complete the active goal successfully only when a refreshed queue leaves no further independently eligible verification under current conditions and all required observations and transitions are persisted. Tickets with specific recorded blockers remain unresolved; queue processing does not mean every implementation passed. User stop or native execution limits require an accurate stopped or resumable state, not a successful completion claim.
 
-- the project verification queue processed;
-- the independence basis for every checked ticket;
-- every ticket's verdict and resulting lifecycle state;
-- the independently observed evidence and the meaningful adjacent contracts checked;
-- every unobserved material boundary and the exact reason;
-- confirmation that the refreshed queue and this run's handled tickets leave no further permitted independent verification, distinguishing persisted transitions from proposed updates still awaiting a write.
+Return the queue processed and, for each checked ticket, the independence basis, verdict, resulting state, decisive observations, and material verification gaps. State whether the refreshed queue leaves further permitted independent verification. Omit empty categories and distinguish persisted transitions from proposals.

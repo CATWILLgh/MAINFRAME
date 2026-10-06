@@ -1,6 +1,6 @@
 ---
 name: mainframe-go-backend
-description: Develop, debug, review, or test server-side Go services. Excludes client UI, non-Go services, data or ML pipelines, and infrastructure ownership.
+description: Design, implement, debug, or review Go services, APIs, and workers, including transactions, concurrency, retries, and backend tests.
 ---
 
 # Go backend engineering
@@ -9,6 +9,8 @@ Apply this method whenever the active work matches the description, whether you
 are the primary implementer, a delegated engineer, or a reviewer. Follow the
 scope and authority supplied through the current execution path; this skill does
 not expand either.
+
+For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
 
 ## Establish the active service boundary
 

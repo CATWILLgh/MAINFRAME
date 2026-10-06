@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-09-22.
+Last reviewed: 2026-10-03.
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -8,6 +8,54 @@ the installer owns repeatable packaging and lifecycle operations. Recheck the
 version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
+
+## Desktop 0.159.2 delivery revalidation
+
+The current Desktop task reported engine `0.159.2`. Compare the exact upstream
+tags [0.153.4](https://github.com/openai/codex/tree/rust-v0.153.4) and
+[0.159.2](https://github.com/openai/codex/tree/rust-v0.159.2), not a latest branch.
+The non-truncated Git trees resolve to `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`
+and `ff6aec96948b70d94983af2641a6b67c94faeff5`. Downloaded relevant files were
+checked against their Git blob hashes.
+
+- Native config definitions used by MAINFRAME (`AgentsToml`, `SkillsConfig`,
+  `HooksToml`, `HookHandlerConfig`, `SandboxWorkspaceWrite`, `SandboxMode`,
+  `PermissionsToml`) are unchanged in the tagged
+  [config schema](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/core/config.schema.json).
+  The [custom-role configuration](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/agent-roles/src/agent_role_config.rs)
+  is also unchanged. This preserves packaging, not proof of parent permission
+  enforcement for read-only roles.
+- [Host skill roots](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/ext/skills/src/host_roots.rs),
+  metadata parsing and host merge rules are unchanged. `$CODEX_HOME/skills`
+  remains a supported compatibility root. Host discovery now passes an
+  unrestricted filesystem accessor; it preserves that root's previous access
+  semantics. Cloud-provider renaming does not change local skill packaging.
+- [Global instructions](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/codex-home/src/instructions/mod.rs)
+  still prefer `AGENTS.override.md` then `AGENTS.md`. The newer reader retains
+  its last good value on read failures and deduplicates warnings. Confirmed
+  absence still clears the cache; a failed read does not prove an update loaded.
+- `PreToolUse`, `PostToolUse`, and `Stop` event implementations and generated
+  input/output schemas, hook configuration, and tool-name mapping have identical
+  Git blob hashes. The actual-tool-workdir, exact attributed diff, and
+  non-blocking completion-context limitations remain. Preserve useful partial
+  bindings and do not claim those missing guarantees became supported.
+- The [runtime dispatcher](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/core/src/hook_runtime.rs)
+  now supplies the local environment's `cwd` for pre/post tool events, falling
+  back to the turn directory. This still does not identify a shell call's own
+  working directory. `Stop` retains the turn directory. Forked subagents now
+  receive start events; the later reminder extension below binds exact specialized roles.
+- The [command runner](https://github.com/openai/codex/blob/rust-v0.159.2/codex-rs/hooks/src/engine/command_runner.rs)
+  drains output while writing input and includes both in the timeout. Unix
+  handlers launch in a new process session; restricted environment names are
+  filtered from both the session snapshot and hook overrides. No MAINFRAME
+  transport change follows from these inspected differences.
+
+The maintained adapter permits this exact Desktop version; unknown versions and
+CLI 0.159.2 remain outside this revalidation. Disposable-home checks cover full
+skill resource delivery, state truthfulness, convergence, preservation and
+rejection before writes for an uninspected surface/version. Native discovery,
+trust, lifecycle execution and read-only role behavior remain separate pending
+acceptance. A fresh task is the shared loading handoff after delivery changes.
 
 ## Official sources
 
@@ -256,7 +304,7 @@ representation merely for compatibility.
 ## Private user skill destination
 
 On 2026-09-08, the current Desktop task's newly created native child session
-received an ordinary probe skill from `/Users/user/.codex/skills` in its supplied
+received an ordinary probe skill from `$CODEX_HOME/skills` in its supplied
 catalog. It read the skill and its linked resource successfully without being
 given the path or marker. This proves discovery and resource loading in that
 native child; primary-session refresh and explicit-command UI selection remain
@@ -316,3 +364,96 @@ Full 0.154.0-alpha.6.2 installation and native hook acceptance remain unverified
 Do not generalize this bounded-update support to another runtime or use it
 to introduce bindings. The [procedure](../codex-installer.md) reports the mode and
 retains a fresh-task handoff for updated text.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostToolUse (apply_patch) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.
+
+## Skill reminder and Desktop 0.159.0-alpha.12.1
+
+On 2026-10-03 the current parent and native child task metadata and bundled
+`codex-package.json` identified **0.159.0-alpha.12.1**. The installed executable's
+embedded `post-tool-use.command.input` schema includes optional `agent_id` and
+`agent_type`; an in-place, keys-only temporary probe observed root and child
+`Bash` callbacks with string output and `tool_input.command` only. No actual
+shell working directory is supplied. These findings validate the reminder's
+native payload/output route; they do not establish discovery or behavior of all
+other installed components. Disposable-home packaging checks cover delivery.
+
+[Hooks](https://learn.chatgpt.com/docs/hooks) documents nonblocking
+`PostToolUse.additionalContext`. Nearby public source
+[`rust-v0.159.0-alpha.12` hook runtime](https://github.com/openai/codex/blob/rust-v0.159.0-alpha.12/codex-rs/core/src/hook_runtime.rs)
+corroborates child attribution. The exact local schema/probe is stronger evidence
+for the current build than assuming nearby source is identical.
+
+The maintained reminder reads at most 256 KiB of the current native transcript
+in memory to find unambiguous explicit literal command/workdir hints. Code Mode
+nested call IDs are random and transient exec-begin events are not persisted;
+this is advisory context, not exact call attribution. Omitted workdir, dynamic
+arguments, conflicts and unknown formats do not authorize a cwd guess. No raw
+source is retained. Installed readable skill paths are distinguished from native
+catalog exposure, which is budgeted. See the
+[canonical contract](../../../hooks/README.md#adapt-mainframe-skill-reminder).
+
+The installer retires only the exact receipted experimental registration and
+sets its configuration disabled in the same transaction. Original experiment
+files/backups remain for recovery and harmless late callbacks. Changed or foreign
+registrations are preserved for reconciliation. Normal enable/disable/remove
+then follows the maintained hook lifecycle. New registration trust remains a
+user action; do not claim active delivery from installer convergence alone.
+
+Trusted live acceptance exposed raw stdout/stderr in Bash `tool_response`, with
+no exit status (including failed commands). Advice therefore concerns a bounded
+read attempt when success is unknown; known structured failures stay silent.
+Raw output is never parsed as status or successful skill-read evidence.
+
+Live acceptance on 2026-10-03 after native user trust: root and a native child
+each received a project-method suggestion and a testing-method suggestion, then
+a third read produced no further context. The child used an explicit-workdir
+relative read for the testing suggestion and read/applied the suggested method
+to distinguish synthetic test assertions from native delivery evidence. This
+proves those two recipient sequences, not a universal rate of useful selection
+or coverage of arbitrary shell syntax. Temporary callback probes were removed.
+
+
+### Expanded reminder bindings
+
+The same current Desktop binary embeds `subagent-start.command.input/output`:
+`agent_id`, `agent_type`, and nonblocking `additionalContext` are available. The
+[official event contract](https://learn.chatgpt.com/docs/hooks) directs this
+context to the child before work. The adapter matches only its seven exact
+MAINFRAME roles, retaining recipient isolation. Generic roles remain silent.
+
+Explicit supported operations use `PreToolUse` Bash; bounded source/package
+profiles use `PostToolUse` Bash. A pre-tool advisory is not a guard and does not
+prove the model reconsidered its already-submitted command. Both share the same
+three-suggestion budget and once-per-method state with role-start advice.
+Explicit attempts to read an available skill suppress redundant advice as
+awareness evidence, without claiming successful reading or application.
+
+Disposable-home tests exercise all three native output envelopes, packaging,
+disablement, reconciliation and duplicate suppression. Native activation of new
+registrations remains separate from these checks and may require user trust.
+See the [routing matrix](../../../hooks/skill-reminder-routing.md) for supported
+forms and deliberate silence; historical acceptance above covers the earlier
+read-only bindings, not these new event sequences.
+
+Expanded bindings were delivered on 2026-10-03; managed verification converged
+with zero changes. Before user trust a bounded HTTP probe produced no new state
+or model receipt. After trust, the root received `mainframe-curl-requests` on
+PreToolUse, read the method and applied its request guidance; a second bounded
+HTTP request produced no duplicate. Existing recipient state was not reset.
+
+A fresh native `mainframe-test-auditor` received `mainframe-test-audit` context
+before its first tool and applied that method. An absolute test-file read then
+received `mainframe-testing` through PostToolUse; the identical repeated read
+was silent. Earlier relative reads without explicit workdir remained silent,
+as designed. Reading a supporting reference alone does not mark SKILL.md as
+read. These sequences establish all three event routes and recipient-level
+repeat suppression, not universal relevance or every command/profile variant.

@@ -6,6 +6,8 @@ Description: Independently audit a bounded test system for concrete coverage, re
 
 Required method: [mainframe-test-audit](../skills/mainframe-test-audit/SKILL.md)
 
+Evaluate the shared `mainframe-testing` criteria through the audit method’s relevant reference routes. They define what good evidence must prove; they do not authorize this role to write tests or repair CI.
+
 ## Role
 
 Audit the bounded test system supplied through the current execution path. Read

@@ -1,60 +1,64 @@
-# Find project ticket candidates
+# Investigate random project areas and record proven problems
 
-This is a user-invocable command. Execute it only because the current invocation explicitly selected it. It takes no arguments: every invocation covers the complete current project.
+This is a user-invocable command. Execute it only because the current invocation explicitly selected it. It takes no arguments and operates on the current project. When combined with a native goal, continue the campaign under that goal until the stopping criterion below is met or the user stops it. This command alone does not create a goal or background automation.
 
-Start discovery from the current project state every time. Find concrete problem candidates across the complete project, reconcile them with the receiving project's configured open issue queue, and return an evidence-based coverage report. Earlier runs, remembered coverage, and existing tickets are leads and deduplication inputs, never substitutes for a fresh pass. Do not implement, fully refine, prioritize, decide, or close tickets during this command.
+Repeatedly choose a random project area, investigate it, immediately persist a supported problem or consolidate new evidence into its existing ticket, then choose another area. Do not implement fixes, assign priorities, decide unresolved product behavior, or advance tickets through later lifecycle stages.
 
-## Establish the boundary
+## Read the initialized ticket contract
 
-Resolve the current project root and its configured issue route from the effective project harness. Do not use another repository's queue or MAINFRAME's central harness-feedback queue. If the project has no configured issue route, return the exact missing configuration and ticket-ready findings; do not invent a tracker or initialize a queue as a side effect of discovery.
+Read `docs/tickets/AGENTS.md` and require the `mainframe-tickets-v1` contract before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
 
-The invocation authorizes read-only discovery and project-ticket writes only to the extent supplied by the current caller. It does not authorize product changes, external environment mutations, repository-history operations, or broader access. If the configured queue is external and the invocation does not carry write authority for it, keep discovery read-only and return ticket-ready records.
+Read only relevant matches across the five `docs/tickets/open/` queues for deduplication. Create new records in `open/observations/` with `id`, `title`, `component`, `created`, `created-from` and an `Evidence` section. New IDs are quoted four-character lowercase hexadecimal strings checked against open and archived IDs; retain existing IDs. Add new facts to matching open records without changing their lifecycle or execution marker. Record trigger/location, actual and expected behavior with sources, consequence, and uncertainty. Keep this campaign's random-point history and duplicate streak under `.campaigns/`; never count state files, migration snapshots, or terminal records as open duplicates.
 
-Preserve the current checkout, branch, unrelated dirty work, and existing processes. Do not switch or create branches or worktrees, alter history, stash, clean, commit, push, deploy, or modify application behavior.
+## Resolve project storage and authority
 
-## Refresh relevant open records
+Use the initialized project contract for ticket identity, fields, destinations and `.campaigns/` storage. Follow its template and validate required fields, Markdown structure and links before saving. Preserve existing tracked or ignored ownership; campaign state is not a defect ticket or durable project skill.
 
-Inspect every open project ticket before searching for new candidates. Recheck its locations, triggering conditions, and claimed mechanisms against the current project tree.
+The invocation authorizes project investigation and local ticket and campaign-state writes within the effective project policy. External ticket writes and access to shared or remote environments require the applicable caller authority. Preserve unrelated work and processes. Do not change application behavior, switch branches, alter history, commit, push, deploy, or broaden access during this command.
 
-Follow renamed or moved code into current callers and consumers; a missing historical path alone does not prove that a problem disappeared. Add a concise relevance note only when current evidence materially changes an open record. Preserve its identity, evidence history, and lifecycle state. Do not close, reject, split, merge, refine, or reroute tickets in this command.
+## Choose and investigate one random point
 
-Use the refreshed open queue for deduplication. A match must concern the same affected behavior and mechanism, not merely similar words or filenames.
+Build a lightweight candidate pool from the actual project structure: modules, entrypoints, user scenarios, interfaces, data paths, and cross-component contracts. Randomly sample or shuffle it using an available local mechanism. Expand the pool as investigation reveals other boundaries. Do not select points from existing tickets to manufacture duplicate matches, repeatedly inspect one known defect, or claim randomness for a fixed favorite checklist.
 
-## Cover the complete project
+Keep one point active through investigation and recording. Avoid revisiting the same point within the current selection cycle; after exhausting the pool, vary the scenario, contract, inputs, or failure condition and continue. A point with no defect is not proof that its module or project is defect-free. An exhausted pool or an elapsed work period is not a completion criterion.
 
-Build a temporary coverage map from the project's actual boundaries: manifests, entry points, modules or services, interfaces, data paths, external contracts, and material business areas. Include only what is needed to track the run; do not add a permanent repository map.
+Trace relevant callers, consumers, state transitions, failure paths, and real project requirements. Use current authoritative internet sources and available MCP resources when they can establish the applicable behavior, compatibility, or intended contract. Match external evidence to the project's actual versions and environment. Cite the specific source and what it establishes; search snippets, stale documentation, and model confidence are not proof. Do not transmit secrets or private project material to external sources.
 
-Inspect one bounded area at a time using relevant risk directions rather than a generic checklist. Trace cross-component contracts, authority boundaries, state transitions, failure and recovery paths, concurrency, and edge inputs when they are material to that area.
+Use the smallest safe inspection, local test, reproduction, or measurement that can settle the suspected problem. Check side effects before running project commands and use disposable fixtures only within existing authority. Available credentials, tools, or localhost addresses do not authorize remote access or disposal. A blocked source or unavailable check leaves that claim unresolved; continue other available investigation without inventing evidence.
 
-Keep one candidate active at a time. Reconcile or record it completely before pursuing the next candidate, then resume the remaining project coverage. Continue this cycle while project material or a concrete lead remains unexamined.
+## Establish a real problem and deduplicate
 
-Use read-only repository and configuration inspection. Do not run project code, tests, builds, linters, servers, containers, migrations, benchmarks, or external systems. Consult current authoritative documentation only when a plausible candidate depends on a changing external contract.
+Record only a problem supported by current evidence: an affected project location or behavior, its triggering conditions, the expected behavior and its basis, and a demonstrated discrepancy or concrete defect established by inspection. Include practical consequences and distinguish what is proved from remaining uncertainty. A reproducible execution is useful but not mandatory when source inspection proves the defect.
 
-If the execution environment provides delegation and separation would materially improve coverage, assign bounded areas with explicit ownership and evidence requirements. Treat every omission, limitation, or not-covered result as unfinished coverage until it is examined elsewhere or excluded by the project's actual boundaries, capability, or authority. Do not require delegation or assume that a primary-agent interface is available.
+An optimization qualifies when evidence establishes a meaningful avoidable cost or constraint violation. Do not create tickets for stylistic preferences, speculative mechanisms, newer technology alone, or guessed business requirements. Full root cause, complete blast radius, priority, and implementation design belong to later stages when not yet established.
 
-## Record defensible candidates
+Before every write, search the configured open queue for the same behavior, mechanism, and affected boundary. Read relevant matches rather than re-auditing every open ticket. Follow moved code when needed; keywords or an old path alone do not establish identity.
 
-Record a candidate only when both are present:
+- No matching record: create one ticket using the configured identity, initial lifecycle state, YAML and Markdown requirements.
+- A matching record with substantial new evidence: consolidate that evidence into its relevant sections, correcting stale conclusions while preserving identity and useful history. Do not append a repeated investigation diary or change the lifecycle state.
+- A matching record with no substantial new evidence: leave it unchanged and continue.
 
-- a concrete project location or observable behavior;
-- a plausible mechanism by which it could produce incorrect behavior, data loss, unsafe access, failed delivery, or another practical regression.
+Preserve sources, conditions, observed and expected behavior, and important unknowns in the ticket itself so another session can continue without this conversation. Save and confirm each ticket update before moving to the next point. If a write is unavailable, retain ticket-ready evidence in permitted campaign state and report the exact missing action; do not claim persistence or successful campaign completion.
 
-Do not create tickets for preferences, stylistic disagreements, abstract improvements, unsupported speculation, or replacing working technology merely because a newer option exists. Discovery establishes a candidate, not a confirmed cause, complete blast radius, priority, solution, or acceptance criteria.
+Do not mutate closed or archived records. If a matching terminal record is encountered, verify whether this is a recurrence; a present recurrence needs a new linked observation under the project's rules and does not count as an already-covered open problem.
 
-Before every write, search the configured open queue narrowly for the same problem. Add only material new evidence to a clear match and do not repeat evidence already present. When no clear match exists and writing is authorized, create one observation for one concrete problem using the project's configured ticket format and identity mechanism. Keep uncertain matches separate and note only the possible relationship.
+## Preserve campaign continuity and count saturation
 
-Repeated discovery over unchanged project state and evidence must converge: it must not duplicate records, relevance notes, or evidence. Do not inspect or modify archived or closed records merely to reuse their identity.
+Save concise campaign state after each point: campaign identity, relevant project revision or dirty-state boundary, point and selection history, evidence outcome, ticket identity, unresolved evidence or writes, and the current consecutive-duplicate count. Preserve enough history to avoid counting a repeated inspection as a new random point. Resume that same campaign after context changes; do not reset progress merely because a new turn or session began. Revalidate affected evidence and reset an unsupported streak when relevant project changes invalidate it.
 
-## Complete the command
+The completion threshold is **10 consecutive investigations of distinct randomly selected points**, each establishing a real problem already covered by an open ticket, with no substantial new evidence to add.
 
-Follow concrete new leads through their relevant callers and consumers and extend the temporary coverage map when they expose an omitted boundary. Finish only after every area in the complete project map is examined or explicitly excluded for a concrete project-boundary, capability, authority, or evidence reason, every defensible candidate is recorded or returned as ticket-ready content, and a final control sweep produces no unprocessed project material or concrete lead.
+- An established duplicate with no new evidence increments the count once for that point, regardless of how many matching tickets exist.
+- A new problem or substantial addition to an existing ticket resets the count to zero.
+- A point with no established problem, an inconclusive investigation, a repeated point, or unavailable evidence does not qualify and breaks the consecutive streak.
+- Tool calls, retries, context changes, or replaying a saved result do not create additional attempts.
 
-Do not claim that the project has no remaining defects. Return:
+Never skip a new finding to preserve the streak. If several problems emerge from one investigation, reconcile all of them before choosing another point; any new problem or material evidence resets the streak.
 
-- the exact project inspected;
-- the meaningful areas and risk directions covered;
-- open-ticket relevance changes, if any;
-- tickets created or reconciled, with identities or links;
-- ticket-ready records that could not be written and the exact reason;
-- remaining unexamined areas and their concrete exclusion or blocker;
-- the evidence that no discovered candidate or lead from this run remains unprocessed.
+## Continue or report the stopping result
+
+Continue while the count is below 10 and authorized investigation remains possible. Do not finish a goal because the code seems clean, all mapped areas were visited, no problem was found in a short period, or the agent believes it has checked everything. Finite native execution or budget limits remain binding; preserve a continuation state rather than label interrupted work complete.
+
+A user stop ends the campaign as requested. If no authorized progress remains possible, report the concrete blocker and preserve resumable state; a blocker is not successful completion. Follow the native goal's actual status rules without substituting a completion claim.
+
+At 10 qualifying consecutive duplicates, verify the saved evidence and that no discovered finding or write remains unprocessed. Report completion by the agreed duplicate-saturation criterion, never absence of defects. Return created or materially updated ticket links, the saved campaign-state location, the streak and its supporting ticket identities, and material unresolved limitations. For an interrupted campaign, report its continuation point instead. Omit empty categories.

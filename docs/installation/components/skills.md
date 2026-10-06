@@ -4,10 +4,17 @@ Use this guide for every entry under `components.skills`.
 
 ## Preserve the complete skill
 
-Copy the complete listed skill directory, including directly referenced
+Copy the approved resource tree of the listed skill, including directly referenced
 scripts, references, examples, and assets. Preserve stable identity, proactive
 trigger semantics, exclusions, relative links, and progressive disclosure.
 Nested resources belong to the skill; they are not separate components.
+
+Use the maintained shared resource selector. Ignore rules exclude local state
+before contents are read, and Git control files stay in the source. For a Git
+checkout, reject untracked non-ignored resources until their ownership is
+resolved; do not blindly copy them or silently omit a required new resource.
+For a downloaded source archive, use its distributed ignore rules without
+initializing the source. Reject symlinks and missing tracked resources.
 
 Add only native-required metadata or packaging to the installed copy. Do not
 edit the canonical skill to add one product's frontmatter, UI metadata,

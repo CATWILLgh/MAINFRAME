@@ -52,19 +52,36 @@
 
 - When referring to a known file, use a Markdown link to its path instead of a bare file name. Add a line suffix when useful, for example `[config.ts](src/config.ts:42)`.
 
-# Tests
+# Testing and CI
 
-- Keep routine local tests fast while protecting business rules, logical behavior, functional behavior, and the relevant regression boundaries.
-- Use the smallest test set and minimum infrastructure that can faithfully observe the changed risk. Do not start services or containers that add no relevant behavior.
-- Leave broad, expensive, compatibility, and full-system suites to CI or an explicitly assigned full verification pass.
-- Use local test infrastructure authorized by the effective instructions or your immediate caller. If a required infrastructure boundary is missing, return that exact decision and continue checks that do not depend on it. Ordinary one-shot checks using disposable files need no separate infrastructure approval.
-- Do not weaken assertions, suppress failures, or retry flaky checks until they pass and call that verification. Report what ran, what it proves, and any material gap.
+- For behavior changes, both the primary agent and subagents use `mainframe-testing` when available and follow red → green → refactor: observe a focused failure for the intended behavior before the fix, implement it, then refactor with relevant checks green. Reuse an existing failing test; do not manufacture tests for prose-only or reversible low-impact changes.
+- Keep the normal local loop lightweight: pure/in-process tests, plus isolated verified local PostgreSQL when its semantics matter. Other service-backed, expensive, compatibility, and end-to-end suites belong in CI by default. Run a broader local pass only under explicit caller/project authority; do not replace missing engine semantics with misleading mocks.
+- Use the project verification map to connect changed guarantees to test boundaries, commands, local/CI routes and acceptance conditions; follow the testing skill’s shared strategy and reconcile relevant entries within write authority. Do not require every test level for every change.
+- Give delegated work its behavior, permitted test boundary, and required evidence. Each implementer reports observed failures and checks; the primary agent verifies the integrated result and required CI coverage. The method never expands a read-only assignment into test or code edits.
+- Use `mainframe-test-audit` for an assigned assessment of existing test/CI quality or an in-scope evidenced concern; it evaluates the shared testing standard read-only. Ordinary test writing, execution and repair use `mainframe-testing`, without a mandatory audit.
+- Reuse the project’s configured analysis tools; add only tools that close a concrete gap, using the testing skill’s small tool profiles. Keep hook execution bounded and free of installation. SonarQube or comparable analysis platforms require an explicit user request and agreement on scope, infrastructure, cost and maintenance; generic CI work is insufficient.
+- Use the testing skill's relevant GitHub Actions or GitLab CI reference when creating, changing, or diagnosing pipeline checks. Preserve meaningful required coverage while reducing avoidable setup, duplicate runs, and infrastructure.
+- Do not weaken assertions, suppress failures, or retry flaky checks until green. Distinguish local results, configuration validation, actual CI results for the tested revision/event, and live acceptance. If faithful red/green or required CI evidence is unavailable, name the exact gap; do not claim it passed or silently omit the check.
 
 # Secrets
 
 - Never expose secret values in replies, logs, diagnostics, commits, or files not intended to store them.
 - Never read protected credential stores directly. Use the allowed credentials index for descriptions and the `mainframe-secret` helper or existing environment variables for values.
 - Pass secret values directly to the process that needs them; do not echo, inspect, or retain them.
+
+# Local Git checkpoints
+
+- Unless the caller or project explicitly forbids it, make local commits of
+  coherent completed and appropriately verified parts of authorized repository
+  work. This does not expand a read-only or delegated scope. Use Conventional
+  Commits (`<type>[optional scope]: <description>`).
+  Prefer useful checkpoints during substantial work rather than one accumulated
+  change at the end; do not commit unfinished work solely to reach a quota.
+- Inspect and stage only the intended changes you own. Preserve unrelated and
+  pre-existing work, including partial staging. If ownership cannot be safely
+  separated, leave that part uncommitted and explain the concrete boundary.
+- This default authorizes local commits only. Push, publication, destructive
+  history changes and deployment still require their own caller authority.
 
 # Authority and safety
 

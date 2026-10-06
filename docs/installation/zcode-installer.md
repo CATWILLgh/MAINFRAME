@@ -1,8 +1,10 @@
 # Install MAINFRAME into ZCode Desktop
 
 Use this maintained route when the installation request is running in ZCode
-Desktop from this MAINFRAME checkout. The fully accepted mapping targets macOS
-ZCode build **3.11.2.6792**. The current **3.14.3.7762** route permits bounded
+Desktop from this MAINFRAME checkout. The original inspected mapping targets macOS
+ZCode build **3.11.2.6792**. The **3.14.4.7912** mapping was revalidated against its shipped hook parser,
+context consumers and current official documentation. New conversation acceptance
+remains separate. The older **3.14.3.7762** route permits bounded
 skill updates and the exact validated pre-shell transport consolidation in an
 existing same-source installation; other native-hook changes, roles, commands,
 and permissions remain blocked. Version detection reads the selected application's plist;
@@ -62,8 +64,9 @@ Do not delete an old wrapper merely to make cleanup look complete.
 
 ## Delivered mapping and known gaps
 
-The program prepares the 15 complete skill packages, seven native agent roles,
-six native slash commands, the narrow `mainframe-tickets-find` skill projection
+The program prepares every complete skill package listed in the
+[inventory](../../ADAPTATION.example.json), seven native agent roles,
+seven native slash commands, the narrow `mainframe-tickets-find` skill projection
 needed by noninteractive automations, shared credential helper/index integration,
 and the global instruction. It preserves unrelated target files and configuration.
 Commands retain explicit invocation, and shared command-skill collisions are
@@ -96,7 +99,8 @@ successful or failed post attribution, and a `Stop` callback that blocks only
 while an introduced finding still exists. Advisory-only Stop output remains
 silent because ZCode otherwise delivers it by forcing another model turn.
 
-**34 components are delivered; two are unsupported in this build.**
+The installer report supplies current delivery counts from the exact inventory.
+Two hook contracts remain unsupported in the inspected builds:
 `mainframe-code-quality` and `mainframe-fallow-quality` require non-blocking completion advice.
 ZCode collects `Stop` advice but delivers it to the model only with a new model
 continuation. The useful mainframe-code-quality core is installed and reported as a
@@ -137,7 +141,7 @@ python3 -B install.py zcode uninstall
 python3 -B install.py zcode recover
 ```
 
-Use `--hook NAME` with one of the five maintained hook names for an individual hook.
+Use `--hook NAME` with an identity from the inventory's `hooks` group for an individual hook.
 Disable markers are checked by the cached inline launcher; they do not depend
 on a native configuration reload. Uninstall disables first and waits for the
 bounded maintained callbacks before retiring implementation. It preserves
@@ -145,3 +149,19 @@ foreign files, reused instructions/helpers, credential metadata, unrelated
 configuration, and any necessary inert manual callbacks. `recover` restores an
 interrupted file transaction only when concurrent user changes do not conflict.
 No lifecycle command runs a native acceptance campaign.
+
+
+## Skill reminders
+
+The installer delivers the shared positive-only reminder method and this
+product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
+An already considered skill stays quiet; reminders neither block nor continue
+a model. Existing disable choices are preserved. Start a fresh Desktop
+conversation after updating registrations; file convergence does not establish
+native receipt or skill application.
+
+Native role settings (`color`, `model`, `thoughtLevel`, `injectAgentsMd`) remain
+per-installation choices. Receipts separately hash the managed role core, so a
+later canonical-body update can preserve independently changed settings while
+still rejecting arbitrary local edits to role bodies or tool boundaries. Older
+receipts without a core hash can need one explicit semantic reconciliation.

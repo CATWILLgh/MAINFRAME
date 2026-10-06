@@ -24,9 +24,9 @@ release evidence, `--cline-home` selects an explicit configuration root, and
 | Destination | Content |
 | --- | --- |
 | `~/.cline/rules/mainframe.md` | The canonical global instruction inside one MAINFRAME-managed block |
-| `~/.cline/skills/mainframe-*/` | The 15 canonical skills, complete with references, scripts, and assets; markers resolved only in the copies |
+| `~/.cline/skills/mainframe-*/` | Every canonical skill in the [inventory](../../ADAPTATION.example.json), complete with references, scripts, and assets; markers resolved only in the copies |
 | `~/.cline/agents/mainframe-*.yml` | The seven roles as YAML profiles; read-only roles are restricted to `read_files, search_codebase` and every profile binds its required method through the native `skills:` field |
-| `~/.cline/workflows/<command>.md` | The six commands as explicit user-invoked slash workflows |
+| `~/.cline/workflows/<command>.md` | The seven commands as explicit user-invoked slash workflows |
 | `~/.cline/hooks/PreToolUse`, `PostToolUse` | Two fail-open launchers that call one Python transport |
 | `~/.cline/hooks/mainframe-cline-hook` and `hooks/detectors/` | The unchanged canonical detectors behind the transport |
 | `~/.local/bin/mainframe-secret` | The credential helper, installed only when absent |
@@ -87,3 +87,13 @@ The mapping and its limitations are documented in
 [native/cline.md](native/cline.md). Adapter code lives in
 [installer/cline.py](../../installer/cline.py), and the installed hook
 transport comes from [installer/cline_hook.py](../../installer/cline_hook.py).
+
+
+## Skill reminders
+
+The installer delivers the shared positive-only reminder method and this
+product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
+An already considered skill stays quiet; reminders neither block nor continue
+a model. Existing disable choices are preserved. Start a fresh Desktop
+conversation after updating registrations; file convergence does not establish
+native receipt or skill application.

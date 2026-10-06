@@ -1,7 +1,7 @@
 # Antigravity Desktop 2.0 native mapping
 
-Reviewed 2026-09-15 against the installed macOS application and current official
-documentation for **Antigravity 2.0 v2.13.0**. This page owns product evidence;
+Reviewed 2026-10-06 against the installed macOS application and current official
+documentation for **Antigravity 2.0 v2.16.0**. This page owns product evidence;
 the executable route is [the maintained installer](../antigravity-installer.md).
 
 ## Native destinations
@@ -15,7 +15,7 @@ the executable route is [the maintained installer](../antigravity-installer.md).
 | Credentials | Compatible global `mainframe-secret` helper plus the canonical non-secret index |
 
 The installed application reports bundle identifier `com.google.antigravity`
-and release `2.13.0`. Its Desktop transcripts live below
+and release `2.16.0`. Its Desktop transcripts live below
 `~/.gemini/antigravity`; CLI uses `~/.gemini/antigravity-cli`. The maintained
 entrypoint accepts only the Desktop surface, so the shared customization root
 does not authorize a CLI or IDE installation run.
@@ -27,7 +27,7 @@ Official references: [rules](https://antigravity.google/docs/rules-workflows/),
 
 ## Represented components
 
-The global rule file has a documented 12,000-character limit. The installer
+The global rule file has a documented 24,000-byte per-file limit. The installer
 merges one owned block, preserves outside content, and rejects an oversized
 result instead of truncating it. Complete skill packages are copied to the
 documented global root with resources and resolved local placeholders.
@@ -44,7 +44,7 @@ surface, matching the documentation's warning that an unmapped tool name can
 break custom-agent execution.
 
 Antigravity skills support both slash invocation and autonomous selection.
-Version 2.13.0 documents no explicit-only switch. The six canonical MAINFRAME
+The current documentation provides no explicit-only switch. The seven canonical MAINFRAME
 commands therefore remain `unsupported` as complete contracts. The installer
 retains their useful slash behavior as ordinary skill packages whose discovery
 description and body both require the exact `/command` invocation. This is a
@@ -69,9 +69,10 @@ leaving the user's existing native permission decision unchanged.
 | `mainframe-code-quality` | Exact inserted-text findings are injected after supported edits and revalidated at `Stop` | Pre-edit external diagnostics, growth attribution, and unsupported edit-tool shapes |
 | `mainframe-fallow-quality` | Exact supported TS/JS edit diffs are analyzed and injected at `PostInvocation` | Completion-event timing and unsupported edit-tool shapes |
 
-All six exact native hook contracts remain `unsupported` in schema-2 delivery.
+The six preventive/quality contracts above remain `unsupported` in schema-2 delivery;
+the separate post-edit checkpoint advisory is fully mapped.
 That status describes the missing event guarantee; it does not erase the retained
-instruction and skill behavior reported under `retained_partial_bindings`.
+native event behavior reported under `retained_partial_bindings`.
 
 The earlier adapter incorrectly returned `{}` as a clean `PreToolUse` result.
 A real A106 Desktop task then lost every shell and edit result while reads kept
@@ -92,3 +93,28 @@ post-event deduplication, code-finding revalidation, and Desktop/CLI separation.
 They do not prove that a fresh Desktop conversation
 discovered or executed skills and agents. That native check belongs to separately
 requested acceptance and must not be replaced by launching Antigravity CLI.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostInvocation (attributable supported edit fragments) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.
+
+
+## Reminder update
+
+On 2026-10-06, current [rules documentation](https://antigravity.google/docs/rules)
+replaced the earlier 12,000-character assumption with a 24,000-byte per-file
+limit after includes and a separate aggregate rules budget. The adapter checks
+UTF-8 bytes and preserves outside user instructions. Current
+[hooks documentation](https://antigravity.google/docs/hooks) retains the
+PostInvocation `injectSteps`/`ephemeralMessage` channel and no neutral
+PreToolUse decision; `deny_unless_prior_grant` is another gating decision.
+Reminder advice therefore joins the existing composite PostInvocation handler,
+without a new permission gate or forced continuation. Supported timing and
+unavailable role-start advice are in the
+[native binding table](../../../hooks/skill-reminder-routing.md#native-bindings).

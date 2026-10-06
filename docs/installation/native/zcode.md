@@ -2,7 +2,10 @@
 
 Reviewed 2026-09-08 against official documentation and the installed macOS
 application, version 3.11.2 (build 3.11.2.6792), with a bounded skill-update
-compatibility review on 2026-09-22 for 3.14.3.7762. Use the [maintained installer](../zcode-installer.md) for delivery. This page
+compatibility review on 2026-09-22 for 3.14.3.7762 and
+[shipped-code reminder revalidation](zcode-evidence.md#31447912-reminder-revalidation-2026-10-06)
+on 2026-10-06 for 3.14.4.7912. Live acceptance below belongs to the older build;
+it is not acceptance of the newer one. Use the [maintained installer](../zcode-installer.md) for delivery. This page
 records mapping evidence and the boundaries still requiring native acceptance. Target Desktop; the configuration directory's `cli` name does
 not require launching a CLI agent.
 
@@ -162,3 +165,13 @@ four pre-shell effects and the primary-runtime `mainframe-code-quality` post-edi
 positive Stop lifecycle have live Desktop evidence on this build. The
 advisory-only Stop limitation, default-subagent omission, and cached-callback
 retirement boundary remain unproven or unsupported as stated above.
+
+## Commit checkpoint advisory
+
+`mainframe-commit-checkpoint` uses PostToolUse (Write/Edit) to deliver bounded
+model context after successful edits. It is independently disableable and never
+registers checkpoint advice at Stop or forces continuation. Defaults, metadata
+bounds, reset/deduplication, failure behavior and coverage are owned by the
+[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
+The maintained installer includes its detector and post-edit binding; native
+activation remains a separate observation after installation.

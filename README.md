@@ -13,8 +13,9 @@ Generated product copies are not maintained as separate source trees.
 
 ## Verified baselines
 
-Each badge shows the lowest version that has actually run the relevant
-MAINFRAME checks in this rebuild as of 2026-09-07. It is verification evidence,
+The runtime badges record the lowest versions that ran the relevant canonical
+checks in the 2026-09-07 rebuild. Analyzer badges record the maintained runtime
+installer's tested pins. They are verification evidence,
 not a claim that older releases are incompatible or that every newer release is
 automatically supported.
 
@@ -61,28 +62,8 @@ The [Codex](docs/installation/codex-installer.md),
 [MiniMax Code Desktop](docs/installation/minimax-installer.md), and
 [Cline](docs/installation/cline-installer.md) installers
 implement packaging, ownership, updates, recovery, and safe hook removal for
-their documented versions. The installation-procedure trials below do not
-establish full native acceptance; each adapter records its own exact limitations.
-
-### Installer model trials
-
-Codex **Desktop 0.153.4**, **2026-09-08**. One fresh task per tested combination,
-using the same source and file-only request after removing the previous
-MAINFRAME installation. Models are ordered from lightest to strongest;
-reasoning levels with the same observed outcome are grouped.
-
-| Model | Reasoning | Result |
-| --- | --- | --- |
-| `gpt-5.3-codex-spark` | low, medium, xhigh | Partial: correct files; instruction review skipped |
-| `gpt-5.3-codex-spark` | high | Failed: installation never started |
-| `gpt-5.6-luna` | low | Passed |
-| `gpt-5.6-terra` | low, medium, high, xhigh | Passed |
-| `gpt-5.6-sol` | — | Not tested; expected to pass |
-| `gpt-6-astra` | — | Not tested; expected to pass |
-
-Passed covers file delivery, preservation, convergence, and required instruction
-review. Full adapter acceptance is tracked separately. These are single-run
-results; the Sol/Astra expectations are untested assumptions.
+their documented versions. Successful file delivery does not establish full
+native acceptance; each adapter records its own exact limitations.
 
 ## Install or update
 
@@ -170,6 +151,12 @@ payload from directory contents, archives, older adapters, or ignored files.
 
 ## User commands
 
+The global testing rule applies to primary and delegated agents. Use
+[mainframe-testing](skills/mainframe-testing/SKILL.md) for TDD, lightweight local
+checks with verified local PostgreSQL where needed, and reliable GitHub/GitLab CI.
+Stack-specific evidence remains in the engineering skills; test-system audits
+remain a separate capability.
+
 The installed product exposes these stable command identities through its
 closest explicit user-command mechanism:
 
@@ -177,10 +164,11 @@ closest explicit user-command mechanism:
 | --- | --- |
 | [mainframe-init](commands/mainframe-init.md) | Establish ownership and verification for one user-facing coordinating session |
 | [mainframe-project-skill](commands/mainframe-project-skill.md) | Initialize, update, or extend the current project's evolving skill |
-| [mainframe-tickets-find](commands/mainframe-tickets-find.md) | Find and record current project problems from scratch |
-| [mainframe-tickets-refine](commands/mainframe-tickets-refine.md) | Expand the project's existing ticket queue |
-| [mainframe-tickets-implement](commands/mainframe-tickets-implement.md) | Implement every ready project ticket one at a time |
-| [mainframe-tickets-verify](commands/mainframe-tickets-verify.md) | Independently verify every eligible implemented ticket |
+| [mainframe-tickets-init](commands/mainframe-tickets-init.md) | Initialize or migrate project ticket directories, format and root instructions |
+| [mainframe-tickets-find](commands/mainframe-tickets-find.md) | Investigate random project areas and record or enrich deduplicated problem tickets |
+| [mainframe-tickets-refine](commands/mainframe-tickets-refine.md) | Deeply investigate ticket execution paths, blast radius, and duplicates; route each outcome |
+| [mainframe-tickets-implement](commands/mainframe-tickets-implement.md) | Implement, validate, and locally commit each ready engineering ticket sequentially |
+| [mainframe-tickets-verify](commands/mainframe-tickets-verify.md) | Independently verify implemented tickets; edit only ticket records |
 
 Exact slash syntax and delayed loading depend on the installed product. The
 adapter records any unsupported or degraded capability instead of claiming
@@ -204,3 +192,8 @@ acceptance tests.
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and security
 boundaries, [CONTRIBUTING.md](CONTRIBUTING.md) for change rules, and
 [LICENSE](LICENSE) for the MIT license.
+
+To publish or mirror the source on another host, use the
+[repository-sharing guide](docs/repository-sharing.md). Local configuration and
+receiving-project knowledge stay outside the shared source; reviewing the
+current files does not sanitize Git history.

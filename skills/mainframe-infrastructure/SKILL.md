@@ -1,6 +1,6 @@
 ---
 name: mainframe-infrastructure
-description: Diagnose, change, or verify project-owned infrastructure. Excludes ordinary application and UI implementation.
+description: "Plan, diagnose, change, or verify project infrastructure: deployment, CI/CD, containers, networking, TLS, storage, and recovery. Not application implementation."
 ---
 
 # Infrastructure work
@@ -44,6 +44,18 @@ configuration, database, and API behavior.
 
 ## Load only the applicable branch
 
+- Test-pipeline design, required checks, GitHub Actions or GitLab CI: load
+  `mainframe-testing` for its CI references. Keep runner provisioning and live
+  deployment ownership here.
+
+- K3s cluster design, installation, networking, storage, hardening, upgrades,
+  or recovery: load `mainframe-k3s`. Keep general infrastructure ownership and
+  cross-service coordination here; that skill owns the K3s operational method.
+- ClickHouse queries, ingestion, data/schema changes, maintenance, or recovery:
+  load `mainframe-clickhouse` for its environment, cost, and data-safety boundaries.
+- Application Keycloak/OIDC login, admin SSO settings or group-to-role mapping:
+  load `mainframe-keycloak-sso`; keep server deployment, TLS and proxy ownership
+  here. That method owns the application integration and acceptance.
 - Dockerfile, image, container runtime, or Compose work: read
   [containers.md](references/containers.md).
 - Operational PostgreSQL, Redis, backup, restore, replication, or failover
@@ -82,3 +94,9 @@ runbooks and let Git retain history.
 
 If durable facts were established but project edits are outside the task,
 return the exact proposed map update without writing it.
+
+For application event routing, notification delivery and channel settings, use
+`mainframe-notifications`; keep deployment, DNS, TLS and service operations here.
+
+For an embedded System/Diagnostics page, scoped runtime controls or data previews,
+use `mainframe-self-monitoring`; retain live infrastructure operations here.

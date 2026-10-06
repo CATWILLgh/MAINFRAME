@@ -27,6 +27,15 @@ except ImportError:
     from antigravity_hook_state import EVENT_TTL, claim_event, open_state
 
 
+try:
+    from . import native_skill_reminder as skill_advice
+except ImportError:
+    try:
+        import native_skill_reminder as skill_advice
+    except ImportError:
+        skill_advice = None
+
+
 ROOT = Path(__file__).resolve().parent
 MAX_INPUT_BYTES = 262_144
 MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024
@@ -249,6 +258,7 @@ def _fragment_diff(path: Path, workspace: Path, before: str, after: str, line: i
 def _edit_messages(calls: list[dict], data: dict, workspace: Path, state: Path) -> list[str]:
     quality = None if (ROOT / ".disabled-mainframe-code-quality").exists() else _load_detector("mainframe-code-quality")
     fallow = None if (ROOT / ".disabled-mainframe-fallow-quality").exists() else _load_detector("mainframe-fallow-quality")
+    checkpoint = None if (ROOT / ".disabled-mainframe-commit-checkpoint").exists() else _load_detector("mainframe-commit-checkpoint")
     conversation = data.get("conversationId")
     scope = hashlib.sha256(f"{conversation}\0{workspace}".encode()).hexdigest()
     messages: list[str] = []
@@ -258,6 +268,11 @@ def _edit_messages(calls: list[dict], data: dict, workspace: Path, state: Path) 
         if edit is None or not claim_event(state, call["id"] + "\0edit"):
             continue
         path, before, after, line, whole = edit
+        if checkpoint is not None:
+            message = checkpoint.observe(str(conversation), str(workspace), hashlib.sha256(call["id"].encode()).hexdigest(),
+                                         checkpoint.text_lines(before, after), state_root=state)
+            if message:
+                messages.append(message)
         if quality is not None and path.suffix.lower() in quality.CODE_EXTENSIONS:
             before_rows = Counter(row.fingerprint for row in quality.scan_text(before, path.suffix))
             after_rows = quality.scan_text(after, path.suffix)
@@ -302,6 +317,32 @@ def post_invocation(data: dict, state: Path) -> dict:
     calls = _latest_calls(data)
     messages = [message for call in calls for message in _shell_messages(call, workspace, state)]
     messages.extend(_edit_messages(calls, data, workspace, state))
+    if skill_advice is not None and not (ROOT / ".disabled-mainframe-skill-reminder").exists():
+        for call in calls:
+            context = _command_context(call, workspace) if call["name"] == "run_command" else None
+            raw_cwd = call["args"].get("Cwd", call["args"].get("cwd"))
+            read_hint = None
+            if raw_cwd is not None:
+                if not isinstance(raw_cwd, str) or not Path(raw_cwd).is_absolute():
+                    continue
+                literal_cwd = _inside(workspace, raw_cwd)
+                if literal_cwd is None:
+                    continue
+                read_hint = str(literal_cwd)
+            command = context[0] if context else (
+                skill_advice.read_command(call["args"], ("AbsolutePath",)) if call["name"] == "view_file" else None)
+            if not isinstance(command, str):
+                continue
+            # PostInvocation is post-action only: preserve that timing explicitly.
+            message = skill_advice.advise(ROOT, ROOT.parents[2] / "config/skills", state, workspace,
+                                          data.get("conversationId"), call["id"], command, "PreToolUse")
+            if not message:
+                message = skill_advice.advise(ROOT, ROOT.parents[2] / "config/skills", state, workspace,
+                                              data.get("conversationId"), call["id"], command, "PostToolUse", read_cwd=read_hint)
+            if message:
+                messages.append(message)
+                break
+
     if not messages:
         return {}
     message = "\n\n".join(messages)[:MAX_MESSAGE_CHARS]
@@ -317,8 +358,10 @@ def stop(data: dict, state: Path) -> dict:
             or (ROOT / ".disabled-mainframe-code-quality").exists()):
         return {"decision": "stop"}
     detector = _load_detector("mainframe-code-quality")
+    if detector is None:
+        return {"decision": "stop"}
     connection = open_state(state)
-    if detector is None or connection is None:
+    if connection is None:
         return {"decision": "stop"}
     scope = hashlib.sha256(f"{conversation}\0{workspace}".encode()).hexdigest()
     unresolved = []

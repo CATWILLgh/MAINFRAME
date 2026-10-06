@@ -3,6 +3,10 @@
 Keep changes small, evidence-based, and inside the agreed scope. Preserve
 unrelated work, private data, and local agent configuration.
 
+Before sharing another revision or adding a Git host, follow the
+[repository-sharing guide](docs/repository-sharing.md). Review current tracked
+content, actual product payload, and historical disclosure separately.
+
 ## Canonical design
 
 - Keep one canonical owner for every rule or capability.
@@ -29,6 +33,13 @@ commands, and product-specific representation in the maintained adapter.
 - Give each skill a short description that names its actual trigger. Avoid
   broad neighboring keywords and repeated urgency that can route unrelated
   work into the skill.
+  Describe the useful method and recognizable task or symptom, including
+  planning and discussion when the method supports them. Keep procedures,
+  provenance, tool inventories, and repeated safety rules in the body or
+  supporting files. Add an exclusion only for a plausible competing route.
+  Check selection with realistic requests that do not name the skill and
+  nearby requests where it should stay unused; distinguish catalog selection
+  from observed native invocation. Keep explicit-command workflows explicit.
 - Use a skill entrypoint as a small router when it covers several workflows.
   Link only the relevant supporting references, scripts, and assets instead of
   loading the full domain for every invocation.
@@ -78,7 +89,14 @@ inventory. Update it whenever an installable component is added, renamed,
 moved, or removed.
 
 Only listed sources are product payload. A listed skill includes its required
-relative resources. A listed hook includes only its canonical source file, not
+relative resources. [installer/shared.py](installer/shared.py) selects skill
+resources through the source's ignore rules before reading their contents.
+In a Git checkout, intended new resources must be added to the index;
+untracked non-ignored resources stop planning rather than entering delivery.
+Ignored files and Git control files are never skill payload. Downloaded source
+archives use the same ignore rules through temporary Git metadata without
+initializing the source. Keep private notes and experiment data outside listed
+skill packages. A listed hook includes only its canonical source file, not
 `hooks/README.md` or `hooks/tests/`. The shared credential component installs
 only `shared/credentials/mainframe-secret`; its installer, template, local
 index, and tests remain repository support.
@@ -130,6 +148,8 @@ bootstrap.
 
 ## Validate the change
 
+Use [mainframe-testing](skills/mainframe-testing/SKILL.md) for behavioral changes and CI work. Keep the local loop lightweight; tests needing other service infrastructure belong in CI unless a specific local pass is authorized.
+
 Select checks for the changed surface. Documentation and instruction-only edits
 need link/inventory checks and review of the affected decision boundaries, not
 unrelated executable suites. The source-structure check is:
@@ -160,5 +180,8 @@ acceptance checks; an ordinary installation follows the bounded product
 procedure without replaying this development suite or starting model probes.
 
 When handing off a change, state what changed, what was tested, what the tests
-prove, and what remains unverified. Do not commit, push, publish, or change
-external systems unless the current task authorizes that action.
+prove, and what remains unverified. Make local Conventional Commits of coherent
+completed and verified work, following the ownership and checkpoint rules in
+[instructions/global.md](instructions/global.md).
+Do not push, publish, rewrite history destructively, or change external systems
+unless the current task authorizes that action.

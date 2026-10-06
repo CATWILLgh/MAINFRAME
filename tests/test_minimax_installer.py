@@ -45,22 +45,45 @@ class MiniMaxInstallationTests(unittest.TestCase):
         report = self.apply()
         _, converged = self.adapter.plan()
         self.assertEqual(converged["changes"], [])
-        self.assertEqual(report["planned_delivery"], {"installed": 23, "pending": 0, "unsupported": 13})
+        init_command = (self.adapter.plugin / "skills/mainframe-tickets-init/SKILL.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.plugin / "skills") / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
+        self.assertEqual(report["planned_delivery"], {"installed": 31, "pending": 0, "unsupported": 14})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
-        self.assertEqual(len(manifest["skills"]), 21)
+        self.assertEqual(len(manifest["skills"]), 28)
         self.assertEqual(manifest["hooks"], ["hooks/hooks.json"])
         hooks = json.loads((self.adapter.plugin / "hooks/hooks.json").read_text())["hooks"]
         self.assertEqual(set(hooks), {
             "SessionStart", "SubagentStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStop",
         })
         self.assertEqual(hooks["PreToolUse"][0]["matcher"], "bash|write|edit")
-        self.assertEqual(hooks["PostToolUse"][0]["matcher"], "write|edit")
+        self.assertEqual(hooks["PostToolUse"][0]["matcher"], "bash|read|write|edit")
         self.assertTrue(all(
             "MAINFRAME_RUNTIME_BIN=" in handler["command"]
             for groups in hooks.values() for group in groups for handler in group["hooks"]
         ))
         state = json.loads(self.adapter.state_path.read_text())
+        reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
+        self.assertEqual(reminder["delivery"], "installed")
+        self.assertEqual(reminder["verification"], "pending")
+        self.assertNotIn("reason", reminder)
+        self.assertTrue((self.adapter.plugin / "hooks/detectors" / "mainframe-skill-reminder.py").exists())
+        self.assertTrue(any("mainframe-skill-reminder" in path
+                             for path in self.adapter.receipt()["files"]))
+        self.assertNotIn("mainframe-skill-reminder", (self.adapter.plugin / "hooks/hooks.json").read_text())
         self.assertEqual(state["components"]["agents"]["mainframe-researcher"]["reason"], AGENT_REASON)
         self.assertEqual(state["components"]["agents"]["mainframe-go-backend-engineer"]["reason"], AGENT_REASON)
         self.assertEqual(state["components"]["commands"]["mainframe-project-skill"]["reason"], COMMAND_REASON)

@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import _instruction, inventory
+from .shared import _instruction, inventory, skill_resources
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -21,7 +21,7 @@ from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 HOOK_FILES = {"PreToolUse": "tool_call", "PostToolUse": "tool_result"}
@@ -44,7 +44,7 @@ FALLOW_PARTIAL = (
 )
 HOOK_SCOPE = (
     "One pre-action guard file covers recognized catastrophic shell and secret patterns; "
-    "one post-action file delivers exact-edit quality and Fallow advisories. Lifecycle hook "
+    "one post-action file delivers exact-edit quality, Fallow and skill advisories. Positive skill advice also joins pre-action output. Lifecycle hook "
     "files are unused because Cline ignores their result. Guards hard-block through the "
     "native cancel result, which stops the affected run with the reason; Cline offers no "
     "recoverable per-tool denial for file hooks."
@@ -186,6 +186,7 @@ class Cline:
             self.rules, self.home / ".local/bin/mainframe-secret",
             self.home / ".local/bin/secret",
             self.hooks / "PreToolUse", self.hooks / "PostToolUse", self.hooks / TRANSPORT,
+            *(self.hooks / n for n in ("skill_reminder.py", "native_skill_reminder.py", "skill_profiles.py")),
         }:
             return True
         if path.parent == self.detectors and path.suffix == ".py" and path.stem in HOOK_NAMES:
@@ -220,13 +221,10 @@ class Cline:
 
 
     def _skill_files(self, source: dict, add) -> None:
+        resources = skill_resources(self.root, source)
         for name, entry in source["components"]["skills"].items():
             base = self.root / entry["source"]
-            for path in sorted(base.rglob("*")):
-                if path.is_symlink():
-                    raise Conflict("Canonical skill resources cannot be symlinks.")
-                if not path.is_file() or "__pycache__" in path.parts or path.name == ".DS_Store":
-                    continue
+            for path in resources[name]:
                 data = path.read_bytes()
                 if path.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
                     data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(
@@ -256,6 +254,10 @@ class Cline:
                 (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
         add(self.hooks / TRANSPORT, Path(__file__).with_name("cline_hook.py").read_bytes(),
             "hook transport", 0o700)
+        for filename, sourcefile in (("skill_reminder.py", "codex_skill_reminder.py"),
+                                     ("native_skill_reminder.py", "native_skill_reminder.py")):
+            add(self.hooks / filename, Path(__file__).with_name(sourcefile).read_bytes(), "hooks.mainframe-skill-reminder")
+        add(self.hooks / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
         for file_name, event_key in HOOK_FILES.items():
             add(self.hooks / file_name, launcher(event_key, TRANSPORT, runtime_bin(self.home)), "hook transport", 0o755)
         add(self.index, (self.root / "shared/credentials/credentials-index.template.md").read_bytes(),
@@ -373,9 +375,10 @@ class Cline:
                 ("hooks", "mainframe-fallow-quality"): COMPLETION_REASON + " " + FALLOW_PARTIAL,
                 ("hooks", "mainframe-code-quality"): COMPLETION_REASON + " " + CODE_QUALITY_PARTIAL,
             }
+            pending = {}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
-                if (category, name) not in unsupported
+                if (category, name) not in unsupported and (category, name) not in pending
             ]
             if remove:
                 from .state import component_keys
@@ -392,7 +395,7 @@ class Cline:
                 ]
                 state = reconcile_state(source, prior_state, target, unchanged=unchanged,
                                         delivered=delivered, unsupported=unsupported,
-                                        next_actions=actions)
+                                        pending=pending, next_actions=actions)
             changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state),
                                                 component="adaptation state"))
         if remove:
@@ -484,7 +487,8 @@ class Cline:
             return
         if state.stat().st_uid != os.getuid():
             raise Conflict("Temporary hook state has unexpected ownership.")
-        for name in ("events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm"):
+        for name in ("events.sqlite3", "events.sqlite3-journal", "events.sqlite3-wal", "events.sqlite3-shm",
+                     "commit-checkpoint.sqlite3", "commit-checkpoint.sqlite3-journal", "commit-checkpoint.sqlite3-wal", "commit-checkpoint.sqlite3-shm"):
             path = state / name
             if path.exists() and not path.is_symlink() and path.is_file():
                 path.unlink()

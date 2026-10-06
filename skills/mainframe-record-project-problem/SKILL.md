@@ -15,7 +15,7 @@ Do not use this route for a fault in MAINFRAME, its adaptation, hooks, instructi
 
 ## Use the project's queue
 
-Locate the issue route already configured for the receiving project. It may be a repository-local queue or an external tracker. Follow its documented ownership, fields, states, and write permissions. Do not write a receiving-project problem into MAINFRAME's own queue, invent a new issue system, or initialize directories merely to record the finding.
+When the project uses `docs/tickets/AGENTS.md` with `mainframe-tickets-v1`, read that contract and create observations with its required YAML fields and Evidence section; preserve matching open records and do not perform campaign investigation or lifecycle transitions. Otherwise locate the issue route already configured for the receiving project. It may be a repository-local queue or an external tracker. Follow its documented ownership, fields, states, and write permissions. Do not write a receiving-project problem into MAINFRAME's own queue, invent a new issue system, or initialize directories merely to record the finding.
 
 If no project issue route is configured, the route is unavailable, or you lack write authority, do not broaden access or claim that a ticket exists. Return a ticket-ready record to your immediate caller and identify the exact missing route, capability, or authorization.
 

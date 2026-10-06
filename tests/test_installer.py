@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from installer.codex import (
     Codex,
+    ROLE_MATCHER,
     HOOK_NAMES,
     PRE_SHELL_TRANSPORT,
     SHELL_HOOK_NAMES,
@@ -74,6 +75,45 @@ class InstallationTests(unittest.TestCase):
         return subprocess.run(["/bin/sh", "-c", callback], input=json.dumps(data),
                               text=True, capture_output=True, timeout=timeout)
 
+    def test_receipted_reminder_pilot_retires_without_foreign_loss(self):
+        self.install()
+        pilot = self.adapter.support / "experiments/skill-reminder"
+        pilot.mkdir(parents=True)
+        group = {"matcher": "^Bash$", "hooks": [{"type": "command", "command": str(pilot / "codex.py")}]}
+        hook_path = self.adapter.codex / "hooks.json"
+        hooks = json.loads(hook_path.read_text())
+        foreign = {"matcher": "^Other$", "hooks": [{"type": "command", "command": "true"}]}
+        hooks["hooks"]["PostToolUse"].extend([group, foreign])
+        hook_path.write_text(json.dumps(hooks))
+        (pilot / "receipt.json").write_text(json.dumps({"registration": group}))
+        (pilot / "config.json").write_text(json.dumps({"disabled": False, "profiles": []}))
+        (pilot / "codex.py").write_text("# preserve late-callback executable")
+        self.install()
+        after = json.loads(hook_path.read_text())["hooks"]["PostToolUse"]
+        self.assertNotIn(group, after)
+        self.assertIn(foreign, after)
+        self.assertTrue(json.loads((pilot / "config.json").read_text())["disabled"])
+        self.assertTrue((pilot / "codex.py").exists())
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+
+    def test_skill_reminder_delivery_dispatch_disable_and_repeat(self):
+        self.install()
+        (self.home / "server").mkdir()
+        path = self.home / "server/app.py"
+        path.write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+        payload = {"hook_event_name": "PostToolUse", "tool_name": "Bash",
+                   "session_id": "reminder-scope", "tool_use_id": "read",
+                   "cwd": str(self.home), "tool_input": {"command": "cat " + shlex.quote(str(path))},
+                   "tool_response": {"exit_code": 0}}
+        result = self.invoke_payload("mainframe-skill-reminder", payload)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("mainframe-python-backend", result.stdout)
+        self.assertNotIn("permissionDecision", result.stdout)
+        self.assertEqual(self.invoke_payload("mainframe-skill-reminder", payload).stdout, "")
+        (self.adapter.hooks / ".disabled-mainframe-skill-reminder").write_text("")
+        payload["agent_id"] = "child"
+        self.assertEqual(self.invoke_payload("mainframe-skill-reminder", payload).stdout, "")
+
     def test_plan_is_read_only_and_repeat_install_converges(self):
         _, report = self.adapter.plan()
         self.assertTrue(report["changes"])
@@ -83,6 +123,21 @@ class InstallationTests(unittest.TestCase):
         _, repeated = self.adapter.plan()
         self.assertEqual(repeated["changes"], [])
         self.assertFalse(self.adapter.journal.exists())
+        init_command = (self.adapter.skills / "mainframe-tickets-init/SKILL.md").read_text()
+        self.assertIn("<!-- MAINFRAME ticket rules: begin -->", init_command)
+        self.assertIn("<!-- MAINFRAME ticket entry: end -->", init_command)
+        self.assertIn("execution: user-approved", init_command)
+        self.assertFalse((self.home / "docs/tickets").exists())
+
+        testing_source = ROOT / "skills/mainframe-testing"
+        testing_delivered = (self.adapter.skills) / "mainframe-testing"
+        for source in testing_source.rglob("*.md"):
+            with self.subTest(testing_resource=str(source.relative_to(testing_source))):
+                self.assertEqual(
+                    (testing_delivered / source.relative_to(testing_source)).read_bytes(),
+                    source.read_bytes(),
+                )
+
         state = json.loads(self.adapter.state_path.read_bytes())
         hooks = state["components"]["hooks"]
         self.assertEqual(sum(e["delivery"] == "unsupported" for e in hooks.values()), 4)
@@ -640,6 +695,27 @@ class InstallationTests(unittest.TestCase):
         self.assertFalse(result["skills"]["mainframe-research"]["discovered"])
         self.assertFalse(result["hooks"]["mainframe-secret-access"]["discovered"])
 
+    def test_native_discovery_recognizes_post_tool_advisories(self):
+        source = json.loads((self.source / "ADAPTATION.example.json").read_bytes())
+        cwd = self.home / "isolated"
+        hooks = []
+        for name, event, matcher, timeout, limit in (
+            ("mainframe-skill-reminder", "preToolUse", "^Bash$", 2, 300),
+            ("mainframe-skill-reminder", "postToolUse", "^Bash$", 2, 300),
+            ("mainframe-skill-reminder", "subagentStart", ROLE_MATCHER, 2, 300),
+            ("mainframe-commit-checkpoint", "postToolUse", "^apply_patch$", 5, 1000),
+        ):
+            hooks.append({"command": hook_command(self.adapter.hooks, name, self.adapter.event_state),
+                          "eventName": event, "matcher": matcher,
+                          "timeoutSec": timeout, "additionalContextLimit": limit,
+                          "enabled": True, "trustStatus": "trusted", "handlerType": "command",
+                          "source": "user", "sourcePath": str(self.adapter.codex / "hooks.json")})
+        result = summarize(self.adapter, source, {"data": [{"cwd": str(cwd), "skills": []}]},
+                           {"data": [{"cwd": str(cwd), "hooks": hooks}]}, cwd)
+        for name in ("mainframe-skill-reminder", "mainframe-commit-checkpoint"):
+            self.assertTrue(result["hooks"][name]["discovered"], name)
+            self.assertTrue(result["hooks"][name]["trusted"], name)
+
     def test_cli_requires_instruction_review_before_applying(self):
         self.adapter.codex.mkdir(parents=True)
         (self.adapter.codex / "AGENTS.md").write_text("User instruction")
@@ -692,6 +768,7 @@ class InstallationTests(unittest.TestCase):
             ("apply", ["--surface", "desktop", "--executable", "/nonexistent/codex"], "does not launch"),
             ("apply", ["--surface", "cli", "--runtime-version", "0.153.4"], "applies only to Desktop"),
             ("apply", ["--surface", "desktop", "--runtime-version", "0.147.0"], "inspected Codex mapping"),
+            ("apply", ["--surface", "desktop", "--runtime-version", "0.159.3"], "inspected Codex mapping"),
         ]
         for action, options, error in cases:
             with self.subTest(action=action, options=options):
@@ -702,6 +779,50 @@ class InstallationTests(unittest.TestCase):
                 self.assertFalse(self.adapter.receipt_path.exists())
                 self.assertFalse(self.adapter.state_path.exists())
                 self.assertEqual(list(self.home.iterdir()), [])
+
+    def test_current_desktop_mapping_delivers_complete_skills_and_converges(self):
+        executable = self.home / "codex"
+        executable.write_text('#!/bin/sh\nprintf called > "$0.called"\n')
+        executable.chmod(0o755)
+        environment = dict(os.environ, PATH=str(self.home) + os.pathsep + os.environ.get("PATH", ""))
+        base = [sys.executable, "-B", str(self.source / "install.py"), "codex"]
+        options = ["--surface", "desktop", "--runtime-version", "0.159.2",
+                   "--home", str(self.home), "--instructions-reviewed"]
+        for action in ("plan", "apply", "verify"):
+            result = subprocess.run(base + [action] + options, cwd=self.source,
+                env=environment, text=True, capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report["runtime_version"], "0.159.2")
+            if action == "verify":
+                self.assertTrue(report["structure_matches"])
+                self.assertEqual(report["file_change_count"], 0)
+        state = json.loads(self.adapter.state_path.read_bytes())
+        for name in ("mainframe-clickhouse", "mainframe-keycloak-sso", "mainframe-notifications", "mainframe-self-monitoring"):
+            with self.subTest(skill=name):
+                root = self.source / "skills" / name
+                for source in root.rglob("*"):
+                    if source.is_file():
+                        installed = self.adapter.skills / name / source.relative_to(root)
+                        self.assertEqual(installed.read_bytes(), source.read_bytes())
+                self.assertEqual(state["components"]["skills"][name]["delivery"], "installed")
+                self.assertEqual(state["components"]["skills"][name]["verification"], "pending")
+        self.assertTrue(all(state["components"]["hooks"][name]["delivery"] == "unsupported"
+                            for name in codex.LIMITATIONS))
+        self.assertFalse(Path(str(executable) + ".called").exists())
+
+    def test_current_mapping_does_not_authorize_an_uninspected_cli(self):
+        executable = self.home / "fake-codex"
+        executable.write_text('#!/bin/sh\nprintf "codex-cli 0.159.2\\n"\n')
+        executable.chmod(0o755)
+        result = subprocess.run([sys.executable, "-B", str(self.source / "install.py"),
+            "codex", "apply", "--surface", "cli", "--home", str(self.home),
+            "--executable", str(executable), "--instructions-reviewed"],
+            cwd=self.source, text=True, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("inspected Codex mapping", result.stderr)
+        self.assertFalse(self.adapter.receipt_path.exists())
+        self.assertFalse(self.adapter.state_path.exists())
 
     def test_desktop_reads_only_current_task_version_and_rejects_a_conflicting_override(self):
         self.assertIsNone(codex.desktop_version(self.adapter.codex, "current-task"))
@@ -969,6 +1090,28 @@ class InstallationTests(unittest.TestCase):
         self.assertFalse(self.adapter.receipt_path.exists())
         result = self.invoke("mainframe-secret-access", "mainframe-secret get synthetic", "Stop", cached=cached)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+    def test_reminder_pretool_and_role_context_use_managed_dispatch(self):
+        self.install()
+        payload={'hook_event_name':'PreToolUse','tool_name':'Bash',
+                 'session_id':'operation','tool_use_id':'call','cwd':str(self.home),
+                 'tool_input':{'command':'curl --disable https://example.invalid/status'}}
+        result=self.invoke_payload('mainframe-skill-reminder',payload)
+        self.assertEqual(result.returncode,0)
+        context=json.loads(result.stdout)['hookSpecificOutput']
+        self.assertEqual(context['hookEventName'],'PreToolUse')
+        self.assertIn('mainframe-curl-requests',context['additionalContext'])
+        self.assertNotIn('permissionDecision',context)
+        payload={'hook_event_name':'SubagentStart','session_id':'operation',
+                 'agent_id':'research-child','agent_type':'mainframe-researcher','cwd':str(self.home)}
+        result=self.invoke_payload('mainframe-skill-reminder',payload)
+        context=json.loads(result.stdout)['hookSpecificOutput']
+        self.assertEqual(context['hookEventName'],'SubagentStart')
+        self.assertIn('mainframe-research',context['additionalContext'])
+        self.assertEqual(self.invoke_payload('mainframe-skill-reminder',payload).stdout,'')
+        (self.adapter.hooks/'.disabled-mainframe-skill-reminder').write_text('')
+        payload['agent_id']='another-child'
+        self.assertEqual(self.invoke_payload('mainframe-skill-reminder',payload).stdout,'')
 
 
 if __name__ == "__main__":

@@ -1,5 +1,7 @@
 # Testing
 
+Use `mainframe-testing` for red/green/refactor, the lightweight local PostgreSQL boundary, and CI ownership. Apply the stack-specific details below within that boundary; real service-backed checks beyond local PostgreSQL run in CI by default.
+
 Use the project's native Go commands, fixtures, and dependency boundaries.
 Choose the smallest faithful proof: pure rules at package level, HTTP contracts
 through the real handler/middleware, provider behavior through a bounded fake

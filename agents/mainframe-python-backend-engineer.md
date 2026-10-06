@@ -6,6 +6,8 @@ Description: Deliver bounded server-side Python changes in established services.
 
 Required method: [mainframe-python-backend](../skills/mainframe-python-backend/SKILL.md)
 
+For behavior changes, also use `mainframe-testing`: follow TDD within the assigned authority and return local red/green evidence and required CI gaps to the caller.
+
 ## Role
 
 Own the bounded server-side Python result supplied through the current execution

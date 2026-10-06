@@ -20,13 +20,22 @@ import time
 from typing import BinaryIO
 
 
+try:
+    from . import native_skill_reminder as skill_advice
+except ImportError:
+    try:
+        import native_skill_reminder as skill_advice
+    except ImportError:
+        skill_advice = None
+
+
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 DETECTORS = PLUGIN_ROOT / "hooks/detectors"
 HOOKS = PLUGIN_ROOT / "hooks"
 HOOK_NAMES = frozenset({
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
 })
 MAX_INPUT_BYTES = 1_048_576
 MAX_MESSAGE_CHARS = 6_000
@@ -347,10 +356,22 @@ def pre_tool(data: dict, state: Path) -> dict | None:
                    deny="\n\n".join(dict.fromkeys(denials)))
 
 
+def _checkpoint_note(data: dict, cwd: Path, state: Path) -> str | None:
+    identity, tool, path = _identity(data), _tool(data), _path(data, cwd)
+    response = _value(data, "tool_response", "toolResponse")
+    if isinstance(response, dict) and any(response.get(key) is True for key in ("isError", "is_error", "error")):
+        return None
+    detector = _load_detector("mainframe-commit-checkpoint")
+    if identity is None or tool is None or path is None or detector is None:
+        return None
+    size = detector.text_lines(*(tool[1].get(key, "") for key in ("content", "old_string", "new_string")))
+    return detector.observe(identity[0], str(cwd), identity[1], size, state_root=state)
+
+
 def post_tool(data: dict, state: Path) -> dict | None:
     cwd, tool = _cwd(data), _tool(data)
     if cwd is None or tool is None or tool[0] not in {"write", "edit"}: return None
-    notes = [n for n in (_quality_post(data, cwd, state), _fallow_post(data, cwd, state)) if n]
+    notes = [n for n in (_quality_post(data, cwd, state), _fallow_post(data, cwd, state), _checkpoint_note(data, cwd, state)) if n]
     identity = _identity(data)
     if not notes or identity is None: return None
     message = "\n\n".join(dict.fromkeys(notes))
@@ -379,11 +400,50 @@ def stop(data: dict, state: Path) -> dict | None:
     return {"decision": "block", "reason": reason[:MAX_MESSAGE_CHARS]}
 
 
+def combine_reminder(result, note):
+    if not note:
+        return result
+    if not result:
+        return note
+    specific = result.get("hookSpecificOutput", {})
+    if specific.get("permissionDecision") == "deny":
+        return result
+    text = note.get("hookSpecificOutput", {}).get("additionalContext")
+    if text:
+        specific["additionalContext"] = "\n\n".join(filter(None, (specific.get("additionalContext"), text)))[:MAX_MESSAGE_CHARS]
+    return result
+
+
+def reminder_output(data, state):
+    if skill_advice is None:
+        return None
+    if (HOOKS / ".disabled-mainframe-skill-reminder").exists():
+        return None
+    event = _value(data, "hook_event_name", "hookEventName")
+    tool, identity, cwd = _tool(data), _identity(data), _cwd(data)
+    if event not in {"PreToolUse", "PostToolUse"} or not tool or not identity or not cwd:
+        return None
+    name, inputs = tool
+    if event == "PostToolUse" and skill_advice.known_failed(_value(data, "tool_response", "toolResponse")):
+        return None
+    command = inputs.get("command") if name == "bash" else (
+        skill_advice.read_command(inputs, ("file_path", "path")) if name == "read" and event == "PostToolUse" else None)
+    if not isinstance(command, str):
+        return None
+    message = skill_advice.advise(PLUGIN_ROOT / "scripts", PLUGIN_ROOT / "skills", state, cwd,
+                                  *identity, command, event, agent=_value(data, "agent_id", "agentId"), detectors=HOOKS / "detectors")
+    return _output(event, context=message) if message else None
+
+
 def dispatch(data: dict, state: Path) -> dict | None:
     event = _value(data, "hook_event_name", "hookEventName")
     if event in {"SessionStart", "SubagentStart"}: return session_start(data)
-    if event == "PreToolUse": return pre_tool(data, state)
-    if event == "PostToolUse": return post_tool(data, state)
+    if event == "PreToolUse":
+        result = pre_tool(data, state)
+        if result and result.get("hookSpecificOutput", {}).get("permissionDecision") == "deny":
+            return result
+        return combine_reminder(result, reminder_output(data, state))
+    if event == "PostToolUse": return combine_reminder(post_tool(data, state), reminder_output(data, state))
     if event in {"Stop", "SubagentStop"}: return stop(data, state)
     return None
 
