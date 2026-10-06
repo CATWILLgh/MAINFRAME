@@ -1,7 +1,7 @@
 # Install MAINFRAME into ZCode Desktop
 
 Use this maintained route when the installation request is running in ZCode
-Desktop from this MAINFRAME checkout. The fully accepted mapping targets macOS
+Desktop from this MAINFRAME checkout. The original inspected mapping targets macOS
 ZCode build **3.11.2.6792**. The **3.14.4.7912** mapping was revalidated against its shipped hook parser,
 context consumers and current official documentation. New conversation acceptance
 remains separate. The older **3.14.3.7762** route permits bounded
@@ -64,7 +64,8 @@ Do not delete an old wrapper merely to make cleanup look complete.
 
 ## Delivered mapping and known gaps
 
-The program prepares the 15 complete skill packages, seven native agent roles,
+The program prepares every complete skill package listed in the
+[inventory](../../ADAPTATION.example.json), seven native agent roles,
 seven native slash commands, the narrow `mainframe-tickets-find` skill projection
 needed by noninteractive automations, shared credential helper/index integration,
 and the global instruction. It preserves unrelated target files and configuration.
@@ -98,7 +99,8 @@ successful or failed post attribution, and a `Stop` callback that blocks only
 while an introduced finding still exists. Advisory-only Stop output remains
 silent because ZCode otherwise delivers it by forcing another model turn.
 
-**34 components are delivered; two are unsupported in this build.**
+The installer report supplies current delivery counts from the exact inventory.
+Two hook contracts remain unsupported in the inspected builds:
 `mainframe-code-quality` and `mainframe-fallow-quality` require non-blocking completion advice.
 ZCode collects `Stop` advice but delivers it to the model only with a new model
 continuation. The useful mainframe-code-quality core is installed and reported as a
@@ -139,7 +141,7 @@ python3 -B install.py zcode uninstall
 python3 -B install.py zcode recover
 ```
 
-Use `--hook NAME` with one of the five maintained hook names for an individual hook.
+Use `--hook NAME` with an identity from the inventory's `hooks` group for an individual hook.
 Disable markers are checked by the cached inline launcher; they do not depend
 on a native configuration reload. Uninstall disables first and waits for the
 bounded maintained callbacks before retiring implementation. It preserves

@@ -72,7 +72,7 @@ leaving the user's existing native permission decision unchanged.
 The six preventive/quality contracts above remain `unsupported` in schema-2 delivery;
 the separate post-edit checkpoint advisory is fully mapped.
 That status describes the missing event guarantee; it does not erase the retained
-instruction and skill behavior reported under `retained_partial_bindings`.
+native event behavior reported under `retained_partial_bindings`.
 
 The earlier adapter incorrectly returned `{}` as a clean `PreToolUse` result.
 A real A106 Desktop task then lost every shell and edit result while reads kept

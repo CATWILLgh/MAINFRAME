@@ -57,5 +57,8 @@ scope; an agent requires native routing and a meaningful permission boundary.
 - Test repeated installation for duplicate commands and event handlers.
 - Confirm extension failure follows the canonical hook failure behavior.
 
-Prefer a precise unsupported entry over an elaborate compatibility layer that
-cannot be verified against Pi's real execution model.
+When full parity is unavailable, keep a precise unsupported entry and follow the
+[hook guide](../components/hooks.md#keep-native-integration-thin) to evaluate
+safe useful partial effects at relevant native events. Install and report those
+effects separately; do not invent an unverified compatibility layer or equate
+an advisory with enforcement.

@@ -34,15 +34,15 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(candidates(path, self.root), {'mainframe-python-backend'})
         cli = self.put('cli/format.py', 'import fastapi\n')
         self.assertEqual(candidates(cli, self.root), set())
-        named = self.put('prodtrack-backend/services/orders.py', 'def get_order(): pass\n')
+        named = self.put('example-backend/services/orders.py', 'def get_order(): pass\n')
         self.assertEqual(candidates(named, self.root), {'mainframe-python-backend'})
 
     def test_ts_service_react_web_and_native(self):
         self.put('server/package.json', '{"dependencies":{"@nestjs/core":"1"}}')
         path = self.put('server/src/orders/service.ts', 'export class Orders {}')
         self.assertEqual(candidates(path, self.root), {'mainframe-typescript-backend'})
-        self.put('proxy-wb/package.json', '{"dependencies":{"@nestjs/core":"1"}}')
-        nested = self.put('proxy-wb/src/modules/orders/service.ts', 'export class Orders {}')
+        self.put('example-service/package.json', '{"dependencies":{"@nestjs/core":"1"}}')
+        nested = self.put('example-service/src/modules/orders/service.ts', 'export class Orders {}')
         self.assertEqual(candidates(nested, self.root), {'mainframe-typescript-backend'})
         self.put('web/package.json', '{"dependencies":{"react":"1","react-dom":"1"}}')
         self.put('web/src/main.tsx', "import {createRoot} from 'react-dom/client';\ncreateRoot(document.getElementById('root')).render(<App />);\n")

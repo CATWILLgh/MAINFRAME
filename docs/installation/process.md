@@ -6,7 +6,8 @@ component type.
 
 The maintained [Codex procedure](codex-installer.md),
 [ZCode procedure](zcode-installer.md), [Antigravity procedure](antigravity-installer.md),
-and [MiniMax procedure](minimax-installer.md) execute the mechanical parts of this
+the [MiniMax procedure](minimax-installer.md), and the
+[Cline procedure](cline-installer.md) execute the mechanical parts of this
 contract. For those routes, run their finite `plan`, `apply`, and `verify`
 sequence instead of recreating this manual adapter-development loop. Their
 protected ownership receipts record owned files and registrations; the ignored
@@ -83,7 +84,10 @@ The schema 2 state file answers only:
 
 Delivery is evaluated against the exact canonical component contract. An
 `unsupported` full contract can still have useful behavior represented through a
-different native primitive, instruction, or skill. Adapters must expose that
+different native primitive. For hooks, evaluate the alternatives in the
+[hook guide](components/hooks.md#keep-native-integration-thin), keeping advice
+at a relevant decision point rather than moving it into generic instructions.
+Adapters must expose that
 separately as `retained_partial_bindings`; they must not relabel partial behavior as
 full delivery or discard it because one enforcement guarantee is unavailable.
 

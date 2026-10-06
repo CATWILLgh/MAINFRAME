@@ -13,8 +13,9 @@ Generated product copies are not maintained as separate source trees.
 
 ## Verified baselines
 
-Each badge shows the lowest version that has actually run the relevant
-MAINFRAME checks in this rebuild as of 2026-09-07. It is verification evidence,
+The runtime badges record the lowest versions that ran the relevant canonical
+checks in the 2026-09-07 rebuild. Analyzer badges record the maintained runtime
+installer's tested pins. They are verification evidence,
 not a claim that older releases are incompatible or that every newer release is
 automatically supported.
 

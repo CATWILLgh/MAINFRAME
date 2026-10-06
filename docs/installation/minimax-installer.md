@@ -23,7 +23,8 @@ Neither option changes the other adapters.
 
 ## Delivered shape
 
-The Plugin manifest declares the 18 canonical MAINFRAME Skills, seven command
+The Plugin manifest declares every canonical MAINFRAME Skill in the
+[inventory](../../ADAPTATION.example.json), seven command
 workflows rendered as Skills, and one Hook document. The Hook document starts
 one composite command for each relevant event rather than one process per
 canonical detector:

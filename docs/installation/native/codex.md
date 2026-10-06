@@ -304,7 +304,7 @@ representation merely for compatibility.
 ## Private user skill destination
 
 On 2026-09-08, the current Desktop task's newly created native child session
-received an ordinary probe skill from `/Users/user/.codex/skills` in its supplied
+received an ordinary probe skill from `$CODEX_HOME/skills` in its supplied
 catalog. It read the skill and its linked resource successfully without being
 given the path or marker. This proves discovery and resource loading in that
 native child; primary-session refresh and explicit-command UI selection remain

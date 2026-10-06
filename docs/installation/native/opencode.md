@@ -60,5 +60,8 @@ effective catalog for collisions.
   compatible-path skill remains.
 
 If OpenCode cannot provide the exact pre-action or continuation event required
-by a hook, mark that hook unsupported. Do not emulate a guard with an agent
-prompt or a repository-wide scan.
+by a hook, record the missing full contract as unsupported and follow the
+[hook guide](../components/hooks.md#keep-native-integration-thin) to find and
+install the strongest safe useful partial binding. Do not describe an advisory
+as prevention or replace moment-specific feedback with a generic agent prompt
+or repository-wide scan.
