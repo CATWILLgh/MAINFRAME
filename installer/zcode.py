@@ -20,12 +20,12 @@ from .shared import inventory, _instruction
 from .state import reconcile_state, set_component
 
 KNOWN_RUNTIME = "3.11.2.6792"
+FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912"}
 CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
-SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
     "rg-short-replace": "mainframe-rg-short-replace",
@@ -34,7 +34,7 @@ HOOK_RENAMES = {
     "code-quality": "mainframe-code-quality",
 }
 READ_ONLY = {"mainframe-researcher", "mainframe-test-auditor", "mainframe-consequential-reviewer"}
-LEGACY_HOOKS = HOOK_NAMES
+LEGACY_HOOKS = tuple(n for n in HOOK_NAMES if n != "mainframe-skill-reminder")
 LEGACY_BRIDGE_SHA256 = "5761f656b9ead923dd48b91adb02935bcba3d922155464a19ae0205a520e75d8"
 COMPATIBLE_UPDATE_BRIDGE_SHA256 = {
     # Split four-process transport delivered before the bounded consolidation.
@@ -122,7 +122,8 @@ def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, st
         expected["hooks"]["events"]["SessionStart"][0]["matcher"] = new_start["matcher"]
         changed = True
     variants = {
-        ("PreToolUse", "Bash"): [(PRE_SHELL_TRANSPORT, 5000)],
+        ("PreToolUse", "Bash"): [(PRE_SHELL_TRANSPORT, 5000), ("mainframe-skill-reminder", 2000)],
+        ("PostToolUse", "Bash|Read"): [("mainframe-skill-reminder", 2000)],
         ("PreToolUse", "Write|Edit"): [("mainframe-code-quality", 30000)],
         ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000), ("mainframe-commit-checkpoint", 5000)],
         ("PostToolUseFailure", "Write|Edit"): [("mainframe-code-quality", 30000)],
@@ -217,6 +218,16 @@ def _agent_settings(data: bytes) -> dict | None:
         return None
     fields, _ = parsed
     return {key: fields[key] for key in NATIVE_AGENT_SETTING_KEYS if key in fields}
+
+
+def _agent_core_digest(data: bytes) -> str | None:
+    parsed = _frontmatter(data)
+    if parsed is None:
+        return None
+    fields, body = parsed
+    core = {key: value for key, value in fields.items()
+            if key not in NATIVE_AGENT_SETTING_KEYS}
+    return digest(encode_json({"fields": core, "body": body}))
 
 
 def _compatible_agent_settings(current: bytes, expected: bytes) -> dict | None:
@@ -334,6 +345,10 @@ class ZCode:
         for name in HOOK_NAMES:
             add(self.hooks / "detectors" / (name + ".py"), (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
         add(self.hooks / "bridge.py", Path(__file__).with_name("zcode_hook.py").read_bytes(), "hook transport")
+        for filename, sourcefile in (("skill_reminder.py", "codex_skill_reminder.py"),
+                                     ("native_skill_reminder.py", "native_skill_reminder.py")):
+            add(self.hooks / filename, Path(__file__).with_name(sourcefile).read_bytes(), "hooks.mainframe-skill-reminder")
+        add(self.hooks / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
         helper = self.home / ".local/bin/mainframe-secret"
         located = shutil.which("mainframe-secret") if self.home == Path.home().resolve() else None
         if located and Path(located) != helper:
@@ -448,6 +463,8 @@ class ZCode:
                     analyzer_bin=runtime_bin(self.home),
                 )]}],
             }
+            desired_groups["PreToolUse"].append({"matcher": "Bash", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
+            desired_groups["PostToolUse"].append({"matcher": "Bash|Read", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
             expected_callbacks = [h for groups in desired_groups.values() for group in groups for h in group["hooks"]]
             for event, candidates in events.items():
                 for candidate in candidates:
@@ -549,7 +566,10 @@ class ZCode:
                 if digest(current) == prior_file["sha256"]:
                     settings = _agent_settings(current)
                 else:
-                    settings = _compatible_agent_settings(current, expected)
+                    settings = (_agent_settings(current)
+                                if prior_file.get("native_core_sha256")
+                                and _agent_core_digest(current) == prior_file["native_core_sha256"]
+                                else _compatible_agent_settings(current, expected))
                     if settings is not None:
                         prior_file["sha256"] = digest(current)
                         prior_file["mode"] = path.stat().st_mode & 0o777
@@ -617,6 +637,9 @@ class ZCode:
             new_receipt = None
             target = prior_state.get("target", {})
         else:
+            for path, artifact in artifacts.items():
+                if artifact[2].startswith("agents.") and str(path) in records:
+                    records[str(path)]["native_core_sha256"] = _agent_core_digest(artifact[0])
             new_receipt = {"version": 1, "target": str(self.zcode), "source": str(self.root), "files": records,
                            "instruction": irecord, "hook_groups": groups, "enabled_added": enabled_added,
                            "config_created": previous.get("config_created", old_config is None), "skill_overrides": overrides,
@@ -644,9 +667,7 @@ class ZCode:
             )
             state_source = source if not remove else inventory(self.root, "zcode")
             unsupported = {("hooks", n): why for n, why in UNSUPPORTED.items()} if not remove else {}
-            pending = {("hooks", n): SKILL_REMINDER_ACTION
-                       for n in state_source["components"]["hooks"]
-                       if n == "mainframe-skill-reminder"}
+            pending = {}
             delivered = [(cat, n) for cat, group in state_source["components"].items() for n in group
                          if not remove and (cat != "hooks" or n in HOOK_NAMES)
                          and (cat, n) not in unsupported and (cat, n) not in pending]

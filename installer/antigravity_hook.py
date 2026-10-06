@@ -27,6 +27,15 @@ except ImportError:
     from antigravity_hook_state import EVENT_TTL, claim_event, open_state
 
 
+try:
+    from . import native_skill_reminder as skill_advice
+except ImportError:
+    try:
+        import native_skill_reminder as skill_advice
+    except ImportError:
+        skill_advice = None
+
+
 ROOT = Path(__file__).resolve().parent
 MAX_INPUT_BYTES = 262_144
 MAX_TRANSCRIPT_BYTES = 8 * 1024 * 1024
@@ -308,6 +317,32 @@ def post_invocation(data: dict, state: Path) -> dict:
     calls = _latest_calls(data)
     messages = [message for call in calls for message in _shell_messages(call, workspace, state)]
     messages.extend(_edit_messages(calls, data, workspace, state))
+    if skill_advice is not None and not (ROOT / ".disabled-mainframe-skill-reminder").exists():
+        for call in calls:
+            context = _command_context(call, workspace) if call["name"] == "run_command" else None
+            raw_cwd = call["args"].get("Cwd", call["args"].get("cwd"))
+            read_hint = None
+            if raw_cwd is not None:
+                if not isinstance(raw_cwd, str) or not Path(raw_cwd).is_absolute():
+                    continue
+                literal_cwd = _inside(workspace, raw_cwd)
+                if literal_cwd is None:
+                    continue
+                read_hint = str(literal_cwd)
+            command = context[0] if context else (
+                skill_advice.read_command(call["args"], ("AbsolutePath",)) if call["name"] == "view_file" else None)
+            if not isinstance(command, str):
+                continue
+            # PostInvocation is post-action only: preserve that timing explicitly.
+            message = skill_advice.advise(ROOT, ROOT.parents[2] / "config/skills", state, workspace,
+                                          data.get("conversationId"), call["id"], command, "PreToolUse")
+            if not message:
+                message = skill_advice.advise(ROOT, ROOT.parents[2] / "config/skills", state, workspace,
+                                              data.get("conversationId"), call["id"], command, "PostToolUse", read_cwd=read_hint)
+            if message:
+                messages.append(message)
+                break
+
     if not messages:
         return {}
     message = "\n\n".join(messages)[:MAX_MESSAGE_CHARS]

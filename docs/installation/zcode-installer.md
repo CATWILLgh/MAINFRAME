@@ -2,7 +2,9 @@
 
 Use this maintained route when the installation request is running in ZCode
 Desktop from this MAINFRAME checkout. The fully accepted mapping targets macOS
-ZCode build **3.11.2.6792**. The current **3.14.3.7762** route permits bounded
+ZCode build **3.11.2.6792**. The **3.14.4.7912** mapping was revalidated against its shipped hook parser,
+context consumers and current official documentation. New conversation acceptance
+remains separate. The older **3.14.3.7762** route permits bounded
 skill updates and the exact validated pre-shell transport consolidation in an
 existing same-source installation; other native-hook changes, roles, commands,
 and permissions remain blocked. Version detection reads the selected application's plist;
@@ -145,3 +147,19 @@ foreign files, reused instructions/helpers, credential metadata, unrelated
 configuration, and any necessary inert manual callbacks. `recover` restores an
 interrupted file transaction only when concurrent user changes do not conflict.
 No lifecycle command runs a native acceptance campaign.
+
+
+## Skill reminders
+
+The installer delivers the shared positive-only reminder method and this
+product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
+An already considered skill stays quiet; reminders neither block nor continue
+a model. Existing disable choices are preserved. Start a fresh Desktop
+conversation after updating registrations; file convergence does not establish
+native receipt or skill application.
+
+Native role settings (`color`, `model`, `thoughtLevel`, `injectAgentsMd`) remain
+per-installation choices. Receipts separately hash the managed role core, so a
+later canonical-body update can preserve independently changed settings while
+still rejecting arbitrary local edits to role bodies or tool boundaries. Older
+receipts without a core hash can need one explicit semantic reconciliation.

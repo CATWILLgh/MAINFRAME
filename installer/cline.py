@@ -21,10 +21,9 @@ from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
-SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 HOOK_FILES = {"PreToolUse": "tool_call", "PostToolUse": "tool_result"}
 TRANSPORT = "mainframe-cline-hook"
 # Cline file hooks have one synchronous pre-action event and one post-action
@@ -45,7 +44,7 @@ FALLOW_PARTIAL = (
 )
 HOOK_SCOPE = (
     "One pre-action guard file covers recognized catastrophic shell and secret patterns; "
-    "one post-action file delivers exact-edit quality and Fallow advisories. Lifecycle hook "
+    "one post-action file delivers exact-edit quality, Fallow and skill advisories. Positive skill advice also joins pre-action output. Lifecycle hook "
     "files are unused because Cline ignores their result. Guards hard-block through the "
     "native cancel result, which stops the affected run with the reason; Cline offers no "
     "recoverable per-tool denial for file hooks."
@@ -187,6 +186,7 @@ class Cline:
             self.rules, self.home / ".local/bin/mainframe-secret",
             self.home / ".local/bin/secret",
             self.hooks / "PreToolUse", self.hooks / "PostToolUse", self.hooks / TRANSPORT,
+            *(self.hooks / n for n in ("skill_reminder.py", "native_skill_reminder.py", "skill_profiles.py")),
         }:
             return True
         if path.parent == self.detectors and path.suffix == ".py" and path.stem in HOOK_NAMES:
@@ -257,6 +257,10 @@ class Cline:
                 (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
         add(self.hooks / TRANSPORT, Path(__file__).with_name("cline_hook.py").read_bytes(),
             "hook transport", 0o700)
+        for filename, sourcefile in (("skill_reminder.py", "codex_skill_reminder.py"),
+                                     ("native_skill_reminder.py", "native_skill_reminder.py")):
+            add(self.hooks / filename, Path(__file__).with_name(sourcefile).read_bytes(), "hooks.mainframe-skill-reminder")
+        add(self.hooks / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
         for file_name, event_key in HOOK_FILES.items():
             add(self.hooks / file_name, launcher(event_key, TRANSPORT, runtime_bin(self.home)), "hook transport", 0o755)
         add(self.index, (self.root / "shared/credentials/credentials-index.template.md").read_bytes(),
@@ -374,9 +378,7 @@ class Cline:
                 ("hooks", "mainframe-fallow-quality"): COMPLETION_REASON + " " + FALLOW_PARTIAL,
                 ("hooks", "mainframe-code-quality"): COMPLETION_REASON + " " + CODE_QUALITY_PARTIAL,
             }
-            pending = {("hooks", n): SKILL_REMINDER_ACTION
-                       for n in source["components"]["hooks"]
-                       if n == "mainframe-skill-reminder"}
+            pending = {}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending

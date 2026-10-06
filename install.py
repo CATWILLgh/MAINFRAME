@@ -190,6 +190,7 @@ def main(argv=None):
 
 def zcode_main(args, root, parser):
     from installer.zcode import (ZCode, KNOWN_RUNTIME as ZCODE_RUNTIME,
+        FULL_MAPPING_RUNTIMES as ZCODE_FULL_MAPPING_RUNTIMES,
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
         RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
         desktop_version as zcode_version)
@@ -208,7 +209,7 @@ def zcode_main(args, root, parser):
             if version and version != observed_version:
                 raise Conflict("Supplied ZCode build conflicts with the selected Desktop application")
             version = observed_version
-        if version not in {ZCODE_RUNTIME, *ZCODE_CONTENT_UPDATE_RUNTIMES}:
+        if version not in ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES:
             raise Conflict("Revalidate the maintained ZCode mapping for this build; supported full mapping is " + ZCODE_RUNTIME)
     from installer.zcode import HOOK_NAMES as ZCODE_HOOK_NAMES
     if args.hook and args.hook not in ZCODE_HOOK_NAMES:

@@ -23,10 +23,19 @@ import time
 from typing import BinaryIO
 
 
+try:
+    from . import native_skill_reminder as skill_advice
+except ImportError:
+    try:
+        import native_skill_reminder as skill_advice
+    except ImportError:
+        skill_advice = None
+
+
 ROOT = Path(__file__).resolve().parent
 PRE_SHELL_HOOKS = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint"})
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder"})
 MAX_INPUT_BYTES = 262_144
 MAX_MESSAGE_CHARS = 6_000
 MAX_OUTPUT_BYTES = 32_768
@@ -395,6 +404,26 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
     event = _native_value(data, "hook_event_name", "hookEventName")
+    if name == "mainframe-skill-reminder":
+        if skill_advice is None:
+            return None
+        if event not in {"PreToolUse", "PostToolUse"}:
+            return None
+        tool = _native_value(data, "tool_name", "toolName")
+        inputs = _native_value(data, "tool_input", "toolInput")
+        identity = _event_identity(data)
+        cwd = data.get("cwd")
+        if not identity or not isinstance(inputs, dict) or not isinstance(cwd, str):
+            return None
+        if event == "PostToolUse" and skill_advice.known_failed(_native_value(data, "tool_response", "toolResponse")):
+            return None
+        command = inputs.get("command") if tool == "Bash" else (
+            skill_advice.read_command(inputs, ("file_path", "filePath")) if tool == "Read" and event == "PostToolUse" else None)
+        if not isinstance(command, str):
+            return None
+        message = skill_advice.advise(ROOT, ROOT.parent.parent / "skills", state, cwd,
+                                      *identity, command, event)
+        return _native_output(event, "additionalContext", message) if message else None
     if name == PRE_SHELL_TRANSPORT:
         outputs = [
             output for hook in PRE_SHELL_HOOKS

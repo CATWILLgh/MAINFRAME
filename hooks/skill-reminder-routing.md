@@ -107,3 +107,40 @@ Explicit initial literal `cat .../SKILL.md` attempts suppress later advice even
 when a complex suffix prevents full read-command parsing. This suppression-only
 fallback does not classify source files, inspect later branches, or prove that
 the method was read successfully or applied.
+
+
+## Native bindings
+
+All five maintained adapters reuse one detector, source profiles and recipient
+budget through a small native normalizer. No callback executes the inspected
+command, reads the complete skill body into the model, changes permission or
+forces a model turn. One readable path is suggested conditionally; explicit
+skill-read awareness suppresses further advice for that method. State stores
+only expiring scope hashes and skill identities, at most three sent suggestions
+per recipient/workspace and one per skill. Unknown or conflicting identity,
+context, invocation policy and state failures stay silent.
+
+| Adapter | Operation advice | Read advice | Attribution and limits |
+| --- | --- | --- | --- |
+| Codex | PreToolUse Bash | PostToolUse Bash | Root/child identity; exact specialized roles also use SubagentStart; bounded native transcript workdir hints |
+| ZCode | PreToolUse Bash | PostToolUse Bash/Read | Primary runtime only; native default children omit hook runners; shell relative reads require an explicit literal directory |
+| Antigravity | PostInvocation run_command | PostInvocation run_command/view_file | Native conversation and bounded latest-call identity; post-invocation advice before the next model decision, no prospective prevention or role-start advice |
+| MiniMax | PreToolUse bash | PostToolUse bash/read | Native session and optional recipient identity; known structured failed reads stay silent; no canonical specialized Agent package/start mapping |
+| Cline | PreToolUse run_commands | PostToolUse run_commands/read_files | Native task, tool ID and optional agent identity; multi-command arrays and unattributed lifecycle events stay silent; no role-start advisory |
+
+Native file read tools are normalized only from literal supported path
+fields (Cline accepts up to eight `files[].path` requests). Absolute targets work without a shell workdir; do not substitute a
+workspace directory for an unknown shell tool cwd. The helpers consider only
+readable MAINFRAME methods in each adapter's installed skill root plus the
+uniquely bound project engineering method. These paths are usable directly;
+the helper does not claim native catalog visibility. Native package/global
+hook enablement and per-component disable markers remain authoritative.
+
+Verification: `PYTHONPATH=tests python3 -B -m unittest test_native_skill_reminder`
+checks wire formats, recipient dedup, explicit-read suppression, known failure
+and disable behavior in disposable homes. Product installer suites separately
+check ownership, packaging, registration, convergence and removal. The pinned
+[ZCode source probe](../tests/probes/zcode_reminder_contract.cjs) establishes the
+reviewed current parser/consumer boundary without starting a model. Live
+recognition, model receipt and useful application still need native-session
+evidence; the existing Codex observations do not establish acceptance elsewhere.

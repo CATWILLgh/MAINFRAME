@@ -481,8 +481,10 @@ never source or raw native IDs. Disable/missing identity/state failures are sile
 a cached launcher must remain harmless after files are retired. Native receipt
 and useful application require separate observations from a successful callback.
 
-The initial maintained adapter is Codex only. Other products record pending
-adaptation, not an invented impossibility or a generic instruction substitute.
+The maintained adapters deliver this advisory in Codex, ZCode, Antigravity,
+MiniMax and Cline. Native timing, identity and missing role-start advice are
+listed in the [native binding table](skill-reminder-routing.md#native-bindings).
+File delivery is not proof of native activation or useful skill application.
 
 Implemented routes, deferred candidates and per-skill counterexamples are
 documented in [the routing design](skill-reminder-routing.md). Its status table

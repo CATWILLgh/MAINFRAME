@@ -34,11 +34,20 @@ import time
 from typing import BinaryIO
 
 
+try:
+    from . import native_skill_reminder as skill_advice
+except ImportError:
+    try:
+        import native_skill_reminder as skill_advice
+    except ImportError:
+        skill_advice = None
+
+
 HOOKS = Path(__file__).resolve().parent
 HOOK_NAMES = frozenset({
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
 })
 SHELL_TOOLS = frozenset({"run_commands"})
 EDIT_TOOLS = frozenset({"apply_patch", "editor"})
@@ -550,11 +559,53 @@ def post_tool(data: dict, state: Path) -> dict | None:
     return _output(contexts=notes, denials=[])
 
 
+def with_reminder(result, message):
+    if not message or (result and result.get("cancel")):
+        return result
+    result = result or {}
+    result["contextModification"] = "\n\n".join(filter(None, (result.get("contextModification"), message)))[:MAX_MESSAGE_CHARS]
+    return result
+
+
+def reminder_note(event, data, state):
+    if skill_advice is None:
+        return None
+    if not _enabled("mainframe-skill-reminder"):
+        return None
+    tool, identity, cwd = _tool(data), _identity(data), _workspace(data)
+    if not tool or not identity or not cwd:
+        return None
+    name, inputs = tool
+    if event == "tool_result" and (skill_advice.known_failed(data.get("postToolUse")) or skill_advice.known_failed(data.get("tool_result"))):
+        return None
+    command = None
+    if name == "run_commands":
+        commands = _commands(name, inputs)
+        if len(commands) == 1:
+            command = commands[0]
+    elif event == "tool_result" and name == "read_files":
+        files = inputs.get("files")
+        files = _decoded(files) if isinstance(files, str) else files
+        if isinstance(files, list) and 0 < len(files) <= 8:
+            reads = [skill_advice.read_command(item, ("path",))
+                     if isinstance(item, dict) else None for item in files]
+            if all(reads):
+                command = "cat " + " ".join(read[len("cat "):] for read in reads)
+    if not isinstance(command, str):
+        return None
+    return skill_advice.advise(HOOKS, HOOKS.parent / "skills", state, cwd,
+                              *identity, command, "PreToolUse" if event == "tool_call" else "PostToolUse",
+                              agent=data.get("agent_id"))
+
+
 def dispatch(event: str, data: dict, state: Path) -> dict | None:
     if event == "tool_call":
-        return pre_tool(data, state)
+        result = pre_tool(data, state)
+        if result and result.get("cancel"):
+            return result
+        return with_reminder(result, reminder_note(event, data, state))
     if event == "tool_result":
-        return post_tool(data, state)
+        return with_reminder(post_tool(data, state), reminder_note(event, data, state))
     return None
 
 

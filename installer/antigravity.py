@@ -1,4 +1,4 @@
-"""Maintained Antigravity Desktop 2.0 mapping for release 2.13.0."""
+"""Maintained Antigravity Desktop 2.0 mapping for release 2.16.0."""
 
 from __future__ import annotations
 
@@ -21,13 +21,12 @@ from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 
-KNOWN_RUNTIME = "2.13.0"
+KNOWN_RUNTIME = "2.16.0"
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
-SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
     "rg-short-replace": "mainframe-rg-short-replace",
@@ -38,7 +37,7 @@ HOOK_RENAMES = {
 }
 READ_ONLY = {"mainframe-researcher", "mainframe-test-auditor", "mainframe-consequential-reviewer"}
 COMMAND_REASON = (
-    "Antigravity 2.13.0 exposes custom slash entries as ordinary skills that are also "
+    "Antigravity 2.16.0 exposes custom slash entries as ordinary skills that are also "
     "eligible for autonomous selection; it has no documented explicit-only command switch."
 )
 COMMAND_PARTIAL = (
@@ -46,7 +45,7 @@ COMMAND_PARTIAL = (
     "slash invocation; the host cannot enforce explicit-only selection."
 )
 PRE_TOOL_LIMIT = (
-    "Antigravity 2.13.0 requires every PreToolUse handler to return allow, deny, ask, or force_ask. "
+    "Antigravity 2.16.0 requires every PreToolUse handler to return allow, deny, ask, force_ask, or deny_unless_prior_grant. "
     "It has no neutral decision that preserves the native permission layer: allow authorizes the tool, "
     "while ask forces an extra permission decision and blocks unattended goals."
 )
@@ -91,7 +90,7 @@ PARTIAL_HOOKS = {
     ),
 }
 HOOK_SCOPE = (
-    "One composite PostInvocation hook delivers positive command and edit findings; Stop revalidates only "
+    "One composite PostInvocation hook delivers positive command, edit and skill advice; Stop revalidates only "
     "attributed blocking code findings. PreToolUse remains unregistered so native permissions stay authoritative."
 )
 
@@ -256,6 +255,10 @@ class Antigravity:
         add(self.hooks / "antigravity_hook_state.py",
             Path(__file__).with_name("antigravity_hook_state.py").read_bytes(),
             "hook transport")
+        for filename, sourcefile in (("skill_reminder.py", "codex_skill_reminder.py"),
+                                     ("native_skill_reminder.py", "native_skill_reminder.py")):
+            add(self.hooks / filename, Path(__file__).with_name(sourcefile).read_bytes(), "hooks.mainframe-skill-reminder")
+        add(self.hooks / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
         helper = self.home / ".local/bin/mainframe-secret"
         located = shutil.which("mainframe-secret") if self.home == Path.home().resolve() else None
         if located and Path(located).resolve() != helper:
@@ -337,8 +340,8 @@ class Antigravity:
             instruction_snapshot[0], body, previous.get("instruction"), remove
         )
         review = None
-        if instruction is not None and len(instruction.decode("utf-8")) > 12_000:
-            raise Conflict("Merged Antigravity GEMINI.md exceeds the documented 12,000-character limit.")
+        if instruction is not None and len(instruction) > 24_000:
+            raise Conflict("Merged Antigravity GEMINI.md exceeds the documented 24,000-byte limit.")
         if not remove and outside and (
             not previous.get("instruction")
             or previous["instruction"].get("user_sha256") != digest(outside)
@@ -400,14 +403,12 @@ class Antigravity:
                              and not any(change.needed for change in changes))
             unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
             unsupported.update({("hooks", name): reason for name, reason in UNSUPPORTED.items()})
-            pending = {("hooks", n): SKILL_REMINDER_ACTION
-                       for n in source["components"]["hooks"]
-                       if n == "mainframe-skill-reminder"}
+            pending = {}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending
                 and category != "commands"
-                and (category != "hooks" or name == "mainframe-commit-checkpoint")
+                and (category != "hooks" or name in {"mainframe-commit-checkpoint", "mainframe-skill-reminder"})
             ]
             actions = [] if remove else [
                 "Open a new Antigravity Desktop 2.0 conversation to load global skills, agents, and instructions."
@@ -454,7 +455,7 @@ class Antigravity:
         if not receipt:
             raise Conflict("No maintained Antigravity hook installation.")
         if not receipt.get("hook_specs"):
-            raise Conflict("Antigravity 2.13.0 has no maintained MAINFRAME hook bindings.")
+            raise Conflict("Antigravity 2.16.0 has no maintained MAINFRAME hook bindings.")
         changes, markers = [], receipt.setdefault("disabled_markers", {})
         selected = (name,) if name else (*HOOK_NAMES, "advisories")
         for hook in selected:

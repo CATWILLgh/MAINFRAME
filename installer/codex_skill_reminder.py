@@ -151,14 +151,14 @@ def project_root(cwd):
     return path
 
 
-def catalog(home, project, cwd=None):
+def catalog(home, project, cwd=None, skill_roots=None):
     """Readable local methods, respecting explicit native disable/user-only policy.
 
     Does not claim the native model's budgeted catalog exposed every entry.
     Suggestions contain a verified path so the method can be read directly.
     """
-    layers = [home / 'config.toml', project / '.codex/config.toml']
-    if cwd:
+    layers = [home / 'config.toml', project / '.codex/config.toml'] if skill_roots is None else []
+    if cwd and skill_roots is None:
         directory = Path(cwd).resolve()
         for parent in (directory, *list(directory.parents)[:8]):
             if parent.is_relative_to(project):
@@ -180,7 +180,8 @@ def catalog(home, project, cwd=None):
                 disabled.add(str(Path(raw).expanduser().resolve()))
     available = {}; project_methods = []
     binding = small_text(project / 'AGENTS.md')
-    for root in (home / 'skills', project / '.agents/skills'):
+    private_roots = tuple(skill_roots) if skill_roots is not None else (home / 'skills',)
+    for root in (*private_roots, project / '.agents/skills'):
         if not root.is_dir() or root.is_symlink():
             continue
         for directory in sorted(root.iterdir())[:64]:
@@ -206,9 +207,9 @@ def catalog(home, project, cwd=None):
                     r'''\s*(?P<outer>["']?)policy(?P=outer):[ \t]*\n[ \t]+(?P<inner>["']?)allow_implicit_invocation(?P=inner):[ \t]*true\s*''', policy)
                 if not simple:
                     continue
-            if root == home / 'skills' and name in NAMES:
+            if root in private_roots and name in NAMES:
                 available[name] = path
-            elif root != home / 'skills' and name.endswith('-engineering') and name in binding:
+            elif root not in private_roots and name.endswith('-engineering') and name in binding:
                 project_methods.append((name, path))
     return available, project_methods[0] if len(project_methods) == 1 else None
 
@@ -239,14 +240,14 @@ def reserve(state, scope, skill, seen=False):
         return not seen
 
 
-def advisory(data, state, hooks, detector):
+def advisory(data, state, hooks, detector, *, skill_roots=None, read_cwd=None):
     try:
-        return _advisory(data, state, hooks, detector)
+        return _advisory(data, state, hooks, detector, skill_roots=skill_roots, read_cwd=read_cwd)
     except (OSError, ValueError, KeyError, TypeError, RuntimeError, sqlite3.Error):
         return None
 
 
-def _advisory(data, state, hooks, detector):
+def _advisory(data, state, hooks, detector, *, skill_roots=None, read_cwd=None):
     event = data.get('hook_event_name', 'PostToolUse')
     if event not in {'PreToolUse', 'PostToolUse', 'SubagentStart'}:
         return None
@@ -280,7 +281,7 @@ def _advisory(data, state, hooks, detector):
         paths = []
         if event == 'PostToolUse' and re.search(r'\b(cat|sed|head|tail|rg)\b', command):
             try:
-                hint = workdir_hint(data, hooks.parent.parent)
+                hint = read_cwd if skill_roots is not None else workdir_hint(data, hooks.parent.parent)
             except (OSError, ValueError, TypeError):
                 hint = None
             paths = detector.read_targets(command, hint)
@@ -295,7 +296,7 @@ def _advisory(data, state, hooks, detector):
     if project is None:
         return None
     scope = hashlib.sha256((session+'\0'+(agent or 'root')+'\0'+str(project)).encode()).hexdigest()
-    methods, project_method = catalog(hooks.parent.parent, project, cwd)
+    methods, project_method = catalog(hooks.parent.parent, project, cwd, skill_roots=skill_roots)
     candidates = set(operations) & methods.keys()
     if role:
         candidates = {role} & methods.keys()

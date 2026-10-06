@@ -81,3 +81,13 @@ The mapping and its limitations are documented in
 [native/minimax.md](native/minimax.md). Adapter code lives in
 [installer/minimax.py](../../installer/minimax.py), and the small installed Hook
 transport comes from [installer/minimax_hook.py](../../installer/minimax_hook.py).
+
+
+## Skill reminders
+
+The installer delivers the shared positive-only reminder method and this
+product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
+An already considered skill stays quiet; reminders neither block nor continue
+a model. Existing disable choices are preserved. Start a fresh Desktop
+conversation after updating registrations; file convergence does not establish
+native receipt or skill application.

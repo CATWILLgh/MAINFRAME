@@ -82,12 +82,11 @@ class ClineInstallerTests(unittest.TestCase):
         self.assertIn("server-side Go", go_role)
         state = json.loads(self.adapter.state_path.read_text())
         reminder = state["components"]["hooks"]["mainframe-skill-reminder"]
-        self.assertEqual(reminder["delivery"], "pending")
-        self.assertEqual(reminder["next_action"],
-                         "Codex pilot first; native adaptation and acceptance are pending.")
+        self.assertEqual(reminder["delivery"], "installed")
+        self.assertEqual(reminder["verification"], "pending")
         self.assertNotIn("reason", reminder)
-        self.assertFalse((self.adapter.detectors / "mainframe-skill-reminder.py").exists())
-        self.assertFalse(any("mainframe-skill-reminder" in path
+        self.assertTrue((self.adapter.detectors / "mainframe-skill-reminder.py").exists())
+        self.assertTrue(any("mainframe-skill-reminder" in path
                              for path in self.adapter.receipt()["files"]))
         self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PreToolUse").read_text())
         self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PostToolUse").read_text())

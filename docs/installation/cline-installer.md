@@ -87,3 +87,13 @@ The mapping and its limitations are documented in
 [native/cline.md](native/cline.md). Adapter code lives in
 [installer/cline.py](../../installer/cline.py), and the installed hook
 transport comes from [installer/cline_hook.py](../../installer/cline_hook.py).
+
+
+## Skill reminders
+
+The installer delivers the shared positive-only reminder method and this
+product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
+An already considered skill stays quiet; reminders neither block nor continue
+a model. Existing disable choices are preserved. Start a fresh Desktop
+conversation after updating registrations; file convergence does not establish
+native receipt or skill application.

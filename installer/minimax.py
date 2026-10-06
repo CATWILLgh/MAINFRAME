@@ -21,10 +21,9 @@ from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
-    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint",
+    "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
-SKILL_REMINDER_ACTION = "Codex pilot first; native adaptation and acceptance are pending."
 COMMAND_REASON = (
     "MiniMax Code exposes Plugin Skills to both autonomous selection and explicit invocation; "
     "Plugin V1 has no explicit-only command capability."
@@ -157,6 +156,10 @@ class MiniMax:
                 (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
         add(self.plugin / "scripts/mainframe_hook.py",
             Path(__file__).with_name("minimax_hook.py").read_bytes(), "hook transport")
+        for filename, sourcefile in (("skill_reminder.py", "codex_skill_reminder.py"),
+                                     ("native_skill_reminder.py", "native_skill_reminder.py")):
+            add(self.plugin / "scripts" / filename, Path(__file__).with_name(sourcefile).read_bytes(), "hooks.mainframe-skill-reminder")
+        add(self.plugin / "scripts" / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
         add(self.plugin / "instructions/global.md",
             (self.root / "instructions/global.md").read_bytes(), "instructions.global")
         add(self.plugin / "hooks/hooks.json", encode_json({"hooks": {
@@ -169,7 +172,7 @@ class MiniMax:
             "PreToolUse": [{"matcher": "bash|write|edit", "hooks": [{
                 "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
-            "PostToolUse": [{"matcher": "write|edit", "hooks": [{
+            "PostToolUse": [{"matcher": "bash|read|write|edit", "hooks": [{
                 "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
             "Stop": [{"hooks": [{
@@ -294,9 +297,7 @@ class MiniMax:
                              and not any(change.needed for change in changes))
             unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
             unsupported.update({("agents", name): AGENT_REASON for name in source["components"]["agents"]})
-            pending = {("hooks", n): SKILL_REMINDER_ACTION
-                       for n in source["components"]["hooks"]
-                       if n == "mainframe-skill-reminder"}
+            pending = {}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending

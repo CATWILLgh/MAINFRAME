@@ -2,7 +2,7 @@
 
 Use this maintained route when the file-only installation request runs in
 Antigravity Desktop from the open MAINFRAME repository. The supported mapping
-targets macOS Antigravity **2.13.0**. Version detection reads the application
+targets macOS Antigravity **2.16.0**. Version detection reads the application
 plist and never starts a model, the Antigravity CLI, IDE, or browser.
 
 ## Plan, apply, verify
@@ -19,7 +19,7 @@ Read the existing `~/.gemini/GEMINI.md` and canonical global instruction only
 when the plan requests semantic review. Resolve actual contradictions and pass
 `--instructions-reviewed`; do not ask the user to approve compatible overlap.
 The installer preserves outside content and rejects a merged rule file above the
-documented 12,000-character limit.
+documented 24,000-byte per-file limit.
 
 `--gemini-home` selects an explicitly resolved shared customization root and
 `--antigravity-app` selects the Desktop application used for version evidence.
@@ -28,9 +28,9 @@ or version is not native acceptance evidence.
 
 The adapter installs complete global skills, seven native subagent definitions,
 the compatible credential helper, and the global instruction. It preserves
-foreign `hooks.json` entries and installs one composite MAINFRAME binding on 2.13.0.
+foreign `hooks.json` entries and installs one composite MAINFRAME binding on 2.16.0.
 Antigravity requires every `PreToolUse` handler to decide `allow`, `deny`,
-`ask`, or `force_ask`: it provides no neutral result that can leave the native
+`ask`, `force_ask`, or `deny_unless_prior_grant`: it provides no neutral result that can leave the native
 permission layer authoritative. `allow` authorizes an otherwise clean tool,
 while `ask` adds a prompt and blocks unattended goals. The installer therefore
 records each full native hook contract as unsupported instead of silently replacing
@@ -73,3 +73,13 @@ Native decisions and evidence live in
 [native/antigravity.md](native/antigravity.md). Adapter logic lives in
 [installer/antigravity.py](../../installer/antigravity.py), with shared
 transactions in [installer/core.py](../../installer/core.py).
+
+
+## Skill reminders
+
+The installer delivers the shared positive-only reminder method and this
+product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
+An already considered skill stays quiet; reminders neither block nor continue
+a model. Existing disable choices are preserved. Start a fresh Desktop
+conversation after updating registrations; file convergence does not establish
+native receipt or skill application.
