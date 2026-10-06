@@ -3,6 +3,10 @@
 Keep changes small, evidence-based, and inside the agreed scope. Preserve
 unrelated work, private data, and local agent configuration.
 
+Before sharing another revision or adding a Git host, follow the
+[repository-sharing guide](docs/repository-sharing.md). Review current tracked
+content, actual product payload, and historical disclosure separately.
+
 ## Canonical design
 
 - Keep one canonical owner for every rule or capability.

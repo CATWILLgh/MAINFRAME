@@ -212,3 +212,8 @@ acceptance tests.
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and security
 boundaries, [CONTRIBUTING.md](CONTRIBUTING.md) for change rules, and
 [LICENSE](LICENSE) for the MIT license.
+
+To publish or mirror the source on another host, use the
+[repository-sharing guide](docs/repository-sharing.md). Local configuration and
+receiving-project knowledge stay outside the shared source; reviewing the
+current files does not sanitize Git history.
