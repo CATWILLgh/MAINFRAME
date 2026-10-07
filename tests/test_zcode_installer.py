@@ -44,6 +44,23 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.adapter.clean_directories(self.adapter.receipt())
         return report
 
+    def test_source_relocation_preserves_existing_credential_index(self):
+        changes, _ = self.adapter.plan(instructions_reviewed=True)
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        index = self.adapter.index
+        index.write_text("# Credentials index\n\nSynthetic retained metadata\n")
+        relocated = self.source.with_name("relocated-source")
+        shutil.copytree(self.source, relocated)
+        adapter = ZCode(relocated, self.home, version="3.11.2.6792")
+        changes, _ = adapter.plan(instructions_reviewed=True)
+        self.assertEqual(adapter.index, index)
+        self.assertFalse(any(c.path == index for c in changes))
+        transact(changes, adapter.journal, adapter.allowed)
+        self.assertEqual(index.read_text(), "# Credentials index\n\nSynthetic retained metadata\n")
+        repeated = ZCode(relocated, self.home, version="3.11.2.6792")
+        self.assertEqual(repeated.index, index)
+        self.assertEqual(repeated.plan()[1]["changes"], [])
+
     def test_fresh_delivery_converges_without_native_calls(self):
         _, report = self.adapter.plan()
         self.assertTrue(report['changes'])

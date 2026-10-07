@@ -36,6 +36,10 @@ AGENT_REASON = (
     "MiniMax Code creates custom Agents through the native mavis service; local Plugin V1 "
     "cannot declare Agents and the file-only installer does not mutate the runtime database."
 )
+AGENT_PARTIAL = (
+    "Role instructions are installed as an explicitly assigned Plugin Skill; no native custom "
+    "Agent, isolated execution, or independent review is created by loading the Skill."
+)
 HOOK_SCOPE = (
     "SessionStart and SubagentStart inject the canonical global instruction for their exact "
     "recipients. One composite PreToolUse handler covers bash and exact edit capture; PostToolUse "
@@ -68,6 +72,20 @@ def command_body(text: str, name: str) -> bytes:
         "---\nname: " + name + "\ndescription: " + json.dumps(description, ensure_ascii=False)
         + "\n---\n\n" + text.strip() + "\n"
     ).encode()
+
+
+def role_skill_body(text: str, name: str) -> bytes:
+    description = re.search(r"^Description: (.+)$", text, re.M).group(1)
+    text = re.sub(r"\(\.\./skills/([^/]+)/SKILL\.md\)", r"(../\1/SKILL.md)", text)
+    boundary = (
+        "This is role guidance, not a native custom Agent. Apply it only when assigned this role "
+        "within the current task authority. Loading this Skill creates no separate execution "
+        "or permission boundary and does not establish independent review. A review requiring "
+        "independence must be assigned to a separate agent that actually inspects the evidence."
+    )
+    return ("---\nname: " + name + "\ndescription: "
+            + json.dumps("Use when explicitly assigned this role: " + description)
+            + "\n---\n\n" + boundary + "\n\n" + text.strip() + "\n").encode()
 
 
 def hook_command(python: Path, analyzer_bin: Path | None = None) -> str:
@@ -137,6 +155,11 @@ class MiniMax:
             add(self.plugin / "skills" / name / "SKILL.md",
                 command_body((self.root / entry["source"]).read_text(), name),
                 "commands." + name)
+            manifest_skills.append(f"skills/{name}/SKILL.md")
+        for name, entry in source["components"]["agents"].items():
+            add(self.plugin / "skills" / name / "SKILL.md",
+                role_skill_body((self.root / entry["source"]).read_text(), name),
+                "agents." + name)
             manifest_skills.append(f"skills/{name}/SKILL.md")
         return manifest_skills
 
@@ -322,7 +345,7 @@ class MiniMax:
         changes.append(Change.from_snapshot(self.receipt_path, receipt_snapshot,
                                             encode_json(new_receipt) if new_receipt else None,
                                             component="ownership receipt"))
-        order = ("shared.", "skills.", "commands.", "hooks.", "hook transport", "native registrations",
+        order = ("shared.", "skills.", "commands.", "agents.", "hooks.", "hook transport", "native registrations",
                  "instructions.", "plugin package", "hook control", "adaptation state", "ownership receipt")
         changes.sort(key=lambda change: next((i for i, prefix in enumerate(order)
                                               if change.component.startswith(prefix)), len(order)))
@@ -342,6 +365,7 @@ class MiniMax:
             } if not remove else {}),
             "retained_partial_bindings": ({
                 **{name: COMMAND_PARTIAL for name in source["components"]["commands"]},
+                **{name: AGENT_PARTIAL for name in source["components"]["agents"]},
             } if not remove else {}),
             "hook_scope": HOOK_SCOPE,
             "next_actions": state.get("next_actions", []) if state_snapshot[0] or not remove else [],
