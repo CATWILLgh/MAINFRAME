@@ -5,7 +5,7 @@ description: Preserve unresolved project findings as structured tickets during o
 
 # Record a project problem
 
-Operate in the current receiving project: the repository named by the task or, absent that, the active working repository. This skill belongs to MAINFRAME, but that does not make MAINFRAME the target. Do not inspect MAINFRAME source, installation state, or its feedback queue merely because the skill is loaded. An explicit request to use this skill means apply this recording method to the current project; it is not a request to audit the skill or its distributor.
+Operate in the current project: the repository named by the task or, absent that, the active working repository. An explicit request to use this skill means apply the recording method there. Keep discovery and ticket writes inside that project and its explicitly configured issue routes.
 
 Use this skill when work exposes a concrete problem in the receiving project and resolving it is outside the assigned result. Preserve the finding without silently expanding scope, then continue the assigned work when the problem does not prevent a valid or safe result.
 
@@ -13,7 +13,7 @@ First decide whether the problem belongs to the active work. If it prevents achi
 
 When the work will deliberately leave an evidenced problem unresolved, read [references/surface-ticket.md](references/surface-ticket.md) and apply its surfacing boundary before recording or returning the finding.
 
-Only route a finding to MAINFRAME harness feedback when the observed defect actually concerns MAINFRAME delivery or the effective agent harness. An application bug, project debt, failed project check, or missing project ticket queue is not such a defect. Do not switch the assigned project or begin a harness audit. If no concrete project finding exists yet, keep this method ready for the assigned work; do not fabricate tickets or start a random search campaign.
+If no concrete project finding exists yet, keep this method ready for the assigned work; do not fabricate tickets or start a random search campaign.
 
 ## Use the project's queue
 
@@ -23,7 +23,7 @@ Otherwise inspect only the current project's effective instructions and configur
 
 If no issue route exists and local documentation writes are authorized, establish `docs/tickets/` using [references/new-queue.md](references/new-queue.md), then record the evidenced finding in `open/observations/`. An explicit request to apply this skill authorizes this local setup unless the task or project forbids it; automatic use stays within existing write authority. Create the rule files and directories, not an audit campaign or artificial records. Preserve the project's tracked/ignored ownership and do not change ignore rules without a settled choice.
 
-If the configured route is unavailable or write authority is absent, return a ticket-ready record with the exact missing capability or authority. Never substitute MAINFRAME's own queue for the project's queue.
+If the configured route is unavailable or write authority is absent, return a ticket-ready record with the exact missing capability or authority. Do not substitute another repository's queue for the project's queue.
 
 Creating or changing an external issue is an external mutation. Perform it only when the assigned authority includes that action.
 
