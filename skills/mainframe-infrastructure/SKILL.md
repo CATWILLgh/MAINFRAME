@@ -19,7 +19,7 @@ expand access, or contact an unrelated environment.
    ambiguity that could affect infrastructure or data.
 4. Read only project references applicable to the requested operation. Reject
    stale, missing, or project-escaping reference paths instead of guessing.
-5. Resolve credential names through the central MAINFRAME credential index and
+5. Resolve credential names through the configured credential index and
    use `mainframe-secrets` for value delivery.
 
 Read [infrastructure-map.md](references/infrastructure-map.md) before creating

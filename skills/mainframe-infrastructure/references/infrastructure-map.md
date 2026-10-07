@@ -25,7 +25,7 @@ checks or grants authority.
 - `notes` contains concise exceptional facts, not procedures or chronology.
 
 Use the JSON asset as a structural starting point and replace every example
-value. If an older MAINFRAME map already exists at this same path, preserve and
+value. If an older infrastructure map already exists at this same path, preserve and
 validate it instead of recreating it.
 
 When reality and the map disagree, use reality for the active task. Repair the

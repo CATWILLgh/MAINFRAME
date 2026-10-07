@@ -12,7 +12,7 @@ These templates match the canonical `mainframe-tickets-init` managed blocks; the
 <!-- MAINFRAME ticket rules: begin -->
 # Project ticket system
 
-Ticket schema: mainframe-tickets-v1. This directory stores project issues, not MAINFRAME harness feedback. Read these rules before creating, updating, or moving a ticket.
+This directory stores issues in the current project. Read these rules before creating, updating, or moving a ticket.
 
 ## Directories own lifecycle state
 

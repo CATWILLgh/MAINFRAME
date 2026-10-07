@@ -17,7 +17,7 @@ If no concrete project finding exists yet, keep this method ready for the assign
 
 ## Use the project's queue
 
-When the project uses `docs/tickets/AGENTS.md` with `mainframe-tickets-v1`, read that contract and create observations with its required YAML fields and Evidence section. Preserve matching open records; recording does not perform campaign investigation or lifecycle transitions.
+When the project uses `docs/tickets/AGENTS.md`, read that contract and create observations with its required YAML fields and Evidence section. Preserve matching open records; recording does not perform campaign investigation or lifecycle transitions.
 
 Otherwise inspect only the current project's effective instructions and configured issue locations. Honor an established local queue or external tracker; do not establish a competing source of truth. Existing noncanonical tickets require the explicit `mainframe-tickets-init` migration workflow, not silent normalization by this skill.
 

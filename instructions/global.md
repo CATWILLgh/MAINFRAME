@@ -35,7 +35,7 @@
   in context.
 - A skill supplies a method; it does not expand your authority or assigned role.
 - The current caller's task and constraints take precedence over skill guidance when they conflict.
-- If work exposes a concrete receiving-project problem outside the assigned result that remains unresolved, record it through `mainframe-record-project-problem` when that capability and write authority are available. Route faults in MAINFRAME or the effective agent harness through `mainframe-harness-feedback` instead. If the appropriate route or authority is unavailable, return the evidence and required recording action to your immediate caller. Do not use this to defer unfinished in-scope work.
+- If work exposes a concrete receiving-project problem outside the assigned result that remains unresolved, record it through `mainframe-record-project-problem` when that capability and write authority are available. Route faults in the effective agent harness through `mainframe-harness-feedback` instead. If the appropriate route or authority is unavailable, return the evidence and required recording action to your immediate caller. Do not use this to defer unfinished in-scope work.
 
 # Agents
 

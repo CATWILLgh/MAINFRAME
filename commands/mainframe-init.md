@@ -1,4 +1,4 @@
-# Initialize the user-facing MAINFRAME session
+# Initialize the user-facing work session
 
 This is a user-invocable command. Execute it only because the current invocation explicitly selected it. It takes no arguments.
 
