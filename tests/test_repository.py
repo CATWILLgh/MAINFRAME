@@ -155,6 +155,15 @@ class RepositoryContractTests(unittest.TestCase):
                     failures.append(f"{document.relative_to(ROOT)} -> {raw_target}")
         self.assertEqual(failures, [])
 
+    def test_problem_recording_queue_matches_initialization_contract(self):
+        command = (ROOT / "commands/mainframe-tickets-init.md").read_text()
+        resource = (ROOT / "skills/mainframe-record-project-problem/references/new-queue.md").read_text()
+        for identity in ("MAINFRAME ticket rules", "MAINFRAME ticket entry"):
+            start, end = f"<!-- {identity}: begin -->", f"<!-- {identity}: end -->"
+            def block(text):
+                return text[text.index(start):text.index(end) + len(end)]
+            self.assertEqual(block(command), block(resource), identity)
+
     def test_root_agent_files_are_product_entrypoints(self):
         self.assertEqual((ROOT / "CLAUDE.md").read_text(encoding="utf-8"), "@AGENTS.md\n")
         manifest_text = MANIFEST.read_text(encoding="utf-8")
