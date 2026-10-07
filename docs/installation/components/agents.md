@@ -59,6 +59,26 @@ alone. A delivered role with untested discovery, routing, or permissions keeps
 `verification: pending` and a compact `next_action` under the
 [verification criteria](../verification.md).
 
+## Retain useful material without claiming native equivalence
+
+When a native role cannot be declared, deliver its complete instructions and
+required-method references through a discoverable supported package when that
+package can safely expose assigned-role guidance. For example, a Skill can carry
+the role body while its discovery text limits use to an explicit role assignment.
+State that loading it creates no separate agent, permission isolation, or
+independent reviewer. A check requiring independence still needs a separate
+executor that actually inspects the evidence. Keep the full role contract
+`unsupported` and report the retained partial representation. Do not drop the
+material merely because full native role parity is absent, or put role bodies
+into always-loaded global instructions. If no safe representation exists, record
+the rejected candidate and its concrete limitation.
+
+Material checks should cover every inventoried role body and required method,
+not just file counts or native role status. [test_delivery_parity](../../../tests/test_delivery_parity.py)
+checks all five maintained artifact planners alongside their adapter-specific
+ownership, update and removal tests. These checks do not establish discovery or
+execution.
+
 ## Verify
 
 Run these native checks during adapter development or explicitly requested

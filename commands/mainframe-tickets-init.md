@@ -1,6 +1,6 @@
 # Initialize or normalize the project's ticket system
 
-This is an explicit user-invoked, no-argument command for the current project. Establish `docs/tickets/` and migrate existing project tickets into the standard below. Do not investigate ticket claims, deduplicate problems, implement fixes, or infer user approval. Do not run this command during MAINFRAME installation.
+This is an explicit user-invoked, no-argument command for the current project. Establish `docs/tickets/` and migrate existing project tickets into the standard below. Do not investigate ticket claims, deduplicate problems, implement fixes, or infer user approval. Run only for the current project under an explicit initialization request.
 
 ## Resolve and preserve existing ownership
 
@@ -47,7 +47,7 @@ AGENTS.md managed block:
 <!-- MAINFRAME ticket rules: begin -->
 # Project ticket system
 
-Ticket schema: mainframe-tickets-v1. This directory stores project issues, not MAINFRAME harness feedback. Read these rules before creating, updating, or moving a ticket.
+This directory stores issues in the current project. Read these rules before creating, updating, or moving a ticket.
 
 ## Directories own lifecycle state
 

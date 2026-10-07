@@ -165,3 +165,12 @@ per-installation choices. Receipts separately hash the managed role core, so a
 later canonical-body update can preserve independently changed settings while
 still rejecting arbitrary local edits to role bodies or tool boundaries. Older
 receipts without a core hash can need one explicit semantic reconciliation.
+
+## Source relocation
+
+On a supported full-update build, updating from another source checkout retains
+the existing non-secret credential index at its established path. The ownership
+receipt records code source and credential source separately. Relocation never
+merges, overwrites, or deletes credential descriptions. A missing or symlinked
+retained index stops the update for explicit reconciliation. Older bounded-update
+builds still require the same source root.

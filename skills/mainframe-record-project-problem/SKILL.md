@@ -1,9 +1,11 @@
 ---
 name: mainframe-record-project-problem
-description: Record an evidenced out-of-scope project problem in its configured issue queue. Excludes unfinished work and MAINFRAME harness faults.
+description: Preserve unresolved project findings as structured tickets during ordinary work; establish a local ticket queue when none exists. Not an audit campaign or a way to defer unfinished work.
 ---
 
 # Record a project problem
+
+Operate in the current project: the repository named by the task or, absent that, the active working repository. An explicit request to use this skill means apply the recording method there. Keep discovery and ticket writes inside that project and its explicitly configured issue routes.
 
 Use this skill when work exposes a concrete problem in the receiving project and resolving it is outside the assigned result. Preserve the finding without silently expanding scope, then continue the assigned work when the problem does not prevent a valid or safe result.
 
@@ -11,13 +13,17 @@ First decide whether the problem belongs to the active work. If it prevents achi
 
 When the work will deliberately leave an evidenced problem unresolved, read [references/surface-ticket.md](references/surface-ticket.md) and apply its surfacing boundary before recording or returning the finding.
 
-Do not use this route for a fault in MAINFRAME, its adaptation, hooks, instructions, skills, agents, or effective agent harness. Send that evidence through the configured MAINFRAME harness-feedback route when available; otherwise return the feedback-ready evidence and missing reporting action to your immediate caller.
+If no concrete project finding exists yet, keep this method ready for the assigned work; do not fabricate tickets or start a random search campaign.
 
 ## Use the project's queue
 
-When the project uses `docs/tickets/AGENTS.md` with `mainframe-tickets-v1`, read that contract and create observations with its required YAML fields and Evidence section; preserve matching open records and do not perform campaign investigation or lifecycle transitions. Otherwise locate the issue route already configured for the receiving project. It may be a repository-local queue or an external tracker. Follow its documented ownership, fields, states, and write permissions. Do not write a receiving-project problem into MAINFRAME's own queue, invent a new issue system, or initialize directories merely to record the finding.
+When the project uses `docs/tickets/AGENTS.md`, read that contract and create observations with its required YAML fields and Evidence section. Preserve matching open records; recording does not perform campaign investigation or lifecycle transitions.
 
-If no project issue route is configured, the route is unavailable, or you lack write authority, do not broaden access or claim that a ticket exists. Return a ticket-ready record to your immediate caller and identify the exact missing route, capability, or authorization.
+Otherwise inspect only the current project's effective instructions and configured issue locations. Honor an established local queue or external tracker; do not establish a competing source of truth. Existing noncanonical tickets require the explicit `mainframe-tickets-init` migration workflow, not silent normalization by this skill.
+
+If no issue route exists and local documentation writes are authorized, establish `docs/tickets/` using [references/new-queue.md](references/new-queue.md), then record the evidenced finding in `open/observations/`. An explicit request to apply this skill authorizes this local setup unless the task or project forbids it; automatic use stays within existing write authority. Create the rule files and directories, not an audit campaign or artificial records. Preserve the project's tracked/ignored ownership and do not change ignore rules without a settled choice.
+
+If the configured route is unavailable or write authority is absent, return a ticket-ready record with the exact missing capability or authority. Do not substitute another repository's queue for the project's queue.
 
 Creating or changing an external issue is an external mutation. Perform it only when the assigned authority includes that action.
 

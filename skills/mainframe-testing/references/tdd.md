@@ -25,4 +25,4 @@ When only CI can observe the real dependency, write or select that test for CI. 
 
 Escaped regressions, flakiness or suspicious test cost can trigger `mainframe-test-audit` for an audit of the existing system. Do not require a separate audit for each ordinary code change.
 
-Source: [Martin Fowler on TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html). The operating boundaries above are MAINFRAME policy, not a claim that one practice guarantees correctness.
+Source: [Martin Fowler on TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html). TDD does not by itself guarantee correctness.

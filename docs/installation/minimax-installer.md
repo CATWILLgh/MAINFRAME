@@ -46,8 +46,10 @@ MiniMax exposes Plugin Skills to autonomous selection as well as explicit
 invocation. The seven commands are therefore useful partial bindings, but their
 explicit-only contract cannot be enforced. MiniMax custom Agents are managed by
 the native `mavis` service and are not representable in local Plugin V1, so the
-seven role components remain unsupported rather than being written into private
-runtime state.
+seven role contracts remain unsupported. Their complete instructions are delivered
+as explicitly assigned Plugin Skills, with links to their required methods. Loading
+such a Skill does not create an isolated agent or establish independent review.
+The report records this retained partial binding; private runtime state is never edited.
 
 ## Activation and evidence boundary
 

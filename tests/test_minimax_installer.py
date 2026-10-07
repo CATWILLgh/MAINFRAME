@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 from installer.core import Conflict, transact
+from installer.runtime import TOOL_SPECS
 from installer.minimax import AGENT_REASON, COMMAND_REASON, MiniMax, desktop_version
 
 
@@ -63,7 +64,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
         self.assertEqual(report["planned_delivery"], {"installed": 31, "pending": 0, "unsupported": 14})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
-        self.assertEqual(len(manifest["skills"]), 28)
+        self.assertEqual(len(manifest["skills"]), 35)
         self.assertEqual(manifest["hooks"], ["hooks/hooks.json"])
         hooks = json.loads((self.adapter.plugin / "hooks/hooks.json").read_text())["hooks"]
         self.assertEqual(set(hooks), {
@@ -90,6 +91,21 @@ class MiniMaxInstallationTests(unittest.TestCase):
         self.assertEqual(state["components"]["hooks"]["mainframe-fallow-quality"]["delivery"], "installed")
         command = (self.adapter.plugin / "skills/mainframe-project-skill/SKILL.md").read_text()
         self.assertIn("Never select this Skill autonomously", command)
+
+    def test_role_material_is_retained_as_truthful_plugin_skills(self):
+        report = self.apply()
+        manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
+        for source in (self.source / "agents").glob("*.md"):
+            role = self.adapter.plugin / "skills" / source.stem / "SKILL.md"
+            self.assertTrue(role.is_file(), source.stem)
+            text = role.read_text()
+            self.assertIn("not a native custom Agent", text)
+            self.assertIn("does not establish independent review", text)
+            for line in source.read_text().splitlines():
+                if line and not line.startswith("Required method:"):
+                    self.assertIn(line, text)
+            self.assertIn(f"skills/{source.stem}/SKILL.md", manifest["skills"])
+            self.assertIn(source.stem, report["retained_partial_bindings"])
 
     def test_package_obeys_v1_portable_path_and_size_limits(self):
         self.apply()
@@ -187,17 +203,25 @@ class MiniMaxInstallationTests(unittest.TestCase):
         self.assertTrue(self.adapter.index.exists())
 
     def test_entrypoint_is_desktop_only_without_a_runtime_pin(self):
+        # This test owns entrypoint/version routing, not network provisioning.
+        tools = self.home / "fixture-version-tools"
+        tools.mkdir()
+        for name, (_, _, version) in TOOL_SPECS.items():
+            executable = tools / name
+            executable.write_text(f"#!/bin/sh\nprintf '%s\\n' '{name} {version}'\n")
+            executable.chmod(0o755)
+        environment = {**os.environ, "PATH": str(tools) + os.pathsep + os.environ.get("PATH", "")}
         result = subprocess.run([
             sys.executable, "-B", str(self.source / "install.py"), "minimax", "apply",
             "--home", str(self.home), "--surface", "desktop", "--runtime-version", "4.2.0",
-        ], cwd=self.source, capture_output=True, text=True, timeout=10)
+        ], cwd=self.source, env=environment, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         state = json.loads((self.source / "ADAPTATION.minimax.json").read_text())
         self.assertEqual(state["target"]["version"], "4.2.0")
         result = subprocess.run([
             sys.executable, "-B", str(self.source / "install.py"), "minimax", "plan",
             "--home", str(self.home), "--surface", "cli",
-        ], cwd=self.source, capture_output=True, text=True, timeout=10)
+        ], cwd=self.source, env=environment, capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("targets Desktop only", result.stderr)
 

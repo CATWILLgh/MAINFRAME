@@ -19,7 +19,7 @@ synchronous Hook V1 contract used here.
 | --- | --- |
 | Global instruction | Plugin `SessionStart` and `SubagentStart` additional context; no internal database edit |
 | Skills | Plugin `skills/<mainframe-name>/SKILL.md` with every required relative resource |
-| Agents | Unsupported: Plugin V1 has no Agent declaration; native Agent CRUD belongs to the `mavis` service |
+| Agents | Partial: complete role instructions as explicitly assigned Plugin Skills; no native Agent, isolated permissions, or independent reviewer. Native Agent CRUD belongs to the `mavis` service |
 | Commands | Partial: slash-capable/explicitly invocable Plugin Skills; explicit-only selection cannot be enforced |
 | Hooks | One Plugin Hook document and one composite Python transport over root, tool, and Subagent lifecycle events |
 | Credentials | Shared `mainframe-secret` helper and repository-local non-secret index |

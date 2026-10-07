@@ -19,9 +19,9 @@ The profile is a small set of facts, not a new package manager. For each selecte
 | Project toolchain provides the check | Use its established version and native command; add no competing runtime |
 | Project dependency provides the check | Use the project's package manager, manifest and lockfile; reuse its compatible environment and CI setup |
 | Standalone helper is justified | Use a maintained isolated tool environment with a recorded package source/version and update route; avoid polluting system packages |
-| MAINFRAME hook depends on an analyzer | Use the maintained MAINFRAME installer and its tested compatibility contract; a project tool is not an interchangeable replacement merely because its executable name matches |
+| Managed hook depends on an analyzer | Use the hook's maintained installer and its tested compatibility contract; a project tool is not an interchangeable replacement merely because its executable name matches |
 
-Prepare missing dependencies during authorized project setup or MAINFRAME installation, before relying on the check. Do not download packages or silently update versions inside a hook. Avoid launch commands that may install implicitly in the execution path. Resolve installation explicitly, then invoke the prepared executable. An offline or failed installation is an unavailable check with a concrete cause, not a passing result.
+Prepare missing dependencies during authorized project setup or hook installation, before relying on the check. Do not download packages or silently update versions inside a hook. Avoid launch commands that may install implicitly in the execution path. Resolve installation explicitly, then invoke the prepared executable. An offline or failed installation is an unavailable check with a concrete cause, not a passing result.
 
 Use the same rule/configuration semantics in local checks, hooks and CI where they claim the same guarantee. Honor project lockfiles; for managed hook tools preserve the installer-tested version until compatibility is verified. Maintain an explicit update route rather than abandoned pins or uncontrolled latest-version downloads. Do not swap tools or loosen versions behind an existing output parser.
 

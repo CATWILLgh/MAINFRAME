@@ -285,6 +285,22 @@ class ZCode:
         self.config = self.zcode / "cli/config.json"
         self.state_path = self.root / "ADAPTATION.zcode.json"
         self.index = self.root / "shared/credentials/credentials-index.md"
+        # Credential metadata stays at its established source when code moves.
+        # The exact retained path is anchored to the receipt's credential source,
+        # never accepted from an arbitrary out-of-bound file row.
+        raw_receipt = regular_bytes(self.receipt_path)
+        if raw_receipt is not None:
+            prior = json.loads(raw_receipt)
+            if prior.get("version") == 1 and prior.get("target") == str(self.zcode):
+                credential_source = Path(prior.get("credential_source", prior.get("source", "")))
+                if not credential_source.is_absolute() or ".." in credential_source.parts:
+                    raise Conflict("ZCode receipt has no valid absolute credential source.")
+                index = credential_source / "shared/credentials/credentials-index.md"
+                row = prior.get("files", {}).get(str(index), {})
+                if row.get("retain") is True and row.get("component") == "shared.credentials index":
+                    if not index.is_file() or index.is_symlink():
+                        raise Conflict("Retained ZCode credential index is unavailable; reconcile it before updating.")
+                    self.index = index
         self.event_state = Path(tempfile.gettempdir()).resolve() / ("mainframe-zcode-rg-" + digest(str(self.zcode).encode())[:24])
         self.version, self.surface, self.adopt_existing = version, surface, adopt_existing
 
@@ -541,8 +557,6 @@ class ZCode:
             previous = self.adopt(source, artifacts, prior_state, json.loads(old_config or b"{}"))
         elif not previous and regular_bytes(self.legacy / "zcode_hook.py") is not None:
             raise Conflict("Existing manual ZCode hooks need adoption. Review plan with --adopt-existing; no native probes are required.")
-        if previous and previous.get("source") != str(self.root):
-            raise Conflict("ZCode source root changed; reconcile the non-secret index before relocation.")
         if not remove:
             for raw_path, record in previous.get("files", {}).items():
                 path = Path(raw_path)
@@ -637,7 +651,7 @@ class ZCode:
             for path, artifact in artifacts.items():
                 if artifact[2].startswith("agents.") and str(path) in records:
                     records[str(path)]["native_core_sha256"] = _agent_core_digest(artifact[0])
-            new_receipt = {"version": 1, "target": str(self.zcode), "source": str(self.root), "files": records,
+            new_receipt = {"version": 1, "target": str(self.zcode), "source": str(self.root), "credential_source": str(self.index.parents[2]), "files": records,
                            "instruction": irecord, "hook_groups": groups, "enabled_added": enabled_added,
                            "config_created": previous.get("config_created", old_config is None), "skill_overrides": overrides,
                            "disabled_markers": previous.get("disabled_markers", {}),
