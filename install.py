@@ -192,6 +192,7 @@ def zcode_main(args, root, parser):
     from installer.zcode import (ZCode, KNOWN_RUNTIME as ZCODE_RUNTIME,
         FULL_MAPPING_RUNTIMES as ZCODE_FULL_MAPPING_RUNTIMES,
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
+        SKILL_DELIVERY_RUNTIMES as ZCODE_SKILL_DELIVERY_RUNTIMES,
         RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
         desktop_version as zcode_version)
     if (args.codex_home or args.gemini_home or args.antigravity_app or args.minimax_home
@@ -209,7 +210,7 @@ def zcode_main(args, root, parser):
             if version and version != observed_version:
                 raise Conflict("Supplied ZCode build conflicts with the selected Desktop application")
             version = observed_version
-        if version not in ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES:
+        if version not in ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES | ZCODE_SKILL_DELIVERY_RUNTIMES:
             raise Conflict("Revalidate the maintained ZCode mapping for this build; supported full mapping is " + ZCODE_RUNTIME)
     from installer.zcode import HOOK_NAMES as ZCODE_HOOK_NAMES
     if args.hook and args.hook not in ZCODE_HOOK_NAMES:
@@ -221,6 +222,9 @@ def zcode_main(args, root, parser):
         if version in ZCODE_CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
+        if version in ZCODE_SKILL_DELIVERY_RUNTIMES:
+            adapter.validate_skill_delivery(changes, adapter.receipt())
+            report["delivery_mode"] = "existing-installation skill-only delivery; Markdown additions and updates only"
         if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
@@ -243,6 +247,9 @@ def zcode_main(args, root, parser):
             if not remove and version in ZCODE_CONTENT_UPDATE_RUNTIMES:
                 adapter.validate_content_update(changes, previous)
                 report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
+            if not remove and version in ZCODE_SKILL_DELIVERY_RUNTIMES:
+                adapter.validate_skill_delivery(changes, previous)
+                report["delivery_mode"] = "existing-installation skill-only delivery; Markdown additions and updates only"
             if not remove:
                 provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS)
             if remove and previous:

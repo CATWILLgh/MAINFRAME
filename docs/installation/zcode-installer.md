@@ -18,6 +18,14 @@ modules. Unknown builds need a separately scoped compatibility check.
 
 ## Plan, apply, verify
 
+Desktop build **3.14.5.7961** permits a skill-only update of an existing
+same-source installation: new or updated Markdown skill files, with owned
+content checks and unchanged file modes. It rejects removals, executables,
+hooks, registrations, roles, commands, settings and global instructions.
+This does not authorize fresh installation or establish full native behavior
+for that build. The report names this narrow mode. See the
+[skill-delivery evidence](native/zcode-evidence.md#desktop-31457961-skill-delivery).
+
 From the repository root:
 
 ```sh

@@ -132,6 +132,11 @@
         "source": "skills/mainframe-self-monitoring",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-argocd": {
+        "source": "skills/mainframe-argocd",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {

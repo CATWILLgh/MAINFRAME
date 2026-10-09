@@ -1,5 +1,19 @@
 # ZCode bundled runtime hook evidence
 
+## Desktop 3.14.5.7961 skill delivery
+
+Reviewed 2026-10-09 from the installed application plist and shipped
+`Contents/Resources/glm/zcode.cjs`, SHA-256
+`fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f`.
+This matches the bundle identity already recorded below for skill discovery.
+Its scanner retains the `SKILL.md` entrypoint and directory exclusions.
+The maintained route permits only Markdown skill additions/replacements in an
+existing same-source receipted Desktop installation. Disposable tests establish
+acceptance of a new reference and rejection of role, executable, removal and
+fresh-installation changes; existing receipt reconciliation rejects edited
+owned files. Hook/role/settings mapping is not newly accepted by this mode.
+Native discovery and model use in a fresh conversation remain separate.
+
 Reviewed 2026-09-08, ZCode Desktop 3.11.2 (build 3.11.2.6792), macOS.
 The inspected artifact was
 `/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs`, SHA-256:

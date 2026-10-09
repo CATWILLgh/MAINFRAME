@@ -53,6 +53,9 @@ configuration, database, and API behavior.
   cross-service coordination here; that skill owns the K3s operational method.
 - ClickHouse queries, ingestion, data/schema changes, maintenance, or recovery:
   load `mainframe-clickhouse` for its environment, cost, and data-safety boundaries.
+- Argo CD GitOps configuration, Application/ApplicationSet reconciliation, CLI/API
+  operations, sync or recovery: load `mainframe-argocd`; retain cross-service
+  deployment ownership here.
 - Application Keycloak/OIDC login, admin SSO settings or group-to-role mapping:
   load `mainframe-keycloak-sso`; keep server deployment, TLS and proxy ownership
   here. That method owns the application integration and acceptance.
