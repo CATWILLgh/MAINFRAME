@@ -39,6 +39,25 @@ this bounded-update mode. Known 0.153.4 hook limitations become pending compatib
 checks, not claimed unsupported facts about the newer runtime. See the
 [bounded evidence](native/codex.md#prerelease-content-updates).
 
+Desktop **0.162.0-alpha.17.2** supports a narrower repair of an existing
+same-source installation: replacement of the receipted, installer-owned
+`mainframe-destructive-operations` detector, with its mode, hook definitions,
+transport, dependencies, other payload and global configuration unchanged.
+This does not admit a fresh install, text update or general runtime mapping.
+Use the interpreter already named in the installed hook commands when it remains
+available; changing the installer interpreter would change native definitions
+and is rejected by this repair boundary. The maintained `plan`, `apply` and
+`verify` commands remain the route; never copy a detector manually.
+
+The detector needs only Python's standard library. This bounded repair leaves
+unrelated analyzer dependencies untouched and still reports their readiness.
+`verify` adds `scoped_update_matches`: true proves this narrow reconciliation
+converged. The existing full `structure_matches` result and exit status still
+require all installed hook dependencies, so they can remain false/nonzero when
+an unrelated dependency is missing. Report that distinction, preserve native
+trust and disables, and separately confirm the repaired active pre-shell
+behavior. See the [detector-update evidence](native/codex.md#desktop-01620-alpha172-detector-repair).
+
 Run from this repository root. For Desktop, the installer reads only the current
 task's engine version from local runtime metadata, using `CODEX_THREAD_ID`. It
 does not read conversations, enumerate other tasks, or invoke an executable.

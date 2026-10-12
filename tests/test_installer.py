@@ -867,6 +867,92 @@ class InstallationTests(unittest.TestCase):
         self.assertIn("conflicts with", result.stderr)
         self.assertFalse(self.adapter.receipt_path.exists())
 
+    def test_desktop_detector_update_converges_without_changing_native_contract(self):
+        self.adapter.surface = "desktop"
+        self.install()
+        protected = [self.adapter.codex / "hooks.json", self.adapter.codex / "config.toml",
+                     self.adapter.hooks / "bridge.py"]
+        before = {path: observed(path) for path in protected}
+        source = self.source / "hooks/mainframe-destructive-operations.py"
+        original = source.read_bytes()
+        self.addCleanup(source.write_bytes, original)
+        source.write_bytes(original + b"\n# Fixture-only detector revision.\n")
+        self.adapter.version = "0.162.0-alpha.17.2"
+        changes, _ = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(changes, self.adapter.receipt())
+        self.assertEqual({c.component for c in changes if c.needed}, {
+            "hooks.mainframe-destructive-operations", "adaptation state", "ownership receipt",
+        })
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        repeated, _ = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(repeated, self.adapter.receipt())
+        self.assertFalse(any(c.needed for c in repeated))
+        self.assertEqual(before, {path: observed(path) for path in protected})
+        self.assertFalse(codex.mapping_supported(self.adapter.version, "desktop"))
+
+    def test_detector_update_entrypoint_preserves_unrelated_runtime_readiness(self):
+        self.adapter.surface = "desktop"
+        self.install()
+        source = self.source / "hooks/mainframe-destructive-operations.py"
+        original = source.read_bytes()
+        self.addCleanup(source.write_bytes, original)
+        source.write_bytes(original + b"\n# Fixture-only revision.\n")
+        spec = importlib.util.spec_from_file_location("mainframe_install_detector_test",
+                                                     self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(entrypoint)
+        reports = []
+        options = ["--surface", "desktop", "--runtime-version", "0.162.0-alpha.17.2",
+                   "--home", str(self.home), "--instructions-reviewed"]
+        unavailable = {"ready": False, "required": ["semgrep"], "missing": ["semgrep"]}
+        with (patch.object(entrypoint.Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "runtime_status", return_value=unavailable),
+              patch.object(entrypoint, "ensure_runtime") as provision,
+              patch.object(entrypoint, "show", side_effect=lambda report, details: reports.append(report))):
+            self.assertEqual(entrypoint.main(["codex", "apply"] + options), 0)
+            self.assertEqual(entrypoint.main(["codex", "verify"] + options), 1)
+            provision.assert_not_called()
+        self.assertIn("destructive detector only", reports[0]["delivery_mode"])
+        self.assertTrue(reports[-1]["scoped_update_matches"])
+        self.assertFalse(reports[-1]["structure_matches"])
+        self.assertEqual(reports[-1]["runtime_support"], unavailable)
+
+    def test_desktop_detector_update_rejects_every_other_installation_change(self):
+        self.adapter.surface = "desktop"
+        self.install()
+        self.adapter.version = "0.162.0-alpha.17.2"
+        previous = self.adapter.receipt()
+        detector = self.adapter.hooks / "detectors/mainframe-destructive-operations.py"
+        allowed = Change.to(detector, detector.read_bytes() + b"\n# Revision\n",
+                            mode=detector.stat().st_mode & 0o777,
+                            component="hooks.mainframe-destructive-operations")
+        self.adapter.validate_content_update([allowed], previous)
+        candidates = [
+            Change.to(detector, None, component=allowed.component),
+            Change.to(detector, allowed.after, mode=0o755, component=allowed.component),
+            Change.to(detector.parent / "new.py", b"new", component=allowed.component),
+            Change.to(self.adapter.hooks / "bridge.py", b"changed", component="hook transport"),
+            Change.to(self.adapter.codex / "hooks.json", b"changed", component="hook registration"),
+            Change.to(self.adapter.codex / "config.toml", b"changed", component="feedback permission"),
+            Change.to(self.adapter.skills / "mainframe-research/SKILL.md", b"changed",
+                      component="skills.mainframe-research"),
+        ]
+        for change in candidates:
+            with self.subTest(path=change.path, mode=change.mode):
+                with self.assertRaises(Conflict):
+                    self.adapter.validate_content_update([allowed, change], previous)
+        for receipt in ({}, dict(previous, source="/different-source"),
+                        dict(previous, files={})):
+            with self.assertRaises(Conflict):
+                self.adapter.validate_content_update([allowed], receipt)
+        self.adapter.surface = "cli"
+        with self.assertRaises(Conflict):
+            self.adapter.validate_content_update([allowed], previous)
+        self.adapter.surface = "desktop"
+        self.adapter.version = "0.162.0-alpha.17.3"
+        with self.assertRaises(Conflict):
+            self.adapter.validate_content_update([allowed], previous)
+
     def test_prerelease_content_update_converges_without_touching_native_bindings(self):
         self.adapter.surface = "desktop"
         self.install()

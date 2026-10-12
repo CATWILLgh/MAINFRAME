@@ -43,10 +43,12 @@ KNOWN_RUNTIME = "0.153.4"
 # Exact Desktop mapping revalidated against the tagged native schemas/sources.
 # This is delivery compatibility, not observed lifecycle/role acceptance.
 INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1"}
-# Current Desktop discovery exposes the same instruction/skill/role text formats.
-# This permits only an existing installation's bounded update, including the
-# exact Stop registration repair validated against the native schema.
-CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"}
+# Current Desktop PreToolUse command/deny transport was observed unchanged.
+# This is an existing detector repair boundary, never a full native mapping.
+DETECTOR_UPDATE_RUNTIMES = {"0.162.0-alpha.17.2"}
+# The older prerelease allows text formats and an exact Stop schema repair;
+# detector-update versions use the separate, narrower validator below.
+CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES
 LIMITATIONS = {
     "mainframe-destructive-operations": "The context-free command and root/home/Git guard subset is installed. Native shell hooks omit the actual tool workdir, so active-project-root and ordinary relative-target protection remain unsupported.",
     "mainframe-commit-secrets": "The context-free literal and absolute-file commit-metadata guard is installed. Native shell hooks omit the actual tool workdir needed to inspect staged and worktree content.",
@@ -655,11 +657,43 @@ class Codex:
             }
         return changes, report
 
+    def bounded_update_mode(self):
+        if self.version in DETECTOR_UPDATE_RUNTIMES:
+            return "existing-installation bounded update; owned destructive detector only; native definitions and dependencies unchanged"
+        return "existing-installation bounded update; content changes and validated Stop schema repair only"
+
+    def validate_detector_update(self, changes, previous):
+        """Accept only the existing canonical destructive detector's bytes."""
+        detector = self.hooks / "detectors/mainframe-destructive-operations.py"
+        component = "hooks.mainframe-destructive-operations"
+        record = previous.get("files", {}).get(str(detector), {})
+        if (record.get("component") != component or record.get("owned") is not True
+                or record.get("retain")):
+            raise Conflict("Detector update requires the existing installer-owned destructive detector.")
+        bookkeeping = {"adaptation state": self.state_path,
+                       "ownership receipt": self.receipt_path}
+        for change in changes:
+            if not change.needed:
+                continue
+            if (change.before is None or change.after is None
+                    or change.before_mode != change.mode):
+                raise Conflict("Detector update cannot create, remove, or change file modes: " + str(change.path))
+            if change.component in bookkeeping and change.path == bookkeeping[change.component]:
+                continue
+            if (change.component == component and change.path == detector
+                    and digest(change.before) == record.get("sha256")
+                    and change.before_mode == record.get("mode")):
+                continue
+            raise Conflict("Detector update cannot change native definitions, dependencies, or other payload: " + str(change.path))
+
     def validate_content_update(self, changes, previous):
-        """Permit text replacement and the one validated prerelease hook repair."""
+        """Select the exact existing-installation update boundary for this runtime."""
         if (self.surface != "desktop" or self.version not in CONTENT_UPDATE_RUNTIMES
                 or not previous or previous.get("source") != str(self.root)):
             raise Conflict("This runtime supports only content updates to an existing same-source installation invoked from Desktop; revalidate the native mapping for other changes.")
+        if self.version in DETECTOR_UPDATE_RUNTIMES:
+            self.validate_detector_update(changes, previous)
+            return
         for change in changes:
             if not change.needed or change.component in {"adaptation state", "ownership receipt"}:
                 continue

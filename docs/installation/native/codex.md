@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-10-03.
+Last reviewed: 2026-10-12.
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -56,6 +56,38 @@ skill resource delivery, state truthfulness, convergence, preservation and
 rejection before writes for an uninspected surface/version. Native discovery,
 trust, lifecycle execution and read-only role behavior remain separate pending
 acceptance. A fresh task is the shared loading handoff after delivery changes.
+
+## Desktop 0.162.0-alpha.17.2 detector repair
+
+Current-task metadata identified this exact Desktop engine on 2026-10-12. The
+installed pre-shell transport delivered a denial before execution for a literal
+compound shell command containing `git push` followed by `gh workflow run` with
+`-f profile=v2`. Inspection
+traced the false denial to the canonical destructive detector's handling of
+unquoted newlines. This establishes the current command-to-detector-to-denial
+path; it does not revalidate unrelated native events, roles or discovery.
+
+The current [official hook reference](https://learn.chatgpt.com/docs/hooks)
+still specifies `Bash` with `tool_input.command` and the
+`PreToolUse` `permissionDecision: "deny"` result used by the existing bridge.
+Its trust rule requires review when the native hook definition changes. The
+repair therefore preserves the exact existing registration and bridge rather
+than migrating an interpreter or trust definition. No trust record is edited.
+
+The maintained adapter accepts only replacement bytes for the existing owned
+`mainframe-destructive-operations.py` detector plus its ownership receipt and
+adaptation state. It requires the same source root, unchanged file modes and
+all other installation changes absent. Unknown neighboring versions, CLI,
+fresh installations, source moves, executable transport, registrations,
+permissions and other payload changes are rejected. Dependency provisioning is
+not part of this scoped repair; full dependency readiness remains reported.
+
+Disposable-home installer tests cover allowed replacement, convergence,
+unchanged native definitions, rejection boundaries, and entrypoint behavior
+with an unavailable unrelated analyzer. The existing full mapping guard is
+unchanged. Native acceptance after delivery must establish the repaired
+allowed command and continued denial of recognized destructive commands on
+this Desktop surface; fixture convergence alone does not establish that result.
 
 ## Official sources
 

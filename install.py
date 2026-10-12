@@ -20,7 +20,7 @@ if os.name != "posix":
     raise SystemExit(2)
 
 from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES,
-                             INSPECTED_DESKTOP_RUNTIMES, RUNTIME_TOOLS,
+                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, RUNTIME_TOOLS,
                              desktop_version, native_version, mapping_supported)
 from installer.core import Conflict, installation_lock, restore, transact
 from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
@@ -126,8 +126,10 @@ def main(argv=None):
         support = add_runtime_status(report, adapter, RUNTIME_TOOLS)
         if version in CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
-            report["delivery_mode"] = "existing-installation bounded update; content changes and validated Stop schema repair only"
+            report["delivery_mode"] = adapter.bounded_update_mode()
         if args.action == "verify":
+            if version in DETECTOR_UPDATE_RUNTIMES:
+                report["scoped_update_matches"] = not report["changes"]
             report["structure_matches"] = not report["changes"] and support["ready"]
             if args.native:
                 if not executable:
@@ -165,9 +167,15 @@ def main(argv=None):
             old_receipt = adapter.receipt()
             if not remove and version in CONTENT_UPDATE_RUNTIMES:
                 adapter.validate_content_update(changes, old_receipt)
-                report["delivery_mode"] = "existing-installation bounded update; content changes and validated Stop schema repair only"
+                report["delivery_mode"] = adapter.bounded_update_mode()
             if not remove:
-                provision_runtime(report, adapter, RUNTIME_TOOLS)
+                if version in DETECTOR_UPDATE_RUNTIMES:
+                    # The validated repair changes only a stdlib detector.
+                    # Keep unrelated hook dependency readiness visible without
+                    # provisioning or modifying those existing dependencies.
+                    add_runtime_status(report, adapter, RUNTIME_TOOLS)
+                else:
+                    provision_runtime(report, adapter, RUNTIME_TOOLS)
             if remove and old_receipt:
                 transact(adapter.control(False, None), adapter.journal, adapter.allowed)
                 time.sleep(6)
