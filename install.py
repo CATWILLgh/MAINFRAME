@@ -232,7 +232,7 @@ def zcode_main(args, root, parser):
             report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
         if version in ZCODE_SKILL_DELIVERY_RUNTIMES:
             adapter.validate_skill_delivery(changes, adapter.receipt())
-            report["delivery_mode"] = "existing-installation skill-only delivery; Markdown additions and updates only"
+            report["delivery_mode"] = "existing-installation bounded content delivery; Markdown skills, existing global instruction and destructive detector only"
         if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
@@ -257,7 +257,7 @@ def zcode_main(args, root, parser):
                 report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
             if not remove and version in ZCODE_SKILL_DELIVERY_RUNTIMES:
                 adapter.validate_skill_delivery(changes, previous)
-                report["delivery_mode"] = "existing-installation skill-only delivery; Markdown additions and updates only"
+                report["delivery_mode"] = "existing-installation bounded content delivery; Markdown skills, existing global instruction and destructive detector only"
             if not remove:
                 provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS)
             if remove and previous:
@@ -292,6 +292,7 @@ def antigravity_main(args, root, parser):
     from installer.antigravity import (
         Antigravity, HOOK_NAMES as ANTIGRAVITY_HOOK_NAMES,
         KNOWN_RUNTIME as ANTIGRAVITY_RUNTIME, RUNTIME_TOOLS as ANTIGRAVITY_RUNTIME_TOOLS,
+        CONTENT_UPDATE_RUNTIMES as ANTIGRAVITY_CONTENT_RUNTIMES,
         desktop_version as antigravity_version,
     )
     if (args.codex_home or args.zcode_home or args.zcode_app or args.adopt_existing
@@ -303,13 +304,16 @@ def antigravity_main(args, root, parser):
     version = antigravity_runtime(args, antigravity_version)
     adapter = Antigravity(root, args.home, args.gemini_home, version, args.surface)
     if args.action in ("plan", "verify"):
-        _, report = adapter.plan(args.instructions_reviewed)
+        changes, report = adapter.plan(args.instructions_reviewed)
+        if version in ANTIGRAVITY_CONTENT_RUNTIMES:
+            adapter.validate_content_update(changes, adapter.receipt())
+            report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
         support = add_runtime_status(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
         if args.action == "verify":
             report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
-    if args.action == "apply" and version != ANTIGRAVITY_RUNTIME:
+    if args.action == "apply" and version != ANTIGRAVITY_RUNTIME and version not in ANTIGRAVITY_CONTENT_RUNTIMES:
         raise Conflict("Revalidate the maintained Antigravity mapping for this release; supported release is " + ANTIGRAVITY_RUNTIME)
     with installation_lock(adapter.lock_path):
         if args.action == "recover":
@@ -329,6 +333,9 @@ def antigravity_main(args, root, parser):
             changes, report = adapter.plan(args.instructions_reviewed, remove)
             if report.get("instruction_review"):
                 raise Conflict(report["instruction_review"])
+            if not remove and version in ANTIGRAVITY_CONTENT_RUNTIMES:
+                adapter.validate_content_update(changes, adapter.receipt())
+                report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
             if not remove:
                 provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
             previous = adapter.receipt()

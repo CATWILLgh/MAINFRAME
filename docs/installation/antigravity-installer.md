@@ -5,6 +5,13 @@ Antigravity Desktop from the open MAINFRAME repository. The supported mapping
 targets macOS Antigravity **2.16.0**. Version detection reads the application
 plist and never starts a model, the Antigravity CLI, IDE, or browser.
 
+Desktop **2.22.0** additionally permits a bounded update of an existing
+same-source installation: replacement of existing Markdown skills, managed global
+instruction and destructive-operations detector, with unchanged modes. Fresh
+installs, new/removal of files, other executable changes, native registrations,
+roles and settings require separate revalidation. See the
+[content-update evidence](native/antigravity.md#desktop-2220-content-update).
+
 ## Plan, apply, verify
 
 From the repository root run:

@@ -118,3 +118,23 @@ Reminder advice therefore joins the existing composite PostInvocation handler,
 without a new permission gate or forced continuation. Supported timing and
 unavailable role-start advice are in the
 [native binding table](../../../hooks/skill-reminder-routing.md#native-bindings).
+
+
+## Desktop 2.22.0 content update
+
+Reviewed 2026-10-13. Installed plist identifies `com.google.antigravity`, release
+2.22.0. Current official [rules](https://antigravity.google/docs/rules),
+[skills](https://antigravity.google/docs/skills/) and
+[hooks](https://antigravity.google/docs/hooks/) retain the global destinations
+above, plain Markdown global instructions, skill entrypoints and PostInvocation
+injection without required continuation. The detector change is internal stdlib
+shell parsing, with no new event, payload or registration contract.
+
+The installer permits only replacement of existing skill Markdown, the managed
+global instruction and the exact destructive detector in a same-source receipted
+installation. Native configuration, transport, roles, modes and unrelated
+executables must remain unchanged; additions/removals are rejected. Tests cover
+accepted updates, convergence and these rejection boundaries. This is a bounded
+content-delivery contract, not new full hook/role acceptance or proof that a live
+conversation consumed the update. Existing unsupported explanations retain their
+2.16.0 provenance until separately revalidated.

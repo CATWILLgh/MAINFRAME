@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from installer.antigravity import Antigravity, COMMAND_REASON, PARTIAL_HOOKS, desktop_version
-from installer.core import Conflict, transact
+from installer.core import Change, Conflict, transact
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -178,6 +178,36 @@ class AntigravityInstallationTests(unittest.TestCase):
             self.adapter.receipt()["disabled_markers"],
             {"mainframe-secret-access": True},
         )
+
+    def test_content_update_preserves_native_bindings_and_converges(self):
+        self.apply()
+        adapter = Antigravity(self.source, self.home, version="2.22.0")
+        for relative in ('instructions/global.md', 'skills/mainframe-testing/SKILL.md',
+                         'hooks/mainframe-destructive-operations.py'):
+            p = self.source / relative
+            p.write_text(p.read_text() + '\n# Synthetic content update\n')
+        changes, _ = adapter.plan()
+        adapter.validate_content_update(changes, adapter.receipt())
+        hooks = adapter.hooks_config.read_bytes()
+        transact(changes, adapter.journal, adapter.allowed)
+        self.assertEqual(adapter.hooks_config.read_bytes(), hooks)
+        changes, _ = adapter.plan()
+        self.assertFalse(changes)
+        adapter.validate_content_update(changes, adapter.receipt())
+        bridge = adapter.hooks / 'bridge.py'
+        content = bridge.read_bytes()
+        rejected = [
+            Change(bridge, content, content + b'\n', 0o600, 'hook transport', 0o600),
+            Change(adapter.skills / 'new/SKILL.md', None, b'new', 0o644, 'skills.new'),
+            Change(adapter.instruction, b'old', None, 0o600, 'instructions.global', 0o600),
+            Change(adapter.instruction, b'old', b'new', 0o644, 'instructions.global', 0o600),
+        ]
+        for change in rejected:
+            with self.subTest(path=change.path, after=change.after):
+                with self.assertRaises(Conflict):
+                    adapter.validate_content_update([change], adapter.receipt())
+        with self.assertRaisesRegex(Conflict, 'existing same-source'):
+            adapter.validate_content_update([], {})
 
     def test_entrypoint_is_desktop_only_and_rejects_stale_runtime(self):
         result = subprocess.run([

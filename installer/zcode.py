@@ -750,19 +750,29 @@ class ZCode:
                          "handoff": "Delivery checks only; no agent, browser, credential, or native-hook probes are run."}
 
     def validate_skill_delivery(self, changes, previous):
-        """Add/update Markdown skills without revalidating unrelated native controls."""
+        """Update reviewed content while preserving unrelated native controls."""
         if (self.surface != "desktop" or self.version not in SKILL_DELIVERY_RUNTIMES
                 or not previous or previous.get("source") != str(self.root)):
             raise Conflict("ZCode skill-only delivery requires an existing same-source Desktop installation.")
         for change in changes:
             if not change.needed or change.component in {"adaptation state", "ownership receipt"}:
                 continue
+            existing_content = (
+                (change.component == "instructions.global"
+                 and change.path == self.zcode / "AGENTS.md"
+                 and previous.get("instruction"))
+                or (change.component == "hooks.mainframe-destructive-operations"
+                    and change.path == self.hooks / "detectors/mainframe-destructive-operations.py")
+            )
+            if (existing_content and change.before is not None and change.after is not None
+                    and change.before_mode == change.mode):
+                continue
             if (not change.component.startswith("skills.")
                     or not change.path.is_relative_to(self.skills)
                     or change.path.suffix != ".md" or change.after is None
                     or change.mode != 0o644
                     or (change.before is not None and change.before_mode != change.mode)):
-                raise Conflict("ZCode skill-only delivery cannot change hooks, roles, settings, executables, modes or remove files: " + str(change.path))
+                raise Conflict("ZCode bounded content delivery cannot change unvalidated hooks, roles, settings, executables, modes or remove files: " + str(change.path))
 
     def validate_content_update(self, changes, previous):
         """Allow bounded skill updates and exact validated hook migrations."""

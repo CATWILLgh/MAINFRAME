@@ -22,6 +22,7 @@ from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 
 KNOWN_RUNTIME = "2.16.0"
+CONTENT_UPDATE_RUNTIMES = {"2.22.0"}
 HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
@@ -190,6 +191,26 @@ class Antigravity:
             "mainframe-antigravity-" + digest(str(self.gemini).encode())[:24]
         )
         self.version, self.surface = version, surface
+
+    def validate_content_update(self, changes, previous):
+        """Permit existing content replacement without changing native bindings."""
+        if (self.surface != "desktop" or self.version not in CONTENT_UPDATE_RUNTIMES
+                or not previous or previous.get("source") != str(self.root)):
+            raise Conflict("Antigravity content update requires an existing same-source Desktop installation.")
+        for change in changes:
+            if not change.needed or change.component in {"adaptation state", "ownership receipt"}:
+                continue
+            content = (
+                (change.component.startswith("skills.")
+                 and change.path.is_relative_to(self.skills) and change.path.suffix == ".md")
+                or (change.component == "instructions.global" and change.path == self.instruction
+                    and previous.get("instruction"))
+                or (change.component == "hooks.mainframe-destructive-operations"
+                    and change.path == self.hooks / "detectors/mainframe-destructive-operations.py")
+            )
+            if (not content or change.before is None or change.after is None
+                    or change.before_mode != change.mode):
+                raise Conflict("Antigravity content update cannot change native bindings, modes or add/remove files: " + str(change.path))
 
     def allowed(self, path: Path) -> bool:
         if not path.is_absolute() or ".." in path.parts:

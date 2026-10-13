@@ -7,12 +7,31 @@ Reviewed 2026-10-09 from the installed application plist and shipped
 `fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f`.
 This matches the bundle identity already recorded below for skill discovery.
 Its scanner retains the `SKILL.md` entrypoint and directory exclusions.
-The maintained route permits only Markdown skill additions/replacements in an
+The initially validated route permitted only Markdown skill additions/replacements in an
 existing same-source receipted Desktop installation. Disposable tests establish
 acceptance of a new reference and rejection of role, executable, removal and
 fresh-installation changes; existing receipt reconciliation rejects edited
 owned files. Hook/role/settings mapping is not newly accepted by this mode.
 Native discovery and model use in a fresh conversation remain separate.
+
+### Existing instruction and detector update (2026-10-13)
+
+Current build 3.14.5.7961 still ships the exact SHA-256 above, identical to
+3.14.4.7912's reviewed runtime. The bounded reminder-contract probe passes
+against this installed bundle. Its context source `bls` resolves the user
+`~/.zcode/AGENTS.md` (offset 2096380); the default source list contains AGENTS.md.
+The unchanged PreToolUse schema retains permissionDecision and reason, and
+existing process registrations/transport remain unchanged. The canonical
+stdlib destructive detector update only preserves unquoted shell newline
+boundaries; it adds no native event or output contract.
+
+The existing-installation mode now also permits replacement of the receipted
+managed global instruction and exact existing destructive detector with
+unchanged modes. Disposable tests cover update, convergence, transport rejection
+and the existing skill-only restrictions for unrelated components. This is not
+fresh-install or full native acceptance for the new app build. The official
+hooks page timed out during this pass; shipped source and the previously
+recorded identical bundle provide the bounded compatibility evidence.
 
 Reviewed 2026-09-08, ZCode Desktop 3.11.2 (build 3.11.2.6792), macOS.
 The inspected artifact was

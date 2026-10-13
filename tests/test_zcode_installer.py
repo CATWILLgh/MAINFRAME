@@ -11,7 +11,7 @@ from unittest.mock import patch
 from installer.zcode import (ZCode, HOOK_NAMES, SHELL_HOOK_NAMES,
     _is_validated_hook_config_update, _legacy_hook_registration,
     role_body, command_body)
-from installer.core import Conflict, transact, restore
+from installer.core import Change, Conflict, transact, restore
 from installer.runtime import runtime_bin, TOOL_SPECS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -532,6 +532,25 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertIn('Revalidate the maintained ZCode mapping', result.stderr)
         self.assertFalse((other_home / '.zcode').exists())
 
+    def test_existing_build_updates_instruction_and_detector_without_native_changes(self):
+        self.apply()
+        adapter = ZCode(self.source, self.home, version='3.14.5.7961', surface='desktop')
+        for relative in ['instructions/global.md', 'hooks/mainframe-destructive-operations.py']:
+            source = self.source / relative
+            source.write_text(source.read_text() + '\n# Synthetic content update.\n')
+        changes, _ = adapter.plan()
+        adapter.validate_skill_delivery(changes, adapter.receipt())
+        config_before = adapter.config.read_bytes()
+        transact(changes, adapter.journal, adapter.allowed)
+        self.assertEqual(adapter.config.read_bytes(), config_before)
+        adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
+        bridge = adapter.hooks / 'bridge.py'
+        original = bridge.read_bytes()
+        unvalidated = Change(bridge, original, original + b'\n# Transport change\n',
+                             0o600, 'hook transport', 0o600)
+        with self.assertRaises(Conflict):
+            adapter.validate_skill_delivery([unvalidated], adapter.receipt())
+
     def test_skill_only_build_adds_markdown_but_rejects_other_changes(self):
         self.apply()
         adapter = ZCode(self.source, self.home, version='3.14.5.7961', surface='desktop')
@@ -546,16 +565,16 @@ class ZCodeInstallationTests(unittest.TestCase):
 
         role = self.source / 'agents/mainframe-researcher.md'
         role.write_text(role.read_text() + '\nUnapproved role update.\n')
-        with self.assertRaisesRegex(Conflict, 'skill-only'):
+        with self.assertRaisesRegex(Conflict, 'bounded content'):
             adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
         role.write_text((ROOT / 'agents/mainframe-researcher.md').read_text())
         script = self.source / 'skills/mainframe-argocd/references/fixture.py'
         script.write_text('print("unapproved executable")\n')
-        with self.assertRaisesRegex(Conflict, 'skill-only'):
+        with self.assertRaisesRegex(Conflict, 'bounded content'):
             adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
         script.unlink()
         new_resource.unlink()
-        with self.assertRaisesRegex(Conflict, 'skill-only'):
+        with self.assertRaisesRegex(Conflict, 'bounded content'):
             adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
 
     def test_skill_only_build_requires_existing_same_source_installation(self):
