@@ -4,6 +4,10 @@ Start with required behavior and semantics, not a library name. Prefer a native 
 
 Before adding a component, search for the same semantic role, variants, styles, and consumers. Extend the canonical primitive or add a named variant when the role already exists. Do not create a near-duplicate that differs only by spacing, radius, color, icon placement, or a few props.
 
+When adopting a shared primitive on an existing surface, verify its effective
+styles there: specificity and responsive overrides can change control size,
+readability, or wrapping even when the primitive's own tests pass.
+
 Avoid the opposite error: do not force unrelated roles into one abstraction or promote a one-off composition without a real shared contract. Keep page composition near its owning feature and shared behavior in the narrowest stable primitive.
 
 Maintain one interaction vocabulary for primary, secondary, quiet, selected, and destructive actions. Icon-only controls still need an accessible name and full hit area. Preserve visible hover, pressed, focus, open, disabled, loading, success, and error states where they apply.
