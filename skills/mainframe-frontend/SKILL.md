@@ -24,7 +24,21 @@ Several routers, state libraries, validators, or component systems may legitimat
 
 ## Preserve and extend one product language
 
-Preserve the installed framework, rendering model, router, architecture, state, validation, styling, primitives, accessibility conventions, and visual language unless changing them is part of the assigned result. Do not introduce a competing library or design system for convenience.
+Match the result to the assignment. For maintenance, preserve unaffected design.
+For an explicit design or usability improvement, develop and implement a better
+user-facing arrangement, using [visual direction](references/visual-direction.md)
+to compare it with the baseline. A working interface can still be improved;
+an improvement hypothesis does not require a pre-existing bug. Reading guidance,
+passing regression checks, or fixing an incidental defect alone does not complete
+that assignment.
+
+Preserve the installed framework, rendering model, router, architecture, state,
+validation, shared primitives, and product contracts unless changing them is part
+of the assigned result. Preserve recognizable product language without freezing
+the current composition: hierarchy, grouping, density, navigation and interaction
+may change within an assigned design improvement. Make ordinary reversible design
+decisions within that scope without seeking approval for each one. Do not
+introduce a competing library or design system for convenience.
 
 Start from user purpose and behavior, not a component library. Search existing primitives, variants, and call sites before creating a component. When the same semantic role already exists, extend its canonical owner instead of creating a near-duplicate that differs only in pixels, styling, or props. Do not abstract without a real shared contract; native HTML is preferable when it already supplies the required semantics.
 
