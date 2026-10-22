@@ -1,9 +1,9 @@
 ---
 name: mainframe-frontend
-description: Design, implement, debug, or review React web interfaces, including forms, browser state, accessibility, and interaction tests. Not React Native or standalone design systems.
+description: Design, redesign, implement, debug, or review React web interfaces, including visual hierarchy, responsive layouts, forms, accessibility, and interaction tests. Not React Native or standalone design systems.
 ---
 
-# Frontend engineering
+# Frontend design and engineering
 
 Apply this method whenever the active work matches the description, whether you are the primary implementer, a delegated engineer, or a reviewer. Follow the scope and authority supplied through the current execution path; this skill does not expand either.
 
@@ -31,6 +31,19 @@ Start from user purpose and behavior, not a component library. Search existing p
 Keep tokens, typography, spacing, geometry, density, iconography, motion, states, and action hierarchy coherent across the changed surface. Optimize first for comprehension, task completion, recoverable errors, and predictable interaction. Distinctive graphics support product meaning; they do not excuse inconvenient or inaccessible behavior.
 
 ## Load only the relevant detail
+
+Use the references to make the affected decisions, not just this entrypoint.
+When creating, redesigning, or visually reviewing a screen, read
+[visual direction](references/visual-direction.md) before choosing or judging its
+visual language and hierarchy. For composition, responsive behavior, typography,
+or motion, read [layout, type, and motion](references/layout-type-and-motion.md)
+before making those decisions. Apply the relevant guidance to the actual content
+and existing product language, then inspect the rendered result through
+[browser verification](references/browser-verification.md). For a design-only
+discussion, apply it to the proposal without starting implementation or a browser
+session. A behavior-only fix does not require the visual references unless it
+also changes those concerns. Reuse material already in context; no reading log,
+separate design report, or full-reference pass is required.
 
 | Changed concern | Read |
 |---|---|
