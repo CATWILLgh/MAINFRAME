@@ -195,6 +195,24 @@ class DestructiveOperationsTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIsNone(self.decide(command))
 
+    def test_newline_separates_git_flags_from_other_commands(self) -> None:
+        self.assertIsNone(self.decide(
+            "git push origin HEAD:test\n"
+            "gh workflow run audit-history-clickhouse.yml --ref test -f profile=v2"
+        ))
+        self.assertIsNone(self.decide("git push origin HEAD:test\n\nother-tool -f value"))
+        for command in (
+            "echo ready\ngit push --force origin HEAD:test",
+            "echo ready;\ngit push --force origin HEAD:test",
+            "git push origin HEAD:test \\\n --force",
+            "git push origin HEAD:test\ngit push --mirror origin",
+            "echo ready\ngit push origin +HEAD:test",
+            "git push origin HEAD:test\nsh -c 'git push --force origin main'",
+        ):
+            with self.subTest(command=command):
+                self.assertIn("Force or mirror push", self.decide(command) or "")
+        self.assertIsNone(self.decide("echo 'text\ngit push --force origin main'"))
+
     def test_git_dry_runs_and_read_only_forms_remain_available(self) -> None:
         for command in (
             "git push --dry-run --force origin main",

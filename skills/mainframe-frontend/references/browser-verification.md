@@ -26,5 +26,9 @@ coverage. Wait for observable rendering or navigation readiness, not a fixed del
 Use an authorized local or test contour. Do not spend money, mutate production, alter credentials, or trigger irreversible operations merely for visual proof. Keep simulated data visibly distinct from live runtime evidence.
 
 Capture screenshots when useful for appearance and pair them with interaction
-evidence when behavior changed. Report the relevant observations and limitations.
+evidence when behavior changed. For before/after comparisons, confirm the intended
+content has settled and the captured viewport matches the requested dimensions;
+an immediate resize or a still-loading panel can produce misleading evidence.
+Compare the same state, or explain why a different focus/scroll position is itself
+the interaction outcome being compared. Report the relevant observations and limitations.
 If an essential observation is unavailable, state the exact unverified boundary.

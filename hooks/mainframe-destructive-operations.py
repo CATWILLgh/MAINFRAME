@@ -68,10 +68,33 @@ MANUAL_GIT_SUFFIX = (
 )
 
 
+def _newline_boundaries(command: str) -> str:
+    """Expose unquoted shell newlines without splitting line continuations."""
+    result: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command):
+        character = command[index]
+        if character == "\\" and quote != "'" and index + 1 < len(command):
+            following = command[index + 1]
+            if following != "\n":
+                result.extend((character, following))
+            index += 2
+            continue
+        if character in {"'", '"'}:
+            if quote is None:
+                quote = character
+            elif quote == character:
+                quote = None
+        result.append(" ; " if character == "\n" and quote is None else character)
+        index += 1
+    return "".join(result)
+
+
 def tokenize(command: str) -> list[str] | None:
     """Tokenize shell operators while preserving operators inside quotes."""
     try:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()")
+        lexer = shlex.shlex(_newline_boundaries(command), posix=True, punctuation_chars=";&|()")
         lexer.whitespace_split = True
         lexer.commenters = ""
         return list(lexer)

@@ -30,7 +30,7 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -43,10 +43,14 @@ KNOWN_RUNTIME = "0.153.4"
 # Exact Desktop mapping revalidated against the tagged native schemas/sources.
 # This is delivery compatibility, not observed lifecycle/role acceptance.
 INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1"}
-# Current Desktop discovery exposes the same instruction/skill/role text formats.
-# This permits only an existing installation's bounded update, including the
-# exact Stop registration repair validated against the native schema.
-CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"}
+# Current Desktop PreToolUse command/deny transport was observed unchanged.
+# This is an existing detector repair boundary, never a full native mapping.
+DETECTOR_UPDATE_RUNTIMES = {"0.162.0-alpha.17.2"}
+# The older prerelease allows text formats and an exact Stop schema repair;
+# detector-update versions use the separate, narrower validator below.
+SELECTION_UPDATE_RUNTIMES = {"0.163.0-alpha.11"}
+CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES
+SELECTION_MATCHER = "^collaborationspawn_agent$"
 LIMITATIONS = {
     "mainframe-destructive-operations": "The context-free command and root/home/Git guard subset is installed. Native shell hooks omit the actual tool workdir, so active-project-root and ordinary relative-target protection remain unsupported.",
     "mainframe-commit-secrets": "The context-free literal and absolute-file commit-metadata guard is installed. Native shell hooks omit the actual tool workdir needed to inspect staged and worktree content.",
@@ -421,6 +425,8 @@ class Codex:
             add(self.skills / name / "SKILL.md", packaged.encode(), "commands." + name)
             add(self.skills / name / "agents/openai.yaml", b"policy:\n  allow_implicit_invocation: false\n", "commands." + name)
         for name in HOOK_NAMES:
+            if name == "mainframe-subagent-selection" and self.version not in SELECTION_UPDATE_RUNTIMES:
+                continue
             source_path = self.root / source["components"]["hooks"][name]["source"]
             add(self.hooks / "detectors" / source_path.name, source_path.read_bytes(), "hooks." + name)
         add(self.hooks / "bridge.py", Path(__file__).with_name("codex_hook.py").read_bytes(), "hook transport")
@@ -518,6 +524,8 @@ class Codex:
         "Stop": [{"hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180}]}]}
+        if not remove and self.version in SELECTION_UPDATE_RUNTIMES:
+            desired_hooks["PreToolUse"].append(self.selection_group())
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
         old_hooks = hook_snapshot[0]
@@ -596,6 +604,8 @@ class Codex:
             )
             unsupported = {}
             pending = {}
+            if self.version not in SELECTION_UPDATE_RUNTIMES:
+                pending[("hooks", "mainframe-subagent-selection")] = "Subagent-selection controls and binding require runtime validation; tested on Desktop 0.163.0-alpha.11."
             for name, limitation in LIMITATIONS.items():
                 component = ("hooks", name)
                 if mapping_supported(self.version, self.surface):
@@ -655,11 +665,82 @@ class Codex:
             }
         return changes, report
 
+    def selection_group(self):
+        return {"matcher": SELECTION_MATCHER, "hooks": [{"type": "command",
+                "command": hook_command(self.hooks, "mainframe-subagent-selection", self.event_state), "timeout": 2}]}
+
+    def bounded_update_mode(self):
+        if self.version in SELECTION_UPDATE_RUNTIMES:
+            return "existing-installation subagent-selection hook update; unrelated payload and native definitions preserved"
+        if self.version in DETECTOR_UPDATE_RUNTIMES:
+            return "existing-installation bounded update; owned destructive detector only; native definitions and dependencies unchanged"
+        return "existing-installation bounded update; content changes and validated Stop schema repair only"
+
+    def validate_selection_update(self, changes, previous):
+        """Admit the verified new binding without expanding the runtime mapping."""
+        detector = self.hooks / "detectors/mainframe-subagent-selection.py"
+        bridge = self.hooks / "bridge.py"
+        record = previous.get("files", {}).get(str(bridge), {})
+        if record.get("owned") is not True or record.get("component") != "hook transport":
+            raise Conflict("Subagent-selection update requires the existing owned hook bridge.")
+        for change in changes:
+            if not change.needed:
+                continue
+            if change.path in {self.state_path, self.receipt_path}:
+                continue
+            if change.path == detector and change.after is not None and change.mode == 0o600:
+                continue
+            if (change.path == bridge and change.after is not None
+                    and change.before_mode == change.mode == record.get("mode")
+                    and digest(change.before or b"") == record.get("sha256")):
+                continue
+            if (change.path == self.codex / "hooks.json" and change.before and change.after
+                    and change.before_mode == change.mode):
+                before, after = json.loads(change.before), json.loads(change.after)
+                before_groups = before.get("hooks", {}).get("PreToolUse", [])
+                after_groups = after.get("hooks", {}).get("PreToolUse", [])
+                group = self.selection_group()
+                if group not in before_groups and after_groups.count(group) == 1:
+                    after_groups.remove(group)
+                    if before == after:
+                        continue
+            raise Conflict("Subagent-selection update cannot change unrelated payload or native definitions: " + str(change.path))
+
+    def validate_detector_update(self, changes, previous):
+        """Accept only the existing canonical destructive detector's bytes."""
+        detector = self.hooks / "detectors/mainframe-destructive-operations.py"
+        component = "hooks.mainframe-destructive-operations"
+        record = previous.get("files", {}).get(str(detector), {})
+        if (record.get("component") != component or record.get("owned") is not True
+                or record.get("retain")):
+            raise Conflict("Detector update requires the existing installer-owned destructive detector.")
+        bookkeeping = {"adaptation state": self.state_path,
+                       "ownership receipt": self.receipt_path}
+        for change in changes:
+            if not change.needed:
+                continue
+            if (change.before is None or change.after is None
+                    or change.before_mode != change.mode):
+                raise Conflict("Detector update cannot create, remove, or change file modes: " + str(change.path))
+            if change.component in bookkeeping and change.path == bookkeeping[change.component]:
+                continue
+            if (change.component == component and change.path == detector
+                    and digest(change.before) == record.get("sha256")
+                    and change.before_mode == record.get("mode")):
+                continue
+            raise Conflict("Detector update cannot change native definitions, dependencies, or other payload: " + str(change.path))
+
     def validate_content_update(self, changes, previous):
-        """Permit text replacement and the one validated prerelease hook repair."""
+        """Select the exact existing-installation update boundary for this runtime."""
         if (self.surface != "desktop" or self.version not in CONTENT_UPDATE_RUNTIMES
                 or not previous or previous.get("source") != str(self.root)):
             raise Conflict("This runtime supports only content updates to an existing same-source installation invoked from Desktop; revalidate the native mapping for other changes.")
+        if self.version in SELECTION_UPDATE_RUNTIMES:
+            self.validate_selection_update(changes, previous)
+            return
+        if self.version in DETECTOR_UPDATE_RUNTIMES:
+            self.validate_detector_update(changes, previous)
+            return
         for change in changes:
             if not change.needed or change.component in {"adaptation state", "ownership receipt"}:
                 continue

@@ -20,7 +20,7 @@ if os.name != "posix":
     raise SystemExit(2)
 
 from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES,
-                             INSPECTED_DESKTOP_RUNTIMES, RUNTIME_TOOLS,
+                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, SELECTION_UPDATE_RUNTIMES, RUNTIME_TOOLS,
                              desktop_version, native_version, mapping_supported)
 from installer.core import Conflict, installation_lock, restore, transact
 from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
@@ -112,9 +112,9 @@ def main(argv=None):
     if args.action in ("plan", "apply", "verify"):
         if args.surface == "desktop":
             version = desktop_version(codex_home or args.home / ".codex", os.environ.get("CODEX_THREAD_ID"))
-            if version and args.runtime_version and version != args.runtime_version:
-                raise Conflict("--runtime-version conflicts with the current Desktop task's engine metadata.")
-            version = version or args.runtime_version
+            # Stored thread metadata identifies the creation engine, not necessarily
+            # the live engine after an app upgrade. Explicit observed evidence wins.
+            version = args.runtime_version or version
             if not version:
                 raise Conflict("Current-task Desktop engine metadata is unavailable; supply --runtime-version from app engine metadata, never from CLI or the app release number.")
         else:
@@ -126,8 +126,10 @@ def main(argv=None):
         support = add_runtime_status(report, adapter, RUNTIME_TOOLS)
         if version in CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
-            report["delivery_mode"] = "existing-installation bounded update; content changes and validated Stop schema repair only"
+            report["delivery_mode"] = adapter.bounded_update_mode()
         if args.action == "verify":
+            if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES:
+                report["scoped_update_matches"] = not report["changes"]
             report["structure_matches"] = not report["changes"] and support["ready"]
             if args.native:
                 if not executable:
@@ -165,9 +167,15 @@ def main(argv=None):
             old_receipt = adapter.receipt()
             if not remove and version in CONTENT_UPDATE_RUNTIMES:
                 adapter.validate_content_update(changes, old_receipt)
-                report["delivery_mode"] = "existing-installation bounded update; content changes and validated Stop schema repair only"
+                report["delivery_mode"] = adapter.bounded_update_mode()
             if not remove:
-                provision_runtime(report, adapter, RUNTIME_TOOLS)
+                if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES:
+                    # These bounded hook updates need only the standard library.
+                    # Keep unrelated hook dependency readiness visible without
+                    # provisioning or modifying those existing dependencies.
+                    add_runtime_status(report, adapter, RUNTIME_TOOLS)
+                else:
+                    provision_runtime(report, adapter, RUNTIME_TOOLS)
             if remove and old_receipt:
                 transact(adapter.control(False, None), adapter.journal, adapter.allowed)
                 time.sleep(6)
@@ -192,6 +200,7 @@ def zcode_main(args, root, parser):
     from installer.zcode import (ZCode, KNOWN_RUNTIME as ZCODE_RUNTIME,
         FULL_MAPPING_RUNTIMES as ZCODE_FULL_MAPPING_RUNTIMES,
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
+        SKILL_DELIVERY_RUNTIMES as ZCODE_SKILL_DELIVERY_RUNTIMES,
         RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
         desktop_version as zcode_version)
     if (args.codex_home or args.gemini_home or args.antigravity_app or args.minimax_home
@@ -209,7 +218,7 @@ def zcode_main(args, root, parser):
             if version and version != observed_version:
                 raise Conflict("Supplied ZCode build conflicts with the selected Desktop application")
             version = observed_version
-        if version not in ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES:
+        if version not in ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES | ZCODE_SKILL_DELIVERY_RUNTIMES:
             raise Conflict("Revalidate the maintained ZCode mapping for this build; supported full mapping is " + ZCODE_RUNTIME)
     from installer.zcode import HOOK_NAMES as ZCODE_HOOK_NAMES
     if args.hook and args.hook not in ZCODE_HOOK_NAMES:
@@ -221,6 +230,9 @@ def zcode_main(args, root, parser):
         if version in ZCODE_CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
+        if version in ZCODE_SKILL_DELIVERY_RUNTIMES:
+            adapter.validate_skill_delivery(changes, adapter.receipt())
+            report["delivery_mode"] = "existing-installation bounded content delivery; Markdown skills, existing global instruction and destructive detector only"
         if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
@@ -243,6 +255,9 @@ def zcode_main(args, root, parser):
             if not remove and version in ZCODE_CONTENT_UPDATE_RUNTIMES:
                 adapter.validate_content_update(changes, previous)
                 report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
+            if not remove and version in ZCODE_SKILL_DELIVERY_RUNTIMES:
+                adapter.validate_skill_delivery(changes, previous)
+                report["delivery_mode"] = "existing-installation bounded content delivery; Markdown skills, existing global instruction and destructive detector only"
             if not remove:
                 provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS)
             if remove and previous:
@@ -277,6 +292,7 @@ def antigravity_main(args, root, parser):
     from installer.antigravity import (
         Antigravity, HOOK_NAMES as ANTIGRAVITY_HOOK_NAMES,
         KNOWN_RUNTIME as ANTIGRAVITY_RUNTIME, RUNTIME_TOOLS as ANTIGRAVITY_RUNTIME_TOOLS,
+        CONTENT_UPDATE_RUNTIMES as ANTIGRAVITY_CONTENT_RUNTIMES,
         desktop_version as antigravity_version,
     )
     if (args.codex_home or args.zcode_home or args.zcode_app or args.adopt_existing
@@ -288,13 +304,16 @@ def antigravity_main(args, root, parser):
     version = antigravity_runtime(args, antigravity_version)
     adapter = Antigravity(root, args.home, args.gemini_home, version, args.surface)
     if args.action in ("plan", "verify"):
-        _, report = adapter.plan(args.instructions_reviewed)
+        changes, report = adapter.plan(args.instructions_reviewed)
+        if version in ANTIGRAVITY_CONTENT_RUNTIMES:
+            adapter.validate_content_update(changes, adapter.receipt())
+            report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
         support = add_runtime_status(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
         if args.action == "verify":
             report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
-    if args.action == "apply" and version != ANTIGRAVITY_RUNTIME:
+    if args.action == "apply" and version != ANTIGRAVITY_RUNTIME and version not in ANTIGRAVITY_CONTENT_RUNTIMES:
         raise Conflict("Revalidate the maintained Antigravity mapping for this release; supported release is " + ANTIGRAVITY_RUNTIME)
     with installation_lock(adapter.lock_path):
         if args.action == "recover":
@@ -314,6 +333,9 @@ def antigravity_main(args, root, parser):
             changes, report = adapter.plan(args.instructions_reviewed, remove)
             if report.get("instruction_review"):
                 raise Conflict(report["instruction_review"])
+            if not remove and version in ANTIGRAVITY_CONTENT_RUNTIMES:
+                adapter.validate_content_update(changes, adapter.receipt())
+                report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
             if not remove:
                 provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
             previous = adapter.receipt()

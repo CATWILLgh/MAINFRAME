@@ -75,6 +75,52 @@ class InstallationTests(unittest.TestCase):
         return subprocess.run(["/bin/sh", "-c", callback], input=json.dumps(data),
                               text=True, capture_output=True, timeout=timeout)
 
+    def test_subagent_selection_delivery_native_identity_and_lifecycle(self):
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        self.install()
+        data = {"hook_event_name": "PreToolUse", "tool_name": "collaborationspawn_agent",
+                "tool_input": {"message": "probe", "fork_turns": "none"}}
+        result = self.invoke_payload("mainframe-subagent-selection", data)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stderr, "")
+        self.assertIn('"permissionDecision":"deny"', result.stdout)
+        groups = json.loads((self.adapter.codex / "hooks.json").read_text())["hooks"]["PreToolUse"]
+        import re
+        self.assertTrue(any(re.fullmatch(g.get("matcher", ""), data["tool_name"]) for g in groups))
+        data["tool_input"].update(model="gpt-6-luna", reasoning_effort="low")
+        self.assertEqual(self.invoke_payload("mainframe-subagent-selection", data).stdout, "")
+        data["tool_input"].pop("fork_turns")
+        self.assertIn('"permissionDecision":"deny"', self.invoke_payload("mainframe-subagent-selection", data).stdout)
+        data["tool_name"] = "Bash"
+        self.assertEqual(self.invoke_payload("mainframe-subagent-selection", data).stdout, "")
+        data["tool_name"] = "collaborationspawn_agent"
+        self.assertEqual(self.invoke_payload("mainframe-subagent-selection", {**data, "tool_input": "bad"}).stdout, "")
+        transact(self.adapter.control(False, "mainframe-subagent-selection"), self.adapter.journal, self.adapter.allowed)
+        self.assertEqual(self.invoke_payload("mainframe-subagent-selection", data).stdout, "")
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+
+    def test_subagent_selection_bounded_upgrade_and_preservation(self):
+        self.install()
+        path = self.adapter.codex / "hooks.json"
+        hooks = json.loads(path.read_text())
+        foreign = {"matcher": "^Foreign$", "hooks": [{"type": "command", "command": "true"}]}
+        hooks["hooks"]["PreToolUse"].append(foreign)
+        path.write_text(json.dumps(hooks))
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        previous = self.adapter.receipt()
+        changes, _ = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(changes, previous)
+        unrelated = Change.to(self.adapter.codex / "config.toml", b"model = 'other'\n", component="feedback permission")
+        with self.assertRaises(Conflict):
+            self.adapter.validate_content_update([unrelated], previous)
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        self.assertIn(foreign, json.loads(path.read_text())["hooks"]["PreToolUse"])
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+        changes, _ = self.adapter.plan(remove=True)
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        self.assertEqual(json.loads(path.read_text())["hooks"]["PreToolUse"], [foreign])
+        self.assertEqual(self.invoke_payload("mainframe-subagent-selection", {"hook_event_name":"PreToolUse", "tool_name":"collaborationspawn_agent", "tool_input":{}}).stdout, "")
+
     def test_receipted_reminder_pilot_retires_without_foreign_loss(self):
         self.install()
         pilot = self.adapter.support / "experiments/skill-reminder"
@@ -142,8 +188,9 @@ class InstallationTests(unittest.TestCase):
         hooks = state["components"]["hooks"]
         self.assertEqual(sum(e["delivery"] == "unsupported" for e in hooks.values()), 4)
         self.assertTrue(all("verification" not in e for e in hooks.values() if e["delivery"] == "unsupported"))
-        supported = [e for group in state["components"].values() for e in group.values()
-                     if e["delivery"] != "unsupported"]
+        self.assertEqual(hooks["mainframe-subagent-selection"]["delivery"], "pending")
+        supported = [e for group in state["components"].values() for name, e in group.items()
+                     if e["delivery"] != "unsupported" and name != "mainframe-subagent-selection"]
         self.assertTrue(all(e["delivery"] == "installed" for e in supported))
         self.assertTrue(all(e["verification"] == "pending" for e in supported))
         self.assertEqual(len(state["next_actions"]), 2)
@@ -824,7 +871,7 @@ class InstallationTests(unittest.TestCase):
         self.assertFalse(self.adapter.receipt_path.exists())
         self.assertFalse(self.adapter.state_path.exists())
 
-    def test_desktop_reads_only_current_task_version_and_rejects_a_conflicting_override(self):
+    def test_desktop_reads_only_current_task_version_and_preserves_historical_metadata(self):
         self.assertIsNone(codex.desktop_version(self.adapter.codex, "current-task"))
         self.assertFalse(self.adapter.codex.exists())
         self.adapter.codex.mkdir()
@@ -846,12 +893,12 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["runtime_version"], "0.153.4")
         result = subprocess.run(command + ["--runtime-version", "0.147.0"], cwd=self.source,
                                 env=environment, text=True, capture_output=True, timeout=15)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn("conflicts with", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["runtime_version"], "0.147.0")
         self.assertFalse(self.adapter.receipt_path.exists())
         self.assertEqual(database.read_bytes(), before)
 
-    def test_desktop_prerelease_metadata_preserves_identity_and_override_guard(self):
+    def test_desktop_explicit_runtime_overrides_historical_creation_metadata(self):
         self.adapter.codex.mkdir()
         database = self.adapter.codex / "state_5.sqlite"
         with sqlite3.connect(database) as connection:
@@ -860,12 +907,98 @@ class InstallationTests(unittest.TestCase):
         connection.close()
         self.assertEqual(codex.desktop_version(self.adapter.codex, "current-task"), "0.154.0-alpha.6.2")
         result = subprocess.run([sys.executable, "-B", str(self.source / "install.py"), "codex", "apply",
-            "--surface", "desktop", "--runtime-version", "0.153.4", "--home", str(self.home)],
+            "--surface", "desktop", "--runtime-version", "0.163.0-alpha.11", "--home", str(self.home)],
             cwd=self.source, env=dict(os.environ, CODEX_THREAD_ID="current-task"),
             text=True, capture_output=True, timeout=15)
         self.assertEqual(result.returncode, 2)
-        self.assertIn("conflicts with", result.stderr)
+        self.assertIn("existing same-source installation", result.stderr)
         self.assertFalse(self.adapter.receipt_path.exists())
+
+    def test_desktop_detector_update_converges_without_changing_native_contract(self):
+        self.adapter.surface = "desktop"
+        self.install()
+        protected = [self.adapter.codex / "hooks.json", self.adapter.codex / "config.toml",
+                     self.adapter.hooks / "bridge.py"]
+        before = {path: observed(path) for path in protected}
+        source = self.source / "hooks/mainframe-destructive-operations.py"
+        original = source.read_bytes()
+        self.addCleanup(source.write_bytes, original)
+        source.write_bytes(original + b"\n# Fixture-only detector revision.\n")
+        self.adapter.version = "0.162.0-alpha.17.2"
+        changes, _ = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(changes, self.adapter.receipt())
+        self.assertEqual({c.component for c in changes if c.needed}, {
+            "hooks.mainframe-destructive-operations", "adaptation state", "ownership receipt",
+        })
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        repeated, _ = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(repeated, self.adapter.receipt())
+        self.assertFalse(any(c.needed for c in repeated))
+        self.assertEqual(before, {path: observed(path) for path in protected})
+        self.assertFalse(codex.mapping_supported(self.adapter.version, "desktop"))
+
+    def test_detector_update_entrypoint_preserves_unrelated_runtime_readiness(self):
+        self.adapter.surface = "desktop"
+        self.install()
+        source = self.source / "hooks/mainframe-destructive-operations.py"
+        original = source.read_bytes()
+        self.addCleanup(source.write_bytes, original)
+        source.write_bytes(original + b"\n# Fixture-only revision.\n")
+        spec = importlib.util.spec_from_file_location("mainframe_install_detector_test",
+                                                     self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(entrypoint)
+        reports = []
+        options = ["--surface", "desktop", "--runtime-version", "0.162.0-alpha.17.2",
+                   "--home", str(self.home), "--instructions-reviewed"]
+        unavailable = {"ready": False, "required": ["semgrep"], "missing": ["semgrep"]}
+        with (patch.object(entrypoint.Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "runtime_status", return_value=unavailable),
+              patch.object(entrypoint, "ensure_runtime") as provision,
+              patch.object(entrypoint, "show", side_effect=lambda report, details: reports.append(report))):
+            self.assertEqual(entrypoint.main(["codex", "apply"] + options), 0)
+            self.assertEqual(entrypoint.main(["codex", "verify"] + options), 1)
+            provision.assert_not_called()
+        self.assertIn("destructive detector only", reports[0]["delivery_mode"])
+        self.assertTrue(reports[-1]["scoped_update_matches"])
+        self.assertFalse(reports[-1]["structure_matches"])
+        self.assertEqual(reports[-1]["runtime_support"], unavailable)
+
+    def test_desktop_detector_update_rejects_every_other_installation_change(self):
+        self.adapter.surface = "desktop"
+        self.install()
+        self.adapter.version = "0.162.0-alpha.17.2"
+        previous = self.adapter.receipt()
+        detector = self.adapter.hooks / "detectors/mainframe-destructive-operations.py"
+        allowed = Change.to(detector, detector.read_bytes() + b"\n# Revision\n",
+                            mode=detector.stat().st_mode & 0o777,
+                            component="hooks.mainframe-destructive-operations")
+        self.adapter.validate_content_update([allowed], previous)
+        candidates = [
+            Change.to(detector, None, component=allowed.component),
+            Change.to(detector, allowed.after, mode=0o755, component=allowed.component),
+            Change.to(detector.parent / "new.py", b"new", component=allowed.component),
+            Change.to(self.adapter.hooks / "bridge.py", b"changed", component="hook transport"),
+            Change.to(self.adapter.codex / "hooks.json", b"changed", component="hook registration"),
+            Change.to(self.adapter.codex / "config.toml", b"changed", component="feedback permission"),
+            Change.to(self.adapter.skills / "mainframe-research/SKILL.md", b"changed",
+                      component="skills.mainframe-research"),
+        ]
+        for change in candidates:
+            with self.subTest(path=change.path, mode=change.mode):
+                with self.assertRaises(Conflict):
+                    self.adapter.validate_content_update([allowed, change], previous)
+        for receipt in ({}, dict(previous, source="/different-source"),
+                        dict(previous, files={})):
+            with self.assertRaises(Conflict):
+                self.adapter.validate_content_update([allowed], receipt)
+        self.adapter.surface = "cli"
+        with self.assertRaises(Conflict):
+            self.adapter.validate_content_update([allowed], previous)
+        self.adapter.surface = "desktop"
+        self.adapter.version = "0.162.0-alpha.17.3"
+        with self.assertRaises(Conflict):
+            self.adapter.validate_content_update([allowed], previous)
 
     def test_prerelease_content_update_converges_without_touching_native_bindings(self):
         self.adapter.surface = "desktop"

@@ -24,7 +24,9 @@ PRE_SHELL_HOOKS = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder"})
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection"})
+# Exact verified V2 surface; V1 uses different fork controls.
+SUBAGENT_TOOLS = {"collaborationspawn_agent"}
 MAX_INPUT_BYTES = 262_144
 MAX_MESSAGE_CHARS = 6_000
 MAX_OUTPUT_BYTES = 32_768
@@ -293,10 +295,30 @@ def _dispatch_checkpoint(data: dict, state: Path, event: str) -> dict | None:
     return _context(event, message) if message else None
 
 
+def _dispatch_selection(data: dict) -> dict | None:
+    if data.get("hook_event_name") != "PreToolUse" or data.get("tool_name") not in SUBAGENT_TOOLS:
+        return None
+    args = data.get("tool_input")
+    if not isinstance(args, dict):
+        return None
+    detector = _load_detector("mainframe-subagent-selection")
+    if detector is None:
+        return None
+    reason = detector.decision_reason(args.get("model"), args.get("reasoning_effort"))
+    # V2 defaults to full history, which rejects model overrides natively.
+    fork = args.get("fork_turns", "all")
+    if reason or not isinstance(fork, str) or fork.strip().lower() != "none":
+        return _deny((reason + " " if reason else "") +
+                     'Use fork_turns="none" with a self-contained task brief; full-history inheritance cannot accept model overrides.')
+    return None
+
+
 def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
     event = data.get("hook_event_name")
+    if name == "mainframe-subagent-selection":
+        return _dispatch_selection(data)
     if name == PRE_SHELL_TRANSPORT:
         outputs = [
             output

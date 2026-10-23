@@ -22,6 +22,7 @@ from .state import reconcile_state, set_component
 KNOWN_RUNTIME = "3.11.2.6792"
 FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912"}
 CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
+SKILL_DELIVERY_RUNTIMES = {"3.14.5.7961"}
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder")
@@ -678,7 +679,7 @@ class ZCode:
             )
             state_source = source if not remove else inventory(self.root, "zcode")
             unsupported = {("hooks", n): why for n, why in UNSUPPORTED.items()} if not remove else {}
-            pending = {}
+            pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
             delivered = [(cat, n) for cat, group in state_source["components"].items() for n in group
                          if not remove and (cat != "hooks" or n in HOOK_NAMES)
                          and (cat, n) not in unsupported and (cat, n) not in pending]
@@ -747,6 +748,31 @@ class ZCode:
                          "instruction_review": review, "changes": [{"path": str(c.path), "component": c.component,
                             "action": "remove" if c.after is None else "create" if c.before is None else "update"} for c in changes],
                          "handoff": "Delivery checks only; no agent, browser, credential, or native-hook probes are run."}
+
+    def validate_skill_delivery(self, changes, previous):
+        """Update reviewed content while preserving unrelated native controls."""
+        if (self.surface != "desktop" or self.version not in SKILL_DELIVERY_RUNTIMES
+                or not previous or previous.get("source") != str(self.root)):
+            raise Conflict("ZCode skill-only delivery requires an existing same-source Desktop installation.")
+        for change in changes:
+            if not change.needed or change.component in {"adaptation state", "ownership receipt"}:
+                continue
+            existing_content = (
+                (change.component == "instructions.global"
+                 and change.path == self.zcode / "AGENTS.md"
+                 and previous.get("instruction"))
+                or (change.component == "hooks.mainframe-destructive-operations"
+                    and change.path == self.hooks / "detectors/mainframe-destructive-operations.py")
+            )
+            if (existing_content and change.before is not None and change.after is not None
+                    and change.before_mode == change.mode):
+                continue
+            if (not change.component.startswith("skills.")
+                    or not change.path.is_relative_to(self.skills)
+                    or change.path.suffix != ".md" or change.after is None
+                    or change.mode != 0o644
+                    or (change.before is not None and change.before_mode != change.mode)):
+                raise Conflict("ZCode bounded content delivery cannot change unvalidated hooks, roles, settings, executables, modes or remove files: " + str(change.path))
 
     def validate_content_update(self, changes, previous):
         """Allow bounded skill updates and exact validated hook migrations."""

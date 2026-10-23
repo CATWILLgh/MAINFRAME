@@ -11,8 +11,8 @@ from unittest.mock import patch
 from installer.zcode import (ZCode, HOOK_NAMES, SHELL_HOOK_NAMES,
     _is_validated_hook_config_update, _legacy_hook_registration,
     role_body, command_body)
-from installer.core import Conflict, transact, restore
-from installer.runtime import runtime_bin
+from installer.core import Change, Conflict, transact, restore
+from installer.runtime import runtime_bin, TOOL_SPECS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,6 +43,16 @@ class ZCodeInstallationTests(unittest.TestCase):
         transact(changes, self.adapter.journal, self.adapter.allowed)
         self.adapter.clean_directories(self.adapter.receipt())
         return report
+
+    def entrypoint_environment(self):
+        # These tests cover delivery routing, not analyzer provisioning/execution.
+        tools = self.home / 'version-fixtures'
+        tools.mkdir(exist_ok=True)
+        for name in ('ruff', 'oxlint', 'semgrep'):
+            tool = tools / name
+            tool.write_text('#!/bin/sh\nprintf "%s\\n" "' + name + ' ' + TOOL_SPECS[name][2] + '"\n')
+            tool.chmod(0o755)
+        return {**os.environ, 'PATH': str(tools) + os.pathsep + os.environ.get('PATH', '')}
 
     def test_source_relocation_preserves_existing_credential_index(self):
         changes, _ = self.adapter.plan(instructions_reviewed=True)
@@ -480,14 +490,14 @@ class ZCodeInstallationTests(unittest.TestCase):
             result = subprocess.run([
                 sys.executable, '-B', str(self.source / 'install.py'), 'zcode', action,
                 '--surface', 'desktop', '--home', str(self.home), '--runtime-version', '3.11.2.6792',
-            ], cwd=self.source, capture_output=True, text=True, timeout=15)
+            ], cwd=self.source, env=self.entrypoint_environment(), capture_output=True, text=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stderr)
             reports.append(json.loads(result.stdout))
         self.assertTrue(reports[1]['applied'])
         self.assertTrue(reports[2]['structure_matches'])
         self.assertEqual(reports[2]['file_change_count'], 0)
-        self.assertEqual(reports[2]['planned_delivery'], {'installed': 43, 'pending': 0, 'unsupported': 2})
-        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 43})
+        self.assertEqual(reports[2]['planned_delivery'], {'installed': 44, 'pending': 1, 'unsupported': 2})
+        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 45})
         self.assertEqual(len(reports[2]['next_actions']), 1)
         state = json.loads(self.adapter.state_path.read_text())
         self.assertFalse(any(row.get('verification') == 'passed' for group in state['components'].values() for row in group.values()))
@@ -499,7 +509,7 @@ class ZCodeInstallationTests(unittest.TestCase):
         options = ['--surface', 'desktop', '--home', str(self.home), '--runtime-version', '3.14.3.7762']
         result = subprocess.run([
             sys.executable, '-B', str(self.source / 'install.py'), 'zcode', 'apply', *options,
-        ], cwd=self.source, capture_output=True, text=True, timeout=15)
+        ], cwd=self.source, env=self.entrypoint_environment(), capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('bounded update', json.loads(result.stdout)['delivery_mode'])
 
@@ -521,6 +531,56 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn('Revalidate the maintained ZCode mapping', result.stderr)
         self.assertFalse((other_home / '.zcode').exists())
+
+    def test_existing_build_updates_instruction_and_detector_without_native_changes(self):
+        self.apply()
+        adapter = ZCode(self.source, self.home, version='3.14.5.7961', surface='desktop')
+        for relative in ['instructions/global.md', 'hooks/mainframe-destructive-operations.py']:
+            source = self.source / relative
+            source.write_text(source.read_text() + '\n# Synthetic content update.\n')
+        changes, _ = adapter.plan()
+        adapter.validate_skill_delivery(changes, adapter.receipt())
+        config_before = adapter.config.read_bytes()
+        transact(changes, adapter.journal, adapter.allowed)
+        self.assertEqual(adapter.config.read_bytes(), config_before)
+        adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
+        bridge = adapter.hooks / 'bridge.py'
+        original = bridge.read_bytes()
+        unvalidated = Change(bridge, original, original + b'\n# Transport change\n',
+                             0o600, 'hook transport', 0o600)
+        with self.assertRaises(Conflict):
+            adapter.validate_skill_delivery([unvalidated], adapter.receipt())
+
+    def test_skill_only_build_adds_markdown_but_rejects_other_changes(self):
+        self.apply()
+        adapter = ZCode(self.source, self.home, version='3.14.5.7961', surface='desktop')
+        new_resource = self.source / 'skills/mainframe-argocd/references/fixture.md'
+        new_resource.write_text('Synthetic new reference.\n')
+        changes, _ = adapter.plan()
+        adapter.validate_skill_delivery(changes, adapter.receipt())
+        transact(changes, adapter.journal, adapter.allowed)
+        self.assertEqual((adapter.skills / 'mainframe-argocd/references/fixture.md').read_text(),
+                         'Synthetic new reference.\n')
+        adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
+
+        role = self.source / 'agents/mainframe-researcher.md'
+        role.write_text(role.read_text() + '\nUnapproved role update.\n')
+        with self.assertRaisesRegex(Conflict, 'bounded content'):
+            adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
+        role.write_text((ROOT / 'agents/mainframe-researcher.md').read_text())
+        script = self.source / 'skills/mainframe-argocd/references/fixture.py'
+        script.write_text('print("unapproved executable")\n')
+        with self.assertRaisesRegex(Conflict, 'bounded content'):
+            adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
+        script.unlink()
+        new_resource.unlink()
+        with self.assertRaisesRegex(Conflict, 'bounded content'):
+            adapter.validate_skill_delivery(adapter.plan()[0], adapter.receipt())
+
+    def test_skill_only_build_requires_existing_same_source_installation(self):
+        adapter = ZCode(self.source, self.home, version='3.14.5.7961', surface='desktop')
+        with self.assertRaisesRegex(Conflict, 'existing same-source'):
+            adapter.validate_skill_delivery(adapter.plan()[0], {})
 
     def test_cli_product_rejects_wrong_surface(self):
         result = subprocess.run([sys.executable, '-B', str(self.source / 'install.py'), 'zcode', 'plan', '--surface', 'cli'], cwd=self.source, capture_output=True, text=True)

@@ -9,6 +9,8 @@ Apply this method as the primary agent or a delegated engineer within the same t
 
 For a behavior change, use test-driven development: demonstrate the relevant failing behavior before the fix, implement the smallest complete correction, then refactor while the focused checks remain green. A compiler, import, setup, credential, or network failure is not the intended red result. Reuse an existing test that already demonstrates the defect; do not add a duplicate solely to claim TDD.
 
+Keep the red/green cycle small within a coherent functional result. An individual helper or passing test does not require a separate commit, final report or full validation run. Carry related changes through integration; run focused checks as behavior changes and shared build, lint and regression checks at the relevant integration boundary, or earlier when needed to diagnose a failure or protect a material invariant. Complete all required checks before accepting the result; grouping work must not hide failures or reduce coverage.
+
 State what observable behavior must change, what must remain true, and which boundary can prove it. Test user-visible results and protected side effects rather than private implementation details. Include meaningful rejection, boundary, failure, retry, concurrency, and cleanup cases when the contract contains them; do not generate an indiscriminate test matrix.
 
 ## Choose the operation
@@ -20,6 +22,8 @@ Use `mainframe-test-audit` when the task is to assess the quality of an existing
 For an assignment that includes both audit and repair, keep findings and implementation as explicit phases and reuse the caller's existing repair authority. A delegated read-only auditor returns findings to its caller; it does not become an implementer. An author may review their own work but must not claim an independent audit.
 
 ## Load the method needed now
+
+Reuse the method while its relevant instructions remain available in context. Read again when needed guidance is missing or may have changed, not merely because a new turn began.
 
 | Decision | Reference |
 | --- | --- |
