@@ -61,6 +61,29 @@ removing a registered executable is not a disable mechanism.
 | `mainframe-code-quality` | Post-edit quality, security, and structure advisories plus an attributed-finding completion guard | Around a successful file edit, report new high-confidence residue, security findings, or a size-review threshold crossing; before completion, revalidate and block only attributed blocking findings | One private temporary JSON file per adapter namespace, native execution scope, and workspace |
 | `mainframe-fallow-quality` | `advisory` | At a continuation-capable completion event after exact-scope TS/JS edits, report newly introduced structural findings or a decision-relevant unavailable check without blocking | Canonical detector is stateless; adapter may retain only bounded short-lived attribution state |
 | `mainframe-skill-reminder` | `advisory` | At a recognized operation, read or specialized role start, suggest one relevant readable skill without changing task authority | Expiring recipient/workspace hashes and skill identities; bounded suggestion count |
+| `mainframe-subagent-selection` | `guard` | Before native subagent creation with selectable model and reasoning effort, reject omitted or implicit choices | Stateless |
+
+## Adapt `mainframe-subagent-selection`
+
+This stateless `guard` requires explicit model and reasoning-effort choices
+before creating a subagent when the native interface supports both controls.
+Missing, blank, non-string or implicit `inherit`/`default`/`auto` selections are
+denied with a short instruction to choose according to complexity, importance,
+error cost and budget. Valid explicit choices are silent. Native model catalogs
+and validation own availability and supported combinations; the hook does not
+judge whether a selected model is sufficiently capable.
+
+The adapter must positively identify subagent creation and normalize its actual
+argument fields. A recognized empty argument object is a violation; an absent
+or unreadable event is unavailable evidence, not a violation. Keep unsupported
+selection interfaces pending adaptation; do not block all delegation merely
+because a product cannot expose these fields. Disable and uninstall must stay
+silent, including late callbacks. No state, logs, network or external tools are
+needed. Product-specific history-fork constraints belong to the adapter.
+
+Codex Desktop 0.163.0-alpha.11 has a verified preventive binding. Other product
+bindings await separately scoped validation; this is not proof they cannot
+support the hook. See [Codex evidence](../docs/installation/native/codex.md#explicit-subagent-selection).
 
 ## Adapt `mainframe-destructive-operations`
 

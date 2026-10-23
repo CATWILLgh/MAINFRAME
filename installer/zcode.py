@@ -679,7 +679,7 @@ class ZCode:
             )
             state_source = source if not remove else inventory(self.root, "zcode")
             unsupported = {("hooks", n): why for n, why in UNSUPPORTED.items()} if not remove else {}
-            pending = {}
+            pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
             delivered = [(cat, n) for cat, group in state_source["components"].items() for n in group
                          if not remove and (cat != "hooks" or n in HOOK_NAMES)
                          and (cat, n) not in unsupported and (cat, n) not in pending]

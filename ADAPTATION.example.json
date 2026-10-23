@@ -253,6 +253,11 @@
         "source": "hooks/mainframe-skill-reminder.py",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-subagent-selection": {
+        "source": "hooks/mainframe-subagent-selection.py",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "mcp": {},

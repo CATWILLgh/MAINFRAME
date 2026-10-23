@@ -489,3 +489,53 @@ was silent. Earlier relative reads without explicit workdir remained silent,
 as designed. Reading a supporting reference alone does not mark SKILL.md as
 read. These sequences establish all three event routes and recipient-level
 repeat suppression, not universal relevance or every command/profile variant.
+
+## Explicit subagent selection
+
+On 2026-10-23, Desktop's live app-server reported **0.163.0-alpha.11**.
+The current thread's creation metadata still reported 0.159.0-alpha.12.1;
+that historical field is not authoritative after an app upgrade. A supplied
+`--runtime-version` must come from the running app's engine evidence and takes
+precedence over thread creation metadata. It does not bypass mapping validation.
+
+`PreToolUse` can prevent native subagent creation. In this version,
+MultiAgentV2's `collaboration.spawn_agent` is exposed to hooks as
+**`collaborationspawn_agent`**, without a separator. The namespace wrapper plus
+`flat_tool_name` explain the spelling: only plain and `multi_agent_v1` spawn
+receive the canonical `spawn_agent` identity. A matcher containing only
+`spawn_agent`, `Agent`, or `collaboration.spawn_agent` silently misses V2.
+Keep recognition in both registration and the adapter consistent, and verify
+callback receipt separately from a successful registration/trust listing.
+
+Exact source: [namespace wrapper](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11/codex-rs/core/src/tools/multi_agent_tool.rs),
+[hook dispatch](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11/codex-rs/core/src/tools/registry.rs),
+[name flattening](https://github.com/openai/codex/blob/rust-v0.163.0-alpha.11/codex-rs/core/src/tools/mod.rs).
+
+A trusted session-scoped candidate denied a missing-selection call before child
+creation. An explicit `gpt-6-luna` / `low` call succeeded, and the child's actual
+turn metadata confirmed those settings. Its hook payload used the flattened
+V2 name. These are real Desktop observations, not CLI or fixture evidence.
+
+After maintained delivery and fresh native trust, the temporary candidate was
+disabled and its exact registration removed. The installed bridge then denied
+the missing-selection probe and allowed an explicit child; actual child turn
+metadata again confirmed `gpt-6-luna` / `low`. The maintained installer converged
+with `scoped_update_matches: true` and `structure_matches: true`. Other hooks,
+roles and the complete runtime mapping were not reaccepted by these probes.
+
+The maintained binding matches the verified `collaborationspawn_agent` V2
+surface only; V1 uses different fork controls and is not claimed covered.
+It uses `permissionDecision: deny` only for a recognized
+creation with missing explicit controls or an incompatible full-history fork.
+V2 requires `fork_turns="none"` for overrides; send a self-contained brief.
+The hook does not evaluate model quality or replace native availability checks.
+A valid call is silent; there is no persistent event log. Role-specific native
+configuration may still affect effective settings and remains native policy.
+
+Delivery on this runtime is a bounded update of an existing same-source
+installation: one new standard-library detector, the owned bridge, and one
+additional PreToolUse group, plus ownership/state bookkeeping. Other payload,
+permissions, existing hook groups and analyzer dependencies must remain unchanged.
+Fresh installation and the complete runtime mapping remain separate work.
+Older inspected runtimes and other adapters leave this new component pending
+rather than claiming delivery or inventing unsupported behavior.

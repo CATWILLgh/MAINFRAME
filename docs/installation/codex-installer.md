@@ -58,10 +58,22 @@ an unrelated dependency is missing. Report that distinction, preserve native
 trust and disables, and separately confirm the repaired active pre-shell
 behavior. See the [detector-update evidence](native/codex.md#desktop-01620-alpha172-detector-repair).
 
+Desktop **0.163.0-alpha.11** supports the bounded subagent-selection update of
+an existing same-source installation. It installs the explicit model/effort
+guard, updates the owned transport, and appends its PreToolUse registration;
+unrelated payload and native definitions must remain unchanged. This is not a
+full runtime mapping or fresh-install route. `verify` reports
+`scoped_update_matches` independently of unrelated analyzer readiness. See
+[the native acceptance and naming evidence](native/codex.md#explicit-subagent-selection).
+Trust the final new hook in Desktop after delivery; the installer does not
+write trust hashes. Its disable/remove lifecycle uses the ordinary maintained
+commands and preserves late-callback silence.
+
 Run from this repository root. For Desktop, the installer reads only the current
 task's engine version from local runtime metadata, using `CODEX_THREAD_ID`. It
 does not read conversations, enumerate other tasks, or invoke an executable.
-If this metadata is unavailable, use `--runtime-version` only with an engine
+Thread creation metadata can be stale after an app upgrade. Use `--runtime-version`
+to override it only with an engine
 version established by current app evidence. Never substitute the app release
 number, the CLI on PATH, or this document's tested version. An unavailable
 version is a precise handoff, not permission to search session histories.

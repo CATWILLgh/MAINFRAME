@@ -61,7 +61,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
                     source.read_bytes(),
                 )
 
-        self.assertEqual(report["planned_delivery"], {"installed": 32, "pending": 0, "unsupported": 14})
+        self.assertEqual(report["planned_delivery"], {"installed": 32, "pending": 1, "unsupported": 14})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
         self.assertEqual(len(manifest["skills"]), 36)

@@ -421,7 +421,7 @@ class Antigravity:
                              and not any(change.needed for change in changes))
             unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
             unsupported.update({("hooks", name): reason for name, reason in UNSUPPORTED.items()})
-            pending = {}
+            pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending

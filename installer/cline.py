@@ -375,7 +375,7 @@ class Cline:
                 ("hooks", "mainframe-fallow-quality"): COMPLETION_REASON + " " + FALLOW_PARTIAL,
                 ("hooks", "mainframe-code-quality"): COMPLETION_REASON + " " + CODE_QUALITY_PARTIAL,
             }
-            pending = {}
+            pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending

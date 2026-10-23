@@ -20,7 +20,7 @@ if os.name != "posix":
     raise SystemExit(2)
 
 from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES,
-                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, RUNTIME_TOOLS,
+                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, SELECTION_UPDATE_RUNTIMES, RUNTIME_TOOLS,
                              desktop_version, native_version, mapping_supported)
 from installer.core import Conflict, installation_lock, restore, transact
 from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
@@ -112,9 +112,9 @@ def main(argv=None):
     if args.action in ("plan", "apply", "verify"):
         if args.surface == "desktop":
             version = desktop_version(codex_home or args.home / ".codex", os.environ.get("CODEX_THREAD_ID"))
-            if version and args.runtime_version and version != args.runtime_version:
-                raise Conflict("--runtime-version conflicts with the current Desktop task's engine metadata.")
-            version = version or args.runtime_version
+            # Stored thread metadata identifies the creation engine, not necessarily
+            # the live engine after an app upgrade. Explicit observed evidence wins.
+            version = args.runtime_version or version
             if not version:
                 raise Conflict("Current-task Desktop engine metadata is unavailable; supply --runtime-version from app engine metadata, never from CLI or the app release number.")
         else:
@@ -128,7 +128,7 @@ def main(argv=None):
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = adapter.bounded_update_mode()
         if args.action == "verify":
-            if version in DETECTOR_UPDATE_RUNTIMES:
+            if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES:
                 report["scoped_update_matches"] = not report["changes"]
             report["structure_matches"] = not report["changes"] and support["ready"]
             if args.native:
@@ -169,8 +169,8 @@ def main(argv=None):
                 adapter.validate_content_update(changes, old_receipt)
                 report["delivery_mode"] = adapter.bounded_update_mode()
             if not remove:
-                if version in DETECTOR_UPDATE_RUNTIMES:
-                    # The validated repair changes only a stdlib detector.
+                if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES:
+                    # These bounded hook updates need only the standard library.
                     # Keep unrelated hook dependency readiness visible without
                     # provisioning or modifying those existing dependencies.
                     add_runtime_status(report, adapter, RUNTIME_TOOLS)
