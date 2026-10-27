@@ -9,7 +9,7 @@ Apply this method as the primary agent or a delegated engineer within the same t
 
 For a behavior change, use test-driven development: demonstrate the relevant failing behavior before the fix, implement the smallest complete correction, then refactor while the focused checks remain green. A compiler, import, setup, credential, or network failure is not the intended red result. Reuse an existing test that already demonstrates the defect; do not add a duplicate solely to claim TDD.
 
-Keep the red/green cycle small within a coherent functional result. An individual helper or passing test does not require a separate commit, final report or full validation run. Carry related changes through integration; run focused checks as behavior changes and shared build, lint and regression checks at the relevant integration boundary, or earlier when needed to diagnose a failure or protect a material invariant. Complete all required checks before accepting the result; grouping work must not hide failures or reduce coverage.
+Keep the red/green cycle small within a coherent functional result. Carry related changes through integration; use focused checks for the behavior being changed and shared build, lint and regression checks at integration and acceptance boundaries. Repeat or widen a passed check when changed inputs, a failure, an unresolved material concern or an explicit project gate requires it. An edit, helper, commit or goal-turn boundary alone is not a reason for another full run or final report. Run earlier when needed to diagnose a failure or protect a material invariant. Complete all required checks before accepting the result; grouping work must not hide failures or reduce coverage.
 
 State what observable behavior must change, what must remain true, and which boundary can prove it. Test user-visible results and protected side effects rather than private implementation details. Include meaningful rejection, boundary, failure, retry, concurrency, and cleanup cases when the contract contains them; do not generate an indiscriminate test matrix.
 
@@ -43,7 +43,7 @@ For substantive behavior or CI work, use the project’s existing verification m
 
 ## Finish with evidence
 
-Run the focused proof and nearest relevant fast checks. Inspect failures and fix in-scope problems; do not weaken assertions, accept snapshots blindly, hide failures, rerun flakes until green, or equate coverage percentage with correctness. Avoid broad reruns unless new changes or evidence require them.
+Run the focused proof and nearest relevant fast checks. Inspect failures and fix in-scope problems; do not weaken assertions, accept snapshots blindly, hide failures, rerun flakes until green, or equate coverage percentage with correctness. A check or workaround that only conceals the failure is not evidence that its cause or the requested behavior was corrected. Expected-error handling, bounded retries and fallbacks are valid when they satisfy the actual contract.
 
 When delegating, supply the behavior, test boundary, local/CI split, permitted infrastructure, and completion evidence. The implementer returns observed red and green outcomes (or the exact exception), changed tests, and remaining required CI jobs. The coordinator verifies the integrated result and relevant cross-component checks after integration; per-agent green checks do not establish combined correctness.
 

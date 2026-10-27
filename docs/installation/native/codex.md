@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-10-12.
+Last reviewed: 2026-10-27.
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -56,6 +56,34 @@ skill resource delivery, state truthfulness, convergence, preservation and
 rejection before writes for an uninspected surface/version. Native discovery,
 trust, lifecycle execution and read-only role behavior remain separate pending
 acceptance. A fresh task is the shared loading handoff after delivery changes.
+
+## Desktop 0.164.0-alpha.11.1 text update
+
+The running Desktop app's engine path and its bundled `codex-package.json`
+identify `0.164.0-alpha.11.1`; the older current-thread creation version is not
+the installed engine version. The exact official tags
+[0.163.0-alpha.11](https://github.com/openai/codex/tree/rust-v0.163.0-alpha.11) and
+[0.164.0-alpha.11.1](https://github.com/openai/codex/tree/rust-v0.164.0-alpha.11.1)
+have byte-identical global instruction readers
+([instructions/mod.rs](https://github.com/openai/codex/blob/rust-v0.164.0-alpha.11.1/codex-rs/codex-home/src/instructions/mod.rs)),
+private skill roots
+([host_roots.rs](https://github.com/openai/codex/blob/rust-v0.164.0-alpha.11.1/codex-rs/ext/skills/src/host_roots.rs))
+and skill frontmatter parser
+([metadata.rs](https://github.com/openai/codex/blob/rust-v0.164.0-alpha.11.1/codex-rs/ext/skills/src/loader/metadata.rs)).
+
+This supports only existing Markdown reconciliation: same source, instruction
+owner, file set and modes, with native skill metadata except descriptions
+preserved. The maintained validator refuses changed hooks, executable support,
+role definitions, permissions, fresh installs and another source or surface.
+The existing subagent-selection files and registration are retained without
+claiming runtime behavior from source comparison. Analyzer readiness remains
+visible but text delivery does not install or repair unrelated analyzers.
+
+Disposable-home regressions exercise delivery, convergence, native-file
+preservation, rejection boundaries and the ordinary installer entrypoint with
+an unavailable analyzer. Structural delivery and convergence do not establish
+fresh-session discovery or improved model behavior; use the delivered guidance
+in a fresh task for that evaluation.
 
 ## Desktop 0.162.0-alpha.17.2 detector repair
 

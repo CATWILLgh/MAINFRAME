@@ -69,6 +69,16 @@ Trust the final new hook in Desktop after delivery; the installer does not
 write trust hashes. Its disable/remove lifecycle uses the ordinary maintained
 commands and preserves late-callback silence.
 
+Desktop **0.164.0-alpha.11.1** supports an existing same-source installation's
+Markdown update only. The global instruction owner, existing skill/command
+Markdown, discovery metadata except descriptions, file modes, executable payload,
+hook registrations, role definitions and global configuration retain their
+existing boundaries. No files may be created or removed. The previously installed
+subagent-selection binding is preserved; its behavior on this runtime is not
+newly certified. The update does not provision unrelated analyzers and reports
+their readiness separately from `scoped_update_matches`. This is not a fresh
+installation or full native mapping. See the [text-update comparison](native/codex.md#desktop-01640-alpha111-text-update).
+
 Run from this repository root. For Desktop, the installer reads only the current
 task's engine version from local runtime metadata, using `CODEX_THREAD_ID`. It
 does not read conversations, enumerate other tasks, or invoke an executable.

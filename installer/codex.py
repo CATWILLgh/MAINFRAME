@@ -49,7 +49,11 @@ DETECTOR_UPDATE_RUNTIMES = {"0.162.0-alpha.17.2"}
 # The older prerelease allows text formats and an exact Stop schema repair;
 # detector-update versions use the separate, narrower validator below.
 SELECTION_UPDATE_RUNTIMES = {"0.163.0-alpha.11"}
-CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES
+# Same instruction reader and private skill roots; existing Markdown only.
+# Retain the previous selection binding, without revalidating its execution.
+TEXT_UPDATE_RUNTIMES = {"0.164.0-alpha.11.1"}
+SELECTION_BINDING_RUNTIMES = SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES
+CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_BINDING_RUNTIMES
 SELECTION_MATCHER = "^collaborationspawn_agent$"
 LIMITATIONS = {
     "mainframe-destructive-operations": "The context-free command and root/home/Git guard subset is installed. Native shell hooks omit the actual tool workdir, so active-project-root and ordinary relative-target protection remain unsupported.",
@@ -425,7 +429,7 @@ class Codex:
             add(self.skills / name / "SKILL.md", packaged.encode(), "commands." + name)
             add(self.skills / name / "agents/openai.yaml", b"policy:\n  allow_implicit_invocation: false\n", "commands." + name)
         for name in HOOK_NAMES:
-            if name == "mainframe-subagent-selection" and self.version not in SELECTION_UPDATE_RUNTIMES:
+            if name == "mainframe-subagent-selection" and self.version not in SELECTION_BINDING_RUNTIMES:
                 continue
             source_path = self.root / source["components"]["hooks"][name]["source"]
             add(self.hooks / "detectors" / source_path.name, source_path.read_bytes(), "hooks." + name)
@@ -524,7 +528,7 @@ class Codex:
         "Stop": [{"hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180}]}]}
-        if not remove and self.version in SELECTION_UPDATE_RUNTIMES:
+        if not remove and self.version in SELECTION_BINDING_RUNTIMES:
             desired_hooks["PreToolUse"].append(self.selection_group())
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
@@ -670,6 +674,8 @@ class Codex:
                 "command": hook_command(self.hooks, "mainframe-subagent-selection", self.event_state), "timeout": 2}]}
 
     def bounded_update_mode(self):
+        if self.version in TEXT_UPDATE_RUNTIMES:
+            return "existing-installation bounded update; existing Markdown only; native definitions and executable payload unchanged"
         if self.version in SELECTION_UPDATE_RUNTIMES:
             return "existing-installation subagent-selection hook update; unrelated payload and native definitions preserved"
         if self.version in DETECTOR_UPDATE_RUNTIMES:
@@ -741,6 +747,10 @@ class Codex:
         if self.version in DETECTOR_UPDATE_RUNTIMES:
             self.validate_detector_update(changes, previous)
             return
+        self.validate_existing_text(changes, previous, markdown_only=self.version in TEXT_UPDATE_RUNTIMES)
+
+    def validate_existing_text(self, changes, previous, *, markdown_only=False):
+        """Preserve native metadata; the narrow mode excludes roles and migrations."""
         for change in changes:
             if not change.needed or change.component in {"adaptation state", "ownership receipt"}:
                 continue
@@ -748,6 +758,9 @@ class Codex:
                     or change.before_mode != change.mode):
                 raise Conflict("Content update cannot create, remove, or change file modes: " + str(change.path))
             component = change.component
+            if markdown_only and not (component == "instructions.global"
+                    or (component.startswith(("skills.", "commands.")) and change.path.suffix == ".md")):
+                raise Conflict("Text update cannot change native definitions or executable payload: " + str(change.path))
             if (component == "hook registration"
                     and _is_validated_hook_registration_update(
                         change, previous, self.hooks, self.event_state,

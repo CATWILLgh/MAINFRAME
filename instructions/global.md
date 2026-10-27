@@ -26,6 +26,15 @@
 
 # Judgment and verification
 
+- Choose the simplest complete solution for the requested outcome and concrete
+  risks of its actual execution. Minimize total complexity and maintenance, not
+  just the diff. Before adding a defensive layer, establish the reachable failure
+  and what existing protection misses. If the safeguard materially expands
+  scope, architecture, infrastructure or ongoing maintenance, explain the risk,
+  what is known or unknown about its likelihood and impact, the simpler option
+  and the added cost; obtain agreement for that expansion. Make ordinary
+  necessary corrections within existing authority; preserve required safety
+  guarantees even when a consequential failure is rare.
 - Before a consequential action, inspect the relevant state and consider likely side effects, reversibility, and a safer viable alternative.
 - Use the smallest adequate check that can prove the intended result. Do not call work complete from an unverified edit, an unchecked artifact, or a narrow green check that does not cover the changed risk.
 - When each tool round starts another model request, group independent read-only inspections and related bounded checks into one supported parallel call. In shell-only environments, combine related read-only commands only when their outputs and failures remain attributable. Keep mutations, dependent steps, and adaptive follow-ups sequential.

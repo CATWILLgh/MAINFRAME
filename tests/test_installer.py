@@ -1000,6 +1000,96 @@ class InstallationTests(unittest.TestCase):
         with self.assertRaises(Conflict):
             self.adapter.validate_content_update([allowed], previous)
 
+    def test_desktop_text_update_preserves_native_payload_and_converges(self):
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        self.install()
+        destinations = [self.adapter.codex / "AGENTS.md",
+                        self.adapter.skills / "mainframe-testing/SKILL.md",
+                        self.adapter.skills / "mainframe-testing/references/tdd.md"]
+        protected = {Path(path): observed(Path(path)) for path in self.adapter.receipt()["files"]
+                     if Path(path) not in destinations}
+        protected[self.adapter.codex / "hooks.json"] = observed(self.adapter.codex / "hooks.json")
+        protected[self.adapter.codex / "config.toml"] = observed(self.adapter.codex / "config.toml")
+        marker = b"\nFixture-only complete-result guidance.\n"
+        for relative in ["instructions/global.md", "skills/mainframe-testing/SKILL.md",
+                         "skills/mainframe-testing/references/tdd.md"]:
+            source = self.source / relative
+            original = source.read_bytes()
+            self.addCleanup(source.write_bytes, original)
+            source.write_bytes(original + marker)
+        self.adapter.version = "0.164.0-alpha.11.1"
+        changes, _ = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(changes, self.adapter.receipt())
+        self.assertEqual({c.path for c in changes if c.needed}
+                         - {self.adapter.receipt_path, self.adapter.state_path}, set(destinations))
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        for destination in destinations:
+            self.assertIn(marker.strip(), destination.read_bytes())
+        self.assertEqual(protected, {path: observed(path) for path in protected})
+        repeated, report = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(repeated, self.adapter.receipt())
+        self.assertEqual(report["changes"], [])
+        self.assertFalse(codex.mapping_supported(self.adapter.version, "desktop"))
+
+    def test_desktop_text_update_rejects_native_changes_and_new_resources(self):
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        self.install()
+        self.adapter.version = "0.164.0-alpha.11.1"
+        previous = self.adapter.receipt()
+        skill = self.adapter.skills / "mainframe-testing/SKILL.md"
+        def update(path, data, component):
+            return Change.to(path, data, mode=path.stat().st_mode & 0o777, component=component)
+        allowed = update(skill, skill.read_bytes() + b"\nRevised method.\n", "skills.mainframe-testing")
+        self.adapter.validate_content_update([allowed], previous)
+        candidates = [
+            update(skill, skill.read_bytes().replace(b"name: mainframe-testing", b"name: different"), allowed.component),
+            update(skill, None, allowed.component),
+            Change.to(skill, allowed.after, mode=0o755, component=allowed.component),
+            Change.to(skill.parent / "new.md", b"new", component=allowed.component),
+            update(self.adapter.hooks / "bridge.py", b"changed", "hook transport"),
+            update(self.adapter.hooks / "detectors/mainframe-subagent-selection.py", b"changed", "hooks.mainframe-subagent-selection"),
+            update(self.adapter.codex / "hooks.json", b"changed", "hook registration"),
+            update(self.adapter.codex / "config.toml", b"changed", "feedback permission"),
+            update(self.adapter.codex / "agents/mainframe-researcher.toml", b"changed", "agents.mainframe-researcher"),
+        ]
+        for change in candidates:
+            with self.subTest(path=change.path, mode=change.mode):
+                with self.assertRaises(Conflict):
+                    self.adapter.validate_content_update([allowed, change], previous)
+        for receipt in ({}, dict(previous, source="/another-source"), dict(previous, files={})):
+            with self.assertRaises(Conflict):
+                self.adapter.validate_content_update([allowed], receipt)
+        self.adapter.surface = "cli"
+        with self.assertRaises(Conflict):
+            self.adapter.validate_content_update([allowed], previous)
+
+    def test_desktop_text_entrypoint_does_not_provision_unrelated_analyzers(self):
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        self.install()
+        source = self.source / "instructions/global.md"
+        original = source.read_bytes()
+        self.addCleanup(source.write_bytes, original)
+        source.write_bytes(original + b"\nFixture-only updated scope.\n")
+        spec = importlib.util.spec_from_file_location("mainframe_install_text_test", self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(entrypoint)
+        reports = []
+        options = ["--surface", "desktop", "--runtime-version", "0.164.0-alpha.11.1",
+                   "--home", str(self.home), "--instructions-reviewed"]
+        unavailable = {"ready": False, "required": ["ruff"], "missing": ["ruff"]}
+        with (patch.object(entrypoint.Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "runtime_status", return_value=unavailable),
+              patch.object(entrypoint, "ensure_runtime") as provision,
+              patch.object(entrypoint, "show", side_effect=lambda report, details: reports.append(report))):
+            self.assertEqual(entrypoint.main(["codex", "apply"] + options), 0)
+            self.assertEqual(entrypoint.main(["codex", "verify"] + options), 1)
+            provision.assert_not_called()
+        self.assertIn("existing Markdown only", reports[0]["delivery_mode"])
+        self.assertTrue(reports[-1]["scoped_update_matches"])
+        self.assertFalse(reports[-1]["structure_matches"])
+        self.assertEqual(reports[-1]["runtime_support"], unavailable)
+        self.assertIn(b"Fixture-only updated scope.", (self.adapter.codex / "AGENTS.md").read_bytes())
+
     def test_prerelease_content_update_converges_without_touching_native_bindings(self):
         self.adapter.surface = "desktop"
         self.install()
