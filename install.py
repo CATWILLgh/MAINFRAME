@@ -77,7 +77,12 @@ def main(argv=None):
     parser.add_argument("--details", action="store_true", help="Include every changed path; default output groups files by component")
     parser.add_argument("--instructions-reviewed", action="store_true", help="The invoking agent has checked the existing and canonical instruction semantics")
     parser.add_argument("--hook", help="One maintained hook for enable/disable; default is all hooks for the selected product")
+    parser.add_argument("--skill", help="Deliver only this exact canonical skill into an existing Codex Desktop installation")
     args = parser.parse_args(argv)
+    if args.skill is not None and (args.product != "codex" or args.action not in ("plan", "apply", "verify")):
+        parser.error("--skill applies only to Codex plan, apply, or verify")
+    if args.skill is not None and (args.surface != "desktop" or args.native):
+        parser.error("--skill requires Desktop and does not launch native discovery")
     if args.hook and args.action not in ("enable", "disable"):
         parser.error("--hook applies only to enable or disable")
     if args.native and args.action != "verify":
@@ -121,6 +126,18 @@ def main(argv=None):
             executable = args.executable or shutil.which("codex")
             version = native_version(executable) if executable else None
     adapter = Codex(root, args.home, codex_home, version, surface=args.surface)
+    if args.skill is not None:
+        if args.action == "apply":
+            with installation_lock(adapter.lock_path):
+                changes, report = adapter.plan_skill(args.skill)
+                transact(changes, adapter.journal, adapter.allowed)
+                report["applied"] = True
+        else:
+            changes, report = adapter.plan_skill(args.skill)
+            if args.action == "verify":
+                report["scoped_update_matches"] = not report["changes"]
+        show(report, args.details)
+        return 0 if args.action != "verify" or report["scoped_update_matches"] else 1
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
         support = add_runtime_status(report, adapter, RUNTIME_TOOLS)

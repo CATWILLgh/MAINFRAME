@@ -75,6 +75,144 @@ class InstallationTests(unittest.TestCase):
         return subprocess.run(["/bin/sh", "-c", callback], input=json.dumps(data),
                               text=True, capture_output=True, timeout=timeout)
 
+    def skill_cli(self, action="plan", name="mainframe-research", *extra):
+        return subprocess.run(
+            [sys.executable, "-B", str(self.source / "install.py"), "codex", action,
+             "--home", str(self.home), "--surface", "desktop",
+             "--runtime-version", "0.165.0-alpha.1.2", "--skill", name, *extra],
+            cwd=self.source, text=True, capture_output=True, timeout=20,
+        )
+
+    def test_skill_only_cli_adds_package_preserves_installation_and_converges(self):
+        self.adapter = Codex(self.source, self.home, version="0.164.0-alpha.11.1", surface="desktop")
+        self.install()
+        receipt = self.adapter.receipt()
+        component = "skills.mainframe-research"
+        for path, record in list(receipt["files"].items()):
+            if record["component"] == component:
+                Path(path).unlink()
+                del receipt["files"][path]
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        state = json.loads(self.adapter.state_path.read_bytes())
+        state["components"]["skills"].pop("mainframe-research")
+        self.adapter.state_path.write_text(json.dumps(state))
+        foreign = self.adapter.codex / "native-trust.fixture"
+        foreign.write_bytes(b"Preserve native state")
+        marker = self.adapter.hooks / ".disabled-mainframe-subagent-selection"
+        marker.write_bytes(b"")
+        protected = {path: observed(path) for path in self.home.rglob("*")
+                     if path.is_file() and path != self.adapter.receipt_path}
+        result = self.skill_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(set(plan["components_changed"]),
+                         {component, "ownership receipt", "adaptation state"})
+        applied = self.skill_cli("apply")
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        for source in (self.source / "skills/mainframe-research").rglob("*"):
+            if source.is_file():
+                target = self.adapter.skills / "mainframe-research" / source.relative_to(self.source / "skills/mainframe-research")
+                self.assertEqual(observed(target), observed(source))
+        for path, snapshot in protected.items():
+            self.assertEqual(observed(path), snapshot, str(path))
+        after_receipt = self.adapter.receipt()
+        for key, value in receipt.items():
+            if key not in {"files", "directories"}:
+                self.assertEqual(after_receipt[key], value, key)
+        for path, record in receipt["files"].items():
+            self.assertEqual(after_receipt["files"][path], record)
+        after_state = json.loads(self.adapter.state_path.read_bytes())
+        for key, value in state.items():
+            if key != "components":
+                self.assertEqual(after_state[key], value, key)
+        for category, rows in state["components"].items():
+            for name, row in rows.items():
+                self.assertEqual(after_state["components"][category][name], row)
+        self.assertEqual(after_state["components"]["skills"]["mainframe-research"]["verification"], "pending")
+        verified = self.skill_cli("verify")
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        self.assertTrue(json.loads(verified.stdout)["scoped_update_matches"])
+        self.assertEqual(json.loads(verified.stdout)["file_change_count"], 0)
+        self.assertNotIn("runtime_support", json.loads(verified.stdout))
+
+    def test_skill_only_rejects_missing_or_different_source_receipt(self):
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("existing same-source installation", result.stderr)
+        self.install()
+        receipt = self.adapter.receipt()
+        receipt["source"] = str(self.source.parent / "another-source")
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("existing same-source installation", result.stderr)
+
+    def test_skill_only_preserves_conflicting_owned_and_foreign_files(self):
+        self.install()
+        target = self.adapter.skills / "mainframe-research/SKILL.md"
+        target.write_bytes(b"User edit")
+        before = observed(target)
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Installed file was edited", result.stderr)
+        self.assertEqual(observed(target), before)
+        receipt = self.adapter.receipt()
+        del receipt["files"][str(target)]
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Existing file has no installer ownership", result.stderr)
+        self.assertEqual(observed(target), before)
+
+    def test_skill_only_rejects_unknown_identity_and_unvalidated_runtime(self):
+        self.install()
+        for name, extra, expected in [
+            ("../mainframe-research", (), "Unknown canonical skill"),
+            ("mainframe-tickets-init", (), "Unknown canonical skill"),
+            ("mainframe-research", ("--runtime-version", "99.0"), "Skill-only delivery is not validated"),
+        ]:
+            with self.subTest(name=name, extra=extra):
+                result = self.skill_cli("apply", name, *extra)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stderr)
+
+    def test_skill_only_rejects_other_products_actions_and_surfaces(self):
+        for product, action, surface in [("zcode", "plan", "desktop"),
+                                         ("codex", "disable", "desktop"),
+                                         ("codex", "plan", "cli")]:
+            with self.subTest(product=product, action=action, surface=surface):
+                result = subprocess.run(
+                    [sys.executable, "-B", str(self.source / "install.py"), product, action,
+                     "--surface", surface, "--skill", "mainframe-research"],
+                    cwd=self.source, text=True, capture_output=True, timeout=10,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("--skill", result.stderr)
+
+    def test_skill_only_preserves_partial_staging_and_rejects_untracked_resources(self):
+        with tempfile.TemporaryDirectory(prefix="mainframe-skill-source-") as temporary:
+            root = Path(temporary) / "source"
+            shutil.copytree(self.source, root)
+            subprocess.run(["git", "init", "--template=", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "--all"], check=True)
+            self.adapter = Codex(root, self.home, version="0.165.0-alpha.1.2", surface="desktop")
+            self.install()
+            body = root / "skills/mainframe-research/SKILL.md"
+            body.write_bytes(body.read_bytes() + b"\nStaged source refinement.\n")
+            subprocess.run(["git", "-C", str(root), "add", str(body)], check=True)
+            body.write_bytes(body.read_bytes() + b"\nUnstaged source refinement.\n")
+            def source_state():
+                return tuple(subprocess.check_output(["git", "-C", str(root), *options])
+                             for options in [("diff", "--cached"), ("diff",), ("ls-files", "--stage")])
+            before = source_state()
+            _, report = self.adapter.plan_skill("mainframe-research")
+            self.assertIn("skills.mainframe-research", {change["component"] for change in report["changes"]})
+            self.assertEqual(source_state(), before)
+            (body.parent / "untracked.md").write_bytes(b"Not approved for delivery")
+            with self.assertRaisesRegex(Conflict, "Untracked canonical skill resource"):
+                self.adapter.plan_skill("mainframe-research")
+            self.assertEqual(source_state(), before)
+
     def test_subagent_selection_delivery_native_identity_and_lifecycle(self):
         self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
         self.install()

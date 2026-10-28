@@ -79,6 +79,43 @@ newly certified. The update does not provision unrelated analyzers and reports
 their readiness separately from `scoped_update_matches`. This is not a fresh
 installation or full native mapping. See the [text-update comparison](native/codex.md#desktop-01640-alpha111-text-update).
 
+### Deliver one skill on Desktop 0.165.0-alpha.1.2
+
+Desktop **0.165.0-alpha.1.2** supports an explicit skill-only route for an
+existing same-source installation with a matching ownership receipt and
+schema-2 adaptation state. The exact tagged skill root and parser support
+complete packages under `$CODEX_HOME/skills`; this is not a full runtime mapping.
+See the [bounded source evidence](native/codex.md#desktop-01650-alpha12-skill-only-delivery).
+
+```sh
+python3 -B install.py codex plan --surface desktop --skill mainframe-sentry
+python3 -B install.py codex apply --surface desktop --skill mainframe-sentry
+python3 -B install.py codex verify --surface desktop --skill mainframe-sentry
+```
+
+Use one exact identity from the inventory's `skills` category. Commands packaged
+as skills are excluded. Keep the same target and observed runtime options for
+all three commands. `--runtime-version` follows the evidence rule below.
+The route uses the ordinary approved resource selector, ownership checks, lock,
+transaction and recovery journal. Intended new source resources must be staged
+before planning; it does not stage them or alter existing partial staging.
+
+Only the selected skill package and its receipt records and adaptation row are
+reconciled. Existing hooks, registrations, global instructions, configuration,
+permissions, native trust, deliberate disables, unrelated files and unrelated
+state rows are preserved. A previous shared-root destination requires its own
+authorized migration. Owned edits and conflicting foreign files stop delivery.
+
+Skill-only verification exits successfully when `scoped_update_matches` is true.
+It neither checks nor provisions unrelated hook analyzers and makes no full
+`structure_matches` claim. The adaptation state's top-level target and existing
+receipt fingerprint retain their previous full-installation meaning; the report
+identifies the current skill-delivery runtime. The selected row remains
+`verification: pending` with a fresh-task discovery handoff until discovery is
+observed. Other runtimes, CLI, fresh installs and source moves are rejected by
+this route. Do not use whole-product apply to deliver a single skill on this
+runtime.
+
 Run from this repository root. For Desktop, the installer reads only the current
 task's engine version from local runtime metadata, using `CODEX_THREAD_ID`. It
 does not read conversations, enumerate other tasks, or invoke an executable.

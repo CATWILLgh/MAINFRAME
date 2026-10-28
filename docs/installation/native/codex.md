@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-10-27.
+Last reviewed: 2026-10-29 (skill-only delivery boundary).
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -56,6 +56,38 @@ skill resource delivery, state truthfulness, convergence, preservation and
 rejection before writes for an uninspected surface/version. Native discovery,
 trust, lifecycle execution and read-only role behavior remain separate pending
 acceptance. A fresh task is the shared loading handoff after delivery changes.
+
+## Desktop 0.165.0-alpha.1.2 skill-only delivery
+
+The official [0.165.0-alpha.1.2 release](https://github.com/openai/codex/releases/tag/rust-v0.165.0-alpha.1.2)
+and its complete Git tree resolve to commit
+`720fec862a608ae1e5878d1eecb04fb93192e93c`. Inspection was limited to the
+skill-package mechanism at that exact tag:
+
+- [host_roots.rs](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/host_roots.rs)
+  retains `$CODEX_HOME/skills` as a backward-compatible user root alongside
+  the shared `.agents/skills` root.
+- The [loader constants](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/loader/mod.rs)
+  name `SKILL.md` and optional `agents/openai.yaml`.
+  The [host loader](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/loader/host.rs)
+  reads the manifest through the frontmatter parser; optional
+  [metadata loading](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/loader/metadata.rs)
+  does not prevent manifest loading when metadata is absent.
+- The [frontmatter parser](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/skills/src/parser.rs)
+  accepts YAML `name` and `description`; it validates a nonempty description
+  and a name of at most 64 characters. This supports the maintained package
+  format without rewriting canonical content.
+
+The maintained `--skill` route therefore delivers one complete canonical
+package into an existing same-source Desktop installation. It merges only
+that package's receipt records and adaptation row, preserving unrelated
+installation metadata and native definitions. Disposable-home CLI regressions
+cover package bytes/modes, preservation, convergence, ownership conflicts,
+unknown identities and rejection of other runtimes, products, actions and
+surfaces. Missing unrelated analyzers do not affect this scoped operation.
+No whole-product runtime allowance, native hook claim, fresh installation,
+CLI compatibility or observed discovery follows from this source inspection.
+Discovery remains pending until the new skill appears in a fresh Desktop task.
 
 ## Desktop 0.164.0-alpha.11.1 text update
 
