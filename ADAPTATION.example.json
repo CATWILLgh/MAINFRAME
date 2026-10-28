@@ -137,6 +137,11 @@
         "source": "skills/mainframe-argocd",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-sentry": {
+        "source": "skills/mainframe-sentry",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {
