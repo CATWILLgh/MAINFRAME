@@ -53,6 +53,7 @@ removing a registered executable is not a disable mechanism.
 
 | Hook | Class | Trigger and result | State |
 | --- | --- | --- | --- |
+| `mainframe-todo-limits` | `guard` | Before a supported addressed file edit, reject a changed idea-index row over 500 characters, a note over 5000 characters, malformed record structure/link, or missing rejection reason | Stateless; only addressed content and its index/link dependencies |
 | `mainframe-destructive-operations` | `guard` | Before a shell action, hard-block a recognized catastrophic filesystem deletion or a narrow Git operation that bypasses recovery and safety mechanisms | Stateless |
 | `mainframe-secret-access` | `guard` | Before a shell action, hard-block direct credential output or value-bearing registration through the `mainframe-secret` helper and point to its protected route | Stateless |
 | `mainframe-rg-short-replace` | `advisory` | Before a shell action, warn when an actual ripgrep invocation uses short `-r`, which selects output replacement rather than recursion | Stateless; adapter deduplicates duplicate delivery of one native event |
@@ -62,6 +63,31 @@ removing a registered executable is not a disable mechanism.
 | `mainframe-fallow-quality` | `advisory` | At a continuation-capable completion event after exact-scope TS/JS edits, report newly introduced structural findings or a decision-relevant unavailable check without blocking | Canonical detector is stateless; adapter may retain only bounded short-lived attribution state |
 | `mainframe-skill-reminder` | `advisory` | At a recognized operation, read or specialized role start, suggest one relevant readable skill without changing task authority | Expiring recipient/workspace hashes and skill identities; bounded suggestion count |
 | `mainframe-subagent-selection` | `guard` | Before native subagent creation with selectable model and reasoning effort, reject omitted or implicit choices | Stateless |
+
+## Adapt `mainframe-todo-limits`
+
+The command [todo](../commands/todo.md) owns the record format. Normalize a
+supported native edit into `check_write(workspace, path, content)`,
+`check_edit(workspace, path, old, new, replace_all=False)`, or
+`check_patch(workspace, patch)`. A returned string is a preventive denial;
+`None` is neutral. No raw record content is returned, written or retained.
+
+Validate only the root `.docs/todo` index's changed entries (including a group
+move) and changed `.docs/todos/<name>.md` notes. Inspect their direct link/index
+dependencies as needed; never walk all notes. Count Python/Unicode characters,
+including whitespace and newlines in the note. The summary excludes its list
+prefix and final link. Meaning, factual completion and semantic duplicates
+remain agent judgments. This check does not authorize execution of an idea.
+
+Reject only positively reconstructed violations. Unresolved workspace, unsafe
+path/symlink, unreadable or oversized input, ambiguous replacement or unsupported
+patch syntax is unavailable evidence and stays neutral. Supported patch forms
+are Add/Update/Delete with unambiguous context hunks; moves and shell writes are
+outside this preventive binding. A complete supplied note over the limit is a
+known violation even when it exceeds the bounded file-read size. A clean call
+has no state or output. Native adapters preserve deliberate disables and use
+their ordinary safe launcher lifecycle. Other products retain this hook pending
+adaptation rather than claiming protection from command delivery alone.
 
 ## Adapt `mainframe-subagent-selection`
 

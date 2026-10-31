@@ -23,9 +23,11 @@ KNOWN_RUNTIME = "3.11.2.6792"
 FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912"}
 CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
 SKILL_DELIVERY_RUNTIMES = {"3.14.5.7961"}
+TODO_DELIVERY_RUNTIMES = FULL_MAPPING_RUNTIMES | {"3.17.1.9553"}
+TODO_HOOK = "mainframe-todo-limits"
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", TODO_HOOK)
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -35,7 +37,7 @@ HOOK_RENAMES = {
     "code-quality": "mainframe-code-quality",
 }
 READ_ONLY = {"mainframe-researcher", "mainframe-test-auditor", "mainframe-consequential-reviewer"}
-LEGACY_HOOKS = tuple(n for n in HOOK_NAMES if n != "mainframe-skill-reminder")
+LEGACY_HOOKS = tuple(n for n in HOOK_NAMES if n not in {"mainframe-skill-reminder", TODO_HOOK})
 LEGACY_BRIDGE_SHA256 = "5761f656b9ead923dd48b91adb02935bcba3d922155464a19ae0205a520e75d8"
 COMPATIBLE_UPDATE_BRIDGE_SHA256 = {
     # Split four-process transport delivered before the bounded consolidation.
@@ -125,7 +127,7 @@ def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, st
     variants = {
         ("PreToolUse", "Bash"): [(PRE_SHELL_TRANSPORT, 5000), ("mainframe-skill-reminder", 2000)],
         ("PostToolUse", "Bash|Read"): [("mainframe-skill-reminder", 2000)],
-        ("PreToolUse", "Write|Edit"): [("mainframe-code-quality", 30000)],
+        ("PreToolUse", "Write|Edit"): [("mainframe-code-quality", 30000), (TODO_HOOK, 5000)],
         ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000), ("mainframe-commit-checkpoint", 5000)],
         ("PostToolUseFailure", "Write|Edit"): [("mainframe-code-quality", 30000)],
         ("Stop", None): [("mainframe-code-quality", 60000)],
@@ -136,7 +138,8 @@ def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, st
         for group in groups:
             for name, timeout in variants.get((event, group.get("matcher")), []):
                 old_callback = _legacy_hook_registration(base, name, state, timeout)
-                new_callback = hook_registration(base, name, state, timeout, analyzer_bin)
+                new_callback = hook_registration(base, name, state, timeout,
+                                                 None if name == TODO_HOOK else analyzer_bin)
                 for index, callback in enumerate(group.get("hooks", [])):
                     if callback == old_callback:
                         group["hooks"][index] = new_callback
@@ -317,6 +320,8 @@ class ZCode:
         for base in (self.skills, self.agents, self.commands):
             if path.is_relative_to(base):
                 parts = path.relative_to(base).parts
+                if base == self.commands and parts == ("todo.md",):
+                    return True
                 return bool(parts and re.fullmatch(
                     r"(?:mainframe-[a-z0-9-]+|project-skill|tickets-(?:find|refine|implement|verify))(?:\.md)?",
                     parts[0],
@@ -468,6 +473,7 @@ class ZCode:
                         analyzer_bin=runtime_bin(self.home),
                     )]},
                     {"matcher": "Write|Edit", "hooks": [quality(30000)]},
+                    {"matcher": "Write|Edit", "hooks": [hook_registration(self.hooks, TODO_HOOK, self.event_state)]},
                 ],
                 "PostToolUse": [{"matcher": "Write|Edit", "hooks": [quality(60000), hook_registration(self.hooks, "mainframe-commit-checkpoint", self.event_state, 5000, runtime_bin(self.home))]}],
                 "PostToolUseFailure": [{"matcher": "Write|Edit", "hooks": [quality(30000)]}],
@@ -748,6 +754,135 @@ class ZCode:
                          "instruction_review": review, "changes": [{"path": str(c.path), "component": c.component,
                             "action": "remove" if c.after is None else "create" if c.before is None else "update"} for c in changes],
                          "handoff": "Delivery checks only; no agent, browser, credential, or native-hook probes are run."}
+
+    def plan_todo(self, instructions_reviewed=False):
+        """Deliver only /todo to a receipted same-source Desktop installation."""
+        if regular_bytes(self.journal) is not None:
+            raise Conflict("Recover the interrupted ZCode transaction first.")
+        receipt_snapshot = observed(self.receipt_path)
+        previous = self.receipt(receipt_snapshot)
+        if (self.surface != "desktop" or self.version not in TODO_DELIVERY_RUNTIMES
+                or not previous or previous.get("source") != str(self.root)):
+            raise Conflict("ZCode /todo delivery requires a reviewed build and an existing same-source Desktop installation.")
+        source = inventory(self.root, "zcode")
+        state_snapshot = observed(self.state_path)
+        state = json.loads(state_snapshot[0] or b"{}")
+        if (state.get("schema_version") != 2
+                or state.get("target", {}).get("config_home") != str(self.zcode)):
+            raise Conflict("Reconcile the existing ZCode adaptation state before /todo delivery.")
+
+        command = self.commands / "todo.md"
+        detector = self.hooks / "detectors" / (TODO_HOOK + ".py")
+        bridge = self.hooks / "bridge.py"
+        bridge_record = previous.get("files", {}).get(str(bridge), {})
+        if bridge_record.get("component") != "hook transport" or bridge_record.get("retain"):
+            raise Conflict("ZCode /todo delivery requires the existing receipted hook bridge.")
+        artifacts = {
+            command: (command_body((self.root / source["components"]["commands"]["todo"]["source"]).read_text()),
+                      0o600, "commands.todo", False),
+            detector: ((self.root / source["components"]["hooks"][TODO_HOOK]["source"]).read_bytes(),
+                       0o600, "hooks." + TODO_HOOK, False),
+            bridge: (Path(__file__).with_name("zcode_hook.py").read_bytes(),
+                     bridge_record["mode"], "hook transport", False),
+        }
+        selected = {str(path): previous["files"][str(path)] for path in artifacts
+                    if str(path) in previous.get("files", {})}
+        if any(record.get("component") != artifacts[Path(path)][2]
+               for path, record in selected.items()):
+            raise Conflict("A /todo destination belongs to another receipted component.")
+        components = {artifact[2] for artifact in artifacts.values()}
+        if any(record.get("component") in components and path not in selected
+               for path, record in previous.get("files", {}).items()):
+            raise Conflict("Scoped /todo delivery cannot migrate existing component destinations.")
+        changes, records = reconcile_files(artifacts, selected, self.allowed)
+
+        config_snapshot = observed(self.config)
+        cfg = json.loads(config_snapshot[0] or b"{}")
+        if not isinstance(cfg, dict):
+            raise Conflict("ZCode config must be a JSON object.")
+        hooks = cfg.setdefault("hooks", {})
+        if not isinstance(hooks, dict) or not isinstance(hooks.get("events", {}), dict):
+            raise Conflict("ZCode hooks configuration has an unsupported shape.")
+        events = hooks.setdefault("events", {})
+        for groups in events.values():
+            if (not isinstance(groups, list) or any(
+                    not isinstance(group, dict) or not isinstance(group.get("hooks"), list)
+                    or any(not isinstance(hook, dict) for hook in group["hooks"])
+                    for group in groups)):
+                raise Conflict("ZCode hook groups have an unsupported shape; preserve the configuration.")
+        desired = {"matcher": "Write|Edit", "hooks": [hook_registration(self.hooks, TODO_HOOK, self.event_state)]}
+        groups = events.setdefault("PreToolUse", [])
+        owned = deepcopy(previous.get("hook_groups", {}))
+        # A native per-entry enable toggle is user state. Other changes to this
+        # registration need reconciliation rather than a second callback.
+        prior_groups = [group for group in owned.get("PreToolUse", [])
+                        if any(TODO_HOOK in hook.get("args", []) for hook in group["hooks"])]
+        candidates = [(event, group) for event, entries in events.items() for group in entries
+                      if any(TODO_HOOK in hook.get("args", []) for hook in group["hooks"])]
+        if len(prior_groups) > 1 or len(candidates) > 1:
+            raise Conflict("Duplicate ZCode /todo hook registrations need scoped reconciliation.")
+        if prior_groups:
+            if not candidates or candidates[0][0] != "PreToolUse":
+                raise Conflict("The owned ZCode /todo hook registration changed; preserve it for review.")
+            actual = candidates[0][1]
+            enabled = actual.get("hooks", [{}])[0].get("enabled")
+            if not isinstance(enabled, bool):
+                raise Conflict("The owned ZCode /todo hook registration changed; preserve it for review.")
+            desired["hooks"][0]["enabled"] = enabled
+            if actual != desired:
+                raise Conflict("The owned ZCode /todo hook registration changed; preserve it for review.")
+            owned["PreToolUse"][owned["PreToolUse"].index(prior_groups[0])] = deepcopy(actual)
+        elif candidates:
+            if candidates != [("PreToolUse", desired)]:
+                raise Conflict("An unowned ZCode /todo hook registration needs scoped reconciliation.")
+        else:
+            groups.append(desired)
+            owned.setdefault("PreToolUse", []).append(deepcopy(desired))
+        enabled_added = previous.get("enabled_added", "enabled" not in hooks)
+        hooks.setdefault("enabled", True)
+        changes.append(Change.from_snapshot(self.config, config_snapshot, encode_json(cfg),
+                                            config_snapshot[1] or 0o600, "native registrations"))
+        changed = any(change.needed for change in changes)
+        for category, name in (("commands", "todo"), ("hooks", TODO_HOOK)):
+            rows = state.setdefault("components", {}).setdefault(category, {})
+            prior = rows.get(name, {})
+            rows[name] = deepcopy(source["components"][category][name])
+            set_component(state, (category, name), delivery="installed",
+                          verification=prior.get("verification", "pending") if not changed else "pending",
+                          next_action=("Explicitly disabled; enable before native verification."
+                                       if category == "hooks" and (
+                                           not desired["hooks"][0]["enabled"]
+                                           or regular_bytes(self.hooks / (".disabled-" + TODO_HOOK)) is not None)
+                                       else prior.get("next_action") if not changed else None))
+        actions = state.setdefault("next_actions", [])
+        if changed and OPEN_SESSION_ACTION not in actions:
+            actions.append(OPEN_SESSION_ACTION)
+        receipt = deepcopy(previous)
+        receipt["files"].update(records)
+        receipt["hook_groups"] = owned
+        receipt["enabled_added"] = enabled_added
+        directories = set(receipt.get("directories", []))
+        for path in artifacts:
+            for parent in path.parents:
+                if self.allowed(parent) and not parent.exists():
+                    directories.add(str(parent))
+        receipt["directories"] = sorted(directories)
+        changes.extend([
+            Change.from_snapshot(self.state_path, state_snapshot, encode_json(state),
+                                 state_snapshot[1] or 0o600, "adaptation state"),
+            Change.from_snapshot(self.receipt_path, receipt_snapshot, encode_json(receipt),
+                                 receipt_snapshot[1] or 0o600, "ownership receipt"),
+        ])
+        changes = [change for change in changes if change.needed]
+        return changes, {
+            "delivery_mode": "existing-installation /todo only",
+            "target": str(self.zcode), "runtime_version": self.version, "surface": self.surface,
+            "hook_scope": HOOK_SCOPE, "hooks_globally_enabled": hooks.get("enabled") is True,
+            "instruction_review": None, "next_actions": state.get("next_actions", []),
+            "changes": [{"path": str(change.path), "component": change.component,
+                         "action": "create" if change.before is None else "update"} for change in changes],
+            "handoff": "Delivery checks only; open a new Desktop session for /todo. Native event acceptance remains separate.",
+        }
 
     def validate_skill_delivery(self, changes, previous):
         """Update reviewed content while preserving unrelated native controls."""

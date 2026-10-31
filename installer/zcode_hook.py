@@ -35,7 +35,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent
 PRE_SHELL_HOOKS = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder"})
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-todo-limits"})
 MAX_INPUT_BYTES = 262_144
 MAX_MESSAGE_CHARS = 6_000
 MAX_OUTPUT_BYTES = 32_768
@@ -346,6 +346,36 @@ def _quality_dispatch(data: dict, state: Path, event: str) -> dict | None:
     return None
 
 
+def _todo_dispatch(data: dict, event: str) -> dict | None:
+    if event != "PreToolUse":
+        return None
+    tool = _native_value(data, "tool_name", "toolName")
+    inputs = _native_value(data, "tool_input", "toolInput")
+    cwd = _cwd(data)
+    if tool not in {"Write", "Edit"} or not isinstance(inputs, dict) or cwd is None:
+        return None
+    paths = _edit_paths(data, cwd)
+    if not paths:
+        return None
+    detector = _load_detector("mainframe-todo-limits")
+    if detector is None:
+        return None
+    workspace = _project_root(cwd)
+    if tool == "Write":
+        content = inputs.get("content")
+        if not isinstance(content, str):
+            return None
+        reason = detector.check_write(workspace, paths[0], content)
+    else:
+        old, new = inputs.get("old_string"), inputs.get("new_string")
+        replace_all = inputs.get("replace_all", False)
+        if not isinstance(old, str) or not isinstance(new, str) or not isinstance(replace_all, bool):
+            return None
+        reason = detector.check_edit(workspace, paths[0], old, new, replace_all=replace_all)
+    return (_native_output(event, "permissionDecisionReason", reason)
+            if isinstance(reason, str) and reason else None)
+
+
 def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
     reasons = []
     advice = []
@@ -404,6 +434,8 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
     event = _native_value(data, "hook_event_name", "hookEventName")
+    if name == "mainframe-todo-limits":
+        return _todo_dispatch(data, event)
     if name == "mainframe-skill-reminder":
         if skill_advice is None:
             return None

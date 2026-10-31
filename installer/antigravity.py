@@ -225,7 +225,7 @@ class Antigravity:
             if path.is_relative_to(base):
                 parts = path.relative_to(base).parts
                 return bool(parts and re.fullmatch(
-                    r"(?:mainframe-[a-z0-9-]+|project-skill|tickets-(?:find|refine|implement|verify))(?:\.md)?",
+                    r"(?:mainframe-[a-z0-9-]+|todo|project-skill|tickets-(?:find|refine|implement|verify))(?:\.md)?",
                     parts[0],
                 ))
         return False

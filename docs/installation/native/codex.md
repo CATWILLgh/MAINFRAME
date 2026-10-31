@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-10-29 (skill-only delivery boundary).
+Last reviewed: 2026-11-01 (bounded backlog command and guard delivery).
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -88,6 +88,27 @@ surfaces. Missing unrelated analyzers do not affect this scoped operation.
 No whole-product runtime allowance, native hook claim, fresh installation,
 CLI compatibility or observed discovery follows from this source inspection.
 Discovery remains pending until the new skill appears in a fresh Desktop task.
+
+## Desktop 0.165.0-alpha.1.2 backlog command and guard
+
+The same exact tagged skill loader supports the explicit-only `todo` package.
+The current official [slash-command guide](https://learn.chatgpt.com/docs/reference/slash-commands)
+places enabled skills in the Desktop slash menu; the
+[skill guide](https://learn.chatgpt.com/docs/build-skills) and
+[app-server contract](https://learn.chatgpt.com/docs/app-server#skills) document
+explicit `$todo <prose>` invocation. Literal `/todo <prose>` on this build and
+actual menu discovery remain unobserved. The exact-tag
+[hook dispatcher](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/hook_runtime.rs)
+constructs `PreToolUse` from the tool's JSON input and local environment `cwd`,
+and returns a blocked result when the hook outcome requests it. The current
+[hook contract](https://learn.chatgpt.com/docs/hooks) specifies `apply_patch`,
+`tool_input.command` and `permissionDecision: deny`; it requires trust for
+non-managed definitions. This supports the bounded `--todo` delivery route,
+without expanding the full runtime mapping. Its transport passes the attributed
+patch to the canonical detector; patches without usable `cwd`, shell
+writes and other editing tools have no preventive coverage. Disposable-home
+checks prove preservation, convergence, ownership rejection and dispatch;
+native command discovery, user trust and observed pre-edit denial remain pending.
 
 ## Desktop 0.164.0-alpha.11.1 text update
 

@@ -116,6 +116,42 @@ observed. Other runtimes, CLI, fresh installs and source moves are rejected by
 this route. Do not use whole-product apply to deliver a single skill on this
 runtime.
 
+### Deliver the backlog command and guard on Desktop 0.165.0-alpha.1.2
+
+An existing same-source installation with a matching receipt and schema-2 state
+can receive the canonical `todo` command and `mainframe-todo-limits` detector
+through the bounded route:
+
+```sh
+python3 -B install.py codex plan --surface desktop --todo
+python3 -B install.py codex apply --surface desktop --todo
+python3 -B install.py codex verify --surface desktop --todo
+```
+
+This installs the explicit-only `todo` skill, updates the owned hook bridge,
+and appends one `PreToolUse` group matching `apply_patch`. It preserves other
+registrations and their order, receipt metadata, adaptation rows, configuration,
+native trust and disabled markers. It uses the ordinary lock, ownership checks
+and recoverable transaction; it neither provisions nor checks unrelated analyzers.
+Verification reports `scoped_update_matches`, with native behavior pending.
+Other runtime versions, CLI, fresh installations and source moves are rejected.
+
+The [official slash-command guide](https://learn.chatgpt.com/docs/reference/slash-commands)
+places enabled skills in the Desktop slash menu. Type `/`, filter for `todo`
+and select it; literal `/todo <prose>` execution on this exact Desktop build
+has not been observed. The documented explicit alternative is `$todo <prose>`.
+The package accepts caller prose and disables implicit invocation, as described
+in the [skill guide](https://learn.chatgpt.com/docs/build-skills).
+
+Review and trust the new hook definition in Desktop after delivery, then confirm
+the addressed oversized edit is denied. The installer never writes trust hashes.
+The guard examines only attributed `apply_patch` edits to `.docs/todo` and
+`.docs/todos/*.md`; shell writes and other tools are outside this binding.
+Without a usable native `cwd`, this binding remains neutral, including absolute
+patch paths. Write a new detail note before
+adding its index link, so its target exists when checked. See the
+[native evidence](native/codex.md#desktop-01650-alpha12-backlog-command-and-guard).
+
 Run from this repository root. For Desktop, the installer reads only the current
 task's engine version from local runtime metadata, using `CODEX_THREAD_ID`. It
 does not read conversations, enumerate other tasks, or invoke an executable.

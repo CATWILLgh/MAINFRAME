@@ -16,6 +16,38 @@ known gaps belong to [zcode.md](native/zcode.md); mechanical behavior belongs to
 [installer/zcode_hook.py](../../installer/zcode_hook.py), and shared installer
 modules. Unknown builds need a separately scoped compatibility check.
 
+## Deliver only /todo
+
+Build **3.17.1.9553** has a separately reviewed route for `/todo` in an existing,
+same-source receipted Desktop installation. This allowance does not extend the
+full-install build list. The bundled command expander appends text supplied after
+`/todo` as user arguments; the workflow records or updates the active worktree's
+`.docs/todo` index and `.docs/todos/*.md` notes. Write the note before its index
+entry. See [the command](../../commands/todo.md) for the agreed groups and limits.
+
+```sh
+python3 -B install.py zcode plan --surface desktop --todo
+python3 -B install.py zcode apply --surface desktop --todo
+python3 -B install.py zcode verify --surface desktop --todo
+```
+
+This route delivers only `commands/todo.md`, the canonical task-limit detector,
+its maintained bridge, and one user-level `PreToolUse` registration matching
+`Write|Edit`, plus their receipt and adaptation rows. It provisions no analyzers
+and preserves other components, user configuration, trust, native disable
+toggles, disable markers and existing verification evidence. Conflicting files
+or registrations stop delivery for reconciliation. Normal full delivery on
+previously supported builds also includes these components.
+
+`mainframe-todo-limits` denies only a positive addressed index-row or note
+violation. Native `Write` content and `Edit` replacements are projected through
+the canonical detector before execution; untouched rows remain outside the
+check. Other write paths, including shell writes, have no new binding. The
+registration is primary-runtime only; subagent coverage and fresh Desktop
+acceptance are not established. [Current bundle evidence](native/zcode-evidence.md#desktop-31719553-task-command-and-pre-edit-guard)
+supports this narrow mapping. Open a new Desktop session after delivery. A
+deliberate global hook disable remains disabled and is reported explicitly.
+
 ## Plan, apply, verify
 
 Desktop build **3.14.5.7961** permits a bounded content update of an existing

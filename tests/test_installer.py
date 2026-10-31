@@ -541,7 +541,7 @@ class InstallationTests(unittest.TestCase):
         original = path.read_bytes()
         self.install()
         self.assertEqual(path.read_bytes(), original)
-        self.assertEqual(len(self.adapter.receipt()["hook_groups"]["PreToolUse"]), 2)
+        self.assertEqual(len(self.adapter.receipt()["hook_groups"]["PreToolUse"]), 3)
         self.assertEqual(self.adapter.plan()[1]["changes"], [])
         changes, _ = self.adapter.plan(remove=True)
         transact(changes, self.adapter.journal, self.adapter.allowed)

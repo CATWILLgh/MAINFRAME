@@ -318,6 +318,7 @@ class MiniMax:
             unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
             unsupported.update({("agents", name): AGENT_REASON for name in source["components"]["agents"]})
             pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
+            pending[("hooks", "mainframe-todo-limits")] = "The addressed idea-record guard awaits MiniMax adaptation; command packaging alone does not provide hook protection."
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending

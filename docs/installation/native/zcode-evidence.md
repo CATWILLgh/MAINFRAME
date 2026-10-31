@@ -1,5 +1,27 @@
 # ZCode bundled runtime hook evidence
 
+## Desktop 3.17.1.9553 task command and pre-edit guard
+
+Reviewed 2026-11-01 from `/Applications/ZCode.app/Contents/Info.plist` and shipped
+`Contents/Resources/glm/zcode.cjs`, SHA-256
+`9afd565a104d660259e6bdeeaa5cb8abc74a908559e21aa3c5f6a06f2a9da6c6`.
+The command-root functions `jpo`/`kSn` include user `.zcode/commands`; `Wln`
+appends unconsumed command text under `User arguments:`. The native tool schemas
+retain `Write.file_path/content` and `Edit.file_path/old_string/new_string/replace_all`.
+`hIn` emits native snake-case tool aliases, `F_a` projects the PreToolUse deny
+and reason, and the main executor rejects `permissionBehavior === "deny"`
+before tool execution. An isolated Node VM executed only extracted pure `Wln`,
+`gxs`, `bIn`, `vIn` and `F_a` functions: prose argument expansion and the bounded
+deny result passed. The default child constructor still omits hook runners;
+the mapping retains primary-runtime scope. The [official hooks contract](https://zcode.z.ai/en/docs/hooks)
+corroborates user configuration, `Write|Edit` matching, process argv, aliases,
+deny output and fresh-session snapshots. Disposable tests in
+[test_todo_zcode.py](../../../tests/test_todo_zcode.py) cover the narrow same-source
+route, preservation, convergence, conflicts, canonical Write/Edit denial and
+disabled or missing cached implementations. No application initializer, CLI,
+model, live configuration or acceptance session was used. Only `/todo` delivery
+is newly allowed on this build; other build mappings remain unchanged.
+
 ## Desktop 3.14.5.7961 skill delivery
 
 Reviewed 2026-10-09 from the installed application plist and shipped

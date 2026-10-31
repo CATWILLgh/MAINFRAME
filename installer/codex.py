@@ -30,7 +30,7 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -57,6 +57,7 @@ CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SEL
 # Only private skill-root discovery and SKILL.md parsing were inspected here.
 # This does not authorize reconciliation of hooks or any other native binding.
 SKILL_DELIVERY_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"}
+TODO_DELIVERY_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"}
 SELECTION_MATCHER = "^collaborationspawn_agent$"
 LIMITATIONS = {
     "mainframe-destructive-operations": "The context-free command and root/home/Git guard subset is installed. Native shell hooks omit the actual tool workdir, so active-project-root and ordinary relative-target protection remain unsupported.",
@@ -135,6 +136,18 @@ def _legacy_hook_command(base: Path, name: str, state: Path) -> str:
 
 def _commands(group: dict) -> set[str]:
     return {hook.get("command", "") for hook in group.get("hooks", []) if isinstance(hook, dict)}
+
+
+def _binding_names(group: dict, base: Path) -> set[str]:
+    names = set()
+    for command in _commands(group):
+        try:
+            arguments = shlex.split(command)
+        except ValueError:
+            continue
+        if len(arguments) >= 7 and arguments[3:5] == ["mainframe-hook", str(base)]:
+            names.add(arguments[6])
+    return names
 
 
 def _is_validated_hook_registration_update(change: Change, previous: dict,
@@ -236,7 +249,8 @@ def merge_hooks(raw: bytes | None, desired: dict, prior: dict, base: Path):
                 owned.setdefault(event, []).append(previous)
             else:
                 replacements = [g for g in desired.get(event, [])
-                                if g.get("matcher") == previous.get("matcher")]
+                                if (g.get("matcher") == previous.get("matcher")
+                                    and _binding_names(g, base) == _binding_names(previous, base))]
                 if previous in groups and len(replacements) == 1:
                     replacement = replacements[0]
                     first = groups.index(previous)
@@ -372,7 +386,7 @@ class Codex:
             if path.is_relative_to(skill_root):
                 parts = path.relative_to(skill_root).parts
                 return bool(parts and re.fullmatch(
-                    r"mainframe-[a-z0-9-]+|project-skill|tickets-(?:find|refine|implement|verify)",
+                    r"mainframe-[a-z0-9-]+|project-skill|tickets-(?:find|refine|implement|verify)|todo",
                     parts[0],
                 ))
         return path.parent == self.codex / "agents" and bool(re.fullmatch(r"mainframe-[a-z0-9-]+\.toml", path.name))
@@ -430,14 +444,8 @@ class Codex:
                 result += 'sandbox_mode = "read-only"\n'
             tomllib.loads(result)
             add(self.codex / "agents" / (name + ".toml"), result.encode(), "agents." + name)
-        for name, entry in source["components"]["commands"].items():
-            body = (self.root / entry["source"]).read_text()
-            if name == "mainframe-init":
-                body = re.sub(r"<!-- MAINFRAME OPTIONAL BLOCK: native-primary-memory.*?<!-- END MAINFRAME OPTIONAL BLOCK: native-primary-memory -->\n?", "", body, flags=re.S)
-            description = "Explicit user command: " + body.splitlines()[0].lstrip("# ") + ". User invocation only; takes no arguments."
-            packaged = "---\nname: " + name + "\ndescription: " + json.dumps(description) + "\n---\n\n" + body
-            add(self.skills / name / "SKILL.md", packaged.encode(), "commands." + name)
-            add(self.skills / name / "agents/openai.yaml", b"policy:\n  allow_implicit_invocation: false\n", "commands." + name)
+        for path, (data, mode, component, retain) in self.command_artifacts(source).items():
+            add(path, data, component, mode, retain)
         for name in HOOK_NAMES:
             if name == "mainframe-subagent-selection" and self.version not in SELECTION_BINDING_RUNTIMES:
                 continue
@@ -469,6 +477,113 @@ class Codex:
                 index_seed = old_data
         add(self.index, index_seed, "shared.credentials index", retain=True)
         return artifacts
+
+    def command_artifacts(self, source: dict) -> dict:
+        artifacts = {}
+        for name, entry in source["components"]["commands"].items():
+            body = (self.root / entry["source"]).read_text()
+            if name == "mainframe-init":
+                body = re.sub(r"<!-- MAINFRAME OPTIONAL BLOCK: native-primary-memory.*?<!-- END MAINFRAME OPTIONAL BLOCK: native-primary-memory -->\n?", "", body, flags=re.S)
+            arguments = "accepts the caller's prose as arguments" if name == "todo" else "takes no arguments"
+            description = "Explicit user command: " + body.splitlines()[0].lstrip("# ") + ". User invocation only; " + arguments + "."
+            packaged = "---\nname: " + name + "\ndescription: " + json.dumps(description) + "\n---\n\n" + body
+            artifacts[self.skills / name / "SKILL.md"] = (packaged.encode(), 0o600, "commands." + name, False)
+            artifacts[self.skills / name / "agents/openai.yaml"] = (b"policy:\n  allow_implicit_invocation: false\n", 0o600, "commands." + name, False)
+        return artifacts
+
+    def todo_group(self):
+        return {"matcher": "^apply_patch$", "hooks": [{"type": "command",
+                "command": hook_command(self.hooks, "mainframe-todo-limits", self.event_state),
+                "timeout": 5}]}
+
+    def plan_todo(self):
+        """Deliver the explicit backlog command and its pre-edit guard only."""
+        if self.surface != "desktop" or self.version not in TODO_DELIVERY_DESKTOP_RUNTIMES:
+            raise Conflict("Todo delivery is not validated for this Codex runtime and surface.")
+        if regular_bytes(self.journal) is not None:
+            raise Conflict(f"Interrupted transaction needs recovery: {self.journal}")
+        source = inventory(self.root)
+        receipt_snapshot = observed(self.receipt_path)
+        previous = self.receipt(receipt_snapshot)
+        if not previous or previous.get("source") != str(self.root):
+            raise Conflict("Todo delivery requires an existing same-source installation.")
+        selected = {"components": {"commands": {"todo": source["components"]["commands"]["todo"]}}}
+        artifacts = self.command_artifacts(selected)
+        detector = self.root / source["components"]["hooks"]["mainframe-todo-limits"]["source"]
+        artifacts[self.hooks / "detectors" / detector.name] = (detector.read_bytes(), 0o600, "hooks.mainframe-todo-limits", False)
+        bridge = self.hooks / "bridge.py"
+        bridge_mode = previous.get("files", {}).get(str(bridge), {}).get("mode", 0o600)
+        artifacts[bridge] = (Path(__file__).with_name("codex_hook.py").read_bytes(), bridge_mode, "hook transport", False)
+        components = {"commands.todo", "hooks.mainframe-todo-limits", "hook transport"}
+        old_records = {path: record for path, record in previous.get("files", {}).items()
+                       if record.get("component") in components}
+        if str(bridge) not in old_records:
+            raise Conflict("Todo delivery requires an existing receipted hook transport.")
+        if any(Path(path) not in artifacts for path in old_records):
+            raise Conflict("Todo delivery cannot migrate existing component destinations.")
+        if any(str(path) in previous.get("files", {}) and str(path) not in old_records for path in artifacts):
+            raise Conflict("Todo destination belongs to another receipted component.")
+        changes, records = reconcile_files(artifacts, old_records, self.allowed)
+        receipt = deepcopy(previous)
+        receipt["files"] = {path: record for path, record in previous.get("files", {}).items() if path not in old_records}
+        receipt["files"].update(records)
+        directories = set(previous.get("directories", []))
+        for path in artifacts:
+            parent = path.parent
+            while self.allowed(parent):
+                if not parent.exists():
+                    directories.add(str(parent))
+                parent = parent.parent
+        receipt["directories"] = sorted(directories)
+
+        hook_path = self.codex / "hooks.json"
+        hook_snapshot = observed(hook_path)
+        document = json.loads(hook_snapshot[0]) if hook_snapshot[0] is not None else {}
+        if not isinstance(document, dict) or not isinstance(document.get("hooks", {}), dict):
+            raise Conflict("hooks.json is not a native hooks object.")
+        groups = document.setdefault("hooks", {}).setdefault("PreToolUse", [])
+        if not isinstance(groups, list) or not all(isinstance(group, dict) for group in groups):
+            raise Conflict("PreToolUse does not contain native hook groups.")
+        group = self.todo_group()
+        def related(current):
+            return any(str(self.hooks) in command and "mainframe-todo-limits" in command
+                       for command in _commands(current))
+        for current in groups:
+            if related(current) and current != group:
+                raise Conflict("The todo hook registration was edited; preserve it for review.")
+        prior_groups = receipt.setdefault("hook_groups", {}).setdefault("PreToolUse", [])
+        if any(related(current) and current != group for current in prior_groups):
+            raise Conflict("The receipted todo hook registration was edited; preserve it for review.")
+        if group not in groups:
+            groups.append(group)
+            if group not in prior_groups:
+                prior_groups.append(group)
+        hooks = hook_snapshot[0] if hook_snapshot[0] is not None and document == json.loads(hook_snapshot[0]) else encode_json(document)
+        changes.append(Change.from_snapshot(hook_path, hook_snapshot, hooks,
+                       mode=hook_snapshot[1] or 0o600, component="hook registration"))
+        state_snapshot = observed(self.state_path)
+        state = json.loads(state_snapshot[0]) if state_snapshot[0] else {}
+        if (state.get("schema_version") != 2
+                or state.get("target", {}).get("config_home") != str(self.codex)
+                or state.get("target", {}).get("mainframe_root") != str(self.root)
+                or any(not isinstance(state.get("components", {}).get(category), dict) for category in ("commands", "hooks"))):
+            raise Conflict("Todo delivery requires matching existing adaptation state.")
+        changed = {change.component for change in changes if change.needed}
+        for category, name, handoff in (
+                ("commands", "todo", "Confirm todo appears in the slash menu after reload; explicit $todo <prose> is the documented native invocation."),
+                ("hooks", "mainframe-todo-limits", "Review and trust the new PreToolUse hook in Codex Desktop; confirm an addressed over-limit patch is denied before editing.")):
+            row = state["components"][category].get(name)
+            if (f"{category}.{name}" in changed or (category == "hooks" and changed & {"hook transport", "hook registration"})
+                    or not row or row.get("source") != source["components"][category][name]["source"]
+                    or row.get("delivery") != "installed"):
+                state["components"][category][name] = deepcopy(source["components"][category][name])
+                set_component(state, (category, name), delivery="installed", verification="pending", next_action=handoff)
+        changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state), component="adaptation state"))
+        changes.append(Change.from_snapshot(self.receipt_path, receipt_snapshot, encode_json(receipt), component="ownership receipt"))
+        return changes, {"target": str(self.codex), "runtime_version": self.version, "surface": self.surface,
+                         "delivery_mode": "existing-installation todo delivery",
+                         "changes": [change.summary() for change in changes if change.needed],
+                         "native_acceptance": "Reload for todo skill discovery in the slash menu; explicit $todo <prose> is documented. Literal /todo invocation remains unobserved. Review and trust the new PreToolUse hook; native acceptance remains pending."}
 
     def plan_skill(self, name: str):
         """Reconcile one canonical skill without evaluating unrelated native bindings."""
@@ -606,6 +721,8 @@ class Codex:
               "timeout": 180}]}]}
         if not remove and self.version in SELECTION_BINDING_RUNTIMES:
             desired_hooks["PreToolUse"].append(self.selection_group())
+        if not remove:
+            desired_hooks["PreToolUse"].append(self.todo_group())
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
         old_hooks = hook_snapshot[0]

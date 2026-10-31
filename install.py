@@ -78,7 +78,13 @@ def main(argv=None):
     parser.add_argument("--instructions-reviewed", action="store_true", help="The invoking agent has checked the existing and canonical instruction semantics")
     parser.add_argument("--hook", help="One maintained hook for enable/disable; default is all hooks for the selected product")
     parser.add_argument("--skill", help="Deliver only this exact canonical skill into an existing Codex Desktop installation")
+    parser.add_argument("--todo", action="store_true", help="Deliver only the project idea command and its addressed guard into an existing Codex or ZCode Desktop installation")
     args = parser.parse_args(argv)
+    if args.todo and (args.product not in ("codex", "zcode")
+                      or args.action not in ("plan", "apply", "verify")
+                      or args.surface != "desktop" or args.skill or args.hook or args.native
+                      or args.adopt_existing):
+        parser.error("--todo requires Codex or ZCode Desktop plan/apply/verify without other component selectors")
     if args.skill is not None and (args.product != "codex" or args.action not in ("plan", "apply", "verify")):
         parser.error("--skill applies only to Codex plan, apply, or verify")
     if args.skill is not None and (args.surface != "desktop" or args.native):
@@ -126,6 +132,8 @@ def main(argv=None):
             executable = args.executable or shutil.which("codex")
             version = native_version(executable) if executable else None
     adapter = Codex(root, args.home, codex_home, version, surface=args.surface)
+    if args.todo:
+        return todo_delivery(args, adapter)
     if args.skill is not None:
         if args.action == "apply":
             with installation_lock(adapter.lock_path):
@@ -213,11 +221,26 @@ def main(argv=None):
     return 0
 
 
+def todo_delivery(args, adapter):
+    if args.action == "apply":
+        with installation_lock(adapter.lock_path):
+            changes, report = adapter.plan_todo()
+            transact(changes, adapter.journal, adapter.allowed)
+            report["applied"] = True
+    else:
+        changes, report = adapter.plan_todo()
+        if args.action == "verify":
+            report["scoped_update_matches"] = not report["changes"]
+    show(report, args.details)
+    return 0 if args.action != "verify" or report["scoped_update_matches"] else 1
+
+
 def zcode_main(args, root, parser):
     from installer.zcode import (ZCode, KNOWN_RUNTIME as ZCODE_RUNTIME,
         FULL_MAPPING_RUNTIMES as ZCODE_FULL_MAPPING_RUNTIMES,
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
         SKILL_DELIVERY_RUNTIMES as ZCODE_SKILL_DELIVERY_RUNTIMES,
+        TODO_DELIVERY_RUNTIMES as ZCODE_TODO_DELIVERY_RUNTIMES,
         RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
         desktop_version as zcode_version)
     if (args.codex_home or args.gemini_home or args.antigravity_app or args.minimax_home
@@ -235,12 +258,16 @@ def zcode_main(args, root, parser):
             if version and version != observed_version:
                 raise Conflict("Supplied ZCode build conflicts with the selected Desktop application")
             version = observed_version
-        if version not in ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES | ZCODE_SKILL_DELIVERY_RUNTIMES:
+        permitted = (ZCODE_TODO_DELIVERY_RUNTIMES if args.todo else
+                     ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES | ZCODE_SKILL_DELIVERY_RUNTIMES)
+        if version not in permitted:
             raise Conflict("Revalidate the maintained ZCode mapping for this build; supported full mapping is " + ZCODE_RUNTIME)
     from installer.zcode import HOOK_NAMES as ZCODE_HOOK_NAMES
     if args.hook and args.hook not in ZCODE_HOOK_NAMES:
         parser.error("Unknown maintained ZCode hook")
     adapter = ZCode(root, args.home, args.zcode_home, version, args.surface, args.adopt_existing)
+    if args.todo:
+        return todo_delivery(args, adapter)
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
         support = add_runtime_status(report, adapter, ZCODE_RUNTIME_TOOLS)

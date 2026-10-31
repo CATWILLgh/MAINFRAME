@@ -24,7 +24,7 @@ PRE_SHELL_HOOKS = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection"})
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits"})
 # Exact verified V2 surface; V1 uses different fork controls.
 SUBAGENT_TOOLS = {"collaborationspawn_agent"}
 MAX_INPUT_BYTES = 262_144
@@ -319,6 +319,15 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
     event = data.get("hook_event_name")
     if name == "mainframe-subagent-selection":
         return _dispatch_selection(data)
+    if name == "mainframe-todo-limits":
+        if event != "PreToolUse" or data.get("tool_name") != "apply_patch":
+            return None
+        patch = _patch(data)
+        detector = _load_detector(name) if patch is not None else None
+        if detector is None:
+            return None
+        reason = detector.check_patch(_workspace(data), patch)
+        return _deny(reason) if isinstance(reason, str) and reason else None
     if name == PRE_SHELL_TRANSPORT:
         outputs = [
             output

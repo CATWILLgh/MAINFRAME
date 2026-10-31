@@ -182,6 +182,11 @@
       }
     },
     "commands": {
+      "todo": {
+        "source": "commands/todo.md",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-init": {
         "source": "commands/mainframe-init.md",
         "delivery": "pending",
@@ -219,6 +224,11 @@
       }
     },
     "hooks": {
+      "mainframe-todo-limits": {
+        "source": "hooks/mainframe-todo-limits.py",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-destructive-operations": {
         "source": "hooks/mainframe-destructive-operations.py",
         "delivery": "pending",
