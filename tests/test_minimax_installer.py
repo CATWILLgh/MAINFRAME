@@ -11,7 +11,7 @@ import unittest
 
 from installer.core import Conflict, transact
 from installer.runtime import TOOL_SPECS
-from installer.minimax import AGENT_REASON, COMMAND_REASON, MiniMax, desktop_version
+from installer.minimax import COMMAND_REASON, MiniMax, desktop_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +34,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
             shutil.copyfile(ROOT / "shared/credentials" / name, credentials / name)
         self.home = base / "home with 'quotes'"
         self.home.mkdir()
-        self.adapter = MiniMax(self.source, self.home, version="3.0.71")
+        self.adapter = MiniMax(self.source, self.home, version="3.0.73")
 
     def apply(self):
         changes, report = self.adapter.plan()
@@ -61,16 +61,16 @@ class MiniMaxInstallationTests(unittest.TestCase):
                     source.read_bytes(),
                 )
 
-        self.assertEqual(report["planned_delivery"], {"installed": 33, "pending": 2, "unsupported": 15})
+        self.assertEqual(report["planned_delivery"], {"installed": 41, "pending": 0, "unsupported": 9})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
-        self.assertEqual(len(manifest["skills"]), 38)
+        self.assertEqual(len(manifest["skills"]), 31)
         self.assertEqual(manifest["hooks"], ["hooks/hooks.json"])
         hooks = json.loads((self.adapter.plugin / "hooks/hooks.json").read_text())["hooks"]
         self.assertEqual(set(hooks), {
             "SessionStart", "SubagentStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStop",
         })
-        self.assertEqual(hooks["PreToolUse"][0]["matcher"], "bash|write|edit")
+        self.assertEqual(hooks["PreToolUse"][0]["matcher"], "bash|write|edit|task")
         self.assertEqual(hooks["PostToolUse"][0]["matcher"], "bash|read|write|edit")
         self.assertTrue(all(
             "MAINFRAME_RUNTIME_BIN=" in handler["command"]
@@ -85,27 +85,85 @@ class MiniMaxInstallationTests(unittest.TestCase):
         self.assertTrue(any("mainframe-skill-reminder" in path
                              for path in self.adapter.receipt()["files"]))
         self.assertNotIn("mainframe-skill-reminder", (self.adapter.plugin / "hooks/hooks.json").read_text())
-        self.assertEqual(state["components"]["agents"]["mainframe-researcher"]["reason"], AGENT_REASON)
-        self.assertEqual(state["components"]["agents"]["mainframe-go-backend-engineer"]["reason"], AGENT_REASON)
+        self.assertEqual(state["components"]["agents"]["mainframe-researcher"]["delivery"], "installed")
+        self.assertEqual(state["components"]["agents"]["mainframe-go-backend-engineer"]["delivery"], "installed")
         self.assertEqual(state["components"]["commands"]["mainframe-project-skill"]["reason"], COMMAND_REASON)
         self.assertEqual(state["components"]["hooks"]["mainframe-fallow-quality"]["delivery"], "installed")
         command = (self.adapter.plugin / "skills/mainframe-project-skill/SKILL.md").read_text()
         self.assertIn("Never select this Skill autonomously", command)
 
-    def test_role_material_is_retained_as_truthful_plugin_skills(self):
+    def test_native_role_material_preserves_canonical_body_and_method_links(self):
         report = self.apply()
-        manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         for source in (self.source / "agents").glob("*.md"):
-            role = self.adapter.plugin / "skills" / source.stem / "SKILL.md"
-            self.assertTrue(role.is_file(), source.stem)
+            role = self.adapter.minimax / "agents" / source.stem / "agent.md"
             text = role.read_text()
-            self.assertIn("not a native custom Agent", text)
-            self.assertIn("does not establish independent review", text)
+            self.assertIn(str(self.adapter.plugin / "skills"), text)
             for line in source.read_text().splitlines():
                 if line and not line.startswith("Required method:"):
                     self.assertIn(line, text)
-            self.assertIn(f"skills/{source.stem}/SKILL.md", manifest["skills"])
-            self.assertIn(source.stem, report["retained_partial_bindings"])
+            self.assertNotIn(source.stem, report["retained_partial_bindings"])
+
+    def test_role_skill_migration_preserves_disables_and_unrelated_native_state(self):
+        self.apply()
+        role_name = "mainframe-researcher"
+        native = self.adapter.minimax / "agents" / role_name / "agent.md"
+        native.unlink()
+        old = self.adapter.plugin / "skills" / role_name / "SKILL.md"
+        old.parent.mkdir()
+        old.write_text("previous receipted role guidance\n")
+        old.chmod(0o600)
+        from installer.core import digest
+        receipt = self.adapter.receipt()
+        del receipt["files"][str(native)]
+        receipt["directories"].append(str(old.parent))
+        receipt["files"][str(old)] = {"sha256": digest(old.read_bytes()), "mode": 0o600,
+                                     "component": "agents." + role_name, "owned": True, "retain": False}
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        settings = self.adapter.minimax / "settings.json"
+        settings.write_text('{"theme":"user","plugins":{"mainframe":{"enabled":false}}}')
+        foreign = self.adapter.minimax / "agents/user-owned/agent.md"
+        foreign.parent.mkdir()
+        foreign.write_text("user role settings")
+        transact(self.adapter.control(False, "mainframe-secret-access"), self.adapter.journal, self.adapter.allowed)
+        self.apply()
+        self.assertTrue(native.is_file())
+        self.assertFalse(old.exists())
+        self.assertTrue((self.adapter.plugin / "hooks/.disabled-mainframe-secret-access").exists())
+        self.assertEqual(settings.read_text(), '{"theme":"user","plugins":{"mainframe":{"enabled":false}}}')
+        self.assertEqual(foreign.read_text(), "user role settings")
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+        native.write_text(native.read_text().replace("description:", 'model: user/selected\neffort: high\ndescription:', 1))
+        before = native.read_bytes()
+        with self.assertRaisesRegex(Conflict, "was edited"):
+            self.adapter.plan()
+        self.assertEqual(native.read_bytes(), before)
+
+    def test_native_roles_and_new_guards_account_for_all_fifty_components(self):
+        report = self.apply()
+        self.assertEqual(report["planned_delivery"], {"installed": 41, "pending": 0, "unsupported": 9})
+        for name in ("mainframe-subagent-selection", "mainframe-todo-limits"):
+            self.assertTrue((self.adapter.plugin / "hooks/detectors" / (name + ".py")).is_file())
+        for source in (self.source / "agents").glob("*.md"):
+            role = self.adapter.minimax / "agents" / source.stem / "agent.md"
+            self.assertTrue(role.is_file(), source.stem)
+            self.assertIn("description:", role.read_text())
+            self.assertNotIn("model:", role.read_text())
+            self.assertNotIn("effort:", role.read_text())
+            self.assertFalse((self.adapter.plugin / "skills" / source.stem / "SKILL.md").exists())
+        for name in ("mainframe-consequential-reviewer", "mainframe-test-auditor", "mainframe-researcher"):
+            role = self.adapter.minimax / "agents" / name / "agent.md"
+            self.assertIn('tools: ["read", "glob", "grep", "skill", "web_fetch", "web_search", "ask_user"]', role.read_text())
+            self.assertNotIn("bash", role.read_text().split("---")[1])
+
+    def test_full_mapping_requires_verified_native_generation_but_removal_remains_available(self):
+        self.adapter.version = "3.0.71"
+        with self.assertRaisesRegex(Conflict, "3.0.73"):
+            self.adapter.plan()
+        self.assertFalse(self.adapter.plugin.exists())
+        self.adapter.version = "3.0.73"
+        self.apply()
+        self.adapter.version = "3.0.71"
+        self.assertTrue(self.adapter.plan(remove=True)[0])
 
     def test_package_obeys_v1_portable_path_and_size_limits(self):
         self.apply()
@@ -199,6 +257,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
         transact(changes, self.adapter.journal, self.adapter.allowed)
         self.adapter.clean_directories(self.adapter.receipt())
         self.assertFalse((self.adapter.plugin / ".minimax-plugin/plugin.json").exists())
+        self.assertFalse(any((self.adapter.minimax / "agents").glob("mainframe-*/agent.md")))
         self.assertFalse(any(self.adapter.plugin.glob("hooks/.disabled-*")))
         self.assertTrue(self.adapter.index.exists())
 
