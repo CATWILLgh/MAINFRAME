@@ -33,7 +33,6 @@ Read exactly the matching procedure:
 
 - **Codex:** [codex-installer.md](docs/installation/codex-installer.md).
 - **ZCode Desktop:** [zcode-installer.md](docs/installation/zcode-installer.md).
-- **Antigravity Desktop 2.0:** [antigravity-installer.md](docs/installation/antigravity-installer.md).
 - **MiniMax Code Desktop:** [minimax-installer.md](docs/installation/minimax-installer.md).
 - **Cline Desktop or CLI:** [cline-installer.md](docs/installation/cline-installer.md).
 

@@ -31,8 +31,7 @@ table, use current evidence, and correct or escalate the actual owner.
 ## Progressive reading route
 
 For Codex, read [codex-installer.md](codex-installer.md). For ZCode Desktop,
-read [zcode-installer.md](zcode-installer.md). For Antigravity Desktop 2.0,
-read [antigravity-installer.md](antigravity-installer.md). For MiniMax Code
+read [zcode-installer.md](zcode-installer.md). For MiniMax Code
 Desktop, read [minimax-installer.md](minimax-installer.md). For Cline Desktop
 or the Cline CLI, read [cline-installer.md](cline-installer.md). Follow the
 selected executable route; do not run a manual adaptation loop in parallel.
@@ -74,7 +73,6 @@ questions that still require verification against the installed version.
 - [Claude Code](native/claude-code.md)
 - [OpenCode](native/opencode.md)
 - [ZCode Desktop](native/zcode.md)
-- [Antigravity Desktop 2.0](native/antigravity.md)
 - [MiniMax Code Desktop](native/minimax.md)
 - [Pi](native/pi.md)
 - [Cline](native/cline.md)

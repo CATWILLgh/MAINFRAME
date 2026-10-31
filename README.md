@@ -4,7 +4,7 @@ MAINFRAME is a product-neutral set of instructions, skills, agents, commands,
 and hooks for coding agents. The repository stores one canonical version of
 each component. A maintained installer generates native copies from these sources
 and a small product-specific mapping. Maintained implementations target Codex,
-ZCode Desktop, Antigravity Desktop 2.0, MiniMax Code Desktop, and Cline Desktop
+ZCode Desktop, MiniMax Code Desktop, and Cline Desktop
 or CLI. Other products require separately assigned adapter development.
 
 Canonical content stays product-neutral. Native packaging, registration,
@@ -58,7 +58,6 @@ source validation or successful installation alone is not enough.
 
 The [Codex](docs/installation/codex-installer.md),
 [ZCode Desktop](docs/installation/zcode-installer.md),
-[Antigravity Desktop 2.0](docs/installation/antigravity-installer.md),
 [MiniMax Code Desktop](docs/installation/minimax-installer.md), and
 [Cline](docs/installation/cline-installer.md) installers
 implement packaging, ownership, updates, recovery, and safe hook removal for
@@ -75,7 +74,7 @@ MAINFRAME has one supported installation path:
 3. Send [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md) to the agent on its own, as an
    attachment or file reference. No additional prompt is needed.
 
-For Codex, ZCode Desktop, Antigravity Desktop 2.0, MiniMax Code Desktop, and
+For Codex, ZCode Desktop, MiniMax Code Desktop, and
 Cline Desktop or CLI, the agent runs [install.py](install.py), reviews existing
 instruction semantics when required by the plan, verifies the delivered
 structure, and checks available discovery evidence on the current surface. If

@@ -57,13 +57,11 @@ def provision_runtime(report, adapter, tools, hook=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("product", choices=["antigravity", "cline", "codex", "minimax", "zcode"])
+    parser.add_argument("product", choices=["cline", "codex", "minimax", "zcode"])
     parser.add_argument("action", choices=["plan", "apply", "verify", "disable", "enable", "uninstall", "recover"])
     parser.add_argument("--home", type=Path, default=Path.home(), help="Explicit target home; isolated fixture roots never imply native proof")
     parser.add_argument("--zcode-home", type=Path, help="Explicit ZCode configuration root")
     parser.add_argument("--zcode-app", type=Path, help="ZCode Desktop application whose plist provides the build")
-    parser.add_argument("--gemini-home", type=Path, help="Explicit Antigravity shared configuration root")
-    parser.add_argument("--antigravity-app", type=Path, help="Antigravity Desktop application whose plist provides the release")
     parser.add_argument("--minimax-home", type=Path, help="Explicit MiniMax Code data directory")
     parser.add_argument("--minimax-app", type=Path, help="MiniMax Code Desktop application whose plist provides the release")
     parser.add_argument("--cline-home", type=Path, help="Explicit Cline configuration root")
@@ -104,14 +102,12 @@ def main(argv=None):
         raise Conflict("Open the MAINFRAME repository and run its installer from that root.")
     if args.product == "zcode":
         return zcode_main(args, root, parser)
-    if args.product == "antigravity":
-        return antigravity_main(args, root, parser)
     if args.product == "minimax":
         return minimax_main(args, root, parser)
     if args.product == "cline":
         return cline_main(args, root, parser)
-    if (args.adopt_existing or args.zcode_home or args.zcode_app or args.gemini_home
-            or args.antigravity_app or args.minimax_home or args.minimax_app
+    if (args.adopt_existing or args.zcode_home or args.zcode_app
+            or args.minimax_home or args.minimax_app
             or args.cline_home or args.cline_app):
         parser.error("Options for another product cannot modify a Codex installation")
     if args.hook and args.hook not in HOOK_NAMES:
@@ -243,7 +239,7 @@ def zcode_main(args, root, parser):
         TODO_DELIVERY_RUNTIMES as ZCODE_TODO_DELIVERY_RUNTIMES,
         RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
         desktop_version as zcode_version)
-    if (args.codex_home or args.gemini_home or args.antigravity_app or args.minimax_home
+    if (args.codex_home or args.minimax_home
             or args.minimax_app or args.cline_home or args.cline_app
             or args.native or args.executable or args.surface == "cli"):
         parser.error("The maintained ZCode route targets Desktop only and never starts a CLI agent")
@@ -320,102 +316,14 @@ def zcode_main(args, root, parser):
     return 0
 
 
-def antigravity_runtime(args, version_reader):
-    if args.action not in ("plan", "apply", "verify"):
-        return None
-    version = args.runtime_version
-    if args.home.resolve() == Path.home().resolve() or not version:
-        observed = version_reader(args.antigravity_app or Path("/Applications/Antigravity.app"))
-        if version and version != observed:
-            raise Conflict("Supplied Antigravity release conflicts with the selected Desktop application")
-        version = observed
-    return version
-
-
-def antigravity_main(args, root, parser):
-    from installer.antigravity import (
-        Antigravity, HOOK_NAMES as ANTIGRAVITY_HOOK_NAMES,
-        KNOWN_RUNTIME as ANTIGRAVITY_RUNTIME, RUNTIME_TOOLS as ANTIGRAVITY_RUNTIME_TOOLS,
-        CONTENT_UPDATE_RUNTIMES as ANTIGRAVITY_CONTENT_RUNTIMES,
-        desktop_version as antigravity_version,
-    )
-    if (args.codex_home or args.zcode_home or args.zcode_app or args.adopt_existing
-            or args.minimax_home or args.minimax_app or args.cline_home or args.cline_app
-            or args.native or args.executable or args.surface == "cli"):
-        parser.error("The maintained Antigravity route targets Desktop 2.0 only and never starts a CLI or IDE agent")
-    if args.hook and args.hook not in ANTIGRAVITY_HOOK_NAMES:
-        parser.error("Unknown maintained Antigravity hook")
-    version = antigravity_runtime(args, antigravity_version)
-    adapter = Antigravity(root, args.home, args.gemini_home, version, args.surface)
-    if args.action in ("plan", "verify"):
-        changes, report = adapter.plan(args.instructions_reviewed)
-        if version in ANTIGRAVITY_CONTENT_RUNTIMES:
-            adapter.validate_content_update(changes, adapter.receipt())
-            report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
-        support = add_runtime_status(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
-        if args.action == "verify":
-            report["structure_matches"] = not report["changes"] and support["ready"]
-        show(report, args.details)
-        return 0 if args.action == "plan" or report["structure_matches"] else 1
-    if args.action == "apply" and version != ANTIGRAVITY_RUNTIME and version not in ANTIGRAVITY_CONTENT_RUNTIMES:
-        raise Conflict("Revalidate the maintained Antigravity mapping for this release; supported release is " + ANTIGRAVITY_RUNTIME)
-    with installation_lock(adapter.lock_path):
-        if args.action == "recover":
-            restore(adapter.journal, adapter.allowed)
-            report = {"recovered": True}
-        elif args.action in ("disable", "enable"):
-            report = {}
-            if args.action == "enable":
-                provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS, args.hook)
-            transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
-            if args.action == "disable":
-                time.sleep(6)
-            report.update({"hook_control": args.action,
-                           "hooks": [args.hook] if args.hook else list(ANTIGRAVITY_HOOK_NAMES)})
-        else:
-            remove = args.action == "uninstall"
-            changes, report = adapter.plan(args.instructions_reviewed, remove)
-            if report.get("instruction_review"):
-                raise Conflict(report["instruction_review"])
-            if not remove and version in ANTIGRAVITY_CONTENT_RUNTIMES:
-                adapter.validate_content_update(changes, adapter.receipt())
-                report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
-            if not remove:
-                provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
-            previous = adapter.receipt()
-            if not remove and report.get("retiring_hooks"):
-                transact(adapter.control(False), adapter.journal, adapter.allowed)
-                time.sleep(6)
-                changes, report = adapter.plan(args.instructions_reviewed, remove=False)
-            if remove and previous:
-                if previous.get("hook_specs"):
-                    transact(adapter.control(False), adapter.journal, adapter.allowed)
-                    time.sleep(6)
-                changes, report = adapter.plan(args.instructions_reviewed, remove=True)
-            transact(changes, adapter.journal, adapter.allowed)
-            if remove:
-                adapter.clean_event_state()
-                adapter.clean_directories(previous)
-            else:
-                adapter.clean_directories(adapter.receipt())
-            report["applied"] = True
-            report["native_acceptance"] = (
-                "Open one new Antigravity Desktop 2.0 conversation and check native discovery; "
-                "the installer did not start a model or the Antigravity CLI."
-                if not remove else "Owned Antigravity configuration was removed."
-            )
-        show(report, args.details)
-    return 0
-
-
 def minimax_main(args, root, parser):
     from installer.minimax import (
         MiniMax, HOOK_NAMES as MINIMAX_HOOK_NAMES,
         RUNTIME_TOOLS as MINIMAX_RUNTIME_TOOLS,
         desktop_version as minimax_version,
     )
-    if (args.codex_home or args.zcode_home or args.zcode_app or args.gemini_home
-            or args.antigravity_app or args.adopt_existing or args.cline_home or args.cline_app
+    if (args.codex_home or args.zcode_home or args.zcode_app
+            or args.adopt_existing or args.cline_home or args.cline_app
             or args.native or args.executable or args.surface == "cli"):
         parser.error("The maintained MiniMax route targets Desktop only and never starts a CLI agent")
     if args.hook and args.hook not in MINIMAX_HOOK_NAMES:
@@ -474,8 +382,8 @@ def cline_main(args, root, parser):
         RUNTIME_TOOLS as CLINE_RUNTIME_TOOLS,
         cli_version as cline_cli_version, desktop_version as cline_desktop_version,
     )
-    if (args.codex_home or args.zcode_home or args.zcode_app or args.gemini_home
-            or args.antigravity_app or args.minimax_home or args.minimax_app
+    if (args.codex_home or args.zcode_home or args.zcode_app
+            or args.minimax_home or args.minimax_app
             or args.adopt_existing or args.native or args.executable):
         parser.error("Options for another product cannot modify a Cline installation")
     if args.hook and args.hook not in CLINE_HOOK_NAMES:

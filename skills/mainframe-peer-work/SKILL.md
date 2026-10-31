@@ -16,7 +16,6 @@ to the same installed version:
 - [Claude Code CLI](references/claude-code.md)
 - [OpenCode CLI](references/opencode.md)
 - [Pi CLI](references/pi.md)
-- [Antigravity CLI](references/antigravity.md)
 
 Give the peer one bounded result, the exact project root, relevant evidence, permitted files and actions, prohibited external effects, verification requirements, and the recipient of its result. A review remains read-only. All task descriptions, questions, progress, evidence, corrections, and handoffs exchanged with the peer are in English.
 

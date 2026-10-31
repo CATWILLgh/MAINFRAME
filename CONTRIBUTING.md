@@ -65,8 +65,8 @@ maintainer guidance to the installed runtime payload.
 transaction mechanics in [installer/core.py](installer/core.py), shared inventory, instruction merging, and delivery state in [installer/shared.py](installer/shared.py)
 and [installer/state.py](installer/state.py), and native decisions in [installer/codex.py](installer/codex.py)
 and native modules such as [installer/zcode.py](installer/zcode.py),
-[installer/antigravity.py](installer/antigravity.py), and
-[installer/minimax.py](installer/minimax.py). Extract more shared code only when
+[installer/minimax.py](installer/minimax.py), and
+[installer/cline.py](installer/cline.py). Extract more shared code only when
 another implemented product actually uses it. Canonical texts and
 detectors remain single sources; never copy their bodies into the installer.
 

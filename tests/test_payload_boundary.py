@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 import unittest
 
-from installer.antigravity import Antigravity
 from installer.cline import Cline
 from installer.codex import Codex
 from installer.core import Conflict
@@ -16,7 +15,7 @@ from installer.zcode import ZCode
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ADAPTERS = (Codex, ZCode, Antigravity, MiniMax, Cline)
+ADAPTERS = (Codex, ZCode, MiniMax, Cline)
 
 
 class PayloadBoundaryTests(unittest.TestCase):

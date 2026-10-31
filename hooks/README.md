@@ -471,10 +471,8 @@ Do not turn a reminder into a quota, automatic `git add`, commit-message lint,
 permission denial or a mandatory new approval step.
 
 Use post-edit model context: Codex and ZCode `PostToolUse`, Cline `PostToolUse`,
-MiniMax `PostToolUse`, and Antigravity's attributable supported-edit
-`PostInvocation`. Antigravity uses its existing verified edit-fragment route;
-unsupported or ambiguous edit forms remain silent. Keep this hook independent
-of code-quality disablement. Never force a Stop continuation for checkpoint
+and MiniMax `PostToolUse`. Unsupported or ambiguous edit forms remain silent.
+Keep this hook independent of code-quality disablement. Never force a Stop continuation for checkpoint
 advice. Missing Git, missing IDs, unavailable/unsafe state, unknown outcomes,
 failed edits, non-Git workspaces and runtime exceptions fail silently.
 
@@ -530,8 +528,8 @@ never source or raw native IDs. Disable/missing identity/state failures are sile
 a cached launcher must remain harmless after files are retired. Native receipt
 and useful application require separate observations from a successful callback.
 
-The maintained adapters deliver this advisory in Codex, ZCode, Antigravity,
-MiniMax and Cline. Native timing, identity and missing role-start advice are
+The maintained adapters deliver this advisory in Codex, ZCode, MiniMax
+and Cline. Native timing, identity and missing role-start advice are
 listed in the [native binding table](skill-reminder-routing.md#native-bindings).
 File delivery is not proof of native activation or useful skill application.
 
