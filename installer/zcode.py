@@ -756,7 +756,7 @@ class ZCode:
                          "handoff": "Delivery checks only; no agent, browser, credential, or native-hook probes are run."}
 
     def plan_todo(self, instructions_reviewed=False):
-        """Deliver only /todo to a receipted same-source Desktop installation."""
+        """Deliver the idea-capture command and guard to an owned Desktop installation."""
         if regular_bytes(self.journal) is not None:
             raise Conflict("Recover the interrupted ZCode transaction first.")
         receipt_snapshot = observed(self.receipt_path)
