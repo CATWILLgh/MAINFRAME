@@ -101,6 +101,18 @@ recovery.
 
 ## 4. Reconstruct the effective target for adapter work
 
+Identify Desktop and CLI releases separately and target the caller's actual
+surface. Read the installed Desktop bundle/version and its shipped runtime;
+a CLI on PATH, a newer website release or old task metadata is not a substitute.
+Compare available releases without upgrading an application implicitly.
+
+Place delivered components in the target product's own documented user
+configuration directories. Shared cross-product skill roots are compatibility
+inputs for ownership-aware migration, not new delivery destinations. Keep
+unrelated shared skills, existing credentials and already installed system
+analyzers intact. Reconsider a shared destination only when a documented
+cross-product standard and the caller's current policy permit it.
+
 Use three evidence sources together:
 
 1. current official documentation;

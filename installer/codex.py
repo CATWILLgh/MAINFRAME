@@ -21,7 +21,7 @@ from .core import (Change, Conflict, digest, encode_json, migrate_disabled_marke
                    observed, reconcile_files, regular_bytes, retire_recorded_legacy_file)
 from .shared import BEGIN, END, _instruction, inventory, skill_resources
 from .state import component_keys, reconcile_state, set_component
-from .runtime import CODE_QUALITY_TOOLS, runtime_bin
+from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 SHELL_HOOK_NAMES = (
     "mainframe-secret-access",
@@ -30,7 +30,7 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits", "mainframe-fallow-quality")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -42,7 +42,8 @@ READ_ONLY_ROLE_ACTION = "Verify parent permission overrides preserve the read-on
 KNOWN_RUNTIME = "0.153.4"
 # Exact Desktop mapping revalidated against the tagged native schemas/sources.
 # This is delivery compatibility, not observed lifecycle/role acceptance.
-INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1"}
+CURRENT_DESKTOP_RUNTIME = "0.165.0-alpha.1.2"
+INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1", CURRENT_DESKTOP_RUNTIME}
 # Current Desktop PreToolUse command/deny transport was observed unchanged.
 # This is an existing detector repair boundary, never a full native mapping.
 DETECTOR_UPDATE_RUNTIMES = {"0.162.0-alpha.17.2"}
@@ -52,8 +53,8 @@ SELECTION_UPDATE_RUNTIMES = {"0.163.0-alpha.11"}
 # Same instruction reader and private skill roots; existing Markdown only.
 # Retain the previous selection binding, without revalidating its execution.
 TEXT_UPDATE_RUNTIMES = {"0.164.0-alpha.11.1"}
-SELECTION_BINDING_RUNTIMES = SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES
-CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_BINDING_RUNTIMES
+SELECTION_BINDING_RUNTIMES = SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES | {CURRENT_DESKTOP_RUNTIME}
+CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES
 # Only private skill-root discovery and SKILL.md parsing were inspected here.
 # This does not authorize reconciliation of hooks or any other native binding.
 SKILL_DELIVERY_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"}
@@ -65,12 +66,21 @@ LIMITATIONS = {
     "mainframe-code-quality": "The core pre-edit, post-edit, and revalidating completion guard is installed. The full contract remains unsupported because Stop lacks non-blocking model context for completion-only unavailable-check advice.",
     "mainframe-fallow-quality": "No safe partial binding is installed: Codex lacks the exact attributed post-edit diff, dirty-worktree reconstruction can include unrelated changes, persisting source content violates the hook state boundary, and Stop would force a model continuation for an advisory.",
 }
+CURRENT_LIMITATIONS = {
+    **LIMITATIONS,
+    "mainframe-code-quality": "The attributed pre/post-edit advisory and revalidating Stop/SubagentStop guard are installed. Full parity is unsupported: completion-only unavailable advice has no non-blocking model channel, and a still-positive retry terminates with a visible unresolved warning after one repair continuation rather than forcing an unbounded loop.",
+    "mainframe-fallow-quality": "An immediate PostToolUse advisory is installed for uniquely reconstructable Add/Update TS/JS patches, with in-memory diffs and no source retention. Full parity is unsupported: Stop/SubagentStop cannot deliver non-blocking completion advice; moved, deleted or ambiguous hunks lack safe exact reconstruction and produce bounded unavailable advice.",
+}
 
 
 def mapping_supported(version: str | None, surface: str | None) -> bool:
     return version == KNOWN_RUNTIME or (
         surface == "desktop" and version in INSPECTED_DESKTOP_RUNTIMES
     )
+
+
+def runtime_tools(version: str | None, surface: str | None) -> tuple[str, ...]:
+    return CODE_QUALITY_TOOLS + FALLOW_TOOLS if surface == "desktop" and version == CURRENT_DESKTOP_RUNTIME else RUNTIME_TOOLS
 
 
 def _validate_mapping(source: dict) -> None:
@@ -449,6 +459,8 @@ class Codex:
         for name in HOOK_NAMES:
             if name == "mainframe-subagent-selection" and self.version not in SELECTION_BINDING_RUNTIMES:
                 continue
+            if name == "mainframe-fallow-quality" and not (self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME):
+                continue
             source_path = self.root / source["components"]["hooks"][name]["source"]
             add(self.hooks / "detectors" / source_path.name, source_path.read_bytes(), "hooks." + name)
         add(self.hooks / "bridge.py", Path(__file__).with_name("codex_hook.py").read_bytes(), "hook transport")
@@ -723,6 +735,13 @@ class Codex:
             desired_hooks["PreToolUse"].append(self.selection_group())
         if not remove:
             desired_hooks["PreToolUse"].append(self.todo_group())
+            if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME:
+                desired_hooks["PostToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
+                    "type": "command", "command": hook_command(self.hooks, "mainframe-fallow-quality", self.event_state, runtime_bin(self.home)),
+                    "timeout": 10, "additionalContextLimit": 2000}]})
+                desired_hooks["SubagentStop"] = [{"hooks": [{
+                    "type": "command", "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
+                    "timeout": 180}]}]
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
         old_hooks = hook_snapshot[0]
@@ -801,9 +820,10 @@ class Codex:
             )
             unsupported = {}
             pending = {}
-            if self.version not in SELECTION_UPDATE_RUNTIMES:
+            if self.version not in SELECTION_UPDATE_RUNTIMES | {CURRENT_DESKTOP_RUNTIME}:
                 pending[("hooks", "mainframe-subagent-selection")] = "Subagent-selection controls and binding require runtime validation; tested on Desktop 0.163.0-alpha.11."
-            for name, limitation in LIMITATIONS.items():
+            limitations = CURRENT_LIMITATIONS if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME else LIMITATIONS
+            for name, limitation in limitations.items():
                 component = ("hooks", name)
                 if mapping_supported(self.version, self.surface):
                     unsupported[component] = limitation + f" Confirmed mapping for Codex {self.version}."
@@ -853,13 +873,15 @@ class Codex:
         report["changes"] = [change.summary() for change in changes if change.needed]
         if not remove:
             report["unsupported_full_contracts"] = (
-                LIMITATIONS if mapping_supported(self.version, self.surface) else {}
+                limitations if mapping_supported(self.version, self.surface) else {}
             )
             report["retained_partial_bindings"] = {
                 "mainframe-destructive-operations": LIMITATIONS["mainframe-destructive-operations"],
                 "mainframe-commit-secrets": LIMITATIONS["mainframe-commit-secrets"],
-                "mainframe-code-quality": LIMITATIONS["mainframe-code-quality"]
+                "mainframe-code-quality": limitations["mainframe-code-quality"]
             }
+            if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME:
+                report["retained_partial_bindings"]["mainframe-fallow-quality"] = limitations["mainframe-fallow-quality"]
         return changes, report
 
     def selection_group(self):

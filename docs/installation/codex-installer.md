@@ -8,21 +8,50 @@ the user-facing file-only invocation unchanged.
 
 On macOS or Linux, use Python 3.11 or newer and Git. Select the surface running
 this request under the [surface rule](verification.md#desktop-and-cli).
-The native mapping was inspected against engine **0.153.4** and revalidated for
-**Desktop 0.159.2** on 2026-10-02. Delivery compatibility is established from
+The native mapping was inspected against engine **0.153.4**, revalidated for
+**Desktop 0.159.2**, and refreshed for **Desktop 0.165.0-alpha.1.2** on
+2026-11-01. Delivery compatibility is established from
 tagged source/schema comparison and disposable-home installer checks; live
 Desktop lifecycle and role acceptance remain separate. See the
-[0.159.2 evidence](native/codex.md#desktop-01592-delivery-revalidation).
+[current full-mapping evidence](native/codex.md#desktop-01650-alpha12-full-delivery).
 Do not upgrade Codex,
 switch the user's model, or claim another version is verified. `plan` works
 read-only; a full installation requires the tested runtime. To support a different version,
 revalidate the affected native contract and update the maintained module with
 its evidence, rather than bypassing the version check or writing a second installer.
 
-CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2
-supports the full maintained delivery route, including new complete skill
-packages and the checkpoint hook. It does not require launching a CLI agent,
+CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2 and
+**0.165.0-alpha.1.2** support the full maintained delivery route, including
+complete skill packages, roles, explicit commands and native hooks. The current
+mapping accounts for all 50 canonical components. Skills and command projections
+are delivered only to `$CODEX_HOME/skills`; role files use `$CODEX_HOME/agents`.
+The shared `.agents/skills` root is never a delivery destination; an older
+receipt can authorize retirement of its unchanged owned files during migration.
+It does not require launching a CLI agent,
 app-server, model probe or trust UI automation.
+
+The current full route retains the existing subagent-selection registration for
+the verified collaboration interface and installs the Fallow detector plus a
+non-blocking `PostToolUse` advisory for supported exact patches. Fallow uses
+only bounded in-memory reconstruction of the addressed files; it never scans a
+dirty worktree for attribution or stores source/diff text. Runtime readiness
+includes `ruff`, `oxlint`, `semgrep` and `fallow`. The native callback gives
+Fallow seven seconds within its ten-second handler timeout.
+
+Quality completion checks now bind both primary `Stop` and worker
+`SubagentStop`, with worker state isolated by native session and agent identity.
+One positive revalidation requests a repair continuation. A still-positive retry
+terminates with a visible unresolved reason and retains state for the next user
+turn. This is bounded recovery, not proof that Codex marks the turn as failed.
+Full quality parity remains unsupported, alongside full Fallow completion timing
+and the two shell guards' actual-tool-workdir-dependent guarantees. The plan
+reports all four retained partial bindings explicitly.
+
+New hook definitions require native review/trust after delivery. The installer
+preserves existing trust state, hook order, deliberate disables, foreign files,
+user roles and configuration; it never writes native trust hashes. Discovery,
+recipient delivery and native execution remain pending until observed on this
+surface. Other nearby versions and current-version CLI are not admitted.
 
 Desktop **0.154.0-alpha.6.2** also supports a bounded update of an existing
 same-source installation. The installer recognizes the exact prerelease string
@@ -196,8 +225,8 @@ with action `verify`. Keep the same surface, runtime, and configuration options.
 
 The installer validates the inventory and ignore rules, copies complete skill
 resources into the private `$CODEX_HOME/skills` directory, packages exact roles
-and explicit-only commands there, prepares the two
-supported hook bindings, merges the narrow feedback permission, and writes the
+and explicit-only commands, prepares the supported native hook registrations,
+merges the narrow feedback permission, and writes the
 global instruction after its dependencies. An existing compatible `mainframe-secret`
 helper and the non-secret index are preserved. The helper creates protected
 storage through its normal operation; installation never inspects its values.

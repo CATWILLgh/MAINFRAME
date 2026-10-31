@@ -20,8 +20,8 @@ if os.name != "posix":
     raise SystemExit(2)
 
 from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES,
-                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, SELECTION_UPDATE_RUNTIMES, TEXT_UPDATE_RUNTIMES, RUNTIME_TOOLS,
-                             desktop_version, native_version, mapping_supported)
+                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, SELECTION_UPDATE_RUNTIMES, TEXT_UPDATE_RUNTIMES,
+                             desktop_version, native_version, mapping_supported, runtime_tools)
 from installer.core import Conflict, installation_lock, restore, transact
 from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
 
@@ -128,6 +128,11 @@ def main(argv=None):
             executable = args.executable or shutil.which("codex")
             version = native_version(executable) if executable else None
     adapter = Codex(root, args.home, codex_home, version, surface=args.surface)
+    codex_tools = runtime_tools(version, args.surface)
+    if args.action == "enable" and any(
+            row.get("component") == "hooks.mainframe-fallow-quality"
+            for row in adapter.receipt().get("files", {}).values()):
+        codex_tools = tuple(dict.fromkeys((*codex_tools, "fallow")))
     if args.todo:
         return todo_delivery(args, adapter)
     if args.skill is not None:
@@ -144,7 +149,7 @@ def main(argv=None):
         return 0 if args.action != "verify" or report["scoped_update_matches"] else 1
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, codex_tools)
         if version in CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = adapter.bounded_update_mode()
@@ -175,7 +180,7 @@ def main(argv=None):
         elif args.action in ("disable", "enable"):
             report = {}
             if args.action == "enable":
-                provision_runtime(report, adapter, RUNTIME_TOOLS, args.hook)
+                provision_runtime(report, adapter, codex_tools, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable":
                 time.sleep(6)  # Registered synchronous hooks have a five-second native timeout.
@@ -194,9 +199,9 @@ def main(argv=None):
                     # These bounded updates need no new analyzer provisioning.
                     # Keep unrelated hook dependency readiness visible without
                     # provisioning or modifying those existing dependencies.
-                    add_runtime_status(report, adapter, RUNTIME_TOOLS)
+                    add_runtime_status(report, adapter, codex_tools)
                 else:
-                    provision_runtime(report, adapter, RUNTIME_TOOLS)
+                    provision_runtime(report, adapter, codex_tools)
             if remove and old_receipt:
                 transact(adapter.control(False, None), adapter.journal, adapter.allowed)
                 time.sleep(6)

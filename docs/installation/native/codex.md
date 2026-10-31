@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-11-01 (bounded backlog command and guard delivery).
+Last reviewed: 2026-11-01 (full Desktop 0.165.0-alpha.1.2 delivery).
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -8,6 +8,88 @@ the installer owns repeatable packaging and lifecycle operations. Recheck the
 version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
+
+## Desktop 0.165.0-alpha.1.2 full delivery
+
+The running app evidence identifies ChatGPT release `26.1023.50603`, build
+`22391`, and bundled `codex-package.json` engine `0.165.0-alpha.1.2`; current-task
+metadata agrees. The exact official tag resolves to
+`720fec862a608ae1e5878d1eecb04fb93192e93c`. The relevant downloaded native files
+were checked against the complete tag tree's Git blob hashes. This admits full
+Desktop delivery for this exact runtime; it does not extend current-version CLI
+or nearby prereleases, and does not establish live native acceptance.
+
+| Canonical inventory | Closest native delivery and verification boundary |
+| --- | --- |
+| Shared credential helper: 1 | Preserve the existing helper/index mechanism; installation never reads protected credential values |
+| Skills: 23 | Complete approved packages under `$CODEX_HOME/skills`, with placeholders resolved through the existing selector |
+| Roles: 7 | Private `$CODEX_HOME/agents/*.toml`, canonical role bodies and method links; the three read-only roles retain native `sandbox_mode = "read-only"`, with parent-permission acceptance pending |
+| Commands: 8 | Explicit-only native skills; `todo` accepts caller prose, other command contracts remain unchanged; actual slash-menu discovery remains pending |
+| Hooks: 10 | Every canonical detector is delivered; six contracts are represented directly and four remain explicitly unsupported with useful partial bindings |
+| Global instruction: 1 | Managed block in the existing global owner, preserving user text and override precedence |
+
+The tagged [skill roots](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/host_roots.rs)
+retain the private compatibility root. MAINFRAME never writes the shared user
+skill root. The tagged
+[role loader](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/agent-roles/src/loader.rs),
+[role parser](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/agent-roles/src/agent_role_config.rs),
+[configuration schema](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/config.schema.json)
+and [instruction reader](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/codex-home/src/instructions/mod.rs)
+support the maintained TOML definitions, narrow feedback permission and global
+managed block. These source checks prove representation, not permission behavior.
+
+The [hook dispatcher](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/hook_runtime.rs)
+and exact
+[PreToolUse](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/hooks/src/events/pre_tool_use.rs),
+[PostToolUse](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/hooks/src/events/post_tool_use.rs)
+and [Stop/SubagentStop](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/hooks/src/events/stop.rs)
+implementations retain the documented deny, attributed tool input, model context
+and completion output shapes. Native pre/post events carry agent identity for
+thread-spawned workers; worker completion uses `SubagentStop`. The adapter combines
+session and agent identity, never consumes parent quality state for a worker,
+and resolves relative patch paths from the native environment directory before
+passing project-confined paths to the canonical detector.
+
+Four full contracts remain unsupported for verified reasons:
+
+- The [exec handler](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs)
+  resolves an overridden `workdir` separately but sends only `command` to the
+  hook. Common `cwd` is the local environment directory. It therefore cannot
+  supply the actual shell working directory needed by full destructive and
+  staged/worktree secret protection. Their context-free preventive subsets remain.
+- Quality has attributed edit advice and positive completion revalidation, but
+  no non-blocking model channel for completion-only unavailable advice. The
+  [native turn loop](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/session/turn.rs)
+  continues after every block without a hook-specific retry cap. After one
+  repair continuation, a still-positive callback emits `continue: false` with
+  visible `stopReason`/`systemMessage`, preserving state. Native code breaks and
+  returns normally; this is a truthful unresolved terminal warning, not a failed
+  turn or the canonical repeated-finding guard. Automatic recovery is deliberately
+  bounded; repeated positive-guard parity remains unsupported.
+- Fallow cannot provide its completion-time non-blocking model advisory. The
+  immediate post-edit fallback instead reverses uniquely anchored supported
+  Add/Update hunks against only bounded addressed TS/JS postimages, builds an
+  in-memory unified diff, and calls the unchanged detector. It never persists
+  source/diff text or infers attribution from a dirty worktree. Moves, deletes,
+  ambiguous hunks and unavailable postimages produce at most one bounded
+  unavailable advisory per native operation. A clean result is silent.
+
+The existing `collaborationspawn_agent` selection binding is retained. The
+tagged [native spawn schema](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/tools/handlers/multi_agents_spec.rs)
+removes both model and reasoning controls unless its exposure option is enabled.
+An unconditional strict `spawn_agent` alias would block interfaces which cannot
+supply those fields, so that unverified alias remains neutral. The observed
+collaboration interface exposes both controls; its valid, invalid and disable
+boundaries remain covered. This does not certify every native feature variant.
+
+The [current hook guide](https://learn.chatgpt.com/docs/hooks) requires review and
+trust of non-managed definitions. Full reconciliation preserves existing native
+definitions in place, deliberate disables, compatible user settings/roles and
+foreign files. New definitions remain untrusted until the user's native review;
+the installer never writes trust hashes. Disposable-home tests cover all 50
+rows, full update/removal and convergence, state isolation, bounded retry
+behavior, exact-edit Fallow advice/privacy, and the dependency dispatch split.
+No CLI/model probe or live hook execution follows from those tests.
 
 ## Desktop 0.159.2 delivery revalidation
 
@@ -297,9 +379,9 @@ The maintained adapter therefore retains the supported core instead of dropping
 the whole component. `PreToolUse` on `apply_patch` captures the explicit patch
 paths, matching `PostToolUse` reports newly introduced findings, and `Stop`
 revalidates and blocks only unresolved attributed findings. A true native
-`stop_hook_active` makes a repeated callback silent, so one unresolved finding
-can create at most one automatic continuation in a turn; its state remains for
-revalidation on the next user turn. Completion-only
+`stop_hook_active` bounds automatic repair continuation to one. The current
+transport terminates a still-positive retry with a visible unresolved reason;
+its state remains for revalidation on the next user turn. Completion-only
 unavailable-check advice stays silent because forcing another model turn would
 change its non-blocking contract. This partial binding remains explicit in the
 installation report and does not make the full component supported.
@@ -323,14 +405,15 @@ Using the session `cwd` for those decisions would create false blocks.
 when Codex already intends to ask for approval; `PostToolUse` cannot prevent a
 side effect.
 
-`mainframe-fallow-quality` remains wholly unbound after the same fallback
-audit. Its contract requires an exact attributed in-memory diff. The available
+In the older mappings, `mainframe-fallow-quality` remains wholly unbound after
+the earlier fallback audit. Its contract requires an exact attributed in-memory diff. The available
 Codex events cannot provide that diff after the edit without persisting source
 content or reconstructing it from a dirty worktree that may include unrelated
 user changes. A `Stop` placement would also force another model turn for an
 advisory. Those placements are misleading or noisier than their decision
 value, so omission is intentional rather than inferred from a missing preferred
-event.
+event. The current Desktop mapping above adds a bounded attributed per-edit
+advisory without claiming completion parity.
 
 Do not guess patch input from a shell-tool example, infer subagent delivery from
 a primary-session event, or label a missing snapshot as a clean result. Use the

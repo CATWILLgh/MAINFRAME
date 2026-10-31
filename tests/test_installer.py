@@ -736,7 +736,9 @@ class InstallationTests(unittest.TestCase):
         blocked = json.loads(self.invoke_payload("mainframe-code-quality", stop).stdout)
         self.assertEqual(blocked["decision"], "block")
         continued = {**stop, "stop_hook_active": True}
-        self.assertEqual(self.invoke_payload("mainframe-code-quality", continued).stdout, "")
+        unresolved = json.loads(self.invoke_payload("mainframe-code-quality", continued).stdout)
+        self.assertFalse(unresolved["continue"])
+        self.assertIn("unresolved", unresolved["stopReason"])
 
         self.assertEqual(self.invoke_payload("mainframe-code-quality", event("PreToolUse", "repair")).stdout, "")
         source.write_text("package sample\n", encoding="utf-8")
