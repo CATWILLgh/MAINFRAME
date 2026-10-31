@@ -233,6 +233,10 @@ class ZCodeHookFixture(unittest.TestCase):
         stop.pop("tool_input")
         blocked = json.loads(self.invoke("mainframe-code-quality", stop).stdout)
         self.assertEqual(blocked["decision"], "block")
+        stop["stop_hook_active"] = True
+        retry = json.loads(self.invoke("mainframe-code-quality", stop).stdout)
+        self.assertEqual(retry["decision"], "block")
+        self.assertIn("remains unresolved", retry["reason"])
 
         self.assertEqual(self.invoke("mainframe-code-quality", event("PreToolUse", "repair")).stdout, "")
         source.write_text("package sample\n", encoding="utf-8")

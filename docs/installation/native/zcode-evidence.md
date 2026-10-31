@@ -1,5 +1,53 @@
 # ZCode bundled runtime hook evidence
 
+## Desktop 3.17.1.9553 full delivery
+
+The same pinned bundle below was re-inspected for full Desktop delivery on
+2026-11-01. The [current-build probe](../../../tests/test_zcode_current.py)
+executes only extracted pure output-parser, matcher and continuation functions
+in an isolated Node VM. PreToolUse deny and PostToolUse context pass; advisory
+Stop output cannot continue, positive Stop output continues below count three,
+and count three cannot continue. `systemMessage` plus `continue: false` supplies
+no non-blocking warning channel. The maintained adapter keeps native bounded
+repair retries and labels a still-positive retry unresolved. This is source and
+fixture evidence, not observed Desktop acceptance.
+
+Native `Write` returns `filePath`, `originalFile`, `content` and `type`; native
+`Edit` returns the exact original text, matched old/new strings and `replaceAll`.
+The successful tool caller passes the unformatted result `xt` to `Lko` before
+model-content projection, and `hIn` includes it as `tool_response`. Post-hook
+contexts are merged into `hookAdditionalContexts` for the responsible model.
+These fields permit an immediate Fallow partial binding with an in-memory diff:
+the bridge uses only the addressed response, verifies its postimage against a
+bounded file read, and supplies whole-file ownership only for Write. It retains
+no source, patch, diff or broad dirty-worktree snapshot. Missing/conflicting
+responses and concurrent postimage changes return bounded unavailable advice.
+Native Edit's empty-replacement line-break rule is covered by fixtures.
+
+The public Agent schema `cat` exposes only `description`, `prompt`,
+`subagent_type` and `run_in_background`. Neither per-call model nor effort exists;
+the strict canonical selection guard cannot be bound to it. The Markdown role
+parser `toe` still projects `model` and `thoughtLevel` through `ire`, plus color
+and AGENTS.md injection. Those user presets are preserved. They do not establish
+explicit choices by the delegating agent. The current default child constructor
+and its `sTt` client-port projection omit hooks and hook runners. The native
+hook-event enum contains seven events, with no SubagentStart or SubagentStop.
+Primary-only scope is consequently retained from current evidence.
+
+The current source retains user `AGENTS.md` lookup in `mPs`, private command
+roots in `jpo`/`kSn`, role scanning under `storageRoot/agents` and the `SKILL.md`
+entrypoint. The [official hooks](https://zcode.z.ai/en/docs/hooks) and
+[subagent definition](https://zcode.z.ai/en/docs/subagents) references corroborate
+the user-level configuration and role presets. The hook page still says project
+hooks are ignored, while this bundle contains workspace trust machinery; this
+route writes only user configuration and does not claim workspace-hook support.
+
+Disposable current-build tests cover all 50 inventory rows, convergence, exact
+Fallow scope and deduplication, no source retention, native enable toggles,
+global disables and role-setting preservation. Current full delivery includes
+the tested Fallow runtime dependency; older build allowances are unchanged.
+No CLI agent, app-server, application initializer or model probe was used.
+
 ## Desktop 3.17.1.9553 task command and pre-edit guard
 
 Reviewed 2026-11-01 from `/Applications/ZCode.app/Contents/Info.plist` and shipped
@@ -19,8 +67,8 @@ deny output and fresh-session snapshots. Disposable tests in
 [test_todo_zcode.py](../../../tests/test_todo_zcode.py) cover the narrow same-source
 route, preservation, convergence, conflicts, canonical Write/Edit denial and
 disabled or missing cached implementations. No application initializer, CLI,
-model, live configuration or acceptance session was used. Only `/todo` delivery
-is newly allowed on this build; other build mappings remain unchanged.
+model, live configuration or acceptance session was used. The narrow `/todo`
+route remains available alongside the full route validated above.
 
 ## Desktop 3.14.5.7961 skill delivery
 

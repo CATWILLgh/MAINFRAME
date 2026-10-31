@@ -2,9 +2,10 @@
 
 Use this maintained route when the installation request is running in ZCode
 Desktop from this MAINFRAME checkout. The original inspected mapping targets macOS
-ZCode build **3.11.2.6792**. The **3.14.4.7912** mapping was revalidated against its shipped hook parser,
-context consumers and current official documentation. New conversation acceptance
-remains separate. The older **3.14.3.7762** route permits bounded
+ZCode build **3.11.2.6792**. Full Desktop delivery is also supported on
+**3.14.4.7912** and **3.17.1.9553** after inspection of their shipped native
+contracts. The current build includes immediate Fallow advice from exact native
+Write/Edit responses. New conversation acceptance remains separate. The older **3.14.3.7762** route permits bounded
 skill updates and the exact validated pre-shell transport consolidation in an
 existing same-source installation; other native-hook changes, roles, commands,
 and permissions remain blocked. Version detection reads the selected application's plist;
@@ -18,9 +19,8 @@ modules. Unknown builds need a separately scoped compatibility check.
 
 ## Deliver only /todo
 
-Build **3.17.1.9553** has a separately reviewed route for `/todo` in an existing,
-same-source receipted Desktop installation. This allowance does not extend the
-full-install build list. The bundled command expander appends text supplied after
+Build **3.17.1.9553** also retains a narrow route for `/todo` in an existing,
+same-source receipted Desktop installation. The bundled command expander appends text supplied after
 `/todo` as user arguments; the workflow records or updates the active worktree's
 `.docs/todo` index and `.docs/todos/*.md` notes. Write the note before its index
 entry. See [the command](../../commands/todo.md) for the agreed groups and limits.
@@ -142,12 +142,29 @@ while an introduced finding still exists. Advisory-only Stop output remains
 silent because ZCode otherwise delivers it by forcing another model turn.
 
 The installer report supplies current delivery counts from the exact inventory.
-Two hook contracts remain unsupported in the inspected builds:
+Two completion contracts remain unsupported:
 `mainframe-code-quality` and `mainframe-fallow-quality` require non-blocking completion advice.
 ZCode collects `Stop` advice but delivers it to the model only with a new model
 continuation. The useful mainframe-code-quality core is installed and reported as a
 retained partial binding, but it is not the full canonical contract. Do not
 silently change timing or force advice through a completion block.
+
+On **3.17.1.9553**, `mainframe-fallow-quality` also has a retained partial
+binding: an immediate `PostToolUse` advisory for attributed TS/JS `Write|Edit`
+results. Native responses supply the original content and actual replacement;
+the bridge compares the addressed postimage and builds its diff in memory.
+Missing, conflicting, oversized or concurrently changed attribution produces
+bounded unavailable advice. No source or diff is retained. The current full
+route verifies the tested Fallow dependency alongside Ruff, Oxlint and Semgrep;
+the `/todo`-only route provisions none of them.
+
+The current native `Agent` input exposes neither a per-call model nor reasoning
+effort. `mainframe-subagent-selection` is therefore reported as unsupported with
+no runtime denial. User role `model`/`thoughtLevel` presets are preserved as
+native configuration. A still-positive quality Stop retry carries an explicit
+unresolved reason; ZCode caps repair continuations at three. Its parser has no
+non-blocking final warning channel equivalent to Codex's, so a final green
+quality result is never inferred from reaching that cap.
 
 The inspected default subagent runtime does **not inherit hook runners**.
 The maintained registrations protect the primary runtime; they do not establish
@@ -162,7 +179,8 @@ It does not call skills or commands, spawn roles, use credentials, launch a
 browser, or test native hook dispatch. Delivery and native verification have
 separate schema-2 fields in `ADAPTATION.zcode.json`.
 
-After successful verification, report the two unsupported hooks and primary-only hook coverage. When skill
+After successful verification, report the unsupported full contracts, retained
+partial bindings and primary-only hook coverage. When skill
 files changed, ask the user to use **Settings -> Skills -> Refresh** once and
 then open a new ZCode Desktop session; retain that handoff in adaptation state
 until native acceptance clears it. Otherwise ask only for a new session. Preserve a deliberate

@@ -15,19 +15,20 @@ import tempfile
 
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, regular_bytes, reconcile_files, retire_recorded_legacy_file)
-from .runtime import CODE_QUALITY_TOOLS, runtime_bin
+from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 from .shared import inventory, _instruction, skill_resources
 from .state import reconcile_state, set_component
 
 KNOWN_RUNTIME = "3.11.2.6792"
-FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912"}
+CURRENT_DESKTOP_RUNTIME = "3.17.1.9553"
+FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912", CURRENT_DESKTOP_RUNTIME}
 CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
 SKILL_DELIVERY_RUNTIMES = {"3.14.5.7961"}
 TODO_DELIVERY_RUNTIMES = FULL_MAPPING_RUNTIMES | {"3.17.1.9553"}
 TODO_HOOK = "mainframe-todo-limits"
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", TODO_HOOK)
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", TODO_HOOK, "mainframe-fallow-quality")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -37,7 +38,7 @@ HOOK_RENAMES = {
     "code-quality": "mainframe-code-quality",
 }
 READ_ONLY = {"mainframe-researcher", "mainframe-test-auditor", "mainframe-consequential-reviewer"}
-LEGACY_HOOKS = tuple(n for n in HOOK_NAMES if n not in {"mainframe-skill-reminder", TODO_HOOK})
+LEGACY_HOOKS = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint")
 LEGACY_BRIDGE_SHA256 = "5761f656b9ead923dd48b91adb02935bcba3d922155464a19ae0205a520e75d8"
 COMPATIBLE_UPDATE_BRIDGE_SHA256 = {
     # Split four-process transport delivered before the bounded consolidation.
@@ -49,11 +50,21 @@ UNSUPPORTED = {
     "mainframe-code-quality": "The core edit lifecycle and revalidating completion guard are installed. The full contract remains unsupported because Stop drops advisory-only output unless it forces another model turn.",
     "mainframe-fallow-quality": "ZCode Stop delivers completion advice only by continuing the model; the canonical non-blocking completion advisory is unsupported in this build.",
 }
+CURRENT_UNSUPPORTED = {
+    **UNSUPPORTED,
+    "mainframe-code-quality": "The attributed Write/Edit lifecycle and revalidating Stop guard are retained. Full parity is unsupported: non-blocking completion advice has no model channel, and native Stop permits at most three repair continuations; still-positive retries emit an unresolved blocked-event reason rather than claiming resolution. Child runtimes do not inherit hook runners.",
+    "mainframe-fallow-quality": "Immediate PostToolUse advice is retained for exact native Write/Edit TS/JS responses, using an in-memory diff without source retention. Full completion timing is unsupported: Stop advice reaches the model only through another continuation, and child runtimes do not inherit hooks.",
+    "mainframe-subagent-selection": "The native Agent input exposes neither per-call model nor reasoning effort; a strict guard requires both controls. User role model/thoughtLevel presets are preserved, but they are not explicit per-call selection. No safe preventive binding is installed.",
+}
 HOOK_SCOPE = "Primary runtime only: the inspected ZCode default subagent path does not inherit hook runners."
 AUTOMATION_SKILL_COMMANDS = {"mainframe-tickets-find"}
 NATIVE_AGENT_SETTING_KEYS = ("color", "model", "thoughtLevel", "injectAgentsMd")
 OPEN_SESSION_ACTION = "Open a new ZCode Desktop session to load the delivered registrations."
 REFRESH_SKILLS_ACTION = "In ZCode Settings, refresh Skills once, then open a new Desktop session to load the delivered registrations."
+
+
+def runtime_tools(version: str | None, surface: str | None) -> tuple[str, ...]:
+    return CODE_QUALITY_TOOLS + FALLOW_TOOLS if version == CURRENT_DESKTOP_RUNTIME and surface == "desktop" else RUNTIME_TOOLS
 
 
 
@@ -362,6 +373,8 @@ class ZCode:
             if name in AUTOMATION_SKILL_COMMANDS:
                 add(self.skills / name / "SKILL.md", command_skill_body(text, name), "commands." + name)
         for name in HOOK_NAMES:
+            if name == "mainframe-fallow-quality" and self.version != CURRENT_DESKTOP_RUNTIME:
+                continue
             add(self.hooks / "detectors" / (name + ".py"), (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
         add(self.hooks / "bridge.py", Path(__file__).with_name("zcode_hook.py").read_bytes(), "hook transport")
         for filename, sourcefile in (("skill_reminder.py", "codex_skill_reminder.py"),
@@ -452,7 +465,22 @@ class ZCode:
                 raise Conflict("ZCode hook groups have an unsupported shape; preserve the configuration.")
         if "skills" in cfg and not isinstance(cfg["skills"], dict):
             raise Conflict("ZCode skill overrides must be an object.")
-        for event, groups in previous.get("hook_groups", {}).items():
+        prior_groups = deepcopy(previous.get("hook_groups", {}))
+        native_toggles = {}
+        def callback_key(callback):
+            return json.dumps({key: value for key, value in callback.items() if key != "enabled"}, sort_keys=True)
+        def group_key(group):
+            return {**group, "hooks": [callback_key(hook) for hook in group["hooks"]]}
+        if self.version == CURRENT_DESKTOP_RUNTIME:
+            for event, groups in prior_groups.items():
+                for index, group in enumerate(groups):
+                    matches = [candidate for candidate in events.get(event, [])
+                               if group_key(candidate) == group_key(group)]
+                    if len(matches) != 1 or any(not isinstance(hook.get("enabled"), bool) for hook in matches[0]["hooks"]):
+                        raise Conflict("An owned ZCode hook registration was edited or duplicated; preserve it for review.")
+                    groups[index] = deepcopy(matches[0])
+                    native_toggles.update((callback_key(hook), hook["enabled"]) for hook in matches[0]["hooks"])
+        for event, groups in prior_groups.items():
             current = events.get(event, [])
             for group in groups:
                 if current.count(group) != 1:
@@ -485,6 +513,14 @@ class ZCode:
             }
             desired_groups["PreToolUse"].append({"matcher": "Bash", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
             desired_groups["PostToolUse"].append({"matcher": "Bash|Read", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
+            if self.version == CURRENT_DESKTOP_RUNTIME:
+                desired_groups["PostToolUse"].append({"matcher": "Write|Edit", "hooks": [hook_registration(
+                    self.hooks, "mainframe-fallow-quality", self.event_state, 10000, runtime_bin(self.home))]})
+                for groups in desired_groups.values():
+                    for group in groups:
+                        for hook in group["hooks"]:
+                            if callback_key(hook) in native_toggles:
+                                hook["enabled"] = native_toggles[callback_key(hook)]
             expected_callbacks = [h for groups in desired_groups.values() for group in groups for h in group["hooks"]]
             for event, candidates in events.items():
                 for candidate in candidates:
@@ -507,7 +543,7 @@ class ZCode:
                     if group not in current:
                         current.append(group)
                         owned.setdefault(event, []).append(group)
-                    elif group in previous.get("hook_groups", {}).get(event, []):
+                    elif group in prior_groups.get(event, []):
                         owned.setdefault(event, []).append(group)
         enabled_added = previous.get("enabled_added", "enabled" not in hooks)
         if remove:
@@ -684,8 +720,9 @@ class ZCode:
                 and not any(change.needed for change in changes)
             )
             state_source = source if not remove else inventory(self.root, "zcode")
-            unsupported = {("hooks", n): why for n, why in UNSUPPORTED.items()} if not remove else {}
-            pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
+            limitations = CURRENT_UNSUPPORTED if self.version == CURRENT_DESKTOP_RUNTIME else UNSUPPORTED
+            unsupported = {("hooks", n): why for n, why in limitations.items()} if not remove else {}
+            pending = {} if self.version == CURRENT_DESKTOP_RUNTIME else {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
             delivered = [(cat, n) for cat, group in state_source["components"].items() for n in group
                          if not remove and (cat != "hooks" or n in HOOK_NAMES)
                          and (cat, n) not in unsupported and (cat, n) not in pending]
@@ -717,7 +754,7 @@ class ZCode:
                                     pending=pending if not remove else {}, next_actions=actions)
             if not remove:
                 for n in HOOK_NAMES:
-                    if n in UNSUPPORTED:
+                    if n in limitations:
                         continue
                     if regular_bytes(self.hooks / (".disabled-" + n)) is not None:
                         set_component(state, ("hooks", n), delivery="installed", verification="pending",
@@ -744,8 +781,9 @@ class ZCode:
                         verified[row["verification"]] += 1
         return changes, {"planned_delivery": planned,
                          "planned_verification": verified,
-                         "unsupported_full_contracts": UNSUPPORTED if not remove else {},
-                         "retained_partial_bindings": ({"mainframe-code-quality": UNSUPPORTED["mainframe-code-quality"]}
+                         "unsupported_full_contracts": limitations if not remove else {},
+                         "retained_partial_bindings": ({name: limitations[name] for name in ("mainframe-code-quality", "mainframe-fallow-quality")
+                                                         if name == "mainframe-code-quality" or self.version == CURRENT_DESKTOP_RUNTIME}
                                                        if not remove else {}),
                          "hook_scope": HOOK_SCOPE,
                          "hooks_globally_enabled": json.loads(config or b"{}").get("hooks", {}).get("enabled", False),

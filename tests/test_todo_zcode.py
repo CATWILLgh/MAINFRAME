@@ -202,7 +202,7 @@ class TodoZCodeTests(unittest.TestCase):
         self.assertIn("5000", json.loads(self.run_callback(payload).stdout)["hookSpecificOutput"]["permissionDecisionReason"])
         self.assertFalse(self.adapter.event_state.exists())
 
-    def test_full_mapping_packages_todo_without_expanding_its_build_allowance(self):
+    def test_full_mapping_packages_todo_with_exact_reviewed_build_allowance(self):
         from installer.zcode import FULL_MAPPING_RUNTIMES
         adapter = ZCode(ROOT, self.home, version="3.14.4.7912")
         artifacts = adapter.artifacts(inventory(ROOT, "zcode"))
@@ -212,7 +212,8 @@ class TodoZCodeTests(unittest.TestCase):
         callbacks = [hook for group in merged["hooks"]["events"]["PreToolUse"]
                      if group["matcher"] == "Write|Edit" for hook in group["hooks"]]
         self.assertEqual(sum(hook["args"][-2] == TODO for hook in callbacks), 1)
-        self.assertNotIn("3.17.1.9553", FULL_MAPPING_RUNTIMES)
+        self.assertIn("3.17.1.9553", FULL_MAPPING_RUNTIMES)
+        self.assertNotIn("unknown", FULL_MAPPING_RUNTIMES)
 
 
 if __name__ == "__main__":

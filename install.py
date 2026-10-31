@@ -242,7 +242,7 @@ def zcode_main(args, root, parser):
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
         SKILL_DELIVERY_RUNTIMES as ZCODE_SKILL_DELIVERY_RUNTIMES,
         TODO_DELIVERY_RUNTIMES as ZCODE_TODO_DELIVERY_RUNTIMES,
-        RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
+        runtime_tools as zcode_runtime_tools,
         desktop_version as zcode_version)
     if (args.codex_home or args.minimax_home
             or args.minimax_app or args.cline_home or args.cline_app
@@ -267,11 +267,16 @@ def zcode_main(args, root, parser):
     if args.hook and args.hook not in ZCODE_HOOK_NAMES:
         parser.error("Unknown maintained ZCode hook")
     adapter = ZCode(root, args.home, args.zcode_home, version, args.surface, args.adopt_existing)
+    zcode_tools = zcode_runtime_tools(version, args.surface)
+    if args.action == "enable" and any(
+            row.get("component") == "hooks.mainframe-fallow-quality"
+            for row in adapter.receipt().get("files", {}).values()):
+        zcode_tools = tuple(dict.fromkeys((*zcode_tools, "fallow")))
     if args.todo:
         return todo_delivery(args, adapter)
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, ZCODE_RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, zcode_tools)
         if version in ZCODE_CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
@@ -288,7 +293,7 @@ def zcode_main(args, root, parser):
         elif args.action in ("disable", "enable"):
             report = {}
             if args.action == "enable":
-                provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS, args.hook)
+                provision_runtime(report, adapter, zcode_tools, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable": time.sleep(6)
             report.update({"hook_control": args.action, "hooks": [args.hook] if args.hook else list(ZCODE_HOOK_NAMES)})
@@ -304,7 +309,7 @@ def zcode_main(args, root, parser):
                 adapter.validate_skill_delivery(changes, previous)
                 report["delivery_mode"] = "existing-installation bounded content delivery; Markdown skills, existing global instruction and destructive detector only"
             if not remove:
-                provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS)
+                provision_runtime(report, adapter, zcode_tools)
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
                 time.sleep(6)
