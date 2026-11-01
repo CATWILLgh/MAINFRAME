@@ -11,9 +11,10 @@ changes instead of repeating full adaptation research for an unchanged runtime.
 
 ## Desktop 0.165.0-alpha.1.2 full delivery
 
-The running app evidence identifies ChatGPT release `26.1023.50603`, build
-`22391`, and bundled `codex-package.json` engine `0.165.0-alpha.1.2`; current-task
-metadata agrees. The exact official tag resolves to
+The installed app evidence identifies ChatGPT release `26.1023.51421`, build
+`22530`, and bundled `codex-package.json` engine `0.165.0-alpha.1.2`. The engine
+identity is unchanged from the inspected delivery runtime; the Desktop app
+release is tracked separately and does not extend native acceptance. The exact official tag resolves to
 `720fec862a608ae1e5878d1eecb04fb93192e93c`. The relevant downloaded native files
 were checked against the complete tag tree's Git blob hashes. This admits full
 Desktop delivery for this exact runtime; it does not extend current-version CLI
