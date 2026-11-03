@@ -62,8 +62,10 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         source = inventory(self.source)
         report = self.apply()
         state = json.loads(self.adapter.state_path.read_bytes())
-        self.assertEqual(sum(map(len, state["components"].values())), 50)
-        self.assertEqual(set(state["components"]["hooks"]), set(source["components"]["hooks"]))
+        self.assertEqual(
+            {category: set(rows) for category, rows in state["components"].items()},
+            {category: set(rows) for category, rows in source["components"].items()},
+        )
         for category, rows in state["components"].items():
             for name, row in rows.items():
                 with self.subTest(category=category, name=name):

@@ -19,8 +19,9 @@ evidence, and `--cline-home` selects another configuration root. The legacy
 `--surface cli` implementation remains available, with no claim of current CLI
 compatibility from this Desktop qualification.
 
-The installer delivers one managed instruction block under `rules/`, all 23
-skills with their approved resources under `skills/`, seven YAML role profiles
+The installer delivers one managed instruction block under `rules/`, all skills
+in the [canonical inventory](../../ADAPTATION.example.json) with their approved
+resources under `skills/`, seven YAML role profiles
 under `agents/`, eight explicit slash workflows under `workflows/`, and unchanged
 canonical detectors behind `hooks/PreToolUse` and `PostToolUse`. Profiles bind
 required methods through `skills:`; the three read-only roles expose only native
@@ -42,8 +43,8 @@ advisories. Multi-file patches retain their complete bounded scope; native
 structured failed edits stay neutral. Private state and the ownership receipt
 live under `~/.cline/data/mainframe/`.
 
-All **50** inventoried components are accounted for: **47 installed**, **3
-unsupported full contracts**. Quality retains per-edit advice plus the new
+The adapter accounts for every inventoried component. The three unsupported
+full contracts are detailed below. Quality retains per-edit advice plus the new
 completion-tool check; Fallow retains per-edit structural advice. Neither has a
 universal continuation-capable completion event, because natural delegated
 completion can bypass `submit_and_exit` and `afterRun` ignores return values.

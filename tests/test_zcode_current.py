@@ -54,7 +54,11 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
         self.assertNotIn("SubagentStop", cfg["hooks"]["events"])
         state = json.loads(self.adapter.state_path.read_bytes())
         rows = [row for group in state["components"].values() for row in group.values()]
-        self.assertEqual(len(rows), 50)
+        source = json.loads((self.root / "ADAPTATION.example.json").read_text())
+        self.assertEqual(
+            {category: set(entries) for category, entries in state["components"].items()},
+            {category: set(entries) for category, entries in source["components"].items()},
+        )
         self.assertFalse(any(row["delivery"] == "pending" for row in rows))
         selection = state["components"]["hooks"]["mainframe-subagent-selection"]
         self.assertEqual(selection["delivery"], "unsupported")

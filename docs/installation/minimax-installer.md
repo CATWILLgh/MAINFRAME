@@ -24,13 +24,12 @@ Neither option changes the other adapters.
 
 ## Delivered shape
 
-The Plugin manifest declares all 23 canonical MAINFRAME Skills in the
+The Plugin manifest declares all canonical MAINFRAME Skills in the
 [inventory](../../ADAPTATION.example.json), eight command workflows rendered as
 Skills, and one Hook document. Seven native custom Agents are delivered separately
-at `~/.minimax/agents/<mainframe-name>/agent.md`. All 50 inventory rows are
-accounted for: 41 installed full mappings and nine unsupported full contracts
-(eight commands plus autonomous model/effort enforcement), all with retained
-partial bindings; no row remains pending delivery. The Hook document starts
+at `~/.minimax/agents/<mainframe-name>/agent.md`. The nine unsupported full
+contracts (eight commands plus autonomous model/effort enforcement) all retain
+partial bindings. The Hook document starts
 one composite command for each relevant event rather than one process per
 canonical detector:
 

@@ -142,6 +142,11 @@
         "source": "skills/mainframe-sentry",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-openspec": {
+        "source": "skills/mainframe-openspec",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {

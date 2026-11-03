@@ -174,7 +174,11 @@ class ClineInstallerTests(unittest.TestCase):
         self.assertIn('event=tool_call', (self.adapter.hooks / "PreToolUse").read_text())
         state = json.loads(self.adapter.state_path.read_text())
         rows = [row for group in state["components"].values() for row in group.values()]
-        self.assertEqual(len(rows), 50)
+        source = json.loads((self.source / "ADAPTATION.example.json").read_text())
+        self.assertEqual(
+            {category: set(entries) for category, entries in state["components"].items()},
+            {category: set(entries) for category, entries in source["components"].items()},
+        )
         self.assertTrue(all(row["delivery"] != "pending" for row in rows))
         self.assertEqual(state["components"]["hooks"]["mainframe-todo-limits"]["delivery"], "installed")
         selection = state["components"]["hooks"]["mainframe-subagent-selection"]

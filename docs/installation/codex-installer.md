@@ -22,8 +22,9 @@ its evidence, rather than bypassing the version check or writing a second instal
 
 CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2 and
 **0.165.0-alpha.1.2** support the full maintained delivery route, including
-complete skill packages, roles, explicit commands and native hooks. The current
-mapping accounts for all 50 canonical components. Skills and command projections
+complete skill packages, roles, explicit commands and native hooks. The mapping
+accounts for every entry in the [canonical inventory](../../ADAPTATION.example.json).
+Skills and command projections
 are delivered only to `$CODEX_HOME/skills`; role files use `$CODEX_HOME/agents`.
 The shared `.agents/skills` root is never a delivery destination; an older
 receipt can authorize retirement of its unchanged owned files during migration.
