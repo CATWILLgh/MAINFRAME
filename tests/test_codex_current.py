@@ -25,7 +25,7 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temporary_source = tempfile.TemporaryDirectory(prefix="mainframe-current-source-")
         cls.source = Path(cls.temporary_source.name).resolve()
-        for directory in ("instructions", "skills", "agents", "commands", "hooks"):
+        for directory in ("instructions", "skills", "agents", "commands", "hooks", "plugins"):
             shutil.copytree(ROOT / directory, cls.source / directory, ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("ADAPTATION.example.json", ".gitignore", "install.py"):
             shutil.copyfile(ROOT / name, cls.source / name)

@@ -20,7 +20,7 @@ class TodoDeliveryTests(unittest.TestCase):
             base = Path(tmp).resolve()
             source, home = base / 'source', base / 'home'
             source.mkdir(); home.mkdir()
-            for name in ('instructions', 'skills', 'agents', 'commands', 'hooks', 'installer'):
+            for name in ('instructions', 'skills', 'agents', 'commands', 'hooks', 'plugins', 'installer'):
                 shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns('__pycache__'))
             for name in ('ADAPTATION.example.json', '.gitignore', 'install.py'):
                 shutil.copy2(ROOT / name, source / name)

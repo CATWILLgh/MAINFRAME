@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import inventory, plan_skill_delivery, skill_resources
+from .shared import inventory, plan_skill_delivery, skill_resources, unsupported_dsh_plugins
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -369,7 +369,10 @@ class MiniMax:
             unchanged = bool(not remove and prior_state.get("target", {}).get("config_home") == str(self.minimax)
                              and prior_state.get("target", {}).get("version") == self.version
                              and not any(change.needed for change in changes))
-            unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
+            unsupported = {
+                **unsupported_dsh_plugins(source),
+                **{("commands", name): COMMAND_REASON for name in source["components"]["commands"]},
+            }
             unsupported[("hooks", "mainframe-subagent-selection")] = SELECTION_REASON
             pending = {}
             delivered = [
@@ -414,6 +417,7 @@ class MiniMax:
         return changes, {
             "planned_delivery": planned, "planned_verification": verified,
             "unsupported_full_contracts": ({
+                **{name: reason for (_, name), reason in unsupported_dsh_plugins(source).items()},
                 **{name: COMMAND_REASON for name in source["components"]["commands"]},
                 "mainframe-subagent-selection": SELECTION_REASON,
             } if not remove else {}),

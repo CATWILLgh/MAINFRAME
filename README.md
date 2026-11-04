@@ -5,7 +5,10 @@ and hooks for coding agents. The repository stores one canonical version of
 each component. A maintained installer generates native copies from these sources
 and a small product-specific mapping. Maintained implementations target Codex,
 ZCode Desktop, MiniMax Code Desktop, and Cline Desktop
-or CLI. Other products require separately assigned adapter development.
+or CLI. A bounded [DSH source-plugin adapter](docs/installation/dsh-adapter.md)
+also owns three native DSH source bundles and read-only planning/native handoff;
+it is not a full global MAINFRAME installer. Other products require separately
+assigned adapter development.
 
 Canonical content stays product-neutral. Native packaging, registration,
 lifecycle handling, and installation checks live under [installer/](installer/).
@@ -117,6 +120,7 @@ installable component identities and canonical sources.
 | Listed files under [commands/](commands/) | Explicit user commands or the closest supported native equivalent |
 | Listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
 | [shared/credentials/mainframe-secret](shared/credentials/mainframe-secret) | The global `mainframe-secret` helper when a compatible command is not already present |
+| Listed bundles under [plugins/dsh/](plugins/dsh/) | DSH-native plugin sources; read-only planning and separate native installation handoff |
 
 Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are runtime support for
 listed hooks, not separate MAINFRAME components. Before registering an active

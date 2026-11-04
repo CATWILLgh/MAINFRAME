@@ -1,0 +1,3 @@
+- insert:
+    - id: activity-analytics
+      name: '@local/activity-analytics'

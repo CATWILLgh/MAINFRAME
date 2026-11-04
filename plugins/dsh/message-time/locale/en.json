@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Message timestamps",
+    "description": "Adds compact timestamps for user messages and the start and completion of full agent turns."
+  }
+}

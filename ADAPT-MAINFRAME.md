@@ -35,8 +35,13 @@ Read exactly the matching procedure:
 - **ZCode Desktop:** [zcode-installer.md](docs/installation/zcode-installer.md).
 - **MiniMax Code Desktop:** [minimax-installer.md](docs/installation/minimax-installer.md).
 - **Cline Desktop or CLI:** [cline-installer.md](docs/installation/cline-installer.md).
+- **DSH:** [dsh-adapter.md](docs/installation/dsh-adapter.md). This bounded route
+  supports source `plan`/`verify` and native plugin handoff only. Do not run
+  `apply` or install other MAINFRAME components through it. Keep source readiness
+  separate from profile delivery; native plugin changes require the explicit
+  installation/update scope and prerequisites described there.
 
-Follow that procedure's `plan`, `apply`, and `verify` commands. Reuse the
+For the four full delivery adapters, follow that procedure's `plan`, `apply`, and `verify` commands. Reuse the
 maintained mapping; do not write another installer, copy components manually,
 run the generic adaptation loop, or ask another model to adapt the inventory.
 The agent resolves actual instruction conflicts and unexpected environments;

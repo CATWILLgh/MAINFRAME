@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="message" x1="12" y1="13" x2="43" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#91BFFF"/>
+      <stop offset="1" stop-color="#527FE1"/>
+    </linearGradient>
+    <linearGradient id="clock" x1="34" y1="31" x2="54" y2="55" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#75DFDC"/>
+      <stop offset="1" stop-color="#3BB5BA"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(32 32) scale(0.88) translate(-32 -32)">
+  <path d="M17 13h26a6 6 0 0 1 6 6v16a6 6 0 0 1-6 6H26l-9 7v-7a6 6 0 0 1-6-6V19a6 6 0 0 1 6-6Z" fill="url(#message)"/>
+  <path d="M19 23h20M19 30h12" stroke="#E3EFFF" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="44" cy="44" r="12" fill="url(#clock)"/>
+  <path d="M44 37v7l4.5 3" stroke="#123F63" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

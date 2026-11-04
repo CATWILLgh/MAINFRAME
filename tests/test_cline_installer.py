@@ -19,7 +19,7 @@ class ClineInstallerTests(unittest.TestCase):
     def setUpClass(cls):
         cls.sources = tempfile.TemporaryDirectory(prefix="mainframe-cline-source-")
         cls.source = Path(cls.sources.name).resolve()
-        for directory in ("instructions", "skills", "agents", "commands", "hooks", "installer"):
+        for directory in ("instructions", "skills", "agents", "commands", "hooks", "plugins", "installer"):
             shutil.copytree(ROOT / directory, cls.source / directory, ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("ADAPTATION.example.json", ".gitignore", "install.py"):
             shutil.copy2(ROOT / name, cls.source / name)

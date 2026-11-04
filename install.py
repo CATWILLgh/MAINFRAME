@@ -57,7 +57,7 @@ def provision_runtime(report, adapter, tools, hook=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("product", choices=["cline", "codex", "minimax", "zcode"])
+    parser.add_argument("product", choices=["cline", "codex", "dsh", "minimax", "zcode"])
     parser.add_argument("action", choices=["plan", "apply", "verify", "disable", "enable", "uninstall", "recover"])
     parser.add_argument("--home", type=Path, default=Path.home(), help="Explicit target home; isolated fixture roots never imply native proof")
     parser.add_argument("--zcode-home", type=Path, help="Explicit ZCode configuration root")
@@ -78,6 +78,23 @@ def main(argv=None):
     parser.add_argument("--skill", help="Deliver only this exact canonical skill into an existing Desktop installation")
     parser.add_argument("--todo", action="store_true", help="Deliver only the project idea command and its addressed guard into an existing Codex or ZCode Desktop installation")
     args = parser.parse_args(argv)
+    if args.product == "dsh":
+        root = Path(__file__).resolve().parent
+        if Path.cwd().resolve() != root:
+            raise Conflict("Open the MAINFRAME repository and run its installer from that root.")
+        if args.action not in ("plan", "verify"):
+            parser.error("DSH source adapter supports plan/verify only; use native plugin_manager for profile lifecycle actions")
+        if not args.surface:
+            parser.error("DSH requires --surface desktop or --surface cli as selection metadata, not native proof")
+        if (args.zcode_home or args.zcode_app or args.minimax_home or args.minimax_app
+                or args.cline_home or args.cline_app or args.codex_home or args.adopt_existing
+                or args.runtime_version or args.executable or args.native or args.instructions_reviewed
+                or args.hook or args.skill is not None or args.todo):
+            parser.error("DSH source adapter does not accept other-product, instruction, runtime, native, or component options")
+        from installer.dsh import DSH
+        _, report = DSH(root, args.home, surface=args.surface).plan()
+        show(report, args.details)
+        return 0  # Source validation only; report explicitly denies profile verification.
     if args.todo and (args.product not in ("codex", "zcode")
                       or args.action not in ("plan", "apply", "verify")
                       or args.surface != "desktop" or args.skill or args.hook or args.native

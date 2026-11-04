@@ -24,7 +24,7 @@ class PayloadBoundaryTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve() / "source"
         self.root.mkdir()
-        for name in ("skills", "instructions", "agents", "commands", "hooks"):
+        for name in ("skills", "instructions", "agents", "commands", "hooks", "plugins"):
             shutil.copytree(ROOT / name, self.root / name,
                             ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(ROOT / "ADAPTATION.example.json", self.root)

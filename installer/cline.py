@@ -13,7 +13,8 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import _instruction, inventory, plan_skill_delivery, render_skill_artifacts
+from .shared import (_instruction, inventory, plan_skill_delivery, render_skill_artifacts,
+                     unsupported_dsh_plugins)
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -431,6 +432,7 @@ class Cline:
                              and prior_state.get("target", {}).get("version") == self.version
                              and not any(change.needed for change in changes))
             unsupported = {
+                **unsupported_dsh_plugins(source),
                 ("hooks", "mainframe-fallow-quality"): COMPLETION_REASON + " " + FALLOW_PARTIAL,
                 ("hooks", "mainframe-code-quality"): COMPLETION_REASON + " " + CODE_QUALITY_PARTIAL,
             }
@@ -489,6 +491,7 @@ class Cline:
         return changes, {
             "planned_delivery": planned, "planned_verification": verified,
             "unsupported_full_contracts": ({
+                **{name: reason for (_, name), reason in unsupported_dsh_plugins(source).items()},
                 "mainframe-code-quality": COMPLETION_REASON,
                 "mainframe-fallow-quality": COMPLETION_REASON,
                 "mainframe-subagent-selection": SELECTION_REASON,

@@ -1,0 +1,3 @@
+- insert:
+    - id: secrets-vault
+      name: '@local/secrets-vault'

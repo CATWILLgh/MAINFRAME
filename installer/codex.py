@@ -19,7 +19,8 @@ import tomllib
 from .codex_skill_reminder import ROLE_MATCHER
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, reconcile_files, regular_bytes, retire_recorded_legacy_file)
-from .shared import BEGIN, END, _instruction, inventory, plan_skill_delivery, render_skill_artifacts
+from .shared import (BEGIN, END, DSH_PLUGINS, _instruction, inventory, plan_skill_delivery,
+                     render_skill_artifacts, unsupported_dsh_plugins)
 from .state import component_keys, reconcile_state, set_component
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -85,9 +86,12 @@ def runtime_tools(version: str | None, surface: str | None) -> tuple[str, ...]:
 
 def _validate_mapping(source: dict) -> None:
     components = source["components"]
-    for category in ("mcp", "plugins", "runtime", "settings"):
+    for category in ("mcp", "runtime", "settings"):
         if components[category]:
             raise Conflict(f"The Codex adapter has no mapping for the new {category} inventory.")
+    if any(name not in DSH_PLUGINS or DSH_PLUGINS[name] != row.get("source")
+           for name, row in components["plugins"].items()):
+        raise Conflict("The Codex adapter has no mapping for the new plugins inventory.")
     if set(components["hooks"]) != set(HOOK_NAMES) | set(LIMITATIONS):
         raise Conflict("A new hook requires a tested Codex event mapping.")
     expected_agents = READ_ONLY_ROLES | {
@@ -744,7 +748,7 @@ class Codex:
                 and prior_state.get("target", {}).get("version") == self.version
                 and not any(change.needed for change in changes)
             )
-            unsupported = {}
+            unsupported = unsupported_dsh_plugins(source)
             pending = {}
             if self.version not in SELECTION_UPDATE_RUNTIMES | {CURRENT_DESKTOP_RUNTIME}:
                 pending[("hooks", "mainframe-subagent-selection")] = "Subagent-selection controls and binding require runtime validation; tested on Desktop 0.163.0-alpha.11."
@@ -798,9 +802,10 @@ class Codex:
         changes.sort(key=order)
         report["changes"] = [change.summary() for change in changes if change.needed]
         if not remove:
-            report["unsupported_full_contracts"] = (
-                limitations if mapping_supported(self.version, self.surface) else {}
-            )
+            report["unsupported_full_contracts"] = {
+                **(limitations if mapping_supported(self.version, self.surface) else {}),
+                **{name: reason for (_, name), reason in unsupported_dsh_plugins(source).items()},
+            }
             report["retained_partial_bindings"] = {
                 "mainframe-destructive-operations": LIMITATIONS["mainframe-destructive-operations"],
                 "mainframe-commit-secrets": LIMITATIONS["mainframe-commit-secrets"],

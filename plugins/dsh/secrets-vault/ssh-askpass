@@ -1,0 +1,3 @@
+#!/bin/sh
+# Static launcher: only public executable/helper paths are passed in argv/env.
+exec "$DSH_SSH_ASKPASS_NODE" "${0}.cjs"

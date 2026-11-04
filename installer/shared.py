@@ -12,6 +12,20 @@ from .core import Change, Conflict, digest, encode_json, observed, reconcile_fil
 from .state import set_component
 
 
+DSH_PLUGINS = {
+    name: f"plugins/dsh/{name}"
+    for name in ("activity-analytics", "message-time", "secrets-vault")
+}
+
+
+def unsupported_dsh_plugins(source: dict) -> dict[tuple[str, str], str]:
+    """DSH runtime plugins have no native binding in the existing products."""
+    return {
+        ("plugins", name): "DSH-only runtime plugin; not installed in this product."
+        for name in DSH_PLUGINS if name in source["components"]["plugins"]
+    }
+
+
 def _skill_resource_names(root: Path, bases: dict[str, Path]) -> set[str]:
     """Apply source ownership and ignore rules using filename-only Git output."""
     command = ["git", "-C", str(root), "-c", "core.excludesFile=/dev/null"]
@@ -219,6 +233,8 @@ def inventory(root: Path, product: str = "codex") -> dict:
     }
     if components["shared"] != expected_shared:
         raise Conflict("The shared-support inventory requires an installer update.")
+    if {name: row.get("source") for name, row in components["plugins"].items()} != DSH_PLUGINS:
+        raise Conflict("The DSH plugin inventory requires an installer update.")
     sources = []
     for group in components.values():
         for name, row in group.items():
@@ -233,7 +249,7 @@ def inventory(root: Path, product: str = "codex") -> dict:
             ):
                 raise Conflict(f"Invalid canonical source: {name}")
             sources.append(row["source"])
-    if len(sources) != 51 or len(sources) != len(set(sources)):
+    if len(sources) != 54 or len(sources) != len(set(sources)):
         raise Conflict("The source inventory identities require an installer update.")
     for relative in (f"ADAPTATION.{product}.json", "shared/credentials/credentials-index.md"):
         owner = subprocess.run(

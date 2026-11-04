@@ -24,7 +24,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
         base = Path(self.temporary.name).resolve()
         self.source = base / "source"
         self.source.mkdir()
-        for name in ("instructions", "skills", "agents", "commands", "hooks", "installer"):
+        for name in ("instructions", "skills", "agents", "commands", "hooks", "plugins", "installer"):
             shutil.copytree(ROOT / name, self.source / name, ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("ADAPTATION.example.json", ".gitignore", "install.py"):
             shutil.copyfile(ROOT / name, self.source / name)
@@ -162,7 +162,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
                     source.read_bytes(),
                 )
 
-        self.assertEqual(report["planned_delivery"], {"installed": 42, "pending": 0, "unsupported": 9})
+        self.assertEqual(report["planned_delivery"], {"installed": 42, "pending": 0, "unsupported": 12})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
         source = json.loads((self.source / "ADAPTATION.example.json").read_text())
@@ -244,7 +244,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
 
     def test_native_roles_and_new_guards_account_for_all_components(self):
         report = self.apply()
-        self.assertEqual(report["planned_delivery"], {"installed": 42, "pending": 0, "unsupported": 9})
+        self.assertEqual(report["planned_delivery"], {"installed": 42, "pending": 0, "unsupported": 12})
         for name in ("mainframe-subagent-selection", "mainframe-todo-limits"):
             self.assertTrue((self.adapter.plugin / "hooks/detectors" / (name + ".py")).is_file())
         for source in (self.source / "agents").glob("*.md"):

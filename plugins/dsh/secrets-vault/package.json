@@ -1,0 +1,10 @@
+{
+  "name": "@local/secrets-vault",
+  "version": "1.3.0",
+  "description": "Profile-wide SQLCipher credential vault with secure entry and scoped agent operations",
+  "private": true,
+  "type": "module",
+  "exports": {".": "./index.js", "./client": "./client.js", "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg"},
+  "files": ["index.js", "client.js", "operations.js", "clipboard.js", "vault-store.js", "recovery-store.js", "ssh-askpass", "ssh-askpass.cjs", "vault.py", "cordis.patch.yml", "locale/*.json", "icon.svg", "README.md"],
+  "dsh": {"bundle": {"patch": "./cordis.patch.yml"}, "client": {"platform": "web", "immediately": true, "inject": ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-sidebar", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-commands", "@deepseek-ai/dsh-client-locale"]}}
+}

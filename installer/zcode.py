@@ -16,7 +16,8 @@ import tempfile
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, regular_bytes, reconcile_files, retire_recorded_legacy_file)
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
-from .shared import inventory, _instruction, plan_skill_delivery, render_skill_artifacts
+from .shared import (inventory, _instruction, plan_skill_delivery, render_skill_artifacts,
+                     unsupported_dsh_plugins)
 from .state import reconcile_state, set_component
 
 KNOWN_RUNTIME = "3.11.2.6792"
@@ -724,7 +725,10 @@ class ZCode:
             )
             state_source = source if not remove else inventory(self.root, "zcode")
             limitations = CURRENT_UNSUPPORTED if self.version == CURRENT_DESKTOP_RUNTIME else UNSUPPORTED
-            unsupported = {("hooks", n): why for n, why in limitations.items()} if not remove else {}
+            unsupported = {
+                **unsupported_dsh_plugins(state_source),
+                **{("hooks", n): why for n, why in limitations.items()},
+            } if not remove else {}
             pending = {} if self.version == CURRENT_DESKTOP_RUNTIME else {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
             delivered = [(cat, n) for cat, group in state_source["components"].items() for n in group
                          if not remove and (cat != "hooks" or n in HOOK_NAMES)
@@ -784,7 +788,10 @@ class ZCode:
                         verified[row["verification"]] += 1
         return changes, {"planned_delivery": planned,
                          "planned_verification": verified,
-                         "unsupported_full_contracts": limitations if not remove else {},
+                         "unsupported_full_contracts": ({
+                             **limitations,
+                             **{name: reason for (_, name), reason in unsupported_dsh_plugins(state_source).items()},
+                         } if not remove else {}),
                          "retained_partial_bindings": ({name: limitations[name] for name in ("mainframe-code-quality", "mainframe-fallow-quality")
                                                          if name == "mainframe-code-quality" or self.version == CURRENT_DESKTOP_RUNTIME}
                                                        if not remove else {}),

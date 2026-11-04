@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bow" x1="12" y1="12" x2="34" y2="36" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#91BFFF"/>
+      <stop offset="1" stop-color="#577FE1"/>
+    </linearGradient>
+    <linearGradient id="blade" x1="29" y1="27" x2="52" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#74DFD6"/>
+      <stop offset="1" stop-color="#38B2B1"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(32 32) scale(0.88) translate(-32 -32)">
+  <path d="m31 26 22 22-6 6-5-5v-6h-6v-6l-11-5 6-6Z" fill="url(#blade)"/>
+  <path fill-rule="evenodd" d="M24 10a14 14 0 1 0 0 28 14 14 0 0 0 0-28Zm0 8a6 6 0 1 0 0 12 6 6 0 0 0 0-12Z" fill="url(#bow)"/>
+  </g>
+</svg>

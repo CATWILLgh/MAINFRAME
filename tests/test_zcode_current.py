@@ -29,7 +29,7 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
         base = Path(self.temp.name).resolve()
         self.root, self.home = base / "source", base / "home"
         self.root.mkdir(); self.home.mkdir()
-        for name in ("instructions", "skills", "agents", "commands", "hooks", "installer"):
+        for name in ("instructions", "skills", "agents", "commands", "hooks", "plugins", "installer"):
             shutil.copytree(ROOT / name, self.root / name, ignore=shutil.ignore_patterns("__pycache__"))
         credentials = self.root / "shared/credentials"
         credentials.mkdir(parents=True)

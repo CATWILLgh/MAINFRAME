@@ -281,7 +281,23 @@
       }
     },
     "mcp": {},
-    "plugins": {},
+    "plugins": {
+      "activity-analytics": {
+        "source": "plugins/dsh/activity-analytics",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "message-time": {
+        "source": "plugins/dsh/message-time",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "secrets-vault": {
+        "source": "plugins/dsh/secrets-vault",
+        "delivery": "pending",
+        "verification": "pending"
+      }
+    },
     "runtime": {},
     "settings": {},
     "instructions": {

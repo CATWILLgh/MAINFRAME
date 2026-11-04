@@ -36,6 +36,10 @@ Desktop, read [minimax-installer.md](minimax-installer.md). For Cline Desktop
 or the Cline CLI, read [cline-installer.md](cline-installer.md). Follow the
 selected executable route; do not run a manual adaptation loop in parallel.
 
+For DSH, read [dsh-adapter.md](dsh-adapter.md). Its maintained route validates
+three source plugins and hands native lifecycle to `plugin_manager`; it does
+not install the rest of MAINFRAME or claim profile acceptance.
+
 Products without a maintained installer require separately assigned adapter
 development. Their native pages are orientation, not ready installation routes.
 The following progressive reading route is for that development work.
