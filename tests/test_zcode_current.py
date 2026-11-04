@@ -66,6 +66,21 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
         self.assertIn(FALLOW, report["retained_partial_bindings"])
         self.assertIn("Primary", report["hook_scope"])
 
+    def test_newer_desktop_is_admitted_only_for_the_selected_skill(self):
+        changes, _ = self.adapter.plan()
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        target = self.adapter.skills / "mainframe-openspec/SKILL.md"
+        target.unlink()
+        config = self.adapter.config.read_bytes()
+        self.adapter.version = "3.17.2.9661"
+        changes, report = self.adapter.plan_skill("mainframe-openspec")
+        self.assertEqual({row["path"] for row in report["changes"]},
+                         {str(target), str(self.adapter.state_path)})
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        self.assertEqual(target.read_bytes(), (self.root / "skills/mainframe-openspec/SKILL.md").read_bytes())
+        self.assertEqual(self.adapter.config.read_bytes(), config)
+        self.assertEqual(self.adapter.plan_skill("mainframe-openspec")[1]["changes"], [])
+
     def test_current_upgrade_preserves_role_settings_and_native_disables(self):
         self.adapter.version = "3.14.4.7912"
         changes, _ = self.adapter.plan()

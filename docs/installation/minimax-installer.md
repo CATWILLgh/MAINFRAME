@@ -22,6 +22,26 @@ remaining structural changes. `--minimax-app` selects another application bundle
 for version evidence; `--minimax-home` selects an explicit data directory.
 Neither option changes the other adapters.
 
+## Deliver one skill
+
+An existing same-source MAINFRAME installation can deliver one canonical skill
+on Desktop release **3.0.73**, inspected in build **3.0.73.170**. Use the exact
+inventory name, for example `mainframe-k3s`.
+
+```sh
+python3 -B install.py minimax plan --surface desktop --skill mainframe-k3s
+python3 -B install.py minimax apply --surface desktop --skill mainframe-k3s
+python3 -B install.py minimax verify --surface desktop --skill mainframe-k3s
+```
+
+The installer writes the skill and its approved resources inside
+`~/.minimax/plugins/mainframe/skills/<name>/`. It adds one entry to the
+existing installer-owned `.minimax-plugin/plugin.json` when needed and updates
+the matching ownership and adaptation records. A missing or edited manifest
+requires reconciliation. `verify` reports `scoped_update_matches` when the
+scoped plan converges. Wait for the Plugin rescan and confirm skill discovery
+in a fresh Desktop conversation.
+
 ## Delivered shape
 
 The Plugin manifest declares all canonical MAINFRAME Skills in the

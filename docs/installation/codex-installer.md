@@ -109,13 +109,15 @@ newly certified. The update does not provision unrelated analyzers and reports
 their readiness separately from `scoped_update_matches`. This is not a fresh
 installation or full native mapping. See the [text-update comparison](native/codex.md#desktop-01640-alpha111-text-update).
 
-### Deliver one skill on Desktop 0.165.0-alpha.1.2
+### Deliver one skill on Desktop
 
-Desktop **0.165.0-alpha.1.2** supports an explicit skill-only route for an
-existing same-source installation with a matching ownership receipt and
-schema-2 adaptation state. The exact tagged skill root and parser support
-complete packages under `$CODEX_HOME/skills`; this is not a full runtime mapping.
-See the [bounded source evidence](native/codex.md#desktop-01650-alpha12-skill-only-delivery).
+Desktop **0.165.0-alpha.1.2** and **0.166.0-alpha.5.1** support the explicit
+skill-only route for an existing same-source installation with a matching
+ownership receipt and schema-2 adaptation state. The tagged reader supports
+complete packages under `$CODEX_HOME/skills`. On **0.166.0-alpha.5.1**, only the
+skill route has been revalidated.
+See the source evidence for [0.165.0](native/codex.md#desktop-01650-alpha12-skill-only-delivery)
+and [0.166.0](native/codex.md#desktop-01660-alpha51-skill-only-delivery).
 
 ```sh
 python3 -B install.py codex plan --surface desktop --skill mainframe-sentry

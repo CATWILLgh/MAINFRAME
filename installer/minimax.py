@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import inventory, skill_resources
+from .shared import inventory, plan_skill_delivery, skill_resources
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -162,6 +162,50 @@ class MiniMax:
                 "commands." + name)
             manifest_skills.append(f"skills/{name}/SKILL.md")
         return manifest_skills
+
+    def _skill_artifacts(self, source: dict) -> dict:
+        artifacts = {}
+
+        def add(path, data, component, mode):
+            artifacts[path] = data, mode, component, False
+
+        self._skill_files(source, add)
+        return artifacts
+
+    def _skill_registration(self, name: str, previous: dict, source: dict) -> dict:
+        path = self.plugin / ".minimax-plugin/plugin.json"
+        record = previous.get("files", {}).get(str(path), {})
+        if record.get("owned") is not True or record.get("retain") or record.get("component") != "plugin package":
+            raise Conflict("Skill-only delivery requires the installer-owned MiniMax Plugin manifest.")
+        data, mode = observed(path)
+        if data is None or digest(data) != record.get("sha256") or mode != record.get("mode"):
+            raise Conflict("The installed MiniMax Plugin manifest is missing or was edited.")
+        manifest = json.loads(data)
+        if (not isinstance(manifest, dict) or manifest.get("schemaVersion") != 1
+                or manifest.get("name") != "mainframe" or not isinstance(manifest.get("skills"), list)
+                or any(not isinstance(entry, str) for entry in manifest["skills"])):
+            raise Conflict("Expected the receipted MAINFRAME MiniMax Plugin V1 manifest.")
+        entries = manifest["skills"]
+        selected = f"skills/{name}/SKILL.md"
+        if entries.count(selected) > 1:
+            raise Conflict("The MiniMax Plugin manifest registers the selected skill more than once.")
+        if selected not in entries:
+            components = source["components"]
+            canonical = {
+                f"skills/{skill}/SKILL.md": index
+                for index, skill in enumerate((*components["skills"], *components["commands"]))
+            }
+            position = next((i for i, entry in enumerate(entries)
+                             if canonical.get(entry, -1) > canonical[selected]), len(entries))
+            entries.insert(position, selected)
+            data = encode_json(manifest)
+        return {path: (data, mode, "plugin package", False)}
+
+    def plan_skill(self, name: str):
+        if self.surface != "desktop" or self.version != "3.0.73":
+            raise Conflict("MiniMax skill-only delivery requires the inspected Desktop release 3.0.73.")
+        return plan_skill_delivery(self, name, "minimax", self.plugin / "skills" / name,
+                                   self._skill_artifacts, self._skill_registration)
 
     def artifacts(self, source: dict) -> dict:
         result = {}

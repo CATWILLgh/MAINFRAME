@@ -19,6 +19,13 @@ evidence, and `--cline-home` selects another configuration root. The legacy
 `--surface cli` implementation remains available, with no claim of current CLI
 compatibility from this Desktop qualification.
 
+For one canonical skill on the inspected **0.0.46** Desktop release, add
+`--skill <name>` to the three commands above. This requires an existing
+same-source installation with matching receipt and adaptation state. The
+selected package goes under `~/.cline/skills/`; only its package, receipt
+records and adaptation row are reconciled. Analyzers and other bindings
+are outside this route. `scoped_update_matches` reports package convergence.
+
 The installer delivers one managed instruction block under `rules/`, all skills
 in the [canonical inventory](../../ADAPTATION.example.json) with their approved
 resources under `skills/`, seven YAML role profiles

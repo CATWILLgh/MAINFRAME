@@ -9,6 +9,18 @@ version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
 
+## Desktop 0.166.0-alpha.5.1 skill-only delivery
+
+On 2026-11-04 macOS verified the signed, notarized Desktop release
+`26.1027.61615`, build `24141`, and nested engine. The sealed engine manifest
+identifies `0.166.0-alpha.5.1`. The [exact OpenAI release](https://github.com/openai/codex/releases/tag/rust-v0.166.0-alpha.5.1)
+retains the [$CODEX_HOME skill root](https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/ext/skills/src/host_roots.rs#L125-L142)
+and the same [frontmatter parser](https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/skills/src/parser.rs),
+loader, disabled-path handling and skill watcher as the prior skill mapping.
+This supports the existing private skill-only route on the new engine. A fresh
+Desktop task still owns discovery evidence. Other native mappings retain their
+previous version boundaries.
+
 ## Desktop 0.165.0-alpha.1.2 full delivery
 
 The installed app evidence identifies ChatGPT release `26.1023.51421`, build

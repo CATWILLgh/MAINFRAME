@@ -176,14 +176,14 @@ class InstallationTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(expected, result.stderr)
 
-    def test_skill_only_rejects_other_products_actions_and_surfaces(self):
-        for product, action, surface in [("zcode", "plan", "desktop"),
-                                         ("codex", "disable", "desktop"),
-                                         ("codex", "plan", "cli")]:
+    def test_skill_only_rejects_incompatible_actions_surfaces_and_selectors(self):
+        for product, action, surface, extra in [("zcode", "plan", "desktop", ["--adopt-existing"]),
+                                                ("codex", "disable", "desktop", []),
+                                                ("codex", "plan", "cli", [])]:
             with self.subTest(product=product, action=action, surface=surface):
                 result = subprocess.run(
                     [sys.executable, "-B", str(self.source / "install.py"), product, action,
-                     "--surface", surface, "--skill", "mainframe-research"],
+                     "--surface", surface, "--skill", "mainframe-research", *extra],
                     cwd=self.source, text=True, capture_output=True, timeout=10,
                 )
                 self.assertNotEqual(result.returncode, 0)

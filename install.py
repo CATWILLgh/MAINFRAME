@@ -75,7 +75,7 @@ def main(argv=None):
     parser.add_argument("--details", action="store_true", help="Include every changed path; default output groups files by component")
     parser.add_argument("--instructions-reviewed", action="store_true", help="The invoking agent has checked the existing and canonical instruction semantics")
     parser.add_argument("--hook", help="One maintained hook for enable/disable; default is all hooks for the selected product")
-    parser.add_argument("--skill", help="Deliver only this exact canonical skill into an existing Codex Desktop installation")
+    parser.add_argument("--skill", help="Deliver only this exact canonical skill into an existing Desktop installation")
     parser.add_argument("--todo", action="store_true", help="Deliver only the project idea command and its addressed guard into an existing Codex or ZCode Desktop installation")
     args = parser.parse_args(argv)
     if args.todo and (args.product not in ("codex", "zcode")
@@ -83,10 +83,10 @@ def main(argv=None):
                       or args.surface != "desktop" or args.skill or args.hook or args.native
                       or args.adopt_existing):
         parser.error("--todo requires Codex or ZCode Desktop plan/apply/verify without other component selectors")
-    if args.skill is not None and (args.product != "codex" or args.action not in ("plan", "apply", "verify")):
-        parser.error("--skill applies only to Codex plan, apply, or verify")
-    if args.skill is not None and (args.surface != "desktop" or args.native):
-        parser.error("--skill requires Desktop and does not launch native discovery")
+    if args.skill is not None and (args.action not in ("plan", "apply", "verify")
+                                   or args.surface != "desktop" or args.native
+                                   or args.adopt_existing or args.hook):
+        parser.error("--skill requires Desktop plan/apply/verify without native probes or other selectors")
     if args.hook and args.action not in ("enable", "disable"):
         parser.error("--hook applies only to enable or disable")
     if args.native and args.action != "verify":
@@ -133,20 +133,8 @@ def main(argv=None):
             row.get("component") == "hooks.mainframe-fallow-quality"
             for row in adapter.receipt().get("files", {}).values()):
         codex_tools = tuple(dict.fromkeys((*codex_tools, "fallow")))
-    if args.todo:
-        return todo_delivery(args, adapter)
-    if args.skill is not None:
-        if args.action == "apply":
-            with installation_lock(adapter.lock_path):
-                changes, report = adapter.plan_skill(args.skill)
-                transact(changes, adapter.journal, adapter.allowed)
-                report["applied"] = True
-        else:
-            changes, report = adapter.plan_skill(args.skill)
-            if args.action == "verify":
-                report["scoped_update_matches"] = not report["changes"]
-        show(report, args.details)
-        return 0 if args.action != "verify" or report["scoped_update_matches"] else 1
+    if args.todo or args.skill is not None:
+        return scoped_delivery(args, adapter)
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
         support = add_runtime_status(report, adapter, codex_tools)
@@ -222,14 +210,17 @@ def main(argv=None):
     return 0
 
 
-def todo_delivery(args, adapter):
+def scoped_delivery(args, adapter):
+    def plan():
+        return adapter.plan_todo() if args.todo else adapter.plan_skill(args.skill)
+
     if args.action == "apply":
         with installation_lock(adapter.lock_path):
-            changes, report = adapter.plan_todo()
+            changes, report = plan()
             transact(changes, adapter.journal, adapter.allowed)
             report["applied"] = True
     else:
-        changes, report = adapter.plan_todo()
+        _, report = plan()
         if args.action == "verify":
             report["scoped_update_matches"] = not report["changes"]
     show(report, args.details)
@@ -241,6 +232,7 @@ def zcode_main(args, root, parser):
         FULL_MAPPING_RUNTIMES as ZCODE_FULL_MAPPING_RUNTIMES,
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
         SKILL_DELIVERY_RUNTIMES as ZCODE_SKILL_DELIVERY_RUNTIMES,
+        SINGLE_SKILL_RUNTIMES as ZCODE_SINGLE_SKILL_RUNTIMES,
         TODO_DELIVERY_RUNTIMES as ZCODE_TODO_DELIVERY_RUNTIMES,
         runtime_tools as zcode_runtime_tools,
         desktop_version as zcode_version)
@@ -261,6 +253,8 @@ def zcode_main(args, root, parser):
             version = observed_version
         permitted = (ZCODE_TODO_DELIVERY_RUNTIMES if args.todo else
                      ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES | ZCODE_SKILL_DELIVERY_RUNTIMES)
+        if args.skill is not None:
+            permitted = ZCODE_SINGLE_SKILL_RUNTIMES
         if version not in permitted:
             raise Conflict("Revalidate the maintained ZCode mapping for this build; supported full mapping is " + ZCODE_RUNTIME)
     from installer.zcode import HOOK_NAMES as ZCODE_HOOK_NAMES
@@ -272,8 +266,8 @@ def zcode_main(args, root, parser):
             row.get("component") == "hooks.mainframe-fallow-quality"
             for row in adapter.receipt().get("files", {}).values()):
         zcode_tools = tuple(dict.fromkeys((*zcode_tools, "fallow")))
-    if args.todo:
-        return todo_delivery(args, adapter)
+    if args.todo or args.skill is not None:
+        return scoped_delivery(args, adapter)
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
         support = add_runtime_status(report, adapter, zcode_tools)
@@ -346,6 +340,8 @@ def minimax_main(args, root, parser):
                 raise Conflict("Supplied MiniMax release conflicts with the selected Desktop application")
             version = observed_version
     adapter = MiniMax(root, args.home, args.minimax_home, version, args.surface)
+    if args.skill is not None:
+        return scoped_delivery(args, adapter)
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
         support = add_runtime_status(report, adapter, MINIMAX_RUNTIME_TOOLS)
@@ -406,6 +402,8 @@ def cline_main(args, root, parser):
             raise Conflict("Supplied Cline release conflicts with the observed " + args.surface + " version")
         version = observed
     adapter = Cline(root, args.home, args.cline_home, version, args.surface)
+    if args.skill is not None:
+        return scoped_delivery(args, adapter)
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
         support = add_runtime_status(report, adapter, CLINE_RUNTIME_TOOLS)

@@ -9,7 +9,7 @@ import sys
 import tempfile
 import unittest
 
-from installer.core import Conflict, transact
+from installer.core import Conflict, digest, encode_json, observed, transact
 from installer.runtime import TOOL_SPECS
 from installer.minimax import COMMAND_REASON, MiniMax, desktop_version
 
@@ -41,6 +41,107 @@ class MiniMaxInstallationTests(unittest.TestCase):
         transact(changes, self.adapter.journal, self.adapter.allowed)
         self.adapter.clean_directories(self.adapter.receipt())
         return report
+
+    def test_skill_only_delivery_registers_one_private_package(self):
+        self.apply()
+        transact(self.adapter.control(False, "mainframe-secret-access"), self.adapter.journal, self.adapter.allowed)
+        name = "mainframe-k3s"
+        destination = self.adapter.plugin / "skills" / name
+        manifest_path = self.adapter.plugin / ".minimax-plugin/plugin.json"
+        manifest = json.loads(manifest_path.read_bytes())
+        manifest["description"] = "Existing Plugin metadata"
+        original_manifest = encode_json(manifest)
+        manifest["skills"].remove(f"skills/{name}/SKILL.md")
+        manifest_path.write_bytes(encode_json(manifest))
+        shutil.rmtree(destination)
+        receipt = self.adapter.receipt()
+        receipt["files"] = {path: record for path, record in receipt["files"].items()
+                            if not Path(path).is_relative_to(destination)}
+        receipt["files"][str(manifest_path)]["sha256"] = digest(manifest_path.read_bytes())
+        self.adapter.receipt_path.write_bytes(encode_json(receipt))
+        state = json.loads(self.adapter.state_path.read_bytes())
+        del state["components"]["skills"][name]
+        self.adapter.state_path.write_bytes(encode_json(state))
+
+        edited_command = self.adapter.plugin / "skills/mainframe-project-skill/SKILL.md"
+        edited_command.write_text(edited_command.read_text() + "\nUnrelated edit\n")
+        shared = self.home / ".agents/skills" / name / "SKILL.md"
+        shared.parent.mkdir(parents=True)
+        shared.write_text("unrelated shared skill\n")
+        protected = {path: observed(path) for path in self.home.rglob("*")
+                     if path.is_file() and path not in {manifest_path, self.adapter.receipt_path}}
+
+        def run(action):
+            return subprocess.run([
+                sys.executable, "-B", str(self.source / "install.py"), "minimax", action,
+                "--home", str(self.home), "--surface", "desktop", "--runtime-version", "3.0.73",
+                "--skill", name,
+            ], cwd=self.source, capture_output=True, text=True, timeout=10)
+
+        result = run("plan")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(set(json.loads(result.stdout)["components_changed"]),
+                         {"skills." + name, "plugin package", "adaptation state", "ownership receipt"})
+        self.assertFalse(destination.exists())
+        result = run("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(manifest_path.read_bytes(), original_manifest)
+        for source in (self.source / "skills" / name).rglob("*"):
+            if source.is_file():
+                self.assertEqual(observed(destination / source.relative_to(self.source / "skills" / name)),
+                                 observed(source))
+        for path, snapshot in protected.items():
+            self.assertEqual(observed(path), snapshot, str(path))
+        new_files = {path for path in self.home.rglob("*") if path.is_file()} - protected.keys()
+        self.assertTrue(all(path.is_relative_to(destination) or path in {
+            manifest_path, self.adapter.receipt_path, self.adapter.lock_path,
+        } for path in new_files))
+        after_receipt = self.adapter.receipt()
+        self.assertEqual(after_receipt["disabled_markers"], receipt["disabled_markers"])
+        for path, record in receipt["files"].items():
+            if path != str(manifest_path):
+                self.assertEqual(after_receipt["files"][path], record)
+        after_state = json.loads(self.adapter.state_path.read_bytes())
+        self.assertEqual(after_state["components"]["skills"].pop(name)["verification"], "pending")
+        self.assertEqual(after_state, state)
+        result = run("verify")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        verified = json.loads(result.stdout)
+        self.assertTrue(verified["scoped_update_matches"])
+        self.assertEqual(verified["file_change_count"], 0)
+        self.assertNotIn("runtime_support", verified)
+
+    def test_skill_only_requires_an_unedited_owned_manifest_and_known_release(self):
+        self.apply()
+        name = "mainframe-k3s"
+        manifest = self.adapter.plugin / ".minimax-plugin/plugin.json"
+        data = manifest.read_bytes()
+        manifest.write_bytes(data + b"\n")
+        with self.assertRaisesRegex(Conflict, "manifest is missing or was edited"):
+            self.adapter.plan_skill(name)
+        manifest.write_bytes(data)
+        receipt = self.adapter.receipt()
+        receipt["files"][str(manifest)]["owned"] = False
+        self.adapter.receipt_path.write_bytes(encode_json(receipt))
+        with self.assertRaisesRegex(Conflict, "requires the installer-owned MiniMax Plugin manifest"):
+            self.adapter.plan_skill(name)
+        adapter = MiniMax(self.source, self.home, version="3.0.74")
+        with self.assertRaisesRegex(Conflict, "requires the inspected Desktop release 3.0.73"):
+            adapter.plan_skill(name)
+
+    def test_skill_only_rejects_duplicate_selected_registration(self):
+        self.apply()
+        name = "mainframe-k3s"
+        path = self.adapter.plugin / ".minimax-plugin/plugin.json"
+        manifest = json.loads(path.read_bytes())
+        manifest["skills"].append(f"skills/{name}/SKILL.md")
+        data = encode_json(manifest)
+        path.write_bytes(data)
+        receipt = self.adapter.receipt()
+        receipt["files"][str(path)]["sha256"] = digest(data)
+        self.adapter.receipt_path.write_bytes(encode_json(receipt))
+        with self.assertRaisesRegex(Conflict, "registers the selected skill more than once"):
+            self.adapter.plan_skill(name)
 
     def test_fresh_delivery_converges_as_one_native_plugin(self):
         report = self.apply()

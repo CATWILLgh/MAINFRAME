@@ -19,7 +19,7 @@ import tomllib
 from .codex_skill_reminder import ROLE_MATCHER
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, reconcile_files, regular_bytes, retire_recorded_legacy_file)
-from .shared import BEGIN, END, _instruction, inventory, skill_resources
+from .shared import BEGIN, END, _instruction, inventory, plan_skill_delivery, render_skill_artifacts
 from .state import component_keys, reconcile_state, set_component
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -57,7 +57,7 @@ SELECTION_BINDING_RUNTIMES = SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES | 
 CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES
 # Only private skill-root discovery and SKILL.md parsing were inspected here.
 # This does not authorize reconciliation of hooks or any other native binding.
-SKILL_DELIVERY_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"}
+SKILL_DELIVERY_DESKTOP_RUNTIMES = {CURRENT_DESKTOP_RUNTIME, "0.166.0-alpha.5.1"}
 TODO_DELIVERY_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"}
 SELECTION_MATCHER = "^collaborationspawn_agent$"
 LIMITATIONS = {
@@ -419,20 +419,7 @@ class Codex:
         return result
 
     def skill_artifacts(self, source: dict) -> dict:
-        """Package only the skills supplied by the caller through the shared selector."""
-        artifacts = {}
-        resources = skill_resources(self.root, source)
-        for name, entry in source["components"]["skills"].items():
-            skill = self.root / entry["source"]
-            for path in resources[name]:
-                data = path.read_bytes()
-                if path.suffix in {".md", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml", ".txt"}:
-                    data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode())
-                    data = data.replace(b"{{CREDENTIALS_INDEX}}", str(self.index).encode())
-                artifacts[self.skills / name / path.relative_to(skill)] = (
-                    data, path.stat().st_mode & 0o777, "skills." + name, False,
-                )
-        return artifacts
+        return render_skill_artifacts(self.root, self.skills, self.index, source)
 
     def artifacts(self, source: dict, previous: dict) -> dict:
         artifacts = self.skill_artifacts(source)
@@ -598,70 +585,9 @@ class Codex:
                          "native_acceptance": "Reload for todo skill discovery in the slash menu; explicit $todo <prose> is documented. Literal /todo invocation remains unobserved. Review and trust the new PreToolUse hook; native acceptance remains pending."}
 
     def plan_skill(self, name: str):
-        """Reconcile one canonical skill without evaluating unrelated native bindings."""
         if self.surface != "desktop" or self.version not in SKILL_DELIVERY_DESKTOP_RUNTIMES:
             raise Conflict("Skill-only delivery is not validated for this Codex runtime and surface.")
-        if regular_bytes(self.journal) is not None:
-            raise Conflict(f"Interrupted transaction needs recovery: {self.journal}")
-        source = inventory(self.root)
-        if name not in source["components"]["skills"]:
-            raise Conflict("Unknown canonical skill: " + name)
-        receipt_snapshot = observed(self.receipt_path)
-        previous = self.receipt(receipt_snapshot)
-        if not previous or previous.get("source") != str(self.root):
-            raise Conflict("Skill-only delivery requires an existing same-source installation.")
-        component = "skills." + name
-        selected = {"components": {"skills": {name: source["components"]["skills"][name]}}}
-        artifacts = self.skill_artifacts(selected)
-        old_records = {path: record for path, record in previous.get("files", {}).items()
-                       if record.get("component") == component}
-        # A legacy shared-root package is a separate migration, never implicit in
-        # this bounded route. Reject inconsistent ownership rather than retire it.
-        destination = self.skills / name
-        if any(Path(path).is_relative_to(destination) and record.get("component") != component
-               for path, record in previous.get("files", {}).items()):
-            raise Conflict("Skill destination belongs to another receipted component.")
-        if any(not Path(path).is_relative_to(destination) for path in old_records):
-            raise Conflict("Skill-only delivery cannot migrate a previous skill destination.")
-        changes, records = reconcile_files(artifacts, old_records, self.allowed)
-        receipt = deepcopy(previous)
-        receipt["files"] = {path: record for path, record in previous.get("files", {}).items()
-                            if path not in old_records}
-        receipt["files"].update(records)
-        directories = set(previous.get("directories", []))
-        for path in artifacts:
-            parent = path.parent
-            while self.allowed(parent):
-                if not parent.exists():
-                    directories.add(str(parent))
-                parent = parent.parent
-        receipt["directories"] = sorted(directories)
-        state_snapshot = observed(self.state_path)
-        state = json.loads(state_snapshot[0]) if state_snapshot[0] else {}
-        if (state.get("schema_version") != 2
-                or state.get("target", {}).get("config_home") != str(self.codex)
-                or state.get("target", {}).get("mainframe_root") != str(self.root)
-                or not isinstance(state.get("components", {}).get("skills"), dict)):
-            raise Conflict("Skill-only delivery requires matching existing adaptation state.")
-        row = state["components"]["skills"].get(name)
-        changed = any(change.needed for change in changes)
-        if changed or not row or row.get("source") != selected["components"]["skills"][name]["source"]:
-            state["components"]["skills"][name] = deepcopy(selected["components"]["skills"][name])
-            set_component(state, ("skills", name), delivery="installed", verification="pending",
-                          next_action=f"Confirm {name} discovery in a fresh Codex desktop task after reload.")
-        elif row.get("delivery") != "installed":
-            set_component(state, ("skills", name), delivery="installed", verification="pending",
-                          next_action=f"Confirm {name} discovery in a fresh Codex desktop task after reload.")
-        changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state),
-                                           component="adaptation state"))
-        changes.append(Change.from_snapshot(self.receipt_path, receipt_snapshot, encode_json(receipt),
-                                           component="ownership receipt"))
-        return changes, {
-            "target": str(self.codex), "runtime_version": self.version, "surface": self.surface,
-            "skill": name, "delivery_mode": "existing-installation skill-only delivery",
-            "changes": [change.summary() for change in changes if change.needed],
-            "native_acceptance": "Skill discovery remains pending; use a fresh Desktop task after reload.",
-        }
+        return plan_skill_delivery(self, name, "codex", self.skills / name, self.skill_artifacts)
 
     def plan(self, instructions_reviewed=False, remove=False):
         if regular_bytes(self.journal) is not None:

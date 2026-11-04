@@ -1,5 +1,22 @@
 # ZCode bundled runtime hook evidence
 
+## Desktop 3.17.2.9661 private skill reader
+
+On 2026-11-04 the installed Desktop plist identified **3.17.2.9661**. macOS
+verified the deep signature and accepted the app as Notarized Developer ID.
+The resource seal matched the bundled `Contents/Resources/glm/zcode.cjs`
+SHA-256 `d9afd58d694f98a5279bf548cdc7646413c125762e86730605a6071f9e0346d6`.
+The [3.17.2 release](https://zcode.z.ai/en/changelog) accounts for the change from
+the 3.17.1.9553 hook-test pin below.
+
+The shipped Desktop default agent resolver selects the packaged Node bundle.
+The extracted native `NodeSkillAdapter` scanner, Markdown loader, and metadata
+reader discovered and loaded the exact `mainframe-openspec` body with no
+diagnostics in a synthetic `~/.zcode/skills/` tree and honored a disabled path.
+This qualifies the user-level package and metadata for skill-only delivery.
+The old hook-test pin still guards its exact build. Current Desktop discovery
+and broader hook, command, and role contracts remain unverified on 3.17.2.
+
 ## Desktop 3.17.1.9553 full delivery
 
 The same pinned bundle below was re-inspected for full Desktop delivery on

@@ -106,6 +106,20 @@ class ClineInstallerTests(unittest.TestCase):
         body = launcher("tool_call", "missing-transport").decode()
         self.assertIn('[ -f "$transport" ] || exit 0', body)
 
+    def test_skill_only_delivery_ignores_unrelated_owned_edits(self):
+        self.install()
+        name = "mainframe-openspec"
+        skill = self.adapter.skills / name / "SKILL.md"
+        skill.unlink()
+        self.adapter.rules.write_bytes(b"Unrelated user edit")
+        changes, report = self.adapter.plan_skill(name)
+        self.assertEqual({row["path"] for row in report["changes"]},
+                         {str(skill), str(self.adapter.state_path)})
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        self.assertEqual(skill.read_bytes(), (self.source / "skills" / name / "SKILL.md").read_bytes())
+        self.assertEqual(self.adapter.rules.read_bytes(), b"Unrelated user edit")
+        self.assertEqual(self.adapter.plan_skill(name)[1]["changes"], [])
+
     def test_disable_is_per_identity_and_unknown_identity_is_rejected_first(self):
         self.install()
         changes = self.adapter.control(False, "mainframe-rg-short-replace")

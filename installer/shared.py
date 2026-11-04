@@ -8,7 +8,8 @@ import re
 import subprocess
 import tempfile
 
-from .core import Conflict, digest
+from .core import Change, Conflict, digest, encode_json, observed, reconcile_files, regular_bytes
+from .state import set_component
 
 
 def _skill_resource_names(root: Path, bases: dict[str, Path]) -> set[str]:
@@ -82,6 +83,97 @@ def skill_resources(root: Path, source: dict) -> dict[str, list[Path]]:
             raise Conflict("Canonical SKILL.md must be an approved skill resource.")
         result[name] = files
     return result
+
+
+def render_skill_artifacts(root: Path, skills: Path, index: Path, source: dict) -> dict:
+    artifacts = {}
+    resources = skill_resources(root, source)
+    for name, entry in source["components"]["skills"].items():
+        base = root / entry["source"]
+        for path in resources[name]:
+            data = path.read_bytes()
+            if path.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
+                data = data.replace(b"{{MAINFRAME_ROOT}}", str(root).encode())
+                data = data.replace(b"{{CREDENTIALS_INDEX}}", str(index).encode())
+            artifacts[skills / name / path.relative_to(base)] = (
+                data, path.stat().st_mode & 0o777, "skills." + name, False,
+            )
+    return artifacts
+
+
+def plan_skill_delivery(adapter, name, product, destination, render, registration=None):
+    """Reconcile the selected package and any required native catalog entry."""
+    if regular_bytes(adapter.journal) is not None:
+        raise Conflict(f"Interrupted transaction needs recovery: {adapter.journal}")
+    source = inventory(adapter.root, product)
+    entry = source["components"]["skills"].get(name)
+    if entry is None:
+        raise Conflict("Unknown canonical skill: " + name)
+    receipt_snapshot = observed(adapter.receipt_path)
+    receipt = adapter.receipt(receipt_snapshot)
+    if not receipt or receipt.get("source") != str(adapter.root):
+        raise Conflict("Skill-only delivery requires an existing same-source installation.")
+    state_snapshot = observed(adapter.state_path)
+    state = json.loads(state_snapshot[0]) if state_snapshot[0] else {}
+    target = state.get("target", {})
+    skills = state.get("components", {}).get("skills")
+    if (state.get("schema_version") != 2 or target.get("product") != product
+            or target.get("config_home") != receipt["target"]
+            or target.get("mainframe_root") != str(adapter.root) or not isinstance(skills, dict)):
+        raise Conflict("Skill-only delivery requires matching existing adaptation state.")
+
+    component = "skills." + name
+    files = receipt["files"]
+    old_records = {path: record for path, record in files.items() if record.get("component") == component}
+    if any(Path(path).is_relative_to(destination) and record.get("component") != component
+           for path, record in files.items()):
+        raise Conflict("Skill destination belongs to another receipted component.")
+    if any(not Path(path).is_relative_to(destination) for path in old_records):
+        raise Conflict("Skill-only delivery cannot migrate a previous skill destination.")
+    artifacts = render({"components": {"skills": {name: entry}, "commands": {}}})
+    if not artifacts or any(not path.is_relative_to(destination) or row[2] != component
+                            for path, row in artifacts.items()):
+        raise Conflict("The rendered skill package is outside its selected destination.")
+    if registration is not None:
+        for path, artifact in registration(name, receipt, source).items():
+            prior = files.get(str(path))
+            if path in artifacts or not prior or not prior["owned"] or prior.get("retain") or prior["component"] != artifact[2]:
+                raise Conflict("The skill's native registration is not owned by this installation.")
+            artifacts[path] = artifact
+            old_records[str(path)] = prior
+    if any(not adapter.allowed(path) for path in artifacts):
+        raise Conflict("Skill-only delivery contains an unexpected destination.")
+
+    changes, records = reconcile_files(artifacts, old_records, adapter.allowed)
+    if any(not change.path.is_relative_to(destination) and change.before is None for change in changes):
+        raise Conflict("The skill's existing native registration disappeared during planning.")
+    for path in old_records.keys() - records.keys():
+        del files[path]
+    files.update(records)
+    directories = set(receipt.get("directories", []))
+    for path in artifacts:
+        parent = path.parent
+        while adapter.allowed(parent):
+            if not parent.exists():
+                directories.add(str(parent))
+            parent = parent.parent
+    receipt["directories"] = sorted(directories)
+    row = skills.get(name, {})
+    if (any(change.needed for change in changes) or row.get("source") != entry["source"]
+            or row.get("delivery") != "installed"):
+        skills[name] = entry.copy()
+        set_component(state, ("skills", name), delivery="installed", verification="pending",
+                      next_action=f"Confirm {name} discovery in a fresh {product} Desktop session after reload.")
+    changes.extend((
+        Change.from_snapshot(adapter.state_path, state_snapshot, encode_json(state), component="adaptation state"),
+        Change.from_snapshot(adapter.receipt_path, receipt_snapshot, encode_json(receipt), component="ownership receipt"),
+    ))
+    return changes, {
+        "target": receipt["target"], "runtime_version": adapter.version, "surface": adapter.surface,
+        "skill": name, "delivery_mode": "existing-installation skill-only delivery",
+        "changes": [change.summary() for change in changes if change.needed],
+        "native_acceptance": "Skill discovery remains pending; use a fresh Desktop session after reload.",
+    }
 
 
 BEGIN = "<!-- MAINFRAME managed instructions: begin -->"

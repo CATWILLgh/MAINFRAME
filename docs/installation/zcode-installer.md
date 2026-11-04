@@ -17,6 +17,24 @@ known gaps belong to [zcode.md](native/zcode.md); mechanical behavior belongs to
 [installer/zcode_hook.py](../../installer/zcode_hook.py), and shared installer
 modules. Unknown builds need a separately scoped compatibility check.
 
+## Deliver one skill
+
+Use this route on the inspected full-mapping builds and Desktop **3.17.2.9661**
+with an existing same-source installation and matching receipt and adaptation
+state. The new build was inspected for the private skill reader only. See the
+[bundled reader evidence](native/zcode-evidence.md#desktop-31729661-private-skill-reader).
+
+```sh
+python3 -B install.py zcode plan --surface desktop --skill mainframe-openspec
+python3 -B install.py zcode apply --surface desktop --skill mainframe-openspec
+python3 -B install.py zcode verify --surface desktop --skill mainframe-openspec
+```
+
+The route reconciles the selected package under `~/.zcode/skills/` and its
+receipt and adaptation records. It leaves hooks, commands, roles, configuration
+and analyzers alone. `scoped_update_matches` proves selected-file convergence.
+Refresh Skills in Desktop settings and open a new conversation for discovery.
+
 ## Deliver only /todo
 
 Build **3.17.1.9553** also retains a narrow route for `/todo` in an existing,

@@ -16,7 +16,7 @@ import tempfile
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, regular_bytes, reconcile_files, retire_recorded_legacy_file)
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
-from .shared import inventory, _instruction, skill_resources
+from .shared import inventory, _instruction, plan_skill_delivery, render_skill_artifacts
 from .state import reconcile_state, set_component
 
 KNOWN_RUNTIME = "3.11.2.6792"
@@ -24,6 +24,7 @@ CURRENT_DESKTOP_RUNTIME = "3.17.1.9553"
 FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912", CURRENT_DESKTOP_RUNTIME}
 CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
 SKILL_DELIVERY_RUNTIMES = {"3.14.5.7961"}
+SINGLE_SKILL_RUNTIMES = FULL_MAPPING_RUNTIMES | {"3.17.2.9661"}
 TODO_DELIVERY_RUNTIMES = FULL_MAPPING_RUNTIMES | {"3.17.1.9553"}
 TODO_HOOK = "mainframe-todo-limits"
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
@@ -351,20 +352,22 @@ class ZCode:
                 raise Conflict("Unexpected owned ZCode file: " + path)
         return record
 
+    def skill_artifacts(self, source: dict) -> dict:
+        return render_skill_artifacts(self.root, self.skills, self.index, source)
+
+    def plan_skill(self, name: str):
+        if self.surface != "desktop" or self.version not in SINGLE_SKILL_RUNTIMES:
+            raise Conflict("Skill-only delivery is not validated for this ZCode build and surface.")
+        return plan_skill_delivery(self, name, "zcode", self.skills / name, self.skill_artifacts)
+
     def artifacts(self, source):
-        result = {}
+        result = self.skill_artifacts(source)
+
         def add(path, data, component, mode=0o600, retain=False):
             if path in result:
                 raise Conflict("Duplicate ZCode destination: " + str(path))
             result[path] = (data, mode, component, retain)
-        resources = skill_resources(self.root, source)
-        for name, entry in source["components"]["skills"].items():
-            base = self.root / entry["source"]
-            for p in resources[name]:
-                data = p.read_bytes()
-                if p.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
-                    data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(b"{{CREDENTIALS_INDEX}}", str(self.index).encode())
-                add(self.skills / name / p.relative_to(base), data, "skills." + name, p.stat().st_mode & 0o777)
+
         for name, entry in source["components"]["agents"].items():
             add(self.agents / (name + ".md"), role_body((self.root / entry["source"]).read_text(), name), "agents." + name)
         for name, entry in source["components"]["commands"].items():

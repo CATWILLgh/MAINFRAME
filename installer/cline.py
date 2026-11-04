@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import _instruction, inventory, skill_resources
+from .shared import _instruction, inventory, plan_skill_delivery, render_skill_artifacts
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -275,28 +275,22 @@ class Cline:
         return result
 
 
-    def _skill_files(self, source: dict, add) -> None:
-        resources = skill_resources(self.root, source)
-        for name, entry in source["components"]["skills"].items():
-            base = self.root / entry["source"]
-            for path in resources[name]:
-                data = path.read_bytes()
-                if path.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
-                    data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(
-                        b"{{CREDENTIALS_INDEX}}", str(self.index).encode()
-                    )
-                add(self.skills / name / path.relative_to(base), data, "skills." + name,
-                    path.stat().st_mode & 0o777)
+    def skill_artifacts(self, source: dict) -> dict:
+        return render_skill_artifacts(self.root, self.skills, self.index, source)
+
+    def plan_skill(self, name: str):
+        if self.surface != "desktop" or self.version != "0.0.46":
+            raise Conflict("Skill-only delivery is not validated for this Cline release and surface.")
+        return plan_skill_delivery(self, name, "cline", self.skills / name, self.skill_artifacts)
 
     def artifacts(self, source: dict) -> dict:
-        result = {}
+        result = self.skill_artifacts(source)
 
         def add(path: Path, data: bytes, component: str, mode: int = 0o600, retain=False):
             if path in result:
                 raise Conflict("Duplicate Cline destination: " + str(path))
             result[path] = data, mode, component, retain
 
-        self._skill_files(source, add)
         for name, entry in source["components"]["commands"].items():
             text = (self.root / entry["source"]).read_text()
             add(self.workflows / (name + ".md"), workflow_body(text, name), "commands." + name)
