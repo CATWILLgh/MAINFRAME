@@ -60,13 +60,13 @@ configuration, install a second copy, or migrate any data. The native profile
 must be inspected afresh: this document is not evidence of its current state.
 
 For a new project conversation, start with this guide and the repository's
-[development instructions](../../AGENTS.md). The source import and namespace
-rename are complete. Remaining work, only after an explicit profile switchover
-request, is to establish supported native configuration, preserve existing
-profile/data ownership, replace the old identities without concurrent duplicate
-bindings, and verify activation and rendered behavior. Follow the prerequisites
-below; do not blindly install the new scope alongside the old one. Native
-activation and Vault's external SQLCipher runtime remain unverified.
+[development instructions](../../AGENTS.md). Native profile state is not repository
+state: inspect it for each explicitly requested switchover. The maintained
+[private bundle generator](../../installer/dsh_local_bundle.py) supplies local
+configuration without adding user paths to source or directly editing profile
+files. Its synthetic tests do not establish native activation, rendered behavior,
+or Vault runtime compatibility. Follow the prerequisites below; do not install
+the new scope active alongside the old one.
 
 ## Native installation/update handoff
 
@@ -74,34 +74,95 @@ Only perform this stage for an explicit profile installation/update request.
 The current source import does **not** retarget existing linked installations.
 
 1. Use `plugin_manager` listing actions to identify exact installed bundles and
-   entries in the selected DSH profile. Preserve unrelated bundles and settings.
-2. Inspect the current DSH tool schema and relevant plugin Config contracts.
-   Use supported native plugin configuration for target-local values, not direct
-   edits to profile manifests or profile patch layers. If configuration cannot
-   be safely supplied with the installed native interface, stop before activation
-   and report that concrete prerequisite; do not install an unconfigured bundle.
-3. The report supplies absolute local directory install targets. Local installs
-   may link the source: keep the repository at that path. Native lifecycle goes
-   through `plugin_manager`, never a subprocess package manager in the profile.
-4. Analytics and Vault need the actual selected `profileDirectory` unless the
-   Host provides `DSH_PROFILE_DIR`. Reusable patches intentionally omit machine
-   paths. Do not guess a desktop profile or copy an old machine's configuration.
-5. Vault additionally needs an explicitly provisioned/configured external Python
-   with `sqlcipher3` and SQLCipher. No venv, database, recovery envelope, password,
-   key or usage authorization is included or migrated. See its
-   [runtime/security documentation](../../plugins/dsh/secrets-vault/README.md).
+   entries in the selected DSH profile. Inspect the current native tool schema
+   and plugin configuration contracts. Preserve unrelated bundles and settings.
+   Never write the profile manifest or patch layers, or run a package manager in
+   the profile. A failure to supply configuration safely is a stop condition,
+   not permission to activate unconfigured source bundles.
+2. Confirm the selected profile directory explicitly; do not guess a desktop
+   profile or copy another machine's configuration. Provision Vault's external
+   Python with `sqlcipher3` and SQLCipher separately. No venv, database, recovery
+   envelope, password, key or usage authorization is included or migrated. See
+   Vault's [runtime/security documentation](../../plugins/dsh/secrets-vault/README.md).
    Analytics requires usable `node:sqlite`; see its
    [storage documentation](../../plugins/dsh/activity-analytics/README.md).
-6. Inspect the actual linked source or packed archive boundary before install.
-   Linked installs do not apply the package manifest's `files` filter. The DSH
-   source adapter rejects unexpected files/directories and symlinks rather than
-   opening them. Tests/build source are repository support; runtime package
-   payload is declared in each manifest. Do not introduce local environments,
-   probes or secrets into these directories.
-7. Verify native discovery and enabled/active state separately from successful
-   installation. Then check rendered UI and plugin-specific behavior on the
-   requested surface. Source hashes and tests are not acceptance evidence.
-   Never exercise real vault credentials as a development probe.
+3. Inspect the linked source or packed archive boundary before installation.
+   Linked installs do not apply the manifest's `files` filter. The read-only DSH
+   source adapter rejects unexpected source entries and symlinks before opening
+   them. Keep local environments, probes and secrets out of source directories.
+   Install the Analytics and Vault source directories supplied by the source
+   report separately with `plugin_manager`, `action: install_bundle`, and
+   **`enabled: false`**. They supply resolvable plugin code, not active rows.
+   Keep linked sources at their installed locations.
+4. Generate the private configuration-only bundle as described below. Keep it
+   outside this repository, the selected profile and DSH home. Its manifest has
+   no dependency or install scripts; it does not copy Host code or provision a
+   runtime. Install it first with `plugin_manager`, `action: install_bundle`,
+   `enabled: false`, using its absolute output directory as `target`.
+5. Before enabling the generated `@mainframe/local-deployment`, disable the old
+   `@local/activity-analytics` and `@local/secrets-vault` bundles using exact
+   identifiers obtained from native listing. **Keep the corresponding
+   `@mainframe/*` source bundles disabled**: their insert rows use the same ids.
+   Then enable only the generated deployment bundle with `set_bundle`. It inserts
+   the configured `activity-analytics` and `secrets-vault` rows. Installing code
+   successfully does not prove that disabled-source packages resolve from this
+   activation bundle; observe native activation and diagnose resolution failures.
+   If activation fails, disable the generated bundle before restoring the old
+   bundles through native lifecycle operations; never enable both generations.
+6. Message timestamps are not configured by this two-row deployment bundle.
+   If switching that component too, disable `@local/message-time` before enabling
+   its separate `@mainframe/message-time` source bundle. Preserve its existing
+   state when that switchover is not requested.
+7. Verify discovery, enabled state and active rows separately from installation.
+   Check rendered metadata/icons and plugin behavior on the requested surface.
+   Successful generation or source tests are not native acceptance. Never
+   exercise real vault credentials as a development probe.
+
+### Generate private activation configuration
+
+From the repository root, supply three explicit **absolute**, nonsecret paths
+through local shell variables (do not place real values in repository examples):
+
+```sh
+python3 -B -m installer.dsh_local_bundle \
+  --output "$MAINFRAME_LOCAL_BUNDLE" \
+  --profile-directory "$SELECTED_DSH_PROFILE_DIRECTORY" \
+  --vault-python "$EXTERNAL_VAULT_PYTHON"
+```
+
+The output parent must already exist. Generation rejects output inside the
+resolved repository, selected profile or DSH home (`DSH_HOME`, otherwise
+`~/.dsh`), and rejects overlapping ancestor outputs too. It refuses symlinks in
+output/profile paths and refuses a nonempty output. The Python argument is
+serialized without resolving or inspecting it, so a venv interpreter symlink
+retains its environment; supplying it does not prove it works. No profile
+configuration, database, credential or runtime file is opened, and no Python
+interpreter is executed by the generator.
+
+The generated private package exports English/Russian metadata and original SVG
+artwork alongside a JSON-compatible YAML insert patch. Only that patch carries
+the local profile/Python paths. Bundle directories have mode `0700`, files `0600`;
+creation stages a complete sibling tree and publishes with one atomic rename.
+Only owned staging directories are eligible for failure cleanup. The generator
+creates no parent directories and does not modify their permissions. Keep the
+whole output private, do not commit or publish it, and retain it while linked.
+`private: true` prevents npm publication but is not an access-control boundary.
+
+### Updates and removal
+
+Update source code with native `install_bundle` **`enabled: false`** again; an
+update must not re-enable a source bundle. Retain the configured deployment
+bundle as the sole Analytics/Vault activation owner. Honor native restart or
+pending-application results before claiming updated behavior. To change local
+paths, generate into a new empty private output, disable the current deployment,
+then replace its installation through `plugin_manager` using the same package
+identity; keep it disabled until the replacement is ready. Restore the prior
+bundle through native lifecycle operations if replacement fails. Do not rewrite
+an installed linked directory in place or edit profile manifests/patches.
+
+To remove activation, disable/remove the generated bundle through native
+`plugin_manager`; remove disabled source bundles separately only when no longer
+needed. Package removal does not authorize deleting analytics or vault data.
 
 Existing original source directories and profile data must remain intact until
 a separately authorized, verified switchover. Removing a plugin is distinct from
@@ -113,6 +174,7 @@ deleting user analytics/vault history; preserve that history.
 | --- | --- | --- |
 | Exact source inventory, link integrity | `python3 -B -m unittest tests.test_repository` | Local + existing repository CI; all assertions pass |
 | Read-only plan, honest status, source rejection and CLI options | `python3 -B -m unittest tests.test_dsh_installer` | Local + existing unittest CI; no profile writes or installed claims |
+| Private config-only generation, output boundaries, permissions and failure cleanup | `python3 -B -m unittest tests.test_dsh_local_bundle` | Disposable filesystem locally + existing unittest CI; no real profile/runtime access or native activation claim |
 | Existing four adapters preserve behavior and skip DSH rows | `python3 -B -m unittest tests.test_dsh_legacy` | Disposable homes locally + existing CI; update/convergence/removal and foreign files preserved |
 | Analytics source behavior | Analytics package-cwd `node --test *.test.mjs` | Local synthetic data; not native acceptance |
 | Message-time source behavior | Message-time package-cwd `node --test test.mjs` | Local synthetic events; not native acceptance |
