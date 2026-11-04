@@ -1,4 +1,20 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
+
+// DSH installs profile bundles below profile/node_modules, including pnpm links.
+// Validate package identity at each boundary; source checkouts never qualify.
+function installedProfileDirectory() {
+  const directory = realpathSync(fileURLToPath(new URL('.', import.meta.url)));
+  let profile;
+  for (let ancestor = directory; path.dirname(ancestor) !== ancestor; ancestor = path.dirname(ancestor)) {
+    if (path.basename(ancestor) !== 'node_modules' || path.basename(path.dirname(path.dirname(ancestor))) === '.pnpm') continue;
+    try {
+      if (realpathSync(path.join(ancestor, '@mainframe', 'activity-analytics')) === directory) profile = path.dirname(ancestor);
+    } catch { /* Missing or unrelated native alias is not a profile anchor. */ }
+  }
+  return profile; // Outermost matching alias, not pnpm's inner self-reference.
+}
 import { createHash } from 'node:crypto';
 import { ActivityStore, CHECKPOINT_MS, InputError } from './store.js';
 
@@ -82,7 +98,7 @@ export async function createHost(ctx, {
 }
 
 export async function apply(ctx, config = {}) {
-  const profile = config.profileDirectory || process.env.DSH_PROFILE_DIR;
-  if (!profile) throw new Error('Activity Analytics requires an active profile directory.');
+  const profile = config.profileDirectory || process.env.DSH_PROFILE_DIR || installedProfileDirectory();
+  if (!profile) throw new Error(`Activity Analytics requires an active profile directory; loaded module: ${import.meta.url}`);
   await createHost(ctx, { directory: path.join(profile, 'activity-analytics') });
 }

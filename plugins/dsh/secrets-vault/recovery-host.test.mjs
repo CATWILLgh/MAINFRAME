@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { accessSync, constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,8 +10,10 @@ import { VaultStore } from './vault-store.js';
 
 const password = 'Synthetic-host-recovery-password';
 const nextPassword = 'Synthetic-host-replacement-password';
-const python = fileURLToPath(new URL('./.venv-homebrew/bin/python3', import.meta.url));
+const python = process.env.MAINFRAME_TEST_VAULT_PYTHON || fileURLToPath(new URL('./runtime/bin/python3.12', import.meta.url));
 async function fixture(t, legacy = false) {
+  try { accessSync(python, constants.X_OK); }
+  catch { throw new Error('Vault integration tests require an executable bundled runtime; stage runtime/bin/python3.12 or set MAINFRAME_TEST_VAULT_PYTHON to a verified Python with sqlcipher3.'); }
   const profile = await mkdtemp(path.join(os.tmpdir(), 'vault-recovery-host-synthetic-'));
   if (legacy) {
     const store = new VaultStore({ python, databasePath: path.join(profile, 'secrets-vault', 'vault.db') });

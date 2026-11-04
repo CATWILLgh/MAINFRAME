@@ -1,13 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat, readdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdtemp, readFile, stat, readdir, rm } from 'node:fs/promises';
+import { accessSync, constants } from 'node:fs';
+import { resolve, dirname, basename } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { VaultStore } from './vault-store.js';
 
-const python = resolve('secrets-vault/.venv-homebrew/bin/python3');
+const python = process.env.MAINFRAME_TEST_VAULT_PYTHON || fileURLToPath(new URL('./runtime/bin/python3.12', import.meta.url));
+function requireRuntime() {
+  try { accessSync(python, constants.X_OK); }
+  catch { throw new Error('Vault integration tests require an executable bundled runtime; stage runtime/bin/python3.12 or set MAINFRAME_TEST_VAULT_PYTHON to a verified Python with sqlcipher3.'); }
+}
 
-test('SQLCipher encrypted persistence, lock, wrong password and internal-only retrieval', async () => {
-  const dir = await mkdtemp(resolve('secrets-vault/probe-'));
+test('SQLCipher encrypted persistence, lock, wrong password and internal-only retrieval', async t => {
+  requireRuntime();
+  const dir = await mkdtemp(resolve(tmpdir(), 'vault-backend-synthetic-'));
+  t.after(async () => {
+    assert.equal(dirname(resolve(dir)), resolve(tmpdir()));
+    assert.ok(basename(dir).startsWith('vault-backend-synthetic-'));
+    await rm(dir, { recursive: true });
+  });
   const databasePath = resolve(dir, 'vault.db');
   let store = new VaultStore({ python, databasePath });
   const password = "synthetic-test-'password-2026";

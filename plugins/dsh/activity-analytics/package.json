@@ -1,6 +1,6 @@
 {
   "name": "@mainframe/activity-analytics",
-  "version": "1.2.0",
+  "version": "1.3.2",
   "description": "Profile-wide local analytics for user activity and summed agent working time",
   "private": true,
   "type": "module",

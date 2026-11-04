@@ -1,6 +1,6 @@
 {
   "name": "@mainframe/secrets-vault",
-  "version": "1.3.0",
+  "version": "1.4.1",
   "description": "Profile-wide SQLCipher credential vault with secure entry and scoped agent operations",
   "private": true,
   "type": "module",

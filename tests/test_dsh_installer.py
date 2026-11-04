@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+import install as entrypoint
 
 from installer.core import Conflict
 from installer.dsh import DSH
@@ -92,6 +94,32 @@ class DSHTests(unittest.TestCase):
             path.write_text(json.dumps(manifest))
             with self.assertRaisesRegex(Conflict, 'Incomplete DSH runtime payload'):
                 DSH(root, root / 'home')._bundle('message-time', 'plugins/dsh/message-time')
+
+    def test_source_report_requires_packed_user_install_instead_of_links(self):
+        _, report = DSH(ROOT, ROOT / 'unused-home').plan()
+        for bundle in report['bundles'].values():
+            self.assertIsNone(bundle['install_target'])
+            self.assertIsNone(bundle['handoff']['target'])
+            self.assertIn('.tgz', bundle['packaging'])
+
+    def test_cli_package_preflights_before_provisioning_and_keeps_shared_runtime_callable(self):
+        shared_runtime = entrypoint.provision_runtime
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory).resolve() / 'packages'
+            runtime = output.parent / 'runtime'
+            with patch('installer.dsh_runtime.provision_runtime', return_value=runtime) as provision, \
+                    patch('installer.dsh_package.build_packages', return_value={'mode':'fixture'}) as build, \
+                    patch('install.show'):
+                self.assertEqual(entrypoint.main(['dsh','package','--surface','desktop','--output',str(output)]),0)
+                provision.assert_called_once_with(output.with_name('packages-runtime-build'))
+                build.assert_called_once_with(ROOT,output,runtime)
+                self.assertIs(entrypoint.provision_runtime,shared_runtime)
+            forbidden = ROOT / 'never-create-package-output'
+            with patch('installer.dsh_runtime.provision_runtime') as provision:
+                with self.assertRaises(Conflict):
+                    entrypoint.main(['dsh','package','--surface','desktop','--output',str(forbidden)])
+                provision.assert_not_called()
+                self.assertFalse(forbidden.exists())
 
     def test_cli_routes_and_rejects_mutation_and_foreign_options(self):
         for action in ('plan', 'verify'):

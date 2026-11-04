@@ -1,5 +1,20 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { realpathSync } from 'node:fs';
+
+// DSH installs profile bundles below profile/node_modules, including pnpm links.
+// Validate package identity at each boundary; source checkouts never qualify.
+function installedProfileDirectory() {
+  const directory = realpathSync(fileURLToPath(new URL('.', import.meta.url)));
+  let profile;
+  for (let ancestor = directory; path.dirname(ancestor) !== ancestor; ancestor = path.dirname(ancestor)) {
+    if (path.basename(ancestor) !== 'node_modules' || path.basename(path.dirname(path.dirname(ancestor))) === '.pnpm') continue;
+    try {
+      if (realpathSync(path.join(ancestor, '@mainframe', 'secrets-vault')) === directory) profile = path.dirname(ancestor);
+    } catch { /* Missing or unrelated native alias is not a profile anchor. */ }
+  }
+  return profile; // Outermost matching alias, not pnpm's inner self-reference.
+}
 import { VaultStore } from './vault-store.js';
 import { RecoveryStore } from './recovery-store.js';
 import { httpOperation, sshOperation } from './operations.js';
@@ -20,9 +35,9 @@ function metadata(value = {}) {
 }
 const error = () => ({ok:false,error:{code:'VAULT_OPERATION_FAILED',message:'Vault operation failed. Check that it is unlocked and the fields are valid.'}});
 export function apply(ctx, config = {}) {
-  const profile = config.profileDirectory || process.env.DSH_PROFILE_DIR;
+  const profile = config.profileDirectory || process.env.DSH_PROFILE_DIR || installedProfileDirectory();
   if (!profile) throw new Error('Secrets Vault requires a profile directory.');
-  const python = config.python || fileURLToPath(new URL('./.venv-homebrew/bin/python3',import.meta.url));
+  const python = config.python || fileURLToPath(new URL('./runtime/bin/python3.12',import.meta.url));
   const databasePath=path.join(profile,'secrets-vault','vault.db');
   const store = new VaultStore({python,databasePath});
   const recovery = new RecoveryStore(store,databasePath);

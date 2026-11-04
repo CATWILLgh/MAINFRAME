@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+
+test('native pnpm package resolves profile without environment or source checkout', async t => {
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'analytics-native-profile-'));
+ const previous=process.env.DSH_PROFILE_DIR;
+ delete process.env.DSH_PROFILE_DIR;
+ t.after(async()=>{if(previous===undefined)delete process.env.DSH_PROFILE_DIR;else process.env.DSH_PROFILE_DIR=previous;assert.ok(root.startsWith(path.join(os.tmpdir(),'analytics-native-profile-')));await fs.rm(root,{recursive:true});});
+ const installed=path.join(root,'node_modules','.pnpm','synthetic-package','node_modules','@mainframe','activity-analytics');
+ await fs.mkdir(installed,{recursive:true});
+ const source=fileURLToPath(new URL('.',import.meta.url));
+ for(const name of await fs.readdir(source))if(name.endsWith('.js')||name==='package.json')await fs.copyFile(path.join(source,name),path.join(installed,name));
+ await fs.mkdir(path.join(root,'node_modules','@mainframe'),{recursive:true});
+ await fs.symlink(installed,path.join(root,'node_modules','@mainframe','activity-analytics'));
+ const copied=await import(pathToFileURL(path.join(installed,'index.js')));
+ const effects=[],listeners=new Map();
+ const ctx={agents:{list:()=>[]},effect(fn){effects.push(fn());},on(name,fn){listeners.set(name,fn);},connection:{fetch:{register:()=>()=>{}}}};
+ try {await copied.apply(ctx);await fs.access(path.join(root,'activity-analytics','intervals.sqlite'));}
+ finally {await listeners.get('dispose')?.();for(const cleanup of effects)await cleanup?.();}
+ await fs.rm(path.join(root,'node_modules','@mainframe','activity-analytics'));
+ await fs.symlink(root,path.join(root,'node_modules','@mainframe','activity-analytics'));
+ await assert.rejects(copied.apply(ctx),/requires an active profile directory/);
+ await assert.rejects(apply(ctx),/requires an active profile directory/);
+});
 import { apply, createHost, inject, UI_PATH } from './index.js';
 
 async function fixture(t, agents = []) {

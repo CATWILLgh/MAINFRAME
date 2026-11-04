@@ -1,4 +1,4 @@
-# Activity Analytics 1.2.0
+# Activity Analytics 1.3.1
 
 Profile-wide DSH Analytics sidebar page for user-active time and summed agent
 working time. Local-only; no chat scan, input text, keystrokes, page names, or
@@ -29,10 +29,13 @@ agent-minutes. This is an estimate of presence, not a measurement of attention.
 ## Storage and deployment
 
 Requires a DSH Host exposing usable `node:sqlite`; no npm runtime dependencies.
-The bundle patch deliberately contains no machine paths. Before activation,
-configure `profileDirectory` for the **selected** profile through DSH's supported
-plugin configuration; `DSH_PROFILE_DIR` is a fallback only and may be absent in
-Desktop. Never guess the profile or point state into this source tree.
+The bundle patch deliberately contains no machine paths. Storage root precedence
+is explicit `profileDirectory`, then Host `DSH_PROFILE_DIR`, then the native
+installed package's profile root. The native fallback requires an outer
+`node_modules/@mainframe/activity-analytics` alias resolving to this exact package;
+pnpm's inner self-reference is excluded. This relies on DSH's profile-local
+package installation layout, not cwd or home guessing. Source-linked installs
+without that anchor require explicit configuration; missing roots fail closed.
 
 The profile's `activity-analytics/intervals.sqlite` stores only merged user
 intervals, weighted agent intervals and history start. It is **not encrypted**;

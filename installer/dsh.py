@@ -88,18 +88,20 @@ class DSH:
             raise Conflict(f'Incomplete DSH runtime payload in {name}: {", ".join(sorted(missing))}')
         if name == 'secrets-vault' and not (directory / 'ssh-askpass').stat().st_mode & 0o111:
             raise Conflict('DSH vault ssh-askpass must remain executable.')
-        requirements = ['Supply the selected DSH profile directory through native plugin configuration.'] if name != 'message-time' else []
+        requirements = ['Install through the native profile package manager; source execution needs DSH_PROFILE_DIR or an explicit profileDirectory override.'] if name != 'message-time' else []
         if name == 'activity-analytics':
             requirements.append('The DSH Host runtime must expose usable node:sqlite.')
         if name == 'secrets-vault':
-            requirements.append('Configure an external Python with sqlcipher3/SQLCipher; no Python environment or vault data is included.')
+            requirements.append('Build a release package with a standalone Python/SQLCipher runtime; source directories alone are not user installs.')
         return {
             'source': source, 'package': manifest['name'], 'version': manifest['version'],
-            'install_target': str(directory),
+            'source_target': str(directory),
+            'install_target': None,
+            'packaging': 'Run install.py dsh package; install the resulting persistent .tgz archives, not source links.',
             'source_files': {item: digest(regular_bytes(directory / item)) for item in sorted(expected)},
             'requirements': requirements,
             'handoff': {'tool': 'plugin_manager', 'actions': ['list_bundles', 'install_bundle'],
-                        'target': str(directory)},
+                        'target': None, 'requires': 'Build independent .tgz packages first.'},
         }
 
     def plan(self):
