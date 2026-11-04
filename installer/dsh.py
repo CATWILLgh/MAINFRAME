@@ -64,7 +64,7 @@ class DSH:
             manifest = json.loads(regular_bytes(directory / 'package.json'))
         except (ValueError, TypeError) as error:
             raise Conflict(f'Invalid DSH package manifest: {name}') from error
-        if (not isinstance(manifest, dict) or manifest.get('name') != f'@local/{name}'
+        if (not isinstance(manifest, dict) or manifest.get('name') != f'@mainframe/{name}'
                 or not isinstance(manifest.get('version'), str)):
             raise Conflict(f'Invalid DSH package identity: {name}')
         dsh = manifest.get('dsh')

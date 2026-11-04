@@ -38,6 +38,19 @@ class DSHTests(unittest.TestCase):
                                  for row in group.values()))
             self.assertEqual(before, {p.relative_to(home): p.read_bytes() for p in home.rglob('*') if p.is_file()})
 
+    def test_mainframe_namespace_matches_manifests_patches_and_client_modules(self):
+        _, report = DSH(ROOT, ROOT / 'unused-home').plan()
+        for name in DSH_PLUGINS:
+            package = ROOT / DSH_PLUGINS[name]
+            expected = f'@mainframe/{name}'
+            with self.subTest(package=name):
+                self.assertEqual(report['bundles'][name]['package'], expected)
+                self.assertEqual(json.loads((package / 'package.json').read_text())['name'], expected)
+                self.assertIn(f"name: '{expected}'", (package / 'cordis.patch.yml').read_text())
+                for client in ('client.js', 'client.template.js'):
+                    if (package / client).exists():
+                        self.assertRegex((package / client).read_text(), rf"id:\s*'{expected}'")
+
     def test_source_validation_rejects_private_material_and_missing_payload(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -63,7 +76,7 @@ class DSHTests(unittest.TestCase):
             root = Path(directory)
             package = root / 'plugins/dsh/message-time'
             shutil.copytree(ROOT / 'plugins/dsh/message-time', package)
-            for value in ([], {'name': '@local/message-time', 'version': '1.1.0', 'dsh': []}):
+            for value in ([], {'name': '@mainframe/message-time', 'version': '1.1.0', 'dsh': []}):
                 (package / 'package.json').write_text(json.dumps(value))
                 with self.subTest(manifest=value), self.assertRaises(Conflict):
                     DSH(root, root / 'home')._bundle('message-time', 'plugins/dsh/message-time')

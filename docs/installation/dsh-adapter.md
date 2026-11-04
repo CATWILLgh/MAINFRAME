@@ -11,9 +11,9 @@ The repository owns three original DSH source bundles:
 
 | Source | Package | Copied version |
 | --- | --- | --- |
-| [Activity Analytics](../../plugins/dsh/activity-analytics/package.json) | `@local/activity-analytics` | 1.2.0 |
-| [Message timestamps](../../plugins/dsh/message-time/package.json) | `@local/message-time` | 1.1.0 |
-| [Secrets Vault](../../plugins/dsh/secrets-vault/package.json) | `@local/secrets-vault` | 1.3.0 |
+| [Activity Analytics](../../plugins/dsh/activity-analytics/package.json) | `@mainframe/activity-analytics` | 1.2.0 |
+| [Message timestamps](../../plugins/dsh/message-time/package.json) | `@mainframe/message-time` | 1.1.0 |
+| [Secrets Vault](../../plugins/dsh/secrets-vault/package.json) | `@mainframe/secrets-vault` | 1.3.0 |
 
 These are native DSH implementations, not generated copies of product-neutral
 MAINFRAME skills. Codex, ZCode, MiniMax and Cline explicitly classify these three
@@ -43,6 +43,30 @@ owner is DSH's `plugin_manager`; a Python file transaction cannot roll back that
 profile-level lifecycle. Other MAINFRAME components remain pending with the
 explicit limitation that this adapter has not implemented their DSH mapping.
 That is not a claim that DSH cannot support skills, roles or hooks.
+
+## MAINFRAME namespace and continuation boundary
+
+Repository packages use `@mainframe/*`; the scope identifies their MAINFRAME
+ownership, not an npm publication or installation location. Manifest names,
+Cordis package references and Client module ids use the same scope. Loader row
+ids, services, storage keys, data paths and source directories are unchanged.
+The copied versions above are retained; this is a package-identity change, not
+proof of a runtime upgrade.
+
+Previously running packages were named `@local/activity-analytics`,
+`@local/message-time` and `@local/secrets-vault`, linked to the original workspace
+sources. This repository rename does not rename those packages, change their
+configuration, install a second copy, or migrate any data. The native profile
+must be inspected afresh: this document is not evidence of its current state.
+
+For a new project conversation, start with this guide and the repository's
+[development instructions](../../AGENTS.md). The source import and namespace
+rename are complete. Remaining work, only after an explicit profile switchover
+request, is to establish supported native configuration, preserve existing
+profile/data ownership, replace the old identities without concurrent duplicate
+bindings, and verify activation and rendered behavior. Follow the prerequisites
+below; do not blindly install the new scope alongside the old one. Native
+activation and Vault's external SQLCipher runtime remain unverified.
 
 ## Native installation/update handoff
 

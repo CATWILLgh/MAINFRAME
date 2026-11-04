@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id:'@local/activity-analytics',
+  id:'@mainframe/activity-analytics',
   factory(require) {
     const React=require('react'), h=React.createElement;
     /* Pure browser-compatible helpers. No DOM access, timers, persistence, or content capture. */

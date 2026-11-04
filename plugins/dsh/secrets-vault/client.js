@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@local/secrets-vault',
+  id: '@mainframe/secrets-vault',
   factory(require) {
     const React = require('react');
     const h = React.createElement;

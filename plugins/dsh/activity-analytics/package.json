@@ -1,5 +1,5 @@
 {
-  "name": "@local/activity-analytics",
+  "name": "@mainframe/activity-analytics",
   "version": "1.2.0",
   "description": "Profile-wide local analytics for user activity and summed agent working time",
   "private": true,
