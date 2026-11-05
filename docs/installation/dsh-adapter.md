@@ -59,6 +59,12 @@ After switching a running Desktop Host from source links to archives, fully quit
 and reopen DSH before acceptance (a browser refresh is insufficient). The live
 loader can retain the previous linked module even while native package inventory
 and disk files show the new version; repeated installation is not a cache repair.
+Also check for older background Hosts sharing the same profile. Vault deliberately
+holds an exclusive worker lock; an obsolete Host can keep the new worker unavailable
+even after the visible Desktop restarts. Identify the lock-owning process and its
+parent without reading the database; obtain permission before stopping that older
+Host. Never delete the lock file or bypass the lock. Confirm the replacement with
+the native Vault status tool, not just an active plugin row.
 
 If the old `profileDirectory` differs from the launcher-selected profile, keep
 the complete plugin-owned directories intact until a separately authorized
