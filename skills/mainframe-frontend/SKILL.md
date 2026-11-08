@@ -1,16 +1,17 @@
 ---
 name: mainframe-frontend
-description: "Use for every web UI design task: plan, create, review, polish, or redesign a screen, component, dashboard, landing page, or product demo, in any web stack. Also use to implement or debug React web UI."
+description: Design, build, review, polish, or debug React web interfaces, including screens, components, dashboards, landing pages, and product demos. Use for visual planning and screenshot reviews as well as implementation.
 ---
 
-# Web UI design and engineering
+# React frontend design and engineering
 
-Use this as the primary visual method whenever the task involves how a web
-interface looks, reads, or is arranged. Apply it even when the task is a
-discussion, screenshot review, small visual edit, or uses a stack other than
-React. Start with [Unslop visual direction](references/visual-direction.md)
-before making or judging visual decisions. Use the existing product language
-for a small edit and develop a clear direction for a new surface or a redesign.
+Use this as the single design and engineering method for React web interfaces.
+Apply it to visual discussions, screenshot reviews, small edits, new screens,
+and redesigns. Build new interfaces and demos in React using the project's
+existing components and styles. Start with
+[Unslop visual direction](references/visual-direction.md) before making or
+judging visual decisions. Use the existing product language for a small edit
+and develop a clear direction for a new surface or a redesign.
 
 For an authored product illustration or demo, also use
 [Stageshow for product demos](references/product-demos.md). It guides the scene

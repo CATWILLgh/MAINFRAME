@@ -1,9 +1,9 @@
 # Product illustrations and short demos
 
 Use the Stageshow method when an illustration or short demo needs to show how
-one product action leads to a visible result. Build the scene with the project's
-existing UI primitives, local assets, and browser tooling. The method works with
-ordinary HTML and CSS and requires no upstream kit, install, CDN, or service.
+one product action leads to a visible result. Build the scene in React with the
+project's existing UI primitives, local assets, styles, and browser tooling.
+The method requires no upstream kit, install, CDN, or service.
 
 ## Compose the scene
 
@@ -32,7 +32,9 @@ ordinary HTML and CSS and requires no upstream kit, install, CDN, or service.
 Crop to one order line and its two counts. Keep the line identifier and count
 labels visible throughout, and omit navigation and other orders.
 Open the [standalone example](../assets/stock-reservation.html) in a browser to
-see the result and replay the three beats.
+see the result and replay the three beats. Its dependency-free HTML, CSS, and
+JavaScript demonstrate the composition and timing. Recreate those decisions
+with the receiving project's React components when building its demo.
 
 | Beat | What the viewer sees |
 | --- | --- |
