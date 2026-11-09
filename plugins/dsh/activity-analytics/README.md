@@ -1,4 +1,8 @@
-# Activity Analytics 1.3.1
+# Activity Analytics 1.3.5
+
+Compatibility is intentionally pinned to DSH `0.2.2-rc.1`, the runtime whose
+contracts were inspected. Source tests do not establish other-version or live
+installed compatibility.
 
 Profile-wide DSH Analytics sidebar page for user-active time and summed agent
 working time. Local-only; no chat scan, input text, keystrokes, page names, or
@@ -7,8 +11,10 @@ agent-minutes. This is an estimate of presence, not a measurement of attention.
 
 ## Behavior
 
-- User time requires a visible, focused DSH window and trusted input. Five minutes
-  without input suspends accounting; the grace period can include reading.
+- User time estimates focused-window presence, not attention or manual work.
+  A visible, focused window starts with a five-minute grace period even before
+  trusted input. Trusted interaction renews it; five minutes without input pauses
+  accounting. The grace period can include reading or inactivity.
 - Agent time tracks all running agents in the active profile, including subagents,
   tool/model waits and parallel execution, starting when the plugin observes them.
 - Today, yesterday, 7/14/28 calendar days, all-time and inclusive custom dates use
@@ -25,6 +31,25 @@ agent-minutes. This is an estimate of presence, not a measurement of attention.
 - Numeric queues are backed up in profile/history-scoped browser localStorage.
   Failed backup/restore is visible, not silently discarded. Clear browser data,
   an unobserved crash tail or failure before first connection can still lose time.
+  New v2 snapshots are immutable: each synchronous backup uses a fresh key,
+  then removes only the exact snapshots durably replaced by that backup. Reload
+  adopts and compacts captured v2 crash records; successful Host ACK retires them.
+  A resumed live owner always publishes a new key, so cleanup cannot delete its
+  newer tail. This works without Web Locks. Each construction requires a fresh
+  random instance id; keys are never reused, including after failed writes.
+  Rotation temporarily needs capacity for both old and new snapshots. Quota
+  failures preserve source records and memory rather than deleting to make room;
+  a full Host ACK can retire captured snapshots without allocating another one.
+  Concurrent directory changes can defer recovery until another reload. If a
+  failed write may have committed and a follow-up read also fails, its untouched
+  key is left for fresh recovery rather than retaining an unbounded in-memory
+  failed-attempt journal. Such ambiguous orphans may replay until that recovery.
+  Legacy v1 records remain read-only and can replay: old writers do not honor the
+  new protocol, and Browser Storage has no atomic compare/delete. Host union
+  prevents double counting. No stale-record TTL or lossy eviction.
+- Native unload closes admission, stops the timer and drains accepted work. Final
+  SQLite flush gets one bounded retry; the connection is closed even on failure.
+  A persistent storage failure is reported and may lose the final unsaved tail.
 
 ## Storage and deployment
 
@@ -62,8 +87,18 @@ node --check client.js
 node --test *.test.mjs
 ```
 
+`locale/en.json` and `locale/ru.json` are the centralized translation owners:
+`meta` supplies native plugin display metadata and the flat `ui` dictionary owns
+all interface strings. Russian DSH uses Russian; every other DSH language uses
+English, including dates, numbers and duration units. The Client registers the
+embedded dictionaries through native `ctx.locale.register` and `bind`; native
+locale slots and the page subscription update labels when DSH language changes.
+No separate language setting is stored.
+
 `time.js` and `outbox.js` are pure source modules. Edit `client.template.js` and
-rebuild `client.js`; the generated runtime client embeds both modules. Tests use
+the locale JSON, then rebuild `client.js`; the generated runtime client embeds
+both modules and the dictionaries using the shared development-only
+`../build-locales.mjs`. Do not maintain translations inside the generated client. Tests use
 synthetic clocks and temporary data, including SQLite migration, failed writes,
 concurrency/busy handling, corruption, randomized intervals, calendar boundaries,
 privacy/focus/idle, queue ACK/retry/reload, quota failure and tooltip contracts.

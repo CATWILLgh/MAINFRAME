@@ -139,6 +139,8 @@ export class ActivityStore {
     this.pendingAgents = [];
     this.serial = Promise.resolve();
     this.closed = false;
+    this.closing = false;
+    this.disposal = undefined;
     this.dirty = false;
   }
   prepare() {
@@ -164,6 +166,8 @@ export class ActivityStore {
     return time;
   }
   run(operation) {
+    // Close admission synchronously; work accepted before close still drains.
+    if (this.closing || this.closed) return Promise.reject(new Error('Analytics store is closing or closed.'));
     const result = this.serial.then(async () => {
       if (this.closed) throw new Error('Analytics store is closed.');
       return operation();
@@ -259,12 +263,20 @@ export class ActivityStore {
     });
   }
   close(time = this.time()) {
-    return this.run(async () => {
-      this.advance(time);
-      await this.flush();
-      this.active.clear();
-      this.db.close();
-      this.closed = true;
+    if (this.disposal) return this.disposal;
+    this.closing = true;
+    this.disposal = this.serial.then(async () => {
+      try {
+        this.advance(time);
+        // Only local SQLite transactions are retried. Failed transactions roll
+        // back; this is bounded even if storage stays unavailable on unload.
+        try { await this.flush(); } catch { await this.flush(); }
+      } finally {
+        this.active.clear();
+        try { this.db.close(); } finally { this.closed = true; }
+      }
     });
+    this.serial = this.disposal.then(() => {}, () => {});
+    return this.disposal;
   }
 }

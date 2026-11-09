@@ -138,6 +138,57 @@ test('failed stop/start writes preserve exact live state and retry without phant
   assert.equal((await reopened.summary(0, 2_000_000)).agentMs, 15_000);
 });
 
+test('close rejects new admission immediately, drains accepted operations and is single-shot', async t => {
+  const { store, at } = await fixture(t);
+  let release;
+  store.serial = new Promise(resolve => { release = resolve; });
+  at(1_005_000);
+  const accepted = store.activity([{ start: 1_000_000, end: 1_005_000 }]);
+  const closing = store.close();
+  const late = assert.rejects(store.checkpoint(), /clos/i);
+  assert.equal(store.close(), closing);
+  release();
+  await Promise.all([accepted, closing, late]);
+  assert.equal(store.closed, true);
+  assert.throws(() => store.db.prepare('SELECT 1'), /closed|not open/i);
+});
+
+test('close retries transient final flush once without duplicate intervals', async t => {
+  const { store, at, directory, now } = await fixture(t);
+  await store.setRunning({}, true);
+  at(1_010_000);
+  const persist = store.persist.bind(store);
+  let attempts = 0;
+  store.persist = async () => {
+    if (++attempts === 1) throw new Error('synthetic transient failure');
+    return persist();
+  };
+  await store.close();
+  assert.equal(attempts, 2);
+  assert.equal(store.active.size, 0);
+  const reopened = await ActivityStore.open(directory, { now });
+  try { assert.equal((await reopened.summary(0, 2_000_000)).agentMs, 10_000); }
+  finally { await reopened.close(); }
+});
+
+test('close releases database and live agents even while a real SQLite writer holds a lock', async t => {
+  const { store, at } = await fixture(t);
+  await store.setRunning({}, true);
+  at(1_010_000);
+  store.db.exec('PRAGMA busy_timeout=0');
+  const writer = new DatabaseSync(store.file);
+  writer.exec('BEGIN IMMEDIATE');
+  try {
+    const closing = store.close();
+    await assert.rejects(closing, /locked/);
+    assert.equal(store.close(), closing);
+    assert.equal(store.closed, true);
+    assert.equal(store.active.size, 0);
+    assert.throws(() => store.db.prepare('SELECT 1'), /closed|not open/i);
+    await assert.rejects(store.checkpoint(), /clos/i);
+  } finally { writer.exec('ROLLBACK'); writer.close(); }
+});
+
 test('partial unpublished database is ignored; corrupt canonical database fails closed', async t => {
   const { store, directory, now } = await fixture(t);
   await store.close();

@@ -296,6 +296,11 @@
         "source": "plugins/dsh/secrets-vault",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "session-collaboration": {
+        "source": "plugins/dsh/session-collaboration",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "runtime": {},

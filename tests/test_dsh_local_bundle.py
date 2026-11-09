@@ -24,7 +24,6 @@ class LocalBundleTests(unittest.TestCase):
         self.profile.mkdir()
         self.home = self.root / 'dsh-home'
         self.home.mkdir()
-        self.python = self.root / 'external-runtime' / 'bin' / 'python3'
         self.output = self.root / 'deployment'
         self.addCleanup(patch.stopall)
         patch.object(bundle, 'REPOSITORY_ROOT', self.repo).start()
@@ -34,7 +33,6 @@ class LocalBundleTests(unittest.TestCase):
         return bundle.generate_bundle(**{
             'output': self.output,
             'profile_directory': self.profile,
-            'vault_python': self.python,
             **kwargs,
         })
 
@@ -61,7 +59,7 @@ class LocalBundleTests(unittest.TestCase):
             {'id': 'activity-analytics', 'name': '@mainframe/activity-analytics',
              'config': {'profileDirectory': str(self.profile)}},
             {'id': 'secrets-vault', 'name': '@mainframe/secrets-vault',
-             'config': {'profileDirectory': str(self.profile), 'python': str(self.python)}},
+             'config': {'profileDirectory': str(self.profile)}},
         ])
         for language in ('en', 'ru'):
             meta = json.loads((self.output / 'locale' / f'{language}.json').read_text())['meta']
@@ -87,7 +85,6 @@ class LocalBundleTests(unittest.TestCase):
         self.assertEqual(marker.read_bytes(), b'opaque fixture')
         self.assertEqual(list(self.profile.iterdir()), [marker])
         self.assertEqual(list(self.repo.iterdir()), [])
-        self.assertFalse(self.python.exists())
 
     @unittest.skipUnless(os.name == 'posix', 'POSIX permission bits')
     def test_owner_only_permissions_even_with_permissive_umask(self):
@@ -137,7 +134,7 @@ class LocalBundleTests(unittest.TestCase):
             self.reject(output=self.home / 'private')
 
     def test_absolute_paths_are_required(self):
-        for key in ('output', 'profile_directory', 'vault_python'):
+        for key in ('output', 'profile_directory'):
             with self.subTest(key=key):
                 self.reject(**{key: Path('relative-path')})
         self.assertFalse(self.output.exists())
@@ -180,10 +177,10 @@ class LocalBundleTests(unittest.TestCase):
 
     def test_conflict_created_during_staging_is_preserved(self):
         original = bundle._payload
-        def introduce_conflict(profile, python):
+        def introduce_conflict(profile):
             self.output.mkdir()
             (self.output / 'foreign').write_text('preserve')
-            return original(profile, python)
+            return original(profile)
         with patch.object(bundle, '_payload', side_effect=introduce_conflict):
             self.reject()
         self.assertEqual((self.output / 'foreign').read_text(), 'preserve')
@@ -195,22 +192,11 @@ class LocalBundleTests(unittest.TestCase):
         self.reject(profile_directory=alias)
         self.assertFalse(self.output.exists())
 
-    def test_venv_python_symlink_spelling_is_preserved_without_reading_it(self):
-        executable = self.root / 'venv' / 'bin' / 'python3'
-        executable.parent.mkdir(parents=True)
-        executable.symlink_to(self.python)
-        self.generate(vault_python=executable)
-        rows = json.loads((self.output / 'cordis.patch.yml').read_text())[0]['insert']
-        self.assertEqual(rows[1]['config']['python'], str(executable))
-        self.assertTrue(executable.is_symlink())
-        self.assertFalse(self.python.exists())
-
     def test_paths_with_yaml_metacharacters_round_trip(self):
         profile = self.root / 'profile: # "quoted"'
-        python = self.root / 'python: # "quoted"'
-        self.generate(profile_directory=profile, vault_python=python)
+        self.generate(profile_directory=profile)
         rows = json.loads((self.output / 'cordis.patch.yml').read_text())[0]['insert']
-        self.assertEqual(rows[1]['config'], {'profileDirectory': str(profile), 'python': str(python)})
+        self.assertEqual(rows[1]['config'], {'profileDirectory': str(profile)})
         self.assertFalse(profile.exists())
 
     def test_failed_publication_cleans_only_owned_staging_files(self):
@@ -232,16 +218,23 @@ class LocalBundleTests(unittest.TestCase):
     def test_cli_success_does_not_print_private_paths(self):
         stdout, stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
-            status = bundle.main(['--output', str(self.output), '--profile-directory', str(self.profile),
-                                  '--vault-python', str(self.python)])
+            status = bundle.main(['--output', str(self.output), '--profile-directory', str(self.profile)])
         self.assertEqual(status, 0)
         self.assertNotIn(str(self.root), stdout.getvalue() + stderr.getvalue())
+
+    def test_obsolete_python_option_is_rejected_without_echo(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit):
+            bundle.main(['--output', str(self.output), '--profile-directory', str(self.profile),
+                         '--vault-python', str(self.root / 'private-python')])
+        self.assertNotIn(str(self.root), stderr.getvalue())
+        self.assertFalse(self.output.exists())
 
     def test_cli_failure_hides_exception_paths(self):
         stdout, stderr = io.StringIO(), io.StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
             status = bundle.main(['--output', str(self.repo / 'private'),
-                                  '--profile-directory', str(self.profile), '--vault-python', str(self.python)])
+                                  '--profile-directory', str(self.profile)])
         self.assertNotEqual(status, 0)
         self.assertNotIn(str(self.root), stdout.getvalue() + stderr.getvalue())
 

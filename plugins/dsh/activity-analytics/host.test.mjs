@@ -20,7 +20,7 @@ test('native pnpm package resolves profile without environment or source checkou
  const effects=[],listeners=new Map();
  const ctx={agents:{list:()=>[]},effect(fn){effects.push(fn());},on(name,fn){listeners.set(name,fn);},connection:{fetch:{register:()=>()=>{}}}};
  try {await copied.apply(ctx);await fs.access(path.join(root,'activity-analytics','intervals.sqlite'));}
- finally {await listeners.get('dispose')?.();for(const cleanup of effects)await cleanup?.();}
+ finally {await Promise.all(effects.splice(0).map(cleanup=>cleanup?.()));}
  await fs.rm(path.join(root,'node_modules','@mainframe','activity-analytics'));
  await fs.symlink(root,path.join(root,'node_modules','@mainframe','activity-analytics'));
  await assert.rejects(copied.apply(ctx),/requires an active profile directory/);
@@ -56,7 +56,7 @@ async function fixture(t, agents = []) {
     const result = await handler(new Request(`http://localhost${UI_PATH}`, { method: options.method || 'POST', headers: { 'content-type': 'application/json', 'x-activity-analytics-ui': '1', ...options.headers }, body: options.raw ?? JSON.stringify(args) }));
     return { status: result.status, headers: result.headers, value: await result.json() };
   };
-  return { store, directory, call, errors, tick: () => tick(), at: n => { time = n; }, emit: (name, value) => { for (const listener of listeners.get(name) || []) listener(value); }, dispose: async () => { for (const listener of listeners.get('dispose') || []) await listener(); for (const effect of effects) await effect?.(); }, get stopped() { return stopped; }, get unregistered() { return unregistered; } };
+  return { store, directory, call, errors, tick: () => tick(), at: n => { time = n; }, emit: (name, value) => { for (const listener of listeners.get(name) || []) listener(value); }, dispose: async () => { listeners.clear(); await Promise.all(effects.splice(0).map(effect => effect?.())); }, get stopped() { return stopped; }, get unregistered() { return unregistered; } };
 }
 
 test('apply accepts explicit profileDirectory without relying on desktop environment', async t => {
@@ -66,7 +66,7 @@ test('apply accepts explicit profileDirectory without relying on desktop environ
   const ctx={agents:{list:()=>[]},effect(fn){effects.push(fn());},on(name,fn){listeners.set(name,fn);},connection:{fetch:{register:()=>()=>{}}}};
   await apply(ctx,{profileDirectory:profile});
   await fs.access(path.join(profile,'activity-analytics','intervals.sqlite'));
-  await listeners.get('dispose')();for(const cleanup of effects)await cleanup?.();
+  await Promise.all(effects.splice(0).map(cleanup=>cleanup?.()));
 });
 
 test('authenticated bootstrap returns stable opaque profile-history scope without paths or content',async t=>{
@@ -99,6 +99,42 @@ test('Host has no tool dependency and snapshots all already-running agents witho
   await f.dispose();
   assert.ok(f.stopped >= 1);
   assert.ok(f.unregistered);
+});
+
+test('owned unload closes admission, drains accepted work and persists the final active interval', async t => {
+  const f = await fixture(t, [{ status: 'running' }]);
+  await f.store.serial;
+  f.at(1_010_000);
+  const accepted = f.store.activity([{ start: 1_000_000, end: 1_005_000 }]);
+  const disposing = f.dispose();
+  await accepted;
+  await disposing;
+  assert.equal(f.stopped, 1);
+  assert.equal(f.store.closed, true);
+  assert.equal(f.store.active.size, 0);
+  assert.throws(() => f.store.db.prepare('SELECT 1'), /closed|not open/i);
+  assert.equal((await f.call({ op: 'bootstrap' })).status, 503);
+  const { ActivityStore } = await import('./store.js');
+  const reopened = await ActivityStore.open(f.directory, { now: () => 1_010_000 });
+  try {
+    const summary = await reopened.summary(0, 2_000_000);
+    assert.equal(summary.agentMs, 10_000);
+    assert.equal(summary.userMs, 5_000);
+  } finally { await reopened.close(); }
+  await f.dispose();
+  assert.equal(f.stopped, 1);
+});
+
+test('owned unload reports failed final flush but still releases SQLite', async t => {
+  const f = await fixture(t, [{ status: 'running' }]);
+  await f.store.serial;
+  f.at(1_010_000);
+  f.store.persist = async () => { throw new Error('synthetic disk failure'); };
+  await f.dispose();
+  assert.equal(f.store.closed, true);
+  assert.equal(f.store.active.size, 0);
+  assert.throws(() => f.store.db.prepare('SELECT 1'), /closed|not open/i);
+  assert.deepEqual(f.errors, ['reported']);
 });
 
 test('private UI admission rejects API peers, unauthenticated, and missing protection header', async t => {

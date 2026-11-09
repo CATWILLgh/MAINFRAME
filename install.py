@@ -78,18 +78,17 @@ def main(argv=None):
     parser.add_argument("--skill", help="Deliver only this exact canonical skill into an existing Desktop installation")
     parser.add_argument("--todo", action="store_true", help="Deliver only the project idea command and its addressed guard into an existing Codex or ZCode Desktop installation")
     parser.add_argument("--output", type=Path, help="DSH package output directory outside the checkout; must not exist")
-    parser.add_argument("--vault-runtime", type=Path, help="Prepared standalone Python root; otherwise package builds provision pinned Python/SQLCipher with uv")
     args = parser.parse_args(argv)
-    if args.product != "dsh" and (args.action == "package" or args.output or args.vault_runtime):
-        parser.error("package/--output/--vault-runtime are DSH-only")
+    if args.product != "dsh" and (args.action == "package" or args.output):
+        parser.error("package/--output are DSH-only")
     if args.product == "dsh":
         root = Path(__file__).resolve().parent
         if Path.cwd().resolve() != root:
             raise Conflict("Open the MAINFRAME repository and run its installer from that root.")
         if args.action not in ("plan", "verify", "package"):
             parser.error("DSH adapter supports plan/verify/package; use native plugin_manager for profile lifecycle actions")
-        if args.action != "package" and (args.output or args.vault_runtime):
-            parser.error("DSH --output/--vault-runtime require package")
+        if args.action != "package" and (args.output):
+            parser.error("DSH --output require package")
         if not args.surface:
             parser.error("DSH requires --surface desktop or --surface cli as selection metadata, not native proof")
         if (args.zcode_home or args.zcode_app or args.minimax_home or args.minimax_app
@@ -102,13 +101,7 @@ def main(argv=None):
             if not args.output:
                 parser.error("DSH package requires --output outside the checkout")
             from installer.dsh_package import build_packages
-            from installer.dsh_runtime import provision_runtime as provision_vault_runtime, validate_build_output
-            output = validate_build_output(args.output, source_root=root)
-            runtime = args.vault_runtime
-            if runtime is None:
-                runtime_output = validate_build_output(output.with_name(output.name + "-runtime-build"), source_root=root)
-                runtime = provision_vault_runtime(runtime_output)
-            show(build_packages(root, args.output, runtime), args.details)
+            show(build_packages(root, args.output), args.details)
             return 0
         _, report = DSH(root, args.home, surface=args.surface).plan()
         show(report, args.details)

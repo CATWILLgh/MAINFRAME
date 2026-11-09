@@ -18,20 +18,31 @@ SOURCE_FILES = {
         'README.md', 'build-client.mjs', 'client.js', 'client.template.js',
         'client.test.mjs', 'cordis.patch.yml', 'delivery.test.mjs', 'host.test.mjs',
         'icon.svg', 'index.js', 'outbox.js', 'outbox.test.mjs', 'package.json',
-        'store.js', 'store.test.mjs', 'time.js', 'time.test.mjs',
+        'store.js', 'store.test.mjs', 'time.js', 'time.test.mjs', 'localization.test.mjs',
         'locale/en.json', 'locale/ru.json',
     },
     'message-time': {
-        'cordis.patch.yml', 'icon.svg', 'index.js', 'package.json', 'test.mjs',
+        'cordis.patch.yml', 'icon.svg', 'index.js', 'package.json', 'test.mjs', 'schema-fixture.mjs', 'README.md',
         'locale/en.json', 'locale/ru.json',
     },
+    'session-collaboration': {
+        'index.js', 'core.js', 'core.test.js', 'selftest.js', 'package.json',
+        'tasks.js', 'storage.js', 'wait-many.js', 'tasks.test.js', 'wait-many.test.js', 'index.test.js',
+        'lifecycle-management.js', 'lifecycle-reads.js', 'lifecycle-management.test.js',
+        'model-selection.js', 'model-selection.test.js', 'tool-surface.js', 'tool-surface.test.js', 'title-creation.test.js',
+        'cordis.patch.yml', 'README.md', 'icon.svg', 'locale/en.json', 'locale/ru.json',
+    },
     'secrets-vault': {
-        'README.md', 'backend.test.mjs', 'client.js', 'clipboard.js',
+        'README.md', 'backend.test.mjs', 'client.js', 'client.template.js',
+        'build-client.mjs', 'localization.test.mjs', 'lifecycle.test.mjs', 'test-effects.mjs', 'clipboard.js',
         'clipboard.test.mjs', 'cordis.patch.yml', 'host.test.mjs', 'icon.svg',
-        'index.js', 'operations.js', 'operations.test.mjs', 'package.json',
+        'index.js', 'legacy-guard.test.mjs', 'operations.js', 'operations.test.mjs', 'package.json',
         'recovery-host.test.mjs', 'recovery-store.js', 'recovery-ui.test.mjs',
-        'recovery.test.mjs', 'ssh-askpass', 'ssh-askpass.cjs', 'ui-contract.test.mjs',
-        'vault-store.js', 'vault.py', 'locale/en.json', 'locale/ru.json',
+        'recovery.test.mjs', 'recovery-durability.test.mjs', 'modal-requests.test.mjs', 'tool-diagnostics.test.mjs',
+        'ssh-askpass', 'ssh-askpass.cjs', 'ui-contract.test.mjs',
+        'discovery-benchmark.mjs', 'http-synthetic.test.mjs', 'tool-contract.test.mjs',
+        'vault-store.js', 'core/index.js', 'core/core.test.mjs', 'core/ownership.test.mjs', 'core/README.md',
+        'locale/en.json', 'locale/ru.json',
     },
 }
 
@@ -52,7 +63,7 @@ class DSH:
             if path.is_symlink():
                 raise Conflict(f'Unexpected DSH source symlink: {path}')
             if path.is_dir():
-                if relative != 'locale':
+                if relative not in ({'locale', 'core'} if name == 'secrets-vault' else {'locale'}):
                     raise Conflict(f'Unexpected DSH source directory: {path}')
             elif relative not in expected or not path.is_file():
                 raise Conflict(f'Unexpected DSH source: {path}')
@@ -82,17 +93,19 @@ class DSH:
             if not matches or any(p.relative_to(directory).as_posix() not in expected for p in matches):
                 raise Conflict(f'Missing DSH payload declaration: {name}: {pattern}')
             covered.update(p.relative_to(directory).as_posix() for p in matches)
-        development = {'package.json', 'build-client.mjs', 'client.template.js', 'time.js', 'outbox.js'}
-        runtime = {item for item in expected if item not in development and not item.endswith('.test.mjs') and item != 'test.mjs'}
+        development = {'package.json', 'build-client.mjs', 'client.template.js', 'time.js', 'outbox.js', 'core/README.md', 'test-effects.mjs', 'schema-fixture.mjs', 'discovery-benchmark.mjs'}
+        if name in {'activity-analytics', 'message-time', 'secrets-vault'}:
+            development.add('README.md')
+        runtime = {item for item in expected if item not in development and not item.endswith(('.test.js', '.test.mjs')) and item != 'test.mjs'}
         if missing := runtime - covered:
             raise Conflict(f'Incomplete DSH runtime payload in {name}: {", ".join(sorted(missing))}')
         if name == 'secrets-vault' and not (directory / 'ssh-askpass').stat().st_mode & 0o111:
             raise Conflict('DSH vault ssh-askpass must remain executable.')
-        requirements = ['Install through the native profile package manager; source execution needs DSH_PROFILE_DIR or an explicit profileDirectory override.'] if name != 'message-time' else []
+        requirements = ['Install through the native profile package manager; source execution needs DSH_PROFILE_DIR or an explicit profileDirectory override.'] if name in {'activity-analytics', 'secrets-vault'} else []
         if name == 'activity-analytics':
             requirements.append('The DSH Host runtime must expose usable node:sqlite.')
         if name == 'secrets-vault':
-            requirements.append('Build a release package with a standalone Python/SQLCipher runtime; source directories alone are not user installs.')
+            requirements.append('Build a release package using the Host Node runtime; source directories alone are not user installs.')
         return {
             'source': source, 'package': manifest['name'], 'version': manifest['version'],
             'source_target': str(directory),

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { promises as fs, accessSync, constants } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { RecoveryStore } from './recovery-store.js';
@@ -24,7 +23,9 @@ class FakeStore {
 async function fixture(t) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-recovery-synthetic-'));
   await fs.chmod(directory, 0o700);
+  const disposals = [];
   t.after(async () => {
+    for (const dispose of disposals) await dispose();
     // Resolve and constrain the test-owned target before deleting it.
     assert.equal(path.dirname(path.resolve(directory)), path.resolve(os.tmpdir()));
     assert.ok(path.basename(directory).startsWith('dsh-recovery-synthetic-'));
@@ -32,7 +33,7 @@ async function fixture(t) {
   });
   const store = new FakeStore();
   const databasePath = path.join(directory, 'synthetic.db');
-  return { directory, store, recovery: new RecoveryStore(store, databasePath), databasePath };
+  return { directory, store, recovery: new RecoveryStore(store, databasePath), databasePath, disposals };
 }
 const password = 'synthetic master password';
 const nextPassword = 'synthetic replacement password';
@@ -120,13 +121,10 @@ test('missing DB after interrupted setup preserves envelope and refuses overwrit
   assert.equal(await fs.readFile(recovery.sidecarPath, 'utf8'), before);
 });
 
-test('real SQLCipher synthetic legacy migration, recovery, restart and key rotation', async t => {
-  const python = process.env.MAINFRAME_TEST_VAULT_PYTHON || fileURLToPath(new URL('./runtime/bin/python3.12', import.meta.url));
-  try { accessSync(python, constants.X_OK); }
-  catch { throw new Error('Vault integration tests require an executable bundled runtime; stage runtime/bin/python3.12 or set MAINFRAME_TEST_VAULT_PYTHON to a verified Python with sqlcipher3.'); }
-  const { databasePath } = await fixture(t);
-  let store = new VaultStore({ python, databasePath });
-  t.after(async () => { await store.dispose(); });
+test('real Node synthetic recovery enable, restart and key rotation', async t => {
+  const { databasePath, disposals } = await fixture(t);
+  let store = new VaultStore({ databasePath });
+  disposals.push(() => store.dispose());
   await store.setup(password, password);
   const secret = { token: 'SYNTHETIC-RECOVERY-INTEGRATION-NOT-A-CREDENTIAL' };
   const { id } = await store.save({ metadata: { name: 'synthetic recovery fixture' }, secret });
@@ -134,7 +132,7 @@ test('real SQLCipher synthetic legacy migration, recovery, restart and key rotat
   const issued = await recovery.enable(password);
   assert.deepEqual(await store.internalGet(id), secret);
   await store.dispose();
-  store = new VaultStore({ python, databasePath });
+  store = new VaultStore({ databasePath });
   recovery = new RecoveryStore(store, databasePath);
   await assert.rejects(store.unlock(password));
   await recovery.unlock(password);

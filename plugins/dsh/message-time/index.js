@@ -4,8 +4,20 @@
  * source metadata; the model receives only [YYYY-MM-DD HH:mm:ss ±HH:mm].
  */
 import { randomUUID } from 'node:crypto';
+import Schema from '@deepseek-ai/schemastery';
+import en from './locale/en.json' with { type: 'json' };
+import ru from './locale/ru.json' with { type: 'json' };
 
 export const name = 'message-time';
+// Cordis validates through ~standard; DSH settings/Inspect project the native
+// Schemastery graph. A plain JSON Schema is not a native plugin Config.
+export const Config = Schema.object({
+  enabled: Schema.boolean().default(true).description(en.config.enabled),
+  includeUser: Schema.boolean().default(true).description(en.config.includeUser),
+  includeAssistant: Schema.boolean().default(true).description(en.config.includeAssistant),
+  includeTurnStart: Schema.boolean().default(true).description(en.config.includeTurnStart),
+  timeZone: Schema.string().description(en.config.timeZone),
+}).i18n({ en: en.config, ru: ru.config });
 const SOURCE_KIND = 'message-time';
 const IANA_TIME_ZONE = /^[A-Za-z][A-Za-z0-9_+.-]*(?:\/[A-Za-z0-9_+.-]+)*$/;
 
@@ -60,30 +72,50 @@ export function apply(ctx, config) {
   const log = ctx.logger('message-time');
   // Derived incrementally from the durable log; isolated by Session identity,
   // restored lazily on reload/fork, and collectible when the Session goes away.
-  const states = new WeakMap();
+  let states = new WeakMap();
   let disposed = false;
 
   function stateOf(session) {
     let state = states.get(session);
     if (!state) {
-      state = { cursor: 0, received: new Map(), zone: fallbackZone,
+      state = { cursor: 0, received: new Map(), claimed: new Set(),
+        pending: { 'next-turn': [], 'next-step': [] }, zone: fallbackZone,
         startedTurn: undefined, endedTurn: undefined };
       states.set(session, state);
     }
     for (const event of session.snapshotEvents(state.cursor)) {
       state.cursor = event.seq + 1;
       if (event.type === 'agent/inbox/spliced') {
-        for (const message of event.data?.inserted ?? []) {
-          if (message?.source?.kind === 'user' && !state.received.has(message.id)) {
-            state.received.set(message.id, event.time);
-          }
+        const { target, start, removedCount = 0, inserted, outcome } = event.data;
+        // Native persisted splices have normalized offsets. Keep ALL pending
+        // identities (including synthetic input) to preserve those positions.
+        const removed = state.pending[target].splice(start, removedCount,
+          ...inserted.map(message => message.id));
+        for (const id of removed) {
+          // Native removal/replacement/cancel explicitly records "canceled";
+          // claim removes without an outcome BEFORE pre-step runs. A pending-
+          // inbox-only prune would therefore lose the original receipt time.
+          if (outcome === 'canceled') {
+            state.received.delete(id);
+            state.claimed.delete(id);
+          } else if (state.received.has(id)) state.claimed.add(id);
         }
+        for (const message of inserted) {
+          if (message?.source?.kind === 'user') state.received.set(message.id, event.time);
+        }
+      }
+      if (event.type === 'turn/end') {
+        // Claims rejected or aborted during async assembly may never commit a
+        // user/message. Terminal turns abandon them, but not queued next work.
+        for (const id of state.claimed) state.received.delete(id);
+        state.claimed.clear();
       }
       if (event.type !== 'user/message' || event.surfaceOp !== 'append') continue;
       const message = event.data;
       if (message?.source?.kind === 'user') {
         state.zone = clientZone(message) ?? state.zone;
         state.received.delete(message.id);
+        state.claimed.delete(message.id);
       }
       const source = message?.source;
       if (source?.kind !== SOURCE_KIND) continue;
@@ -96,7 +128,7 @@ export function apply(ctx, config) {
 
   ctx.on('agent/pre-step', async (payload, next) => {
     const decision = await next();
-    if (decision?.kind !== 'enter') return decision;
+    if (disposed || decision?.kind !== 'enter') return decision;
     try {
       const state = stateOf(payload.agent.session);
       let zone = state.zone;
@@ -129,10 +161,15 @@ export function apply(ctx, config) {
   ctx.on('session/event', (session, event) => {
     // A full completed turn, not each model message or tool step. Capture the
     // zone now; never consult another session or a later mutable zone in a job.
-    if (options.includeAssistant === false || event.type !== 'turn/end' ||
-        event.data?.reason?.kind !== 'completed') return;
+    if (disposed) return;
+    const completed = options.includeAssistant !== false && event.type === 'turn/end' &&
+      event.data?.reason?.kind === 'completed';
+    // Keep an already-observed Session current even if no later step arrives.
+    // Unknown sessions remain lazy unless a completion clock is needed.
+    if (!completed && !states.has(session)) return;
     try {
       const state = stateOf(session);
+      if (!completed) return;
       const turn = event.data.turn;
       if (state.endedTurn === turn) return;
       const stamp = stampMessage(event.time, state.zone, { phase: 'turn-end', turn });
@@ -151,5 +188,8 @@ export function apply(ctx, config) {
       log.warn('message-time: skipped turn end: %s', String(error));
     }
   });
-  ctx.effect(() => () => { disposed = true; }, 'message-time: stop queued appends');
+  ctx.effect(() => () => {
+    disposed = true;
+    states = new WeakMap();
+  }, 'message-time: stop queued appends and release derived state');
 }

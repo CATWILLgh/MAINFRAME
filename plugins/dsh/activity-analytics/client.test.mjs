@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
+import { embedLocaleDictionaries } from '../build-locales.mjs';
 const source=await fs.readFile(new URL('client.js',import.meta.url),'utf8');
 function harness({storage:sharedStorage,scope='a'.repeat(64)}={}){
   const values=sharedStorage??new Map();const storage={get length(){return values.size;},key:i=>[...values.keys()][i]??null,getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
@@ -85,7 +86,7 @@ test('help popover supports hover, keyboard, pinned click and outside dismissal'
 test('client embeds exact tested time core and uses native slots/theme without internal imports',async()=>{
   const core=await fs.readFile(new URL('time.js',import.meta.url),'utf8');const template=await fs.readFile(new URL('client.template.js',import.meta.url),'utf8');
   const outbox=await fs.readFile(new URL('outbox.js',import.meta.url),'utf8');
-  assert.equal(source,template.replace('/* TIME_CORE */',()=>core.replace(/^export /gm,'')).replace('/* OUTBOX_CORE */',()=>outbox.replace(/^export /gm,'')));
+  assert.equal(source,(await embedLocaleDictionaries(template,new URL('./',import.meta.url))).replace('/* TIME_CORE */',()=>core.replace(/^export /gm,'')).replace('/* OUTBOX_CORE */',()=>outbox.replace(/^export /gm,'')));
   assert.match(source,/name:'main',key:'activity-analytics'/);assert.match(source,/name:'sidebar.panellist',id:'activity-analytics'/);
   assert.match(source,/ctx\.effect\(\(\)=>controller\.start\(\)\)/);assert.doesNotMatch(source,/require\(['"]@deepseek/);
   assert.doesNotMatch(source,/document\.(?:querySelector|body)|clipboard|\.target\.value.*interact/);
@@ -94,7 +95,7 @@ test('client embeds exact tested time core and uses native slots/theme without i
   assert.match(source,/function Help\(/);assert.match(source,/role:'tooltip'/);assert.match(source,/'aria-expanded':open/);assert.match(source,/e\.key==='Escape'\|\|e\.key==='Tab'/);
   assert.match(source,/aa-range-meta/);assert.match(source,/data\.trackingSince/);
   const interaction=source.slice(source.indexOf('const interact='),source.indexOf('const change=',source.indexOf('const interact=')));assert.doesNotMatch(interaction,/\.key\b|\.data\b|\.target\b/);
-  assert.match(source,/ctx\.locale\.register\(NS,\{en,ru\}\)/);assert.match(source,/--dsw-alias-bg-base/);
+  assert.match(source,/registerMainframeLocale\(ctx\.locale,NS,en,ru\)/);assert.match(source,/--dsw-alias-bg-base/);
   const pkg=JSON.parse(await fs.readFile(new URL('package.json',import.meta.url),'utf8'));assert.equal(pkg.dsh.client.immediately,true);
   for(const locale of ['en','ru']){const doc=JSON.parse(await fs.readFile(new URL(`locale/${locale}.json`,import.meta.url),'utf8'));assert.ok(doc.meta.title&&doc.meta.description);}
 });

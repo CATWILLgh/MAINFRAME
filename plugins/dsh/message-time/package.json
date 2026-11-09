@@ -1,6 +1,12 @@
 {
   "name": "@mainframe/message-time",
-  "version": "1.2.0",
+  "version": "1.2.1",
+  "engines": {
+    "dsh": "0.2.2-rc.1"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.19.0"
+  },
   "private": true,
   "description": "Adds compact, append-only timestamps to user messages and full agent turn boundaries.",
   "type": "module",

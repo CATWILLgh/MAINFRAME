@@ -50,8 +50,8 @@ async function deliveryFixture(t) {
   });
   t.after(async () => {
     if (!closed) {
-      for (const callback of listeners.get('dispose') ?? []) await callback();
-      for (const cleanup of effects) await cleanup?.();
+      listeners.clear();
+      await Promise.all(effects.splice(0).map(cleanup => cleanup?.()));
       closed = true;
     }
     const absolute = path.resolve(directory);
@@ -126,7 +126,7 @@ async function deliveryFixture(t) {
   };
 }
 
-test('real SQLite commit + lost response survives offline client reload, retry, and stale-record replay without double counting', async t => {
+test('real SQLite commit + lost response survives offline reload and reclaims immutable snapshots without double counting', async t => {
   const f = await deliveryFixture(t);
   const original = f.browser();
   await original.controller.flush(); // Authenticated bootstrap, initially empty.
@@ -147,6 +147,13 @@ test('real SQLite commit + lost response survives offline client reload, retry, 
   assert.equal(reloaded.controller.getSnapshot().pendingMs, 5_000);
   assert.equal(reloaded.controller.getSnapshot().durable, true);
   assert.deepEqual(f.committed(), { count: 1, total: 5_000 });
+  assert.equal(f.storageValues.size, 1);
+  for (const value of f.storageValues.values()) {
+    const record = JSON.parse(value);
+    assert.deepEqual(Object.keys(record).sort(), ['pending', 'version']);
+    assert.equal(record.version, 2);
+    for (const row of record.pending) assert.ok(row.length === 2 && row.every(Number.isSafeInteger));
+  }
   f.setOffline(false);
   assert.equal(await reloaded.controller.flush(), true);
   assert.equal(reloaded.controller.getSnapshot().pendingMs, 0);
@@ -154,20 +161,19 @@ test('real SQLite commit + lost response survives offline client reload, retry, 
   assert.deepEqual(f.committed(), { count: 1, total: 5_000 });
   assert.equal((await f.summary()).userMs, 5_000);
 
-  // Foreign snapshots are never deleted, so another reload can safely replay
-  // stale activity. The genuine Host interval union still counts it only once.
+  // Copy-first adoption retires immutable v2 crash records, and the genuine
+  // Host ACK retires the replacement. Later reloads have nothing to replay.
+  assert.equal(f.storageValues.size, 0);
+  const delivered = f.calls.filter(body => body.op === 'activity').length;
   const replay = f.browser();
   assert.equal(await replay.controller.flush(), true);
   assert.equal(replay.controller.getSnapshot().pendingMs, 0);
   assert.deepEqual(f.committed(), { count: 1, total: 5_000 });
   assert.equal((await f.summary()).userMs, 5_000);
-  assert.ok(f.calls.filter(body => body.op === 'activity').length >= 4);
+  assert.equal(delivered, 3); // Lost response, offline attempt, successful retry.
+  assert.equal(f.calls.filter(body => body.op === 'activity').length, delivered);
+  assert.equal(f.storageValues.size, 0);
   assert.deepEqual(f.reports, []);
-  for (const value of f.storageValues.values()) {
-    const record = JSON.parse(value);
-    assert.deepEqual(Object.keys(record).sort(), ['pending', 'version']);
-    for (const row of record.pending) assert.ok(row.length === 2 && row.every(Number.isSafeInteger));
-  }
 });
 
 test('Host clock lag ACK retains clipped future tail until genuine persistence catches up', async t => {
@@ -193,6 +199,37 @@ test('Host clock lag ACK retains clipped future tail until genuine persistence c
     [{ start: BASE, end: BASE + 10_000 }],
     [{ start: BASE + 5_000, end: BASE + 10_000 }],
   ]);
+  assert.deepEqual(f.reports, []);
+});
+
+test('live client resumes after another client adopts its snapshot; new tail survives genuine Host ACK', async t => {
+  const f = await deliveryFixture(t);
+  const live = f.browser();
+  assert.equal(await live.controller.flush(), true);
+  live.advance(5_000);
+  live.controller.sample(true);
+  const adopted = f.browser();
+  f.setOffline(true);
+  assert.equal(await adopted.controller.flush(), false);
+  assert.equal(adopted.controller.getSnapshot().pendingMs, 5_000);
+  assert.equal(f.storageValues.size, 1);
+
+  // The original owner was only suspended, not dead. Its old key is gone,
+  // but it must publish its new unacknowledged tail under a different key.
+  live.advance(5_000);
+  live.controller.sample(true);
+  assert.equal(live.controller.getSnapshot().pendingMs, 10_000);
+  assert.equal(f.storageValues.size, 2);
+  f.setOffline(false);
+  assert.equal(await adopted.controller.flush(), true);
+  assert.deepEqual(f.committed(), { count: 1, total: 5_000 });
+  assert.equal(f.storageValues.size, 1);
+  assert.equal(await live.controller.flush(), true);
+  assert.deepEqual(f.committed(), { count: 1, total: 10_000 });
+  assert.equal(f.storageValues.size, 0);
+  const sent = f.calls.filter(body => body.op === 'activity').length;
+  assert.equal(await f.browser().controller.flush(), true);
+  assert.equal(f.calls.filter(body => body.op === 'activity').length, sent);
   assert.deepEqual(f.reports, []);
 });
 

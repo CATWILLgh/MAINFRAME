@@ -14,7 +14,7 @@ from .state import set_component
 
 DSH_PLUGINS = {
     name: f"plugins/dsh/{name}"
-    for name in ("activity-analytics", "message-time", "secrets-vault")
+    for name in ("activity-analytics", "message-time", "secrets-vault", "session-collaboration")
 }
 
 
@@ -249,7 +249,7 @@ def inventory(root: Path, product: str = "codex") -> dict:
             ):
                 raise Conflict(f"Invalid canonical source: {name}")
             sources.append(row["source"])
-    if len(sources) != 54 or len(sources) != len(set(sources)):
+    if len(sources) != 55 or len(sources) != len(set(sources)):
         raise Conflict("The source inventory identities require an installer update.")
     for relative in (f"ADAPTATION.{product}.json", "shared/credentials/credentials-index.md"):
         owner = subprocess.run(

@@ -37,10 +37,9 @@ or the Cline CLI, read [cline-installer.md](cline-installer.md). Follow the
 selected executable route; do not run a manual adaptation loop in parallel.
 
 For DSH, read [dsh-adapter.md](dsh-adapter.md). Its maintained route validates
-three source plugins, builds independent `.tgz` packages with a bundled Vault
-runtime, and hands native lifecycle to `plugin_manager`. Normal installs need
-no repository link or Local Deployment bundle. This route does not install the
-rest of MAINFRAME or claim profile acceptance from source checks.
+four source plugins and builds independent `.tgz` packages. DSH's native
+`plugin_manager` owns profile installation and lifecycle. This route covers
+the DSH plugins, with source readiness and native acceptance verified separately.
 
 Products without a maintained installer require separately assigned adapter
 development. Their native pages are orientation, not ready installation routes.

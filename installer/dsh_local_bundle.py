@@ -52,7 +52,7 @@ def _json(value):
     return json.dumps(value, indent=2, ensure_ascii=False) + '\n'
 
 
-def _payload(profile, python):
+def _payload(profile):
     manifest = {
         'name': '@mainframe/local-deployment', 'version': '1.0.0', 'private': True,
         'description': 'Private configuration for MAINFRAME Activity Analytics and Secrets Vault.',
@@ -65,7 +65,7 @@ def _payload(profile, python):
         {'id': 'activity-analytics', 'name': '@mainframe/activity-analytics',
          'config': {'profileDirectory': str(profile)}},
         {'id': 'secrets-vault', 'name': '@mainframe/secrets-vault',
-         'config': {'profileDirectory': str(profile), 'python': str(python)}},
+         'config': {'profileDirectory': str(profile)}},
     ]
     # JSON is a YAML subset; encoding paths this way prevents YAML interpolation
     # or accidental interpretation of punctuation in a local directory name.
@@ -91,11 +91,11 @@ def _payload(profile, python):
     }
 
 
-def generate_bundle(*, output, profile_directory, vault_python):
-    """Publish one bundle, returning its path; never read/execute the runtime.
+def generate_bundle(*, output, profile_directory):
+    """Publish one bundle, returning its path; never read a profile.
 
     No profile files are opened. Path metadata is used only for boundaries and
-    symlink rejection. Missing profile/runtime paths are permitted: provisioning
+    symlink rejection. Missing profile paths are permitted: configuration generation
     and native activation are separate operations. Existing nonempty outputs are
     never updated; choose a new private output for configuration changes.
     """
@@ -104,12 +104,6 @@ def generate_bundle(*, output, profile_directory, vault_python):
     try:
         output = _absolute(output, 'Output')
         profile = _absolute(profile_directory, 'Profile directory')
-        # Preserve the configured executable spelling: venv interpreters are
-        # commonly symlinks, and resolving them discards their venv context.
-        # This path is serialized only, never opened, executed or traversed.
-        python = Path(vault_python)
-        if not python.is_absolute():
-            raise LocalBundleError('Vault Python must be an absolute path.')
         dsh_home = Path(os.environ.get('DSH_HOME') or Path.home() / '.dsh').expanduser().resolve()
         boundaries = (REPOSITORY_ROOT.resolve(), profile, dsh_home)
         _validate_output(output, boundaries)
@@ -119,7 +113,7 @@ def generate_bundle(*, output, profile_directory, vault_python):
         os.chmod(stage, 0o700)
         (stage / 'locale').mkdir(mode=0o700)
         os.chmod(stage / 'locale', 0o700)
-        for relative, text in _payload(profile, python).items():
+        for relative, text in _payload(profile).items():
             # Exclusive creation and explicit chmod do not depend on umask.
             with (stage / relative).open('x', encoding='utf-8') as stream:
                 os.chmod(stage / relative, 0o600)
@@ -160,11 +154,9 @@ def main(argv=None):
     parser = _Parser(description=__doc__)
     parser.add_argument('--output', required=True, help='New private bundle directory; parent must exist.')
     parser.add_argument('--profile-directory', required=True, help='Selected DSH profile directory (absolute).')
-    parser.add_argument('--vault-python', required=True, help='Separately provisioned SQLCipher Python (absolute).')
     args = parser.parse_args(argv)
     try:
-        generate_bundle(output=args.output, profile_directory=args.profile_directory,
-                        vault_python=args.vault_python)
+        generate_bundle(output=args.output, profile_directory=args.profile_directory)
     except LocalBundleError as error:
         print(str(error), file=sys.stderr)
         return 1

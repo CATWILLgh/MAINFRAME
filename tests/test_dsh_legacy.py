@@ -15,7 +15,7 @@ from installer.zcode import ZCode
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGINS = {name: f"plugins/dsh/{name}" for name in
-           ("activity-analytics", "message-time", "secrets-vault")}
+           ("activity-analytics", "message-time", "secrets-vault", "session-collaboration")}
 ADAPTERS = (
     (codex.Codex, "0.153.4", "cli"),
     (codex.Codex, codex.CURRENT_DESKTOP_RUNTIME, "desktop"),
@@ -114,7 +114,7 @@ class DshLegacyCompatibilityTests(unittest.TestCase):
 
     def test_inventory_rejects_missing_unknown_or_redirected_plugins(self):
         source = inventory(self.source)
-        self.assertEqual(sum(map(len, source["components"].values())), 54)
+        self.assertEqual(sum(map(len, source["components"].values())), 55)
         for mutation in ("missing", "unknown", "redirected"):
             with self.subTest(mutation=mutation):
                 changed = deepcopy(source)

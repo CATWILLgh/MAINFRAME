@@ -1,0 +1,18 @@
+{
+  "name": "@mainframe/session-collaboration",
+  "version": "0.5.1",
+  "description": "Compact cross-project session coordination and native lifecycle management for DSH",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "dsh": "0.2.2-rc.1" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "exports": {
+    ".": "./index.js",
+    "./core": "./core.js",
+    "./selftest": "./selftest.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": ["index.js", "tool-surface.js", "core.js", "tasks.js", "storage.js", "wait-many.js", "lifecycle-management.js", "lifecycle-reads.js", "model-selection.js", "selftest.js", "cordis.patch.yml", "README.md", "locale/*.json", "icon.svg"],
+  "peerDependencies": { "@deepseek-ai/dsh-llm": "0.2.2-rc.1", "@deepseek-ai/dsh-session-title": "0.2.2-rc.1", "@deepseek-ai/dsh-storage-domain": "0.2.2-rc.1", "zod": "4.4.3" }
+}

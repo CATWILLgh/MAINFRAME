@@ -50,14 +50,22 @@ export async function createHost(ctx, {
     // agent/status is emit, not serial: contain persistence failures explicitly.
     try { Promise.resolve(operation()).catch(report); } catch { report(); }
   };
+  let stop = () => {};
+  // Cordis unload awaits owned effects, not an ordinary 'dispose' event.
+  // Own the open store before registering other resources (also on setup failure).
+  ctx.effect(() => async () => {
+    closing = true;
+    try { stop(); } finally {
+      try { await store.close(now()); } catch { report(); }
+    }
+  });
   ctx.on('agent/status', ({ agent, status }) => observe(() => store.setRunning(agent, status === 'running', now())));
   ctx.on('agent/disposed', ({ agent }) => observe(() => store.setRunning(agent, false, now())));
   // All registry entries, including children; never walk session history/backfill.
   for (const agent of ctx.agents.list()) {
     if (agent.status === 'running') observe(() => store.setRunning(agent, true, now()));
   }
-  const stop = schedule(() => observe(() => store.checkpoint(now())));
-  ctx.effect(() => () => stop());
+  stop = schedule(() => observe(() => store.checkpoint(now())));
   ctx.effect(() => ctx.connection.fetch.register({
     path: UI_PATH,
     methods: ['POST'],
@@ -89,11 +97,6 @@ export async function createHost(ctx, {
       }
     },
   }));
-  ctx.on('dispose', async () => {
-    closing = true;
-    stop();
-    try { await store.close(now()); } catch { report(); }
-  });
   return store;
 }
 

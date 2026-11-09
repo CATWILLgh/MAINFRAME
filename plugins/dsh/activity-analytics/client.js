@@ -181,21 +181,31 @@ function createActivityClock({ idleMs = 300000, maxGapMs = 30000, clockSkewMs = 
 
     /* Pure browser-compatible, synchronous interval outbox. No ambient storage/DOM access.
  *
- * The caller supplies an opaque, authenticated profile scope and a fresh random
- * instance id (e.g. crypto.randomUUID()). Only those opaque identifiers occur in
- * keys; values contain a version and numeric half-open epoch-ms intervals.
+ * The caller MUST supply a fresh, globally unique opaque instance id for EVERY
+ * construction, including reloads (e.g. crypto.randomUUID()), and an authenticated
+ * profile scope. Keys contain only these identifiers and a monotonic sequence;
+ * values contain a version and numeric half-open epoch-ms intervals.
  *
- * Every add/ACK writes the complete union to this instance's key. Recovery copies
- * all valid scoped snapshots into that union BEFORE reporting state. Foreign keys
- * are deliberately never changed/deleted: Storage has no atomic compare/delete,
- * so even checking unchanged raw text before deletion could lose a live tab's
- * intervening write. This trades stale records/replays for strict cross-tab safety.
- * Host interval union makes repeated delivery idempotent. There is no queue cap,
- * eviction, timer, or dependency on storage events. Quota/other storage failures
- * retain memory and report volatile state; a later add/ACK retries persistence.
+ * v2 snapshots are immutable: each persist writes the complete current union to
+ * a fresh key BEFORE removing the exact captured old snapshots. A key is never
+ * reused, even after deletion or a failed/ambiguous write. Another live owner can
+ * append safely by publishing a fresh key, which our captured cleanup cannot touch.
+ * Absence checks defend persisted id collisions, NOT simultaneous id reuse (there
+ * is no Storage CAS). Fresh ids also prevent reuse of already-deleted identities.
+ *
+ * Recovery reads v1 and v2. Mutable v1 records remain strictly read-only, forever
+ * replayable: an old tab can change them even between a comparison and deletion.
+ * Host interval union makes duplicate delivery harmless. Removal failures retry
+ * on later add/ACK calls; malformed/unreadable records are preserved. Rotation
+ * temporarily needs room for old AND new snapshots: quota failure never deletes
+ * sources first and retains the current memory union, reported as volatile. A
+ * failed write whose commit cannot be read is left untouched for the next fresh
+ * recovery, not retained as an unbounded in-memory journal of failed attempts.
+ * No queue cap, per-event journal, timers, leases, locks, or storage events.
  */
 
-const OUTBOX_PREFIX = 'activity-analytics:outbox:v1:';
+const OUTBOX_LEGACY_PREFIX = 'activity-analytics:outbox:v1:';
+const OUTBOX_PREFIX = 'activity-analytics:outbox:v2:';
 const OUTBOX_MAX_EPOCH = 8_640_000_000_000_000;
 const OUTBOX_MAX_BATCH = 256;
 const OUTBOX_MAX_INTERVAL = 30_000;
@@ -248,9 +258,9 @@ function outboxSubtract(pending, acknowledged) {
   return result;
 }
 
-function outboxRecord(raw) {
+function outboxRecord(raw, version) {
   const value = JSON.parse(raw);
-  if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== 1 ||
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== version ||
       Object.keys(value).some(key => key !== 'version' && key !== 'pending') || !Array.isArray(value.pending)) {
     throw new TypeError('Invalid outbox record.');
   }
@@ -276,12 +286,16 @@ function createOutbox({ storage = null, scope = null, id, onState } = {}) {
   if (scope !== null && (typeof scope !== 'string' || scope.length === 0)) throw new TypeError('Expected an opaque nonempty scope.');
   if (onState !== undefined && typeof onState !== 'function') throw new TypeError('onState must be a function.');
   const prefix = scope === null ? null : `${OUTBOX_PREFIX}${encodeURIComponent(scope)}:`;
-  const ownKey = prefix === null ? null : `${prefix}${encodeURIComponent(id)}`;
+  const legacyPrefix = scope === null ? null : `${OUTBOX_LEGACY_PREFIX}${encodeURIComponent(scope)}:`;
+  const ownPrefix = prefix === null ? null : `${prefix}${encodeURIComponent(id)}:`;
+  let sequence = 0;
+  // Captured immutable identities only, never a fresh directory scan for cleanup.
+  // Their intervals are covered by pending or a Host ACK, so retirement can retry.
+  const snapshots = new Map();
   let pending = [];
   let durable = false;
   let error = null;
   let recoveryError = null;
-  let writable = true;
 
   const pendingMs = () => pending.reduce((total, [start, end]) => total + (end - start), 0);
   const getPending = () => pending.map(([start, end]) => ({ start, end }));
@@ -293,57 +307,114 @@ function createOutbox({ storage = null, scope = null, id, onState } = {}) {
   function persist() {
     durable = false;
     if (scope === null) return;
-    if (!writable) {
-      error = 'An existing unreadable or malformed outbox record was preserved; new activity is only in memory.';
-      return;
-    }
+    let key;
+    let raw;
+    let attempted = false;
     try {
-      if (!storage || typeof storage.setItem !== 'function') throw new TypeError('Unavailable storage.');
-      storage.setItem(ownKey, JSON.stringify({ version: 1, pending }));
-      durable = true;
-      error = null;
+      if (!storage || typeof storage.getItem !== 'function' || typeof storage.setItem !== 'function' ||
+          typeof storage.removeItem !== 'function') throw new TypeError('Unavailable storage.');
+      if (pending.length) {
+        do {
+          if (sequence === Number.MAX_SAFE_INTEGER) throw new TypeError('Snapshot sequence exhausted.');
+          // Consume BEFORE checking/writing: failures may have committed, and a
+          // reader can already hold this identity for a later retirement.
+          key = `${ownPrefix}${++sequence}`;
+        } while (storage.getItem(key) !== null);
+        raw = JSON.stringify({ version: 2, pending });
+        attempted = true;
+        storage.setItem(key, raw);
+      }
     } catch {
-      error = 'Activity storage is unavailable; unsynced activity is only in memory.';
+      if (attempted) {
+        try {
+          const current = storage.getItem(key);
+          // setItem can commit and then throw. Only confirmed, exact committed
+          // snapshots need tracking. Absent keys never return (fresh ids/sequence).
+          if (current === raw) snapshots.set(key, raw);
+          else if (current !== null) {
+            recoveryError = 'A changed saved activity record was preserved and could not be retired.';
+          }
+        } catch {
+          // Do not accumulate full snapshots for every ambiguous failure during
+          // storage outage. Leave any possible commit intact for fresh recovery.
+          recoveryError = 'A failed activity write could not be checked; any saved snapshot was preserved for the next recovery.';
+        }
+      }
+      error = 'Activity storage is unavailable; unsynced activity may only be in memory.';
+      return; // No source deletion on failed/ambiguous replacement.
     }
+    // Capture known old identities only after successful publication, before
+    // recording its fresh key. Failed writes need not copy the retirement set.
+    const captured = [...snapshots];
+    if (attempted) snapshots.set(key, raw);
+    let cleaned = true;
+    for (const [key, raw] of captured) {
+      try {
+        const current = storage.getItem(key);
+        if (current !== null && current !== raw) {
+          // Defensive isolation for corrupted or nonconforming writers. This
+          // check is NOT CAS: safety still requires immutable v2 identities.
+          recoveryError = 'A changed saved activity record was preserved and could not be retired.';
+        } else if (current !== null) {
+          storage.removeItem(key);
+        }
+        snapshots.delete(key);
+      } catch {
+        cleaned = false; // Keep this exact identity for a later safe retry.
+      }
+    }
+    // Pending is now fully persisted (or empty after ACK/empty recovery). A
+    // cleanup failure leaves duplicate replay, not volatile unacknowledged data.
+    durable = true;
+    error = cleaned ? null : 'Activity is retained, but saved snapshots could not be retired; cleanup will retry.';
   }
 
   if (scope !== null) {
+    const recovered = [];
     try {
-      if (!storage || typeof storage.getItem !== 'function' || typeof storage.key !== 'function' ||
-          typeof storage.setItem !== 'function') throw new TypeError('Unavailable storage.');
-      // Snapshot the key directory first. Other tabs may change values throughout
-      // recovery; each value is only ever read, never overwritten under their id.
+      if (!storage || typeof storage.getItem !== 'function' || typeof storage.key !== 'function') {
+        throw new TypeError('Unavailable storage.');
+      }
+      // Snapshot the directory BEFORE any cleanup. Racing insertions/removals can
+      // skip a key; an unseen record stays untouched for a later recovery.
       const keys = new Set();
       const count = storage.length;
       if (!Number.isSafeInteger(count) || count < 0) throw new TypeError('Unavailable storage directory.');
       for (let index = 0; index < count; index++) {
         const key = storage.key(index);
-        if (typeof key === 'string' && key.startsWith(prefix)) keys.add(key);
+        if (typeof key === 'string' && (key.startsWith(prefix) || key.startsWith(legacyPrefix))) keys.add(key);
       }
-      // Also check our id directly, so a collision with malformed data is never
-      // overwritten even if a concurrent directory change skipped its key.
-      keys.add(ownKey);
-      const recovered = [];
       for (const key of keys) {
+        // Defensive id-collision handling also consumes observed old sequences;
+        // compacting one must never make its identity available to this instance.
+        if (key.startsWith(ownPrefix)) {
+          const suffix = key.slice(ownPrefix.length);
+          const seen = Number(suffix);
+          if (/^[1-9][0-9]*$/.test(suffix) && Number.isSafeInteger(seen)) sequence = Math.max(sequence, seen);
+        }
         let raw;
         try { raw = storage.getItem(key); } catch {
           recoveryError = 'Some saved activity could not be recovered; existing records were preserved.';
-          if (key === ownKey) writable = false;
           continue;
         }
         if (raw === null) continue;
-        try { for (const interval of outboxRecord(raw)) recovered.push(interval); } catch {
+        try {
+          const version = key.startsWith(prefix) ? 2 : 1;
+          if (version === 2) {
+            const suffix = key.slice(prefix.length);
+            const match = /^[^:]+:([1-9][0-9]*)$/.exec(suffix);
+            if (!match || !Number.isSafeInteger(Number(match[1]))) throw new TypeError('Invalid snapshot key.');
+          }
+          for (const interval of outboxRecord(raw, version)) recovered.push(interval);
+          if (version === 2) snapshots.set(key, raw);
+        } catch {
           recoveryError = 'A malformed saved activity record was preserved and could not be recovered.';
-          if (key === ownKey) writable = false;
         }
       }
-      pending = outboxUnion(recovered);
     } catch {
       recoveryError = 'Saved activity could not be recovered; existing records were preserved.';
-      // A failed directory/getter can hide a malformed own record. Do not risk
-      // replacing it. The caller can retry creation with a fresh random id.
-      writable = false;
     }
+    pending = outboxUnion(recovered);
     persist();
   }
   notify();
@@ -382,8 +453,121 @@ function createOutbox({ storage = null, scope = null, id, onState } = {}) {
 }
 
     const NS='activityAnalytics';
-    const en={panel:'Analytics',subtitle:'Time spent here. Across every conversation.',today:'Today',yesterday:'Yesterday','7':'7 days','14':'14 days','28':'28 days',all:'All time',custom:'Custom range',from:'From',to:'Through',apply:'Apply',refresh:'Refresh analytics',you:'Your time',agents:'Agent time',youHelp:'Active time inside the DSH window',agentsHelp:'Summed across all agents, including subagents',hour:'h',minute:'min',seconds:'Less than a minute',loading:'Loading analytics…',error:'Could not load analytics. Try again.',activityError:'Activity has not synced. Retrying automatically; keep this window open.',pending:'Waiting to save',saved:'Activity saved',savedAt:'Last saved',volatile:'Browser backup is unavailable. Pending activity is only in memory; keep this window open until it is saved.',recoveryError:'A browser backup could not be read. It was preserved, not deleted. Some earlier activity may be missing.',invalid:'Choose a valid date range. The end date must not precede the start date.',recording:'Tracking activity',paused:'User activity paused',running:'Agents running',since:'Tracking since',rules:'How time is counted',ruleUser:'Your time counts while DSH is visible and focused. Typing, clicking, scrolling, touch, text input and pointer movement are detected across DSH: chats, settings, previews and sidebars. After 5 minutes without input, counting pauses, even if you are still reading. Automatic page scrolling does not renew this timer. Embedded external pages may isolate their input; see the browser limitation below.',ruleAgent:'Agent time measures running tasks, including model calls, tools and waits. Parallel agents add up: three agents running for 10 minutes mean 30 agent-minutes. Detached jobs after an agent becomes idle are not included.',ruleDates:'Periods use this device’s local calendar. 7, 14 and 28 days include today. The custom end date is inclusive. Tracking starts at installation; earlier activity is not reconstructed.',rulePrivacy:'Only timestamps and durations are stored, not text, keys, clicks or page contents. Sleep and long timer gaps are skipped. Abrupt closure may lose the latest unsynced seconds.',ruleBrowser:'The browser guest is isolated from DSH. Activity inside an external embedded page is not guaranteed to renew the 5-minute timer. No page content or browsing history is read.',selected:'Selected period',noData:'No recorded time in this period yet.',timezone:'Local time zone'};
-    const ru={panel:'Аналитика',subtitle:'Время в DSH. По всем диалогам.',today:'Сегодня',yesterday:'Вчера','7':'7 дней','14':'14 дней','28':'28 дней',all:'Всё время',custom:'Свой период',from:'С',to:'По',apply:'Применить',refresh:'Обновить аналитику',you:'Ваше время',agents:'Время агентов',youHelp:'Активное время внутри окна DSH',agentsHelp:'Сумма по всем агентам, включая субагентов',hour:'ч',minute:'мин',seconds:'Меньше минуты',loading:'Загружаем аналитику…',error:'Не удалось загрузить аналитику. Попробуйте ещё раз.',activityError:'Активность ещё не сохранена. Повторяем автоматически; не закрывайте окно.',pending:'Ожидает сохранения',saved:'Активность сохранена',savedAt:'Последнее сохранение',volatile:'Резервная очередь браузера недоступна. Несохранённое время пока только в памяти; не закрывайте окно до сохранения.',recoveryError:'Резервную очередь браузера не удалось прочитать. Она не удалена. Часть прежней активности может отсутствовать.',invalid:'Выберите корректный период: дата окончания не раньше даты начала.',recording:'Учитываем активность',paused:'Учёт вашей активности на паузе',running:'Работают агенты',since:'Учёт с',rules:'Как считается время',ruleUser:'Ваше время считается, пока окно DSH видно и находится в фокусе. Ввод, клики, прокрутка, касания и движения указателя учитываются по всему DSH: в чатах, настройках, предпросмотре и боковых панелях. После 5 минут без взаимодействия учёт останавливается, даже если вы продолжаете читать. Автоматическая прокрутка не продлевает этот срок. Внешние встроенные страницы могут изолировать ввод — см. ограничение браузера ниже.',ruleAgent:'Время агентов — длительность выполняемых задач, включая обращения к модели, инструменты и ожидание. Параллельные агенты суммируются: три агента по 10 минут — это 30 агент-минут. Фоновые задачи после перехода агента в idle не учитываются.',ruleDates:'Периоды считаются по местному календарю этого устройства. 7, 14 и 28 дней включают сегодня. Последняя дата своего периода включается целиком. Учёт начинается с установки; прошлое время не восстанавливается.',rulePrivacy:'Сохраняются только отметки времени и длительности, а не тексты, клавиши, клики или содержимое страниц. Сон и длинные паузы таймера пропускаются. При аварийном закрытии последние несохранённые секунды могут потеряться.',ruleBrowser:'Встроенный браузер изолирован от DSH: действия внутри внешней страницы не гарантированно обновляют 5-минутный таймер. Содержимое страниц и история посещений не читаются.',selected:'Выбранный период',noData:'За этот период пока нет учтённого времени.',timezone:'Местный часовой пояс'};
+    const en = {
+  "7": "7 days",
+  "14": "14 days",
+  "28": "28 days",
+  "panel": "Analytics",
+  "subtitle": "Time spent here. Across every conversation.",
+  "today": "Today",
+  "yesterday": "Yesterday",
+  "all": "All time",
+  "custom": "Custom range",
+  "from": "From",
+  "to": "Through",
+  "apply": "Apply",
+  "refresh": "Refresh analytics",
+  "you": "Your time",
+  "agents": "Agent time",
+  "youHelp": "Estimated focused-window presence, not manual work",
+  "agentsHelp": "Summed across all agents, including subagents",
+  "hour": "h",
+  "minute": "min",
+  "seconds": "Less than a minute",
+  "loading": "Loading analytics…",
+  "error": "Could not load analytics. Try again.",
+  "activityError": "Activity has not synced. Retrying automatically; keep this window open.",
+  "pending": "Waiting to save",
+  "saved": "Activity saved",
+  "savedAt": "Last saved",
+  "volatile": "Browser backup is unavailable. Pending activity is only in memory; keep this window open until it is saved.",
+  "recoveryError": "A browser backup could not be read. It was preserved, not deleted. Some earlier activity may be missing.",
+  "invalid": "Choose a valid date range. The end date must not precede the start date.",
+  "recording": "Tracking activity",
+  "paused": "User activity paused",
+  "running": "Agents running",
+  "since": "Tracking since",
+  "rules": "How time is counted",
+  "ruleUser": "Your time estimates presence, not attention or manual work. A visible, focused DSH window starts with a 5-minute grace period even before input. Trusted interaction renews it. Typing, clicking, scrolling, touch, text input and pointer movement are detected across DSH: chats, settings, previews and sidebars. After 5 minutes without input, counting pauses, even if you are still reading. Automatic page scrolling does not renew this timer. Embedded external pages may isolate their input; see the browser limitation below.",
+  "ruleAgent": "Agent time measures running tasks, including model calls, tools and waits. Parallel agents add up: three agents running for 10 minutes mean 30 agent-minutes. Detached jobs after an agent becomes idle are not included.",
+  "ruleDates": "Periods use this device’s local calendar. 7, 14 and 28 days include today. The custom end date is inclusive. Tracking starts at installation; earlier activity is not reconstructed.",
+  "rulePrivacy": "Only timestamps and durations are stored, not text, keys, clicks or page contents. Sleep and long timer gaps are skipped. Abrupt closure may lose the latest unsynced seconds.",
+  "ruleBrowser": "The browser guest is isolated from DSH. Activity inside an external embedded page is not guaranteed to renew the 5-minute timer. No page content or browsing history is read.",
+  "selected": "Selected period",
+  "noData": "No recorded time in this period yet.",
+  "timezone": "Local time zone",
+  "second": "s"
+};
+const ru = {
+  "7": "7 дней",
+  "14": "14 дней",
+  "28": "28 дней",
+  "panel": "Аналитика",
+  "subtitle": "Время в DSH. По всем диалогам.",
+  "today": "Сегодня",
+  "yesterday": "Вчера",
+  "all": "Всё время",
+  "custom": "Свой период",
+  "from": "С",
+  "to": "По",
+  "apply": "Применить",
+  "refresh": "Обновить аналитику",
+  "you": "Ваше время",
+  "agents": "Время агентов",
+  "youHelp": "Оценка присутствия в окне, не ручной работы",
+  "agentsHelp": "Сумма по всем агентам, включая субагентов",
+  "hour": "ч",
+  "minute": "мин",
+  "seconds": "Меньше минуты",
+  "loading": "Загружаем аналитику…",
+  "error": "Не удалось загрузить аналитику. Попробуйте ещё раз.",
+  "activityError": "Активность ещё не сохранена. Повторяем автоматически; не закрывайте окно.",
+  "pending": "Ожидает сохранения",
+  "saved": "Активность сохранена",
+  "savedAt": "Последнее сохранение",
+  "volatile": "Резервная очередь браузера недоступна. Несохранённое время пока только в памяти; не закрывайте окно до сохранения.",
+  "recoveryError": "Резервную очередь браузера не удалось прочитать. Она не удалена. Часть прежней активности может отсутствовать.",
+  "invalid": "Выберите корректный период: дата окончания не раньше даты начала.",
+  "recording": "Учитываем активность",
+  "paused": "Учёт вашей активности на паузе",
+  "running": "Работают агенты",
+  "since": "Учёт с",
+  "rules": "Как считается время",
+  "ruleUser": "Ваше время — оценка присутствия, а не внимания или ручной работы. Видимое окно DSH в фокусе начинает учёт с 5-минутного периода даже до первого ввода. Доверенное взаимодействие продлевает его. Ввод, клики, прокрутка, касания и движения указателя учитываются по всему DSH: в чатах, настройках, предпросмотре и боковых панелях. После 5 минут без взаимодействия учёт останавливается, даже если вы продолжаете читать. Автоматическая прокрутка не продлевает этот срок. Внешние встроенные страницы могут изолировать ввод — см. ограничение браузера ниже.",
+  "ruleAgent": "Время агентов — длительность выполняемых задач, включая обращения к модели, инструменты и ожидание. Параллельные агенты суммируются: три агента по 10 минут — это 30 агент-минут. Фоновые задачи после завершения работы агента не учитываются.",
+  "ruleDates": "Периоды считаются по местному календарю этого устройства. 7, 14 и 28 дней включают сегодня. Последняя дата своего периода включается целиком. Учёт начинается с установки; прошлое время не восстанавливается.",
+  "rulePrivacy": "Сохраняются только отметки времени и длительности, а не тексты, клавиши, клики или содержимое страниц. Сон и длинные паузы таймера пропускаются. При аварийном закрытии последние несохранённые секунды могут потеряться.",
+  "ruleBrowser": "Встроенный браузер изолирован от DSH: действия внутри внешней страницы не гарантированно обновляют 5-минутный таймер. Содержимое страниц и история посещений не читаются.",
+  "selected": "Выбранный период",
+  "noData": "За этот период пока нет учтённого времени.",
+  "timezone": "Местный часовой пояс",
+  "second": "с"
+};
+function registerMainframeLocale(locale, namespace, en, ru) {
+  const disposers = new Map();
+  let refreshing = false;
+  function refresh() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      for (const { id } of locale.getSnapshot().locales) {
+        const key = id.toLowerCase();
+        if (!disposers.has(key)) {
+          // Mark before register: it synchronously notifies snapshot subscribers.
+          disposers.set(key, null);
+          disposers.set(key, locale.register(namespace, id, key === 'ru' ? ru : en));
+        }
+      }
+    } finally { refreshing = false; }
+  }
+  refresh();
+  const unsubscribe = locale.subscribe(refresh);
+  return () => {
+    unsubscribe();
+    for (const dispose of disposers.values()) dispose?.();
+    disposers.clear();
+  };
+}
     const css=`
 .aa-page{font:inherit;color:var(--dsw-alias-label-primary);width:100%;height:100%;min-width:0;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:32px;padding:0 clamp(24px,4vw,48px) 48px;overflow:auto;background:var(--dsw-alias-bg-base)}
 .aa-page *{box-sizing:border-box}.aa-page>header,.aa-page>section{width:100%;max-width:960px;flex:none}
@@ -422,7 +606,8 @@ function createOutbox({ storage = null, scope = null, id, onState } = {}) {
         const {queueScope}=await api({op:'bootstrap'});
         if(typeof queueScope!=='string'||! /^[a-f0-9]{64}$/.test(queueScope))throw new Error('scope');
         let storage=null;try{storage=window.localStorage;}catch{}
-        const restored=createOutbox({storage,scope:queueScope,id});
+        // A new durable instance must never reuse an older snapshot identity.
+        const restored=createOutbox({storage,scope:queueScope,id:globalThis.crypto.randomUUID()});
         restored.add(outbox.getPending());outbox=restored;initialized=true;queueState();
       }
       function sample(interaction=false,forceInactive=false){
@@ -485,17 +670,25 @@ function createOutbox({ storage = null, scope = null, id, onState } = {}) {
         }catch{if(live&&token===view.current)setError('error');}finally{loading=false;if(live&&token===view.current)setBusy(false);}}
         setData(null);void load();const timer=setInterval(()=>void load(),15000);return()=>{live=false;clearInterval(timer);};
       },[preset,custom,revision]);
-      const fmt=(ts,options)=>new Intl.DateTimeFormat(locale.getLocale().active,options).format(new Date(ts));
+      const language=locale.getLocale().active.toLowerCase()==='ru'?'ru':'en';
+      const timeZone=Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const formats=React.useMemo(()=>({
+        date:new Intl.DateTimeFormat(language,{timeZone,day:'numeric',month:'short',year:'numeric'}),
+        since:new Intl.DateTimeFormat(language,{timeZone,day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),
+        saved:new Intl.DateTimeFormat(language,{timeZone,hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+        pending:new Intl.NumberFormat(language,{minimumFractionDigits:1,maximumFractionDigits:1})
+      }),[language,timeZone]);
+      const fmt=(ts,kind)=>formats[kind].format(ts);
       function duration(ms){const total=Math.floor(ms/60000),hours=Math.floor(total/60),minutes=total%60;return h(React.Fragment,null,String(hours),h('small',null,t('hour')),String(minutes).padStart(2,'0'),h('small',null,t('minute')));}
       const metric=(key,value,help)=>h('article',{className:'aa-metric'},h('h2',null,t(key)),h('div',{className:'aa-number','aria-label':value===undefined?t('loading'):`${Math.floor(value/3600000)} ${t('hour')} ${Math.floor(value/60000)%60} ${t('minute')}`},value===undefined?'—':duration(value)),h('p',{className:'aa-muted'},t(help)),value>0&&value<60000&&h('p',{className:'aa-muted'},t('seconds')));
-      return h('div',{className:'aa-page'},h('style',null,css),h('header',{className:'aa-header'},h('div',null,h('h1',{className:'aa-title'},t('panel')),h('div',{className:'aa-subtitle aa-muted'},h('span',null,t('subtitle')),h(Help,{t}))),h('button',{type:'button',className:'aa-button aa-icon-button',title:t('refresh'),'aria-label':t('refresh'),disabled:busy,onClick:()=>setRevision(v=>v+1)},h(Refresh))),
-        h('section',{className:'aa-filter','aria-label':t('selected')},h('div',{className:'aa-presets'},['today','yesterday','7','14','28','all','custom'].map(key=>h('button',{key,type:'button',className:'aa-button','aria-pressed':preset===key,onClick:()=>{setError('');if(key==='custom'&&!custom)setCustom({from,to});setPreset(key);}},t(key)))),preset==='custom'&&h('form',{className:'aa-custom',onSubmit:e=>{e.preventDefault();try{resolveRange('custom',Date.now(),tracking.current??Date.now(),from,to);setCustom({from,to});setError('');}catch{setError('invalid');}}},h('label',null,t('from'),h('input',{type:'date',required:true,value:from,max:dateInput(Date.now()),onChange:e=>setFrom(e.target.value)})),h('label',null,t('to'),h('input',{type:'date',required:true,value:to,max:dateInput(Date.now()),onChange:e=>setTo(e.target.value)})),h('button',{className:'aa-button',type:'submit'},t('apply'))),h('div',{className:'aa-range aa-muted'},h('span',null,data?`${fmt(data.start,{day:'numeric',month:'short',year:'numeric'})} — ${fmt(Math.max(data.start,data.end-1),{day:'numeric',month:'short',year:'numeric'})}`:t('loading')),h('div',{className:'aa-range-meta'},h('span',null,`${t('timezone')}: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`),data&&h('span',null,`${t('since')} ${fmt(data.trackingSince,{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}`)))),
+      return h('div',{className:'aa-page',lang:language},h('style',null,css),h('header',{className:'aa-header'},h('div',null,h('h1',{className:'aa-title'},t('panel')),h('div',{className:'aa-subtitle aa-muted'},h('span',null,t('subtitle')),h(Help,{t}))),h('button',{type:'button',className:'aa-button aa-icon-button',title:t('refresh'),'aria-label':t('refresh'),disabled:busy,onClick:()=>setRevision(v=>v+1)},h(Refresh))),
+        h('section',{className:'aa-filter','aria-label':t('selected')},h('div',{className:'aa-presets'},['today','yesterday','7','14','28','all','custom'].map(key=>h('button',{key,type:'button',className:'aa-button','aria-pressed':preset===key,onClick:()=>{setError('');if(key==='custom'&&!custom)setCustom({from,to});setPreset(key);}},t(key)))),preset==='custom'&&h('form',{className:'aa-custom',onSubmit:e=>{e.preventDefault();try{resolveRange('custom',Date.now(),tracking.current??Date.now(),from,to);setCustom({from,to});setError('');}catch{setError('invalid');}}},h('label',null,t('from'),h('input',{type:'date',required:true,value:from,max:dateInput(Date.now()),onChange:e=>setFrom(e.target.value)})),h('label',null,t('to'),h('input',{type:'date',required:true,value:to,max:dateInput(Date.now()),onChange:e=>setTo(e.target.value)})),h('button',{className:'aa-button',type:'submit'},t('apply'))),h('div',{className:'aa-range aa-muted'},h('span',null,data?`${fmt(data.start,'date')} — ${fmt(Math.max(data.start,data.end-1),'date')}`:t('loading')),h('div',{className:'aa-range-meta'},h('span',null,`${t('timezone')}: ${timeZone}`),data&&h('span',null,`${t('since')} ${fmt(data.trackingSince,'since')}`)))),
         (error||activity.syncError||activity.recoveryError||(activity.pendingMs>0&&!activity.durable))&&h('section',{'aria-live':'polite'},error&&h('p',{className:'aa-error',role:'alert'},t(error)),activity.syncError&&h('p',{className:'aa-error'},t('activityError')),activity.pendingMs>0&&!activity.durable&&h('p',{className:'aa-error'},t('volatile')),activity.recoveryError&&h('p',{className:'aa-error'},t('recoveryError'))),
         h('section',{className:'aa-metrics','aria-busy':busy},metric('you',data?.userMs,'youHelp'),metric('agents',data?.agentMs,'agentsHelp')),
-        h('section',{className:'aa-status aa-muted'},h('span',null,h('i',{className:'aa-dot','data-active':activity.active}),t(activity.active?'recording':'paused')),h('span',null,`${t('running')}: ${data?.runningAgents??'—'}`),h('span',{'aria-live':'polite'},activity.pendingMs>0?`${t('pending')}: ${(activity.pendingMs/1000).toFixed(1)} s`:activity.lastSavedAt?`${t('saved')} · ${t('savedAt')} ${fmt(activity.lastSavedAt,{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`:t('loading')),data&&data.userMs===0&&data.agentMs===0&&h('p',{className:'aa-empty'},t('noData'))));
+        h('section',{className:'aa-status aa-muted'},h('span',null,h('i',{className:'aa-dot','data-active':activity.active}),t(activity.active?'recording':'paused')),h('span',null,`${t('running')}: ${data?.runningAgents??'—'}`),h('span',{'aria-live':'polite'},activity.pendingMs>0?`${t('pending')}: ${formats.pending.format(activity.pendingMs/1000)} ${t('second')}`:activity.lastSavedAt?`${t('saved')} · ${t('savedAt')} ${fmt(activity.lastSavedAt,'saved')}`:t('loading')),data&&data.userMs===0&&data.agentMs===0&&h('p',{className:'aa-empty'},t('noData'))));
     }
     return {inject:['slots','locale'],apply(ctx){
-      ctx.effect(()=>ctx.locale.register(NS,{en,ru}));const t=ctx.locale.bind(NS),controller=createController();
+      ctx.effect(()=>registerMainframeLocale(ctx.locale,NS,en,ru));const t=ctx.locale.bind(NS),controller=createController();
       ctx.effect(()=>controller.start());
       ctx.slots.inject('sidebar.panellist',()=>ctx.slots.register({name:'sidebar.panellist',id:'activity-analytics',order:20,label:()=>t('panel'),locale:NS},Icon));
       ctx.slots.inject('main',()=>ctx.slots.register({name:'main',key:'activity-analytics',locale:NS,inject:()=>({controller,t,locale:ctx.locale})},Page));

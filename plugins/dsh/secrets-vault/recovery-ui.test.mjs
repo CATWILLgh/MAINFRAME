@@ -5,8 +5,8 @@ import {readFile} from 'node:fs/promises';
 
 // Source-only VM harness. No real network, browser, vault, clipboard, or secrets.
 const source=await readFile(new URL('./client.js',import.meta.url),'utf8');
-function fixture({failRefresh=false,dropIssuance=false}={}) {
-  let hook=null, api;
+function fixture({failRefresh=false,dropIssuance=false,issuanceGate}={}) {
+  let hook=null, api,poll,interval;
   const React={
     createElement:(type,props,...children)=>({type,props:props||{},children}),
     Fragment:Symbol('Fragment'),
@@ -15,8 +15,9 @@ function fixture({failRefresh=false,dropIssuance=false}={}) {
     useSyncExternalStore:(_subscribe,get)=>get(),
   };
   const calls=[];
-  const sandbox={window:{__ModuleLoader__:{load:module=>{api=module.factory(name=>{assert.equal(name,'react');return React;});}}},URL,document:{baseURI:'https://synthetic.invalid/'},setInterval:()=>1,clearInterval:()=>{},fetch:async(_url,options)=>{
+  const sandbox={window:{__ModuleLoader__:{load:module=>{api=module.factory(name=>{assert.equal(name,'react');return React;});}}},URL,document:{baseURI:'https://synthetic.invalid/'},setInterval:(fn,ms)=>{poll=fn;interval=ms;return 1;},clearInterval:()=>{},fetch:async(_url,options)=>{
     const args=JSON.parse(options.body);calls.push(args);
+    if(['setup','enableRecovery','rotateRecovery','recover'].includes(args.op))await issuanceGate;
     if(args.op==='status'&&failRefresh)throw new Error('synthetic dropped status');
     if(dropIssuance&&['setup','enableRecovery','rotateRecovery','recover'].includes(args.op))throw new Error('synthetic lost issuance response');
     const data=args.op==='status'?{initialized:true,unlocked:true,recoveryAvailable:true}:args.op==='list'?{records:[]}:['setup','enableRecovery','rotateRecovery','recover'].includes(args.op)?{recoveryKey:'SYNTHETIC-RECOVERY-KEY'}:{};
@@ -29,11 +30,18 @@ function fixture({failRefresh=false,dropIssuance=false}={}) {
     const values=[...initial];
     return {render(){let index=0;const effects=[];hook={effects,state(value){const current=index++;if(!(current in values))values[current]=typeof value==='function'?value():value;return [values[current],next=>{values[current]=typeof next==='function'?next(values[current]):next;}];}};const tree=fn(props);hook=null;for(const effect of effects)effect();return tree;}};
   }
-  return {...api,calls,component};
+  return {...api,calls,component,poll:()=>poll(),interval:()=>interval};
 }
 function descendants(tree,predicate){if(!tree||typeof tree!=='object')return [];return [...(predicate(tree)?[tree]:[]),...(tree.children||[]).flat(Infinity).flatMap(child=>descendants(child,predicate))];}
 const t=key=>key;
 
+test('idle polling is status-only at two seconds, never full-catalog refresh',async()=>{
+ const f=fixture(),controller=f.controllerFor(t),unmount=controller.mount();
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(f.interval(),2000);
+ f.calls.length=0;for(let i=0;i<10;i++)await f.poll();
+ assert.equal(f.calls.length,10);assert.ok(f.calls.every(call=>call.op==='status'));
+ unmount();controller.dispose();
+});
 test('recovery key stays out of globally observable controller snapshot',()=>{
   const f=fixture(),controller=f.controllerFor(t);
   controller.issueRecovery('SYNTHETIC-RECOVERY-KEY');
@@ -94,6 +102,15 @@ test('lock preserves unacknowledged key but disposal clears it',async()=>{
   assert.equal(controller.peekIssuedRecovery(),null);
 });
 
+for(const mode of ['setup','enableRecovery','rotateRecovery','recover'])test(`${mode}: late issuance after disposal cannot retain or publish the key`,async()=>{
+ let release;const f=fixture({issuanceGate:new Promise(r=>release=r)}),controller=f.controllerFor(t);
+ controller.set({initialized:mode!=='setup',unlocked:true,modal:{mode}});
+ const form=f.component(f.PasswordForm,{controller,t,s:controller.getSnapshot(),mode},['synthetic-password-long','synthetic-password-long',false,'synthetic-old']).render();
+ const pending=form.props.onSubmit({preventDefault(){}});assert.equal(f.calls[0].op,mode);
+ controller.dispose();let publications=0;controller.subscribe(()=>publications++);release();await pending;
+ assert.equal(controller.peekIssuedRecovery(),null);assert.equal(controller.getSnapshot().modal,null);assert.equal(publications,0);
+ assert.equal(f.calls.length,1);
+});
 test('empty issued key never permits acknowledgement',()=>{
   const f=fixture(),controller=f.controllerFor(t);controller.issueRecovery(null);
   const view=f.component(f.RecoveryIssued,{controller,t,s:controller.getSnapshot()});

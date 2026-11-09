@@ -11,12 +11,73 @@ import install as entrypoint
 
 from installer.core import Conflict
 from installer.dsh import DSH
-from installer.shared import DSH_PLUGINS
+from installer.shared import DSH_PLUGINS, unsupported_dsh_plugins
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class DSHTests(unittest.TestCase):
+    def collaboration_fixture(self, root):
+        source = 'plugins/dsh/session-collaboration'
+        package = root / source
+        runtime = ['index.js', 'core.js', 'selftest.js', 'tasks.js', 'storage.js',
+                   'wait-many.js', 'lifecycle-management.js', 'lifecycle-reads.js', 'model-selection.js', 'tool-surface.js',
+                   'cordis.patch.yml', 'README.md', 'icon.svg',
+                   'locale/en.json', 'locale/ru.json']
+        for relative in [*runtime, 'core.test.js', 'tasks.test.js', 'wait-many.test.js',
+                         'index.test.js', 'lifecycle-management.test.js', 'model-selection.test.js', 'tool-surface.test.js', 'title-creation.test.js']:
+            path = package / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{}' if relative.endswith('.json') else 'synthetic source')
+        manifest = {'name': '@mainframe/session-collaboration', 'version': '0.5.1',
+                    'dsh': {'bundle': {'patch': './cordis.patch.yml'}}, 'files': runtime}
+        (package / 'package.json').write_text(json.dumps(manifest))
+        return source, package, manifest
+
+    def test_collaboration_inventory_is_pending_and_dsh_only(self):
+        source = json.loads((ROOT / 'ADAPTATION.example.json').read_text())
+        row = source['components']['plugins'].get('session-collaboration')
+        self.assertEqual(row, {'source': 'plugins/dsh/session-collaboration',
+                               'delivery': 'pending', 'verification': 'pending'})
+        self.assertEqual(DSH_PLUGINS['session-collaboration'], row['source'])
+        self.assertIn(('plugins', 'session-collaboration'), unsupported_dsh_plugins(source))
+
+    def test_collaboration_source_handoff_needs_no_profile_or_extra_runtime(self):
+        self.assertIn('session-collaboration', DSH_PLUGINS)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, package, _ = self.collaboration_fixture(root)
+            home = root / 'never-created-profile'
+            bundle = DSH(root, home)._bundle('session-collaboration', source)
+            self.assertEqual(bundle['package'], '@mainframe/session-collaboration')
+            self.assertEqual(bundle['version'], '0.5.1')
+            self.assertEqual(bundle['requirements'], [])
+            self.assertIsNone(bundle['install_target'])
+            self.assertIsNone(bundle['handoff']['target'])
+            self.assertEqual(bundle['handoff']['tool'], 'plugin_manager')
+            self.assertEqual(set(bundle['source_files']),
+                             {p.relative_to(package).as_posix() for p in package.rglob('*') if p.is_file()})
+            self.assertFalse(home.exists())
+
+    def test_collaboration_rejects_private_source_and_omitted_runtime(self):
+        self.assertIn('session-collaboration', DSH_PLUGINS)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, package, manifest = self.collaboration_fixture(root)
+            adapter = DSH(root, root / 'unused-home')
+            for runtime in ('core.js', 'tasks.js', 'storage.js', 'wait-many.js',
+                            'lifecycle-management.js', 'lifecycle-reads.js', 'model-selection.js', 'tool-surface.js'):
+                with self.subTest(runtime=runtime):
+                    manifest['files'].remove(runtime)
+                    (package / 'package.json').write_text(json.dumps(manifest))
+                    with self.assertRaisesRegex(Conflict, 'Incomplete DSH runtime payload'):
+                        adapter._bundle('session-collaboration', source)
+                    manifest['files'].append(runtime)
+            (package / 'package.json').write_text(json.dumps(manifest))
+            (package / 'private.json').write_text('{}')
+            with self.assertRaisesRegex(Conflict, 'Unexpected DSH source'):
+                adapter._bundle('session-collaboration', source)
+
     def test_plan_reuses_inventory_without_claiming_delivery(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)
@@ -29,7 +90,7 @@ class DSHTests(unittest.TestCase):
             self.assertEqual(changes, [])
             self.assertFalse(report['profile_verified'])
             self.assertTrue(report['source_verified'])
-            self.assertEqual(len(report['bundles']), 3)
+            self.assertEqual(set(report['bundles']), set(DSH_PLUGINS))
             for name, row in report['state']['components']['plugins'].items():
                 self.assertIn(name, DSH_PLUGINS)
                 self.assertEqual(row['delivery'], 'pending')
@@ -102,24 +163,22 @@ class DSHTests(unittest.TestCase):
             self.assertIsNone(bundle['handoff']['target'])
             self.assertIn('.tgz', bundle['packaging'])
 
-    def test_cli_package_preflights_before_provisioning_and_keeps_shared_runtime_callable(self):
+    def test_cli_package_never_provisions_a_runtime(self):
         shared_runtime = entrypoint.provision_runtime
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory).resolve() / 'packages'
-            runtime = output.parent / 'runtime'
-            with patch('installer.dsh_runtime.provision_runtime', return_value=runtime) as provision, \
-                    patch('installer.dsh_package.build_packages', return_value={'mode':'fixture'}) as build, \
-                    patch('install.show'):
-                self.assertEqual(entrypoint.main(['dsh','package','--surface','desktop','--output',str(output)]),0)
-                provision.assert_called_once_with(output.with_name('packages-runtime-build'))
-                build.assert_called_once_with(ROOT,output,runtime)
-                self.assertIs(entrypoint.provision_runtime,shared_runtime)
+            with patch('installer.dsh_package.build_packages', return_value={'mode': 'fixture'}) as build, \
+                    patch('subprocess.run') as spawn, patch('install.show'):
+                self.assertEqual(entrypoint.main(['dsh', 'package', '--surface', 'desktop', '--output', str(output)]), 0)
+                build.assert_called_once_with(ROOT, output)
+                spawn.assert_not_called()
+                self.assertIs(entrypoint.provision_runtime, shared_runtime)
             forbidden = ROOT / 'never-create-package-output'
-            with patch('installer.dsh_runtime.provision_runtime') as provision:
-                with self.assertRaises(Conflict):
-                    entrypoint.main(['dsh','package','--surface','desktop','--output',str(forbidden)])
-                provision.assert_not_called()
-                self.assertFalse(forbidden.exists())
+            with self.assertRaises(Conflict):
+                entrypoint.main(['dsh', 'package', '--surface', 'desktop', '--output', str(forbidden)])
+            self.assertFalse(forbidden.exists())
+        with self.assertRaises(SystemExit):
+            entrypoint.main(['dsh', 'package', '--surface', 'desktop', '--vault-runtime', '/not-used'])
 
     def test_cli_routes_and_rejects_mutation_and_foreign_options(self):
         for action in ('plan', 'verify'):

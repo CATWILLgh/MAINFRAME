@@ -1,7 +1,7 @@
 """Build checkout-independent native DSH tarballs; never inspect or write a profile.
 
-The caller provisions a standalone Python/SQLCipher runtime separately. No code,
-worker, package script, or interpreter from that runtime is executed here.
+Packages use the Host Node runtime. No runtime provisioning, package scripts,
+profile reads, credential access, or plugin execution occurs here.
 """
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import stat
 import tarfile
 import tempfile
 
@@ -21,32 +20,7 @@ from .core import Conflict, regular_bytes
 from .dsh import DSH
 from .shared import DSH_PLUGINS
 
-_PRIVATE_SUFFIXES = {'.db', '.sqlite', '.sqlite3', '.pem', '.key', '.p12', '.pfx', '.kdbx'}
-_PRIVATE_NAMES = {'pyvenv.cfg', '.env', 'credentials.json', 'credentials', 'secrets.json',
-                  'vault.db-wal', 'vault.db-shm', '.npmrc', '.pypirc', '.netrc'}
 _VERSION = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$')
-_TARGETS = {'aarch64-apple-darwin': ('darwin', 'arm64'),
-            'x86_64-apple-darwin': ('darwin', 'x64'),
-            'aarch64-unknown-linux-gnu': ('linux', 'arm64'),
-            'x86_64-unknown-linux-gnu': ('linux', 'x64')}
-
-
-def _runtime_target(files):
-    receipt_file = files.get('mainframe-runtime.json')
-    if receipt_file is None:
-        raise Conflict('Standalone runtime requires a mainframe-runtime.json provisioning receipt.')
-    try:
-        receipt = json.loads(regular_bytes(receipt_file[0]))
-    except (ValueError, TypeError) as error:
-        raise Conflict('Invalid standalone runtime provisioning receipt.') from error
-    if (not isinstance(receipt, dict) or receipt.get('schema') != 1
-            or receipt.get('python') != '3.12.12' or receipt.get('sqlcipher3') != '0.6.4'
-            or receipt.get('binary_wheel_only') is not True
-            or receipt.get('provider') != 'uv/python-build-standalone'
-            or not isinstance(receipt.get('cipher'), str) or not receipt['cipher'].strip()
-            or not isinstance(receipt.get('target'), str) or receipt['target'] not in _TARGETS):
-        raise Conflict('Unsupported or unverified standalone runtime provisioning receipt.')
-    return _TARGETS[receipt['target']]
 
 
 def _path(value, label):
@@ -64,58 +38,6 @@ def _path(value, label):
 
 def _overlap(first, second):
     return first == second or first in second.parents or second in first.parents
-
-
-def _private(path):
-    name = path.name.lower()
-    return name in _PRIVATE_NAMES or name.startswith('.env.') or path.suffix.lower() in _PRIVATE_SUFFIXES
-
-
-def _runtime_files(runtime):
-    """Resolve only internal links; emit regular file sources, retaining executable bits."""
-    files = {}
-
-    def visit(logical, candidate, ancestors):
-        parts = logical.parts
-        # Packaging tools are not runtime dependencies; omit their CA/test keys
-        # rather than weakening the private-file boundary for arbitrary PEMs.
-        if (len(parts) >= 3 and parts[:2] == ('lib', 'python3.12')
-                and parts[2] in {'test', 'ensurepip', 'idlelib', 'tkinter', 'turtledemo'}):
-            return
-        if (len(parts) >= 4 and parts[:3] == ('lib', 'python3.12', 'site-packages')
-                and (parts[3] in {'pip', 'setuptools', '_distutils_hack', 'wheel'}
-                     or parts[3].startswith(('pip-', 'setuptools-', 'wheel-')))):
-            return
-        if len(parts) == 2 and parts[0] == 'bin' and parts[1].startswith(('pip', 'idle', '2to3')):
-            return
-        if _private(logical):
-            raise Conflict('Standalone runtime contains private material or virtualenv configuration.')
-        if logical.name == '__pycache__' or logical.suffix in {'.pyc', '.pyo'}:
-            return
-        try:
-            physical = candidate.resolve(strict=True)
-        except (OSError, RuntimeError) as error:
-            raise Conflict('Standalone runtime contains a broken or cyclic link.') from error
-        if physical != runtime and runtime not in physical.parents:
-            raise Conflict('Standalone runtime contains an external link.')
-        mode = physical.stat().st_mode
-        if stat.S_ISDIR(mode):
-            if physical in ancestors:
-                raise Conflict('Standalone runtime contains a directory link cycle.')
-            for child in sorted(physical.iterdir()):
-                visit(logical / child.name, child, ancestors | {physical})
-        elif stat.S_ISREG(mode):
-            files[logical.as_posix()] = (physical, 0o755 if mode & 0o111 else 0o644)
-        else:
-            raise Conflict('Standalone runtime may contain only regular files and internal links.')
-
-    visit(Path('.'), runtime, set())
-    python = files.get('bin/python3.12')
-    if python is None or python[1] != 0o755:
-        raise Conflict('Standalone runtime requires an executable bin/python3.12 matching the worker default.')
-    if not any(Path(name).name.upper().startswith(('LICENSE', 'COPYING')) for name in files):
-        raise Conflict('Standalone runtime must include its upstream licenses.')
-    return files
 
 
 def _archive(path, payload):
@@ -140,33 +62,29 @@ def _archive(path, payload):
                             packed.addfile(info, stream)
 
 
-def build_packages(root, output, runtime_directory):
+def build_packages(root, output):
     """Return archive paths/hashes and native handoffs, without lifecycle changes.
 
     All inputs use canonical absolute paths. Output must be absent or empty,
-    outside the source and runtime, with an existing parent. Artifacts remain at
+    outside the source, with an existing parent. Artifacts remain at
     output: retain them for native package repair/reinstall after checkout deletion.
-    The runtime is a provisioned standalone distribution, not a copied virtualenv.
-    This validates packaging only, not ABI suitability or SQLCipher functionality.
+    This validates packaging only, not native activation or encrypted persistence.
     """
     root = _path(root, 'Source root')
     output = _path(output, 'Output')
-    runtime = _path(runtime_directory, 'Standalone runtime')
     protected = [Path.home() / '.dsh']
     protected.extend(Path(value) for key in ('DSH_HOME', 'DSH_PROFILE_DIR')
                      if (value := os.environ.get(key, '').strip()))
     if any(_overlap(output, path.expanduser().resolve()) for path in protected):
         raise Conflict('Package output must not overlap DSH home or profile directories.')
-    if not root.is_dir() or not runtime.is_dir():
-        raise Conflict('Source root and standalone runtime must be existing directories.')
-    if _overlap(root, output) or _overlap(runtime, output) or _overlap(root, runtime):
-        raise Conflict('Source, runtime, and output must be separate directory trees.')
+    if not root.is_dir():
+        raise Conflict('Source root must be an existing directory.')
+    if _overlap(root, output):
+        raise Conflict('Source and output must be separate directory trees.')
     if not output.parent.is_dir():
         raise Conflict('Output parent must already exist.')
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise Conflict('Output must be absent or empty.')
-    runtime_files = _runtime_files(runtime)
-    runtime_os, runtime_cpu = _runtime_target(runtime_files)
     adapter = DSH(root, root / 'unused-profile-selection')
     bundles = {}
     payloads = {}
@@ -185,14 +103,9 @@ def build_packages(root, output, runtime_directory):
                     raise Conflict('Runtime manifest must select regular source files only.')
                 relative = file.relative_to(directory).as_posix()
                 payload[relative] = (file, 0o755 if file.stat().st_mode & 0o111 else 0o644)
-        if name == 'secrets-vault':
-            payload.update({'runtime/' + key: value for key, value in runtime_files.items()})
-            manifest['files'] = [*manifest['files'], 'runtime']
-            manifest['os'], manifest['cpu'] = [runtime_os], [runtime_cpu]
         payload['package.json'] = ((json.dumps(manifest, indent=2, ensure_ascii=False) + '\n').encode(), 0o644)
         payloads[name] = payload
-        platform = f'-{runtime_os}-{runtime_cpu}' if name == 'secrets-vault' else ''
-        filename = f'mainframe-{name}-{checked["version"]}{platform}.tgz'
+        filename = f'mainframe-{name}-{checked["version"]}.tgz'
         archive = output / filename
         bundles[name] = {'package': checked['package'], 'version': checked['version'],
                          'archive': str(archive),
@@ -217,7 +130,7 @@ def build_packages(root, output, runtime_directory):
     return {'product': 'dsh', 'mode': 'native-tarball-handoff', 'bundles': bundles,
             'profile_verified': False, 'composition_verified': False,
             'runtime_verified': False,
-            'limitations': ['Packaging does not establish native installation, activation, ABI compatibility, or SQLCipher behavior.',
+            'limitations': ['Packaging does not establish native installation, activation, or encrypted persistence.',
                             'Retain archives outside the checkout for native repair and subsequent reinstall.']}
 
 
@@ -225,10 +138,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', required=True)
     parser.add_argument('--output', required=True)
-    parser.add_argument('--runtime-directory', required=True)
     args = parser.parse_args(argv)
     try:
-        report = build_packages(args.root, args.output, args.runtime_directory)
+        report = build_packages(args.root, args.output)
     except (Conflict, OSError) as error:
         parser.exit(1, f'DSH package build failed: {error}\n')
     print(json.dumps(report, indent=2))

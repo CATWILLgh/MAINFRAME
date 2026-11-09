@@ -1,6 +1,7 @@
 # Local archive and agent instructions
 /archive/
 /experiments/
+/.local-audits/
 /AGENTS.override.md
 /GEMINI.md
 /.agents/

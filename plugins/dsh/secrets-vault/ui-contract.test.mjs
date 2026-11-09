@@ -4,11 +4,13 @@ import {readFile} from 'node:fs/promises';
 const text = name => readFile(new URL(name, import.meta.url), 'utf8');
 test('catalog has native display metadata and a self-colored icon', async () => {
   const pkg=JSON.parse(await text('package.json'));
+  assert.equal(pkg.version,'2.0.7');
+  assert.deepEqual(pkg.engines,{dsh:'0.2.2-rc.1'});
   assert.equal(pkg.exports['./icon'],'./icon.svg');
   assert.ok(pkg.exports['./locale/*.json']);
   for (const lang of ['en','ru']) {
     const locale=JSON.parse(await text(`locale/${lang}.json`));
-    assert.equal(locale.meta.title,'Secrets Vault');
+    assert.equal(locale.meta.title,lang==='ru'?'Хранилище секретов':'Secrets Vault');
     assert.ok(locale.meta.description.length>20);
   }
   const svg=await text('icon.svg');
@@ -16,7 +18,7 @@ test('catalog has native display metadata and a self-colored icon', async () => 
   assert.doesNotMatch(svg,/currentColor|<script|href=/i);
 });
 test('dynamic UI preserves supported imports and keyboard modal contract',async()=>{
-  const source=await text('client.js');
+  const source=await text('client.template.js');
   assert.doesNotMatch(source,/require\(['"]@deepseek-ai\//);
   assert.match(source,/aria-modal/);
   assert.match(source,/Escape/);
@@ -26,7 +28,7 @@ test('dynamic UI preserves supported imports and keyboard modal contract',async(
   assert.match(source,/commandUi\.register/);
 });
 test('modal backdrop is translucent without fading the dialog',async()=>{
-  const source=await text('client.js');
+  const source=await text('client.template.js');
   const css=source.match(/const css = `([\s\S]*?)`;/)[1];
   const backdrop=css.match(/\.sv-overlay\{([^}]+)\}/)[1];
   const dialog=css.match(/\.sv-dialog\{([^}]+)\}/)[1];
@@ -36,7 +38,7 @@ test('modal backdrop is translucent without fading the dialog',async()=>{
   assert.doesNotMatch(dialog,/(?:^|;)opacity:/);
 });
 test('management page uses the complete native Plugins layout contract',async()=>{
-  const source=await text('client.js');
+  const source=await text('client.template.js');
   const css=source.match(/const css = `([\s\S]*?)`;/)[1];
   const rule=selector=>css.match(new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\{([^}]+)\\}'))?.[1];
   const page=rule('.sv-page');

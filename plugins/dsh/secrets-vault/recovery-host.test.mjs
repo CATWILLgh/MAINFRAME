@@ -1,36 +1,31 @@
 import test from 'node:test';
+import {ownedEffects} from './test-effects.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { accessSync, constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { apply } from './index.js';
 import { VaultStore } from './vault-store.js';
 
 const password = 'Synthetic-host-recovery-password';
 const nextPassword = 'Synthetic-host-replacement-password';
-const python = process.env.MAINFRAME_TEST_VAULT_PYTHON || fileURLToPath(new URL('./runtime/bin/python3.12', import.meta.url));
-async function fixture(t, legacy = false) {
-  try { accessSync(python, constants.X_OK); }
-  catch { throw new Error('Vault integration tests require an executable bundled runtime; stage runtime/bin/python3.12 or set MAINFRAME_TEST_VAULT_PYTHON to a verified Python with sqlcipher3.'); }
+async function fixture(t, passwordOnlyNode = false) {
   const profile = await mkdtemp(path.join(os.tmpdir(), 'vault-recovery-host-synthetic-'));
-  if (legacy) {
-    const store = new VaultStore({ python, databasePath: path.join(profile, 'secrets-vault', 'vault.db') });
+  if (passwordOnlyNode) {
+    const store = new VaultStore({ databasePath: path.join(profile, 'secrets-vault', 'vault.v2.json') });
     try { await store.setup(password, password); } finally { await store.dispose(); }
   }
   const peer = {};
-  let route, tool, dispose;
+  let route, tool;const {effect,on,dispose}=ownedEffects();
   const injections = [];
   const ctx = {
-    effect: fn => fn(),
-    on: (event, fn) => { if (event === 'dispose') dispose = fn; },
+    effect,on,
     connection: { browserPeer: peer, admit: () => ({ peer }), fetch: { register: value => { route = value; return () => {}; } } },
     tools: { register: value => { tool = value; return () => {}; } },
     systemPrompt: { section: () => () => {} },
     agents: { get: () => ({ inject: value => injections.push(value) }) },
   };
-  apply(ctx, { profileDirectory: profile, python });
+  apply(ctx, { profileDirectory: profile });
   t.after(async () => {
     await dispose();
     assert.equal(path.dirname(path.resolve(profile)), path.resolve(os.tmpdir()));
@@ -74,7 +69,7 @@ test('recovery issuance is restricted to private admitted UI, never status/list/
   const entry = await ui({ op: 'save', sessionId: 'synthetic-session', record: {
     name: 'Synthetic host recovery entry', kind: 'token', secret: { token: 'synthetic-entry-not-real' },
   } });
-  assert.equal(entry.ok, true);
+  assert.equal(entry.ok, true, JSON.stringify(entry));
   noMaterial(await ui({ op: 'list' }), [setup.recoveryKey, 'synthetic-entry-not-real']);
   noMaterial(await tool.execute({ action: 'list' }, {}), [setup.recoveryKey, 'synthetic-entry-not-real']);
   noMaterial(injections, [setup.recoveryKey, 'synthetic-entry-not-real']);
@@ -107,7 +102,7 @@ test('private rotateRecovery requires fresh password and invalidates previous co
   noMaterial(old);
 });
 
-test('legacy enable remains UI-only and requires password even while already unlocked', async t => {
+test('password-only Node recovery enable remains UI-only and requires password even while already unlocked', async t => {
   const { ui, tool } = await fixture(t, true);
   assert.equal((await ui({ op: 'status' })).recoveryAvailable, false);
   assert.equal((await ui({ op: 'unlock', password })).ok, true);

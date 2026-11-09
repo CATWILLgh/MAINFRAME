@@ -30,7 +30,8 @@ Security problems include behavior that:
   work only because a guard had an operational failure;
 - mixes attribution across projects, sessions, agents, or concurrent work;
 - installs repository files not listed in `ADAPTATION.example.json`;
-- adds telemetry, a permanent activity log, or unexpected network traffic;
+- adds telemetry, unexpected network traffic, or a permanent activity log
+  outside the [documented local timing store](plugins/dsh/activity-analytics/README.md#storage-and-deployment);
 - claims native enforcement or runtime verification without supporting
   evidence.
 

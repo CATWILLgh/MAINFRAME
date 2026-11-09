@@ -10,6 +10,16 @@ test('clipboard import returns opaque id only and removes usage authority',async
  assert.equal(saved.metadata.allowAgentUse,false);
  assert(!JSON.stringify(result).includes('synthetic-test-secret'));
 });
+test('cancellation gates status, clipboard read and save, but never an initiated commit',async()=>{
+ for(const phase of ['entry','status','read','commit']) {
+  const controller=new AbortController(),calls=[];
+  if(phase==='entry')controller.abort();
+  const store={status:async()=>{calls.push('status');if(phase==='status')controller.abort();return {unlocked:true};},save:async()=>{calls.push('save');controller.abort();return {id:'committed'};}};
+  const pending=importClipboard({store,metadata:{kind:'token'},signal:controller.signal,read:async signal=>{calls.push('read');assert.equal(signal,controller.signal);if(phase==='read')controller.abort();return 'synthetic';}});
+  if(phase==='commit')assert.deepEqual(await pending,{id:'committed'});else await assert.rejects(pending,{name:'AbortError'});
+  assert.deepEqual(calls,phase==='entry'?[]:phase==='status'?['status']:phase==='read'?['status','read']:['status','read','save']);
+ }
+});
 test('locked vault never reads clipboard',async()=>{
  let read=false;
  await assert.rejects(importClipboard({store:{status:async()=>({unlocked:false})},metadata:{kind:'token'},read:async()=>{read=true;return 'fake';}}));

@@ -80,6 +80,7 @@ class RepositoryContractTests(unittest.TestCase):
                 "activity-analytics": "plugins/dsh/activity-analytics",
                 "message-time": "plugins/dsh/message-time",
                 "secrets-vault": "plugins/dsh/secrets-vault",
+                "session-collaboration": "plugins/dsh/session-collaboration",
             },
         )
         for group in ("mcp", "runtime", "settings"):
@@ -109,7 +110,10 @@ class RepositoryContractTests(unittest.TestCase):
             },
             "plugins": {
                 path.name: path.relative_to(ROOT).as_posix()
-                for path in (ROOT / "plugins/dsh").iterdir() if path.is_dir()
+                for path in (ROOT / "plugins/dsh").iterdir()
+                if path.is_dir()
+                # Retained development source, deliberately deferred from delivery.
+                and path.name != "workspace-transfer-safe"
             },
         }
         components = load_manifest()["components"]
@@ -129,7 +133,7 @@ class RepositoryContractTests(unittest.TestCase):
                 if isinstance(component, dict) and "source" in component:
                     sources.append(component["source"])
 
-        self.assertEqual(len(sources), 54, "unexpected payload identity count")
+        self.assertEqual(len(sources), 55, "unexpected payload identity count")
         self.assertEqual(len(sources), len(set(sources)), "duplicate payload source")
 
         forbidden = {
