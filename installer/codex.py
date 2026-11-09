@@ -19,9 +19,10 @@ import tomllib
 from .codex_skill_reminder import ROLE_MATCHER
 from .core import (Change, Conflict, digest, encode_json, migrate_disabled_markers,
                    observed, reconcile_files, regular_bytes, retire_recorded_legacy_file)
-from .shared import BEGIN, END, _instruction, inventory, skill_resources
+from .shared import (BEGIN, END, DSH_PLUGINS, _instruction, inventory, plan_skill_delivery,
+                     render_skill_artifacts, unsupported_dsh_plugins)
 from .state import component_keys, reconcile_state, set_component
-from .runtime import CODE_QUALITY_TOOLS, runtime_bin
+from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 SHELL_HOOK_NAMES = (
     "mainframe-secret-access",
@@ -30,7 +31,7 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection")
+HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits", "mainframe-fallow-quality")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
     "secret-access": "mainframe-secret-access",
@@ -42,20 +43,34 @@ READ_ONLY_ROLE_ACTION = "Verify parent permission overrides preserve the read-on
 KNOWN_RUNTIME = "0.153.4"
 # Exact Desktop mapping revalidated against the tagged native schemas/sources.
 # This is delivery compatibility, not observed lifecycle/role acceptance.
-INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1"}
+CURRENT_DESKTOP_RUNTIME = "0.165.0-alpha.1.2"
+INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1", CURRENT_DESKTOP_RUNTIME}
 # Current Desktop PreToolUse command/deny transport was observed unchanged.
 # This is an existing detector repair boundary, never a full native mapping.
 DETECTOR_UPDATE_RUNTIMES = {"0.162.0-alpha.17.2"}
 # The older prerelease allows text formats and an exact Stop schema repair;
 # detector-update versions use the separate, narrower validator below.
 SELECTION_UPDATE_RUNTIMES = {"0.163.0-alpha.11"}
-CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES
+# Same instruction reader and private skill roots; existing Markdown only.
+# Retain the previous selection binding, without revalidating its execution.
+TEXT_UPDATE_RUNTIMES = {"0.164.0-alpha.11.1"}
+SELECTION_BINDING_RUNTIMES = SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES | {CURRENT_DESKTOP_RUNTIME}
+CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES
+# Only private skill-root discovery and SKILL.md parsing were inspected here.
+# This does not authorize reconciliation of hooks or any other native binding.
+SKILL_DELIVERY_DESKTOP_RUNTIMES = {CURRENT_DESKTOP_RUNTIME, "0.166.0-alpha.5.1"}
+TODO_DELIVERY_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"}
 SELECTION_MATCHER = "^collaborationspawn_agent$"
 LIMITATIONS = {
     "mainframe-destructive-operations": "The context-free command and root/home/Git guard subset is installed. Native shell hooks omit the actual tool workdir, so active-project-root and ordinary relative-target protection remain unsupported.",
     "mainframe-commit-secrets": "The context-free literal and absolute-file commit-metadata guard is installed. Native shell hooks omit the actual tool workdir needed to inspect staged and worktree content.",
     "mainframe-code-quality": "The core pre-edit, post-edit, and revalidating completion guard is installed. The full contract remains unsupported because Stop lacks non-blocking model context for completion-only unavailable-check advice.",
     "mainframe-fallow-quality": "No safe partial binding is installed: Codex lacks the exact attributed post-edit diff, dirty-worktree reconstruction can include unrelated changes, persisting source content violates the hook state boundary, and Stop would force a model continuation for an advisory.",
+}
+CURRENT_LIMITATIONS = {
+    **LIMITATIONS,
+    "mainframe-code-quality": "The attributed pre/post-edit advisory and revalidating Stop/SubagentStop guard are installed. Full parity is unsupported: completion-only unavailable advice has no non-blocking model channel, and a still-positive retry terminates with a visible unresolved warning after one repair continuation rather than forcing an unbounded loop.",
+    "mainframe-fallow-quality": "An immediate PostToolUse advisory is installed for uniquely reconstructable Add/Update TS/JS patches, with in-memory diffs and no source retention. Full parity is unsupported: Stop/SubagentStop cannot deliver non-blocking completion advice; moved, deleted or ambiguous hunks lack safe exact reconstruction and produce bounded unavailable advice.",
 }
 
 
@@ -65,11 +80,18 @@ def mapping_supported(version: str | None, surface: str | None) -> bool:
     )
 
 
+def runtime_tools(version: str | None, surface: str | None) -> tuple[str, ...]:
+    return CODE_QUALITY_TOOLS + FALLOW_TOOLS if surface == "desktop" and version == CURRENT_DESKTOP_RUNTIME else RUNTIME_TOOLS
+
+
 def _validate_mapping(source: dict) -> None:
     components = source["components"]
-    for category in ("mcp", "plugins", "runtime", "settings"):
+    for category in ("mcp", "runtime", "settings"):
         if components[category]:
             raise Conflict(f"The Codex adapter has no mapping for the new {category} inventory.")
+    if any(name not in DSH_PLUGINS or DSH_PLUGINS[name] != row.get("source")
+           for name, row in components["plugins"].items()):
+        raise Conflict("The Codex adapter has no mapping for the new plugins inventory.")
     if set(components["hooks"]) != set(HOOK_NAMES) | set(LIMITATIONS):
         raise Conflict("A new hook requires a tested Codex event mapping.")
     expected_agents = READ_ONLY_ROLES | {
@@ -128,6 +150,18 @@ def _legacy_hook_command(base: Path, name: str, state: Path) -> str:
 
 def _commands(group: dict) -> set[str]:
     return {hook.get("command", "") for hook in group.get("hooks", []) if isinstance(hook, dict)}
+
+
+def _binding_names(group: dict, base: Path) -> set[str]:
+    names = set()
+    for command in _commands(group):
+        try:
+            arguments = shlex.split(command)
+        except ValueError:
+            continue
+        if len(arguments) >= 7 and arguments[3:5] == ["mainframe-hook", str(base)]:
+            names.add(arguments[6])
+    return names
 
 
 def _is_validated_hook_registration_update(change: Change, previous: dict,
@@ -229,7 +263,8 @@ def merge_hooks(raw: bytes | None, desired: dict, prior: dict, base: Path):
                 owned.setdefault(event, []).append(previous)
             else:
                 replacements = [g for g in desired.get(event, [])
-                                if g.get("matcher") == previous.get("matcher")]
+                                if (g.get("matcher") == previous.get("matcher")
+                                    and _binding_names(g, base) == _binding_names(previous, base))]
                 if previous in groups and len(replacements) == 1:
                     replacement = replacements[0]
                     first = groups.index(previous)
@@ -365,7 +400,7 @@ class Codex:
             if path.is_relative_to(skill_root):
                 parts = path.relative_to(skill_root).parts
                 return bool(parts and re.fullmatch(
-                    r"mainframe-[a-z0-9-]+|project-skill|tickets-(?:find|refine|implement|verify)",
+                    r"mainframe-[a-z0-9-]+|project-skill|tickets-(?:find|refine|implement|verify)|todo",
                     parts[0],
                 ))
         return path.parent == self.codex / "agents" and bool(re.fullmatch(r"mainframe-[a-z0-9-]+\.toml", path.name))
@@ -387,21 +422,15 @@ class Codex:
                 raise Conflict(f"Receipt contains an unexpected path: {path}")
         return result
 
+    def skill_artifacts(self, source: dict) -> dict:
+        return render_skill_artifacts(self.root, self.skills, self.index, source)
+
     def artifacts(self, source: dict, previous: dict) -> dict:
-        artifacts = {}
+        artifacts = self.skill_artifacts(source)
         def add(path, data, component, mode=0o600, retain=False):
             if path in artifacts:
                 raise Conflict(f"Two components map to the same destination: {path}")
             artifacts[path] = (data, mode, component, retain)
-        resources = skill_resources(self.root, source)
-        for name, entry in source["components"]["skills"].items():
-            skill = self.root / entry["source"]
-            for path in resources[name]:
-                data = path.read_bytes()
-                if path.suffix in {".md", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml", ".txt"}:
-                    data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode())
-                    data = data.replace(b"{{CREDENTIALS_INDEX}}", str(self.index).encode())
-                add(self.skills / name / path.relative_to(skill), data, "skills." + name, path.stat().st_mode & 0o777)
         for name, entry in source["components"]["agents"].items():
             text = (self.root / entry["source"]).read_text()
             description = re.search(r"^Description: (.+)$", text, re.M).group(1)
@@ -416,16 +445,12 @@ class Codex:
                 result += 'sandbox_mode = "read-only"\n'
             tomllib.loads(result)
             add(self.codex / "agents" / (name + ".toml"), result.encode(), "agents." + name)
-        for name, entry in source["components"]["commands"].items():
-            body = (self.root / entry["source"]).read_text()
-            if name == "mainframe-init":
-                body = re.sub(r"<!-- MAINFRAME OPTIONAL BLOCK: native-primary-memory.*?<!-- END MAINFRAME OPTIONAL BLOCK: native-primary-memory -->\n?", "", body, flags=re.S)
-            description = "Explicit user command: " + body.splitlines()[0].lstrip("# ") + ". User invocation only; takes no arguments."
-            packaged = "---\nname: " + name + "\ndescription: " + json.dumps(description) + "\n---\n\n" + body
-            add(self.skills / name / "SKILL.md", packaged.encode(), "commands." + name)
-            add(self.skills / name / "agents/openai.yaml", b"policy:\n  allow_implicit_invocation: false\n", "commands." + name)
+        for path, (data, mode, component, retain) in self.command_artifacts(source).items():
+            add(path, data, component, mode, retain)
         for name in HOOK_NAMES:
-            if name == "mainframe-subagent-selection" and self.version not in SELECTION_UPDATE_RUNTIMES:
+            if name == "mainframe-subagent-selection" and self.version not in SELECTION_BINDING_RUNTIMES:
+                continue
+            if name == "mainframe-fallow-quality" and not (self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME):
                 continue
             source_path = self.root / source["components"]["hooks"][name]["source"]
             add(self.hooks / "detectors" / source_path.name, source_path.read_bytes(), "hooks." + name)
@@ -455,6 +480,118 @@ class Codex:
                 index_seed = old_data
         add(self.index, index_seed, "shared.credentials index", retain=True)
         return artifacts
+
+    def command_artifacts(self, source: dict) -> dict:
+        artifacts = {}
+        for name, entry in source["components"]["commands"].items():
+            body = (self.root / entry["source"]).read_text()
+            if name == "mainframe-init":
+                body = re.sub(r"<!-- MAINFRAME OPTIONAL BLOCK: native-primary-memory.*?<!-- END MAINFRAME OPTIONAL BLOCK: native-primary-memory -->\n?", "", body, flags=re.S)
+            arguments = "accepts the caller's prose as arguments" if name == "todo" else "takes no arguments"
+            description = "Explicit user command: " + body.splitlines()[0].lstrip("# ") + ". User invocation only; " + arguments + "."
+            packaged = "---\nname: " + name + "\ndescription: " + json.dumps(description) + "\n---\n\n" + body
+            artifacts[self.skills / name / "SKILL.md"] = (packaged.encode(), 0o600, "commands." + name, False)
+            artifacts[self.skills / name / "agents/openai.yaml"] = (b"policy:\n  allow_implicit_invocation: false\n", 0o600, "commands." + name, False)
+        return artifacts
+
+    def todo_group(self):
+        return {"matcher": "^apply_patch$", "hooks": [{"type": "command",
+                "command": hook_command(self.hooks, "mainframe-todo-limits", self.event_state),
+                "timeout": 5}]}
+
+    def plan_todo(self):
+        """Deliver the explicit backlog command and its pre-edit guard only."""
+        if self.surface != "desktop" or self.version not in TODO_DELIVERY_DESKTOP_RUNTIMES:
+            raise Conflict("Todo delivery is not validated for this Codex runtime and surface.")
+        if regular_bytes(self.journal) is not None:
+            raise Conflict(f"Interrupted transaction needs recovery: {self.journal}")
+        source = inventory(self.root)
+        receipt_snapshot = observed(self.receipt_path)
+        previous = self.receipt(receipt_snapshot)
+        if not previous or previous.get("source") != str(self.root):
+            raise Conflict("Todo delivery requires an existing same-source installation.")
+        selected = {"components": {"commands": {"todo": source["components"]["commands"]["todo"]}}}
+        artifacts = self.command_artifacts(selected)
+        detector = self.root / source["components"]["hooks"]["mainframe-todo-limits"]["source"]
+        artifacts[self.hooks / "detectors" / detector.name] = (detector.read_bytes(), 0o600, "hooks.mainframe-todo-limits", False)
+        bridge = self.hooks / "bridge.py"
+        bridge_mode = previous.get("files", {}).get(str(bridge), {}).get("mode", 0o600)
+        artifacts[bridge] = (Path(__file__).with_name("codex_hook.py").read_bytes(), bridge_mode, "hook transport", False)
+        components = {"commands.todo", "hooks.mainframe-todo-limits", "hook transport"}
+        old_records = {path: record for path, record in previous.get("files", {}).items()
+                       if record.get("component") in components}
+        if str(bridge) not in old_records:
+            raise Conflict("Todo delivery requires an existing receipted hook transport.")
+        if any(Path(path) not in artifacts for path in old_records):
+            raise Conflict("Todo delivery cannot migrate existing component destinations.")
+        if any(str(path) in previous.get("files", {}) and str(path) not in old_records for path in artifacts):
+            raise Conflict("Todo destination belongs to another receipted component.")
+        changes, records = reconcile_files(artifacts, old_records, self.allowed)
+        receipt = deepcopy(previous)
+        receipt["files"] = {path: record for path, record in previous.get("files", {}).items() if path not in old_records}
+        receipt["files"].update(records)
+        directories = set(previous.get("directories", []))
+        for path in artifacts:
+            parent = path.parent
+            while self.allowed(parent):
+                if not parent.exists():
+                    directories.add(str(parent))
+                parent = parent.parent
+        receipt["directories"] = sorted(directories)
+
+        hook_path = self.codex / "hooks.json"
+        hook_snapshot = observed(hook_path)
+        document = json.loads(hook_snapshot[0]) if hook_snapshot[0] is not None else {}
+        if not isinstance(document, dict) or not isinstance(document.get("hooks", {}), dict):
+            raise Conflict("hooks.json is not a native hooks object.")
+        groups = document.setdefault("hooks", {}).setdefault("PreToolUse", [])
+        if not isinstance(groups, list) or not all(isinstance(group, dict) for group in groups):
+            raise Conflict("PreToolUse does not contain native hook groups.")
+        group = self.todo_group()
+        def related(current):
+            return any(str(self.hooks) in command and "mainframe-todo-limits" in command
+                       for command in _commands(current))
+        for current in groups:
+            if related(current) and current != group:
+                raise Conflict("The todo hook registration was edited; preserve it for review.")
+        prior_groups = receipt.setdefault("hook_groups", {}).setdefault("PreToolUse", [])
+        if any(related(current) and current != group for current in prior_groups):
+            raise Conflict("The receipted todo hook registration was edited; preserve it for review.")
+        if group not in groups:
+            groups.append(group)
+            if group not in prior_groups:
+                prior_groups.append(group)
+        hooks = hook_snapshot[0] if hook_snapshot[0] is not None and document == json.loads(hook_snapshot[0]) else encode_json(document)
+        changes.append(Change.from_snapshot(hook_path, hook_snapshot, hooks,
+                       mode=hook_snapshot[1] or 0o600, component="hook registration"))
+        state_snapshot = observed(self.state_path)
+        state = json.loads(state_snapshot[0]) if state_snapshot[0] else {}
+        if (state.get("schema_version") != 2
+                or state.get("target", {}).get("config_home") != str(self.codex)
+                or state.get("target", {}).get("mainframe_root") != str(self.root)
+                or any(not isinstance(state.get("components", {}).get(category), dict) for category in ("commands", "hooks"))):
+            raise Conflict("Todo delivery requires matching existing adaptation state.")
+        changed = {change.component for change in changes if change.needed}
+        for category, name, handoff in (
+                ("commands", "todo", "Confirm todo appears in the slash menu after reload; explicit $todo <prose> is the documented native invocation."),
+                ("hooks", "mainframe-todo-limits", "Review and trust the new PreToolUse hook in Codex Desktop; confirm an addressed over-limit patch is denied before editing.")):
+            row = state["components"][category].get(name)
+            if (f"{category}.{name}" in changed or (category == "hooks" and changed & {"hook transport", "hook registration"})
+                    or not row or row.get("source") != source["components"][category][name]["source"]
+                    or row.get("delivery") != "installed"):
+                state["components"][category][name] = deepcopy(source["components"][category][name])
+                set_component(state, (category, name), delivery="installed", verification="pending", next_action=handoff)
+        changes.append(Change.from_snapshot(self.state_path, state_snapshot, encode_json(state), component="adaptation state"))
+        changes.append(Change.from_snapshot(self.receipt_path, receipt_snapshot, encode_json(receipt), component="ownership receipt"))
+        return changes, {"target": str(self.codex), "runtime_version": self.version, "surface": self.surface,
+                         "delivery_mode": "existing-installation todo delivery",
+                         "changes": [change.summary() for change in changes if change.needed],
+                         "native_acceptance": "Reload for todo skill discovery in the slash menu; explicit $todo <prose> is documented. Literal /todo invocation remains unobserved. Review and trust the new PreToolUse hook; native acceptance remains pending."}
+
+    def plan_skill(self, name: str):
+        if self.surface != "desktop" or self.version not in SKILL_DELIVERY_DESKTOP_RUNTIMES:
+            raise Conflict("Skill-only delivery is not validated for this Codex runtime and surface.")
+        return plan_skill_delivery(self, name, "codex", self.skills / name, self.skill_artifacts)
 
     def plan(self, instructions_reviewed=False, remove=False):
         if regular_bytes(self.journal) is not None:
@@ -524,8 +661,17 @@ class Codex:
         "Stop": [{"hooks": [{"type": "command",
               "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
               "timeout": 180}]}]}
-        if not remove and self.version in SELECTION_UPDATE_RUNTIMES:
+        if not remove and self.version in SELECTION_BINDING_RUNTIMES:
             desired_hooks["PreToolUse"].append(self.selection_group())
+        if not remove:
+            desired_hooks["PreToolUse"].append(self.todo_group())
+            if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME:
+                desired_hooks["PostToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
+                    "type": "command", "command": hook_command(self.hooks, "mainframe-fallow-quality", self.event_state, runtime_bin(self.home)),
+                    "timeout": 10, "additionalContextLimit": 2000}]})
+                desired_hooks["SubagentStop"] = [{"hooks": [{
+                    "type": "command", "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
+                    "timeout": 180}]}]
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
         old_hooks = hook_snapshot[0]
@@ -602,11 +748,12 @@ class Codex:
                 and prior_state.get("target", {}).get("version") == self.version
                 and not any(change.needed for change in changes)
             )
-            unsupported = {}
+            unsupported = unsupported_dsh_plugins(source)
             pending = {}
-            if self.version not in SELECTION_UPDATE_RUNTIMES:
+            if self.version not in SELECTION_UPDATE_RUNTIMES | {CURRENT_DESKTOP_RUNTIME}:
                 pending[("hooks", "mainframe-subagent-selection")] = "Subagent-selection controls and binding require runtime validation; tested on Desktop 0.163.0-alpha.11."
-            for name, limitation in LIMITATIONS.items():
+            limitations = CURRENT_LIMITATIONS if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME else LIMITATIONS
+            for name, limitation in limitations.items():
                 component = ("hooks", name)
                 if mapping_supported(self.version, self.surface):
                     unsupported[component] = limitation + f" Confirmed mapping for Codex {self.version}."
@@ -655,14 +802,17 @@ class Codex:
         changes.sort(key=order)
         report["changes"] = [change.summary() for change in changes if change.needed]
         if not remove:
-            report["unsupported_full_contracts"] = (
-                LIMITATIONS if mapping_supported(self.version, self.surface) else {}
-            )
+            report["unsupported_full_contracts"] = {
+                **(limitations if mapping_supported(self.version, self.surface) else {}),
+                **{name: reason for (_, name), reason in unsupported_dsh_plugins(source).items()},
+            }
             report["retained_partial_bindings"] = {
                 "mainframe-destructive-operations": LIMITATIONS["mainframe-destructive-operations"],
                 "mainframe-commit-secrets": LIMITATIONS["mainframe-commit-secrets"],
-                "mainframe-code-quality": LIMITATIONS["mainframe-code-quality"]
+                "mainframe-code-quality": limitations["mainframe-code-quality"]
             }
+            if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME:
+                report["retained_partial_bindings"]["mainframe-fallow-quality"] = limitations["mainframe-fallow-quality"]
         return changes, report
 
     def selection_group(self):
@@ -670,6 +820,8 @@ class Codex:
                 "command": hook_command(self.hooks, "mainframe-subagent-selection", self.event_state), "timeout": 2}]}
 
     def bounded_update_mode(self):
+        if self.version in TEXT_UPDATE_RUNTIMES:
+            return "existing-installation bounded update; existing Markdown only; native definitions and executable payload unchanged"
         if self.version in SELECTION_UPDATE_RUNTIMES:
             return "existing-installation subagent-selection hook update; unrelated payload and native definitions preserved"
         if self.version in DETECTOR_UPDATE_RUNTIMES:
@@ -741,6 +893,10 @@ class Codex:
         if self.version in DETECTOR_UPDATE_RUNTIMES:
             self.validate_detector_update(changes, previous)
             return
+        self.validate_existing_text(changes, previous, markdown_only=self.version in TEXT_UPDATE_RUNTIMES)
+
+    def validate_existing_text(self, changes, previous, *, markdown_only=False):
+        """Preserve native metadata; the narrow mode excludes roles and migrations."""
         for change in changes:
             if not change.needed or change.component in {"adaptation state", "ownership receipt"}:
                 continue
@@ -748,6 +904,9 @@ class Codex:
                     or change.before_mode != change.mode):
                 raise Conflict("Content update cannot create, remove, or change file modes: " + str(change.path))
             component = change.component
+            if markdown_only and not (component == "instructions.global"
+                    or (component.startswith(("skills.", "commands.")) and change.path.suffix == ".md")):
+                raise Conflict("Text update cannot change native definitions or executable payload: " + str(change.path))
             if (component == "hook registration"
                     and _is_validated_hook_registration_update(
                         change, previous, self.hooks, self.event_state,

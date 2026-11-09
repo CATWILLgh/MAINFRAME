@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin Cline file-hook transport for unchanged MAINFRAME detectors.
+"""Thin Cline file-hook and Desktop completion transport for unchanged detectors.
 
 Cline runs an executable file named after the hook event with one JSON payload
 on standard input and reads one JSON object from standard output. This transport
@@ -12,7 +12,9 @@ keeps every canonical detector unchanged and owns only that native contract:
 * deliver every advisory through ``contextModification`` and never block for one.
 
 ``cancel`` in Cline stops the whole run with the reason recorded, so it is used
-only where the canonical contract requires a hard block.
+only where the canonical contract requires a hard block. The native Desktop
+plugin uses the separate guard event for submit_and_exit and converts its positive
+result to recoverable SDK skip; existing file guards remain active independently.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import shlex
 import sqlite3
 import stat
 import subprocess
@@ -48,6 +51,7 @@ HOOK_NAMES = frozenset({
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
+    "mainframe-todo-limits",
 })
 SHELL_TOOLS = frozenset({"run_commands"})
 EDIT_TOOLS = frozenset({"apply_patch", "editor"})
@@ -259,6 +263,8 @@ def _commands(name: str, inputs: dict) -> list[str]:
     if name not in SHELL_TOOLS:
         return []
     raw = inputs.get("commands")
+    if raw is None and isinstance(inputs.get("command"), str):
+        raw = [inputs] if "args" in inputs else [inputs["command"]]
     raw = _decoded(raw) if isinstance(raw, str) else raw
     if isinstance(raw, str):
         raw = [raw]
@@ -268,6 +274,10 @@ def _commands(name: str, inputs: dict) -> list[str]:
     for command in raw[:MAX_COMMANDS]:
         if isinstance(command, str) and command:
             bounded.append(command)
+        elif isinstance(command, dict) and isinstance(command.get("command"), str):
+            args = command.get("args", [])
+            if isinstance(args, list) and all(isinstance(arg, str) for arg in args):
+                bounded.append(shlex.join([command["command"], *args]))
     return bounded
 
 
@@ -500,6 +510,64 @@ def _quality_record(scope: str, root: str, operation: str, succeeded: bool,
     return result.advisory
 
 
+def _todo_reason(name: str, inputs: dict, workspace: Path) -> str | None:
+    detector = _load_detector("mainframe-todo-limits")
+    if detector is None:
+        return None
+    root = str(_project_root(workspace))
+    if name == "apply_patch":
+        return detector.check_patch(root, inputs.get("input"))
+    paths = _edit_paths(name, inputs, workspace)
+    if name != "editor" or len(paths) != 1 or not isinstance(inputs.get("new_text"), str):
+        return None
+    path = paths[0]
+    if detector._target(root, path) is None:
+        return None
+    before = detector._read(Path(path))
+    if before is None:
+        return None
+    new = inputs["new_text"]
+    line = inputs.get("insert_line")
+    if line is not None:
+        if not isinstance(line, int) or isinstance(line, bool) or not Path(path).is_file():
+            return None
+        # Match Desktop's one-based insertion boundaries and line-ending normalization.
+        eol = "\r\n" if "\r\n" in before else "\n"
+        lines = re.split(r"\r\n|\n", before)
+        if not 1 <= line <= len(lines) + 1:
+            return None
+        lines[line - 1:line - 1] = re.split(r"\r\n|\n", new)
+        return detector.check_write(root, path, eol.join(lines))
+    if not Path(path).exists():
+        return detector.check_write(root, path, new)
+    old = inputs.get("old_text")
+    if not isinstance(old, str) or not old:
+        return None
+    eol = "\r\n" if "\r\n" in before else "\n"
+    old = re.sub(r"\r\n|\n", lambda _: eol, old)
+    new = re.sub(r"\r\n|\n", lambda _: eol, new)
+    return detector.check_edit(root, path, old, new)
+
+
+def guard_tool(data: dict, state: Path) -> dict | None:
+    workspace, tool = _workspace(data), _tool(data)
+    if workspace is None or tool is None:
+        return None
+    name, inputs = tool
+    contexts, denials = [], []
+    if name == "submit_and_exit":
+        identity = _identity(data)
+        detector = _load_detector("mainframe-code-quality")
+        if identity and detector:
+            result = detector.check_completion(identity[0], str(_project_root(workspace)),
+                                               state_namespace="mainframe-cline", state_root=state)
+            if result.block_reason:
+                denials.append(result.block_reason)
+            elif result.advisory:
+                contexts.append(result.advisory)
+    return _output(contexts=contexts, denials=denials)
+
+
 def pre_tool(data: dict, state: Path) -> dict | None:
     workspace, tool = _workspace(data), _tool(data)
     if workspace is None or tool is None:
@@ -513,6 +581,9 @@ def pre_tool(data: dict, state: Path) -> dict | None:
             _shell_findings(commands, workspace, _project_root(workspace),
                             str(Path.home()), contexts, denials)
     elif name in EDIT_TOOLS:
+        reason = _todo_reason(name, inputs, workspace)
+        if reason:
+            return _output(contexts=[], denials=[reason])
         identity = _identity(data)
         paths = _edit_paths(name, inputs, workspace)
         if identity and paths:
@@ -546,12 +617,18 @@ def post_tool(data: dict, state: Path) -> dict | None:
     succeeded = True
     if isinstance(record, dict) and isinstance(record.get("success"), bool):
         succeeded = record["success"]
+    native_result = data.get("tool_result")
+    if isinstance(native_result, dict):
+        output = native_result.get("output")
+        if native_result.get("error") or (isinstance(output, dict) and
+                (output.get("success") is False or output.get("error"))):
+            succeeded = False
     if not claim_event(state, identity[0] + "\0quality-post\0" + identity[1]):
         return None
     notes = [note for note in (
         _quality_record(identity[0], str(_project_root(workspace)), identity[1],
                         succeeded, state),
-        _fallow_post(identity, workspace, state),
+        _fallow_post(identity, workspace, state) if succeeded else None,
         _checkpoint_note(identity, workspace, inputs, state, succeeded),
     ) if note]
     if not notes:
@@ -599,6 +676,8 @@ def reminder_note(event, data, state):
 
 
 def dispatch(event: str, data: dict, state: Path) -> dict | None:
+    if event == "guard":
+        return guard_tool(data, state)
     if event == "tool_call":
         result = pre_tool(data, state)
         if result and result.get("cancel"):

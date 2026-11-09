@@ -4,8 +4,10 @@ MAINFRAME is a product-neutral set of instructions, skills, agents, commands,
 and hooks for coding agents. The repository stores one canonical version of
 each component. A maintained installer generates native copies from these sources
 and a small product-specific mapping. Maintained implementations target Codex,
-ZCode Desktop, Antigravity Desktop 2.0, MiniMax Code Desktop, and Cline Desktop
-or CLI. Other products require separately assigned adapter development.
+ZCode Desktop, MiniMax Code Desktop, and Cline Desktop or CLI. The
+[DSH plugin adapter](docs/installation/dsh-adapter.md) validates and packages
+four native plugins for installation through DSH's package manager. Other
+products require separately assigned adapter development.
 
 Canonical content stays product-neutral. Native packaging, registration,
 lifecycle handling, and installation checks live under [installer/](installer/).
@@ -58,7 +60,6 @@ source validation or successful installation alone is not enough.
 
 The [Codex](docs/installation/codex-installer.md),
 [ZCode Desktop](docs/installation/zcode-installer.md),
-[Antigravity Desktop 2.0](docs/installation/antigravity-installer.md),
 [MiniMax Code Desktop](docs/installation/minimax-installer.md), and
 [Cline](docs/installation/cline-installer.md) installers
 implement packaging, ownership, updates, recovery, and safe hook removal for
@@ -67,7 +68,8 @@ native acceptance; each adapter records its own exact limitations.
 
 ## Install or update
 
-MAINFRAME has one supported installation path:
+Use this path to install or update MAINFRAME globally in Codex, ZCode Desktop,
+MiniMax Code Desktop, or Cline Desktop or CLI.
 
 1. Clone or update this repository.
 2. Open this repository itself as the current project in the agent product you
@@ -75,7 +77,7 @@ MAINFRAME has one supported installation path:
 3. Send [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md) to the agent on its own, as an
    attachment or file reference. No additional prompt is needed.
 
-For Codex, ZCode Desktop, Antigravity Desktop 2.0, MiniMax Code Desktop, and
+For Codex, ZCode Desktop, MiniMax Code Desktop, and
 Cline Desktop or CLI, the agent runs [install.py](install.py), reviews existing
 instruction semantics when required by the plan, verifies the delivered
 structure, and checks available discovery evidence on the current surface. If
@@ -105,19 +107,33 @@ Do not run the installation from another project. MAINFRAME is installed
 globally; project-specific configuration is created later through installed
 capabilities such as `mainframe-project-skill`.
 
+For DSH, follow the [plugin packaging and installation guide](docs/installation/dsh-adapter.md).
+Build the `.tgz` archives from a checkout or obtain the matching release
+archives, then install the desired plugins through DSH's native `plugin_manager`.
+Source and package checks leave native profile verification pending.
+
 ## Product payload
 
 [ADAPTATION.example.json](ADAPTATION.example.json) is the complete list of
-installable component identities and canonical sources.
+55 component identities and canonical sources. Each adapter delivers the
+components it supports.
 
 | Source | Installed result |
 | --- | --- |
 | [instructions/global.md](instructions/global.md) | One MAINFRAME-owned section in the product's global instruction |
-| Listed directories under [skills/](skills/) | Native global skills, including their required references, scripts, and assets |
-| Listed files under [agents/](agents/) | Native global agent or subagent roles |
-| Listed files under [commands/](commands/) | Explicit user commands or the closest supported native equivalent |
-| Listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
+| 24 listed directories under [skills/](skills/) | Native global skills, including their required references, scripts, and assets |
+| 7 listed files under [agents/](agents/) | Native global agent or subagent roles |
+| 8 listed files under [commands/](commands/) | Explicit user commands or the closest supported native equivalent |
+| 10 listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
 | [shared/credentials/mainframe-secret](shared/credentials/mainframe-secret) | The global `mainframe-secret` helper when a compatible command is not already present |
+| 4 listed bundles under [plugins/dsh/](plugins/dsh/) | Independent DSH packages installed through the native manager |
+
+- The [React frontend skill](skills/mainframe-frontend/SKILL.md) covers visual
+  planning, implementation, screenshot review, and browser verification. It
+  includes local workflows for visual direction and authored product demos.
+- The [OpenSpec skill](skills/mainframe-openspec/SKILL.md) uses one shared CLI
+  per user across the supported full adapters. The maintained installer prepares
+  it before delivering the skill. [Shared OpenSpec CLI setup](docs/installation/components/integrations.md#shared-openspec-cli)
 
 Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are runtime support for
 listed hooks, not separate MAINFRAME components. Before registering an active
@@ -162,6 +178,7 @@ closest explicit user-command mechanism:
 
 | Command | Purpose |
 | --- | --- |
+| [todo](commands/todo.md) | Capture or update an idea in the current project's tracked queue |
 | [mainframe-init](commands/mainframe-init.md) | Establish ownership and verification for one user-facing coordinating session |
 | [mainframe-project-skill](commands/mainframe-project-skill.md) | Initialize, update, or extend the current project's evolving skill |
 | [mainframe-tickets-init](commands/mainframe-tickets-init.md) | Initialize or migrate project ticket directories, format and root instructions |
@@ -181,7 +198,8 @@ built-in goal command instead of invoking it.
 Installation preserves unrelated global configuration, authentication,
 history, sessions, memories, projects, and user-owned instructions. Secret
 values are never part of this repository or its adaptation state. MAINFRAME
-does not include telemetry collectors or a permanent activity log.
+does not send telemetry. The optional DSH Activity Analytics plugin stores
+timing data locally in the selected profile. [Activity Analytics data boundary](plugins/dsh/activity-analytics/README.md#storage-and-deployment)
 
 Canonical source validation does not prove that a product discovered or ran an
 installed component. Installation targets the surface running the request.

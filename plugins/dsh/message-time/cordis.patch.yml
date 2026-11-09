@@ -1,0 +1,7 @@
+# Compact clocks for human inputs and full turns; settled history is unchanged.
+- insert:
+    - id: message-time
+      name: '@mainframe/message-time'
+      config:
+        enabled: true
+        timeZone: Europe/Moscow

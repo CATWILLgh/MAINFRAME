@@ -1,9 +1,8 @@
-# Cline installer
+# Cline Desktop installer
 
-This maintained route targets Cline's shared global configuration root on
-macOS. Cline Desktop and the Cline CLI read the same `~/.cline/` tree, so one
-installation serves both surfaces; select the surface that will prove native
-behavior. The installer never launches a Cline session, the hub, or a model.
+This maintained route targets installed Cline Desktop **0.0.46** on macOS and
+its product-private `~/.cline/` directory. It never launches a conversation,
+hub, model or application service.
 
 Run from the MAINFRAME repository root:
 
@@ -13,87 +12,74 @@ python3 -B install.py cline apply --surface desktop
 python3 -B install.py cline verify --surface desktop
 ```
 
-`plan` is read-only. `apply` writes the reviewed plan through the common
-transaction and ownership receipt. `verify` checks that the same plan has no
-remaining structural changes. `--cline-app` selects another Desktop bundle for
-release evidence, `--cline-home` selects an explicit configuration root, and
-`--surface cli` reads the installed CLI's own version instead.
+`plan` is read-only. `apply` uses the common transaction and ownership receipt;
+`verify` checks convergence. Full Desktop plans require release 0.0.46 or newer;
+controls and removal remain available for older recorded installations. `--cline-app` selects the Desktop bundle for version
+evidence, and `--cline-home` selects another configuration root. The legacy
+`--surface cli` implementation remains available, with no claim of current CLI
+compatibility from this Desktop qualification.
 
-## Delivered shape
+For one canonical skill on the inspected **0.0.46** Desktop release, add
+`--skill <name>` to the three commands above. This requires an existing
+same-source installation with matching receipt and adaptation state. The
+selected package goes under `~/.cline/skills/`; only its package, receipt
+records and adaptation row are reconciled. Analyzers and other bindings
+are outside this route. `scoped_update_matches` reports package convergence.
 
-| Destination | Content |
-| --- | --- |
-| `~/.cline/rules/mainframe.md` | The canonical global instruction inside one MAINFRAME-managed block |
-| `~/.cline/skills/mainframe-*/` | Every canonical skill in the [inventory](../../ADAPTATION.example.json), complete with references, scripts, and assets; markers resolved only in the copies |
-| `~/.cline/agents/mainframe-*.yml` | The seven roles as YAML profiles; read-only roles are restricted to `read_files, search_codebase` and every profile binds its required method through the native `skills:` field |
-| `~/.cline/workflows/<command>.md` | The seven commands as explicit user-invoked slash workflows |
-| `~/.cline/hooks/PreToolUse`, `PostToolUse` | Two fail-open launchers that call one Python transport |
-| `~/.cline/hooks/mainframe-cline-hook` and `hooks/detectors/` | The unchanged canonical detectors behind the transport |
-| `~/.local/bin/mainframe-secret` | The credential helper, installed only when absent |
+The installer delivers one managed instruction block under `rules/`, all skills
+in the [canonical inventory](../../ADAPTATION.example.json) with their approved
+resources under `skills/`, seven YAML role profiles
+under `agents/`, eight explicit slash workflows under `workflows/`, and unchanged
+canonical detectors behind `hooks/PreToolUse` and `PostToolUse`. Profiles bind
+required methods through `skills:`; the three read-only roles expose only native
+read/search tools and their attached skill executor.
 
-`PreToolUse` receives every tool call, filters to the exact shell and edit tools,
-evaluates the secret, destructive-operations, commit-secrets, and
-ripgrep-replacement detectors, and answers only on a positively recognized
-finding: a hard `cancel` for a guard, a `contextModification` advisory
-otherwise. `PostToolUse` delivers exact-scope code-quality advisories plus
-Fallow's structural analysis of TS/JS edits, with per-operation
-deduplication and bounded per-file snapshots. For `apply_patch`, the transport
-extracts the complete affected scope from canonical patch headers; multi-file
-patches remain one attributed operation. Clean calls, unknown tools, malformed
-payloads, unavailable interpreters, and detector failures all stay silent.
-Hook state lives under `~/.cline/data/mainframe/hook-state/` with bounded
-expiry.
+The additional native `plugins/mainframe.js` module revalidates attributed
+quality findings before `submit_and_exit`. A positive finding recoverably skips
+that completion tool; the agent can repair and retry. The plugin needs only
+Node builtins and the installer's Python interpreter. Its child process is
+bounded below the native three-second plugin-hook timeout and fails open.
+It writes no product settings or database registration.
 
-Two hook components are `unsupported` with an exact reason: Cline dispatches
-lifecycle hook files detached, so no completion event can revalidate findings
-or continue the model, which removes the completion guard of
-`mainframe-code-quality` and the continuation-capable completion timing of
-`mainframe-fallow-quality`. Both remain useful as reported partial bindings:
-per-edit quality advisories and per-edit Fallow analysis are delivered
-informatively on `PostToolUse` and never block. Guards block through the native `cancel` result, which stops
-the affected run with the reason; Cline file hooks offer no recoverable
-per-tool denial, and a batched `run_commands` call is evaluated command by
-command.
+File hooks retain established protection when the plugin is disabled or fails
+to load. `PreToolUse` applies shell secret, destructive-operation and commit
+checks, ripgrep advice, TODO guards and edit capture. Its positive guard
+`cancel` aborts the run. `PostToolUse` supplies exact-edit quality, Fallow,
+checkpoint and skill advice. The plugin does not duplicate these guards or
+advisories. Multi-file patches retain their complete bounded scope; native
+structured failed edits stay neutral. Private state and the ownership receipt
+live under `~/.cline/data/mainframe/`.
 
-Commands are workflows, Cline's explicit-only invocation surface; skills remain
-the autonomous surface. Agent profiles load as `subagent_<name>` tools when the
-runtime spawns configured agents.
+The adapter accounts for every inventoried component. The three unsupported
+full contracts are detailed below. Quality retains per-edit advice plus the new
+completion-tool check; Fallow retains per-edit structural advice. Neither has a
+universal continuation-capable completion event, because natural delegated
+completion can bypass `submit_and_exit` and `afterRun` ignores return values.
+Subagent model-plus-effort selection has no binding: native call schemas do not
+offer both controls. No guard blocks valid inherited native defaults. There are
+no stale pending rows reserved for another product.
 
-## Activation and evidence boundary
+The current shipped loader accepts the generated plugin in a disposable worker;
+source inspection proves its global discovery path and control effects. A
+converged installation proves files, modes, ownership and markers. It does not
+prove live Desktop discovery or recipient behavior. Open one new Desktop
+conversation and confirm skills, workflows, profiles and rules appear without
+diagnostics; observe a harmless relevant event when native acceptance is needed.
+A product version change invalidates prior native verification where appropriate.
 
-`ADAPTATION.cline.json` records delivery separately from native behavior. A
-converged `verify` proves files, modes, ownership, markers, and placeholders.
-It does not prove Desktop or CLI discovery, a model's skill choice, workflow
-invocation, role loading, or a hook lifecycle. Open one new conversation in the
-selected surface and confirm MAINFRAME appears without diagnostics; that is the
-only routine handoff. File hooks are read when a session starts, so a new
-conversation also adopts hook changes.
-
-A new Cline release changes the recorded target version and returns native
-verification to pending where appropriate. If Cline changes hook event names,
-payload shape, or the output contract, the adapter needs a focused mapping
-update against that concrete failure.
-
-Hook controls and removal use the same entrypoint:
+Existing histories, sessions, authentication, global settings, foreign plugins
+and user files are preserved. Only receipted owned files are updated or removed.
+The credential helper is installed when needed; its metadata index is retained.
+Existing per-hook disable choices are preserved. Controls use the same entrypoint:
 
 ```sh
 python3 -B install.py cline disable
-python3 -B install.py cline enable --hook mainframe-secret-access
+python3 -B install.py cline enable --hook mainframe-todo-limits
 python3 -B install.py cline uninstall
 python3 -B install.py cline recover
 ```
 
-The mapping and its limitations are documented in
-[native/cline.md](native/cline.md). Adapter code lives in
-[installer/cline.py](../../installer/cline.py), and the installed hook
-transport comes from [installer/cline_hook.py](../../installer/cline_hook.py).
-
-
-## Skill reminders
-
-The installer delivers the shared positive-only reminder method and this
-product's [native binding](../../hooks/skill-reminder-routing.md#native-bindings).
-An already considered skill stays quiet; reminders neither block nor continue
-a model. Existing disable choices are preserved. Start a fresh Desktop
-conversation after updating registrations; file convergence does not establish
-native receipt or skill application.
+The [native evidence](native/cline.md) owns current schemas, loading paths,
+hook ordering, read-only filtering and acceptance limits. The maintained code is
+[installer/cline.py](../../installer/cline.py) with the thin transport in
+[installer/cline_hook.py](../../installer/cline_hook.py).

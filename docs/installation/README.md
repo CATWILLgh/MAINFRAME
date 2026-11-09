@@ -31,11 +31,15 @@ table, use current evidence, and correct or escalate the actual owner.
 ## Progressive reading route
 
 For Codex, read [codex-installer.md](codex-installer.md). For ZCode Desktop,
-read [zcode-installer.md](zcode-installer.md). For Antigravity Desktop 2.0,
-read [antigravity-installer.md](antigravity-installer.md). For MiniMax Code
+read [zcode-installer.md](zcode-installer.md). For MiniMax Code
 Desktop, read [minimax-installer.md](minimax-installer.md). For Cline Desktop
 or the Cline CLI, read [cline-installer.md](cline-installer.md). Follow the
 selected executable route; do not run a manual adaptation loop in parallel.
+
+For DSH, read [dsh-adapter.md](dsh-adapter.md). Its maintained route validates
+four source plugins and builds independent `.tgz` packages. DSH's native
+`plugin_manager` owns profile installation and lifecycle. This route covers
+the DSH plugins, with source readiness and native acceptance verified separately.
 
 Products without a maintained installer require separately assigned adapter
 development. Their native pages are orientation, not ready installation routes.
@@ -74,7 +78,6 @@ questions that still require verification against the installed version.
 - [Claude Code](native/claude-code.md)
 - [OpenCode](native/opencode.md)
 - [ZCode Desktop](native/zcode.md)
-- [Antigravity Desktop 2.0](native/antigravity.md)
 - [MiniMax Code Desktop](native/minimax.md)
 - [Pi](native/pi.md)
 - [Cline](native/cline.md)

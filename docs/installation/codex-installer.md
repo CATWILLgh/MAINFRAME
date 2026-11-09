@@ -8,21 +8,51 @@ the user-facing file-only invocation unchanged.
 
 On macOS or Linux, use Python 3.11 or newer and Git. Select the surface running
 this request under the [surface rule](verification.md#desktop-and-cli).
-The native mapping was inspected against engine **0.153.4** and revalidated for
-**Desktop 0.159.2** on 2026-10-02. Delivery compatibility is established from
+The native mapping was inspected against engine **0.153.4**, revalidated for
+**Desktop 0.159.2**, and refreshed for **Desktop 0.165.0-alpha.1.2** on
+2026-11-01. Delivery compatibility is established from
 tagged source/schema comparison and disposable-home installer checks; live
 Desktop lifecycle and role acceptance remain separate. See the
-[0.159.2 evidence](native/codex.md#desktop-01592-delivery-revalidation).
+[current full-mapping evidence](native/codex.md#desktop-01650-alpha12-full-delivery).
 Do not upgrade Codex,
 switch the user's model, or claim another version is verified. `plan` works
 read-only; a full installation requires the tested runtime. To support a different version,
 revalidate the affected native contract and update the maintained module with
 its evidence, rather than bypassing the version check or writing a second installer.
 
-CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2
-supports the full maintained delivery route, including new complete skill
-packages and the checkpoint hook. It does not require launching a CLI agent,
+CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2 and
+**0.165.0-alpha.1.2** support the full maintained delivery route, including
+complete skill packages, roles, explicit commands and native hooks. The mapping
+accounts for every entry in the [canonical inventory](../../ADAPTATION.example.json).
+Skills and command projections
+are delivered only to `$CODEX_HOME/skills`; role files use `$CODEX_HOME/agents`.
+The shared `.agents/skills` root is never a delivery destination; an older
+receipt can authorize retirement of its unchanged owned files during migration.
+It does not require launching a CLI agent,
 app-server, model probe or trust UI automation.
+
+The current full route retains the existing subagent-selection registration for
+the verified collaboration interface and installs the Fallow detector plus a
+non-blocking `PostToolUse` advisory for supported exact patches. Fallow uses
+only bounded in-memory reconstruction of the addressed files; it never scans a
+dirty worktree for attribution or stores source/diff text. Runtime readiness
+includes `ruff`, `oxlint`, `semgrep` and `fallow`. The native callback gives
+Fallow seven seconds within its ten-second handler timeout.
+
+Quality completion checks now bind both primary `Stop` and worker
+`SubagentStop`, with worker state isolated by native session and agent identity.
+One positive revalidation requests a repair continuation. A still-positive retry
+terminates with a visible unresolved reason and retains state for the next user
+turn. This is bounded recovery, not proof that Codex marks the turn as failed.
+Full quality parity remains unsupported, alongside full Fallow completion timing
+and the two shell guards' actual-tool-workdir-dependent guarantees. The plan
+reports all four retained partial bindings explicitly.
+
+New hook definitions require native review/trust after delivery. The installer
+preserves existing trust state, hook order, deliberate disables, foreign files,
+user roles and configuration; it never writes native trust hashes. Discovery,
+recipient delivery and native execution remain pending until observed on this
+surface. Other nearby versions and current-version CLI are not admitted.
 
 Desktop **0.154.0-alpha.6.2** also supports a bounded update of an existing
 same-source installation. The installer recognizes the exact prerelease string
@@ -69,6 +99,93 @@ Trust the final new hook in Desktop after delivery; the installer does not
 write trust hashes. Its disable/remove lifecycle uses the ordinary maintained
 commands and preserves late-callback silence.
 
+Desktop **0.164.0-alpha.11.1** supports an existing same-source installation's
+Markdown update only. The global instruction owner, existing skill/command
+Markdown, discovery metadata except descriptions, file modes, executable payload,
+hook registrations, role definitions and global configuration retain their
+existing boundaries. No files may be created or removed. The previously installed
+subagent-selection binding is preserved; its behavior on this runtime is not
+newly certified. The update does not provision unrelated analyzers and reports
+their readiness separately from `scoped_update_matches`. This is not a fresh
+installation or full native mapping. See the [text-update comparison](native/codex.md#desktop-01640-alpha111-text-update).
+
+### Deliver one skill on Desktop
+
+Desktop **0.165.0-alpha.1.2** and **0.166.0-alpha.5.1** support the explicit
+skill-only route for an existing same-source installation with a matching
+ownership receipt and schema-2 adaptation state. The tagged reader supports
+complete packages under `$CODEX_HOME/skills`. On **0.166.0-alpha.5.1**, only the
+skill route has been revalidated.
+See the source evidence for [0.165.0](native/codex.md#desktop-01650-alpha12-skill-only-delivery)
+and [0.166.0](native/codex.md#desktop-01660-alpha51-skill-only-delivery).
+
+```sh
+python3 -B install.py codex plan --surface desktop --skill mainframe-sentry
+python3 -B install.py codex apply --surface desktop --skill mainframe-sentry
+python3 -B install.py codex verify --surface desktop --skill mainframe-sentry
+```
+
+Use one exact identity from the inventory's `skills` category. Commands packaged
+as skills are excluded. Keep the same target and observed runtime options for
+all three commands. `--runtime-version` follows the evidence rule below.
+The route uses the ordinary approved resource selector, ownership checks, lock,
+transaction and recovery journal. Intended new source resources must be staged
+before planning; it does not stage them or alter existing partial staging.
+
+Only the selected skill package and its receipt records and adaptation row are
+reconciled. Existing hooks, registrations, global instructions, configuration,
+permissions, native trust, deliberate disables, unrelated files and unrelated
+state rows are preserved. A previous shared-root destination requires its own
+authorized migration. Owned edits and conflicting foreign files stop delivery.
+
+Skill-only verification checks `scoped_update_matches` for file convergence.
+It neither checks nor provisions unrelated hook analyzers and makes no full
+`structure_matches` claim. For `mainframe-openspec`, apply prepares the
+[shared CLI](components/integrations.md#shared-openspec-cli) and verify also
+requires `runtime_support.ready`. The adaptation state's top-level target and
+existing receipt fingerprint retain their previous full-installation meaning.
+The report identifies the current skill-delivery runtime. The selected row remains
+`verification: pending` with a fresh-task discovery handoff until discovery is
+observed. Other runtimes, CLI, fresh installs and source moves are rejected by
+this route. Do not use whole-product apply to deliver a single skill on this
+runtime.
+
+### Deliver the backlog command and guard on Desktop 0.165.0-alpha.1.2
+
+An existing same-source installation with a matching receipt and schema-2 state
+can receive the canonical `todo` command and `mainframe-todo-limits` detector
+through the bounded route:
+
+```sh
+python3 -B install.py codex plan --surface desktop --todo
+python3 -B install.py codex apply --surface desktop --todo
+python3 -B install.py codex verify --surface desktop --todo
+```
+
+This installs the explicit-only `todo` skill, updates the owned hook bridge,
+and appends one `PreToolUse` group matching `apply_patch`. It preserves other
+registrations and their order, receipt metadata, adaptation rows, configuration,
+native trust and disabled markers. It uses the ordinary lock, ownership checks
+and recoverable transaction; it neither provisions nor checks unrelated analyzers.
+Verification reports `scoped_update_matches`, with native behavior pending.
+Other runtime versions, CLI, fresh installations and source moves are rejected.
+
+The [official slash-command guide](https://learn.chatgpt.com/docs/reference/slash-commands)
+places enabled skills in the Desktop slash menu. Type `/`, filter for `todo`
+and select it; literal `/todo <prose>` execution on this exact Desktop build
+has not been observed. The documented explicit alternative is `$todo <prose>`.
+The package accepts caller prose and disables implicit invocation, as described
+in the [skill guide](https://learn.chatgpt.com/docs/build-skills).
+
+Review and trust the new hook definition in Desktop after delivery, then confirm
+the addressed oversized edit is denied. The installer never writes trust hashes.
+The guard examines only attributed `apply_patch` edits to `.docs/todo` and
+`.docs/todos/*.md`; shell writes and other tools are outside this binding.
+Without a usable native `cwd`, this binding remains neutral, including absolute
+patch paths. Write a new detail note before
+adding its index link, so its target exists when checked. See the
+[native evidence](native/codex.md#desktop-01650-alpha12-backlog-command-and-guard).
+
 Run from this repository root. For Desktop, the installer reads only the current
 task's engine version from local runtime metadata, using `CODEX_THREAD_ID`. It
 does not read conversations, enumerate other tasks, or invoke an executable.
@@ -113,8 +230,8 @@ with action `verify`. Keep the same surface, runtime, and configuration options.
 
 The installer validates the inventory and ignore rules, copies complete skill
 resources into the private `$CODEX_HOME/skills` directory, packages exact roles
-and explicit-only commands there, prepares the two
-supported hook bindings, merges the narrow feedback permission, and writes the
+and explicit-only commands, prepares the supported native hook registrations,
+merges the narrow feedback permission, and writes the
 global instruction after its dependencies. An existing compatible `mainframe-secret`
 helper and the non-secret index are preserved. The helper creates protected
 storage through its normal operation; installation never inspects its values.

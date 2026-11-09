@@ -74,7 +74,16 @@ class RepositoryContractTests(unittest.TestCase):
                 }
             },
         )
-        for group in ("mcp", "plugins", "runtime", "settings"):
+        self.assertEqual(
+            {name: row["source"] for name, row in components["plugins"].items()},
+            {
+                "activity-analytics": "plugins/dsh/activity-analytics",
+                "message-time": "plugins/dsh/message-time",
+                "secrets-vault": "plugins/dsh/secrets-vault",
+                "session-collaboration": "plugins/dsh/session-collaboration",
+            },
+        )
+        for group in ("mcp", "runtime", "settings"):
             self.assertEqual(components[group], {}, group)
 
     def test_manifest_inventory_matches_files_on_disk(self):
@@ -99,6 +108,13 @@ class RepositoryContractTests(unittest.TestCase):
                 path.stem: path.relative_to(ROOT).as_posix()
                 for path in (ROOT / "hooks").glob("*.py")
             },
+            "plugins": {
+                path.name: path.relative_to(ROOT).as_posix()
+                for path in (ROOT / "plugins/dsh").iterdir()
+                if path.is_dir()
+                # Retained development source, deliberately deferred from delivery.
+                and path.name != "workspace-transfer-safe"
+            },
         }
         components = load_manifest()["components"]
         for group, sources in actual.items():
@@ -117,7 +133,7 @@ class RepositoryContractTests(unittest.TestCase):
                 if isinstance(component, dict) and "source" in component:
                     sources.append(component["source"])
 
-        self.assertEqual(len(sources), 47, "unexpected payload identity count")
+        self.assertEqual(len(sources), 55, "unexpected payload identity count")
         self.assertEqual(len(sources), len(set(sources)), "duplicate payload source")
 
         forbidden = {

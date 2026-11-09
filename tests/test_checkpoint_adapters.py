@@ -1,4 +1,4 @@
-"""Checkpoint advice through the five maintained native output contracts."""
+"""Checkpoint advice through the four maintained native output contracts."""
 import io
 import json
 from pathlib import Path
@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from installer import codex_hook, zcode_hook, cline_hook, minimax_hook, antigravity_hook
+from installer import codex_hook, zcode_hook, cline_hook, minimax_hook
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = 'mainframe-commit-checkpoint'
@@ -100,20 +100,6 @@ class CheckpointAdapterTests(unittest.TestCase):
             (self.support / ('.disabled-' + NAME)).write_text('')
             self.assertIsNone(minimax_hook.post_tool({**payload, 'tool_use_id': 'next'}, self.state))
 
-    def test_antigravity_large_edit_uses_post_context_not_stop_continuation(self):
-        transcript = self.base / 'antigravity/brain/session/.system_generated/logs/transcript.jsonl'
-        transcript.parent.mkdir(parents=True)
-        transcript.write_text(json.dumps({'step_index': 1, 'created_at': '2026-10-01T12:00:00Z',
-            'tool_calls': [{'name': 'write_to_file', 'args': {'TargetFile': str(self.file), 'CodeContent': CONTENT, 'Overwrite': False}}]}) + '\n')
-        payload = {'conversationId': 'session', 'workspacePaths': [str(self.workspace)],
-                   'transcriptPath': str(transcript), 'invocationNum': 1, 'executionNum': 1}
-        with patch.object(antigravity_hook, 'ROOT', self.support):
-            result = antigravity_hook.post_invocation(payload, self.state)
-            self.assertIn('Commit checkpoint', result['injectSteps'][0]['ephemeralMessage'])
-            self.assertEqual(antigravity_hook.post_invocation(payload, self.state), {})
-            self.assertEqual(antigravity_hook.stop(payload, self.state), {'decision': 'stop'})
-            (self.support / ('.disabled-' + NAME)).write_text('')
-            self.assertEqual(antigravity_hook.post_invocation(payload, self.state), {})
 
 
 if __name__ == '__main__': unittest.main()

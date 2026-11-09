@@ -9,9 +9,9 @@ import sys
 import tempfile
 import unittest
 
-from installer.core import Conflict, transact
-from installer.runtime import TOOL_SPECS
-from installer.minimax import AGENT_REASON, COMMAND_REASON, MiniMax, desktop_version
+from installer.core import Conflict, digest, encode_json, observed, transact
+from installer.runtime import OPENSPEC_VERSION, TOOL_SPECS
+from installer.minimax import COMMAND_REASON, MiniMax, desktop_version
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,7 +24,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
         base = Path(self.temporary.name).resolve()
         self.source = base / "source"
         self.source.mkdir()
-        for name in ("instructions", "skills", "agents", "commands", "hooks", "installer"):
+        for name in ("instructions", "skills", "agents", "commands", "hooks", "plugins", "installer"):
             shutil.copytree(ROOT / name, self.source / name, ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("ADAPTATION.example.json", ".gitignore", "install.py"):
             shutil.copyfile(ROOT / name, self.source / name)
@@ -34,13 +34,114 @@ class MiniMaxInstallationTests(unittest.TestCase):
             shutil.copyfile(ROOT / "shared/credentials" / name, credentials / name)
         self.home = base / "home with 'quotes'"
         self.home.mkdir()
-        self.adapter = MiniMax(self.source, self.home, version="3.0.71")
+        self.adapter = MiniMax(self.source, self.home, version="3.0.73")
 
     def apply(self):
         changes, report = self.adapter.plan()
         transact(changes, self.adapter.journal, self.adapter.allowed)
         self.adapter.clean_directories(self.adapter.receipt())
         return report
+
+    def test_skill_only_delivery_registers_one_private_package(self):
+        self.apply()
+        transact(self.adapter.control(False, "mainframe-secret-access"), self.adapter.journal, self.adapter.allowed)
+        name = "mainframe-k3s"
+        destination = self.adapter.plugin / "skills" / name
+        manifest_path = self.adapter.plugin / ".minimax-plugin/plugin.json"
+        manifest = json.loads(manifest_path.read_bytes())
+        manifest["description"] = "Existing Plugin metadata"
+        original_manifest = encode_json(manifest)
+        manifest["skills"].remove(f"skills/{name}/SKILL.md")
+        manifest_path.write_bytes(encode_json(manifest))
+        shutil.rmtree(destination)
+        receipt = self.adapter.receipt()
+        receipt["files"] = {path: record for path, record in receipt["files"].items()
+                            if not Path(path).is_relative_to(destination)}
+        receipt["files"][str(manifest_path)]["sha256"] = digest(manifest_path.read_bytes())
+        self.adapter.receipt_path.write_bytes(encode_json(receipt))
+        state = json.loads(self.adapter.state_path.read_bytes())
+        del state["components"]["skills"][name]
+        self.adapter.state_path.write_bytes(encode_json(state))
+
+        edited_command = self.adapter.plugin / "skills/mainframe-project-skill/SKILL.md"
+        edited_command.write_text(edited_command.read_text() + "\nUnrelated edit\n")
+        shared = self.home / ".agents/skills" / name / "SKILL.md"
+        shared.parent.mkdir(parents=True)
+        shared.write_text("unrelated shared skill\n")
+        protected = {path: observed(path) for path in self.home.rglob("*")
+                     if path.is_file() and path not in {manifest_path, self.adapter.receipt_path}}
+
+        def run(action):
+            return subprocess.run([
+                sys.executable, "-B", str(self.source / "install.py"), "minimax", action,
+                "--home", str(self.home), "--surface", "desktop", "--runtime-version", "3.0.73",
+                "--skill", name,
+            ], cwd=self.source, capture_output=True, text=True, timeout=10)
+
+        result = run("plan")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(set(json.loads(result.stdout)["components_changed"]),
+                         {"skills." + name, "plugin package", "adaptation state", "ownership receipt"})
+        self.assertFalse(destination.exists())
+        result = run("apply")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(manifest_path.read_bytes(), original_manifest)
+        for source in (self.source / "skills" / name).rglob("*"):
+            if source.is_file():
+                self.assertEqual(observed(destination / source.relative_to(self.source / "skills" / name)),
+                                 observed(source))
+        for path, snapshot in protected.items():
+            self.assertEqual(observed(path), snapshot, str(path))
+        new_files = {path for path in self.home.rglob("*") if path.is_file()} - protected.keys()
+        self.assertTrue(all(path.is_relative_to(destination) or path in {
+            manifest_path, self.adapter.receipt_path, self.adapter.lock_path,
+        } for path in new_files))
+        after_receipt = self.adapter.receipt()
+        self.assertEqual(after_receipt["disabled_markers"], receipt["disabled_markers"])
+        for path, record in receipt["files"].items():
+            if path != str(manifest_path):
+                self.assertEqual(after_receipt["files"][path], record)
+        after_state = json.loads(self.adapter.state_path.read_bytes())
+        self.assertEqual(after_state["components"]["skills"].pop(name)["verification"], "pending")
+        self.assertEqual(after_state, state)
+        result = run("verify")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        verified = json.loads(result.stdout)
+        self.assertTrue(verified["scoped_update_matches"])
+        self.assertEqual(verified["file_change_count"], 0)
+        self.assertNotIn("runtime_support", verified)
+
+    def test_skill_only_requires_an_unedited_owned_manifest_and_known_release(self):
+        self.apply()
+        name = "mainframe-k3s"
+        manifest = self.adapter.plugin / ".minimax-plugin/plugin.json"
+        data = manifest.read_bytes()
+        manifest.write_bytes(data + b"\n")
+        with self.assertRaisesRegex(Conflict, "manifest is missing or was edited"):
+            self.adapter.plan_skill(name)
+        manifest.write_bytes(data)
+        receipt = self.adapter.receipt()
+        receipt["files"][str(manifest)]["owned"] = False
+        self.adapter.receipt_path.write_bytes(encode_json(receipt))
+        with self.assertRaisesRegex(Conflict, "requires the installer-owned MiniMax Plugin manifest"):
+            self.adapter.plan_skill(name)
+        adapter = MiniMax(self.source, self.home, version="3.0.74")
+        with self.assertRaisesRegex(Conflict, "requires the inspected Desktop release 3.0.73"):
+            adapter.plan_skill(name)
+
+    def test_skill_only_rejects_duplicate_selected_registration(self):
+        self.apply()
+        name = "mainframe-k3s"
+        path = self.adapter.plugin / ".minimax-plugin/plugin.json"
+        manifest = json.loads(path.read_bytes())
+        manifest["skills"].append(f"skills/{name}/SKILL.md")
+        data = encode_json(manifest)
+        path.write_bytes(data)
+        receipt = self.adapter.receipt()
+        receipt["files"][str(path)]["sha256"] = digest(data)
+        self.adapter.receipt_path.write_bytes(encode_json(receipt))
+        with self.assertRaisesRegex(Conflict, "registers the selected skill more than once"):
+            self.adapter.plan_skill(name)
 
     def test_fresh_delivery_converges_as_one_native_plugin(self):
         report = self.apply()
@@ -61,16 +162,19 @@ class MiniMaxInstallationTests(unittest.TestCase):
                     source.read_bytes(),
                 )
 
-        self.assertEqual(report["planned_delivery"], {"installed": 32, "pending": 1, "unsupported": 14})
+        self.assertEqual(report["planned_delivery"], {"installed": 42, "pending": 0, "unsupported": 13})
         manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         self.assertEqual(manifest["name"], "mainframe")
-        self.assertEqual(len(manifest["skills"]), 36)
+        source = json.loads((self.source / "ADAPTATION.example.json").read_text())
+        expected_skills = [f"skills/{name}/SKILL.md" for category in ("skills", "commands")
+                           for name in source["components"][category]]
+        self.assertCountEqual(manifest["skills"], expected_skills)
         self.assertEqual(manifest["hooks"], ["hooks/hooks.json"])
         hooks = json.loads((self.adapter.plugin / "hooks/hooks.json").read_text())["hooks"]
         self.assertEqual(set(hooks), {
             "SessionStart", "SubagentStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStop",
         })
-        self.assertEqual(hooks["PreToolUse"][0]["matcher"], "bash|write|edit")
+        self.assertEqual(hooks["PreToolUse"][0]["matcher"], "bash|write|edit|task")
         self.assertEqual(hooks["PostToolUse"][0]["matcher"], "bash|read|write|edit")
         self.assertTrue(all(
             "MAINFRAME_RUNTIME_BIN=" in handler["command"]
@@ -85,27 +189,85 @@ class MiniMaxInstallationTests(unittest.TestCase):
         self.assertTrue(any("mainframe-skill-reminder" in path
                              for path in self.adapter.receipt()["files"]))
         self.assertNotIn("mainframe-skill-reminder", (self.adapter.plugin / "hooks/hooks.json").read_text())
-        self.assertEqual(state["components"]["agents"]["mainframe-researcher"]["reason"], AGENT_REASON)
-        self.assertEqual(state["components"]["agents"]["mainframe-go-backend-engineer"]["reason"], AGENT_REASON)
+        self.assertEqual(state["components"]["agents"]["mainframe-researcher"]["delivery"], "installed")
+        self.assertEqual(state["components"]["agents"]["mainframe-go-backend-engineer"]["delivery"], "installed")
         self.assertEqual(state["components"]["commands"]["mainframe-project-skill"]["reason"], COMMAND_REASON)
         self.assertEqual(state["components"]["hooks"]["mainframe-fallow-quality"]["delivery"], "installed")
         command = (self.adapter.plugin / "skills/mainframe-project-skill/SKILL.md").read_text()
         self.assertIn("Never select this Skill autonomously", command)
 
-    def test_role_material_is_retained_as_truthful_plugin_skills(self):
+    def test_native_role_material_preserves_canonical_body_and_method_links(self):
         report = self.apply()
-        manifest = json.loads((self.adapter.plugin / ".minimax-plugin/plugin.json").read_text())
         for source in (self.source / "agents").glob("*.md"):
-            role = self.adapter.plugin / "skills" / source.stem / "SKILL.md"
-            self.assertTrue(role.is_file(), source.stem)
+            role = self.adapter.minimax / "agents" / source.stem / "agent.md"
             text = role.read_text()
-            self.assertIn("not a native custom Agent", text)
-            self.assertIn("does not establish independent review", text)
+            self.assertIn(str(self.adapter.plugin / "skills"), text)
             for line in source.read_text().splitlines():
                 if line and not line.startswith("Required method:"):
                     self.assertIn(line, text)
-            self.assertIn(f"skills/{source.stem}/SKILL.md", manifest["skills"])
-            self.assertIn(source.stem, report["retained_partial_bindings"])
+            self.assertNotIn(source.stem, report["retained_partial_bindings"])
+
+    def test_role_skill_migration_preserves_disables_and_unrelated_native_state(self):
+        self.apply()
+        role_name = "mainframe-researcher"
+        native = self.adapter.minimax / "agents" / role_name / "agent.md"
+        native.unlink()
+        old = self.adapter.plugin / "skills" / role_name / "SKILL.md"
+        old.parent.mkdir()
+        old.write_text("previous receipted role guidance\n")
+        old.chmod(0o600)
+        from installer.core import digest
+        receipt = self.adapter.receipt()
+        del receipt["files"][str(native)]
+        receipt["directories"].append(str(old.parent))
+        receipt["files"][str(old)] = {"sha256": digest(old.read_bytes()), "mode": 0o600,
+                                     "component": "agents." + role_name, "owned": True, "retain": False}
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        settings = self.adapter.minimax / "settings.json"
+        settings.write_text('{"theme":"user","plugins":{"mainframe":{"enabled":false}}}')
+        foreign = self.adapter.minimax / "agents/user-owned/agent.md"
+        foreign.parent.mkdir()
+        foreign.write_text("user role settings")
+        transact(self.adapter.control(False, "mainframe-secret-access"), self.adapter.journal, self.adapter.allowed)
+        self.apply()
+        self.assertTrue(native.is_file())
+        self.assertFalse(old.exists())
+        self.assertTrue((self.adapter.plugin / "hooks/.disabled-mainframe-secret-access").exists())
+        self.assertEqual(settings.read_text(), '{"theme":"user","plugins":{"mainframe":{"enabled":false}}}')
+        self.assertEqual(foreign.read_text(), "user role settings")
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+        native.write_text(native.read_text().replace("description:", 'model: user/selected\neffort: high\ndescription:', 1))
+        before = native.read_bytes()
+        with self.assertRaisesRegex(Conflict, "was edited"):
+            self.adapter.plan()
+        self.assertEqual(native.read_bytes(), before)
+
+    def test_native_roles_and_new_guards_account_for_all_components(self):
+        report = self.apply()
+        self.assertEqual(report["planned_delivery"], {"installed": 42, "pending": 0, "unsupported": 13})
+        for name in ("mainframe-subagent-selection", "mainframe-todo-limits"):
+            self.assertTrue((self.adapter.plugin / "hooks/detectors" / (name + ".py")).is_file())
+        for source in (self.source / "agents").glob("*.md"):
+            role = self.adapter.minimax / "agents" / source.stem / "agent.md"
+            self.assertTrue(role.is_file(), source.stem)
+            self.assertIn("description:", role.read_text())
+            self.assertNotIn("model:", role.read_text())
+            self.assertNotIn("effort:", role.read_text())
+            self.assertFalse((self.adapter.plugin / "skills" / source.stem / "SKILL.md").exists())
+        for name in ("mainframe-consequential-reviewer", "mainframe-test-auditor", "mainframe-researcher"):
+            role = self.adapter.minimax / "agents" / name / "agent.md"
+            self.assertIn('tools: ["read", "glob", "grep", "skill", "web_fetch", "web_search", "ask_user"]', role.read_text())
+            self.assertNotIn("bash", role.read_text().split("---")[1])
+
+    def test_full_mapping_requires_verified_native_generation_but_removal_remains_available(self):
+        self.adapter.version = "3.0.71"
+        with self.assertRaisesRegex(Conflict, "3.0.73"):
+            self.adapter.plan()
+        self.assertFalse(self.adapter.plugin.exists())
+        self.adapter.version = "3.0.73"
+        self.apply()
+        self.adapter.version = "3.0.71"
+        self.assertTrue(self.adapter.plan(remove=True)[0])
 
     def test_package_obeys_v1_portable_path_and_size_limits(self):
         self.apply()
@@ -199,6 +361,7 @@ class MiniMaxInstallationTests(unittest.TestCase):
         transact(changes, self.adapter.journal, self.adapter.allowed)
         self.adapter.clean_directories(self.adapter.receipt())
         self.assertFalse((self.adapter.plugin / ".minimax-plugin/plugin.json").exists())
+        self.assertFalse(any((self.adapter.minimax / "agents").glob("mainframe-*/agent.md")))
         self.assertFalse(any(self.adapter.plugin.glob("hooks/.disabled-*")))
         self.assertTrue(self.adapter.index.exists())
 
@@ -206,7 +369,9 @@ class MiniMaxInstallationTests(unittest.TestCase):
         # This test owns entrypoint/version routing, not network provisioning.
         tools = self.home / "fixture-version-tools"
         tools.mkdir()
-        for name, (_, _, version) in TOOL_SPECS.items():
+        versions = {name: spec[2] for name, spec in TOOL_SPECS.items()}
+        versions["openspec"] = OPENSPEC_VERSION
+        for name, version in versions.items():
             executable = tools / name
             executable.write_text(f"#!/bin/sh\nprintf '%s\\n' '{name} {version}'\n")
             executable.chmod(0o755)

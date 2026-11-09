@@ -1,29 +1,74 @@
-# Visual direction
+# Unslop visual direction
 
-Separate product truth, the established design contract, and the local surface direction. Derive decisions from the audience, user job, real content, failure consequences, nearby screens, tokens, primitives, brand character, and platform constraints.
+Start here for web UI design. Work from the audience, the task, and what the
+product actually does. A screen needs a clear first read and a character that
+fits its purpose.
 
-Preserve a coherent established language for local work. Establish a new direction only when the product has no adequate language or the assignment explicitly includes one. Record durable choices in the project's existing design source only when that documentation is authorized and reusable.
+## Read the screen before changing it
 
-For an assigned improvement, inspect a complete user task and identify where a
-different hierarchy, grouping, content presentation or interaction could make it
-clearer or easier. Distinguish an observed obstacle from a hypothesis worth trying;
-both can justify a reversible experiment within the assignment. Existing styles
-are a starting point, not proof that the current composition is the best one.
+Look at the rendered surface or the supplied screenshot when available. Find the
+first thing the eye lands on, the primary action, and the information needed to
+act. Name the location and consequence of each issue you intend to address.
+For example, equal emphasis on three summary cards can hide the failed import
+that needs attention. A weak hierarchy can justify a redesign even when every
+control works. For a new screen, use real content and its intended reading
+order to anticipate the same problems.
 
-Carry a promising change through implementation and compare the rendered baseline
-and candidate using the same task, representative content, viewport and theme.
-Assess the affected qualities: what attracts attention first, how easily users
-find context and actions, reading and scanning effort, unnecessary navigation or
-scrolling, and visual coherence. Check relevant interaction and accessibility
-regressions as well. Keep a useful change, revise an uncertain one, or reject a
-worse candidate; explain concrete gains and tradeoffs without claiming measured
-user performance from your own inspection. A before/after view and a concise
-explanation can provide the evidence; no fixed number of variants, new branding,
-or separate design report is required. If no candidate improves the result, show
-what was compared and why rather than treating absence of bugs as completion.
+Match the size of the change to the evidence. Polish a sound screen where it
+breaks. When the hierarchy or composition is the problem, rethink the grouping
+and reading order within the assigned scope. A discussion or review can stop
+at a concrete recommendation.
 
-Build character through the relationship among content, typography, layout, color, imagery, geometry, and interaction. Do not manufacture novelty, copy a reference product's trade dress, or treat a fashionable pattern as a requirement. A distinctive element should support hierarchy, meaning, or memory without competing with the primary task.
+## Give the design a reason to look that way
 
-Use semantic color and type roles. Make action hierarchy, selection, status, warning, and destructive meaning understandable without color alone. Verify representative real content, long labels, localization, empty and dense states, and every supported theme.
+Before choosing styles, decide who the screen serves, what they should see or
+do first, and which product-specific detail can carry the character. Draw the
+tone from the product, its content, and its established visual language. Keep
+navigation and secondary controls quiet enough for the focal content or action
+to lead. Give color, texture, imagery, or motion a job where it appears.
 
-Usability wins when visual intensity conflicts with comprehension, task completion, recovery, accessibility, or performance. Do not turn taste into a defect; distinguish confirmed mismatches from optional directions.
+For example, on an import monitor, show the latest failed run and its recovery
+action together, with a distinctive stage-by-stage trace as the visual focus.
+On a scheduling page, the timeline and its next open slot can supply the
+character. The exact colors, typography, and density follow the product and
+its users. Reuse existing brand and semantic roles.
+
+## Refine the visible result
+
+Choose the checks that change the result. Use the project's tokens and real
+content as constraints.
+
+- **Composition and spacing.** Give related content shared edges and tighter
+  internal spacing. Use scale, placement, and density to separate primary and
+  supporting information. Check for nested cards or repeated equal boxes that
+  flatten the hierarchy.
+- **Color and depth.** Make action, selection, and status distinct. Check
+  contrast on the actual background and keep their meaning available without
+  color alone. Question decorative gradients, glows, and borders where they
+  compete with the content. Keep intentional brand expression.
+- **Copy, type, and icons.** Use product-specific language, meaningful action
+  verbs, units, and comparison periods. Remove filler and verify claims. Set
+  distinct type roles, align icon boxes and comparable figures, and check
+  wrapping with representative labels and data. At the rendered size, make
+  sure display tracking keeps letter and word boundaries legible.
+- **Imagery, detail, and motion.** Prefer a meaningful product view, an
+  existing local asset, or a visual made in code. Keep one detail that belongs
+  to this product when it helps the task. Make motion explain cause, continuity,
+  or feedback, and respect reduced motion. Keep keyboard focus visible.
+
+Read [layout, type, and motion](layout-type-and-motion.md) for those decisions
+and [flows and accessibility](flows-and-accessibility.md) where the design
+affects access or interaction. Preserve meaningful labels and controls at
+narrow widths and in dense, empty, or other affected states.
+
+For an implemented redesign, compare the rendered baseline and candidate
+using the same task, representative content, viewport, and theme. Look for an
+easier first read, a clearer next action, and fewer distractions. Revise or
+discard a candidate that fares worse. Use [browser verification](browser-verification.md)
+and describe gains you observed without claiming measured user performance.
+
+Adapted from [Unslop by Damir Sokolovsky](https://github.com/heydamir/unslop/tree/a6f121eee5f29c2f74976b75456feae8b66afb3a)
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). MAINFRAME
+condensed and rewrote the visual method, kept project design systems and
+accessibility constraints, and replaced service-dependent options with local
+materials and verification.

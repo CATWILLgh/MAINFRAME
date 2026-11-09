@@ -111,7 +111,7 @@ the method was read successfully or applied.
 
 ## Native bindings
 
-All five maintained adapters reuse one detector, source profiles and recipient
+All four maintained adapters reuse one detector, source profiles and recipient
 budget through a small native normalizer. No callback executes the inspected
 command, reads the complete skill body into the model, changes permission or
 forces a model turn. One readable path is suggested conditionally; explicit
@@ -124,7 +124,6 @@ context, invocation policy and state failures stay silent.
 | --- | --- | --- | --- |
 | Codex | PreToolUse Bash | PostToolUse Bash | Root/child identity; exact specialized roles also use SubagentStart; bounded native transcript workdir hints |
 | ZCode | PreToolUse Bash | PostToolUse Bash/Read | Primary runtime only; native default children omit hook runners; shell relative reads require an explicit literal directory |
-| Antigravity | PostInvocation run_command | PostInvocation run_command/view_file | Native conversation and bounded latest-call identity; post-invocation advice before the next model decision, no prospective prevention or role-start advice |
 | MiniMax | PreToolUse bash | PostToolUse bash/read | Native session and optional recipient identity; known structured failed reads stay silent; no canonical specialized Agent package/start mapping |
 | Cline | PreToolUse run_commands | PostToolUse run_commands/read_files | Native task, tool ID and optional agent identity; multi-command arrays and unattributed lifecycle events stay silent; no role-start advisory |
 

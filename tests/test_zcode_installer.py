@@ -24,7 +24,7 @@ class ZCodeInstallationTests(unittest.TestCase):
         base = Path(self.temp.name).resolve()
         self.source = base / "source"
         self.source.mkdir()
-        for name in ('instructions', 'skills', 'agents', 'commands', 'hooks', 'installer'):
+        for name in ('instructions', 'skills', 'agents', 'commands', 'hooks', 'plugins', 'installer'):
             shutil.copytree(ROOT / name, self.source / name, ignore=shutil.ignore_patterns('__pycache__'))
         for name in ('ADAPTATION.example.json', '.gitignore', 'install.py'):
             shutil.copyfile(ROOT / name, self.source / name)
@@ -496,8 +496,8 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertTrue(reports[1]['applied'])
         self.assertTrue(reports[2]['structure_matches'])
         self.assertEqual(reports[2]['file_change_count'], 0)
-        self.assertEqual(reports[2]['planned_delivery'], {'installed': 44, 'pending': 1, 'unsupported': 2})
-        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 45})
+        self.assertEqual(reports[2]['planned_delivery'], {'installed': 48, 'pending': 1, 'unsupported': 6})
+        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 49})
         self.assertEqual(len(reports[2]['next_actions']), 1)
         state = json.loads(self.adapter.state_path.read_text())
         self.assertFalse(any(row.get('verification') == 'passed' for group in state['components'].values() for row in group.values()))

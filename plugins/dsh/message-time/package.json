@@ -1,0 +1,34 @@
+{
+  "name": "@mainframe/message-time",
+  "version": "1.2.1",
+  "engines": {
+    "dsh": "0.2.2-rc.1"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.19.0"
+  },
+  "private": true,
+  "description": "Adds compact, append-only timestamps to user messages and full agent turn boundaries.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "meta": {
+    "title": "Message timestamps",
+    "description": "Adds compact timestamps for user messages and the start and completion of full agent turns."
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

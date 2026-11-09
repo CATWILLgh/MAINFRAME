@@ -20,10 +20,10 @@ if os.name != "posix":
     raise SystemExit(2)
 
 from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RUNTIMES,
-                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, SELECTION_UPDATE_RUNTIMES, RUNTIME_TOOLS,
-                             desktop_version, native_version, mapping_supported)
+                             INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, SELECTION_UPDATE_RUNTIMES, TEXT_UPDATE_RUNTIMES,
+                             desktop_version, native_version, mapping_supported, runtime_tools)
 from installer.core import Conflict, installation_lock, restore, transact
-from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
+from installer.runtime import OPENSPEC_TOOLS, ensure as ensure_runtime, status as runtime_status, tools_for_hook
 
 
 def show(report, details=False):
@@ -57,13 +57,11 @@ def provision_runtime(report, adapter, tools, hook=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("product", choices=["antigravity", "cline", "codex", "minimax", "zcode"])
-    parser.add_argument("action", choices=["plan", "apply", "verify", "disable", "enable", "uninstall", "recover"])
+    parser.add_argument("product", choices=["cline", "codex", "dsh", "minimax", "zcode"])
+    parser.add_argument("action", choices=["plan", "apply", "verify", "disable", "enable", "uninstall", "recover", "package"])
     parser.add_argument("--home", type=Path, default=Path.home(), help="Explicit target home; isolated fixture roots never imply native proof")
     parser.add_argument("--zcode-home", type=Path, help="Explicit ZCode configuration root")
     parser.add_argument("--zcode-app", type=Path, help="ZCode Desktop application whose plist provides the build")
-    parser.add_argument("--gemini-home", type=Path, help="Explicit Antigravity shared configuration root")
-    parser.add_argument("--antigravity-app", type=Path, help="Antigravity Desktop application whose plist provides the release")
     parser.add_argument("--minimax-home", type=Path, help="Explicit MiniMax Code data directory")
     parser.add_argument("--minimax-app", type=Path, help="MiniMax Code Desktop application whose plist provides the release")
     parser.add_argument("--cline-home", type=Path, help="Explicit Cline configuration root")
@@ -77,7 +75,46 @@ def main(argv=None):
     parser.add_argument("--details", action="store_true", help="Include every changed path; default output groups files by component")
     parser.add_argument("--instructions-reviewed", action="store_true", help="The invoking agent has checked the existing and canonical instruction semantics")
     parser.add_argument("--hook", help="One maintained hook for enable/disable; default is all hooks for the selected product")
+    parser.add_argument("--skill", help="Deliver only this exact canonical skill into an existing Desktop installation")
+    parser.add_argument("--todo", action="store_true", help="Deliver only the project idea command and its addressed guard into an existing Codex or ZCode Desktop installation")
+    parser.add_argument("--output", type=Path, help="DSH package output directory outside the checkout; must not exist")
     args = parser.parse_args(argv)
+    if args.product != "dsh" and (args.action == "package" or args.output):
+        parser.error("package/--output are DSH-only")
+    if args.product == "dsh":
+        root = Path(__file__).resolve().parent
+        if Path.cwd().resolve() != root:
+            raise Conflict("Open the MAINFRAME repository and run its installer from that root.")
+        if args.action not in ("plan", "verify", "package"):
+            parser.error("DSH adapter supports plan/verify/package; use native plugin_manager for profile lifecycle actions")
+        if args.action != "package" and (args.output):
+            parser.error("DSH --output require package")
+        if not args.surface:
+            parser.error("DSH requires --surface desktop or --surface cli as selection metadata, not native proof")
+        if (args.zcode_home or args.zcode_app or args.minimax_home or args.minimax_app
+                or args.cline_home or args.cline_app or args.codex_home or args.adopt_existing
+                or args.runtime_version or args.executable or args.native or args.instructions_reviewed
+                or args.hook or args.skill is not None or args.todo):
+            parser.error("DSH source adapter does not accept other-product, instruction, runtime, native, or component options")
+        from installer.dsh import DSH
+        if args.action == "package":
+            if not args.output:
+                parser.error("DSH package requires --output outside the checkout")
+            from installer.dsh_package import build_packages
+            show(build_packages(root, args.output), args.details)
+            return 0
+        _, report = DSH(root, args.home, surface=args.surface).plan()
+        show(report, args.details)
+        return 0  # Source validation only; report explicitly denies profile verification.
+    if args.todo and (args.product not in ("codex", "zcode")
+                      or args.action not in ("plan", "apply", "verify")
+                      or args.surface != "desktop" or args.skill or args.hook or args.native
+                      or args.adopt_existing):
+        parser.error("--todo requires Codex or ZCode Desktop plan/apply/verify without other component selectors")
+    if args.skill is not None and (args.action not in ("plan", "apply", "verify")
+                                   or args.surface != "desktop" or args.native
+                                   or args.adopt_existing or args.hook):
+        parser.error("--skill requires Desktop plan/apply/verify without native probes or other selectors")
     if args.hook and args.action not in ("enable", "disable"):
         parser.error("--hook applies only to enable or disable")
     if args.native and args.action != "verify":
@@ -93,14 +130,12 @@ def main(argv=None):
         raise Conflict("Open the MAINFRAME repository and run its installer from that root.")
     if args.product == "zcode":
         return zcode_main(args, root, parser)
-    if args.product == "antigravity":
-        return antigravity_main(args, root, parser)
     if args.product == "minimax":
         return minimax_main(args, root, parser)
     if args.product == "cline":
         return cline_main(args, root, parser)
-    if (args.adopt_existing or args.zcode_home or args.zcode_app or args.gemini_home
-            or args.antigravity_app or args.minimax_home or args.minimax_app
+    if (args.adopt_existing or args.zcode_home or args.zcode_app
+            or args.minimax_home or args.minimax_app
             or args.cline_home or args.cline_app):
         parser.error("Options for another product cannot modify a Codex installation")
     if args.hook and args.hook not in HOOK_NAMES:
@@ -121,14 +156,22 @@ def main(argv=None):
             executable = args.executable or shutil.which("codex")
             version = native_version(executable) if executable else None
     adapter = Codex(root, args.home, codex_home, version, surface=args.surface)
+    codex_tools = runtime_tools(version, args.surface)
+    if args.action == "enable" and any(
+            row.get("component") == "hooks.mainframe-fallow-quality"
+            for row in adapter.receipt().get("files", {}).values()):
+        codex_tools = tuple(dict.fromkeys((*codex_tools, "fallow")))
+    if args.todo or args.skill is not None:
+        return scoped_delivery(args, adapter)
+    package_tools = codex_tools + OPENSPEC_TOOLS if mapping_supported(version, args.surface) else codex_tools
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, package_tools)
         if version in CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = adapter.bounded_update_mode()
         if args.action == "verify":
-            if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES:
+            if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES:
                 report["scoped_update_matches"] = not report["changes"]
             report["structure_matches"] = not report["changes"] and support["ready"]
             if args.native:
@@ -154,7 +197,7 @@ def main(argv=None):
         elif args.action in ("disable", "enable"):
             report = {}
             if args.action == "enable":
-                provision_runtime(report, adapter, RUNTIME_TOOLS, args.hook)
+                provision_runtime(report, adapter, codex_tools, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable":
                 time.sleep(6)  # Registered synchronous hooks have a five-second native timeout.
@@ -169,13 +212,13 @@ def main(argv=None):
                 adapter.validate_content_update(changes, old_receipt)
                 report["delivery_mode"] = adapter.bounded_update_mode()
             if not remove:
-                if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES:
-                    # These bounded hook updates need only the standard library.
+                if version in DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES:
+                    # These bounded updates need no new analyzer provisioning.
                     # Keep unrelated hook dependency readiness visible without
                     # provisioning or modifying those existing dependencies.
-                    add_runtime_status(report, adapter, RUNTIME_TOOLS)
+                    add_runtime_status(report, adapter, codex_tools)
                 else:
-                    provision_runtime(report, adapter, RUNTIME_TOOLS)
+                    provision_runtime(report, adapter, package_tools)
             if remove and old_receipt:
                 transact(adapter.control(False, None), adapter.journal, adapter.allowed)
                 time.sleep(6)
@@ -196,14 +239,40 @@ def main(argv=None):
     return 0
 
 
+def scoped_delivery(args, adapter):
+    def plan():
+        return adapter.plan_todo() if args.todo else adapter.plan_skill(args.skill)
+
+    tools = OPENSPEC_TOOLS if args.skill == "mainframe-openspec" else ()
+    if args.action == "apply":
+        with installation_lock(adapter.lock_path):
+            changes, report = plan()
+            if tools:
+                provision_runtime(report, adapter, tools)
+            transact(changes, adapter.journal, adapter.allowed)
+            report["applied"] = True
+    else:
+        _, report = plan()
+        if tools:
+            add_runtime_status(report, adapter, tools)
+        if args.action == "verify":
+            report["scoped_update_matches"] = not report["changes"]
+    show(report, args.details)
+    return 0 if args.action != "verify" or (
+        report["scoped_update_matches"] and report.get("runtime_support", {}).get("ready", True)
+    ) else 1
+
+
 def zcode_main(args, root, parser):
     from installer.zcode import (ZCode, KNOWN_RUNTIME as ZCODE_RUNTIME,
         FULL_MAPPING_RUNTIMES as ZCODE_FULL_MAPPING_RUNTIMES,
         CONTENT_UPDATE_RUNTIMES as ZCODE_CONTENT_UPDATE_RUNTIMES,
         SKILL_DELIVERY_RUNTIMES as ZCODE_SKILL_DELIVERY_RUNTIMES,
-        RUNTIME_TOOLS as ZCODE_RUNTIME_TOOLS,
+        SINGLE_SKILL_RUNTIMES as ZCODE_SINGLE_SKILL_RUNTIMES,
+        TODO_DELIVERY_RUNTIMES as ZCODE_TODO_DELIVERY_RUNTIMES,
+        runtime_tools as zcode_runtime_tools,
         desktop_version as zcode_version)
-    if (args.codex_home or args.gemini_home or args.antigravity_app or args.minimax_home
+    if (args.codex_home or args.minimax_home
             or args.minimax_app or args.cline_home or args.cline_app
             or args.native or args.executable or args.surface == "cli"):
         parser.error("The maintained ZCode route targets Desktop only and never starts a CLI agent")
@@ -218,15 +287,27 @@ def zcode_main(args, root, parser):
             if version and version != observed_version:
                 raise Conflict("Supplied ZCode build conflicts with the selected Desktop application")
             version = observed_version
-        if version not in ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES | ZCODE_SKILL_DELIVERY_RUNTIMES:
+        permitted = (ZCODE_TODO_DELIVERY_RUNTIMES if args.todo else
+                     ZCODE_FULL_MAPPING_RUNTIMES | ZCODE_CONTENT_UPDATE_RUNTIMES | ZCODE_SKILL_DELIVERY_RUNTIMES)
+        if args.skill is not None:
+            permitted = ZCODE_SINGLE_SKILL_RUNTIMES
+        if version not in permitted:
             raise Conflict("Revalidate the maintained ZCode mapping for this build; supported full mapping is " + ZCODE_RUNTIME)
     from installer.zcode import HOOK_NAMES as ZCODE_HOOK_NAMES
     if args.hook and args.hook not in ZCODE_HOOK_NAMES:
         parser.error("Unknown maintained ZCode hook")
     adapter = ZCode(root, args.home, args.zcode_home, version, args.surface, args.adopt_existing)
+    zcode_tools = zcode_runtime_tools(version, args.surface)
+    if args.action == "enable" and any(
+            row.get("component") == "hooks.mainframe-fallow-quality"
+            for row in adapter.receipt().get("files", {}).values()):
+        zcode_tools = tuple(dict.fromkeys((*zcode_tools, "fallow")))
+    if args.todo or args.skill is not None:
+        return scoped_delivery(args, adapter)
+    package_tools = zcode_tools + OPENSPEC_TOOLS if version in ZCODE_FULL_MAPPING_RUNTIMES else zcode_tools
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, ZCODE_RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, package_tools)
         if version in ZCODE_CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
@@ -243,7 +324,7 @@ def zcode_main(args, root, parser):
         elif args.action in ("disable", "enable"):
             report = {}
             if args.action == "enable":
-                provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS, args.hook)
+                provision_runtime(report, adapter, zcode_tools, args.hook)
             transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
             if args.action == "disable": time.sleep(6)
             report.update({"hook_control": args.action, "hooks": [args.hook] if args.hook else list(ZCODE_HOOK_NAMES)})
@@ -259,7 +340,7 @@ def zcode_main(args, root, parser):
                 adapter.validate_skill_delivery(changes, previous)
                 report["delivery_mode"] = "existing-installation bounded content delivery; Markdown skills, existing global instruction and destructive detector only"
             if not remove:
-                provision_runtime(report, adapter, ZCODE_RUNTIME_TOOLS)
+                provision_runtime(report, adapter, package_tools)
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
                 time.sleep(6)
@@ -276,102 +357,14 @@ def zcode_main(args, root, parser):
     return 0
 
 
-def antigravity_runtime(args, version_reader):
-    if args.action not in ("plan", "apply", "verify"):
-        return None
-    version = args.runtime_version
-    if args.home.resolve() == Path.home().resolve() or not version:
-        observed = version_reader(args.antigravity_app or Path("/Applications/Antigravity.app"))
-        if version and version != observed:
-            raise Conflict("Supplied Antigravity release conflicts with the selected Desktop application")
-        version = observed
-    return version
-
-
-def antigravity_main(args, root, parser):
-    from installer.antigravity import (
-        Antigravity, HOOK_NAMES as ANTIGRAVITY_HOOK_NAMES,
-        KNOWN_RUNTIME as ANTIGRAVITY_RUNTIME, RUNTIME_TOOLS as ANTIGRAVITY_RUNTIME_TOOLS,
-        CONTENT_UPDATE_RUNTIMES as ANTIGRAVITY_CONTENT_RUNTIMES,
-        desktop_version as antigravity_version,
-    )
-    if (args.codex_home or args.zcode_home or args.zcode_app or args.adopt_existing
-            or args.minimax_home or args.minimax_app or args.cline_home or args.cline_app
-            or args.native or args.executable or args.surface == "cli"):
-        parser.error("The maintained Antigravity route targets Desktop 2.0 only and never starts a CLI or IDE agent")
-    if args.hook and args.hook not in ANTIGRAVITY_HOOK_NAMES:
-        parser.error("Unknown maintained Antigravity hook")
-    version = antigravity_runtime(args, antigravity_version)
-    adapter = Antigravity(root, args.home, args.gemini_home, version, args.surface)
-    if args.action in ("plan", "verify"):
-        changes, report = adapter.plan(args.instructions_reviewed)
-        if version in ANTIGRAVITY_CONTENT_RUNTIMES:
-            adapter.validate_content_update(changes, adapter.receipt())
-            report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
-        support = add_runtime_status(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
-        if args.action == "verify":
-            report["structure_matches"] = not report["changes"] and support["ready"]
-        show(report, args.details)
-        return 0 if args.action == "plan" or report["structure_matches"] else 1
-    if args.action == "apply" and version != ANTIGRAVITY_RUNTIME and version not in ANTIGRAVITY_CONTENT_RUNTIMES:
-        raise Conflict("Revalidate the maintained Antigravity mapping for this release; supported release is " + ANTIGRAVITY_RUNTIME)
-    with installation_lock(adapter.lock_path):
-        if args.action == "recover":
-            restore(adapter.journal, adapter.allowed)
-            report = {"recovered": True}
-        elif args.action in ("disable", "enable"):
-            report = {}
-            if args.action == "enable":
-                provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS, args.hook)
-            transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
-            if args.action == "disable":
-                time.sleep(6)
-            report.update({"hook_control": args.action,
-                           "hooks": [args.hook] if args.hook else list(ANTIGRAVITY_HOOK_NAMES)})
-        else:
-            remove = args.action == "uninstall"
-            changes, report = adapter.plan(args.instructions_reviewed, remove)
-            if report.get("instruction_review"):
-                raise Conflict(report["instruction_review"])
-            if not remove and version in ANTIGRAVITY_CONTENT_RUNTIMES:
-                adapter.validate_content_update(changes, adapter.receipt())
-                report["delivery_mode"] = "existing-installation content update; native bindings unchanged"
-            if not remove:
-                provision_runtime(report, adapter, ANTIGRAVITY_RUNTIME_TOOLS)
-            previous = adapter.receipt()
-            if not remove and report.get("retiring_hooks"):
-                transact(adapter.control(False), adapter.journal, adapter.allowed)
-                time.sleep(6)
-                changes, report = adapter.plan(args.instructions_reviewed, remove=False)
-            if remove and previous:
-                if previous.get("hook_specs"):
-                    transact(adapter.control(False), adapter.journal, adapter.allowed)
-                    time.sleep(6)
-                changes, report = adapter.plan(args.instructions_reviewed, remove=True)
-            transact(changes, adapter.journal, adapter.allowed)
-            if remove:
-                adapter.clean_event_state()
-                adapter.clean_directories(previous)
-            else:
-                adapter.clean_directories(adapter.receipt())
-            report["applied"] = True
-            report["native_acceptance"] = (
-                "Open one new Antigravity Desktop 2.0 conversation and check native discovery; "
-                "the installer did not start a model or the Antigravity CLI."
-                if not remove else "Owned Antigravity configuration was removed."
-            )
-        show(report, args.details)
-    return 0
-
-
 def minimax_main(args, root, parser):
     from installer.minimax import (
         MiniMax, HOOK_NAMES as MINIMAX_HOOK_NAMES,
         RUNTIME_TOOLS as MINIMAX_RUNTIME_TOOLS,
         desktop_version as minimax_version,
     )
-    if (args.codex_home or args.zcode_home or args.zcode_app or args.gemini_home
-            or args.antigravity_app or args.adopt_existing or args.cline_home or args.cline_app
+    if (args.codex_home or args.zcode_home or args.zcode_app
+            or args.adopt_existing or args.cline_home or args.cline_app
             or args.native or args.executable or args.surface == "cli"):
         parser.error("The maintained MiniMax route targets Desktop only and never starts a CLI agent")
     if args.hook and args.hook not in MINIMAX_HOOK_NAMES:
@@ -384,9 +377,12 @@ def minimax_main(args, root, parser):
                 raise Conflict("Supplied MiniMax release conflicts with the selected Desktop application")
             version = observed_version
     adapter = MiniMax(root, args.home, args.minimax_home, version, args.surface)
+    if args.skill is not None:
+        return scoped_delivery(args, adapter)
+    package_tools = MINIMAX_RUNTIME_TOOLS + OPENSPEC_TOOLS
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, MINIMAX_RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, package_tools)
         if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
@@ -406,7 +402,7 @@ def minimax_main(args, root, parser):
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
             if not remove:
-                provision_runtime(report, adapter, MINIMAX_RUNTIME_TOOLS)
+                provision_runtime(report, adapter, package_tools)
             previous = adapter.receipt()
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
@@ -430,8 +426,8 @@ def cline_main(args, root, parser):
         RUNTIME_TOOLS as CLINE_RUNTIME_TOOLS,
         cli_version as cline_cli_version, desktop_version as cline_desktop_version,
     )
-    if (args.codex_home or args.zcode_home or args.zcode_app or args.gemini_home
-            or args.antigravity_app or args.minimax_home or args.minimax_app
+    if (args.codex_home or args.zcode_home or args.zcode_app
+            or args.minimax_home or args.minimax_app
             or args.adopt_existing or args.native or args.executable):
         parser.error("Options for another product cannot modify a Cline installation")
     if args.hook and args.hook not in CLINE_HOOK_NAMES:
@@ -444,9 +440,12 @@ def cline_main(args, root, parser):
             raise Conflict("Supplied Cline release conflicts with the observed " + args.surface + " version")
         version = observed
     adapter = Cline(root, args.home, args.cline_home, version, args.surface)
+    if args.skill is not None:
+        return scoped_delivery(args, adapter)
+    package_tools = CLINE_RUNTIME_TOOLS + OPENSPEC_TOOLS
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, CLINE_RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, package_tools)
         if args.action == "verify":
             report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
@@ -466,7 +465,7 @@ def cline_main(args, root, parser):
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
             if not remove:
-                provision_runtime(report, adapter, CLINE_RUNTIME_TOOLS)
+                provision_runtime(report, adapter, package_tools)
             previous = adapter.receipt()
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)

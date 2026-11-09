@@ -13,12 +13,13 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import inventory, skill_resources
+from .shared import inventory, plan_skill_delivery, skill_resources, unsupported_dsh_plugins
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
 
 HOOK_NAMES = (
+    "mainframe-subagent-selection", "mainframe-todo-limits",
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
@@ -32,17 +33,21 @@ COMMAND_PARTIAL = (
     "Installed as a Plugin Skill whose discovery text and body require explicit matching invocation; "
     "the host cannot enforce explicit-only selection."
 )
-AGENT_REASON = (
-    "MiniMax Code creates custom Agents through the native mavis service; local Plugin V1 "
-    "cannot declare Agents and the file-only installer does not mutate the runtime database."
+SELECTION_REASON = (
+    "MiniMax task supports model/effort overrides only for explicit user choices; its native tool "
+    "instructions forbid autonomous inference. Requiring both fields would block valid inherited/default calls."
 )
-AGENT_PARTIAL = (
-    "Role instructions are installed as an explicitly assigned Plugin Skill; no native custom "
-    "Agent, isolated execution, or independent review is created by loading the Skill."
+SELECTION_PARTIAL = (
+    "PreToolUse task advice preserves native defaults and explains the explicit-user-choice boundary "
+    "when complete selections are absent; autonomous preventive selection parity is unavailable."
 )
+READ_ONLY_ROLES = frozenset({
+    "mainframe-consequential-reviewer", "mainframe-researcher", "mainframe-test-auditor",
+})
+READ_ONLY_TOOLS = ("read", "glob", "grep", "skill", "web_fetch", "web_search", "ask_user")
 HOOK_SCOPE = (
     "SessionStart and SubagentStart inject the canonical global instruction for their exact "
-    "recipients. One composite PreToolUse handler covers bash and exact edit capture; PostToolUse "
+    "recipients. One composite PreToolUse handler covers bash, native task selection advice, addressed TODO writes/edits, and exact edit capture; PostToolUse "
     "delivers exact edit findings; Stop and SubagentStop revalidate only blocking findings and "
     "use native loop guards."
 )
@@ -74,18 +79,14 @@ def command_body(text: str, name: str) -> bytes:
     ).encode()
 
 
-def role_skill_body(text: str, name: str) -> bytes:
+def agent_body(text: str, name: str, plugin: Path) -> bytes:
     description = re.search(r"^Description: (.+)$", text, re.M).group(1)
-    text = re.sub(r"\(\.\./skills/([^/]+)/SKILL\.md\)", r"(../\1/SKILL.md)", text)
-    boundary = (
-        "This is role guidance, not a native custom Agent. Apply it only when assigned this role "
-        "within the current task authority. Loading this Skill creates no separate execution "
-        "or permission boundary and does not establish independent review. A review requiring "
-        "independence must be assigned to a separate agent that actually inspects the evidence."
-    )
-    return ("---\nname: " + name + "\ndescription: "
-            + json.dumps("Use when explicitly assigned this role: " + description)
-            + "\n---\n\n" + boundary + "\n\n" + text.strip() + "\n").encode()
+    text = re.sub(r"\(\.\./skills/([^/]+)/SKILL\.md\)",
+                  lambda match: "(" + str(plugin / "skills" / match.group(1) / "SKILL.md") + ")", text)
+    metadata = "---\nname: " + name + "\ndescription: " + json.dumps(description)
+    if name in READ_ONLY_ROLES:
+        metadata += "\ntools: " + json.dumps(READ_ONLY_TOOLS)
+    return (metadata + "\n---\n\n" + text.strip() + "\n").encode()
 
 
 def hook_command(python: Path, analyzer_bin: Path | None = None) -> str:
@@ -109,6 +110,7 @@ class MiniMax:
         self.journal = self.support / "recovery.json"
         self.lock_path = self.support / ".install.lock"
         self.state_path = self.root / "ADAPTATION.minimax.json"
+        self.agent_names = frozenset(json.loads((self.root / "ADAPTATION.example.json").read_text())["components"]["agents"])
         self.index = self.root / "shared/credentials/credentials-index.md"
         self.python = (python or Path(sys.executable)).resolve()
         self.version, self.surface = version, surface
@@ -120,6 +122,9 @@ class MiniMax:
             self.state_path, self.index, self.receipt_path,
             self.home / ".local/bin/mainframe-secret", self.home / ".local/bin/secret",
         }:
+            return True
+        if any(path in {self.minimax / "agents" / name, self.minimax / "agents" / name / "agent.md"}
+               for name in self.agent_names):
             return True
         if path == self.support or path.is_relative_to(self.plugin):
             return True
@@ -156,12 +161,51 @@ class MiniMax:
                 command_body((self.root / entry["source"]).read_text(), name),
                 "commands." + name)
             manifest_skills.append(f"skills/{name}/SKILL.md")
-        for name, entry in source["components"]["agents"].items():
-            add(self.plugin / "skills" / name / "SKILL.md",
-                role_skill_body((self.root / entry["source"]).read_text(), name),
-                "agents." + name)
-            manifest_skills.append(f"skills/{name}/SKILL.md")
         return manifest_skills
+
+    def _skill_artifacts(self, source: dict) -> dict:
+        artifacts = {}
+
+        def add(path, data, component, mode):
+            artifacts[path] = data, mode, component, False
+
+        self._skill_files(source, add)
+        return artifacts
+
+    def _skill_registration(self, name: str, previous: dict, source: dict) -> dict:
+        path = self.plugin / ".minimax-plugin/plugin.json"
+        record = previous.get("files", {}).get(str(path), {})
+        if record.get("owned") is not True or record.get("retain") or record.get("component") != "plugin package":
+            raise Conflict("Skill-only delivery requires the installer-owned MiniMax Plugin manifest.")
+        data, mode = observed(path)
+        if data is None or digest(data) != record.get("sha256") or mode != record.get("mode"):
+            raise Conflict("The installed MiniMax Plugin manifest is missing or was edited.")
+        manifest = json.loads(data)
+        if (not isinstance(manifest, dict) or manifest.get("schemaVersion") != 1
+                or manifest.get("name") != "mainframe" or not isinstance(manifest.get("skills"), list)
+                or any(not isinstance(entry, str) for entry in manifest["skills"])):
+            raise Conflict("Expected the receipted MAINFRAME MiniMax Plugin V1 manifest.")
+        entries = manifest["skills"]
+        selected = f"skills/{name}/SKILL.md"
+        if entries.count(selected) > 1:
+            raise Conflict("The MiniMax Plugin manifest registers the selected skill more than once.")
+        if selected not in entries:
+            components = source["components"]
+            canonical = {
+                f"skills/{skill}/SKILL.md": index
+                for index, skill in enumerate((*components["skills"], *components["commands"]))
+            }
+            position = next((i for i, entry in enumerate(entries)
+                             if canonical.get(entry, -1) > canonical[selected]), len(entries))
+            entries.insert(position, selected)
+            data = encode_json(manifest)
+        return {path: (data, mode, "plugin package", False)}
+
+    def plan_skill(self, name: str):
+        if self.surface != "desktop" or self.version != "3.0.73":
+            raise Conflict("MiniMax skill-only delivery requires the inspected Desktop release 3.0.73.")
+        return plan_skill_delivery(self, name, "minimax", self.plugin / "skills" / name,
+                                   self._skill_artifacts, self._skill_registration)
 
     def artifacts(self, source: dict) -> dict:
         result = {}
@@ -171,6 +215,10 @@ class MiniMax:
             result[path] = data, mode, component, retain
 
         skills = self._skill_files(source, add)
+        for name, entry in source["components"]["agents"].items():
+            add(self.minimax / "agents" / name / "agent.md",
+                agent_body((self.root / entry["source"]).read_text(), name, self.plugin),
+                "agents." + name)
         for name in HOOK_NAMES:
             add(self.plugin / "hooks/detectors" / (name + ".py"),
                 (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
@@ -189,7 +237,7 @@ class MiniMax:
             "SubagentStart": [{"hooks": [{
                 "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 5,
             }]}],
-            "PreToolUse": [{"matcher": "bash|write|edit", "hooks": [{
+            "PreToolUse": [{"matcher": "bash|write|edit|task", "hooks": [{
                 "type": "command", "command": hook_command(self.python, runtime_bin(self.home)), "timeout": 10,
             }]}],
             "PostToolUse": [{"matcher": "bash|read|write|edit", "hooks": [{
@@ -208,7 +256,7 @@ class MiniMax:
             "schemaVersion": 1,
             "name": "mainframe",
             "displayName": "MAINFRAME",
-            "version": "1.0.0",
+            "version": "1.1.0",
             "description": "Installs MAINFRAME workflows, operating policy, and bounded safety hooks.",
             "author": "MAINFRAME",
             "icon": "icon.png",
@@ -242,6 +290,9 @@ class MiniMax:
         if self.plugin.is_symlink() or not self.plugin.is_dir():
             raise Conflict("The MiniMax MAINFRAME Plugin root is not a regular directory.")
         expected = {path for path in artifacts if path.is_relative_to(self.plugin)}
+        # Receipted retired entries are reconciled below, including former role Skills.
+        expected.update(Path(path) for path in previous.get("files", {})
+                        if Path(path).is_relative_to(self.plugin))
         for path in tuple(expected):
             expected.update(parent for parent in path.parents if parent != self.plugin
                             and parent.is_relative_to(self.plugin))
@@ -268,6 +319,9 @@ class MiniMax:
         if previous and previous.get("source") != str(self.root):
             raise Conflict("MiniMax source root changed; reconcile the non-secret index before relocation.")
         if not remove:
+            release = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", self.version or "")
+            if release is None or tuple(map(int, release.groups())) < (3, 0, 73):
+                raise Conflict("The full MiniMax Desktop mapping requires release 3.0.73 or newer; older Plugin-only mappings remain removable.")
             if not self.python.is_file():
                 raise Conflict("The Python interpreter running the installer is unavailable for MiniMax Hooks.")
             probe = subprocess.run([str(self.python), "-c", "import sys; assert sys.version_info >= (3, 11)"],
@@ -315,15 +369,18 @@ class MiniMax:
             unchanged = bool(not remove and prior_state.get("target", {}).get("config_home") == str(self.minimax)
                              and prior_state.get("target", {}).get("version") == self.version
                              and not any(change.needed for change in changes))
-            unsupported = {("commands", name): COMMAND_REASON for name in source["components"]["commands"]}
-            unsupported.update({("agents", name): AGENT_REASON for name in source["components"]["agents"]})
-            pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
+            unsupported = {
+                **unsupported_dsh_plugins(source),
+                **{("commands", name): COMMAND_REASON for name in source["components"]["commands"]},
+            }
+            unsupported[("hooks", "mainframe-subagent-selection")] = SELECTION_REASON
+            pending = {}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending
             ]
             actions = [] if remove else [
-                "Wait for MiniMax Code's automatic local Plugin rescan, then open one new conversation to confirm MAINFRAME appears without scan diagnostics."
+                "Wait for the automatic local Plugin rescan; confirm MAINFRAME and its seven custom Agents in Desktop, then open a fresh conversation. Restart Desktop only if its Agent roster needs startup reconciliation."
             ]
             state = reconcile_state(source, prior_state, target, unchanged=unchanged,
                                     delivered=delivered, unsupported=unsupported if not remove else {},
@@ -360,12 +417,13 @@ class MiniMax:
         return changes, {
             "planned_delivery": planned, "planned_verification": verified,
             "unsupported_full_contracts": ({
+                **{name: reason for (_, name), reason in unsupported_dsh_plugins(source).items()},
                 **{name: COMMAND_REASON for name in source["components"]["commands"]},
-                **{name: AGENT_REASON for name in source["components"]["agents"]},
+                "mainframe-subagent-selection": SELECTION_REASON,
             } if not remove else {}),
             "retained_partial_bindings": ({
                 **{name: COMMAND_PARTIAL for name in source["components"]["commands"]},
-                **{name: AGENT_PARTIAL for name in source["components"]["agents"]},
+                "mainframe-subagent-selection": SELECTION_PARTIAL,
             } if not remove else {}),
             "hook_scope": HOOK_SCOPE,
             "next_actions": state.get("next_actions", []) if state_snapshot[0] or not remove else [],

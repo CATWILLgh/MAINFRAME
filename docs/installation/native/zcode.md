@@ -1,6 +1,8 @@
 # ZCode Desktop adaptation
 
-Reviewed 2026-09-08 against official documentation and the installed macOS
+Current full Desktop mapping: **3.17.1.9553**, reviewed 2026-11-01 against the
+shipped bundle and official references; see [current evidence](zcode-evidence.md#desktop-31719553-full-delivery).
+The historical mapping was reviewed 2026-09-08 against official documentation and the installed macOS
 application, version 3.11.2 (build 3.11.2.6792), with a bounded skill-update
 compatibility review on 2026-09-22 for 3.14.3.7762 and
 [shipped-code reminder revalidation](zcode-evidence.md#31447912-reminder-revalidation-2026-10-06)
@@ -116,7 +118,11 @@ separate registrations because they consume different events and state.
 | `mainframe-destructive-operations` | Capture runtime workspace root at native `SessionStart` startup/clear/compact/resume; combine with actual pre-Bash cwd. Missing capture is neutral. |
 | `mainframe-commit-secrets` | Native pre-Bash cwd is the execution cwd; pass it to canonical staged-content inspection. |
 | `mainframe-code-quality` | Retain `PreToolUse` capture and matching `PostToolUse` or `PostToolUseFailure` attribution for native `Write|Edit`; use `Stop` only for a positive revalidating block. The full contract remains unsupported because advisory-only Stop output is discarded unless it requests another model turn. |
-| `mainframe-fallow-quality` | Unsupported completion advisory: Stop advice is discarded unless it requests another model turn. Do not convert an advisory into forced continuation. |
+| `mainframe-fallow-quality` | On 3.17.1.9553, retain immediate PostToolUse advice for native Write/Edit TS/JS responses. Build an exact addressed diff in memory, verify the postimage, and preserve source privacy. Full completion timing remains unsupported; older builds retain no Fallow binding. |
+| `mainframe-subagent-selection` | Current Agent input has no per-call model or effort. Report unsupported without a strict runtime denial. Preserve native role model/thoughtLevel presets as configuration, without claiming preventive selection enforcement. |
+| `mainframe-todo-limits` | PreToolUse Write/Edit projects addressed content/replacements through the canonical detector; positive findings deny only that edit. |
+| `mainframe-commit-checkpoint` | PostToolUse Write/Edit provides bounded non-blocking advice. |
+| `mainframe-skill-reminder` | PreToolUse Bash and PostToolUse Bash/Read provide positive-only context, preserving deduplication and disable choices. |
 
 This is the smallest event set that preserves the canonical timing and effect:
 
@@ -129,7 +135,8 @@ This is the smallest event set that preserves the canonical timing and effect:
 - `Stop` is used only to revalidate and block a still-live attributed quality
   finding. ZCode ignores matchers for Stop and caps continuation at three, so
   the clean path must remain silent. Completion-only advisories are left
-  unsupported instead of forcing another model turn.
+  unsupported instead of forcing another model turn. A still-positive repair
+  retry is explicitly labeled unresolved; the native cap does not prove repair.
 - `SessionStart` is the only event that supplies the initialized runtime root
   before later Bash calls can change cwd. The current bundle emits startup and
   resume; clear and compact remain accepted because they are documented native
@@ -154,15 +161,16 @@ regenerate wrappers or replay the probes above during ordinary installation.
 Those probes describe separately assigned adapter validation.
 
 The maintained mapping delivers four pre-shell hooks and retains the supported
-`mainframe-code-quality` edit and blocking lifecycle for the primary runtime. The two
-complete completion contracts remain unsupported in this inspected build;
-`mainframe-code-quality` carries the exact partial-binding limitation. Default subagent
+`mainframe-code-quality` edit and blocking lifecycle for the primary runtime.
+Current 3.17.1.9553 delivery also retains per-edit Fallow advice. Both complete
+completion contracts and the per-call subagent-selection guard remain unsupported;
+the report names each retained partial and precise gap. Default subagent
 runtimes omit hook runners, so primary protection must not be generalized to
 delegated tool calls. See the
 [reproducible native code evidence](zcode-evidence.md) for exact functions,
 source fingerprint, extracted-function experiments, and live acceptance. The
 four pre-shell effects and the primary-runtime `mainframe-code-quality` post-edit and
-positive Stop lifecycle have live Desktop evidence on this build. The
+positive Stop lifecycle have live Desktop evidence on the historical 3.11.2 build. The
 advisory-only Stop limitation, default-subagent omission, and cached-callback
 retirement boundary remain unproven or unsupported as stated above.
 

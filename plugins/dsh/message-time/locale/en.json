@@ -1,0 +1,13 @@
+{
+  "config": {
+    "enabled": "Enable compact, append-only clocks. Default: enabled.",
+    "includeUser": "Stamp human input with its inbox receipt time. Default: enabled.",
+    "includeAssistant": "Stamp completion of each full agent turn, not individual assistant messages or tool steps. Default: enabled.",
+    "includeTurnStart": "Stamp the first accepted step of each full agent turn. Default: enabled.",
+    "timeZone": "Optional IANA fallback time zone. A valid human client time zone takes precedence and is remembered per session. Omitted, empty or invalid values use the host time zone until a session zone is known. Europe/Moscow in the bundle patch is an explicit fallback, not browser autodetection."
+  },
+  "meta": {
+    "title": "Message timestamps",
+    "description": "Adds compact timestamps for user messages and the start and completion of full agent turns."
+  }
+}

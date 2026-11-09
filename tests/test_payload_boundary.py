@@ -6,7 +6,6 @@ import subprocess
 import tempfile
 import unittest
 
-from installer.antigravity import Antigravity
 from installer.cline import Cline
 from installer.codex import Codex
 from installer.core import Conflict
@@ -16,7 +15,7 @@ from installer.zcode import ZCode
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ADAPTERS = (Codex, ZCode, Antigravity, MiniMax, Cline)
+ADAPTERS = (Codex, ZCode, MiniMax, Cline)
 
 
 class PayloadBoundaryTests(unittest.TestCase):
@@ -25,7 +24,7 @@ class PayloadBoundaryTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve() / "source"
         self.root.mkdir()
-        for name in ("skills", "instructions", "agents", "commands", "hooks"):
+        for name in ("skills", "instructions", "agents", "commands", "hooks", "plugins"):
             shutil.copytree(ROOT / name, self.root / name,
                             ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(ROOT / "ADAPTATION.example.json", self.root)

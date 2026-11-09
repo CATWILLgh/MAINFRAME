@@ -137,6 +137,16 @@
         "source": "skills/mainframe-argocd",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-sentry": {
+        "source": "skills/mainframe-sentry",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-openspec": {
+        "source": "skills/mainframe-openspec",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {
@@ -177,6 +187,11 @@
       }
     },
     "commands": {
+      "todo": {
+        "source": "commands/todo.md",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-init": {
         "source": "commands/mainframe-init.md",
         "delivery": "pending",
@@ -214,6 +229,11 @@
       }
     },
     "hooks": {
+      "mainframe-todo-limits": {
+        "source": "hooks/mainframe-todo-limits.py",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-destructive-operations": {
         "source": "hooks/mainframe-destructive-operations.py",
         "delivery": "pending",
@@ -261,7 +281,28 @@
       }
     },
     "mcp": {},
-    "plugins": {},
+    "plugins": {
+      "activity-analytics": {
+        "source": "plugins/dsh/activity-analytics",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "message-time": {
+        "source": "plugins/dsh/message-time",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "secrets-vault": {
+        "source": "plugins/dsh/secrets-vault",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "session-collaboration": {
+        "source": "plugins/dsh/session-collaboration",
+        "delivery": "pending",
+        "verification": "pending"
+      }
+    },
     "runtime": {},
     "settings": {},
     "instructions": {

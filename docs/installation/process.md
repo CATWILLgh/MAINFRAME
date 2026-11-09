@@ -5,7 +5,7 @@ it with the page for the installed product and the guide for the active
 component type.
 
 The maintained [Codex procedure](codex-installer.md),
-[ZCode procedure](zcode-installer.md), [Antigravity procedure](antigravity-installer.md),
+[ZCode procedure](zcode-installer.md),
 the [MiniMax procedure](minimax-installer.md), and the
 [Cline procedure](cline-installer.md) execute the mechanical parts of this
 contract. For those routes, run their finite `plan`, `apply`, and `verify`
@@ -100,6 +100,18 @@ non-secret rollback location as its `next_action`; remove that pointer after
 recovery.
 
 ## 4. Reconstruct the effective target for adapter work
+
+Identify Desktop and CLI releases separately and target the caller's actual
+surface. Read the installed Desktop bundle/version and its shipped runtime;
+a CLI on PATH, a newer website release or old task metadata is not a substitute.
+Compare available releases without upgrading an application implicitly.
+
+Place delivered components in the target product's own documented user
+configuration directories. Shared cross-product skill roots are compatibility
+inputs for ownership-aware migration, not new delivery destinations. Keep
+unrelated shared skills, existing credentials and already installed system
+analyzers intact. Reconsider a shared destination only when a documented
+cross-product standard and the caller's current policy permit it.
 
 Use three evidence sources together:
 

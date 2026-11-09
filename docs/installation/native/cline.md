@@ -1,161 +1,157 @@
-# Cline (Desktop and CLI) — native orientation
+# Cline Desktop — native orientation
 
-Observed 2026-09-22 against **Cline Desktop 0.0.33** (`bot.cline.app`,
-`/Applications/Cline.app`) and **Cline CLI 3.0.62** (`@cline/cli-darwin-arm64`,
-installed through Homebrew). Both surfaces read the same global root, so one
-global installation serves both; desktop and CLI remain separate verification
-surfaces under [verification.md](../verification.md#desktop-and-cli).
+Inspected 2026-11-01 against installed **Cline Desktop 0.0.46** (`bot.cline.app`,
+`/Applications/Cline.app`). Its `code-sidecar` embeds SDK core **0.0.93**.
+This is Desktop evidence. The maintained legacy CLI route remains available,
+but no current CLI compatibility, discovery or behavioral acceptance is claimed.
+Public Desktop releases can advance independently of this installed target.
 
-Evidence sources: current official documentation (`docs.cline.bot`:
-`getting-started/config`, `customization/{skills,rules,plugins,hooks}`,
-`features/subagents`, `sdk/plugins`), the shipped `@cline/core` and
-`@cline/shared` distributions of the installed CLI (type declarations and
-bundled runtime), and isolated harmless runtime probes in a temporary directory.
-Reread current documentation before relying on any version-sensitive item.
+Official references consulted: [configuration](https://docs.cline.bot/getting-started/config),
+[plugins](https://docs.cline.bot/customization/plugins),
+[subagents](https://docs.cline.bot/features/subagents), and
+[SDK plugins](https://docs.cline.bot/sdk/plugins).
+The installed Desktop source resolves details that public cross-product documentation
+cannot establish for this release.
 
-## Global and project configuration roots
+## Exact shipped evidence
 
-`~/.cline/` is the global root and applies to every Cline surface. Project
-configuration is `.cline/` at the workspace root. Discovered search paths
-(later entries win where the product documents precedence):
+The arm64/x86_64 universal `Contents/MacOS/code-sidecar` contains a NUL-delimited,
+readable JavaScript bundle. Read its embedded text without executing the binary;
+identify source modules through their retained `sdk/packages/.../src/` comments.
+No agent, hub, model session, application service, database or history is needed.
 
-| Component | Global | Project | Notes |
-| --- | --- | --- | --- |
-| Rules | `~/.cline/rules/`, `~/Documents/Cline/Rules`, `~/Cline/Rules`, `~/.agents/AGENTS.md` | `.clinerules/`, `.cline/rules/`, `AGENTS.md` | workspace rules win over global |
-| Skills | `~/.cline/skills/<name>/SKILL.md`, `~/.agents/skills/<name>/SKILL.md` | `.cline/skills/`, `.agents/skills/` | `name` must equal the directory name |
-| Agents | `~/.cline/agents/*.yml` | `.cline/agents/*.yml` | YAML frontmatter profile plus markdown body |
-| Hooks | `~/.cline/hooks/`, `~/Documents/Cline/Hooks` | `.cline/hooks/`, `.clinerules/hooks/` | executable files named after the event |
-| Plugins | `~/.cline/plugins/_installed/...` | `.cline/plugins/_installed/...` | managed by `cline plugin install` |
-| Workflows | `~/.cline/workflows/`, `~/Documents/Cline/Workflows` | `.cline/workflows/`, `.clinerules/workflows/` | markdown files; optional YAML frontmatter (`name`, `disabled`) |
+| Shipped artifact | SHA-256 |
+| --- | --- |
+| `Contents/MacOS/code-sidecar` | `d508c4d9cc7740ee23b3f5c1cb6fa7915bb1c6752a5d09105750ef1222fff276` |
+| `Contents/Resources/bin/extensions/plugin-sandbox-bootstrap.js` | `c3d22e3207ae0c8b991945606943855757c949764ba4048def54822990c01524` |
 
-Provider settings, MCP settings, sessions, teams, and caches live under
-`~/.cline/data/`. `CLINE_DIR`, `CLINE_DATA_DIR`, and `--config` / `--data-dir`
-relocate these roots; the CLI `--hooks-dir` value defaults to `~/.cline/hooks`.
+Relevant current functions and their observed semantics:
 
-## Hooks
+- `resolvePluginConfigSearchPaths` includes `~/.cline/plugins`;
+  `discoverPluginModulePaths` recursively discovers `.js`/`.ts` modules, or
+  declared `package.json` entries. A plain module requires no internal database
+  registration or package installation.
+- Desktop `resolveDesktopPluginBootstrap` and `configurePluginBootstrap` select
+  the shipped bootstrap above. `resolveAndLoadAgentPlugins` loads discovered
+  modules through the native registry. Default runtime config extensions include
+  `plugins` and `hooks`; disabled plugin settings remain effective.
+- The native bootstrap's `initialize` accepts the generated module, validates
+  its `hooks` manifest, and reports `beforeTool` with no failures. An isolated
+  worker probe through that actual shipped bootstrap returned recoverable
+  `{skip: true, reason: ...}` and informational `{appendContext: ...}` from
+  synthetic inputs. This proves module loading and control serialization, not
+  activation in the user's running conversation.
+- `AgentRuntime.prepareToolExecution` maps `skip` to an error tool result and
+  continues the run; `findCompletingToolMessage` requires a successful completion
+  tool result. `stop` throws instead. `callAfterRunHooks` ignores return values.
+- `session-factory` merges the built-in file-hook extension before discovered
+  plugins; `mergeAgentExtensions` preserves first-seen order. File guards
+  therefore remain installed: changing them to capture-only would remove
+  protection when the plugin is disabled or fails to load. The plugin only adds
+  a completion-tool check, with no duplicate shell guard or edit advice.
+- Native plugin hooks default to 3000 ms. The thin bridge kills its Python child
+  after 2300 ms and returns no control on failure, malformed output or timeout.
+  Longer analyzers remain on the existing synchronous file-hook route.
 
-Hooks are executable files named after the event. File names map to runtime
-events as follows:
+## Product-private delivery
 
-| Hook file | Runtime event | Phase |
-| --- | --- | --- |
-| `TaskStart` | `agent_start` | detached, result unused |
-| `TaskResume` | `agent_resume` | detached, result unused |
-| `TaskCancel` | `agent_abort` | detached, result unused |
-| `TaskComplete` | `agent_end` | detached, result unused |
-| `TaskError` | `agent_error` | detached, result unused |
-| `PreToolUse` | `tool_call` | **synchronous**, result used |
-| `PostToolUse` | `tool_result` | **synchronous**, result used |
-| `UserPromptSubmit` | `prompt_submit` | detached, result unused |
-| `PreCompact` | unmapped | not dispatched |
-| `SessionShutdown` | `session_shutdown` | detached, result unused |
+| Component | Maintained Cline destination |
+| --- | --- |
+| Global instruction | `~/.cline/rules/mainframe.md`, one managed block |
+| 23 skills with all approved resources | `~/.cline/skills/<name>/SKILL.md` and relative resources |
+| 7 roles | `~/.cline/agents/<name>.yml` |
+| 8 explicit user workflows | `~/.cline/workflows/<name>.md` |
+| Tool hooks and unchanged detectors | `~/.cline/hooks/PreToolUse`, `PostToolUse`, transport and `detectors/` |
+| Additional native completion binding | `~/.cline/plugins/mainframe.js` |
+| Private bounded detector state and ownership receipt | `~/.cline/data/mainframe/` |
 
-Input is one JSON object on standard input with `clineVersion`, `hookName`,
-`timestamp`, `taskId`, `sessionContext.rootSessionId`, `workspaceRoots`,
-`workspaceInfo` (`rootPath`, `hint`, `associatedRemoteUrls`,
-`latestGitCommitHash`, `latestGitBranchName`), `userId`, `agent_id`,
-`parent_agent_id`, and a per-event payload object (`preToolUse`, `postToolUse`,
-`taskComplete`, `tool_call`, `tool_result`, …). Subagent calls carry their own
-`agent_id` with a non-null `parent_agent_id`, so attribution needs no transcript
-inspection.
+Rules, skills, profiles and workflows use current native discovery paths.
+Cross-product compatibility roots such as `~/.agents/` are not owned by this
+Cline delivery. Existing settings, histories, sessions, authentication, user
+plugins and foreign files are preserved. The shared credential helper and
+metadata index keep their separately inventoried ownership.
 
-Standard output is a single JSON object or a final `HOOK_CONTROL\t<json>` line,
-validated against
-`{cancel?, review?, errorMessage?, context?, contextModification?, overrideInput?}`;
-context is truncated at 50 000 characters. Result semantics, confirmed in the
-shipped runtime:
+## Profiles and delegated runtime
 
-- `cancel: true` becomes `stop`, and the runtime **throws**, aborting the whole
-  run with `errorMessage`/`context` as the recorded reason. It is a hard block,
-  not a recoverable per-tool denial.
-- `review` is accepted by the schema but has no runtime effect in 3.0.62.
-- A recoverable tool denial exists only in the in-process plugin API
-  (`beforeTool` returning `skip`), not in the file-hook contract.
-- `contextModification` reaches the responsible agent as appended context and
-  never blocks.
-- Detached lifecycle events cannot inject context, continue the model, or block.
-- Hook files must be executable and carry a shebang; otherwise the launch fails
-  and the product reports a hook dispatch error.
+`parseConfiguredAgentConfig` requires YAML frontmatter `name`, `description`
+and a nonempty Markdown prompt. It supports `tools`, `skills`, `providerId`,
+`modelId` and `maxIterations`. `loadConfiguredAgentConfigs` reads project and
+global `.cline/agents` YAML files. `createConfiguredAgentTools` exposes profiles
+as `subagent_<sanitized_name>` tools with a single `prompt` argument; hyphens in
+MAINFRAME names become underscores. Generic `spawn_agent` accepts only
+`systemPrompt` and `task`.
 
-Probed on a free model in an isolated temporary project: `TaskStart`,
-`PreToolUse`, `PostToolUse`, and `TaskComplete` all executed, dispatch ran
-through the hub capability layer, and both a `contextModification` advisory and
-a `cancel` hard block were delivered. Shell calls arrived as
-`run_commands` with `input.commands` as a string array (several commands may
-share one call, stringified into `preToolUse.parameters` as
-`{"commands": "[\"true\",\"echo hi\"]"}`). Desktop 0.0.33 sends
-`apply_patch` as `input: {"input": "*** Begin Patch\\n..."}`; affected paths
-therefore come from bounded `Add File`, `Update File`, `Delete File`, and
-`Move to` patch headers rather than a separate path field. Built-in tool set of
-the same build:
-`read_files`, `search_codebase`, `run_commands`, `fetch_web_content`,
-`apply_patch`, `editor`, `skills`, `ask_question`, `submit_and_exit`. Tool-event
-hooks default to a 120 000 ms timeout.
+Every profile binds its required method with native `skills:` metadata.
+`DefaultRuntimeBuilder` creates a skill executor restricted to that configured
+skill list. Three read-only roles allow `read_files, search_codebase`.
+`filterToolsForConfiguredAgent` adds `skills` when a skill list exists and then
+filters by exact tool name. A pure extracted-function probe against this shipped
+filter retained only `read_files`, `search_codebase`, `skills` and excluded
+shell, editors, MCP, scheduling and delegation tools. This does not establish
+judgment quality or all host permission behavior.
 
-## Plugins
+`buildDelegatedAgentConfig` passes the parent's hooks/extensions into a distinct
+`SessionRuntime`, preserving `parentAgentId` and its independent conversation.
+Native file-hook `createPayloadBase` assigns `taskId = ctx.conversationId`;
+`baseContextFromSnapshot` derives that conversation as
+`snapshot.conversationId ?? snapshot.runId ?? snapshot.agentId`. The generated
+plugin uses that exact expression. Edit capture and completion therefore share
+the same scope, while a child conversation never reads its parent's quality
+state. Focused fixtures verify unrelated scopes stay quiet.
 
-Documented for SDK, CLI, and Kanban; not documented for the VS Code and JetBrains
-extensions. `cline plugin install` copies the package into
-`~/.cline/plugins/_installed/<source>/<name>-<hash>` and picks up a top-level
-`skills/` directory. In-process plugin hooks use the SDK stages (`beforeTool`,
-`afterTool`, `afterRun`, `beforeRun`, `beforeModel`, `afterModel`, `onEvent`) and
-can return a recoverable `skip` decision.
+## Hook contracts and retained limits
 
-Probe result: a freshly installed local hook plugin was **not imported** in a
-non-interactive CLI session, in a background (hub) session, or from a project
-plugin directory; no load failure appeared in the CLI or hub logs and global
-settings had no `disabledPlugins` entry. Plugin loading in this build needs its
-own investigation before it can carry MAINFRAME behavior, so the maintained
-mapping uses the proven file-hook mechanism.
+`PreToolUse` is synchronous `tool_call`; `PostToolUse` is synchronous
+`tool_result`. Inputs include `taskId`, optional lineage, workspace metadata,
+`tool_call`/`tool_result` and legacy stringified parameter fields. Output accepts
+`cancel`, `errorMessage`, `contextModification` and `overrideInput`.
+`cancel` aborts the run. `contextModification` appends responsible-agent context.
+Lifecycle files (`TaskComplete`, task start/resume/cancel/error, prompt submit,
+shutdown) are detached and their result is unused.
 
-## Skills, rules, agents, and workflows
+Native `run_commands` uses command arrays, including structured
+`{command,args}` entries; the bridge quotes structured argv before unchanged
+detector checks. `apply_patch` carries canonical patch text in `input.input`.
+`editor` uses `path`, `old_text`, `new_text`, optional one-based `insert_line`;
+replacement must match once, creation requires an absent file, insertion follows
+native boundaries and line endings. TODO validation calls the unchanged
+`check_patch`, `check_edit` or `check_write` detector on only the addressed rows
+and notes. Unsupported/malformed forms stay neutral; guard denial does not edit
+the requested file. Structured native failed edit results cannot attribute
+unrelated changes as successful edits.
 
-- Skills use `SKILL.md` with `name` and `description` frontmatter
-  (`description` capped at 1024 characters), load progressively, and surface as
-  `/slash-commands`. A skill can also be selected autonomously by description,
-  so a skill is never an explicit-only command surface.
-- Rules are always-on markdown files with optional `paths:` glob frontmatter for
-  conditional activation.
-- Agent profiles are YAML-frontmatter files whose body is the system prompt;
-  `name` and `description` are required and `tools`, `skills`, `providerId`,
-  `modelId`, `maxIterations` are optional. They are exposed as `subagent_<name>`
-  when the runtime spawns configured agents; the CLI additionally exposes a
-  read-only `use_subagents` research fan-out.
-- Workflow files are markdown with optional YAML frontmatter (`name`,
-  `disabled`/`enabled`); the body is the instruction text and the name defaults
-  to the file name. They are the explicit user-invoked command surface, distinct
-  from skills, and appear in the same slash menu. Slash invocation is a
-  user-facing action and was not exercised by the non-interactive probes.
+All **50** inventory rows are accounted for: **47 installed**, **3 unsupported
+full contracts**, with two useful partial bindings:
 
+- `mainframe-code-quality`: exact-edit advice and bounded before-images remain.
+  The plugin additionally revalidates attributed findings before
+  `submit_and_exit`, returning recoverable `skip` on a positive finding. This
+  cannot cover natural delegated completion: delegated `SessionRuntime` does
+  not inherit the root's required-completion-tool policy, and `afterRun` cannot
+  continue it. Timeout or analyzer failure stays non-blocking.
+- `mainframe-fallow-quality`: exact-scope TS/JS analysis remains informative on
+  `PostToolUse`. Universal continuation-capable completion timing is unavailable.
+- `mainframe-subagent-selection`: full explicit model-plus-effort selection is
+  unavailable. Profile model/provider settings are static; generic and profile
+  call schemas have no model/effort pair, and the profile schema has no effort
+  field. No strict guard blocks valid native defaults or asks callers to pass
+  nonexistent controls. No useful deterministic partial binding is claimed.
 
-Global rules are individual markdown files, each independently toggleable in the
-Cline UI, and workspace rules win over global rules. `~/.agents/AGENTS.md` is a
-cross-tool compatibility path, not a Cline-owned file; a Cline-only installation
-therefore owns exactly one new file under `~/.cline/rules/` and never writes
-another product's global instruction system.
+Skill reminders and checkpoint advice remain independently disableable,
+positive-only per-operation context. Unknown tools, failed reads, malformed
+payloads, missing runtimes and unavailable checks stay silent or return the
+canonical bounded unavailable-check advisory; none is a positive dangerous
+finding.
 
-## Commit checkpoint advisory
+## Acceptance boundary
 
-`mainframe-commit-checkpoint` uses PostToolUse (apply_patch/editor) to deliver bounded
-model context after successful edits. It is independently disableable and never
-registers checkpoint advice at Stop or forces continuation. Defaults, metadata
-bounds, reset/deduplication, failure behavior and coverage are owned by the
-[canonical checkpoint contract](../../../hooks/README.md#adapt-mainframe-commit-checkpoint).
-The maintained installer includes its detector and post-edit binding; native
-activation remains a separate observation after installation.
+The focused installer/transport tests prove update convergence, owned-file
+migration, modes, disable controls, foreign-file preservation, exact-edit scope,
+TODO checks, failed-edit neutrality, completion revalidation and scope isolation.
+The shipped bootstrap worker proves module parsing/loading and serialized control.
+Source inspection plus the extracted filter proves the current read-only tool
+filter. Neither result proves the Desktop UI has activated the delivered files,
+a model selected a skill, a workflow was invoked, or a real conversation received
+and acted on advice. No model session or current CLI probe is run by installation.
 
-
-## Skill-reminder input evidence (2026-10-06)
-
-The locally shipped `@cline/core` 0.0.83 definitions at
-`dist/extensions/tools/schemas.d.ts` define `read_files` with
-`files: [{path, start_line?, end_line?}]`, not a `read_file` event. The adapter
-normalizes up to eight literal `files[].path` targets after the tool result;
-stringified structured input is decoded as input, never as raw output.
-Known structured failed results are silent. Absolute paths remain useful;
-unknown shell workdirs are not replaced with workspace metadata. Native task,
-operation and optional child identity share the same budgeted state used by
-other adapters. The
-[native binding table](../../../hooks/skill-reminder-routing.md#native-bindings)
-owns timing and acceptance limits. Shared-runtime code evidence does not prove
-that a new Desktop 0.0.43 conversation delivered the reminder.
+See the [maintained procedure](../cline-installer.md).

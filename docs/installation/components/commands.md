@@ -10,7 +10,8 @@ global representation that:
 - exposes the stable command name to the user;
 - keeps the full body out of routine context until invocation;
 - preserves explicit user activation rather than autonomous execution;
-- preserves the source's no-argument contract;
+- preserves the source's argument contract (existing commands take no arguments;
+  `todo` consumes the user's following idea or update text);
 - runs in the user's current project rather than the MAINFRAME source project
   unless the command itself says otherwise.
 
@@ -23,6 +24,15 @@ limitation in `reason`; missing proof leaves verification `pending`.
 
 Reinstall by stable identity. Do not create aliases or turn a command into an
 always-on instruction.
+
+## `todo`
+
+Deliver [the source command](../../../commands/todo.md) with its prose argument
+contract. It captures ideas in the receiving worktree's tracked `.docs/todo`
+index and `.docs/todos/` notes; installation does not create project records.
+The dedicated `mainframe-todo-limits` hook is a separate capability whose native
+edit coverage and activation must be reported independently. Preserve its
+four-group lifecycle, retained completed notes and address-only validation.
 
 ## `mainframe-init`
 
