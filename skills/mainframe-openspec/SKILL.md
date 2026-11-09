@@ -21,14 +21,20 @@ workflow. Size or uncertainty alone does not select OpenSpec.
   Use `<repo>/.docs` for the MAINFRAME layout or `<repo>` for an assigned root
   layout. Use the actual repository and its normal entrypoints for source
   inspection, implementation, and project checks.
-- Prefer an available project-approved OpenSpec executable and check its version
-  and relevant command help. For an authorized first proposal, create `.docs`
+- Use the project's approved OpenSpec executable if it specifies one. Otherwise
+  use the shared MAINFRAME executable at
+  `~/.local/share/mainframe/runtime/bin/openspec` when present, then check
+  `openspec` on `PATH`. Check its version and relevant command help. Use the
+  resolved executable for every `openspec` command in this skill. For an
+  authorized first proposal, create `.docs`
   if needed, then run `openspec init --tools none` from `.docs`. This delegates
   project structure to OpenSpec and keeps agent integration with MAINFRAME.
   Before changing a package, verify the local config and the root reported by
   `openspec list --json` or an equivalent read-only command in that release.
-  If OpenSpec is missing or the CLI root cannot be verified, report the specific
-  gap. Exploration can continue in chat while setup is resolved.
+  If the CLI is missing, request the shared OpenSpec runtime through the
+  maintained MAINFRAME installer. Keep CLI installation outside the project.
+  If the CLI root cannot be verified, report the specific gap. Exploration can
+  continue in chat while setup is resolved.
 
 ## Explore, propose, and revise
 
@@ -86,6 +92,5 @@ their guidance and the current scope permits it.
 Use the installed release's help and the official [CLI reference](https://openspec.dev/docs/cli)
 for version-specific flags, the [schema guide](https://openspec.dev/docs/schemas/spec-driven)
 for artifact formats, and the [quickstart](https://openspec.dev/docs/quickstart)
-for the workflow. Use the [installation guide](https://openspec.dev/docs/installation)
-when the CLI itself needs setup. Apply the receiving project's tooling policy
-before installing or upgrading any dependency.
+for the workflow. Manage the shared CLI version through MAINFRAME. Follow the
+receiving project's tooling policy for any project-specific dependency change.

@@ -23,7 +23,7 @@ from installer.codex import (Codex, HOOK_NAMES, KNOWN_RUNTIME, CONTENT_UPDATE_RU
                              INSPECTED_DESKTOP_RUNTIMES, DETECTOR_UPDATE_RUNTIMES, SELECTION_UPDATE_RUNTIMES, TEXT_UPDATE_RUNTIMES,
                              desktop_version, native_version, mapping_supported, runtime_tools)
 from installer.core import Conflict, installation_lock, restore, transact
-from installer.runtime import ensure as ensure_runtime, status as runtime_status, tools_for_hook
+from installer.runtime import OPENSPEC_TOOLS, ensure as ensure_runtime, status as runtime_status, tools_for_hook
 
 
 def show(report, details=False):
@@ -170,9 +170,10 @@ def main(argv=None):
         codex_tools = tuple(dict.fromkeys((*codex_tools, "fallow")))
     if args.todo or args.skill is not None:
         return scoped_delivery(args, adapter)
+    package_tools = codex_tools + OPENSPEC_TOOLS if mapping_supported(version, args.surface) else codex_tools
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, codex_tools)
+        support = add_runtime_status(report, adapter, package_tools)
         if version in CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = adapter.bounded_update_mode()
@@ -224,7 +225,7 @@ def main(argv=None):
                     # provisioning or modifying those existing dependencies.
                     add_runtime_status(report, adapter, codex_tools)
                 else:
-                    provision_runtime(report, adapter, codex_tools)
+                    provision_runtime(report, adapter, package_tools)
             if remove and old_receipt:
                 transact(adapter.control(False, None), adapter.journal, adapter.allowed)
                 time.sleep(6)
@@ -249,17 +250,24 @@ def scoped_delivery(args, adapter):
     def plan():
         return adapter.plan_todo() if args.todo else adapter.plan_skill(args.skill)
 
+    tools = OPENSPEC_TOOLS if args.skill == "mainframe-openspec" else ()
     if args.action == "apply":
         with installation_lock(adapter.lock_path):
             changes, report = plan()
+            if tools:
+                provision_runtime(report, adapter, tools)
             transact(changes, adapter.journal, adapter.allowed)
             report["applied"] = True
     else:
         _, report = plan()
+        if tools:
+            add_runtime_status(report, adapter, tools)
         if args.action == "verify":
             report["scoped_update_matches"] = not report["changes"]
     show(report, args.details)
-    return 0 if args.action != "verify" or report["scoped_update_matches"] else 1
+    return 0 if args.action != "verify" or (
+        report["scoped_update_matches"] and report.get("runtime_support", {}).get("ready", True)
+    ) else 1
 
 
 def zcode_main(args, root, parser):
@@ -303,9 +311,10 @@ def zcode_main(args, root, parser):
         zcode_tools = tuple(dict.fromkeys((*zcode_tools, "fallow")))
     if args.todo or args.skill is not None:
         return scoped_delivery(args, adapter)
+    package_tools = zcode_tools + OPENSPEC_TOOLS if version in ZCODE_FULL_MAPPING_RUNTIMES else zcode_tools
     if args.action in ("plan", "verify"):
         changes, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, zcode_tools)
+        support = add_runtime_status(report, adapter, package_tools)
         if version in ZCODE_CONTENT_UPDATE_RUNTIMES:
             adapter.validate_content_update(changes, adapter.receipt())
             report["delivery_mode"] = "existing-installation bounded update; skills and validated hook transport/lifecycle updates only"
@@ -338,7 +347,7 @@ def zcode_main(args, root, parser):
                 adapter.validate_skill_delivery(changes, previous)
                 report["delivery_mode"] = "existing-installation bounded content delivery; Markdown skills, existing global instruction and destructive detector only"
             if not remove:
-                provision_runtime(report, adapter, zcode_tools)
+                provision_runtime(report, adapter, package_tools)
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
                 time.sleep(6)
@@ -377,9 +386,10 @@ def minimax_main(args, root, parser):
     adapter = MiniMax(root, args.home, args.minimax_home, version, args.surface)
     if args.skill is not None:
         return scoped_delivery(args, adapter)
+    package_tools = MINIMAX_RUNTIME_TOOLS + OPENSPEC_TOOLS
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, MINIMAX_RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, package_tools)
         if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
         return 0 if args.action == "plan" or report["structure_matches"] else 1
@@ -399,7 +409,7 @@ def minimax_main(args, root, parser):
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
             if not remove:
-                provision_runtime(report, adapter, MINIMAX_RUNTIME_TOOLS)
+                provision_runtime(report, adapter, package_tools)
             previous = adapter.receipt()
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)
@@ -439,9 +449,10 @@ def cline_main(args, root, parser):
     adapter = Cline(root, args.home, args.cline_home, version, args.surface)
     if args.skill is not None:
         return scoped_delivery(args, adapter)
+    package_tools = CLINE_RUNTIME_TOOLS + OPENSPEC_TOOLS
     if args.action in ("plan", "verify"):
         _, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, CLINE_RUNTIME_TOOLS)
+        support = add_runtime_status(report, adapter, package_tools)
         if args.action == "verify":
             report["structure_matches"] = not report["changes"] and support["ready"]
         show(report, args.details)
@@ -461,7 +472,7 @@ def cline_main(args, root, parser):
             remove = args.action == "uninstall"
             changes, report = adapter.plan(args.instructions_reviewed, remove)
             if not remove:
-                provision_runtime(report, adapter, CLINE_RUNTIME_TOOLS)
+                provision_runtime(report, adapter, package_tools)
             previous = adapter.receipt()
             if remove and previous:
                 transact(adapter.control(False), adapter.journal, adapter.allowed)

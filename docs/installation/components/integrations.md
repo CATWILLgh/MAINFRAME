@@ -7,8 +7,8 @@ required directly by another listed component.
 
 An empty category means MAINFRAME currently installs no component of that kind.
 Do not populate it from available marketplaces, old adapters, archives, or
-nearby configuration. A runtime executable required by a listed hook supports
-that hook; it does not gain a new inventory row.
+nearby configuration. A runtime executable required by a listed hook or skill
+is support for that component and has no separate inventory row.
 
 Reuse compatible native tools and runtimes. Install only what an active listed
 component requires. Never install development harnesses, test fixtures,
@@ -31,6 +31,27 @@ checks distinctly from clean results. Reuse compatible installations through
 the maintained installer and preserve unrelated project environments.
 SonarQube and comparable server/hosted platforms are not default dependencies;
 adding them requires an explicit user request and an agreed operating scope.
+
+## Shared OpenSpec CLI
+
+The [OpenSpec skill](../../../skills/mainframe-openspec/SKILL.md) uses one CLI
+per user. Full installation through Codex, ZCode, MiniMax Code, or Cline prepares
+it through the [shared runtime installer](../../../installer/runtime.py).
+For an existing compatible Desktop installation, `plan`, `apply`, and `verify`
+with `--surface desktop --skill mainframe-openspec` use the same runtime. Run the
+scoped `apply` with any supported Desktop adapter to prepare the CLI. Repeat it
+for the other adapters when their skill copies need updating.
+
+The installer reuses a compatible OpenSpec or installs the pinned official npm
+package into user storage. The npm route requires Node.js 22.12.0 or newer and
+npm. The launcher at `~/.local/share/mainframe/runtime/bin/openspec` works with
+the shell path inherited by Desktop applications. It opts out of telemetry and
+update checks. Use MAINFRAME to update the managed CLI. Each project still owns
+its OpenSpec artifacts and can select its own approved executable.
+
+`plan` reports runtime readiness without provisioning. `apply` prepares the CLI
+before writing the skill. `verify` requires both file convergence and a working
+CLI. The shared runtime remains available after removing one adapter.
 
 ## MCP and external capabilities
 

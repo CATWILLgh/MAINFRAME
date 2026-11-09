@@ -25,7 +25,7 @@ from installer.core import Change, Conflict, installation_lock, observed, restor
 from installer import core
 from installer import codex
 from installer.codex_native import summarize
-from installer.runtime import runtime_bin
+from installer.runtime import OPENSPEC_VERSION, runtime_bin
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,6 +52,14 @@ class InstallationTests(unittest.TestCase):
         self.home = Path(self.temporary.name).resolve() / "home with 'quotes'"
         self.home.mkdir()
         self.adapter = Codex(self.source, self.home, version="0.153.4")
+        fixture_bin = self.home.parent / "fixture-bin"
+        fixture_bin.mkdir()
+        openspec = fixture_bin / "openspec"
+        openspec.write_text(f"#!/bin/sh\nprintf '%s\\n' '{OPENSPEC_VERSION}'\n")
+        openspec.chmod(0o755)
+        path = patch.dict(os.environ, {"PATH": str(fixture_bin) + os.pathsep + os.environ.get("PATH", os.defpath)})
+        path.start()
+        self.addCleanup(path.stop)
         for path in (self.adapter.state_path, self.adapter.index):
             path.unlink(missing_ok=True)
         self.addCleanup(self.temporary.cleanup)

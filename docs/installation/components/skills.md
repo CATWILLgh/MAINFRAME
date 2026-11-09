@@ -8,6 +8,8 @@ Copy the approved resource tree of the listed skill, including directly referenc
 scripts, references, examples, and assets. Preserve stable identity, proactive
 trigger semantics, exclusions, relative links, and progressive disclosure.
 Nested resources belong to the skill; they are not separate components.
+For `mainframe-openspec`, also prepare its
+[shared CLI](integrations.md#shared-openspec-cli) through the maintained installer.
 
 Use the maintained shared resource selector. Ignore rules exclude local state
 before contents are read, and Git control files stay in the source. For a Git

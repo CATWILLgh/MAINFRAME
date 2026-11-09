@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from installer import codex, codex_hook
-from installer.core import encode_json, observed, transact
+from installer.core import Conflict, encode_json, observed, transact
 from installer.shared import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,22 +125,60 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         entrypoint = importlib.util.module_from_spec(specification)
         specification.loader.exec_module(entrypoint)
         options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION]
-        ready = {"ready": True, "required": ["ruff", "oxlint", "semgrep", "fallow"], "missing": []}
+        required = ("ruff", "oxlint", "semgrep", "fallow", "openspec")
+        ready = {"ready": True, "required": list(required), "missing": []}
         with (patch.object(Path, "cwd", return_value=self.source),
               patch.object(entrypoint, "ensure_runtime", return_value=ready) as ensure,
               patch.object(entrypoint, "runtime_status", return_value=ready) as status,
               patch("sys.stdout", new_callable=io.StringIO)):
             self.assertEqual(entrypoint.main(["codex", "apply", *options, "--instructions-reviewed"]), 0)
-            ensure.assert_called_once_with(self.home, ("ruff", "oxlint", "semgrep", "fallow"))
+            ensure.assert_called_once_with(self.home, required)
             ensure.reset_mock()
             self.assertEqual(entrypoint.main(["codex", "verify", *options]), 0)
-            status.assert_called_once_with(self.home, ("ruff", "oxlint", "semgrep", "fallow"))
+            status.assert_called_once_with(self.home, required)
             status.reset_mock()
             for selector in (["--skill", "mainframe-sentry"], ["--todo"]):
                 self.assertEqual(entrypoint.main(["codex", "apply", *options, *selector]), 0)
                 self.assertEqual(entrypoint.main(["codex", "verify", *options, *selector]), 0)
             ensure.assert_not_called()
             status.assert_not_called()
+
+    def test_scoped_openspec_checks_and_provisions_only_its_cli(self):
+        self.apply()
+        specification = importlib.util.spec_from_file_location("mainframe_openspec_entrypoint", self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(entrypoint)
+        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION,
+                   "--skill", "mainframe-openspec"]
+        missing = {"ready": False, "required": ["openspec"], "missing": ["openspec"]}
+        ready = {"ready": True, "required": ["openspec"], "missing": []}
+        installed = self.adapter.skills / "mainframe-openspec/SKILL.md"
+        before = observed(installed)
+        receipt = observed(self.adapter.receipt_path)
+        with (patch.object(Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "runtime_status", return_value=missing) as status,
+              patch.object(entrypoint, "ensure_runtime", side_effect=Conflict("OpenSpec unavailable")) as ensure,
+              patch("sys.stdout", new_callable=io.StringIO)):
+            self.assertEqual(entrypoint.main(["codex", "verify", *options]), 1)
+            status.assert_called_once_with(self.home, ("openspec",))
+            ensure.assert_not_called()
+
+            source = self.source / "skills/mainframe-openspec/SKILL.md"
+            original = source.read_bytes()
+            self.addCleanup(source.write_bytes, original)
+            source.write_bytes(original + b"\nTest revision.\n")
+            with self.assertRaisesRegex(Conflict, "OpenSpec unavailable"):
+                entrypoint.main(["codex", "apply", *options])
+            ensure.assert_called_once_with(self.home, ("openspec",))
+            self.assertEqual(observed(installed), before)
+            self.assertEqual(observed(self.adapter.receipt_path), receipt)
+
+            ensure.side_effect = None
+            ensure.return_value = ready
+            status.return_value = ready
+            self.assertEqual(entrypoint.main(["codex", "apply", *options]), 0)
+            self.assertEqual(installed.read_bytes(), source.read_bytes())
+            self.assertEqual(entrypoint.main(["codex", "verify", *options]), 0)
 
 
 class CurrentCodexAdvisoryTests(unittest.TestCase):

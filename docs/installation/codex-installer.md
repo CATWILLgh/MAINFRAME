@@ -138,11 +138,13 @@ permissions, native trust, deliberate disables, unrelated files and unrelated
 state rows are preserved. A previous shared-root destination requires its own
 authorized migration. Owned edits and conflicting foreign files stop delivery.
 
-Skill-only verification exits successfully when `scoped_update_matches` is true.
+Skill-only verification checks `scoped_update_matches` for file convergence.
 It neither checks nor provisions unrelated hook analyzers and makes no full
-`structure_matches` claim. The adaptation state's top-level target and existing
-receipt fingerprint retain their previous full-installation meaning; the report
-identifies the current skill-delivery runtime. The selected row remains
+`structure_matches` claim. For `mainframe-openspec`, apply prepares the
+[shared CLI](components/integrations.md#shared-openspec-cli) and verify also
+requires `runtime_support.ready`. The adaptation state's top-level target and
+existing receipt fingerprint retain their previous full-installation meaning.
+The report identifies the current skill-delivery runtime. The selected row remains
 `verification: pending` with a fresh-task discovery handoff until discovery is
 observed. Other runtimes, CLI, fresh installs and source moves are rejected by
 this route. Do not use whole-product apply to deliver a single skill on this

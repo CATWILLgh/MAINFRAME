@@ -108,19 +108,20 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
         specification.loader.exec_module(entrypoint)
         options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", CURRENT]
         required = CODE_QUALITY_TOOLS + FALLOW_TOOLS
-        ready = {"ready": True, "required": list(required), "missing": []}
+        package_tools = (*required, "openspec")
+        ready = {"ready": True, "required": list(package_tools), "missing": []}
         with (patch.object(Path, "cwd", return_value=self.root),
               patch.object(entrypoint, "ensure_runtime", return_value=ready) as ensure,
               patch.object(entrypoint, "runtime_status", return_value=ready) as status,
               patch("sys.stdout", new_callable=io.StringIO)):
             self.assertEqual(entrypoint.main(["zcode", "plan", *options]), 0)
-            status.assert_called_once_with(self.home, required)
+            status.assert_called_once_with(self.home, package_tools)
             status.reset_mock()
             self.assertEqual(entrypoint.main(["zcode", "apply", *options]), 0)
-            ensure.assert_called_once_with(self.home, required)
+            ensure.assert_called_once_with(self.home, package_tools)
             ensure.reset_mock()
             self.assertEqual(entrypoint.main(["zcode", "verify", *options]), 0)
-            status.assert_called_once_with(self.home, required)
+            status.assert_called_once_with(self.home, package_tools)
             status.reset_mock()
             self.assertEqual(entrypoint.main(["zcode", "enable", "--home", str(self.home)]), 0)
             ensure.assert_called_once_with(self.home, required)

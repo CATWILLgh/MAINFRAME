@@ -10,7 +10,7 @@ import tempfile
 import unittest
 
 from installer.core import Conflict, digest, encode_json, observed, transact
-from installer.runtime import TOOL_SPECS
+from installer.runtime import OPENSPEC_VERSION, TOOL_SPECS
 from installer.minimax import COMMAND_REASON, MiniMax, desktop_version
 
 
@@ -369,7 +369,9 @@ class MiniMaxInstallationTests(unittest.TestCase):
         # This test owns entrypoint/version routing, not network provisioning.
         tools = self.home / "fixture-version-tools"
         tools.mkdir()
-        for name, (_, _, version) in TOOL_SPECS.items():
+        versions = {name: spec[2] for name, spec in TOOL_SPECS.items()}
+        versions["openspec"] = OPENSPEC_VERSION
+        for name, version in versions.items():
             executable = tools / name
             executable.write_text(f"#!/bin/sh\nprintf '%s\\n' '{name} {version}'\n")
             executable.chmod(0o755)
