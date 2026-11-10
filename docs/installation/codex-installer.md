@@ -111,13 +111,14 @@ installation or full native mapping. See the [text-update comparison](native/cod
 
 ### Deliver one skill on Desktop
 
-Desktop **0.165.0-alpha.1.2** and **0.166.0-alpha.5.1** support the explicit
-skill-only route for an existing same-source installation with a matching
-ownership receipt and schema-2 adaptation state. The tagged reader supports
-complete packages under `$CODEX_HOME/skills`. On **0.166.0-alpha.5.1**, only the
-skill route has been revalidated.
-See the source evidence for [0.165.0](native/codex.md#desktop-01650-alpha12-skill-only-delivery)
-and [0.166.0](native/codex.md#desktop-01660-alpha51-skill-only-delivery).
+Desktop **0.165.0-alpha.1.2**, **0.166.0-alpha.5.1**, and **0.167.0-alpha.3.2**
+support the explicit skill-only route for an existing same-source installation
+with a matching ownership receipt and schema-2 adaptation state. The tagged
+reader supports complete packages under `$CODEX_HOME/skills`. The two later
+versions have been revalidated for this route alone.
+See the source evidence for [0.165.0](native/codex.md#desktop-01650-alpha12-skill-only-delivery),
+[0.166.0](native/codex.md#desktop-01660-alpha51-skill-only-delivery), and
+[0.167.0](native/codex.md#desktop-01670-alpha32-skill-only-delivery).
 
 ```sh
 python3 -B install.py codex plan --surface desktop --skill mainframe-sentry

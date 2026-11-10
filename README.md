@@ -121,7 +121,7 @@ components it supports.
 | Source | Installed result |
 | --- | --- |
 | [instructions/global.md](instructions/global.md) | One MAINFRAME-owned section in the product's global instruction |
-| 24 listed directories under [skills/](skills/) | Native global skills, including their required references, scripts, and assets |
+| 25 listed directories under [skills/](skills/) | Native global skills, including their required references, scripts, and assets |
 | 7 listed files under [agents/](agents/) | Native global agent or subagent roles |
 | 8 listed files under [commands/](commands/) | Explicit user commands or the closest supported native equivalent |
 | 10 listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
@@ -134,6 +134,8 @@ components it supports.
 - The [OpenSpec skill](skills/mainframe-openspec/SKILL.md) uses one shared CLI
   per user across the supported full adapters. The maintained installer prepares
   it before delivering the skill. [Shared OpenSpec CLI setup](docs/installation/components/integrations.md#shared-openspec-cli)
+- [LeanREA](skills/mainframe-leanrea/SKILL.md) analyzes shipped software with local
+  CLI tools. It includes the [original MIT license](skills/mainframe-leanrea/LICENSE).
 
 Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are runtime support for
 listed hooks, not separate MAINFRAME components. Before registering an active

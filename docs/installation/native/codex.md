@@ -9,6 +9,16 @@ version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
 
+## Desktop 0.167.0-alpha.3.2 skill-only delivery
+
+The signed ChatGPT Desktop release `26.1103.41825`, build `25679`, bundles
+engine `0.167.0-alpha.3.2`. The [exact OpenAI tag](https://github.com/openai/codex/releases/tag/rust-v0.167.0-alpha.3.2)
+resolves to `c40729ea5cf8e947481b130c59807273eda2f8e9`. Comparing Git blob
+identities with `0.166.0-alpha.5.1` found identical runtime skill roots,
+manifest and metadata loaders, disabled-path handling, and watcher code.
+This extends private skill-only delivery to the inspected engine. Use a fresh
+Desktop task to observe discovery.
+
 ## Desktop 0.166.0-alpha.5.1 skill-only delivery
 
 On 2026-11-04 macOS verified the signed, notarized Desktop release

@@ -147,6 +147,11 @@
         "source": "skills/mainframe-openspec",
         "delivery": "pending",
         "verification": "pending"
+      },
+      "mainframe-leanrea": {
+        "source": "skills/mainframe-leanrea",
+        "delivery": "pending",
+        "verification": "pending"
       }
     },
     "agents": {
