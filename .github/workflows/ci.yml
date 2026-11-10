@@ -29,6 +29,40 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Trace synthetic credential registration
+        shell: bash
+        run: |
+          if ! command -v strace >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y strace
+          fi
+          trace_root=$(mktemp -d)
+          for attempt in $(seq 1 8); do
+            trace_prefix="$trace_root/$attempt"
+            if PYTHONPATH=shared/credentials/tests strace -ff -qq -ttt -s 256 \
+                -e trace=open,openat,creat,unlink,unlinkat,mkdir,mkdirat,rmdir,rename,renameat,renameat2,kill,chdir,write \
+                -o "$trace_prefix" python3 -B -m unittest \
+                test_secret.SecretCommandTests.test_parallel_registration_converges_without_lost_entries; then
+              continue
+            fi
+            python3 - "$trace_prefix" <<'TRACE'
+          from pathlib import Path
+          import sys
+
+          prefix = Path(sys.argv[1])
+          events = []
+          for path in prefix.parent.glob(prefix.name + ".*"):
+              pid = path.suffix[1:]
+              for line in path.read_text(errors="replace").splitlines():
+                  if any(item in line for item in ("/config/credentials", '"pid"', "kill(", "registered 'TOKEN_")):
+                      timestamp, syscall = line.split(maxsplit=1)
+                      events.append((timestamp, pid, syscall))
+          for timestamp, pid, syscall in sorted(events):
+              print(timestamp, pid, syscall)
+          TRACE
+            exit 1
+          done
+
       - name: Install hook analyzer dependencies
         run: |
           python3 -m pip install --disable-pip-version-check ruff==0.15.15 semgrep==1.164.0
