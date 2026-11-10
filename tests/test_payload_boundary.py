@@ -6,16 +6,14 @@ import subprocess
 import tempfile
 import unittest
 
-from installer.cline import Cline
 from installer.codex import Codex
 from installer.core import Conflict
-from installer.minimax import MiniMax
 from installer.shared import inventory
 from installer.zcode import ZCode
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ADAPTERS = (Codex, ZCode, MiniMax, Cline)
+ADAPTERS = (Codex, ZCode)
 
 
 class PayloadBoundaryTests(unittest.TestCase):

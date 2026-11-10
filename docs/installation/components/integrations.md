@@ -35,7 +35,7 @@ adding them requires an explicit user request and an agreed operating scope.
 ## Shared OpenSpec CLI
 
 The [OpenSpec skill](../../../skills/mainframe-openspec/SKILL.md) uses one CLI
-per user. Full installation through Codex, ZCode, MiniMax Code, or Cline prepares
+per user. Full installation through Codex or ZCode prepares
 it through the [shared runtime installer](../../../installer/runtime.py).
 For an existing compatible Desktop installation, `plan`, `apply`, and `verify`
 with `--surface desktop --skill mainframe-openspec` use the same runtime. Run the

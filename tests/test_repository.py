@@ -1,5 +1,7 @@
 import json
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from urllib.parse import unquote
@@ -40,6 +42,16 @@ def prose_without_fenced_code(text):
 
 
 class RepositoryContractTests(unittest.TestCase):
+    def test_retired_products_have_no_installation_entrypoint(self):
+        for product in ("cline", "minimax"):
+            with self.subTest(product=product):
+                result = subprocess.run(
+                    [sys.executable, "-B", str(ROOT / "install.py"), product, "plan"],
+                    cwd=ROOT, text=True, capture_output=True, timeout=5,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(f"invalid choice: {product!r}", result.stderr)
+
     def test_manifest_uses_the_supported_state_model(self):
         manifest = load_manifest()
         self.assertEqual(manifest["schema_version"], 2)
@@ -133,7 +145,7 @@ class RepositoryContractTests(unittest.TestCase):
                 if isinstance(component, dict) and "source" in component:
                     sources.append(component["source"])
 
-        self.assertEqual(len(sources), 55, "unexpected payload identity count")
+        self.assertEqual(len(sources), 56, "unexpected payload identity count")
         self.assertEqual(len(sources), len(set(sources)), "duplicate payload source")
 
         forbidden = {

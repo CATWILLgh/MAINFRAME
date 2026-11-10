@@ -1,180 +1,98 @@
 # MAINFRAME
 
-MAINFRAME is a product-neutral set of instructions, skills, agents, commands,
-and hooks for coding agents. The repository stores one canonical version of
-each component. A maintained installer generates native copies from these sources
-and a small product-specific mapping. Maintained implementations target Codex,
-ZCode Desktop, MiniMax Code Desktop, and Cline Desktop or CLI. The
-[DSH plugin adapter](docs/installation/dsh-adapter.md) validates and packages
-four native plugins for installation through DSH's package manager. Other
-products require separately assigned adapter development.
+MAINFRAME provides reusable instructions, skills, agents, commands, and hooks
+for coding agents. Each component has one product-neutral source. Maintained
+adapters translate that source into the native layouts of **Codex** and
+**ZCode Desktop**.
 
-Canonical content stays product-neutral. Native packaging, registration,
-lifecycle handling, and installation checks live under [installer/](installer/).
-Generated product copies are not maintained as separate source trees.
+This repository also develops four separate **DeepSeek Harness (DSH)** plugins.
+Each is built as its own package and installed into a DSH profile through DSH's
+native manager. [DSH plugin guide](docs/installation/dsh-adapter.md)
 
-## Verified baselines
+[![GitHub Actions on main](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml?query=branch%3Amain)
+![Installer Python 3.11 or newer](https://img.shields.io/badge/installer%20Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![GitHub CI Python 3.12](https://img.shields.io/badge/GitHub%20CI%20Python-3.12-3776AB?logo=python&logoColor=white)
 
-The runtime badges record the lowest versions that ran the relevant canonical
-checks in the 2026-09-07 rebuild. Analyzer badges record the maintained runtime
-installer's tested pins. They are verification evidence,
-not a claim that older releases are incompatible or that every newer release is
-automatically supported.
+## Where MAINFRAME installs
 
-Runtimes verified for the canonical components:
+The versions below identify the latest full delivery mapping maintained here
+for each surface. The native guides record earlier and scoped-update versions.
+Delivery checks establish file and configuration convergence. Native discovery,
+permissions, event execution, and model behavior require separate evidence on
+the requested surface.
 
-![Python: minimum tested 3.9.6](https://img.shields.io/badge/Python-min%20tested%203.9.6-3776AB?logo=python&logoColor=white)
-![Bash: minimum tested 3.2.57](https://img.shields.io/badge/Bash-min%20tested%203.2.57-4EAA25?logo=gnubash&logoColor=white)
-![Git: minimum tested 2.39.5](https://img.shields.io/badge/Git-min%20tested%202.39.5-F05032?logo=git&logoColor=white)
-![Node.js: minimum tested 25.9.0](https://img.shields.io/badge/Node.js-min%20tested%2025.9.0-5FA04E?logo=nodedotjs&logoColor=white)
+| Product | Full delivery mapping | Other maintained paths |
+| --- | --- | --- |
+| [Codex Desktop](docs/installation/codex-installer.md) | Engine `0.165.0-alpha.1.2` | `0.166.0-alpha.5.1` and `0.167.0-alpha.3.2` support skill-only updates of an existing installation. |
+| [Codex CLI](docs/installation/codex-installer.md) | Engine `0.153.4` | Read-only native discovery is available on the inspected CLI. |
+| [ZCode Desktop](docs/installation/zcode-installer.md) | Build `3.17.1.9553` | Build `3.17.2.9661` supports skill-only updates of an existing installation. |
 
-Optional runtime support used by specific hook capabilities:
+Some hooks have narrower native bindings. Codex retains partial shell guards
+where the host omits the actual tool working directory, and both adapters
+retain useful code-quality and Fallow behavior within their event limits.
+ZCode's installed hook bindings cover the primary runtime. The installer reports
+unsupported full contracts and retained partial bindings. [Codex mapping](docs/installation/native/codex.md) · [ZCode mapping](docs/installation/native/zcode.md)
 
-![ripgrep: minimum tested 15.2.0](https://img.shields.io/badge/ripgrep-min%20tested%2015.2.0-CC342D)
-![Ruff: pinned 0.15.15](https://img.shields.io/badge/Ruff-pinned%200.15.15-D7FF64)
-![Oxlint: pinned 1.67.0](https://img.shields.io/badge/Oxlint-pinned%201.67.0-7C3AED)
-![Semgrep: pinned 1.164.0](https://img.shields.io/badge/Semgrep-pinned%201.164.0-00A9A5)
-![Fallow: pinned 2.92.1](https://img.shields.io/badge/Fallow-pinned%202.92.1-6B7280)
+## Install or update MAINFRAME
 
-The maintained installer requires Python 3.11 or newer and is tested locally on
-Python 3.13.0. Active JavaScript analyzers also require `npm` when their tested
-distributions are not already available. Missing package infrastructure stops
-the apply before hook registration changes. CI runs the repository tests on
-Python 3.12 with the analyzer versions shown above; that run must pass before
-publication. The older Python badge applies to separately tested canonical
-components, not the installer.
-
-Python runs the canonical hooks and Python reconnaissance; Bash runs the
-credential helper; Git supports repository-aware safety; Node.js runs the
-TypeScript and React reconnaissance scripts. The second group is not required
-for every installation: an adapter installs or reuses each analyzer only when
-its corresponding hook is supported.
-
-### Adapter acceptance
-
-No adapter is marked verified yet. Add an adapter badge only after installation
-from a clean repository copy proves native discovery and behavior. Each badge
-must identify the agent product version, tested interface (`CLI`, `Desktop`, or
-both), and model. Different verified combinations receive separate badges; a
-source validation or successful installation alone is not enough.
-
-The [Codex](docs/installation/codex-installer.md),
-[ZCode Desktop](docs/installation/zcode-installer.md),
-[MiniMax Code Desktop](docs/installation/minimax-installer.md), and
-[Cline](docs/installation/cline-installer.md) installers
-implement packaging, ownership, updates, recovery, and safe hook removal for
-their documented versions. Successful file delivery does not establish full
-native acceptance; each adapter records its own exact limitations.
-
-## Install or update
-
-Use this path to install or update MAINFRAME globally in Codex, ZCode Desktop,
-MiniMax Code Desktop, or Cline Desktop or CLI.
+Use the checked-out repository as the open project in the product you want to
+configure. Run the maintained installer on macOS or Linux with Python 3.11 or
+newer and Git.
 
 1. Clone or update this repository.
-2. Open this repository itself as the current project in the agent product you
-   want to configure.
-3. Send [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md) to the agent on its own, as an
-   attachment or file reference. No additional prompt is needed.
+2. Open this repository in Codex or ZCode Desktop.
+3. Send [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md) by itself as an attachment or
+   file reference. The project's [AGENTS.md](AGENTS.md) defines this invocation.
+4. Follow the returned activation handoff. Codex may require reviewing and
+   trusting new hooks. ZCode asks you to refresh Skills when skill files changed.
+   Use a new chat for discovery on the same surface.
 
-For Codex, ZCode Desktop, MiniMax Code Desktop, and
-Cline Desktop or CLI, the agent runs [install.py](install.py), reviews existing
-instruction semantics when required by the plan, verifies the delivered
-structure, and checks available discovery evidence on the current surface. If
-activation or reload requires user action, it leaves a short handoff and records
-the remaining gaps. It does not regenerate installation scripts or start a model
-session for each file. The installer does not change product versions or choose
-a model.
+The agent uses the maintained [installer](install.py) to plan, apply, and
+verify. It resolves actual instruction conflicts before applying and records
+delivery separately from native behavior in an ignored
+`ADAPTATION.<product-id>.json`. Use the same route to update an existing
+installation on a supported runtime. The per-product procedures also cover
+scoped Desktop updates, hook controls, removal, and recovery. [Installation guide](docs/installation/README.md)
 
-The agent checks the applicable native contract, installs every applicable
-component into its own global environment, and records which discovery and
-behavior requirements are proven on the requested surface. Delivery and native verification are recorded separately. Missing native evidence
-keeps verification pending; ordinary installation does not run a full adapter acceptance
-campaign. It records progress in an ignored
-`ADAPTATION.<product-id>.json` copied from
-[ADAPTATION.example.json](ADAPTATION.example.json). Repeating the same process
-updates one effective installation instead of creating duplicates.
+The installer prepares the analyzers needed by supported hook bindings and
+the shared OpenSpec CLI when delivering its skill. It reuses compatible tools
+or provisions their pinned distributions before activation. Some provisioning
+paths need Node.js and npm. [Shared runtime and provisioning](docs/installation/components/integrations.md)
 
-The tracked root [AGENTS.md](AGENTS.md) tells compatible agents how to treat this
-repository as the product and installation workspace. [CLAUDE.md](CLAUDE.md) is
-a minimal Claude Code bridge to the same guidance. The complete maintained
-installation route starts at
-[docs/installation/README.md](docs/installation/README.md). These files ship
-with the repository so a zero-context installer can orient itself, but they are
-repository control-plane support rather than globally installed payload.
+## What MAINFRAME delivers
 
-Do not run the installation from another project. MAINFRAME is installed
-globally; project-specific configuration is created later through installed
-capabilities such as `mainframe-project-skill`.
+The [inventory](ADAPTATION.example.json) lists 52 MAINFRAME components and
+four DSH packages. Each global adapter delivers the MAINFRAME components its
+native mapping supports.
 
-For DSH, follow the [plugin packaging and installation guide](docs/installation/dsh-adapter.md).
-Build the `.tgz` archives from a checkout or obtain the matching release
-archives, then install the desired plugins through DSH's native `plugin_manager`.
-Source and package checks leave native profile verification pending.
-
-## Product payload
-
-[ADAPTATION.example.json](ADAPTATION.example.json) is the complete list of
-55 component identities and canonical sources. Each adapter delivers the
-components it supports.
-
-| Source | Installed result |
+| Canonical source | Native result |
 | --- | --- |
-| [instructions/global.md](instructions/global.md) | One MAINFRAME-owned section in the product's global instruction |
-| 24 listed directories under [skills/](skills/) | Native global skills, including their required references, scripts, and assets |
-| 7 listed files under [agents/](agents/) | Native global agent or subagent roles |
-| 8 listed files under [commands/](commands/) | Explicit user commands or the closest supported native equivalent |
-| 10 listed Python files under [hooks/](hooks/) | Native event bindings around the canonical hook behavior |
-| [shared/credentials/mainframe-secret](shared/credentials/mainframe-secret) | The global `mainframe-secret` helper when a compatible command is not already present |
-| 4 listed bundles under [plugins/dsh/](plugins/dsh/) | Independent DSH packages installed through the native manager |
+| [Global instruction](instructions/global.md) | One owned section of the product's user-level instructions |
+| [25 skills](skills/) | Global skill packages with their approved references, scripts, and assets |
+| [7 roles](agents/) | Native agent or subagent profiles |
+| [8 commands](commands/) | Explicit workflows projected into the product's command mechanism |
+| [10 hooks](hooks/) | Canonical detectors bound to supported native events |
+| [Credential helper](shared/credentials/mainframe-secret) | A compatible `mainframe-secret` command and integration with the non-secret index |
 
-- The [React frontend skill](skills/mainframe-frontend/SKILL.md) covers visual
-  planning, implementation, screenshot review, and browser verification. It
-  includes local workflows for visual direction and authored product demos.
-- The [OpenSpec skill](skills/mainframe-openspec/SKILL.md) uses one shared CLI
-  per user across the supported full adapters. The maintained installer prepares
-  it before delivering the skill. [Shared OpenSpec CLI setup](docs/installation/components/integrations.md#shared-openspec-cli)
+Root project instructions, source docs, installer modules, tests, local state,
+and archives stay in the repository. The adapter delivers only the small
+native transport required by a supported hook. [Payload boundary](docs/installation/README.md#repository-and-payload-boundary)
 
-Hook analyzers such as Ruff, Oxlint, Semgrep, or Fallow are runtime support for
-listed hooks, not separate MAINFRAME components. Before registering an active
-hook, the installer reuses a compatible executable or provisions the tested
-official distribution in MAINFRAME's shared user runtime. Hook launchers use
-that managed runtime explicitly instead of depending on an app's inherited
-`PATH`. A dependency failure stops installation before hook files or
-registrations change.
+## Use MAINFRAME in a project
 
-The shared runtime is retained when one product adapter is uninstalled because
-another installed MAINFRAME adapter may still use the same executables.
+Open the project where you want the work done. Describe the task to select a
+relevant skill, such as [testing](skills/mainframe-testing/SKILL.md),
+[React frontend work](skills/mainframe-frontend/SKILL.md), or
+[shipped-software analysis](skills/mainframe-leanrea/SKILL.md). The native role
+profiles are available through the host's delegation mechanism on supported
+surfaces. Hook behavior follows the host's supported events and activation state.
 
-Nothing else is product payload. In particular, the following stay in this
-repository and are never installed globally:
-
-- root `AGENTS.md` and `CLAUDE.md`, this README,
-  [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md), the adaptation JSON, the canonical
-  [installation guide](docs/installation/README.md),
-  [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
-  [LICENSE](LICENSE);
-- hook documentation and tests;
-- [install.py](install.py) and installer development modules; only the small
-  native hook transport required by a listed hook enters its installed binding;
-- `shared/credentials/install.sh`, the credential-index template, the ignored
-  local credential index, and credential-helper tests;
-- local development agent state under `.agents/`, archives, project tickets,
-  caches, generated files, and Git history.
-
-The installer must stop on an inventory mismatch. It must not discover extra
-payload from directory contents, archives, older adapters, or ignored files.
-
-## User commands
-
-The global testing rule applies to primary and delegated agents. Use
-[mainframe-testing](skills/mainframe-testing/SKILL.md) for TDD, lightweight local
-checks with verified local PostgreSQL where needed, and reliable GitHub/GitLab CI.
-Stack-specific evidence remains in the engineering skills; test-system audits
-remain a separate capability.
-
-The installed product exposes these stable command identities through its
-closest explicit user-command mechanism:
+Invoke explicit workflows using the product's command mechanism. Codex
+projects them as explicit-only skills. ZCode exposes slash commands and uses
+a separate ticket-finder skill projection for noninteractive automations.
+For example, invoke `$mainframe-project-skill` explicitly in Codex or send
+`/mainframe-project-skill` as its own ZCode command to create or update the
+current project's reusable skill. [Codex commands](docs/installation/native/codex.md#explicit-commands) · [ZCode commands](docs/installation/native/zcode.md#skills-and-explicit-commands)
 
 | Command | Purpose |
 | --- | --- |
@@ -187,31 +105,36 @@ closest explicit user-command mechanism:
 | [mainframe-tickets-implement](commands/mainframe-tickets-implement.md) | Implement, validate, and locally commit each ready engineering ticket sequentially |
 | [mainframe-tickets-verify](commands/mainframe-tickets-verify.md) | Independently verify implemented tickets; edit only ticket records |
 
-Exact slash syntax and delayed loading depend on the installed product. The
-adapter records any unsupported or degraded capability instead of claiming
-equivalence. In ZCode, send `/mainframe-project-skill` as its own command. `$mainframe-project-skill`
-would select a skill, while `/goal /mainframe-project-skill` passes the latter text to the
-built-in goal command instead of invoking it.
+## DeepSeek Harness plugins
 
-## Safety and privacy
+The four packages target DSH `0.2.2-rc.1`. Choose the ones you want for a
+profile.
 
-Installation preserves unrelated global configuration, authentication,
-history, sessions, memories, projects, and user-owned instructions. Secret
-values are never part of this repository or its adaptation state. MAINFRAME
-does not send telemetry. The optional DSH Activity Analytics plugin stores
-timing data locally in the selected profile. [Activity Analytics data boundary](plugins/dsh/activity-analytics/README.md#storage-and-deployment)
+| Plugin | Capability |
+| --- | --- |
+| [Activity Analytics](plugins/dsh/activity-analytics/README.md) | Profile-local activity and agent-time summaries |
+| [Message Time](plugins/dsh/message-time/README.md) | Timestamps for human messages and complete agent turns |
+| [Secrets Vault](plugins/dsh/secrets-vault/README.md) | Encrypted profile-local credential storage |
+| [Session Collaboration](plugins/dsh/session-collaboration/README.md) | Session discovery, messaging, waits, and lifecycle controls across projects |
 
-Canonical source validation does not prove that a product discovered or ran an
-installed component. Installation targets the surface running the request.
-Desktop and CLI need separate evidence only when the user requests both;
-ordinary installation does not start the other interface or repeat adapter
-acceptance tests.
+Build versioned `.tgz` archives from the checkout, retain them in persistent
+storage, and install or replace bundles with DSH's native `plugin_manager`.
+Repository and archive checks cover package source and contents. Native profile
+activation and visible behavior are verified separately. [Package, install, or update DSH plugins](docs/installation/dsh-adapter.md)
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting and security
-boundaries, [CONTRIBUTING.md](CONTRIBUTING.md) for change rules, and
-[LICENSE](LICENSE) for the MIT license.
+[Workspace Transfer Safe](plugins/dsh/workspace-transfer-safe/README.md) remains
+a paused prototype excluded from the package build and supported installation.
 
-To publish or mirror the source on another host, use the
-[repository-sharing guide](docs/repository-sharing.md). Local configuration and
-receiving-project knowledge stay outside the shared source; reviewing the
-current files does not sanitize Git history.
+## Verification and security
+
+The GitHub badge tracks the workflow for branch `main`. For another revision,
+use that revision's Actions result. The workflow
+runs the repository, hook, and credential-helper tests, shell syntax, and
+whitespace checks. Analyzer pins are maintained in the runtime installer and
+the workflow. [Validation commands](CONTRIBUTING.md#validate-the-change) · [GitHub workflow](.github/workflows/ci.yml)
+
+Installation preserves unrelated user configuration, authentication, histories,
+sessions, memories, and projects. MAINFRAME sends no telemetry. The optional DSH
+Activity Analytics plugin stores timing data within its profile. [Analytics storage](plugins/dsh/activity-analytics/README.md#storage-and-deployment) · [Security reporting](SECURITY.md)
+
+[Contributing](CONTRIBUTING.md) · [Repository sharing](docs/repository-sharing.md) · [MIT license](LICENSE)
