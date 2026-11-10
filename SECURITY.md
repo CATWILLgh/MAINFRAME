@@ -21,18 +21,19 @@ credential with the report.
 
 ## Security scope
 
-Security problems include behavior that:
+Report behavior with any of these effects.
 
-- overwrites unrelated global configuration or native product state;
-- adapts permissions, sandboxing, tools, hooks, or roles unsafely;
-- exposes a value handled by the `mainframe-secret` helper;
-- lets a positively recognized protected operation pass, or blocks unrelated
-  work only because a guard had an operational failure;
-- mixes attribution across projects, sessions, agents, or concurrent work;
-- installs repository files not listed in `ADAPTATION.example.json`;
-- adds telemetry, unexpected network traffic, or a permanent activity log
-  outside the [documented local timing store](plugins/dsh/activity-analytics/README.md#storage-and-deployment);
-- claims native enforcement or runtime verification without supporting
+- Overwrites unrelated global configuration or native product state.
+- Adapts permissions, sandboxing, tools, hooks, or roles unsafely.
+- Exposes a value handled by the `mainframe-secret` helper.
+- Lets a positively recognized protected operation pass, or blocks unrelated
+  work only because a guard had an operational failure.
+- Mixes attribution across projects, sessions, agents, or concurrent work.
+- Installs payload outside the [documented MAINFRAME delivery boundary](docs/installation/README.md#repository-and-payload-boundary)
+  or a DSH package's declared files.
+- Adds telemetry or unexpected network traffic, or stores activity outside
+  the applicable documented plugin data boundary.
+- Claims native enforcement or runtime verification without supporting
   evidence.
 
 MAINFRAME hooks are defense in depth. They do not replace native permissions,
@@ -42,7 +43,7 @@ as effective can be one.
 
 ## Supported code
 
-Security fixes target the current maintained repository state. Archived
-adapters and historical material are references, not supported installation
-sources. The maintainer will assess the supplied evidence and avoid public
-disclosure until a correction or safe migration path is understood.
+Security fixes target the maintained [MAINFRAME adapters](README.md#where-mainframe-installs)
+and [DSH packages](docs/installation/dsh-adapter.md). The maintainer will assess
+the supplied evidence and avoid public disclosure until a correction or safe
+migration path is understood.

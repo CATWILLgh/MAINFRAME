@@ -264,6 +264,119 @@ esac
         self.assertEqual(listed.returncode, 0, listed.stderr)
         self.assertEqual(listed.stdout.splitlines(), ["RECOVERED"])
 
+    def test_mkdir_false_success_does_not_allow_another_writer(self) -> None:
+        self.clipboard.write_text("synthetic-lock-value", encoding="utf-8")
+        waiting = self.root / "holder-waiting"
+        resume = self.root / "holder-resume"
+        retrying = self.root / "contender-retrying"
+        bash_env = self.root / "mkdir-false-success.sh"
+        bash_env.write_text(
+            '''if [[ "$LOCK_TEST_ROLE" = holder ]]; then
+    cp() {
+        : > "$LOCK_TEST_DIR/holder-waiting"
+        while [[ ! -e "$LOCK_TEST_DIR/holder-resume" ]]; do command sleep 0.01; done
+        command cp "$@"
+    }
+else
+    mkdir() {
+        if [[ "$1" = */.lock && -d "$1" ]]; then return 0; fi
+        command mkdir "$@"
+    }
+    sleep() {
+        : > "$LOCK_TEST_DIR/contender-retrying"
+        command sleep "$@"
+    }
+fi
+''',
+            encoding="utf-8",
+        )
+
+        def register(role: str) -> subprocess.CompletedProcess[str]:
+            environment = self.environment | {
+                "BASH_ENV": str(bash_env),
+                "LOCK_TEST_DIR": str(self.root),
+                "LOCK_TEST_ROLE": role,
+            }
+            return self.run_secret("set", role.upper(), "--clipboard", environment=environment)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            holder = executor.submit(register, "holder")
+            try:
+                self._wait_for(waiting.exists, "holder did not reach its write")
+                contender = executor.submit(register, "contender")
+                self._wait_for(
+                    lambda: retrying.exists() or contender.done(),
+                    "contender did not try to acquire the existing lock",
+                )
+            finally:
+                resume.touch()
+            for future in (holder, contender):
+                result = future.result()
+                self.assertEqual(result.returncode, 0, result.stderr)
+        listed = self.run_secret("list")
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(listed.stdout.splitlines(), ["CONTENDER", "HOLDER"])
+
+    def test_termination_after_reading_store_does_not_commit(self) -> None:
+        self.clipboard.write_text("synthetic-signal-value", encoding="utf-8")
+        first = self.run_secret("set", "FIRST", "--clipboard")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        bash_env = self.root / "interrupt-registration.sh"
+        bash_env.write_text(
+            'sed() { command sed "$@"; builtin kill -TERM "$$"; }\n',
+            encoding="utf-8",
+        )
+
+        interrupted = self.run_secret(
+            "set", "INTERRUPTED", "--clipboard",
+            environment=self.environment | {"BASH_ENV": str(bash_env)},
+        )
+
+        self.assertEqual(interrupted.returncode, 143, interrupted.stderr)
+        successor = self.run_secret("set", "SUCCESSOR", "--clipboard")
+        self.assertEqual(successor.returncode, 0, successor.stderr)
+        self.assertEqual(self.run_secret("list").stdout.splitlines(), ["FIRST", "SUCCESSOR"])
+
+    def test_incomplete_pid_marker_does_not_authorize_recovery(self) -> None:
+        self.clipboard.write_text("synthetic-marker-value", encoding="utf-8")
+        lock = self.config / "credentials" / ".lock"
+        lock.mkdir(parents=True)
+        with subprocess.Popen(["/bin/sh", "-c", "exit 0"]) as owner:
+            self.assertEqual(owner.wait(timeout=3), 0)
+        marker = lock / "pid"
+        marker.write_text(str(owner.pid), encoding="utf-8")
+        bash_env = self.root / "skip-lock-retry-delay.sh"
+        bash_env.write_text("sleep() { :; }\n", encoding="utf-8")
+
+        result = self.run_secret(
+            "set", "BLOCKED", "--clipboard",
+            environment=self.environment | {"BASH_ENV": str(bash_env)},
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("another instance holds the lock", result.stderr)
+        self.assertEqual(marker.read_text(encoding="utf-8"), str(owner.pid))
+        self.assertEqual(self.run_secret("list").stdout, "")
+
+    def test_mutations_preserve_entries_on_store_read_error(self) -> None:
+        self.clipboard.write_text("synthetic-read-error-value", encoding="utf-8")
+        for name in ("FIRST", "SECOND"):
+            result = self.run_secret("set", name, "--clipboard")
+            self.assertEqual(result.returncode, 0, result.stderr)
+        bash_env = self.root / "fail-store-read.sh"
+        bash_env.write_text(
+            'grep() { if [[ "$1" = "-v" ]]; then return 2; fi; command grep "$@"; }\n',
+            encoding="utf-8",
+        )
+
+        for arguments in (("set", "THIRD", "--clipboard"), ("del", "FIRST")):
+            with self.subTest(operation=arguments[0]):
+                result = self.run_secret(
+                    *arguments, environment=self.environment | {"BASH_ENV": str(bash_env)},
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.run_secret("list").stdout.splitlines(), ["FIRST", "SECOND"])
+
 
 if __name__ == "__main__":
     unittest.main()

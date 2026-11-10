@@ -66,6 +66,14 @@ Prepare the candidate separately and preserve the original refs until approved.
 Do not automatically rewrite, force-push, delete legacy branches, or include
 every local ref. Secret rotation and historical data removal are separate actions.
 
+## Refresh an independent mirror
+
+Take the source from the verified, merged public `main`. Create a reviewed
+snapshot on the mirror's own `main` lineage and record the public URL and
+commit in the snapshot's `Source` and `Source-Commit` trailers. Compare Git
+tree hashes before pushing. After the mirror merges the snapshot, fetch both
+remote `main` refs and confirm they have identical trees.
+
 ## Validation on each host
 
 Run checks appropriate to the changed source through

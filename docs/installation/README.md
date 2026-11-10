@@ -30,31 +30,27 @@ table, use current evidence, and correct or escalate the actual owner.
 
 ## Progressive reading route
 
-For Codex, read [codex-installer.md](codex-installer.md). For ZCode Desktop,
-read [zcode-installer.md](zcode-installer.md). For MiniMax Code
-Desktop, read [minimax-installer.md](minimax-installer.md). For Cline Desktop
-or the Cline CLI, read [cline-installer.md](cline-installer.md). Follow the
-selected executable route; do not run a manual adaptation loop in parallel.
+For Codex Desktop or CLI, use the [Codex procedure](codex-installer.md). For
+ZCode Desktop, use the [ZCode procedure](zcode-installer.md). The selected
+executable route owns the complete installation pass.
 
-For DSH, read [dsh-adapter.md](dsh-adapter.md). Its maintained route validates
-four source plugins and builds independent `.tgz` packages. DSH's native
-`plugin_manager` owns profile installation and lifecycle. This route covers
-the DSH plugins, with source readiness and native acceptance verified separately.
+For DeepSeek Harness, use the separate [plugin package guide](dsh-adapter.md).
+It covers source checks, independent `.tgz` archives, and profile installation
+and lifecycle through DSH's native `plugin_manager`.
 
 Products without a maintained installer require separately assigned adapter
-development. Their native pages are orientation, not ready installation routes.
-The following progressive reading route is for that development work.
+development. Use native pages to orient that work and to verify adapter
+behavior against the current product.
 
 Do not load the whole documentation tree for every component. Use this route:
 
-1. Read [process.md](process.md) once for a new installation or when resuming
-   unfamiliar state.
+1. Read [process.md](process.md) once to establish how delivery and state work.
 2. Read [verification.md](verification.md) before assigning any final status.
 3. For the active inventory entry, read one component guide and one native
    product page.
 4. Read the canonical component source and its directly linked resources.
 5. Open one problem note only when its `Use when` condition matches.
-6. Perform the native probe and update state immediately.
+6. For assigned native acceptance, record the result of each scoped probe.
 
 This route is both a context budget and an ownership rule. A native page is an
 orientation map, not permission to skip current official documentation.
@@ -75,12 +71,13 @@ Each page records a dated orientation to likely native mechanisms and the
 questions that still require verification against the installed version.
 
 - [Codex](native/codex.md)
+- [ZCode Desktop](native/zcode.md)
+
+These research notes support separately assigned adapter development.
+
 - [Claude Code](native/claude-code.md)
 - [OpenCode](native/opencode.md)
-- [ZCode Desktop](native/zcode.md)
-- [MiniMax Code Desktop](native/minimax.md)
 - [Pi](native/pi.md)
-- [Cline](native/cline.md)
 
 If the product is not listed, apply [process.md](process.md) directly and add a
 native page only after authoritative documentation and a reproducible probe
@@ -104,10 +101,12 @@ data.
 ## Repository and payload boundary
 
 The repository is both canonical product source and installation workspace.
-Only entries in [ADAPTATION.example.json](../../ADAPTATION.example.json) are
-globally installable. Root instructions, this documentation, adaptation state,
-tests, installers, templates, local `.agents/` knowledge, archives, tickets,
-caches, and Git data remain repository support.
+The [inventory](../../ADAPTATION.example.json) identifies the exact sources.
+The Codex and ZCode adapters install the MAINFRAME components they support.
+The inventory's four plugin entries are built separately for DSH profiles.
+Root instructions, this documentation, adaptation state, tests, installers,
+templates, local `.agents/` knowledge, archives, tickets, caches, and Git data
+remain repository support.
 
 A listed hook may require the maintained adapter's small native transport.
 That support is installed only as part of its binding; it does not make the

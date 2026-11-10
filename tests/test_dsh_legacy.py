@@ -7,9 +7,7 @@ import tempfile
 import unittest
 
 from installer import codex
-from installer.cline import Cline
 from installer.core import Conflict, encode_json, transact
-from installer.minimax import MiniMax
 from installer.shared import inventory
 from installer.zcode import ZCode
 
@@ -19,9 +17,6 @@ PLUGINS = {name: f"plugins/dsh/{name}" for name in
 ADAPTERS = (
     (codex.Codex, "0.153.4", "cli"),
     (codex.Codex, codex.CURRENT_DESKTOP_RUNTIME, "desktop"),
-    (Cline, "0.0.46", "desktop"),
-    (Cline, "0.0.46", "cli"),
-    (MiniMax, "3.0.73", "desktop"),
     (ZCode, "3.11.2.6792", "desktop"),
     (ZCode, "3.17.1.9553", "desktop"),
 )
@@ -114,7 +109,7 @@ class DshLegacyCompatibilityTests(unittest.TestCase):
 
     def test_inventory_rejects_missing_unknown_or_redirected_plugins(self):
         source = inventory(self.source)
-        self.assertEqual(sum(map(len, source["components"].values())), 55)
+        self.assertEqual(sum(map(len, source["components"].values())), 56)
         for mutation in ("missing", "unknown", "redirected"):
             with self.subTest(mutation=mutation):
                 changed = deepcopy(source)

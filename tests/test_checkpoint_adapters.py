@@ -1,4 +1,4 @@
-"""Checkpoint advice through the four maintained native output contracts."""
+"""Checkpoint advice through the maintained native output contracts."""
 import io
 import json
 from pathlib import Path
@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from installer import codex_hook, zcode_hook, cline_hook, minimax_hook
+from installer import codex_hook, zcode_hook
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = 'mainframe-commit-checkpoint'
@@ -71,34 +71,6 @@ class CheckpointAdapterTests(unittest.TestCase):
         payload = self.zcode_payload(); del payload['tool_use_id']
         self.assertIsNone(self.native(zcode_hook, payload))
         self.assertEqual(list(self.state.iterdir()), [])
-
-    def test_cline_native_patch_delivers_context_without_cancelling(self):
-        payload = {'hookName': 'PostToolUse', 'taskId': 'task',
-                   'workspaceRoots': [str(self.workspace)], 'workspaceInfo': {'rootPath': str(self.workspace)},
-                   'tool_result': {'id': 'edit', 'name': 'apply_patch',
-                                   'input': {'input': self.codex_payload()['tool_input']['patch']}},
-                   'postToolUse': {'success': True}}
-        with patch.object(cline_hook, 'HOOKS', self.support):
-            result = cline_hook.post_tool(payload, self.state)
-            self.assertIn('Commit checkpoint', result['contextModification'])
-            self.assertFalse(result.get('cancel', False))
-            self.assertIsNone(cline_hook.post_tool(payload, self.state))
-            failed = {**payload, 'tool_result': {**payload['tool_result'], 'id': 'failed'}, 'postToolUse': {'success': False}}
-            self.assertIsNone(cline_hook.post_tool(failed, self.state))
-            (self.support / ('.disabled-' + NAME)).write_text('')
-            next_payload = {**payload, 'tool_result': {**payload['tool_result'], 'id': 'next'}}
-            self.assertIsNone(cline_hook.post_tool(next_payload, self.state))
-
-    def test_minimax_context_and_disable_are_independent_of_quality(self):
-        payload = {**self.zcode_payload(), 'tool_name': 'write'}
-        with patch.object(minimax_hook, 'HOOKS', self.support), patch.object(minimax_hook, 'DETECTORS', self.support / 'detectors'):
-            result = minimax_hook.post_tool(payload, self.state)
-            self.assertIn('Commit checkpoint', result['hookSpecificOutput']['additionalContext'])
-            self.assertNotIn('permissionDecision', result['hookSpecificOutput'])
-            self.assertIsNone(minimax_hook.post_tool(payload, self.state))
-            self.assertIsNone(minimax_hook.post_tool({**payload, 'tool_use_id': 'failed', 'tool_response': {'isError': True}}, self.state))
-            (self.support / ('.disabled-' + NAME)).write_text('')
-            self.assertIsNone(minimax_hook.post_tool({**payload, 'tool_use_id': 'next'}, self.state))
 
 
 

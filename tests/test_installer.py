@@ -155,6 +155,16 @@ class InstallationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("existing same-source installation", result.stderr)
 
+    def test_skill_only_verifies_leanrea_on_desktop_0167(self):
+        self.install()
+        result = self.skill_cli("verify", "mainframe-leanrea", "--runtime-version", "0.167.0-alpha.3.2")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)["scoped_update_matches"])
+        self.assertEqual(
+            (self.adapter.skills / "mainframe-leanrea/LICENSE").read_bytes(),
+            (self.source / "skills/mainframe-leanrea/LICENSE").read_bytes(),
+        )
+
     def test_skill_only_preserves_conflicting_owned_and_foreign_files(self):
         self.install()
         target = self.adapter.skills / "mainframe-research/SKILL.md"

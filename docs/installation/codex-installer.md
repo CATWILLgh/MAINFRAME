@@ -20,10 +20,12 @@ read-only; a full installation requires the tested runtime. To support a differe
 revalidate the affected native contract and update the maintained module with
 its evidence, rather than bypassing the version check or writing a second installer.
 
-CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2 and
-**0.165.0-alpha.1.2** support the full maintained delivery route, including
-complete skill packages, roles, explicit commands and native hooks. The mapping
+CLI remains limited to the inspected **0.153.4** mapping. Desktop admits
+**0.153.4**, **0.159.0-alpha.12.1**, **0.159.2**, and **0.165.0-alpha.1.2**
+for full delivery of the supported MAINFRAME components, including complete
+skill packages, roles, explicit commands and native hooks. The mapping
 accounts for every entry in the [canonical inventory](../../ADAPTATION.example.json).
+The four DSH packages use [DSH's own delivery route](dsh-adapter.md).
 Skills and command projections
 are delivered only to `$CODEX_HOME/skills`; role files use `$CODEX_HOME/agents`.
 The shared `.agents/skills` root is never a delivery destination; an older
@@ -111,13 +113,14 @@ installation or full native mapping. See the [text-update comparison](native/cod
 
 ### Deliver one skill on Desktop
 
-Desktop **0.165.0-alpha.1.2** and **0.166.0-alpha.5.1** support the explicit
-skill-only route for an existing same-source installation with a matching
-ownership receipt and schema-2 adaptation state. The tagged reader supports
-complete packages under `$CODEX_HOME/skills`. On **0.166.0-alpha.5.1**, only the
-skill route has been revalidated.
-See the source evidence for [0.165.0](native/codex.md#desktop-01650-alpha12-skill-only-delivery)
-and [0.166.0](native/codex.md#desktop-01660-alpha51-skill-only-delivery).
+Desktop **0.165.0-alpha.1.2**, **0.166.0-alpha.5.1**, and **0.167.0-alpha.3.2**
+support the explicit skill-only route for an existing same-source installation
+with a matching ownership receipt and schema-2 adaptation state. The tagged
+reader supports complete packages under `$CODEX_HOME/skills`. The two later
+versions have been revalidated for this route alone.
+See the source evidence for [0.165.0](native/codex.md#desktop-01650-alpha12-skill-only-delivery),
+[0.166.0](native/codex.md#desktop-01660-alpha51-skill-only-delivery), and
+[0.167.0](native/codex.md#desktop-01670-alpha32-skill-only-delivery).
 
 ```sh
 python3 -B install.py codex plan --surface desktop --skill mainframe-sentry
@@ -267,9 +270,8 @@ literal and absolute-file metadata inspection. Their workdir-dependent
 guarantees remain unsupported. All four shell identities use one
 `mainframe-pre-shell` registration, so a clean Bash event starts one bridge
 process and emits no context. Individual disable markers still apply inside
-the bridge. Fallow has no retained Codex binding because the available events
-cannot provide an exact attributed diff without persisting source content,
-mixing unrelated dirty-worktree changes, or forcing a model continuation.
+the bridge. Desktop **0.165.0-alpha.1.2** retains the immediate Fallow advisory
+described above. Earlier full mappings have no Fallow binding.
 
 ## Finish the current-surface installation pass
 

@@ -111,7 +111,7 @@ the method was read successfully or applied.
 
 ## Native bindings
 
-All four maintained adapters reuse one detector, source profiles and recipient
+Both maintained global adapters reuse one detector, source profiles and recipient
 budget through a small native normalizer. No callback executes the inspected
 command, reads the complete skill body into the model, changes permission or
 forces a model turn. One readable path is suggested conditionally; explicit
@@ -124,12 +124,10 @@ context, invocation policy and state failures stay silent.
 | --- | --- | --- | --- |
 | Codex | PreToolUse Bash | PostToolUse Bash | Root/child identity; exact specialized roles also use SubagentStart; bounded native transcript workdir hints |
 | ZCode | PreToolUse Bash | PostToolUse Bash/Read | Primary runtime only; native default children omit hook runners; shell relative reads require an explicit literal directory |
-| MiniMax | PreToolUse bash | PostToolUse bash/read | Native session and optional recipient identity; known structured failed reads stay silent; no canonical specialized Agent package/start mapping |
-| Cline | PreToolUse run_commands | PostToolUse run_commands/read_files | Native task, tool ID and optional agent identity; multi-command arrays and unattributed lifecycle events stay silent; no role-start advisory |
 
-Native file read tools are normalized only from literal supported path
-fields (Cline accepts up to eight `files[].path` requests). Absolute targets work without a shell workdir; do not substitute a
-workspace directory for an unknown shell tool cwd. The helpers consider only
+Native file read tools are normalized only from literal supported path fields.
+Absolute targets work without a shell workdir. Do not substitute a workspace
+directory for an unknown shell tool cwd. The helpers consider only
 readable MAINFRAME methods in each adapter's installed skill root plus the
 uniquely bound project engineering method. These paths are usable directly;
 the helper does not claim native catalog visibility. Native package/global
