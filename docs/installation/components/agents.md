@@ -75,7 +75,7 @@ the rejected candidate and its concrete limitation.
 
 Material checks should cover every inventoried role body and required method,
 not just file counts or native role status. [test_delivery_parity](../../../tests/test_delivery_parity.py)
-checks all four maintained artifact planners alongside their adapter-specific
+checks both maintained global artifact planners alongside their adapter-specific
 ownership, update and removal tests. These checks do not establish discovery or
 execution.
 

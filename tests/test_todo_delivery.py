@@ -80,7 +80,7 @@ class TodoDeliveryTests(unittest.TestCase):
         self.exercise('zcode')
 
     def test_unsupported_cli_selectors_fail_before_writes(self):
-        for product, action, extra in [('codex', 'disable', []), ('minimax', 'plan', []),
+        for product, action, extra in [('codex', 'disable', []),
                                        ('codex', 'plan', ['--skill', 'mainframe-sentry']),
                                        ('zcode', 'plan', ['--adopt-existing'])]:
             result = subprocess.run([sys.executable, '-B', str(ROOT / 'install.py'), product, action,

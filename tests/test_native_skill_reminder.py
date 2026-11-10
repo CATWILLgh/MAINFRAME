@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-from installer import zcode_hook, minimax_hook, cline_hook
+from installer import zcode_hook
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -50,37 +50,16 @@ class NativeSkillReminderTests(unittest.TestCase):
             (base / '.disabled-mainframe-skill-reminder').touch(); data['session_id'] = 'three'
             self.assertIsNone(call())
 
-    def test_minimax_failed_read_does_not_send_or_consume_budget(self):
-        plugin = self.home / 'plugin'; base = plugin / 'scripts'
-        self.prepare(base, plugin / 'skills'); (plugin / 'hooks').mkdir()
-        shutil.move(str(base / 'detectors'), str(plugin / 'hooks/detectors'))
-        data = dict(self.payload, tool_name='read',
+    def test_zcode_failed_read_does_not_send_or_consume_budget(self):
+        base = self.home / '.zcode/mainframe/hooks'
+        self.prepare(base, self.home / '.zcode/skills')
+        data = dict(self.payload,
                     tool_input={'file_path': str(self.project / 'test_example.py')},
                     tool_response={'isError': True})
-        with patch.object(minimax_hook, 'PLUGIN_ROOT', plugin), patch.object(minimax_hook, 'HOOKS', plugin / 'hooks'):
-            self.assertIsNone(minimax_hook.dispatch(data, self.state))
+        with patch.object(zcode_hook, 'ROOT', base):
+            def call():
+                return zcode_hook.dispatch('mainframe-skill-reminder', self.state, io.BytesIO(json.dumps(data).encode()))
+
+            self.assertIsNone(call())
             data['tool_response'] = {'isError': False}
-            self.assertIn('mainframe-testing', minimax_hook.dispatch(data, self.state)['hookSpecificOutput']['additionalContext'])
-
-    def test_minimax_wire_and_disabled_marker(self):
-        plugin = self.home / 'plugin'; base = plugin / 'scripts'
-        self.prepare(base, plugin / 'skills'); (plugin / 'hooks').mkdir()
-        shutil.move(str(base / 'detectors'), str(plugin / 'hooks/detectors'))
-        data = dict(self.payload, tool_name='read', tool_input={'path': str(self.project / 'test_example.py')})
-        with patch.object(minimax_hook, 'PLUGIN_ROOT', plugin), patch.object(minimax_hook, 'HOOKS', plugin / 'hooks'):
-            out = minimax_hook.reminder_output(data, self.state)
-            self.assertIn('mainframe-testing', out['hookSpecificOutput']['additionalContext'])
-            self.assertIsNone(minimax_hook.reminder_output(data, self.state))
-            (plugin / 'hooks/.disabled-mainframe-skill-reminder').touch(); data['session_id'] = 'two'
-            self.assertIsNone(minimax_hook.reminder_output(data, self.state))
-
-    def test_cline_wire_and_task_isolation(self):
-        base = self.home / '.cline/hooks'; self.prepare(base, self.home / '.cline/skills')
-        data = {'taskId': 'one', 'workspaceInfo': {'rootPath': str(self.project)},
-                'tool_result': {'id': 'read', 'name': 'read_files', 'input': {'files': [{'path': str(self.project / 'test_example.py')}]}}}
-        with patch.object(cline_hook, 'HOOKS', base):
-            out = cline_hook.dispatch('tool_result', data, self.state)
-            self.assertIn('mainframe-testing', out['contextModification'])
-            self.assertIsNone(cline_hook.dispatch('tool_result', data, self.state))
-            data['taskId'] = 'two'
-            self.assertIn('mainframe-testing', cline_hook.dispatch('tool_result', data, self.state)['contextModification'])
+            self.assertIn('mainframe-testing', call()['hookSpecificOutput']['additionalContext'])

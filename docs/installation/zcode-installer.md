@@ -37,8 +37,9 @@ Refresh Skills in Desktop settings and open a new conversation for discovery.
 
 ## Deliver only /todo
 
-Build **3.17.1.9553** also retains a narrow route for `/todo` in an existing,
-same-source receipted Desktop installation. The bundled command expander appends text supplied after
+The inspected full-mapping builds also admit a narrow route for `/todo` in an
+existing, same-source receipted Desktop installation with matching adaptation
+state. On **3.17.1.9553**, the bundled command expander appends text supplied after
 `/todo` as user arguments; the workflow records or updates the active worktree's
 `.docs/todo` index and `.docs/todos/*.md` notes. Write the note before its index
 entry. See [the command](../../commands/todo.md) for the agreed groups and limits.

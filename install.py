@@ -57,15 +57,11 @@ def provision_runtime(report, adapter, tools, hook=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("product", choices=["cline", "codex", "dsh", "minimax", "zcode"])
+    parser.add_argument("product", choices=["codex", "dsh", "zcode"])
     parser.add_argument("action", choices=["plan", "apply", "verify", "disable", "enable", "uninstall", "recover", "package"])
     parser.add_argument("--home", type=Path, default=Path.home(), help="Explicit target home; isolated fixture roots never imply native proof")
     parser.add_argument("--zcode-home", type=Path, help="Explicit ZCode configuration root")
     parser.add_argument("--zcode-app", type=Path, help="ZCode Desktop application whose plist provides the build")
-    parser.add_argument("--minimax-home", type=Path, help="Explicit MiniMax Code data directory")
-    parser.add_argument("--minimax-app", type=Path, help="MiniMax Code Desktop application whose plist provides the release")
-    parser.add_argument("--cline-home", type=Path, help="Explicit Cline configuration root")
-    parser.add_argument("--cline-app", type=Path, help="Cline Desktop application whose plist provides the release")
     parser.add_argument("--adopt-existing", action="store_true", help="Adopt only the recognized manual ZCode adaptation after a read-only plan")
     parser.add_argument("--codex-home", type=Path, help="Actual Codex config home; defaults to CODEX_HOME for the current user")
     parser.add_argument("--surface", choices=["desktop", "cli"], help="Current installation surface; required for plan, apply, and verify")
@@ -91,8 +87,7 @@ def main(argv=None):
             parser.error("DSH --output require package")
         if not args.surface:
             parser.error("DSH requires --surface desktop or --surface cli as selection metadata, not native proof")
-        if (args.zcode_home or args.zcode_app or args.minimax_home or args.minimax_app
-                or args.cline_home or args.cline_app or args.codex_home or args.adopt_existing
+        if (args.zcode_home or args.zcode_app or args.codex_home or args.adopt_existing
                 or args.runtime_version or args.executable or args.native or args.instructions_reviewed
                 or args.hook or args.skill is not None or args.todo):
             parser.error("DSH source adapter does not accept other-product, instruction, runtime, native, or component options")
@@ -130,13 +125,7 @@ def main(argv=None):
         raise Conflict("Open the MAINFRAME repository and run its installer from that root.")
     if args.product == "zcode":
         return zcode_main(args, root, parser)
-    if args.product == "minimax":
-        return minimax_main(args, root, parser)
-    if args.product == "cline":
-        return cline_main(args, root, parser)
-    if (args.adopt_existing or args.zcode_home or args.zcode_app
-            or args.minimax_home or args.minimax_app
-            or args.cline_home or args.cline_app):
+    if args.adopt_existing or args.zcode_home or args.zcode_app:
         parser.error("Options for another product cannot modify a Codex installation")
     if args.hook and args.hook not in HOOK_NAMES:
         parser.error("Unknown maintained Codex hook")
@@ -272,8 +261,7 @@ def zcode_main(args, root, parser):
         TODO_DELIVERY_RUNTIMES as ZCODE_TODO_DELIVERY_RUNTIMES,
         runtime_tools as zcode_runtime_tools,
         desktop_version as zcode_version)
-    if (args.codex_home or args.minimax_home
-            or args.minimax_app or args.cline_home or args.cline_app
+    if (args.codex_home
             or args.native or args.executable or args.surface == "cli"):
         parser.error("The maintained ZCode route targets Desktop only and never starts a CLI agent")
     if args.adopt_existing and args.action not in ("plan", "apply", "verify"):
@@ -353,133 +341,6 @@ def zcode_main(args, root, parser):
                 adapter.clean_directories(adapter.receipt())
             report["applied"] = True
             report["native_acceptance"] = "This apply command did not run native probes; existing evidence is preserved only for unchanged artifacts."
-        show(report, args.details)
-    return 0
-
-
-def minimax_main(args, root, parser):
-    from installer.minimax import (
-        MiniMax, HOOK_NAMES as MINIMAX_HOOK_NAMES,
-        RUNTIME_TOOLS as MINIMAX_RUNTIME_TOOLS,
-        desktop_version as minimax_version,
-    )
-    if (args.codex_home or args.zcode_home or args.zcode_app
-            or args.adopt_existing or args.cline_home or args.cline_app
-            or args.native or args.executable or args.surface == "cli"):
-        parser.error("The maintained MiniMax route targets Desktop only and never starts a CLI agent")
-    if args.hook and args.hook not in MINIMAX_HOOK_NAMES:
-        parser.error("Unknown maintained MiniMax hook")
-    version = args.runtime_version
-    if args.action in ("plan", "apply", "verify"):
-        if args.home.resolve() == Path.home().resolve() or not version:
-            observed_version = minimax_version(args.minimax_app or Path("/Applications/MiniMax Code.app"))
-            if version and version != observed_version:
-                raise Conflict("Supplied MiniMax release conflicts with the selected Desktop application")
-            version = observed_version
-    adapter = MiniMax(root, args.home, args.minimax_home, version, args.surface)
-    if args.skill is not None:
-        return scoped_delivery(args, adapter)
-    package_tools = MINIMAX_RUNTIME_TOOLS + OPENSPEC_TOOLS
-    if args.action in ("plan", "verify"):
-        _, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, package_tools)
-        if args.action == "verify": report["structure_matches"] = not report["changes"] and support["ready"]
-        show(report, args.details)
-        return 0 if args.action == "plan" or report["structure_matches"] else 1
-    with installation_lock(adapter.lock_path):
-        if args.action == "recover":
-            restore(adapter.journal, adapter.allowed)
-            report = {"recovered": True}
-        elif args.action in ("disable", "enable"):
-            report = {}
-            if args.action == "enable":
-                provision_runtime(report, adapter, MINIMAX_RUNTIME_TOOLS, args.hook)
-            transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
-            if args.action == "disable": time.sleep(11)
-            report.update({"hook_control": args.action,
-                           "hooks": [args.hook] if args.hook else list(MINIMAX_HOOK_NAMES)})
-        else:
-            remove = args.action == "uninstall"
-            changes, report = adapter.plan(args.instructions_reviewed, remove)
-            if not remove:
-                provision_runtime(report, adapter, package_tools)
-            previous = adapter.receipt()
-            if remove and previous:
-                transact(adapter.control(False), adapter.journal, adapter.allowed)
-                time.sleep(11)
-                changes, report = adapter.plan(args.instructions_reviewed, remove=True)
-            transact(changes, adapter.journal, adapter.allowed)
-            adapter.clean_directories(previous if remove else adapter.receipt())
-            report["applied"] = True
-            report["native_acceptance"] = (
-                "MiniMax automatically rescans local Plugins. Open one new conversation and confirm "
-                "MAINFRAME appears without scan diagnostics; no model probe was started."
-                if not remove else "Owned MiniMax Plugin files were removed."
-            )
-        show(report, args.details)
-    return 0
-
-
-def cline_main(args, root, parser):
-    from installer.cline import (
-        Cline, HOOK_NAMES as CLINE_HOOK_NAMES,
-        RUNTIME_TOOLS as CLINE_RUNTIME_TOOLS,
-        cli_version as cline_cli_version, desktop_version as cline_desktop_version,
-    )
-    if (args.codex_home or args.zcode_home or args.zcode_app
-            or args.minimax_home or args.minimax_app
-            or args.adopt_existing or args.native or args.executable):
-        parser.error("Options for another product cannot modify a Cline installation")
-    if args.hook and args.hook not in CLINE_HOOK_NAMES:
-        parser.error("Unknown maintained Cline hook")
-    version = args.runtime_version
-    if args.action in ("plan", "apply", "verify"):
-        observed = (cline_desktop_version(args.cline_app or Path("/Applications/Cline.app"))
-                    if args.surface == "desktop" else cline_cli_version())
-        if version and version != observed:
-            raise Conflict("Supplied Cline release conflicts with the observed " + args.surface + " version")
-        version = observed
-    adapter = Cline(root, args.home, args.cline_home, version, args.surface)
-    if args.skill is not None:
-        return scoped_delivery(args, adapter)
-    package_tools = CLINE_RUNTIME_TOOLS + OPENSPEC_TOOLS
-    if args.action in ("plan", "verify"):
-        _, report = adapter.plan(args.instructions_reviewed)
-        support = add_runtime_status(report, adapter, package_tools)
-        if args.action == "verify":
-            report["structure_matches"] = not report["changes"] and support["ready"]
-        show(report, args.details)
-        return 0 if args.action == "plan" or report["structure_matches"] else 1
-    with installation_lock(adapter.lock_path):
-        if args.action == "recover":
-            restore(adapter.journal, adapter.allowed)
-            report = {"recovered": True}
-        elif args.action in ("disable", "enable"):
-            report = {}
-            if args.action == "enable":
-                provision_runtime(report, adapter, CLINE_RUNTIME_TOOLS, args.hook)
-            transact(adapter.control(args.action == "enable", args.hook), adapter.journal, adapter.allowed)
-            report.update({"hook_control": args.action,
-                           "hooks": [args.hook] if args.hook else list(CLINE_HOOK_NAMES)})
-        else:
-            remove = args.action == "uninstall"
-            changes, report = adapter.plan(args.instructions_reviewed, remove)
-            if not remove:
-                provision_runtime(report, adapter, package_tools)
-            previous = adapter.receipt()
-            if remove and previous:
-                transact(adapter.control(False), adapter.journal, adapter.allowed)
-                changes, report = adapter.plan(args.instructions_reviewed, remove=True)
-            transact(changes, adapter.journal, adapter.allowed)
-            if remove:
-                adapter.clean_event_state()
-            adapter.clean_directories(previous if remove else adapter.receipt())
-            report["applied"] = True
-            report["native_acceptance"] = (
-                "Open one new Cline conversation in the selected surface and confirm MAINFRAME "
-                "discovery without diagnostics; no session, model, or role probe was started."
-                if not remove else "Owned Cline files were removed."
-            )
         show(report, args.details)
     return 0
 

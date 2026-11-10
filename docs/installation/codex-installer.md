@@ -20,10 +20,12 @@ read-only; a full installation requires the tested runtime. To support a differe
 revalidate the affected native contract and update the maintained module with
 its evidence, rather than bypassing the version check or writing a second installer.
 
-CLI remains limited to the inspected **0.153.4** mapping. Desktop 0.159.2 and
-**0.165.0-alpha.1.2** support the full maintained delivery route, including
-complete skill packages, roles, explicit commands and native hooks. The mapping
+CLI remains limited to the inspected **0.153.4** mapping. Desktop admits
+**0.153.4**, **0.159.0-alpha.12.1**, **0.159.2**, and **0.165.0-alpha.1.2**
+for full delivery of the supported MAINFRAME components, including complete
+skill packages, roles, explicit commands and native hooks. The mapping
 accounts for every entry in the [canonical inventory](../../ADAPTATION.example.json).
+The four DSH packages use [DSH's own delivery route](dsh-adapter.md).
 Skills and command projections
 are delivered only to `$CODEX_HOME/skills`; role files use `$CODEX_HOME/agents`.
 The shared `.agents/skills` root is never a delivery destination; an older
@@ -268,9 +270,8 @@ literal and absolute-file metadata inspection. Their workdir-dependent
 guarantees remain unsupported. All four shell identities use one
 `mainframe-pre-shell` registration, so a clean Bash event starts one bridge
 process and emits no context. Individual disable markers still apply inside
-the bridge. Fallow has no retained Codex binding because the available events
-cannot provide an exact attributed diff without persisting source content,
-mixing unrelated dirty-worktree changes, or forcing a model continuation.
+the bridge. Desktop **0.165.0-alpha.1.2** retains the immediate Fallow advisory
+described above. Earlier full mappings have no Fallow binding.
 
 ## Finish the current-surface installation pass
 

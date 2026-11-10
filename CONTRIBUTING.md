@@ -64,11 +64,14 @@ maintainer guidance to the installed runtime payload.
 [install.py](install.py) is the single entrypoint. Keep shared file ownership and
 transaction mechanics in [installer/core.py](installer/core.py), shared inventory, instruction merging, and delivery state in [installer/shared.py](installer/shared.py)
 and [installer/state.py](installer/state.py), and native decisions in [installer/codex.py](installer/codex.py)
-and native modules such as [installer/zcode.py](installer/zcode.py),
-[installer/minimax.py](installer/minimax.py), and
-[installer/cline.py](installer/cline.py). Extract more shared code only when
+and [installer/zcode.py](installer/zcode.py). Extract more shared code only when
 another implemented product actually uses it. Canonical texts and
 detectors remain single sources; never copy their bodies into the installer.
+
+[installer/dsh.py](installer/dsh.py) validates DSH package source, and
+[installer/dsh_package.py](installer/dsh_package.py) builds independent
+archives. Keep plugin runtime source in [plugins/dsh/](plugins/dsh/) and
+profile installation and lifecycle in DSH's native manager.
 
 [installer/runtime.py](installer/runtime.py) owns shared CLI provisioning.
 Provision dependencies required by a delivered hook or skill before changing
@@ -104,6 +107,10 @@ index, and tests remain repository support.
 A listed hook may require the maintained native transport accompanying its
 binding. Install only that support file and the binding's canonical detector;
 this does not make the rest of the installer directory product payload.
+
+The inventory's `plugins` group names the four independently packaged DSH
+plugins. Codex and ZCode do not deliver those packages. Keep paused prototypes
+and development fixtures outside that group. [DSH package and verification guide](docs/installation/dsh-adapter.md)
 
 Do not make root documentation, development checks, `.agents/`, archives,
 tickets, examples, caches, or ignored state installable. Do not recover a

@@ -4,10 +4,8 @@ Use this process from the MAINFRAME repository root. It is target-neutral; pair
 it with the page for the installed product and the guide for the active
 component type.
 
-The maintained [Codex procedure](codex-installer.md),
-[ZCode procedure](zcode-installer.md),
-the [MiniMax procedure](minimax-installer.md), and the
-[Cline procedure](cline-installer.md) execute the mechanical parts of this
+The maintained [Codex procedure](codex-installer.md) and
+[ZCode procedure](zcode-installer.md) execute the mechanical parts of this
 contract. For those routes, run their finite `plan`, `apply`, and `verify`
 sequence instead of recreating this manual adapter-development loop. Their
 protected ownership receipts record owned files and registrations; the ignored

@@ -45,7 +45,7 @@ or nearby prereleases, and does not establish live native acceptance.
 | Canonical inventory | Closest native delivery and verification boundary |
 | --- | --- |
 | Shared credential helper: 1 | Preserve the existing helper/index mechanism; installation never reads protected credential values |
-| Skills: 23 | Complete approved packages under `$CODEX_HOME/skills`, with placeholders resolved through the existing selector |
+| Skills | All approved packages from the [current inventory](../../../ADAPTATION.example.json) under `$CODEX_HOME/skills`, with placeholders resolved through the existing selector |
 | Roles: 7 | Private `$CODEX_HOME/agents/*.toml`, canonical role bodies and method links; the three read-only roles retain native `sandbox_mode = "read-only"`, with parent-permission acceptance pending |
 | Commands: 8 | Explicit-only native skills; `todo` accepts caller prose, other command contracts remain unchanged; actual slash-menu discovery remains pending |
 | Hooks: 10 | Every canonical detector is delivered; six contracts are represented directly and four remain explicitly unsupported with useful partial bindings |

@@ -5,14 +5,12 @@ import tomllib
 import unittest
 from pathlib import Path
 
-from installer.cline import Cline
 from installer.codex import Codex
-from installer.minimax import MiniMax
 from installer.shared import inventory, skill_resources
 from installer.zcode import ZCode
 
 ROOT = Path(__file__).resolve().parents[1]
-ADAPTERS = (Codex, ZCode, MiniMax, Cline)
+ADAPTERS = (Codex, ZCode)
 
 
 def normalized(text):

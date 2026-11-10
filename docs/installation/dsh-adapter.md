@@ -1,75 +1,20 @@
-# DSH plugin packages
+# DeepSeek Harness plugin packages
 
-The [MAINFRAME inventory](../../ADAPTATION.example.json) lists four native
-plugin packages that target DSH `0.2.2-rc.1`.
+This repository develops four independent plugins for DeepSeek Harness (DSH)
+`0.2.2-rc.1`. The [inventory's plugin group](../../ADAPTATION.example.json)
+selects which source packages the builder validates and packs. DSH installs
+and manages them in a profile. The Codex and ZCode global installers leave
+these entries unsupported.
 
-- [Activity Analytics](../../plugins/dsh/activity-analytics/README.md) reports
-  profile-local activity and summed agent time. It requires a Host with `node:sqlite`.
-- [Message Time](../../plugins/dsh/message-time/README.md) adds clocks for human
-  input and full agent turns. Its runtime manifest declares the native Schemastery dependency.
-- [Secrets Vault](../../plugins/dsh/secrets-vault/README.md) stores encrypted
-  credentials using the Host Node.js runtime and built-in `node:crypto`.
-- [Session Collaboration](../../plugins/dsh/session-collaboration/README.md)
-  coordinates ordinary sessions across projects. It uses native session services
-  and `storageDomain` with exact runtime peers for LLM, session title, storage,
-  and Zod.
+| Plugin | Capability and native requirements |
+| --- | --- |
+| [Activity Analytics](../../plugins/dsh/activity-analytics/README.md) | Profile-local activity and summed agent time. The Host needs `node:sqlite`. |
+| [Message Time](../../plugins/dsh/message-time/README.md) | Clocks for human input and complete agent turns. The runtime declares the native Schemastery dependency. |
+| [Secrets Vault](../../plugins/dsh/secrets-vault/README.md) | Encrypted profile-local credentials using the Host Node.js runtime and `node:crypto`. |
+| [Session Collaboration](../../plugins/dsh/session-collaboration/README.md) | One `collaboration` tool for discovery, messaging, waits, task metadata, and ordinary session lifecycle and model selection. It uses native session services and `storageDomain`. |
 
-DSH manages these packages separately from the global MAINFRAME skills. Other
-product adapters mark the four plugin entries unsupported.
-
-## Session Collaboration
-
-Version 0.5.1 exposes one `collaboration` tool with a required `action`:
-`list_projects`, `list_sessions`, `read`, `send`, `wait`, `list_tasks`, `get_task`,
-`cancel_task`, `models`, `create`, `archive`, `unarchive`, `get_model`, and
-`set_model`. Action-specific input validation rejects irrelevant fields before
-execution; the eight legacy tool names are no longer registered. Discovery is
-progressive and read-only. Send accepts optional group/label metadata; one wait
-observes 1–8 `targets` in `any` or `all` mode. Task actions expose bounded metadata.
-
-Use an existing `workspaceId` for creation and an exact ordinary `sessionId` for
-archive/unarchive. Creation accepts an optional meaningful `title`, persisted
-and pinned as session metadata through the native title service. It returns the
-accepted normalized title. Partial naming or model-selection failures retain the
-fresh session ID. Creation leaves the new session idle. Archive uses native
-`workspaceRegistry.archiveSession(id)` without `stopActivity`, after passive
-queue/input checks. Native busy refusal is preserved. This is an inactivity
-snapshot, **not an atomic admission lock**: activity can start between checking
-and persistence, as with native archive. A racing input may be consumed by the
-native loop before the archive gate rejects it, without transcript commitment.
-Avoid archiving a session another actor is about to prompt. The plugin sends no
-stop/clear request; no deletion, subagent creation or self-archive is exposed.
-Unarchive does not wake the target.
-
-The `models` action progressively lists providers, a provider's models, and a
-model's reasoning efforts. `get_model` and `set_model` operate on one session; creation also
-accepts optional `provider` + `model` with `reasoning_effort`. Selection uses
-session-local `agent.model.select`, never changes global defaults, and affects
-the next unprepared step rather than interrupting active work. Omit effort for
-Auto; switching models never inherits the previous effort. `get_model` reports
-unknown for a cold session without waking it; `set_model` may resume a cold Agent
-but starts no model turn. Selection does not establish compatibility with prior
-image history. Creation and selection are not atomic: preserve any returned fresh
-session ID on uncertain configuration and never automatically recreate it.
-
-Native `storageDomain` stores metadata only, with a 24-hour absolute TTL and
-limits of 256 records globally / 64 per sender; pending watches are limited to
-32 globally / 8 per sender. No profile paths or separate database setup are needed.
-
-Automatic notification recovery claims an attempt before enqueueing: an ambiguous
-crash requires manual task-status inspection rather than automatic replay. Deferred
-notices wait for the sender's next natural model step, not merely opening its
-session. They do not cold-wake the sender or rearm goals. Maintenance observes
-targets read-only and never resends tasks. The
-[plugin documentation](../../plugins/dsh/session-collaboration/README.md) owns the
-full storage, recovery, and notification contract; metadata persistence is not a
-guarantee of target execution, completion, or notice delivery.
-
-When upgrading from an already-active 0.2.1 or 0.3.0, restart the DSH Host after
-installing 0.3.1 or later; disable/enable alone does not clear leaked resources. The older
-ordinary dispose listener was not invoked on native unload, leaving the storage
-domain and other resources open. Version 0.3.1 uses an owned effect disposer.
-Do not force-close the domain to bypass the restart.
+[Workspace Transfer Safe](../../plugins/dsh/workspace-transfer-safe/README.md)
+is paused development source excluded from the release package build.
 
 ## User installation and updates
 
@@ -92,6 +37,10 @@ development routes.
    must happen before claiming that new code is running. Observe active rows,
    Client registrations, and the actual capability separately; source tests and
    installed files alone are not native acceptance.
+
+If the Host already ran Session Collaboration 0.2.1 or 0.3.0, restart it
+after installing the replacement to clear the old open storage domain.
+[Session Collaboration upgrade and behavior](../../plugins/dsh/session-collaboration/README.md)
 
 The package's runtime and code live in DSH-managed package storage. Analytics and
 Vault choose `profileDirectory`, then Host `DSH_PROFILE_DIR` if available, then
@@ -246,10 +195,9 @@ python3 -B install.py dsh verify --surface desktop
 These validate repository source only: exact inventory, file boundary, package
 identity, declared runtime files, and hashes. They write no profile or adaptation
 state and explicitly report `profile_verified=false` and
-`composition_verified=false`; delivery/verification remain pending. Other
-MAINFRAME components have no implemented mapping in this plugin adapter.
-`apply`, `enable`, `disable`, `uninstall`, and `recover` remain native-manager
-operations, not Python file transactions.
+`composition_verified=false`. Profile delivery and verification remain pending.
+The Python entrypoint handles source validation and archive building. Use DSH's
+native manager for profile installation, enable/disable, removal, and rollback.
 
 ## Verification map
 

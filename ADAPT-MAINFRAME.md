@@ -33,19 +33,17 @@ Read exactly the matching procedure:
 
 - **Codex:** [codex-installer.md](docs/installation/codex-installer.md).
 - **ZCode Desktop:** [zcode-installer.md](docs/installation/zcode-installer.md).
-- **MiniMax Code Desktop:** [minimax-installer.md](docs/installation/minimax-installer.md).
-- **Cline Desktop or CLI:** [cline-installer.md](docs/installation/cline-installer.md).
-- **DSH:** [dsh-adapter.md](docs/installation/dsh-adapter.md). This bounded route
-  validates source with `plan` and `verify`, builds archives with `package`, and
-  hands installation to the native plugin manager. Keep source readiness separate
-  from profile delivery. Use the explicit plugin installation or update scope and
-  the prerequisites described in the DSH guide.
 
-For the four full delivery adapters, follow that procedure's `plan`, `apply`, and `verify` commands. Reuse the
+Follow the selected procedure's `plan`, `apply`, and `verify` commands. Reuse the
 maintained mapping; do not write another installer, copy components manually,
 run the generic adaptation loop, or ask another model to adapt the inventory.
 The agent resolves actual instruction conflicts and unexpected environments;
 the program owns deterministic rendering, file ownership, writes, and recovery.
+
+For DeepSeek Harness, report that this repository supplies separate profile
+plugins and direct the user to the [DSH plugin guide](docs/installation/dsh-adapter.md).
+Use that guide for an explicitly requested plugin install or update, scoped to
+the selected plugins and profile. The native package manager owns that route.
 
 For a product or version without a maintained supported mapping, report the
 exact missing adapter or compatibility work. Do not silently turn an ordinary
