@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-from installer import zcode_hook, minimax_hook, cline_hook, antigravity_hook
+from installer import zcode_hook, minimax_hook, cline_hook
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -84,14 +84,3 @@ class NativeSkillReminderTests(unittest.TestCase):
             self.assertIsNone(cline_hook.dispatch('tool_result', data, self.state))
             data['taskId'] = 'two'
             self.assertIn('mainframe-testing', cline_hook.dispatch('tool_result', data, self.state)['contextModification'])
-
-    def test_antigravity_post_invocation_only_and_dedup(self):
-        base = self.home / '.gemini/antigravity/mainframe/hooks'
-        self.prepare(base, self.home / '.gemini/config/skills')
-        data = {'conversationId': 'one', 'workspacePaths': [str(self.project)]}
-        calls = [{'id': 'read', 'name': 'view_file', 'args': {'AbsolutePath': str(self.project / 'test_example.py')}}]
-        with patch.object(antigravity_hook, 'ROOT', base), patch.object(antigravity_hook, '_latest_calls', return_value=calls), patch.object(antigravity_hook, '_edit_messages', return_value=[]):
-            out = antigravity_hook.post_invocation(data, self.state)
-            self.assertIn('mainframe-testing', out['injectSteps'][0]['ephemeralMessage'])
-            self.assertEqual(antigravity_hook.post_invocation(data, self.state), {})
-            self.assertNotIn('decision', out)

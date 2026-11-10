@@ -1,85 +1,60 @@
 ---
 name: mainframe-frontend
-description: Design, redesign, implement, debug, or review React web interfaces, including visual hierarchy, responsive layouts, forms, accessibility, and interaction tests. Not React Native or standalone design systems.
+description: Design, build, review, polish, or debug React web interfaces, including screens, components, dashboards, landing pages, and product demos. Use for visual planning and screenshot reviews as well as implementation.
 ---
 
-# Frontend design and engineering
+# React frontend design and engineering
 
-Apply this method whenever the active work matches the description, whether you are the primary implementer, a delegated engineer, or a reviewer. Follow the scope and authority supplied through the current execution path; this skill does not expand either.
+Use this as the single design and engineering method for React web interfaces.
+Apply it to visual discussions, screenshot reviews, small edits, new screens,
+and redesigns. Build new interfaces and demos in React using the project's
+existing components and styles. Start with
+[Unslop visual direction](references/visual-direction.md) before making or
+judging visual decisions. Use the existing product language for a small edit
+and develop a clear direction for a new surface or a redesign.
 
-Deliver one coherent user-facing result. Treat implementation, interaction quality, visual language, accessibility, component reuse, and verification as parts of the same frontend task.
+For an authored product illustration or demo, also use
+[Stageshow for product demos](references/product-demos.md). It guides the scene
+inside the page. Use Unslop for the surrounding page and for real product UI.
+Both workflows use local files, existing project assets, and available local
+verification tools. Use local CSS, SVG, or a product preview when an asset is
+missing. Do not require a subscription, external service, API, CDN, or new tool
+installation for these workflows.
 
-For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
+Keep the caller's scope. For discussion and review, give concrete observations,
+recommendations, or a design proposal without starting implementation. For
+authorized visual edits, compare the result in the browser with the relevant
+baseline, constraints, or intended hierarchy. Use
+[browser verification](references/browser-verification.md) for the observations
+that matter. For a behavior-only React fix, go straight to the affected behavior.
 
-## Establish the active surface
+## Work with the product
 
-Identify the package that owns the affected surface. If ownership or runtime wiring is unclear, use the bounded [recon script](scripts/recon.mjs) or [manual reconnaissance](references/recon.md) for that package. Reuse current inspected evidence; the report is routing evidence, not runtime proof.
+Identify the package and trace the affected user journey, its contracts, and
+tests. When ownership is unclear, use [reconnaissance](references/recon.md) or
+the [recon script](scripts/recon.mjs). Resolve ownership from imports, providers,
+registration, and runtime wiring when multiple systems coexist.
 
-Trace the parts of the user journey affected by the change and their contracts
-and tests. Inspect nearby surfaces and the running product when needed to resolve
-interaction or visual decisions. Reuse established tokens, primitives, and current
-project evidence without repeating unrelated discovery.
+Reuse the installed architecture, design tokens, and canonical component
+owners. Extend the existing primitive or use native semantics where suitable.
+A design improvement can change grouping, hierarchy, density, navigation, and
+interaction within its scope. Preserve unaffected contracts and unrelated work.
+Resolve ordinary design decisions from product evidence. Ask only when a
+material decision remains with the caller.
 
-Several routers, state libraries, validators, or component systems may legitimately coexist. Resolve ownership from imports, providers, configuration, registration, runtime wiring, and affected files. Surface a decision only when evidence cannot resolve a product, business, data, infrastructure, permission, or assigned visual-direction choice with material consequences.
+Keep the server authoritative for permissions and durable business state.
+Cover the reachable interaction and recovery states. For behavior changes,
+apply `mainframe-testing` and use the [frontend testing reference](references/testing.md)
+to select focused evidence. Exercise changed interactions in the browser.
 
-## Preserve and extend one product language
-
-Match the result to the assignment. For maintenance, preserve unaffected design.
-For an explicit design or usability improvement, develop and implement a better
-user-facing arrangement, using [visual direction](references/visual-direction.md)
-to compare it with the baseline. A working interface can still be improved;
-an improvement hypothesis does not require a pre-existing bug. Reading guidance,
-passing regression checks, or fixing an incidental defect alone does not complete
-that assignment.
-
-Preserve the installed framework, rendering model, router, architecture, state,
-validation, shared primitives, and product contracts unless changing them is part
-of the assigned result. Preserve recognizable product language without freezing
-the current composition: hierarchy, grouping, density, navigation and interaction
-may change within an assigned design improvement. Make ordinary reversible design
-decisions within that scope without seeking approval for each one. Do not
-introduce a competing library or design system for convenience.
-
-Start from user purpose and behavior, not a component library. Search existing primitives, variants, and call sites before creating a component. When the same semantic role already exists, extend its canonical owner instead of creating a near-duplicate that differs only in pixels, styling, or props. Do not abstract without a real shared contract; native HTML is preferable when it already supplies the required semantics.
-
-Keep tokens, typography, spacing, geometry, density, iconography, motion, states, and action hierarchy coherent across the changed surface. Optimize first for comprehension, task completion, recoverable errors, and predictable interaction. Distinctive graphics support product meaning; they do not excuse inconvenient or inaccessible behavior.
-
-## Load only the relevant detail
-
-Use the references to make the affected decisions, not just this entrypoint.
-When creating, redesigning, or visually reviewing a screen, read
-[visual direction](references/visual-direction.md) before choosing or judging its
-visual language and hierarchy. For composition, responsive behavior, typography,
-or motion, read [layout, type, and motion](references/layout-type-and-motion.md)
-before making those decisions. Apply the relevant guidance to the actual content
-and existing product language, then inspect the rendered result through
-[browser verification](references/browser-verification.md). For a design-only
-discussion, apply it to the proposal without starting implementation or a browser
-session. A behavior-only fix does not require the visual references unless it
-also changes those concerns. Reuse material already in context; no reading log,
-separate design report, or full-reference pass is required.
+## Read for the decision at hand
 
 | Changed concern | Read |
-|---|---|
-| Package, framework, routing, Server or Client Components, hydration, or module ownership | [architecture and rendering](references/architecture-and-rendering.md) |
-| Remote data, browser state, mutations, optimistic UI, forms, or validation | [data, state, and forms](references/data-state-and-forms.md) |
-| Reachable states, feedback, semantics, keyboard, focus, reflow, or contrast | [flows and accessibility](references/flows-and-accessibility.md) |
-| Established visual system, new direction, typography, hierarchy, or graphic character | [visual direction](references/visual-direction.md) |
-| Responsive composition, density, overflow, alignment, type craft, or animation | [layout, type, and motion](references/layout-type-and-motion.md) |
-| Native controls, shared primitives, variants, component libraries, overlays, or interaction states | [components and interaction](references/components-and-interaction.md) |
-| Editors, Markdown, tables, charts, files, PWA, offline state, realtime, or device APIs | [complex UI and browser capabilities](references/complex-ui-and-browser-capabilities.md) |
-| Client trust boundaries, secrets, storage, untrusted HTML, URLs, or third-party scripts | [browser safety](references/browser-safety.md) |
-| Choosing the smallest faithful automated evidence | [testing](references/testing.md) |
-| Visually and interactively accepting the rendered result | [browser verification](references/browser-verification.md) |
-
-## Complete and verify the journey
-
-Implement every affected location inside the assigned boundary. Represent the loading, empty, pending, error, retry, stale, forbidden, offline, success, and recovery states that are actually reachable. Keep the server authoritative for permissions, durable business state, and protected transitions; keep substantial server work with its backend owner.
-
-Use the project's native commands and the smallest faithful failing evidence when
-practical. Run checks covering the changed risk. For appearance changes, inspect
-the rendered surface; for interaction changes, exercise the affected behavior
-through the browser-verification route. A screenshot can demonstrate static
-appearance, but cannot prove interaction.
-
-Do not replace completion with TODOs, placeholders, weakened checks, suppressions, invented product state, duplicate components, or an unrecorded follow-up. Keep secrets out of bundles, storage, logs, errors, fixtures, telemetry, and browser traces. Preserve unrelated work and report every material verification gap.
+| --- | --- |
+| Responsive layout, density, overflow, typography, or motion | [Layout, type, and motion](references/layout-type-and-motion.md) |
+| Accessibility, keyboard, focus, feedback, or reachable states | [Flows and accessibility](references/flows-and-accessibility.md) |
+| Shared controls, component variants, or overlays | [Components and interaction](references/components-and-interaction.md) |
+| Package, framework, routing, hydration, or server/client rendering | [Architecture and rendering](references/architecture-and-rendering.md) |
+| Remote or browser state, mutations, forms, or validation | [Data, state, and forms](references/data-state-and-forms.md) |
+| Editors, tables, charts, files, PWA, realtime, or device APIs | [Complex UI and browser capabilities](references/complex-ui-and-browser-capabilities.md) |
+| Client trust, secrets, storage, untrusted HTML, URLs, or scripts | [Browser safety](references/browser-safety.md) |

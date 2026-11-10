@@ -19,7 +19,7 @@ class ClineInstallerTests(unittest.TestCase):
     def setUpClass(cls):
         cls.sources = tempfile.TemporaryDirectory(prefix="mainframe-cline-source-")
         cls.source = Path(cls.sources.name).resolve()
-        for directory in ("instructions", "skills", "agents", "commands", "hooks", "installer"):
+        for directory in ("instructions", "skills", "agents", "commands", "hooks", "plugins", "installer"):
             shutil.copytree(ROOT / directory, cls.source / directory, ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("ADAPTATION.example.json", ".gitignore", "install.py"):
             shutil.copy2(ROOT / name, cls.source / name)
@@ -36,7 +36,7 @@ class ClineInstallerTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.home = Path(self.temporary.name).resolve() / "home"
         self.home.mkdir()
-        self.adapter = Cline(self.source, self.home, version="0.0.33", surface="desktop")
+        self.adapter = Cline(self.source, self.home, version="0.0.46", surface="desktop")
         for path in (self.adapter.state_path, self.adapter.index):
             path.unlink(missing_ok=True)
         self.addCleanup(self.adapter.clean_event_state)
@@ -90,10 +90,10 @@ class ClineInstallerTests(unittest.TestCase):
                              for path in self.adapter.receipt()["files"]))
         self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PreToolUse").read_text())
         self.assertNotIn("mainframe-skill-reminder", (self.adapter.hooks / "PostToolUse").read_text())
-        self.assertEqual(state["target"]["version"], "0.0.33")
+        self.assertEqual(state["target"]["version"], "0.0.46")
         self.assertEqual(
             sum(row["delivery"] == "unsupported" for row in state["components"]["hooks"].values()),
-            2,
+            3,
         )
 
     def test_launcher_is_silent_when_transport_or_python_is_unavailable(self):
@@ -105,6 +105,20 @@ class ClineInstallerTests(unittest.TestCase):
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
         body = launcher("tool_call", "missing-transport").decode()
         self.assertIn('[ -f "$transport" ] || exit 0', body)
+
+    def test_skill_only_delivery_ignores_unrelated_owned_edits(self):
+        self.install()
+        name = "mainframe-openspec"
+        skill = self.adapter.skills / name / "SKILL.md"
+        skill.unlink()
+        self.adapter.rules.write_bytes(b"Unrelated user edit")
+        changes, report = self.adapter.plan_skill(name)
+        self.assertEqual({row["path"] for row in report["changes"]},
+                         {str(skill), str(self.adapter.state_path)})
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        self.assertEqual(skill.read_bytes(), (self.source / "skills" / name / "SKILL.md").read_bytes())
+        self.assertEqual(self.adapter.rules.read_bytes(), b"Unrelated user edit")
+        self.assertEqual(self.adapter.plan_skill(name)[1]["changes"], [])
 
     def test_disable_is_per_identity_and_unknown_identity_is_rejected_first(self):
         self.install()
@@ -156,6 +170,43 @@ class ClineInstallerTests(unittest.TestCase):
             plistlib.dump({"CFBundleIdentifier": "other.app", "CFBundleShortVersionString": "1"}, stream)
         with self.assertRaisesRegex(Conflict, "not Cline Desktop"):
             desktop_version(app)
+
+    def test_desktop_refresh_rejects_older_release_but_removal_stays_available(self):
+        self.install()
+        self.adapter.version = "0.0.33"
+        with self.assertRaisesRegex(Conflict, "Desktop 0.0.46"):
+            self.adapter.plan(instructions_reviewed=True)
+        self.assertTrue(self.adapter.control(False, "mainframe-todo-limits"))
+        changes, _ = self.adapter.plan(instructions_reviewed=True, remove=True)
+        self.assertTrue(changes)
+
+    def test_desktop_plugin_is_private_owned_and_all_inventory_accounted(self):
+        report = self.install()
+        plugin = self.adapter.cline / "plugins/mainframe.js"
+        self.assertTrue(plugin.is_file())
+        self.assertIn('skip: true', plugin.read_text())
+        self.assertIn('event=tool_call', (self.adapter.hooks / "PreToolUse").read_text())
+        state = json.loads(self.adapter.state_path.read_text())
+        rows = [row for group in state["components"].values() for row in group.values()]
+        source = json.loads((self.source / "ADAPTATION.example.json").read_text())
+        self.assertEqual(
+            {category: set(entries) for category, entries in state["components"].items()},
+            {category: set(entries) for category, entries in source["components"].items()},
+        )
+        self.assertTrue(all(row["delivery"] != "pending" for row in rows))
+        self.assertEqual(state["components"]["hooks"]["mainframe-todo-limits"]["delivery"], "installed")
+        selection = state["components"]["hooks"]["mainframe-subagent-selection"]
+        self.assertEqual(selection["delivery"], "unsupported")
+        self.assertIn("reasoning", selection["reason"])
+        self.assertNotIn("mainframe-subagent-selection", report["retained_partial_bindings"])
+        self.assertTrue(self.adapter.allowed(plugin))
+        self.assertFalse(self.adapter.allowed(plugin.parent / "foreign.js"))
+        self.assertIn(str(plugin), self.adapter.receipt()["files"])
+        plugin.with_name("foreign.js").write_text("module.exports = {};\n")
+        changes, _ = self.adapter.plan(instructions_reviewed=True, remove=True)
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        self.assertFalse(plugin.exists())
+        self.assertTrue(plugin.with_name("foreign.js").exists())
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-10-12.
+Last reviewed: 2026-11-01 (full Desktop 0.165.0-alpha.1.2 delivery).
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -8,6 +8,101 @@ the installer owns repeatable packaging and lifecycle operations. Recheck the
 version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
+
+## Desktop 0.166.0-alpha.5.1 skill-only delivery
+
+On 2026-11-04 macOS verified the signed, notarized Desktop release
+`26.1027.61615`, build `24141`, and nested engine. The sealed engine manifest
+identifies `0.166.0-alpha.5.1`. The [exact OpenAI release](https://github.com/openai/codex/releases/tag/rust-v0.166.0-alpha.5.1)
+retains the [$CODEX_HOME skill root](https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/ext/skills/src/host_roots.rs#L125-L142)
+and the same [frontmatter parser](https://github.com/openai/codex/blob/rust-v0.166.0-alpha.5.1/codex-rs/skills/src/parser.rs),
+loader, disabled-path handling and skill watcher as the prior skill mapping.
+This supports the existing private skill-only route on the new engine. A fresh
+Desktop task still owns discovery evidence. Other native mappings retain their
+previous version boundaries.
+
+## Desktop 0.165.0-alpha.1.2 full delivery
+
+The installed app evidence identifies ChatGPT release `26.1023.51421`, build
+`22530`, and bundled `codex-package.json` engine `0.165.0-alpha.1.2`. The engine
+identity is unchanged from the inspected delivery runtime; the Desktop app
+release is tracked separately and does not extend native acceptance. The exact official tag resolves to
+`720fec862a608ae1e5878d1eecb04fb93192e93c`. The relevant downloaded native files
+were checked against the complete tag tree's Git blob hashes. This admits full
+Desktop delivery for this exact runtime; it does not extend current-version CLI
+or nearby prereleases, and does not establish live native acceptance.
+
+| Canonical inventory | Closest native delivery and verification boundary |
+| --- | --- |
+| Shared credential helper: 1 | Preserve the existing helper/index mechanism; installation never reads protected credential values |
+| Skills: 23 | Complete approved packages under `$CODEX_HOME/skills`, with placeholders resolved through the existing selector |
+| Roles: 7 | Private `$CODEX_HOME/agents/*.toml`, canonical role bodies and method links; the three read-only roles retain native `sandbox_mode = "read-only"`, with parent-permission acceptance pending |
+| Commands: 8 | Explicit-only native skills; `todo` accepts caller prose, other command contracts remain unchanged; actual slash-menu discovery remains pending |
+| Hooks: 10 | Every canonical detector is delivered; six contracts are represented directly and four remain explicitly unsupported with useful partial bindings |
+| Global instruction: 1 | Managed block in the existing global owner, preserving user text and override precedence |
+
+The tagged [skill roots](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/host_roots.rs)
+retain the private compatibility root. MAINFRAME never writes the shared user
+skill root. The tagged
+[role loader](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/agent-roles/src/loader.rs),
+[role parser](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/agent-roles/src/agent_role_config.rs),
+[configuration schema](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/config.schema.json)
+and [instruction reader](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/codex-home/src/instructions/mod.rs)
+support the maintained TOML definitions, narrow feedback permission and global
+managed block. These source checks prove representation, not permission behavior.
+
+The [hook dispatcher](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/hook_runtime.rs)
+and exact
+[PreToolUse](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/hooks/src/events/pre_tool_use.rs),
+[PostToolUse](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/hooks/src/events/post_tool_use.rs)
+and [Stop/SubagentStop](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/hooks/src/events/stop.rs)
+implementations retain the documented deny, attributed tool input, model context
+and completion output shapes. Native pre/post events carry agent identity for
+thread-spawned workers; worker completion uses `SubagentStop`. The adapter combines
+session and agent identity, never consumes parent quality state for a worker,
+and resolves relative patch paths from the native environment directory before
+passing project-confined paths to the canonical detector.
+
+Four full contracts remain unsupported for verified reasons:
+
+- The [exec handler](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs)
+  resolves an overridden `workdir` separately but sends only `command` to the
+  hook. Common `cwd` is the local environment directory. It therefore cannot
+  supply the actual shell working directory needed by full destructive and
+  staged/worktree secret protection. Their context-free preventive subsets remain.
+- Quality has attributed edit advice and positive completion revalidation, but
+  no non-blocking model channel for completion-only unavailable advice. The
+  [native turn loop](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/session/turn.rs)
+  continues after every block without a hook-specific retry cap. After one
+  repair continuation, a still-positive callback emits `continue: false` with
+  visible `stopReason`/`systemMessage`, preserving state. Native code breaks and
+  returns normally; this is a truthful unresolved terminal warning, not a failed
+  turn or the canonical repeated-finding guard. Automatic recovery is deliberately
+  bounded; repeated positive-guard parity remains unsupported.
+- Fallow cannot provide its completion-time non-blocking model advisory. The
+  immediate post-edit fallback instead reverses uniquely anchored supported
+  Add/Update hunks against only bounded addressed TS/JS postimages, builds an
+  in-memory unified diff, and calls the unchanged detector. It never persists
+  source/diff text or infers attribution from a dirty worktree. Moves, deletes,
+  ambiguous hunks and unavailable postimages produce at most one bounded
+  unavailable advisory per native operation. A clean result is silent.
+
+The existing `collaborationspawn_agent` selection binding is retained. The
+tagged [native spawn schema](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/tools/handlers/multi_agents_spec.rs)
+removes both model and reasoning controls unless its exposure option is enabled.
+An unconditional strict `spawn_agent` alias would block interfaces which cannot
+supply those fields, so that unverified alias remains neutral. The observed
+collaboration interface exposes both controls; its valid, invalid and disable
+boundaries remain covered. This does not certify every native feature variant.
+
+The [current hook guide](https://learn.chatgpt.com/docs/hooks) requires review and
+trust of non-managed definitions. Full reconciliation preserves existing native
+definitions in place, deliberate disables, compatible user settings/roles and
+foreign files. New definitions remain untrusted until the user's native review;
+the installer never writes trust hashes. Disposable-home tests cover all 50
+rows, full update/removal and convergence, state isolation, bounded retry
+behavior, exact-edit Fallow advice/privacy, and the dependency dispatch split.
+No CLI/model probe or live hook execution follows from those tests.
 
 ## Desktop 0.159.2 delivery revalidation
 
@@ -56,6 +151,87 @@ skill resource delivery, state truthfulness, convergence, preservation and
 rejection before writes for an uninspected surface/version. Native discovery,
 trust, lifecycle execution and read-only role behavior remain separate pending
 acceptance. A fresh task is the shared loading handoff after delivery changes.
+
+## Desktop 0.165.0-alpha.1.2 skill-only delivery
+
+The official [0.165.0-alpha.1.2 release](https://github.com/openai/codex/releases/tag/rust-v0.165.0-alpha.1.2)
+and its complete Git tree resolve to commit
+`720fec862a608ae1e5878d1eecb04fb93192e93c`. Inspection was limited to the
+skill-package mechanism at that exact tag:
+
+- [host_roots.rs](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/host_roots.rs)
+  retains `$CODEX_HOME/skills` as a backward-compatible user root alongside
+  the shared `.agents/skills` root.
+- The [loader constants](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/loader/mod.rs)
+  name `SKILL.md` and optional `agents/openai.yaml`.
+  The [host loader](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/loader/host.rs)
+  reads the manifest through the frontmatter parser; optional
+  [metadata loading](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/ext/skills/src/loader/metadata.rs)
+  does not prevent manifest loading when metadata is absent.
+- The [frontmatter parser](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/skills/src/parser.rs)
+  accepts YAML `name` and `description`; it validates a nonempty description
+  and a name of at most 64 characters. This supports the maintained package
+  format without rewriting canonical content.
+
+The maintained `--skill` route therefore delivers one complete canonical
+package into an existing same-source Desktop installation. It merges only
+that package's receipt records and adaptation row, preserving unrelated
+installation metadata and native definitions. Disposable-home CLI regressions
+cover package bytes/modes, preservation, convergence, ownership conflicts,
+unknown identities and rejection of other runtimes, products, actions and
+surfaces. Missing unrelated analyzers do not affect this scoped operation.
+No whole-product runtime allowance, native hook claim, fresh installation,
+CLI compatibility or observed discovery follows from this source inspection.
+Discovery remains pending until the new skill appears in a fresh Desktop task.
+
+## Desktop 0.165.0-alpha.1.2 backlog command and guard
+
+The same exact tagged skill loader supports the explicit-only `todo` package.
+The current official [slash-command guide](https://learn.chatgpt.com/docs/reference/slash-commands)
+places enabled skills in the Desktop slash menu; the
+[skill guide](https://learn.chatgpt.com/docs/build-skills) and
+[app-server contract](https://learn.chatgpt.com/docs/app-server#skills) document
+explicit `$todo <prose>` invocation. Literal `/todo <prose>` on this build and
+actual menu discovery remain unobserved. The exact-tag
+[hook dispatcher](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/hook_runtime.rs)
+constructs `PreToolUse` from the tool's JSON input and local environment `cwd`,
+and returns a blocked result when the hook outcome requests it. The current
+[hook contract](https://learn.chatgpt.com/docs/hooks) specifies `apply_patch`,
+`tool_input.command` and `permissionDecision: deny`; it requires trust for
+non-managed definitions. This supports the bounded `--todo` delivery route,
+without expanding the full runtime mapping. Its transport passes the attributed
+patch to the canonical detector; patches without usable `cwd`, shell
+writes and other editing tools have no preventive coverage. Disposable-home
+checks prove preservation, convergence, ownership rejection and dispatch;
+native command discovery, user trust and observed pre-edit denial remain pending.
+
+## Desktop 0.164.0-alpha.11.1 text update
+
+The running Desktop app's engine path and its bundled `codex-package.json`
+identify `0.164.0-alpha.11.1`; the older current-thread creation version is not
+the installed engine version. The exact official tags
+[0.163.0-alpha.11](https://github.com/openai/codex/tree/rust-v0.163.0-alpha.11) and
+[0.164.0-alpha.11.1](https://github.com/openai/codex/tree/rust-v0.164.0-alpha.11.1)
+have byte-identical global instruction readers
+([instructions/mod.rs](https://github.com/openai/codex/blob/rust-v0.164.0-alpha.11.1/codex-rs/codex-home/src/instructions/mod.rs)),
+private skill roots
+([host_roots.rs](https://github.com/openai/codex/blob/rust-v0.164.0-alpha.11.1/codex-rs/ext/skills/src/host_roots.rs))
+and skill frontmatter parser
+([metadata.rs](https://github.com/openai/codex/blob/rust-v0.164.0-alpha.11.1/codex-rs/ext/skills/src/loader/metadata.rs)).
+
+This supports only existing Markdown reconciliation: same source, instruction
+owner, file set and modes, with native skill metadata except descriptions
+preserved. The maintained validator refuses changed hooks, executable support,
+role definitions, permissions, fresh installs and another source or surface.
+The existing subagent-selection files and registration are retained without
+claiming runtime behavior from source comparison. Analyzer readiness remains
+visible but text delivery does not install or repair unrelated analyzers.
+
+Disposable-home regressions exercise delivery, convergence, native-file
+preservation, rejection boundaries and the ordinary installer entrypoint with
+an unavailable analyzer. Structural delivery and convergence do not establish
+fresh-session discovery or improved model behavior; use the delivered guidance
+in a fresh task for that evaluation.
 
 ## Desktop 0.162.0-alpha.17.2 detector repair
 
@@ -216,9 +392,9 @@ The maintained adapter therefore retains the supported core instead of dropping
 the whole component. `PreToolUse` on `apply_patch` captures the explicit patch
 paths, matching `PostToolUse` reports newly introduced findings, and `Stop`
 revalidates and blocks only unresolved attributed findings. A true native
-`stop_hook_active` makes a repeated callback silent, so one unresolved finding
-can create at most one automatic continuation in a turn; its state remains for
-revalidation on the next user turn. Completion-only
+`stop_hook_active` bounds automatic repair continuation to one. The current
+transport terminates a still-positive retry with a visible unresolved reason;
+its state remains for revalidation on the next user turn. Completion-only
 unavailable-check advice stays silent because forcing another model turn would
 change its non-blocking contract. This partial binding remains explicit in the
 installation report and does not make the full component supported.
@@ -242,14 +418,15 @@ Using the session `cwd` for those decisions would create false blocks.
 when Codex already intends to ask for approval; `PostToolUse` cannot prevent a
 side effect.
 
-`mainframe-fallow-quality` remains wholly unbound after the same fallback
-audit. Its contract requires an exact attributed in-memory diff. The available
+In the older mappings, `mainframe-fallow-quality` remains wholly unbound after
+the earlier fallback audit. Its contract requires an exact attributed in-memory diff. The available
 Codex events cannot provide that diff after the edit without persisting source
 content or reconstructing it from a dirty worktree that may include unrelated
 user changes. A `Stop` placement would also force another model turn for an
 advisory. Those placements are misleading or noisier than their decision
 value, so omission is intentional rather than inferred from a missing preferred
-event.
+event. The current Desktop mapping above adds a bounded attributed per-edit
+advisory without claiming completion parity.
 
 Do not guess patch input from a shell-tool example, infer subagent delivery from
 a primary-session event, or label a missing snapshot as a clean result. Use the

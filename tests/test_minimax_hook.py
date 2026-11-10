@@ -97,6 +97,49 @@ class MiniMaxHookTests(unittest.TestCase):
         self.assertIsNone(minimax_hook.dispatch({**child_stop, "stop_hook_active": True}, self.state))
         self.assertIsNone(minimax_hook.dispatch(child_stop, self.state))
 
+    def test_task_selection_respects_native_defaults_and_advises_only_on_creation(self):
+        for inputs in ({}, {"model": "minimax/MiniMax-M3"},
+                       {"model": "default", "effort": "on"}):
+            result = minimax_hook.dispatch(self.payload(
+                "PreToolUse", tool_name="task", tool_input=inputs), self.state)
+            self.assertNotIn("permissionDecision", result["hookSpecificOutput"])
+            self.assertIn("explicit user choices", result["hookSpecificOutput"]["additionalContext"])
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="task", tool_input={"model": "minimax/MiniMax-M3", "effort": "on"}), self.state))
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="task_append", tool_input={}), self.state))
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="task"), self.state))
+        (self.plugin / "hooks/.disabled-mainframe-subagent-selection").write_text("")
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="task", tool_input={}), self.state))
+
+    def test_todo_guard_checks_native_write_edit_and_keeps_ambiguous_inputs_neutral(self):
+        note = self.workspace / ".docs/todos/idea.md"
+        note.parent.mkdir(parents=True)
+        valid = "# Idea\n\n## Суть\nIdea\n## Ожидаемый результат\nResult\n## Ограничения\nLocal\n"
+        note.write_text(valid)
+        for tool, inputs in (
+            ("write", {"path": str(note), "content": "# Invalid"}),
+            ("edit", {"file_path": str(note), "old_string": "## Суть", "new_string": "## Lost"}),
+        ):
+            result = minimax_hook.dispatch(self.payload(
+                "PreToolUse", tool_name=tool, tool_input=inputs), self.state)
+            self.assertEqual(result["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="write", tool_input={"path": str(note), "content": valid}), self.state))
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="edit", tool_input={"file_path": str(note), "old_string": "missing", "new_string": ""}), self.state))
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="write", tool_input={"path": str(note), "file_path": "other", "content": "# Invalid"}), self.state))
+        linked = note.with_name("linked.md")
+        linked.symlink_to(note)
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="write", tool_input={"path": str(linked), "content": "# Invalid"}), self.state))
+        (self.plugin / "hooks/.disabled-mainframe-todo-limits").write_text("")
+        self.assertIsNone(minimax_hook.dispatch(self.payload(
+            "PreToolUse", tool_name="write", tool_input={"path": str(note), "content": "# Invalid"}), self.state))
+
     def test_invalid_and_oversized_input_are_silent(self):
         self.assertIsNone(minimax_hook._read_payload(io.BytesIO(b"not json")))
         self.assertIsNone(minimax_hook._read_payload(io.BytesIO(b" " * (minimax_hook.MAX_INPUT_BYTES + 1))))

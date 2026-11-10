@@ -1,0 +1,11 @@
+{
+  "name": "@mainframe/secrets-vault",
+  "version": "2.0.7",
+  "engines": {"dsh": "0.2.2-rc.1"},
+  "description": "Portable Node.js encrypted credential vault with secure entry and scoped agent operations",
+  "private": true,
+  "type": "module",
+  "exports": {".": "./index.js", "./core": "./core/index.js", "./client": "./client.js", "./locale/*.json": "./locale/*.json", "./icon": "./icon.svg"},
+  "files": ["index.js", "client.js", "operations.js", "clipboard.js", "vault-store.js", "recovery-store.js", "ssh-askpass", "ssh-askpass.cjs", "core/index.js", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": {"bundle": {"patch": "./cordis.patch.yml"}, "client": {"platform": "web", "immediately": true, "inject": ["@deepseek-ai/dsh-client-ui-renderer", "@deepseek-ai/dsh-client-ui-sidebar", "@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-commands", "@deepseek-ai/dsh-client-locale"]}}
+}

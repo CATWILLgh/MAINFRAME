@@ -22,6 +22,7 @@ HOOK_NAMES = (
     "mainframe-commit-secrets",
     "mainframe-code-quality",
     "mainframe-fallow-quality",
+    "mainframe-todo-limits",
 )
 
 
@@ -58,7 +59,7 @@ class ClineHookTests(unittest.TestCase):
 
     def payload(self, command="printf clean", operation="operation"):
         return {
-            "clineVersion": "0.0.33",
+            "clineVersion": "0.0.46",
             "hookName": "PreToolUse",
             "taskId": "task",
             "workspaceRoots": [str(self.workspace)],
@@ -82,7 +83,7 @@ class ClineHookTests(unittest.TestCase):
         tool_key = "tool_call" if event == "tool_call" else "tool_result"
         legacy_key = "preToolUse" if event == "tool_call" else "postToolUse"
         result = {
-            "clineVersion": "0.0.33",
+            "clineVersion": "0.0.46",
             "hookName": "PreToolUse" if event == "tool_call" else "PostToolUse",
             "taskId": "task",
             "workspaceRoots": [str(self.workspace)],
@@ -105,7 +106,7 @@ class ClineHookTests(unittest.TestCase):
         tool_key = "tool_call" if event == "tool_call" else "tool_result"
         legacy_key = "preToolUse" if event == "tool_call" else "postToolUse"
         result = {
-            "clineVersion": "0.0.33",
+            "clineVersion": "0.0.46",
             "hookName": "PreToolUse" if event == "tool_call" else "PostToolUse",
             "taskId": "task",
             "workspaceRoots": [str(self.workspace)],
@@ -162,6 +163,9 @@ class ClineHookTests(unittest.TestCase):
         batched["tool_call"]["input"]["commands"] = commands
         batched["preToolUse"]["parameters"]["commands"] = json.dumps(commands)
         self.assertTrue(json.loads(self.invoke("tool_call", batched).stdout)["cancel"])
+        structured = self.payload(operation="native-argv")
+        structured["tool_call"]["input"] = {"commands": [{"command": "git", "args": ["reset", "--hard"]}]}
+        self.assertTrue(json.loads(self.invoke("tool_call", structured).stdout)["cancel"])
 
     def test_commit_guard_reads_the_exact_workspace_without_exposing_value(self):
         token = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
@@ -274,6 +278,84 @@ class ClineHookTests(unittest.TestCase):
             "tool_call", self.patch_payload("tool_call", patch, "outside")
         ).stdout, "")
         self.assertFalse((self.state / "events.sqlite3").exists())
+
+    def test_todo_guard_checks_native_patch_and_editor_changes_only(self):
+        docs = self.workspace / ".docs"
+        docs.mkdir()
+        index = docs / "todo"
+        before = "# TODO\n## Запланировано\n- existing unrelated malformed row\n## На рассмотрении\n## Отложено\n## Отказались\n"
+        index.write_text(before)
+        payload = self.edit_payload("tool_call", index)
+        payload["tool_call"]["input"].update(old_text="existing unrelated malformed row", new_text="new invalid row")
+        denied = json.loads(self.invoke("tool_call", payload).stdout)
+        self.assertIn(".docs/todo", denied["errorMessage"])
+        self.assertEqual(index.read_text(), before)
+        clean = self.edit_payload("tool_call", self.workspace / "readme.md")
+        clean["tool_call"]["input"].update(new_text="ordinary document")
+        self.assertEqual(self.invoke("tool_call", clean).stdout, "")
+        patch = "*** Begin Patch\n*** Add File: .docs/todos/new.md\n+missing sections\n*** End Patch"
+        self.assertTrue(json.loads(self.invoke("tool_call", self.patch_payload("tool_call", patch)).stdout)["cancel"])
+        self.assertEqual(self.invoke("tool_call", self.patch_payload("tool_call", "malformed")).stdout, "")
+        insertion = self.edit_payload("tool_call", index, "insert")
+        insertion["tool_call"]["input"].update(insert_line=3, new_text="invalid inserted row")
+        self.assertTrue(json.loads(self.invoke("tool_call", insertion).stdout)["cancel"])
+        insertion["tool_call"]["input"]["insert_line"] = 9999
+        self.assertEqual(self.invoke("tool_call", insertion).stdout, "")
+        payload["tool_call"]["input"].update(old_text="absent old text")
+        self.assertEqual(self.invoke("tool_call", payload).stdout, "")
+
+    def test_submit_revalidates_only_its_attributed_scope_and_repair(self):
+        target = self.workspace / "sample.go"
+        target.write_text("package sample\n")
+        self.invoke("tool_call", self.edit_payload("tool_call", target, "introduce"))
+        target.write_text("package sample\n// TODO: unfinished\n")
+        self.invoke("tool_result", self.edit_payload("tool_result", target, "introduce"))
+        submit = self.payload()
+        submit["tool_call"] = {"id": "finish", "name": "submit_and_exit", "input": {}}
+        self.assertTrue(json.loads(self.invoke("guard", submit).stdout)["cancel"])
+        other = dict(submit, taskId="child-conversation", agent_id="child", parent_agent_id="agent")
+        self.assertEqual(self.invoke("guard", other).stdout, "")
+        target.write_text("package sample\n")
+        self.assertEqual(self.invoke("guard", submit).stdout, "")
+
+    def test_native_structured_failed_edit_stays_silent(self):
+        target = self.workspace / "sample.go"
+        target.write_text("package sample\n")
+        self.invoke("tool_call", self.edit_payload("tool_call", target, "failed"))
+        target.write_text("package sample\n// TODO: unrelated change\n")
+        post = self.edit_payload("tool_result", target, "failed")
+        post["tool_result"]["output"] = {"success": False, "error": "edit failed"}
+        self.assertEqual(self.invoke("tool_result", post).stdout, "")
+
+    def test_desktop_plugin_recovers_completion_denial_and_preserves_native_defaults(self):
+        from installer.cline import desktop_plugin
+        if shutil.which("node") is None:
+            self.skipTest("Node runtime unavailable")
+        target = self.workspace / "sample.go"
+        target.write_text("package sample\n")
+        self.invoke("tool_call", self.edit_payload("tool_call", target, "introduced"))
+        target.write_text("package sample\n// TODO: finish\n")
+        self.invoke("tool_result", self.edit_payload("tool_result", target, "introduced"))
+        plugin = self.root / "mainframe.js"
+        plugin.write_bytes(desktop_plugin(Path(sys.executable), self.hooks / "mainframe-cline-hook", self.state, Path(os.environ["PATH"].split(os.pathsep)[0])))
+        script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const plugin = require(process.argv[1]);
+plugin.setup({}, {workspaceInfo:{rootPath:process.argv[2]}});
+const snapshot={agentId:'agent',conversationId:'task'};
+const call = (name,input) => plugin.hooks.beforeTool({snapshot,toolCall:{toolName:name,toolCallId:'finish'},input});
+(async()=>{
+  const denied=await call('submit_and_exit',{summary:'completion fixture',verified:true});
+  assert.equal(denied.skip,true); assert.equal(denied.stop,undefined);
+  assert.equal(await call('spawn_agent',{systemPrompt:'role',task:'task'}),undefined);
+  assert.equal(await call('run_commands',{commands:['git reset --hard']}),undefined);
+  fs.writeFileSync(process.argv[2]+'/sample.go','package sample\n');
+  assert.equal(await call('submit_and_exit',{summary:'completion fixture',verified:true}),undefined);
+})().catch(error=>{console.error(error);process.exitCode=1;});
+"""
+        result = subprocess.run(["node", "-e", script, str(plugin), str(self.workspace)], text=True, capture_output=True, timeout=10)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
 
 
 if __name__ == "__main__":

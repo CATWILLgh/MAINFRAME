@@ -65,16 +65,16 @@ maintainer guidance to the installed runtime payload.
 transaction mechanics in [installer/core.py](installer/core.py), shared inventory, instruction merging, and delivery state in [installer/shared.py](installer/shared.py)
 and [installer/state.py](installer/state.py), and native decisions in [installer/codex.py](installer/codex.py)
 and native modules such as [installer/zcode.py](installer/zcode.py),
-[installer/antigravity.py](installer/antigravity.py), and
-[installer/minimax.py](installer/minimax.py). Extract more shared code only when
+[installer/minimax.py](installer/minimax.py), and
+[installer/cline.py](installer/cline.py). Extract more shared code only when
 another implemented product actually uses it. Canonical texts and
 detectors remain single sources; never copy their bodies into the installer.
 
-[installer/runtime.py](installer/runtime.py) owns shared analyzer provisioning.
-Provision every dependency required by an active hook before changing its files
-or registration. Reuse a compatible executable or install the tested official
-distribution into MAINFRAME-owned user storage, expose it through the adapter's
-hook environment, and make verification fail when it is unavailable.
+[installer/runtime.py](installer/runtime.py) owns shared CLI provisioning.
+Provision dependencies required by a delivered hook or skill before changing
+its files or registration. Reuse a compatible executable or install the tested
+official distribution into MAINFRAME-owned user storage. Expose the executable
+through the hook environment or skill and require it in delivery verification.
 
 Changes to native packaging, configuration, or lifecycle behavior require tests
 against disposable homes, including update, convergence, foreign-file

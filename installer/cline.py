@@ -1,4 +1,4 @@
-"""Maintained Cline (Desktop and CLI) global component mapping."""
+"""Maintained current Cline Desktop mapping; legacy CLI files remain available."""
 
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ import subprocess
 import sys
 
 from .core import Change, Conflict, digest, encode_json, observed, regular_bytes, reconcile_files
-from .shared import _instruction, inventory, skill_resources
+from .shared import (_instruction, inventory, plan_skill_delivery, render_skill_artifacts,
+                     unsupported_dsh_plugins)
 from .state import reconcile_state
 from .runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS, runtime_bin
 
@@ -22,32 +23,40 @@ HOOK_NAMES = (
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
+    "mainframe-todo-limits",
 )
 RUNTIME_TOOLS = (*CODE_QUALITY_TOOLS, *FALLOW_TOOLS)
 HOOK_FILES = {"PreToolUse": "tool_call", "PostToolUse": "tool_result"}
 TRANSPORT = "mainframe-cline-hook"
-# Cline file hooks have one synchronous pre-action event and one post-action
-# event. Lifecycle events are detached, so they cannot inject context, continue a
-# model, or block, and no recoverable per-tool denial exists outside the
-# in-process plugin API.
+# Desktop 0.0.46 carries core 0.0.93. Its plugin beforeTool supports skip;
+# afterRun ignores return values and delegated runs need not call a completion tool.
 COMPLETION_REASON = (
-    "Cline dispatches its lifecycle hook files detached: the runtime ignores their "
-    "result, so no completion event can revalidate findings or continue the model."
+    "Desktop 0.0.46 ignores plugin afterRun results and dispatches lifecycle files "
+    "detached. Delegated runs may finish without submit_and_exit, so a universal "
+    "continuation-capable completion guard is unavailable."
+)
+SELECTION_REASON = (
+    "Desktop spawn_agent accepts only systemPrompt/task and configured role tools "
+    "accept only prompt. Profiles support static providerId/modelId/maxIterations, "
+    "but expose no reasoning-effort selection; both explicit per-call controls are absent. "
+    "No guard or advice asks callers to supply nonexistent fields."
 )
 CODE_QUALITY_PARTIAL = (
-    "Per-edit advisories are delivered on PostToolUse; the attributed-finding "
-    "completion guard has no blocking completion event in Cline."
+    "Per-edit quality advice remains on PostToolUse. The Desktop plugin revalidates "
+    "attributed findings before submit_and_exit and recoverably skips that tool on "
+    "a positive finding; natural delegated completion is not guarded. Plugin work "
+    "is bounded below the native three-second hook timeout and fails open."
 )
 FALLOW_PARTIAL = (
-    "Fallow's exact-scope structural analysis is delivered as a per-edit advisory on "
-    "PostToolUse; Cline has no continuation-capable completion event for the canonical timing."
+    "Fallow exact-scope structural analysis remains an advisory on PostToolUse; "
+    "no continuation-capable universal completion event exists."
 )
 HOOK_SCOPE = (
-    "One pre-action guard file covers recognized catastrophic shell and secret patterns; "
-    "one post-action file delivers exact-edit quality, Fallow and skill advisories. Positive skill advice also joins pre-action output. Lifecycle hook "
-    "files are unused because Cline ignores their result. Guards hard-block through the "
-    "native cancel result, which stops the affected run with the reason; Cline offers no "
-    "recoverable per-tool denial for file hooks."
+    "Desktop plugin beforeTool recoverably skips submit_and_exit on positively "
+    "revalidated quality findings. PreToolUse retains shell/TODO guards and edit "
+    "baselines; PostToolUse supplies exact-edit quality, Fallow, checkpoint "
+    "and skill advice. Detached lifecycle files are unused. Legacy CLI retains file-hook "
+    "cancel semantics; current CLI behavior is unverified."
 )
 READ_ONLY_AGENTS = {
     "mainframe-consequential-reviewer": "mainframe-consequential-review",
@@ -109,6 +118,52 @@ def launcher(event: str, transport: str, analyzer_bin: Path | None = None) -> by
     )).encode()
 
 
+def desktop_plugin(python: Path, transport: Path, state: Path, analyzer_bin: Path) -> bytes:
+    """Native Desktop plugin: keep the file-hook result separate from SDK control."""
+    config = json.dumps({"python": str(python), "transport": str(transport),
+                         "state": str(state), "bin": str(analyzer_bin)})
+    return ("const config = " + config + ";\n" + r'''const { execFile } = require("node:child_process");
+let workspace;
+module.exports = {
+  name: "mainframe",
+  manifest: { capabilities: ["hooks"] },
+  setup(api, context) { workspace = context.workspaceInfo?.rootPath; },
+  hooks: {
+    async beforeTool(context) {
+      const name = context.toolCall?.toolName;
+      if (name !== "submit_and_exit") return;
+      const snapshot = context.snapshot;
+      const scope = snapshot?.conversationId ?? snapshot?.runId ?? snapshot?.agentId;
+      if (!workspace || !scope || !context.toolCall?.toolCallId) return;
+      const payload = JSON.stringify({
+        taskId: scope, agent_id: snapshot.agentId, parent_agent_id: snapshot.parentAgentId,
+        workspaceInfo: { rootPath: workspace },
+        tool_call: { id: context.toolCall.toolCallId, name, input: context.input }
+      });
+      if (Buffer.byteLength(payload) > 1048576) return;
+      const result = await new Promise((resolve) => {
+        const child = execFile(config.python, ["-B", config.transport, "guard", config.state], {
+          timeout: 2300, killSignal: "SIGKILL", maxBuffer: 65536,
+          env: { ...process.env, PATH: `${config.bin}:${process.env.PATH ?? ""}` }
+        }, (error, stdout) => {
+          if (error) return resolve(undefined);
+          try { resolve(JSON.parse(stdout)); } catch { resolve(undefined); }
+        });
+        child.stdin.on("error", () => {});
+        child.stdin.end(payload);
+      });
+      if (result?.cancel === true && typeof result.errorMessage === "string") {
+        return { skip: true, reason: result.errorMessage };
+      }
+      if (typeof result?.contextModification === "string") {
+        return { appendContext: result.contextModification };
+      }
+    }
+  }
+};
+''').encode()
+
+
 def workflow_body(text: str, name: str) -> bytes:
     text = re.sub(
         r"<!-- MAINFRAME OPTIONAL BLOCK: native-primary-memory.*?"
@@ -157,6 +212,7 @@ class Cline:
         self.skills = self.cline / "skills"
         self.agents = self.cline / "agents"
         self.workflows = self.cline / "workflows"
+        self.plugin = self.cline / "plugins/mainframe.js"
         self.rules = self.cline / "rules/mainframe.md"
         self.support = self.cline / "data/mainframe"
         self.receipt_path = self.support / "installation.json"
@@ -183,7 +239,7 @@ class Cline:
             return False
         if path in {
             self.state_path, self.index, self.receipt_path, self.journal, self.lock_path,
-            self.rules, self.home / ".local/bin/mainframe-secret",
+            self.rules, self.plugin, self.home / ".local/bin/mainframe-secret",
             self.home / ".local/bin/secret",
             self.hooks / "PreToolUse", self.hooks / "PostToolUse", self.hooks / TRANSPORT,
             *(self.hooks / n for n in ("skill_reminder.py", "native_skill_reminder.py", "skill_profiles.py")),
@@ -198,7 +254,7 @@ class Cline:
         if path.parent == self.workflows and path.name.endswith(".md"):
             return path.stem in self.names("commands")
         if path in {self.skills, self.agents, self.workflows, self.hooks,
-                    self.detectors, self.rules.parent, self.support}:
+                    self.detectors, self.rules.parent, self.support, self.plugin.parent}:
             return True
         if path.is_relative_to(self.support):
             return True
@@ -220,28 +276,22 @@ class Cline:
         return result
 
 
-    def _skill_files(self, source: dict, add) -> None:
-        resources = skill_resources(self.root, source)
-        for name, entry in source["components"]["skills"].items():
-            base = self.root / entry["source"]
-            for path in resources[name]:
-                data = path.read_bytes()
-                if path.suffix in {".md", ".txt", ".py", ".sh", ".js", ".mjs", ".json", ".yaml", ".yml"}:
-                    data = data.replace(b"{{MAINFRAME_ROOT}}", str(self.root).encode()).replace(
-                        b"{{CREDENTIALS_INDEX}}", str(self.index).encode()
-                    )
-                add(self.skills / name / path.relative_to(base), data, "skills." + name,
-                    path.stat().st_mode & 0o777)
+    def skill_artifacts(self, source: dict) -> dict:
+        return render_skill_artifacts(self.root, self.skills, self.index, source)
+
+    def plan_skill(self, name: str):
+        if self.surface != "desktop" or self.version != "0.0.46":
+            raise Conflict("Skill-only delivery is not validated for this Cline release and surface.")
+        return plan_skill_delivery(self, name, "cline", self.skills / name, self.skill_artifacts)
 
     def artifacts(self, source: dict) -> dict:
-        result = {}
+        result = self.skill_artifacts(source)
 
         def add(path: Path, data: bytes, component: str, mode: int = 0o600, retain=False):
             if path in result:
                 raise Conflict("Duplicate Cline destination: " + str(path))
             result[path] = data, mode, component, retain
 
-        self._skill_files(source, add)
         for name, entry in source["components"]["commands"].items():
             text = (self.root / entry["source"]).read_text()
             add(self.workflows / (name + ".md"), workflow_body(text, name), "commands." + name)
@@ -258,6 +308,10 @@ class Cline:
                                      ("native_skill_reminder.py", "native_skill_reminder.py")):
             add(self.hooks / filename, Path(__file__).with_name(sourcefile).read_bytes(), "hooks.mainframe-skill-reminder")
         add(self.hooks / "skill_profiles.py", Path(__file__).with_name("skill_profiles.py").read_bytes(), "hooks.mainframe-skill-reminder")
+        if self.surface == "desktop":
+            add(self.plugin, desktop_plugin(self.python, self.hooks / TRANSPORT,
+                                           self.support / "hook-state", runtime_bin(self.home)),
+                "hook transport")
         for file_name, event_key in HOOK_FILES.items():
             add(self.hooks / file_name, launcher(event_key, TRANSPORT, runtime_bin(self.home)), "hook transport", 0o755)
         add(self.index, (self.root / "shared/credentials/credentials-index.template.md").read_bytes(),
@@ -297,6 +351,11 @@ class Cline:
         if previous and previous.get("source") != str(self.root):
             raise Conflict("Cline source root changed; reconcile the non-secret index before relocation.")
         if not remove:
+            if self.surface == "desktop":
+                release = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", self.version or "")
+                if release is None or tuple(map(int, release.groups())) < (0, 0, 46):
+                    raise Conflict("This mapping requires Cline Desktop 0.0.46 or newer; "
+                                   "older Desktop releases need their own qualified adapter.")
             if not self.python.is_file():
                 raise Conflict("The Python interpreter running the installer is unavailable for Cline hooks.")
             probe = subprocess.run(
@@ -364,6 +423,7 @@ class Cline:
                 "config_home": str(self.cline), "mainframe_root": str(self.root),
                 "installer": "maintained Cline adapter", "hook_scope": HOOK_SCOPE,
                 "rules": str(self.rules), "hooks": str(self.hooks),
+                "plugin": str(self.plugin) if self.surface == "desktop" else None,
             }
 
 
@@ -372,10 +432,12 @@ class Cline:
                              and prior_state.get("target", {}).get("version") == self.version
                              and not any(change.needed for change in changes))
             unsupported = {
+                **unsupported_dsh_plugins(source),
                 ("hooks", "mainframe-fallow-quality"): COMPLETION_REASON + " " + FALLOW_PARTIAL,
                 ("hooks", "mainframe-code-quality"): COMPLETION_REASON + " " + CODE_QUALITY_PARTIAL,
             }
-            pending = {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
+            unsupported[("hooks", "mainframe-subagent-selection")] = SELECTION_REASON
+            pending = {}
             delivered = [
                 (category, name) for category, group in source["components"].items() for name in group
                 if (category, name) not in unsupported and (category, name) not in pending
@@ -429,8 +491,10 @@ class Cline:
         return changes, {
             "planned_delivery": planned, "planned_verification": verified,
             "unsupported_full_contracts": ({
+                **{name: reason for (_, name), reason in unsupported_dsh_plugins(source).items()},
                 "mainframe-code-quality": COMPLETION_REASON,
                 "mainframe-fallow-quality": COMPLETION_REASON,
+                "mainframe-subagent-selection": SELECTION_REASON,
             } if not remove else {}),
             "retained_partial_bindings": ({
                 "mainframe-code-quality": CODE_QUALITY_PARTIAL,

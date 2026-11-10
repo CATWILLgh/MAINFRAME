@@ -33,11 +33,15 @@ Read exactly the matching procedure:
 
 - **Codex:** [codex-installer.md](docs/installation/codex-installer.md).
 - **ZCode Desktop:** [zcode-installer.md](docs/installation/zcode-installer.md).
-- **Antigravity Desktop 2.0:** [antigravity-installer.md](docs/installation/antigravity-installer.md).
 - **MiniMax Code Desktop:** [minimax-installer.md](docs/installation/minimax-installer.md).
 - **Cline Desktop or CLI:** [cline-installer.md](docs/installation/cline-installer.md).
+- **DSH:** [dsh-adapter.md](docs/installation/dsh-adapter.md). This bounded route
+  validates source with `plan` and `verify`, builds archives with `package`, and
+  hands installation to the native plugin manager. Keep source readiness separate
+  from profile delivery. Use the explicit plugin installation or update scope and
+  the prerequisites described in the DSH guide.
 
-Follow that procedure's `plan`, `apply`, and `verify` commands. Reuse the
+For the four full delivery adapters, follow that procedure's `plan`, `apply`, and `verify` commands. Reuse the
 maintained mapping; do not write another installer, copy components manually,
 run the generic adaptation loop, or ask another model to adapt the inventory.
 The agent resolves actual instruction conflicts and unexpected environments;

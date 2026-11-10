@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reserve stock · Product demo</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #e8eae1;
+    color: #21291f;
+    font: 1rem/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 40rem; margin: 8vh auto; padding: 1rem; }
+  h1 { margin: 0 0 1rem; font: bold clamp(2rem, 7vw, 3rem)/1 Georgia, serif; }
+  figure { margin: 0; }
+  .scene {
+    padding: clamp(1rem, 4vw, 2rem);
+    background: #fcfbf5;
+    border: 1px solid #6e7e63;
+    border-top: .375rem solid #39563c;
+  }
+  .order { margin: 0; color: #4a5c44; font-size: .875rem; }
+  .product { margin: 0; font-size: 1.375rem; font-weight: 650; }
+  .counts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-block: 1rem;
+    padding-block: .5rem;
+    border-block: 1px solid #b3bcae;
+  }
+  .count { display: block; font-size: 2rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .count + span { display: block; }
+  .status {
+    display: inline-block;
+    padding: .25rem .65rem;
+    border: 1px solid currentColor;
+    color: #2f5035;
+    font-weight: 650;
+  }
+  .scene[data-beat="action"] .status { background: #39563c; color: #fff; }
+  figcaption { margin: .75rem 0; }
+  button {
+    padding: .5rem .75rem;
+    border: 1px solid #39563c;
+    background: #fcfbf5;
+    color: #21291f;
+    font: inherit;
+  }
+  button:focus-visible { outline: 2px solid #39563c; outline-offset: 3px; }
+  button[aria-disabled="true"] { color: #4a5c44; }
+  @media (min-width: 32rem) {
+    .scene { display: grid; grid-template-columns: 1fr auto; align-items: start; }
+    .counts { grid-column: 1 / -1; grid-row: 2; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #replay { display: none; }
+  }
+</style>
+<main>
+  <h1>Reserve stock</h1>
+  <figure>
+    <div class="scene" data-beat="result" aria-hidden="true">
+      <div>
+        <p class="order">Order 104</p>
+        <p class="product">Canvas bag</p>
+      </div>
+      <div class="counts">
+        <div><span class="count" id="available">5</span><span>Available</span></div>
+        <div><span class="count" id="reserved">3</span><span>Reserved</span></div>
+      </div>
+      <span class="status">Reserved</span>
+    </div>
+    <figcaption>Reserving three canvas bags for order 104 moves them from available to reserved. The counts go from 8 available and 0 reserved to 5 available and 3 reserved.</figcaption>
+  </figure>
+  <button type="button" id="replay" hidden>Replay demo</button>
+</main>
+<script>
+  const scene = document.querySelector('.scene');
+  const available = document.querySelector('#available');
+  const reserved = document.querySelector('#reserved');
+  const status = scene.querySelector('.status');
+  const replay = document.querySelector('#replay');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let actionTimer;
+  let resultTimer;
+
+  function showResult() {
+    clearTimeout(actionTimer);
+    clearTimeout(resultTimer);
+    scene.dataset.beat = 'result';
+    available.textContent = '5';
+    reserved.textContent = '3';
+    status.textContent = 'Reserved';
+    replay.removeAttribute('aria-disabled');
+  }
+
+  replay.addEventListener('click', () => {
+    if (reducedMotion.matches || scene.dataset.beat !== 'result') return;
+    replay.setAttribute('aria-disabled', 'true');
+    scene.dataset.beat = 'start';
+    available.textContent = '8';
+    reserved.textContent = '0';
+    status.textContent = 'Reserve 3';
+    actionTimer = setTimeout(() => { scene.dataset.beat = 'action'; }, 1100);
+    resultTimer = setTimeout(showResult, 1950);
+  });
+
+  reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) showResult();
+    replay.hidden = reducedMotion.matches;
+  });
+  replay.hidden = reducedMotion.matches;
+</script>

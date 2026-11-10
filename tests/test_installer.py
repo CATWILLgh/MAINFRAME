@@ -25,7 +25,7 @@ from installer.core import Change, Conflict, installation_lock, observed, restor
 from installer import core
 from installer import codex
 from installer.codex_native import summarize
-from installer.runtime import runtime_bin
+from installer.runtime import OPENSPEC_VERSION, runtime_bin
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,7 +35,7 @@ class InstallationTests(unittest.TestCase):
     def setUpClass(cls):
         cls.sources = tempfile.TemporaryDirectory(prefix="mainframe-installer-source-")
         cls.source = Path(cls.sources.name).resolve()
-        for directory in ("instructions", "skills", "agents", "commands", "hooks", "installer"):
+        for directory in ("instructions", "skills", "agents", "commands", "hooks", "plugins", "installer"):
             shutil.copytree(ROOT / directory, cls.source / directory, ignore=shutil.ignore_patterns("__pycache__"))
         for name in ("ADAPTATION.example.json", ".gitignore", "install.py"):
             shutil.copy2(ROOT / name, cls.source / name)
@@ -52,6 +52,14 @@ class InstallationTests(unittest.TestCase):
         self.home = Path(self.temporary.name).resolve() / "home with 'quotes'"
         self.home.mkdir()
         self.adapter = Codex(self.source, self.home, version="0.153.4")
+        fixture_bin = self.home.parent / "fixture-bin"
+        fixture_bin.mkdir()
+        openspec = fixture_bin / "openspec"
+        openspec.write_text(f"#!/bin/sh\nprintf '%s\\n' '{OPENSPEC_VERSION}'\n")
+        openspec.chmod(0o755)
+        path = patch.dict(os.environ, {"PATH": str(fixture_bin) + os.pathsep + os.environ.get("PATH", os.defpath)})
+        path.start()
+        self.addCleanup(path.stop)
         for path in (self.adapter.state_path, self.adapter.index):
             path.unlink(missing_ok=True)
         self.addCleanup(self.temporary.cleanup)
@@ -74,6 +82,144 @@ class InstallationTests(unittest.TestCase):
         callback = cached or hook_command(self.adapter.hooks, name, self.adapter.event_state)
         return subprocess.run(["/bin/sh", "-c", callback], input=json.dumps(data),
                               text=True, capture_output=True, timeout=timeout)
+
+    def skill_cli(self, action="plan", name="mainframe-research", *extra):
+        return subprocess.run(
+            [sys.executable, "-B", str(self.source / "install.py"), "codex", action,
+             "--home", str(self.home), "--surface", "desktop",
+             "--runtime-version", "0.165.0-alpha.1.2", "--skill", name, *extra],
+            cwd=self.source, text=True, capture_output=True, timeout=20,
+        )
+
+    def test_skill_only_cli_adds_package_preserves_installation_and_converges(self):
+        self.adapter = Codex(self.source, self.home, version="0.164.0-alpha.11.1", surface="desktop")
+        self.install()
+        receipt = self.adapter.receipt()
+        component = "skills.mainframe-research"
+        for path, record in list(receipt["files"].items()):
+            if record["component"] == component:
+                Path(path).unlink()
+                del receipt["files"][path]
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        state = json.loads(self.adapter.state_path.read_bytes())
+        state["components"]["skills"].pop("mainframe-research")
+        self.adapter.state_path.write_text(json.dumps(state))
+        foreign = self.adapter.codex / "native-trust.fixture"
+        foreign.write_bytes(b"Preserve native state")
+        marker = self.adapter.hooks / ".disabled-mainframe-subagent-selection"
+        marker.write_bytes(b"")
+        protected = {path: observed(path) for path in self.home.rglob("*")
+                     if path.is_file() and path != self.adapter.receipt_path}
+        result = self.skill_cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(set(plan["components_changed"]),
+                         {component, "ownership receipt", "adaptation state"})
+        applied = self.skill_cli("apply")
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        for source in (self.source / "skills/mainframe-research").rglob("*"):
+            if source.is_file():
+                target = self.adapter.skills / "mainframe-research" / source.relative_to(self.source / "skills/mainframe-research")
+                self.assertEqual(observed(target), observed(source))
+        for path, snapshot in protected.items():
+            self.assertEqual(observed(path), snapshot, str(path))
+        after_receipt = self.adapter.receipt()
+        for key, value in receipt.items():
+            if key not in {"files", "directories"}:
+                self.assertEqual(after_receipt[key], value, key)
+        for path, record in receipt["files"].items():
+            self.assertEqual(after_receipt["files"][path], record)
+        after_state = json.loads(self.adapter.state_path.read_bytes())
+        for key, value in state.items():
+            if key != "components":
+                self.assertEqual(after_state[key], value, key)
+        for category, rows in state["components"].items():
+            for name, row in rows.items():
+                self.assertEqual(after_state["components"][category][name], row)
+        self.assertEqual(after_state["components"]["skills"]["mainframe-research"]["verification"], "pending")
+        verified = self.skill_cli("verify")
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        self.assertTrue(json.loads(verified.stdout)["scoped_update_matches"])
+        self.assertEqual(json.loads(verified.stdout)["file_change_count"], 0)
+        self.assertNotIn("runtime_support", json.loads(verified.stdout))
+
+    def test_skill_only_rejects_missing_or_different_source_receipt(self):
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("existing same-source installation", result.stderr)
+        self.install()
+        receipt = self.adapter.receipt()
+        receipt["source"] = str(self.source.parent / "another-source")
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("existing same-source installation", result.stderr)
+
+    def test_skill_only_preserves_conflicting_owned_and_foreign_files(self):
+        self.install()
+        target = self.adapter.skills / "mainframe-research/SKILL.md"
+        target.write_bytes(b"User edit")
+        before = observed(target)
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Installed file was edited", result.stderr)
+        self.assertEqual(observed(target), before)
+        receipt = self.adapter.receipt()
+        del receipt["files"][str(target)]
+        self.adapter.receipt_path.write_text(json.dumps(receipt))
+        result = self.skill_cli("apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Existing file has no installer ownership", result.stderr)
+        self.assertEqual(observed(target), before)
+
+    def test_skill_only_rejects_unknown_identity_and_unvalidated_runtime(self):
+        self.install()
+        for name, extra, expected in [
+            ("../mainframe-research", (), "Unknown canonical skill"),
+            ("mainframe-tickets-init", (), "Unknown canonical skill"),
+            ("mainframe-research", ("--runtime-version", "99.0"), "Skill-only delivery is not validated"),
+        ]:
+            with self.subTest(name=name, extra=extra):
+                result = self.skill_cli("apply", name, *extra)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stderr)
+
+    def test_skill_only_rejects_incompatible_actions_surfaces_and_selectors(self):
+        for product, action, surface, extra in [("zcode", "plan", "desktop", ["--adopt-existing"]),
+                                                ("codex", "disable", "desktop", []),
+                                                ("codex", "plan", "cli", [])]:
+            with self.subTest(product=product, action=action, surface=surface):
+                result = subprocess.run(
+                    [sys.executable, "-B", str(self.source / "install.py"), product, action,
+                     "--surface", surface, "--skill", "mainframe-research", *extra],
+                    cwd=self.source, text=True, capture_output=True, timeout=10,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("--skill", result.stderr)
+
+    def test_skill_only_preserves_partial_staging_and_rejects_untracked_resources(self):
+        with tempfile.TemporaryDirectory(prefix="mainframe-skill-source-") as temporary:
+            root = Path(temporary) / "source"
+            shutil.copytree(self.source, root)
+            subprocess.run(["git", "init", "--template=", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "--all"], check=True)
+            self.adapter = Codex(root, self.home, version="0.165.0-alpha.1.2", surface="desktop")
+            self.install()
+            body = root / "skills/mainframe-research/SKILL.md"
+            body.write_bytes(body.read_bytes() + b"\nStaged source refinement.\n")
+            subprocess.run(["git", "-C", str(root), "add", str(body)], check=True)
+            body.write_bytes(body.read_bytes() + b"\nUnstaged source refinement.\n")
+            def source_state():
+                return tuple(subprocess.check_output(["git", "-C", str(root), *options])
+                             for options in [("diff", "--cached"), ("diff",), ("ls-files", "--stage")])
+            before = source_state()
+            _, report = self.adapter.plan_skill("mainframe-research")
+            self.assertIn("skills.mainframe-research", {change["component"] for change in report["changes"]})
+            self.assertEqual(source_state(), before)
+            (body.parent / "untracked.md").write_bytes(b"Not approved for delivery")
+            with self.assertRaisesRegex(Conflict, "Untracked canonical skill resource"):
+                self.adapter.plan_skill("mainframe-research")
+            self.assertEqual(source_state(), before)
 
     def test_subagent_selection_delivery_native_identity_and_lifecycle(self):
         self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
@@ -403,7 +549,7 @@ class InstallationTests(unittest.TestCase):
         original = path.read_bytes()
         self.install()
         self.assertEqual(path.read_bytes(), original)
-        self.assertEqual(len(self.adapter.receipt()["hook_groups"]["PreToolUse"]), 2)
+        self.assertEqual(len(self.adapter.receipt()["hook_groups"]["PreToolUse"]), 3)
         self.assertEqual(self.adapter.plan()[1]["changes"], [])
         changes, _ = self.adapter.plan(remove=True)
         transact(changes, self.adapter.journal, self.adapter.allowed)
@@ -598,7 +744,9 @@ class InstallationTests(unittest.TestCase):
         blocked = json.loads(self.invoke_payload("mainframe-code-quality", stop).stdout)
         self.assertEqual(blocked["decision"], "block")
         continued = {**stop, "stop_hook_active": True}
-        self.assertEqual(self.invoke_payload("mainframe-code-quality", continued).stdout, "")
+        unresolved = json.loads(self.invoke_payload("mainframe-code-quality", continued).stdout)
+        self.assertFalse(unresolved["continue"])
+        self.assertIn("unresolved", unresolved["stopReason"])
 
         self.assertEqual(self.invoke_payload("mainframe-code-quality", event("PreToolUse", "repair")).stdout, "")
         source.write_text("package sample\n", encoding="utf-8")
@@ -999,6 +1147,96 @@ class InstallationTests(unittest.TestCase):
         self.adapter.version = "0.162.0-alpha.17.3"
         with self.assertRaises(Conflict):
             self.adapter.validate_content_update([allowed], previous)
+
+    def test_desktop_text_update_preserves_native_payload_and_converges(self):
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        self.install()
+        destinations = [self.adapter.codex / "AGENTS.md",
+                        self.adapter.skills / "mainframe-testing/SKILL.md",
+                        self.adapter.skills / "mainframe-testing/references/tdd.md"]
+        protected = {Path(path): observed(Path(path)) for path in self.adapter.receipt()["files"]
+                     if Path(path) not in destinations}
+        protected[self.adapter.codex / "hooks.json"] = observed(self.adapter.codex / "hooks.json")
+        protected[self.adapter.codex / "config.toml"] = observed(self.adapter.codex / "config.toml")
+        marker = b"\nFixture-only complete-result guidance.\n"
+        for relative in ["instructions/global.md", "skills/mainframe-testing/SKILL.md",
+                         "skills/mainframe-testing/references/tdd.md"]:
+            source = self.source / relative
+            original = source.read_bytes()
+            self.addCleanup(source.write_bytes, original)
+            source.write_bytes(original + marker)
+        self.adapter.version = "0.164.0-alpha.11.1"
+        changes, _ = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(changes, self.adapter.receipt())
+        self.assertEqual({c.path for c in changes if c.needed}
+                         - {self.adapter.receipt_path, self.adapter.state_path}, set(destinations))
+        transact(changes, self.adapter.journal, self.adapter.allowed)
+        for destination in destinations:
+            self.assertIn(marker.strip(), destination.read_bytes())
+        self.assertEqual(protected, {path: observed(path) for path in protected})
+        repeated, report = self.adapter.plan(instructions_reviewed=True)
+        self.adapter.validate_content_update(repeated, self.adapter.receipt())
+        self.assertEqual(report["changes"], [])
+        self.assertFalse(codex.mapping_supported(self.adapter.version, "desktop"))
+
+    def test_desktop_text_update_rejects_native_changes_and_new_resources(self):
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        self.install()
+        self.adapter.version = "0.164.0-alpha.11.1"
+        previous = self.adapter.receipt()
+        skill = self.adapter.skills / "mainframe-testing/SKILL.md"
+        def update(path, data, component):
+            return Change.to(path, data, mode=path.stat().st_mode & 0o777, component=component)
+        allowed = update(skill, skill.read_bytes() + b"\nRevised method.\n", "skills.mainframe-testing")
+        self.adapter.validate_content_update([allowed], previous)
+        candidates = [
+            update(skill, skill.read_bytes().replace(b"name: mainframe-testing", b"name: different"), allowed.component),
+            update(skill, None, allowed.component),
+            Change.to(skill, allowed.after, mode=0o755, component=allowed.component),
+            Change.to(skill.parent / "new.md", b"new", component=allowed.component),
+            update(self.adapter.hooks / "bridge.py", b"changed", "hook transport"),
+            update(self.adapter.hooks / "detectors/mainframe-subagent-selection.py", b"changed", "hooks.mainframe-subagent-selection"),
+            update(self.adapter.codex / "hooks.json", b"changed", "hook registration"),
+            update(self.adapter.codex / "config.toml", b"changed", "feedback permission"),
+            update(self.adapter.codex / "agents/mainframe-researcher.toml", b"changed", "agents.mainframe-researcher"),
+        ]
+        for change in candidates:
+            with self.subTest(path=change.path, mode=change.mode):
+                with self.assertRaises(Conflict):
+                    self.adapter.validate_content_update([allowed, change], previous)
+        for receipt in ({}, dict(previous, source="/another-source"), dict(previous, files={})):
+            with self.assertRaises(Conflict):
+                self.adapter.validate_content_update([allowed], receipt)
+        self.adapter.surface = "cli"
+        with self.assertRaises(Conflict):
+            self.adapter.validate_content_update([allowed], previous)
+
+    def test_desktop_text_entrypoint_does_not_provision_unrelated_analyzers(self):
+        self.adapter = Codex(self.source, self.home, version="0.163.0-alpha.11", surface="desktop")
+        self.install()
+        source = self.source / "instructions/global.md"
+        original = source.read_bytes()
+        self.addCleanup(source.write_bytes, original)
+        source.write_bytes(original + b"\nFixture-only updated scope.\n")
+        spec = importlib.util.spec_from_file_location("mainframe_install_text_test", self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(entrypoint)
+        reports = []
+        options = ["--surface", "desktop", "--runtime-version", "0.164.0-alpha.11.1",
+                   "--home", str(self.home), "--instructions-reviewed"]
+        unavailable = {"ready": False, "required": ["ruff"], "missing": ["ruff"]}
+        with (patch.object(entrypoint.Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "runtime_status", return_value=unavailable),
+              patch.object(entrypoint, "ensure_runtime") as provision,
+              patch.object(entrypoint, "show", side_effect=lambda report, details: reports.append(report))):
+            self.assertEqual(entrypoint.main(["codex", "apply"] + options), 0)
+            self.assertEqual(entrypoint.main(["codex", "verify"] + options), 1)
+            provision.assert_not_called()
+        self.assertIn("existing Markdown only", reports[0]["delivery_mode"])
+        self.assertTrue(reports[-1]["scoped_update_matches"])
+        self.assertFalse(reports[-1]["structure_matches"])
+        self.assertEqual(reports[-1]["runtime_support"], unavailable)
+        self.assertIn(b"Fixture-only updated scope.", (self.adapter.codex / "AGENTS.md").read_bytes())
 
     def test_prerelease_content_update_converges_without_touching_native_bindings(self):
         self.adapter.surface = "desktop"

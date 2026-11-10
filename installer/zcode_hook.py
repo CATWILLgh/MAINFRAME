@@ -9,6 +9,7 @@ native output.
 from __future__ import annotations
 
 from contextlib import closing, contextmanager
+import difflib
 import hashlib
 import importlib.util
 import json
@@ -35,7 +36,7 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent
 PRE_SHELL_HOOKS = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder"})
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-todo-limits", "mainframe-fallow-quality"})
 MAX_INPUT_BYTES = 262_144
 MAX_MESSAGE_CHARS = 6_000
 MAX_OUTPUT_BYTES = 32_768
@@ -45,6 +46,9 @@ MAX_EVENTS = 4_096
 EVENT_TTL = 7 * 24 * 60 * 60
 MAX_ID_CHARS = 512
 _MISSING = object()
+FALLOW_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte"})
+FALLOW_MAX_BYTES = 2_000_000
+FALLOW_UNAVAILABLE = "Fallow structural review was unavailable: the native edit response could not be attributed exactly. Completion was not blocked; verify the addressed TS/JS edit manually."
 
 
 def _native_value(data: dict, snake: str, camel: str):
@@ -340,10 +344,117 @@ def _quality_dispatch(data: dict, state: Path, event: str) -> dict | None:
             scope, workspace, state_namespace="mainframe-zcode-v2", state_root=state
         )
         if result.block_reason:
-            return _stop_block(result.block_reason)
+            active = _native_value(data, "stop_hook_active", "stopHookActive")
+            prefix = "MAINFRAME quality check remains unresolved after its repair continuation: " if active is True else ""
+            return _stop_block(prefix + result.block_reason)
         # Stop advice is not visible to the responsible model unless it forces
         # another turn. Keep advisory-only results silent at this event.
     return None
+
+
+def _todo_dispatch(data: dict, event: str) -> dict | None:
+    if event != "PreToolUse":
+        return None
+    tool = _native_value(data, "tool_name", "toolName")
+    inputs = _native_value(data, "tool_input", "toolInput")
+    cwd = _cwd(data)
+    if tool not in {"Write", "Edit"} or not isinstance(inputs, dict) or cwd is None:
+        return None
+    paths = _edit_paths(data, cwd)
+    if not paths:
+        return None
+    detector = _load_detector("mainframe-todo-limits")
+    if detector is None:
+        return None
+    workspace = _project_root(cwd)
+    if tool == "Write":
+        content = inputs.get("content")
+        if not isinstance(content, str):
+            return None
+        reason = detector.check_write(workspace, paths[0], content)
+    else:
+        old, new = inputs.get("old_string"), inputs.get("new_string")
+        replace_all = inputs.get("replace_all", False)
+        if not isinstance(old, str) or not isinstance(new, str) or not isinstance(replace_all, bool):
+            return None
+        reason = detector.check_edit(workspace, paths[0], old, new, replace_all=replace_all)
+    return (_native_output(event, "permissionDecisionReason", reason)
+            if isinstance(reason, str) and reason else None)
+
+
+def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
+    paths = _edit_paths(data, cwd)
+    root, path = Path(workspace), Path(paths[0])
+    path.relative_to(root)
+    if ".." in path.parts or any(part.is_symlink() for part in (path, *path.parents) if part.is_relative_to(root)):
+        raise ValueError("unsafe addressed path")
+    response = _native_value(data, "tool_response", "toolResponse")
+    if not isinstance(response, dict) or response.get("userModified") is True:
+        raise ValueError("unattributed native result")
+    response_path = response.get("filePath")
+    if not isinstance(response_path, str):
+        raise ValueError("missing result path")
+    actual_path = Path(response_path)
+    actual_path = actual_path if actual_path.is_absolute() else Path(cwd) / actual_path
+    if actual_path != path:
+        raise ValueError("conflicting result path")
+    original = response.get("originalFile", _MISSING)
+    wholly_owned = []
+    if tool == "Write":
+        after = response.get("content")
+        kind = response.get("type")
+        if (kind not in {"create", "update"} or not isinstance(after, str)
+                or (kind == "create" and original is not None)
+                or (kind == "update" and not isinstance(original, str))):
+            raise ValueError("missing Write postimage")
+        before = original or ""
+        wholly_owned = [str(path)]
+    else:
+        old, new, replace_all = response.get("oldString"), response.get("newString"), response.get("replaceAll")
+        if (not isinstance(original, str) or not isinstance(old, str) or not old
+                or not isinstance(new, str) or not isinstance(replace_all, bool)
+                or original.count(old) == 0 or (not replace_all and original.count(old) != 1)):
+            raise ValueError("ambiguous Edit response")
+        before = original
+        # Native Edit deletes the following line break with an empty replacement.
+        matched = old + "\n" if not new and not old.endswith("\n") and old + "\n" in before else old
+        after = before.replace(matched, new, -1 if replace_all else 1)
+    if len(before.encode("utf-8")) + len(after.encode("utf-8")) > FALLOW_MAX_BYTES:
+        raise ValueError("oversized native edit")
+    with path.open("rb") as stream:
+        observed = stream.read(FALLOW_MAX_BYTES + 1)
+    if observed != after.encode("utf-8"):
+        raise ValueError("addressed postimage changed")
+    relative = path.relative_to(root).as_posix()
+    diff = "".join(difflib.unified_diff([line + "\n" for line in before.splitlines()], [line + "\n" for line in after.splitlines()],
+                                        fromfile="a/" + relative, tofile="b/" + relative))
+    if len(diff.encode("utf-8")) > FALLOW_MAX_BYTES:
+        raise ValueError("oversized edit diff")
+    return [str(path)], wholly_owned, diff
+
+
+def _fallow_dispatch(data: dict, state: Path, event: str) -> dict | None:
+    tool = _native_value(data, "tool_name", "toolName")
+    cwd = _cwd(data)
+    if event != "PostToolUse" or tool not in {"Write", "Edit"} or cwd is None or _event_identity(data) is None:
+        return None
+    paths = _edit_paths(data, cwd)
+    if not paths or Path(paths[0]).suffix.lower() not in FALLOW_SUFFIXES:
+        return None
+    detector = _load_detector("mainframe-fallow-quality")
+    if detector is None:
+        return None
+    workspace = _project_root(cwd)
+    try:
+        affected, owned, diff = _fallow_diff(data, cwd, workspace, tool)
+        if not diff:
+            return None
+        result = detector.analyze(workspace, affected, diff, wholly_owned_paths=owned, timeout_seconds=7)
+        message = result.advisory or result.unavailable
+    except (OSError, ValueError, RuntimeError, UnicodeError):
+        message = FALLOW_UNAVAILABLE
+    return (_native_output(event, "additionalContext", message)
+            if message and claim_event(data, state, "mainframe-fallow-quality:post") else None)
 
 
 def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
@@ -404,6 +515,10 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
     event = _native_value(data, "hook_event_name", "hookEventName")
+    if name == "mainframe-fallow-quality":
+        return _fallow_dispatch(data, state, event)
+    if name == "mainframe-todo-limits":
+        return _todo_dispatch(data, event)
     if name == "mainframe-skill-reminder":
         if skill_advice is None:
             return None

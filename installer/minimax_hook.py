@@ -33,6 +33,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 DETECTORS = PLUGIN_ROOT / "hooks/detectors"
 HOOKS = PLUGIN_ROOT / "hooks"
 HOOK_NAMES = frozenset({
+    "mainframe-subagent-selection", "mainframe-todo-limits",
     "mainframe-secret-access", "mainframe-rg-short-replace",
     "mainframe-destructive-operations", "mainframe-commit-secrets",
     "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder",
@@ -324,12 +325,46 @@ def session_start(data: dict) -> dict | None:
     return _output(event, context="MAINFRAME global operating instructions:\n\n" + text)
 
 
+def _todo_reason(data: dict, cwd: Path) -> str | None:
+    detector = _load_detector("mainframe-todo-limits")
+    tool, path = _tool(data), _path(data, cwd)
+    if detector is None or tool is None or path is None:
+        return None
+    name, inputs = tool
+    # Keep the addressed spelling: the detector rejects symlink traversal and '..'.
+    # _path above supplies the shared alias-conflict and project-scope check only.
+    raw_path = next(inputs[key] for key in ("file_path", "filePath", "path") if key in inputs)
+    addressed = Path(raw_path)
+    path = addressed if addressed.is_absolute() else cwd / addressed
+    root = str(_project_root(cwd))
+    if name == "write":
+        return detector.check_write(root, str(path), inputs.get("content"))
+    if name == "edit" and isinstance(inputs.get("replace_all", False), bool):
+        return detector.check_edit(root, str(path), inputs.get("old_string"),
+                                   inputs.get("new_string"), inputs.get("replace_all", False))
+    return None
+
+
 def pre_tool(data: dict, state: Path) -> dict | None:
     cwd, tool = _cwd(data), _tool(data)
     if cwd is None or tool is None: return None
     name, inputs = tool
     contexts, denials = [], []
-    if name in {"write", "edit"}:
+    if name == "task":
+        detector = _load_detector("mainframe-subagent-selection")
+        if detector is not None:
+            reason = detector.decision_reason(inputs.get("model"), inputs.get("effort"))
+            if reason:
+                contexts.append(
+                    "MiniMax task model/effort overrides require explicit user choices. "
+                    "Preserve the native Agent or inherited defaults when those choices were not supplied; "
+                    "do not infer model or effort from task complexity. MAINFRAME cannot enforce "
+                    "autonomous model/effort selection through this native interface."
+                )
+    elif name in {"write", "edit"}:
+        reason = _todo_reason(data, cwd)
+        if reason:
+            return _output("PreToolUse", deny=reason)
         if not (HOOKS / ".disabled-mainframe-fallow-quality").exists():
             _save_snapshot(data, cwd, state)
         note = _quality_pre(data, cwd, state)

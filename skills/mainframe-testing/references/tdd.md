@@ -11,6 +11,7 @@
 - Use deterministic time, seeded randomness, controlled scheduling and isolated data. Synchronize concurrent work with barriers/events or observable conditions, not arbitrary sleeps.
 - Replace external collaborators at a stable boundary with explicit success, failure and ambiguous-outcome behavior. Do not mock the component whose semantics are being claimed.
 - Assert observable outcomes, including rejected side effects and cleanup. A call count can support an idempotency claim but cannot by itself prove durable business state.
+- A regression check must fail when the specific behavior or protected side effect it claims to test is broken or omitted. Strengthen or replace an insensitive check rather than treating its green result as proof or deleting needed coverage. Check sensitivity on a cheap isolated baseline when needed; this does not require mutation-testing infrastructure or reconstructed red history for every existing test. Judge observable effects, not whether a function returns a value.
 - Test actual database constraints, transactions and migrations on the correct engine. Test serialization and generated artifacts through what their consumers receive.
 - Make test names and failures explain the contract. Keep fixtures minimal; avoid entire production dumps, credentials, universal helper abstractions and large unrelated setup.
 - Preserve meaningful regression coverage during refactoring. A changed requirement can legitimately change a test; document its basis rather than rewriting expectations to match a bug.

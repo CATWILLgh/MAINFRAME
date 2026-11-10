@@ -1,0 +1,3 @@
+- insert:
+    - id: mainframe-workspace-transfer-safe
+      name: '@mainframe/dsh-workspace-transfer-safe'

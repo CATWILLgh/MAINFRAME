@@ -2,9 +2,10 @@
 
 Use this maintained route when the installation request is running in ZCode
 Desktop from this MAINFRAME checkout. The original inspected mapping targets macOS
-ZCode build **3.11.2.6792**. The **3.14.4.7912** mapping was revalidated against its shipped hook parser,
-context consumers and current official documentation. New conversation acceptance
-remains separate. The older **3.14.3.7762** route permits bounded
+ZCode build **3.11.2.6792**. Full Desktop delivery is also supported on
+**3.14.4.7912** and **3.17.1.9553** after inspection of their shipped native
+contracts. The current build includes immediate Fallow advice from exact native
+Write/Edit responses. New conversation acceptance remains separate. The older **3.14.3.7762** route permits bounded
 skill updates and the exact validated pre-shell transport consolidation in an
 existing same-source installation; other native-hook changes, roles, commands,
 and permissions remain blocked. Version detection reads the selected application's plist;
@@ -15,6 +16,55 @@ known gaps belong to [zcode.md](native/zcode.md); mechanical behavior belongs to
 [installer/zcode.py](../../installer/zcode.py),
 [installer/zcode_hook.py](../../installer/zcode_hook.py), and shared installer
 modules. Unknown builds need a separately scoped compatibility check.
+
+## Deliver one skill
+
+Use this route on the inspected full-mapping builds and Desktop **3.17.2.9661**
+with an existing same-source installation and matching receipt and adaptation
+state. The new build was inspected for the private skill reader only. See the
+[bundled reader evidence](native/zcode-evidence.md#desktop-31729661-private-skill-reader).
+
+```sh
+python3 -B install.py zcode plan --surface desktop --skill mainframe-openspec
+python3 -B install.py zcode apply --surface desktop --skill mainframe-openspec
+python3 -B install.py zcode verify --surface desktop --skill mainframe-openspec
+```
+
+The route reconciles the selected package under `~/.zcode/skills/` and its
+receipt and adaptation records. It leaves hooks, commands, roles, configuration
+and analyzers alone. `scoped_update_matches` proves selected-file convergence.
+Refresh Skills in Desktop settings and open a new conversation for discovery.
+
+## Deliver only /todo
+
+Build **3.17.1.9553** also retains a narrow route for `/todo` in an existing,
+same-source receipted Desktop installation. The bundled command expander appends text supplied after
+`/todo` as user arguments; the workflow records or updates the active worktree's
+`.docs/todo` index and `.docs/todos/*.md` notes. Write the note before its index
+entry. See [the command](../../commands/todo.md) for the agreed groups and limits.
+
+```sh
+python3 -B install.py zcode plan --surface desktop --todo
+python3 -B install.py zcode apply --surface desktop --todo
+python3 -B install.py zcode verify --surface desktop --todo
+```
+
+This route delivers only `commands/todo.md`, the canonical task-limit detector,
+its maintained bridge, and one user-level `PreToolUse` registration matching
+`Write|Edit`, plus their receipt and adaptation rows. It provisions no analyzers
+and preserves other components, user configuration, trust, native disable
+toggles, disable markers and existing verification evidence. Conflicting files
+or registrations stop delivery for reconciliation. Normal full delivery on
+previously supported builds also includes these components.
+
+`mainframe-todo-limits` denies only a positive addressed index-row or note
+violation. Native `Write` content and `Edit` replacements are projected through
+the canonical detector before execution; untouched rows remain outside the
+check. Other write paths, including shell writes, have no new binding. The
+registration is primary-runtime only; subagent coverage and fresh Desktop
+acceptance are not established. [Current bundle evidence](native/zcode-evidence.md#desktop-31719553-task-command-and-pre-edit-guard)
+supports this narrow mapping. Open a new Desktop session after delivery. A
+deliberate global hook disable remains disabled and is reported explicitly.
 
 ## Plan, apply, verify
 
@@ -110,12 +160,29 @@ while an introduced finding still exists. Advisory-only Stop output remains
 silent because ZCode otherwise delivers it by forcing another model turn.
 
 The installer report supplies current delivery counts from the exact inventory.
-Two hook contracts remain unsupported in the inspected builds:
+Two completion contracts remain unsupported:
 `mainframe-code-quality` and `mainframe-fallow-quality` require non-blocking completion advice.
 ZCode collects `Stop` advice but delivers it to the model only with a new model
 continuation. The useful mainframe-code-quality core is installed and reported as a
 retained partial binding, but it is not the full canonical contract. Do not
 silently change timing or force advice through a completion block.
+
+On **3.17.1.9553**, `mainframe-fallow-quality` also has a retained partial
+binding: an immediate `PostToolUse` advisory for attributed TS/JS `Write|Edit`
+results. Native responses supply the original content and actual replacement;
+the bridge compares the addressed postimage and builds its diff in memory.
+Missing, conflicting, oversized or concurrently changed attribution produces
+bounded unavailable advice. No source or diff is retained. The current full
+route verifies the tested Fallow dependency alongside Ruff, Oxlint and Semgrep;
+the `/todo`-only route provisions none of them.
+
+The current native `Agent` input exposes neither a per-call model nor reasoning
+effort. `mainframe-subagent-selection` is therefore reported as unsupported with
+no runtime denial. User role `model`/`thoughtLevel` presets are preserved as
+native configuration. A still-positive quality Stop retry carries an explicit
+unresolved reason; ZCode caps repair continuations at three. Its parser has no
+non-blocking final warning channel equivalent to Codex's, so a final green
+quality result is never inferred from reaching that cap.
 
 The inspected default subagent runtime does **not inherit hook runners**.
 The maintained registrations protect the primary runtime; they do not establish
@@ -130,7 +197,8 @@ It does not call skills or commands, spawn roles, use credentials, launch a
 browser, or test native hook dispatch. Delivery and native verification have
 separate schema-2 fields in `ADAPTATION.zcode.json`.
 
-After successful verification, report the two unsupported hooks and primary-only hook coverage. When skill
+After successful verification, report the unsupported full contracts, retained
+partial bindings and primary-only hook coverage. When skill
 files changed, ask the user to use **Settings -> Skills -> Refresh** once and
 then open a new ZCode Desktop session; retain that handoff in adaptation state
 until native acceptance clears it. Otherwise ask only for a new session. Preserve a deliberate
