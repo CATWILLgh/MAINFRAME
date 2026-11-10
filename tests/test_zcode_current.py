@@ -1,10 +1,10 @@
 """Current Desktop delivery and exact native post-edit attribution fixtures."""
 from copy import deepcopy
 import io
-import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import plistlib
 import shutil
 import subprocess
 import tempfile
@@ -201,40 +201,16 @@ class CurrentZCodeFallowTests(unittest.TestCase):
 
 class CurrentZCodeBundleTests(unittest.TestCase):
     def test_installed_public_contract_with_pure_extracted_functions(self):
-        bundle = Path("/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs")
-        if not bundle.is_file() or not shutil.which("node"):
+        contents = Path("/Applications/ZCode.app/Contents")
+        bundle = contents / "Resources/glm/zcode.cjs"
+        node = shutil.which("node")
+        if not bundle.is_file() or not node:
             self.skipTest("Current macOS ZCode bundle and Node are needed for this source-only probe")
-        self.assertEqual(hashlib.sha256(bundle.read_bytes()).hexdigest(), "9afd565a104d660259e6bdeeaa5cb8abc74a908559e21aa3c5f6a06f2a9da6c6",
-                         "Different ZCode bundle: inspect the new public contract before changing this pin")
-        script = r'''
-const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const source=fs.readFileSync(process.argv[1],'utf8');
-function extract(name,next){const start=source.indexOf(`function ${name}(`),end=source.indexOf(`function ${next}(`,start+1);assert.ok(start>=0&&end>start);return source.slice(start,end);}
-const context=vm.createContext({}, {codeGeneration:{strings:false,wasm:false}});
-vm.runInContext(`const Tc=Object.fromEntries(['PreToolUse','PermissionRequest','PostToolUse','PostToolUseFailure','UserPromptSubmit','SessionStart','Stop'].map(n=>[n,n]));const f9a=3;
-${extract('bIn','SIn')}${extract('vIn','F_a')}${extract('F_a','j_a')}${extract('WSo','vIn')}${extract('$Wo','g9a')}
-const qSo=e=>['PreToolUse','PermissionRequest','UserPromptSubmit'].includes(e);`,context,{timeout:1000});
-function evaluate(code){return JSON.parse(vm.runInContext(`JSON.stringify(${code})`,context,{timeout:1000}));}
-assert.equal(evaluate(`bIn('PreToolUse',{hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:'bounded'}})`).permissionBehavior,'deny');
-assert.deepEqual(evaluate(`bIn('PostToolUse',{hookSpecificOutput:{hookEventName:'PostToolUse',additionalContext:'fallow advice'}})`).additionalContexts,['fallow advice']);
-assert.equal(evaluate(`$Wo(bIn('Stop',{additionalContext:'advice'}),0)`),false);
-assert.equal(evaluate(`$Wo(bIn('Stop',{decision:'block',reason:'unresolved'}),2)`),true);
-assert.equal(evaluate(`$Wo(bIn('Stop',{decision:'block',reason:'unresolved'}),3)`),false);
-assert.equal(evaluate(`$Wo(bIn('Stop',{continue:false,systemMessage:'unresolved'}),0)`),false);
-assert.equal(evaluate(`WSo('Edit','Write|Edit')`),true);
-const at=source.indexOf('subagent_type:'),schema=source.slice(source.lastIndexOf('cat=',at),source.indexOf('ANr=',at));
-for(const field of ['description:','prompt:','subagent_type:','run_in_background:'])assert.ok(schema.includes(field));
-assert.doesNotMatch(schema,/\b(?:model|thoughtLevel|reasoningEffort):/);
-const childAt=source.indexOf('taskType:"subagent_child"'),child=source.slice(source.lastIndexOf('new $D(',childAt),source.indexOf('logger:this.logger',childAt));
-assert.ok(child.includes('executionPort:e.executionPort'));
-assert.doesNotMatch(child,/\b(?:hooks|hookRunner|workspaceHookSnapshot|workspaceHookAdmission):/);
-assert.doesNotMatch(extract('sTt','B8a'),/\b(?:hooks|hookRunner):/);
-for(const exact of ['originalFile:c','content:S','originalFile:e.originalFile','oldString:e.actualOldString','newString:e.actualNewString','replaceAll:e.replaceAll','t.tool_response=e.toolResponse','await Lko(e,S,F,xt,','hookAdditionalContexts:Et'])assert.ok(source.includes(exact),exact);
-const enumAt=source.indexOf('Tc={SessionStart:');const events=source.slice(enumAt,source.indexOf('},ZM=',enumAt));
-assert.doesNotMatch(events,/Subagent(?:Start|Stop)/);
-console.log('Current ZCode source-only hook, exact edit response, Stop cap, selection and child-boundary probes passed.');
-'''
-        result = subprocess.run([shutil.which("node"), "-e", script, str(bundle)], capture_output=True, text=True, timeout=10)
+        with (contents / "Info.plist").open("rb") as plist:
+            build = plistlib.load(plist)["CFBundleVersion"]
+        probe = Path(__file__).with_name("probes") / "zcode_current_contract.cjs"
+        result = subprocess.run([node, str(probe), str(bundle), build],
+                                capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
 
 

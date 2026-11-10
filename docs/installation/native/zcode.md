@@ -2,6 +2,9 @@
 
 Current full Desktop mapping: **3.17.1.9553**, reviewed 2026-11-01 against the
 shipped bundle and official references; see [current evidence](zcode-evidence.md#desktop-31719553-full-delivery).
+Installed build **3.17.2.9661** has
+[selected-skill reader evidence](zcode-evidence.md#desktop-31729661-private-skill-reader)
+and a [bounded hook source probe](zcode-evidence.md#desktop-31729661-hook-contract-probe).
 The historical mapping was reviewed 2026-09-08 against official documentation and the installed macOS
 application, version 3.11.2 (build 3.11.2.6792), with a bounded skill-update
 compatibility review on 2026-09-22 for 3.14.3.7762 and
