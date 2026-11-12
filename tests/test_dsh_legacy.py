@@ -109,7 +109,7 @@ class DshLegacyCompatibilityTests(unittest.TestCase):
 
     def test_inventory_rejects_missing_unknown_or_redirected_plugins(self):
         source = inventory(self.source)
-        self.assertEqual(sum(map(len, source["components"].values())), 57)
+        self.assertEqual(sum(map(len, source["components"].values())), 58)
         for mutation in ("missing", "unknown", "redirected"):
             with self.subTest(mutation=mutation):
                 changed = deepcopy(source)

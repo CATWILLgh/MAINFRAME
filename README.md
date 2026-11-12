@@ -61,7 +61,7 @@ paths need Node.js and npm. [Shared runtime and provisioning](docs/installation/
 
 ## What MAINFRAME delivers
 
-The [inventory](ADAPTATION.example.json) lists 53 MAINFRAME components and
+The [inventory](ADAPTATION.example.json) lists 54 MAINFRAME components and
 four DSH packages. Each global adapter delivers the MAINFRAME components its
 native mapping supports.
 
@@ -70,7 +70,7 @@ native mapping supports.
 | [Global instruction](instructions/global.md) | One owned section of the product's user-level instructions |
 | [26 skills](skills/) | Global skill packages with their approved references, scripts, and assets |
 | [7 roles](agents/) | Native agent or subagent profiles |
-| [8 commands](commands/) | Explicit workflows projected into the product's command mechanism |
+| [9 commands](commands/) | Explicit workflows projected into the product's command mechanism |
 | [10 hooks](hooks/) | Canonical detectors bound to supported native events |
 | [Credential helper](shared/credentials/mainframe-secret) | A compatible `mainframe-secret` command and integration with the non-secret index |
 

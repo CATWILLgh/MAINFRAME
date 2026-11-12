@@ -126,8 +126,8 @@ Do not delete an old wrapper merely to make cleanup look complete.
 ## Delivered mapping and known gaps
 
 The program prepares every complete skill package listed in the
-[inventory](../../ADAPTATION.example.json), seven native agent roles,
-seven native slash commands, the narrow `mainframe-tickets-find` skill projection
+[inventory](../../ADAPTATION.example.json), the native agent roles and slash
+commands it declares, the narrow `mainframe-tickets-find` skill projection
 needed by noninteractive automations, shared credential helper/index integration,
 and the global instruction. It preserves unrelated target files and configuration.
 Commands retain explicit invocation, and shared command-skill collisions are

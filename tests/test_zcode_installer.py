@@ -12,7 +12,7 @@ from installer.zcode import (ZCode, HOOK_NAMES, SHELL_HOOK_NAMES,
     _is_validated_hook_config_update, _legacy_hook_registration,
     role_body, command_body)
 from installer.core import Change, Conflict, transact, restore
-from installer.runtime import runtime_bin, TOOL_SPECS
+from installer.runtime import OPENSPEC_VERSION, runtime_bin, TOOL_SPECS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,13 +45,16 @@ class ZCodeInstallationTests(unittest.TestCase):
         return report
 
     def entrypoint_environment(self):
-        # These tests cover delivery routing, not analyzer provisioning/execution.
+        # These tests cover delivery routing with local version probes.
         tools = self.home / 'version-fixtures'
         tools.mkdir(exist_ok=True)
         for name in ('ruff', 'oxlint', 'semgrep'):
             tool = tools / name
             tool.write_text('#!/bin/sh\nprintf "%s\\n" "' + name + ' ' + TOOL_SPECS[name][2] + '"\n')
             tool.chmod(0o755)
+        openspec = tools / 'openspec'
+        openspec.write_text(f"#!/bin/sh\nprintf '%s\\n' '{OPENSPEC_VERSION}'\n")
+        openspec.chmod(0o755)
         return {**os.environ, 'PATH': str(tools) + os.pathsep + os.environ.get('PATH', '')}
 
     def test_source_relocation_preserves_existing_credential_index(self):
@@ -496,8 +499,14 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertTrue(reports[1]['applied'])
         self.assertTrue(reports[2]['structure_matches'])
         self.assertEqual(reports[2]['file_change_count'], 0)
-        self.assertEqual(reports[2]['planned_delivery'], {'installed': 49, 'pending': 1, 'unsupported': 6})
-        self.assertEqual(reports[2]['planned_verification'], {'passed': 0, 'pending': 50})
+        manifest = json.loads((self.source / 'ADAPTATION.example.json').read_text())
+        component_count = sum(len(group) for group in manifest['components'].values())
+        expected_delivery = {'pending': 1, 'unsupported': 6}
+        expected_delivery['installed'] = component_count - sum(expected_delivery.values())
+        self.assertEqual(reports[2]['planned_delivery'], expected_delivery)
+        self.assertEqual(reports[2]['planned_verification'], {
+            'passed': 0, 'pending': component_count - expected_delivery['unsupported'],
+        })
         self.assertEqual(len(reports[2]['next_actions']), 1)
         state = json.loads(self.adapter.state_path.read_text())
         self.assertFalse(any(row.get('verification') == 'passed' for group in state['components'].values() for row in group.values()))

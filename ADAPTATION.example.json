@@ -212,6 +212,11 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-review-branch": {
+        "source": "commands/mainframe-review-branch.md",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-tickets-find": {
         "source": "commands/mainframe-tickets-find.md",
         "delivery": "pending",
