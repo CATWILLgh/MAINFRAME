@@ -28,6 +28,7 @@ Reuse the method while its relevant instructions remain available in context. Re
 | Decision | Reference |
 | --- | --- |
 | Project strategy, test levels, or the project verification map | [Shared strategy](references/strategy.md) |
+| Changed latency, resource use, contention, or shared background capacity | [Performance and progress](references/strategy.md#protect-performance-and-progress) |
 | Red/green/refactor, regression design, or an inherited implementation | [Behavior and TDD](references/tdd.md) |
 | Local scope, fixtures, PostgreSQL identity, or an unavailable real dependency | [Local test boundary](references/local.md) |
 | Analyzer selection, installation, reuse, or hook execution | [Small tool profiles](references/tooling.md) |

@@ -18,6 +18,11 @@ explicit. Count every simultaneously retained pool and dedicated connection;
 prove progress at minimum supported capacity. A second connection can prevent
 self-deadlock, but it also changes the resource bound and atomicity model.
 
+When background writes and a user request contend, identify the lock holder,
+waiting query, and time spent waiting. Reproduce overlap with the actual
+engine. Verify that the request can progress at the intended capacity or
+returns its defined bounded failure without losing or duplicating work.
+
 Treat context cancellation, serialization conflicts, deadlocks, and stale
 versions as defined outcomes. Retry only the intended transaction scope with a
 bounded termination rule. Use `errors.Is` with the selected database package's

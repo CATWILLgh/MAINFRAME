@@ -9,6 +9,7 @@
 - Use a transaction only when operations must commit or fail together. Verify callback, nested, retry, timeout, and connection semantics for the installed client and version.
 - Make concurrency ownership explicit. A read followed by a write is not atomic unless the database contract makes it so.
 - Own pools and clients once per intended process or request lifecycle. Prevent connection multiplication in hot-reload, serverless, worker, and test environments.
+- Release transactions and pool slots before waiting for a queue, quota, or upstream response whenever the protocol permits. Measure the lock holder, waiter, and request progress on the actual engine when changing contention.
 
 ## Schema and data rollout
 

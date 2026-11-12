@@ -18,6 +18,30 @@ Specialized risks apply across the other levels; they are not a final optional b
 
 Use [local boundaries](local.md) for infrastructure authority and [the CI contract](ci.md) for required events, result interpretation and cost. Test-level names vary between frameworks; judge the exercised boundary rather than renaming the project's established suites.
 
+## Protect performance and progress
+
+When a change adds work to a hot path, shares capacity with existing work, or
+claims a speed or resource improvement, choose an observable outcome and a
+budget from the product requirement or measured baseline. Compare the same
+workload before and after with realistic data size and skew, cache state,
+concurrency, and resource limits. Separate queue, lock or connection wait from
+execution time. Check correctness, completions, timeouts, and tail latency
+together so a fast rejection or delayed worker cannot hide lost work.
+
+Prefer a fast regression that fails on the mechanism. Assert progress while
+the competing transaction, worker, or upstream call is deliberately held.
+Use query/row counts, repeated work, or bounded concurrency when those expose
+the cost reliably. For an actual latency or resource budget, use a controlled
+benchmark or CI job with an explicit acceptance bound. Timing printed in a log
+is diagnostic evidence. Keep preparation out of the timed window and prove
+the check can reject the baseline defect.
+
+For a new integration sharing a queue, pool, or rate limit, exercise the
+existing user path and the new work together. Verify admission, durable
+completion, progress on the next item, and the effect of a slow or failed
+dependency at the relevant boundary. Keep the existing performance evidence
+linked to the guarantee and executable check in the project verification map.
+
 ## Keep one project verification map
 
 Reuse the existing project test documentation, project-skill reference, or equivalent maintained owner. Link it from project knowledge; do not create another file when one already serves this purpose. Group guarantees that share the same proof and execution route rather than listing every test case. Start with the current task's affected guarantees and expand during relevant work; an ordinary change does not authorize a repository-wide inventory.
