@@ -36,6 +36,13 @@ benchmark or CI job with an explicit acceptance bound. Timing printed in a log
 is diagnostic evidence. Keep preparation out of the timed window and prove
 the check can reject the baseline defect.
 
+Define the conditions that make the comparison valid separately from the
+guarantees the candidate must pass. Decide what baseline failures should
+count as evidence and what would invalidate the experiment. If a chosen
+control fails, diagnose that distinction before repeating the run. Correct a
+faulty measuring tool within scope and bring any change to an agreed
+acceptance condition back to its decision owner.
+
 For a new integration sharing a queue, pool, or rate limit, exercise the
 existing user path and the new work together. Verify admission, durable
 completion, progress on the next item, and the effect of a slow or failed

@@ -362,6 +362,11 @@ OPERATION_ADVISORIES = {
         "Scaling to zero can remove all serving endpoints. Confirm the maintenance impact "
         "and recovery path. Probe a real user route across the change.",
     ),
+    "openspec-apply": (
+        "openspec-apply", "mainframe-openspec",
+        "Check the agreed outcome and the evidence needed to accept it. Confirm authority "
+        "for any new live account, write, or external effect before applying.",
+    ),
 }
 _BACKUP_ROUTES = {"postgres-backup", "k3s-backup"}
 
@@ -480,6 +485,12 @@ def _operation_advisory(argv: list[str], executable: str, args: list[str]) -> st
         return "argo-release"
     if executable == "k3s" and args[:2] == ["etcd-snapshot", "save"] and not _HELP_VERSION.intersection(args):
         return "k3s-backup"
+    if executable == "openspec" and args[:2] == ["instructions", "apply"]:
+        values: dict[str, list[str]] = {}
+        operands = _operation_operands(args[2:], {"--json"}, {"--change"}, values)
+        changes = values.get("--change", [])
+        if operands == [] and len(changes) == 1 and re.fullmatch(r"[a-z0-9][a-z0-9-]*", changes[0]):
+            return "openspec-apply"
     return None
 
 
@@ -767,7 +778,8 @@ def operation_candidates(command: str) -> set[str]:
     named test runners and documented Codex exec/exact-ID resume forms are
     candidates. Peer relevance does not establish product-assignment authority.
     The additional operation advisories cover named Argo CD release commands,
-    scaling a workload to zero, and explicit PostgreSQL/K3s backup commands.
+    scaling a workload to zero, explicit PostgreSQL/K3s backup commands, and
+    requesting OpenSpec apply instructions for a named change.
     A single trailing literal stdout destination is accepted for a backup.
     Other application-only kubectl/K3s work, opaque shell wrappers and dynamic
     commands stay silent. A malformed nested string or exceeded limit silences

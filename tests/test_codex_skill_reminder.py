@@ -190,6 +190,27 @@ class ReminderTests(unittest.TestCase):
         self.data['tool_input']['command'] = 'kubectl scale deployment/web --replicas=0'
         self.assertIsNone(self.invoke())
 
+    def test_openspec_apply_checks_outcome_and_live_scope_once_after_skill_read(self):
+        skill = self.home / 'skills/mainframe-openspec/SKILL.md'
+        skill.parent.mkdir(parents=True)
+        skill.write_text('---\nname: mainframe-openspec\ndescription: OpenSpec\n---\n')
+        self.data['tool_input']['command'] = f'cat {skill}'
+        self.assertIsNone(self.invoke())
+
+        self.data['hook_event_name'] = 'PreToolUse'
+        self.data['tool_input']['command'] = 'openspec instructions archive --change example --json'
+        self.assertIsNone(self.invoke())
+        self.data['tool_input']['command'] = (
+            '/opt/bin/openspec instructions apply --change example --json'
+        )
+        note = self.invoke()
+        self.assertIsNotNone(note)
+        self.assertIn('agreed outcome', note)
+        self.assertIn('live account', note)
+        self.assertIn('mainframe-openspec', note)
+        self.assertNotIn('example', note)
+        self.assertIsNone(self.invoke())
+
     def test_symlink_parent_and_large_read_batch_stay_silent(self):
         alias=self.project/'api';alias.symlink_to(self.project/'server',target_is_directory=True)
         self.data['tool_input']['command']='cat '+str(alias/'app.py')

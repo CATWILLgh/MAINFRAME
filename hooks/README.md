@@ -523,7 +523,8 @@ Send one brief conditional suggestion. Deduplicate by session, recipient,
 workspace and skill or operation, with at most three suggestions per scope and
 seven-day expiry. Explicit PostgreSQL or K3s backup commands get one lifecycle
 note. Named Argo CD release commands and explicit scaling of a workload to zero
-share one continuity note per scope. These fixed notes point to a readable
+share one continuity note per scope. A named OpenSpec apply instruction request
+gets one note on acceptance evidence and live-operation authority. These fixed notes point to a readable
 method and remain useful after an explicit skill read. An explicit read attempt
 suppresses the generic skill suggestion and establishes awareness only. Raw
 output cannot prove read success; never parse content as a status envelope. Bounded private state contains hashes and skill identities,

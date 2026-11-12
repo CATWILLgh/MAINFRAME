@@ -154,6 +154,23 @@ class CandidateSkillTests(unittest.TestCase):
 
 
 class OperationSkillTests(unittest.TestCase):
+    def test_openspec_apply_instructions_require_an_explicit_change(self) -> None:
+        for command in (
+            "openspec instructions apply --change stabilize-queue --json",
+            "cd /workspace/.docs && /opt/bin/openspec instructions apply --change=stabilize-queue",
+        ):
+            with self.subTest(command=command):
+                self.assertIn("openspec-apply", DETECTOR.operation_candidates(command))
+        for command in (
+            "openspec instructions apply", "openspec instructions apply --change change --help",
+            "openspec instructions apply --change x --change y", "openspec instructions apply --change ../outside",
+            "openspec instructions tasks --change change --json",
+            "openspec instructions archive --change change --json",
+            "echo 'openspec instructions apply --change change --json'",
+        ):
+            with self.subTest(command=command):
+                self.assertNotIn("openspec-apply", DETECTOR.operation_candidates(command))
+
     def test_backup_advice_requires_an_executed_backup_command(self) -> None:
         for command, route in (
             ("pg_dump -h db -Fc --file=backup.dump app", "postgres-backup"),

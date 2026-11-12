@@ -17,7 +17,7 @@ TTL = 7 * 86400
 NAMES = {'mainframe-python-backend', 'mainframe-go-backend', 'mainframe-typescript-backend',
          'mainframe-frontend', 'mainframe-testing', 'mainframe-infrastructure',
          'mainframe-secrets', 'mainframe-curl-requests', 'mainframe-clickhouse', 'mainframe-k3s', 'mainframe-argocd',
-         'mainframe-research', 'mainframe-test-audit', 'mainframe-consequential-review',
+         'mainframe-research', 'mainframe-test-audit', 'mainframe-consequential-review', 'mainframe-openspec',
          'mainframe-peer-work'}
 ROLE_SKILLS = {
     'mainframe-researcher': 'mainframe-research',

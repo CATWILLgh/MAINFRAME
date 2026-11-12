@@ -56,6 +56,9 @@ observable changes to capabilities, design captures technical decisions when
 needed, and tasks map the agreement to implementation and checks. Use actual
 capability paths and scenarios with observable outcomes. Keep the full intended
 requirement when modifying it, including existing scenarios that still apply.
+For a changed journey, prove the result the user sees through the normal
+entrypoint. Join adjacent invariants in the same scenario when they can drift
+independently, such as list order and the timestamp shown on that row.
 For a change with no specification-level behavior change, use the selected
 schema's supported no-spec path when available. Leave implementation for apply.
 
@@ -76,6 +79,10 @@ their guidance and the current scope permits it.
   normal verification. Mark tasks complete when their result and required checks
   are evidenced. When implementation exposes a material change to the agreed
   behavior, reconcile the artifacts with the user before implementing it.
+  For a staged integration, establish which account, mode, live calls and
+  lasting changes are authorized, and who performs the first real action.
+  Reuse explicit authority. Keep working with the authorized fixtures and
+  checks while any unresolved live action waits.
 - **Verify** the affected change with
   `openspec validate <id> --type change --strict`. Inspect findings even on a
   zero exit code, including any reported archive merge conflicts. Check actual
