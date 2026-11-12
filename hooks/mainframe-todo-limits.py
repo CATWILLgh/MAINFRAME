@@ -129,15 +129,24 @@ def check_write(workspace, path, content):
     return _check(root, p, relative, before, content, {})
 
 
-def check_edit(workspace, path, old, new, replace_all=False):
+def check_edit(workspace, path, old, new, replace_all=False, *, blank_characters=None):
     target = _target(workspace, path)
-    if target is None or not isinstance(old, str) or not isinstance(new, str) or not old:
+    if (target is None or not isinstance(old, str) or not isinstance(new, str)
+            or (not old and blank_characters is None)):
         return None
     root, p, relative = target
     before = _read(p)
-    if before is None or old not in before or (not replace_all and before.count(old) != 1):
+    if before is None:
         return None
-    after = before.replace(old, new, -1 if replace_all else 1)
+    if old:
+        if old not in before or (not replace_all and before.count(old) != 1):
+            return None
+        after = before.replace(old, new, -1 if replace_all else 1)
+    else:
+        # A verified native empty-old form writes the whole blank or absent file.
+        if before.strip(blank_characters):
+            return None
+        after = new
     if str(relative) == '.docs/todo' and len(after.encode('utf-8')) > MAX_BYTES:
         return None
     return _check(root, p, relative, before, after, {})

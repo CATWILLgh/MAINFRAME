@@ -71,6 +71,8 @@ supported native edit into `check_write(workspace, path, content)`,
 `check_edit(workspace, path, old, new, replace_all=False)`, or
 `check_patch(workspace, patch)`. A returned string is a preventive denial;
 `None` is neutral. No raw record content is returned, written or retained.
+If native Edit uses an empty old string to create or fill a blank file, pass
+the verified native `blank_characters` set to `check_edit`.
 
 Validate only the root `.docs/todo` index's changed entries (including a group
 move) and changed `.docs/todos/<name>.md` notes. Inspect their direct link/index

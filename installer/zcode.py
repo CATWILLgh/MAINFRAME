@@ -21,13 +21,15 @@ from .shared import (inventory, _instruction, plan_skill_delivery, render_skill_
 from .state import reconcile_state, set_component
 
 KNOWN_RUNTIME = "3.11.2.6792"
-CURRENT_DESKTOP_RUNTIME = "3.17.1.9553"
-FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912", CURRENT_DESKTOP_RUNTIME}
+CURRENT_DESKTOP_RUNTIME = "3.18.0.10300"
+EXTENDED_HOOK_RUNTIMES = {"3.17.1.9553", CURRENT_DESKTOP_RUNTIME}
+FULL_MAPPING_RUNTIMES = {KNOWN_RUNTIME, "3.14.4.7912"} | EXTENDED_HOOK_RUNTIMES
 CONTENT_UPDATE_RUNTIMES = {"3.14.3.7762"}
 SKILL_DELIVERY_RUNTIMES = {"3.14.5.7961"}
 SINGLE_SKILL_RUNTIMES = FULL_MAPPING_RUNTIMES | {"3.17.2.9661"}
-TODO_DELIVERY_RUNTIMES = FULL_MAPPING_RUNTIMES | {"3.17.1.9553"}
+TODO_DELIVERY_RUNTIMES = FULL_MAPPING_RUNTIMES
 TODO_HOOK = "mainframe-todo-limits"
+ROOT_START_MATCHER = "startup|clear|resume|fork"
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", TODO_HOOK, "mainframe-fallow-quality")
@@ -58,7 +60,7 @@ CURRENT_UNSUPPORTED = {
     "mainframe-fallow-quality": "Immediate PostToolUse advice is retained for exact native Write/Edit TS/JS responses, using an in-memory diff without source retention. Full completion timing is unsupported: Stop advice reaches the model only through another continuation, and child runtimes do not inherit hooks.",
     "mainframe-subagent-selection": "The native Agent input exposes neither per-call model nor reasoning effort; a strict guard requires both controls. User role model/thoughtLevel presets are preserved, but they are not explicit per-call selection. No safe preventive binding is installed.",
 }
-HOOK_SCOPE = "Primary runtime only: the inspected ZCode default subagent path does not inherit hook runners."
+HOOK_SCOPE = "Primary runtime mapping. Ordinary Agent/Task subagents do not inherit the hook runner. Workflow-child delivery is unverified."
 AUTOMATION_SKILL_COMMANDS = {"mainframe-tickets-find"}
 NATIVE_AGENT_SETTING_KEYS = ("color", "model", "thoughtLevel", "injectAgentsMd")
 OPEN_SESSION_ACTION = "Open a new ZCode Desktop session to load the delivered registrations."
@@ -66,7 +68,7 @@ REFRESH_SKILLS_ACTION = "In ZCode Settings, refresh Skills once, then open a new
 
 
 def runtime_tools(version: str | None, surface: str | None) -> tuple[str, ...]:
-    return CODE_QUALITY_TOOLS + FALLOW_TOOLS if version == CURRENT_DESKTOP_RUNTIME and surface == "desktop" else RUNTIME_TOOLS
+    return CODE_QUALITY_TOOLS + FALLOW_TOOLS if version in EXTENDED_HOOK_RUNTIMES and surface == "desktop" else RUNTIME_TOOLS
 
 
 
@@ -129,8 +131,8 @@ def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, st
         changed = True
     if old_start.get("matcher") != new_start.get("matcher"):
         if (
-            old_start.get("matcher") != "startup|resume"
-            or new_start.get("matcher") != "startup|clear|compact|resume"
+            old_start.get("matcher") not in {"startup|resume", "startup|clear|compact|resume"}
+            or new_start.get("matcher") != ROOT_START_MATCHER
             or set(old_start) != {"matcher", "hooks"}
             or set(new_start) != {"matcher", "hooks"}
         ):
@@ -144,8 +146,7 @@ def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, st
         ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000), ("mainframe-commit-checkpoint", 5000)],
         ("PostToolUseFailure", "Write|Edit"): [("mainframe-code-quality", 30000)],
         ("Stop", None): [("mainframe-code-quality", 60000)],
-        ("SessionStart", "startup|resume"): [("mainframe-destructive-operations", 5000)],
-        ("SessionStart", "startup|clear|compact|resume"): [("mainframe-destructive-operations", 5000)],
+        ("SessionStart", ROOT_START_MATCHER): [("mainframe-destructive-operations", 5000)],
     }
     for event, groups in expected.get("hooks", {}).get("events", {}).items():
         for group in groups:
@@ -377,7 +378,7 @@ class ZCode:
             if name in AUTOMATION_SKILL_COMMANDS:
                 add(self.skills / name / "SKILL.md", command_skill_body(text, name), "commands." + name)
         for name in HOOK_NAMES:
-            if name == "mainframe-fallow-quality" and self.version != CURRENT_DESKTOP_RUNTIME:
+            if name == "mainframe-fallow-quality" and self.version not in EXTENDED_HOOK_RUNTIMES:
                 continue
             add(self.hooks / "detectors" / (name + ".py"), (self.root / "hooks" / (name + ".py")).read_bytes(), "hooks." + name)
         add(self.hooks / "bridge.py", Path(__file__).with_name("zcode_hook.py").read_bytes(), "hook transport")
@@ -475,7 +476,7 @@ class ZCode:
             return json.dumps({key: value for key, value in callback.items() if key != "enabled"}, sort_keys=True)
         def group_key(group):
             return {**group, "hooks": [callback_key(hook) for hook in group["hooks"]]}
-        if self.version == CURRENT_DESKTOP_RUNTIME:
+        if self.version in EXTENDED_HOOK_RUNTIMES:
             for event, groups in prior_groups.items():
                 for index, group in enumerate(groups):
                     matches = [candidate for candidate in events.get(event, [])
@@ -483,16 +484,10 @@ class ZCode:
                     if len(matches) != 1 or any(not isinstance(hook.get("enabled"), bool) for hook in matches[0]["hooks"]):
                         raise Conflict("An owned ZCode hook registration was edited or duplicated; preserve it for review.")
                     groups[index] = deepcopy(matches[0])
-                    native_toggles.update((callback_key(hook), hook["enabled"]) for hook in matches[0]["hooks"])
-        for event, groups in prior_groups.items():
-            current = events.get(event, [])
-            for group in groups:
-                if current.count(group) != 1:
-                    raise Conflict("An owned ZCode hook registration was edited or duplicated; preserve it for review.")
-                current.remove(group)
-            if not current:
-                events.pop(event, None)
+                    native_toggles.update(((event, callback_key(hook)), hook["enabled"])
+                                          for hook in matches[0]["hooks"])
         owned = {}
+        desired_groups = {}
         if not remove:
             quality = lambda timeout: hook_registration(
                 self.hooks, "mainframe-code-quality", self.event_state, timeout,
@@ -510,21 +505,32 @@ class ZCode:
                 "PostToolUse": [{"matcher": "Write|Edit", "hooks": [quality(60000), hook_registration(self.hooks, "mainframe-commit-checkpoint", self.event_state, 5000, runtime_bin(self.home))]}],
                 "PostToolUseFailure": [{"matcher": "Write|Edit", "hooks": [quality(30000)]}],
                 "Stop": [{"hooks": [quality(60000)]}],
-                "SessionStart": [{"matcher": "startup|clear|compact|resume", "hooks": [hook_registration(
+                "SessionStart": [{"matcher": ROOT_START_MATCHER, "hooks": [hook_registration(
                     self.hooks, "mainframe-destructive-operations", self.event_state,
                     analyzer_bin=runtime_bin(self.home),
                 )]}],
             }
             desired_groups["PreToolUse"].append({"matcher": "Bash", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
             desired_groups["PostToolUse"].append({"matcher": "Bash|Read", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
-            if self.version == CURRENT_DESKTOP_RUNTIME:
+            if self.version in EXTENDED_HOOK_RUNTIMES:
                 desired_groups["PostToolUse"].append({"matcher": "Write|Edit", "hooks": [hook_registration(
                     self.hooks, "mainframe-fallow-quality", self.event_state, 10000, runtime_bin(self.home))]})
-                for groups in desired_groups.values():
+                for event, groups in desired_groups.items():
                     for group in groups:
                         for hook in group["hooks"]:
-                            if callback_key(hook) in native_toggles:
-                                hook["enabled"] = native_toggles[callback_key(hook)]
+                            key = (event, callback_key(hook))
+                            if key in native_toggles:
+                                hook["enabled"] = native_toggles[key]
+        for event, groups in prior_groups.items():
+            current = events.get(event, [])
+            for group in groups:
+                if current.count(group) != 1:
+                    raise Conflict("An owned ZCode hook registration was edited or duplicated; preserve it for review.")
+                if group not in desired_groups.get(event, []):
+                    current.remove(group)
+            if not current:
+                events.pop(event, None)
+        if not remove:
             expected_callbacks = [h for groups in desired_groups.values() for group in groups for h in group["hooks"]]
             for event, candidates in events.items():
                 for candidate in candidates:
@@ -724,12 +730,12 @@ class ZCode:
                 and not any(change.needed for change in changes)
             )
             state_source = source if not remove else inventory(self.root, "zcode")
-            limitations = CURRENT_UNSUPPORTED if self.version == CURRENT_DESKTOP_RUNTIME else UNSUPPORTED
+            limitations = CURRENT_UNSUPPORTED if self.version in EXTENDED_HOOK_RUNTIMES else UNSUPPORTED
             unsupported = {
                 **unsupported_dsh_plugins(state_source),
                 **{("hooks", n): why for n, why in limitations.items()},
             } if not remove else {}
-            pending = {} if self.version == CURRENT_DESKTOP_RUNTIME else {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
+            pending = {} if self.version in EXTENDED_HOOK_RUNTIMES else {("hooks", "mainframe-subagent-selection"): "Native subagent-selection binding is pending adapter validation; currently delivered only to Codex."}
             delivered = [(cat, n) for cat, group in state_source["components"].items() for n in group
                          if not remove and (cat != "hooks" or n in HOOK_NAMES)
                          and (cat, n) not in unsupported and (cat, n) not in pending]
@@ -793,7 +799,7 @@ class ZCode:
                              **{name: reason for (_, name), reason in unsupported_dsh_plugins(state_source).items()},
                          } if not remove else {}),
                          "retained_partial_bindings": ({name: limitations[name] for name in ("mainframe-code-quality", "mainframe-fallow-quality")
-                                                         if name == "mainframe-code-quality" or self.version == CURRENT_DESKTOP_RUNTIME}
+                                                         if name == "mainframe-code-quality" or self.version in EXTENDED_HOOK_RUNTIMES}
                                                        if not remove else {}),
                          "hook_scope": HOOK_SCOPE,
                          "hooks_globally_enabled": json.loads(config or b"{}").get("hooks", {}).get("enabled", False),

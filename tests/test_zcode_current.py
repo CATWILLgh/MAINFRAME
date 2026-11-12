@@ -18,7 +18,7 @@ from installer.runtime import CODE_QUALITY_TOOLS, FALLOW_TOOLS
 from installer.zcode import ZCode, FULL_MAPPING_RUNTIMES
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT = "3.17.1.9553"
+CURRENT = "3.18.0.10300"
 FALLOW = "mainframe-fallow-quality"
 
 
@@ -90,6 +90,15 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
         cfg = json.loads(self.adapter.config.read_bytes()); cfg["user"] = {"preserve": True}
         cfg["hooks"]["enabled"] = False
         cfg["hooks"]["events"]["PreToolUse"][0]["hooks"][0]["enabled"] = False
+        cfg["hooks"]["events"]["PreToolUse"][1]["hooks"][0]["enabled"] = False
+        cfg["hooks"]["events"]["Stop"][0]["hooks"][0]["enabled"] = False
+        old_matcher = "startup|clear|compact|resume"
+        cfg["hooks"]["events"]["SessionStart"][0]["matcher"] = old_matcher
+        receipt = self.adapter.receipt()
+        receipt["hook_groups"]["SessionStart"][0]["matcher"] = old_matcher
+        self.adapter.receipt_path.write_bytes(encode_json(receipt))
+        user_hook = {"matcher": "Write", "hooks": [{"type": "process", "command": "user-check", "enabled": True}]}
+        cfg["hooks"]["events"]["PreToolUse"].append(user_hook)
         self.adapter.config.write_bytes(encode_json(cfg))
         self.adapter.version = CURRENT
         changes, _ = self.adapter.plan()
@@ -97,6 +106,13 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
         current = json.loads(self.adapter.config.read_bytes())
         self.assertFalse(current["hooks"]["enabled"])
         self.assertFalse(current["hooks"]["events"]["PreToolUse"][0]["hooks"][0]["enabled"])
+        self.assertFalse(current["hooks"]["events"]["PreToolUse"][1]["hooks"][0]["enabled"])
+        self.assertTrue(current["hooks"]["events"]["PostToolUseFailure"][0]["hooks"][0]["enabled"])
+        self.assertFalse(current["hooks"]["events"]["Stop"][0]["hooks"][0]["enabled"])
+        self.assertTrue(current["hooks"]["events"]["PostToolUse"][0]["hooks"][0]["enabled"])
+        self.assertEqual(current["hooks"]["events"]["PreToolUse"][-1], user_hook)
+        self.assertEqual([group["matcher"] for group in current["hooks"]["events"]["SessionStart"]],
+                         ["startup|clear|resume|fork"])
         self.assertEqual(current["user"], {"preserve": True})
         for value in (b"specific/provider-model", b"thoughtLevel: high", b"color: blue", b"injectAgentsMd: false"):
             self.assertIn(value, role.read_bytes())
@@ -179,6 +195,23 @@ class CurrentZCodeFallowTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
         missing = deepcopy(self.payload); missing["tool_use_id"] = "missing"; missing.pop("tool_response")
         self.assertIn("unavailable", self.invoke(missing)["hookSpecificOutput"]["additionalContext"])
+
+    def test_empty_old_edit_uses_the_exact_new_file_or_blank_replacement(self):
+        payload = {**self.payload, "tool_name": "Edit", "tool_input": {
+            "file_path": str(self.path), "old_string": "", "new_string": "const after = 2;\n"}}
+        for operation, original in (("create", ""), ("blank", " \n\t"), ("unicode", "\u00a0\ufeff\u2028")):
+            with self.subTest(operation=operation):
+                payload["tool_use_id"] = operation
+                payload["tool_response"] = {"filePath": str(self.path), "originalFile": original,
+                    "oldString": "", "newString": "const after = 2;\n", "replaceAll": False, "userModified": False}
+                output = self.invoke(payload)
+                self.assertEqual(output["hookSpecificOutput"]["additionalContext"], "bounded fallow finding")
+                self.assertIn("+const after = 2;\n", self.calls[-1][0][2])
+                self.assertEqual(self.calls[-1][1]["wholly_owned_paths"], [str(self.path)])
+        payload["tool_use_id"] = "nonblank"
+        payload["tool_response"]["originalFile"] = "const unrelated = 1;\n"
+        self.assertIn("unavailable", self.invoke(payload)["hookSpecificOutput"]["additionalContext"])
+        self.assertEqual(len(self.calls), 3)
 
     def test_non_js_failed_or_unidentified_events_are_neutral(self):
         for update in ({"hook_event_name": "PostToolUseFailure"}, {"tool_name": "Bash"}, {"session_id": ""}):

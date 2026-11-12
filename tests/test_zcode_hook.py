@@ -327,6 +327,7 @@ class ZCodeHookFixture(unittest.TestCase):
         self.assertEqual(self.invoke("mainframe-destructive-operations", payload).stdout, "")
         self.assertFalse(self.state.exists())
         self.assertEqual(self.capture(root).stdout, "")
+        self.assertEqual(self.capture(child, source="compact").stdout, "")
         specific = json.loads(self.invoke("mainframe-destructive-operations", payload).stdout)["hookSpecificOutput"]
         self.assertEqual(specific["permissionDecision"], "deny")
         self.assertIn("active project root", specific["permissionDecisionReason"])
@@ -342,13 +343,13 @@ class ZCodeHookFixture(unittest.TestCase):
         self.assertIsNone(zcode_hook.session_root({"session_id": "disabled"}, self.state))
 
     def test_only_verified_session_start_sources_capture(self):
-        for source in ("other", None):
+        for source in ("compact", "other", None):
             self.assertEqual(
                 self.capture(self.temporary.name, source=source, session="rejected").stdout,
                 "",
             )
         self.assertFalse(self.state.exists())
-        for source in ("startup", "clear", "compact", "resume"):
+        for source in ("startup", "clear", "resume", "fork"):
             session = "session-" + source
             self.assertEqual(
                 self.capture(self.temporary.name, source=source, session=session).stdout,
@@ -358,6 +359,15 @@ class ZCodeHookFixture(unittest.TestCase):
                 zcode_hook.session_root({"session_id": session}, self.state),
                 str(Path(self.temporary.name).resolve()),
             )
+
+    def test_context_free_guards_survive_missing_session_root(self):
+        for command in ("rm -rf /", "git reset --hard"):
+            with self.subTest(command=command):
+                result = self.invoke("mainframe-destructive-operations", self.payload(command))
+                self.assertTrue(result.stdout)
+                specific = json.loads(result.stdout)["hookSpecificOutput"]
+                self.assertEqual(specific["permissionDecision"], "deny")
+        self.assertFalse(self.state.exists())
 
 
 class ZCodeEventStateTests(unittest.TestCase):

@@ -3,8 +3,8 @@
 Use this maintained route when the installation request is running in ZCode
 Desktop from this MAINFRAME checkout. The original inspected mapping targets macOS
 ZCode build **3.11.2.6792**. Full Desktop delivery is also supported on
-**3.14.4.7912** and **3.17.1.9553** after inspection of their shipped native
-contracts. The current build includes immediate Fallow advice from exact native
+**3.14.4.7912**, **3.17.1.9553**, and **3.18.0.10300** after inspection of their
+shipped native contracts. The two newest mappings include immediate Fallow advice from exact native
 Write/Edit responses. New conversation acceptance remains separate. The older **3.14.3.7762** route permits bounded
 skill updates and the exact validated pre-shell transport consolidation in an
 existing same-source installation; other native-hook changes, roles, commands,
@@ -146,9 +146,10 @@ They share one product-private pre-shell process registration; this changes
 only transport cost, while the four canonical components, decisions, and
 individual disable controls remain separate.
 The destructive guard captures the native workspace root on `SessionStart`
-(`startup`, `clear`, `compact`, or compatibility `resume`), then combines it with the actual mutable Bash cwd from
-`PreToolUse`. Missing root capture never guesses from a dirty worktree or
-transcript. Commit inspection uses the actual pre-command cwd.
+(`startup`, `resume`, `fork`, or compatibility `clear`), then combines it with
+the actual Bash cwd from `PreToolUse`. Compaction leaves the capture intact.
+Without a root, the context-free denials still work. Commit inspection uses
+the actual pre-command cwd.
 
 Positive findings deny only the relevant tool call; advice never grants or
 changes native permissions. The inline system-shell entrypoint stays neutral if
@@ -168,7 +169,7 @@ continuation. The useful mainframe-code-quality core is installed and reported a
 retained partial binding, but it is not the full canonical contract. Do not
 silently change timing or force advice through a completion block.
 
-On **3.17.1.9553**, `mainframe-fallow-quality` also has a retained partial
+On **3.17.1.9553** and **3.18.0.10300**, `mainframe-fallow-quality` has a retained partial
 binding: an immediate `PostToolUse` advisory for attributed TS/JS `Write|Edit`
 results. Native responses supply the original content and actual replacement;
 the bridge compares the addressed postimage and builds its diff in memory.

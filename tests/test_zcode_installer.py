@@ -170,7 +170,7 @@ class ZCodeInstallationTests(unittest.TestCase):
         self.assertNotIn('matcher', events['Stop'][0])
         self.assertEqual(events['Stop'][0]['hooks'][0]['args'][-2], 'mainframe-code-quality')
         start = events['SessionStart'][0]
-        self.assertEqual(start['matcher'], 'startup|clear|compact|resume')
+        self.assertEqual(start['matcher'], 'startup|clear|resume|fork')
         self.assertEqual(start['hooks'][0]['args'][-2], 'mainframe-destructive-operations')
         self.assertIn('subagent', report['hook_scope'])
         state = json.loads(self.adapter.state_path.read_text())

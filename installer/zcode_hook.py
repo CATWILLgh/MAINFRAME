@@ -46,6 +46,9 @@ MAX_EVENTS = 4_096
 EVENT_TTL = 7 * 24 * 60 * 60
 MAX_ID_CHARS = 512
 _MISSING = object()
+# ECMAScript String.trim() whitespace and line terminators used by empty-old Edit.
+EDIT_BLANK_CHARACTERS = (" \t\r\n\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+                         "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff")
 FALLOW_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte"})
 FALLOW_MAX_BYTES = 2_000_000
 FALLOW_UNAVAILABLE = "Fallow structural review was unavailable: the native edit response could not be attributed exactly. Completion was not blocked; verify the addressed TS/JS edit manually."
@@ -157,7 +160,8 @@ def session_root(data: dict, state: Path, *, capture: bool = False) -> str | Non
         return None
     root = _cwd(data) if capture else None
     if capture and (
-        data.get("source") not in {"startup", "clear", "compact", "resume"}
+        # Compact uses the mutable working directory, not the session root.
+        data.get("source") not in {"startup", "clear", "resume", "fork"}
         or root is None
     ):
         return None
@@ -210,7 +214,7 @@ def _load_detector(name: str):
 
 @contextmanager
 def _commit_budget(detector):
-    """Reserve time for native output after the canonical Git inspection."""
+    """Bound the scan even when a scoped bridge update retains an older detector."""
     def expired(signum, frame):
         raise detector.InspectionUnavailable("native_time_budget")
 
@@ -377,7 +381,10 @@ def _todo_dispatch(data: dict, event: str) -> dict | None:
         replace_all = inputs.get("replace_all", False)
         if not isinstance(old, str) or not isinstance(new, str) or not isinstance(replace_all, bool):
             return None
-        reason = detector.check_edit(workspace, paths[0], old, new, replace_all=replace_all)
+        if old:
+            reason = detector.check_edit(workspace, paths[0], old, new, replace_all=replace_all)
+        else:
+            reason = detector.check_edit(workspace, paths[0], old, new, blank_characters=EDIT_BLANK_CHARACTERS)
     return (_native_output(event, "permissionDecisionReason", reason)
             if isinstance(reason, str) and reason else None)
 
@@ -411,14 +418,21 @@ def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
         wholly_owned = [str(path)]
     else:
         old, new, replace_all = response.get("oldString"), response.get("newString"), response.get("replaceAll")
-        if (not isinstance(original, str) or not isinstance(old, str) or not old
-                or not isinstance(new, str) or not isinstance(replace_all, bool)
-                or original.count(old) == 0 or (not replace_all and original.count(old) != 1)):
-            raise ValueError("ambiguous Edit response")
+        if not (isinstance(original, str) and isinstance(old, str)
+                and isinstance(new, str) and isinstance(replace_all, bool)):
+            raise ValueError("missing Edit response")
         before = original
-        # Native Edit deletes the following line break with an empty replacement.
-        matched = old + "\n" if not new and not old.endswith("\n") and old + "\n" in before else old
-        after = before.replace(matched, new, -1 if replace_all else 1)
+        if old:
+            if old not in before or (not replace_all and before.count(old) != 1):
+                raise ValueError("ambiguous Edit response")
+            # Native Edit deletes the following line break with an empty replacement.
+            matched = old + "\n" if not new and not old.endswith("\n") and old + "\n" in before else old
+            after = before.replace(matched, new, -1 if replace_all else 1)
+        else:
+            if before.strip(EDIT_BLANK_CHARACTERS):
+                raise ValueError("empty-old Edit did not address a blank file")
+            after = new
+            wholly_owned = [str(path)]
     if len(before.encode("utf-8")) + len(after.encode("utf-8")) > FALLOW_MAX_BYTES:
         raise ValueError("oversized native edit")
     with path.open("rb") as stream:
@@ -572,17 +586,16 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
             return _native_output(event, "permissionDecisionReason", reason)
         return None
 
-    if name in {"mainframe-commit-secrets", "mainframe-destructive-operations"}:
+    if name == "mainframe-destructive-operations":
+        cwd = _cwd(data)
+        root = session_root(data, state) if cwd else None
+        reason = (detector.decision_reason(command, cwd, root) if root
+                  else detector.context_free_decision_reason(command))
+        return (_native_output(event, "permissionDecisionReason", reason)
+                if isinstance(reason, str) and reason else None)
+    if name == "mainframe-commit-secrets":
         cwd = _cwd(data)
         if cwd is None:
-            return None
-        if name == "mainframe-destructive-operations":
-            root = session_root(data, state)
-            if root is None:
-                return None
-            reason = detector.decision_reason(command, cwd, root)
-            if isinstance(reason, str) and reason:
-                return _native_output(event, "permissionDecisionReason", reason)
             return None
         with _commit_budget(detector):
             result = detector.check_command(command, cwd)
