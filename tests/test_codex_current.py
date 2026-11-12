@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -52,11 +53,39 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         return report
 
     def test_exact_current_desktop_mapping_keeps_other_surfaces_out(self):
-        self.assertTrue(codex.mapping_supported(VERSION, "desktop"))
-        self.assertFalse(codex.mapping_supported(VERSION, "cli"))
-        self.assertFalse(codex.mapping_supported("0.165.0-alpha.1.3", "desktop"))
-        self.assertEqual(codex.runtime_tools(VERSION, "desktop"), ("ruff", "oxlint", "semgrep", "fallow"))
+        for version, neighbor in ((VERSION, "0.165.0-alpha.1.3"),
+                                  ("0.167.0-alpha.4.1", "0.167.0-alpha.4.2")):
+            with self.subTest(version=version):
+                self.assertTrue(codex.mapping_supported(version, "desktop"))
+                self.assertFalse(codex.mapping_supported(version, "cli"))
+                self.assertFalse(codex.mapping_supported(neighbor, "desktop"))
+                self.assertEqual(codex.runtime_tools(version, "desktop"), ("ruff", "oxlint", "semgrep", "fallow"))
         self.assertEqual(codex.runtime_tools("0.153.4", "cli"), ("ruff", "oxlint", "semgrep"))
+
+    def test_desktop_tool_cwd_upgrade_changes_only_owned_shell_binding(self):
+        self.apply()
+        path = self.adapter.codex / "hooks.json"
+        before = json.loads(path.read_bytes())
+        foreign = {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "true"}]}
+        before["hooks"]["PreToolUse"].insert(1, foreign)
+        path.write_bytes(encode_json(before))
+
+        self.adapter.version = "0.167.0-alpha.4.1"
+        report = self.apply()
+        after = json.loads(path.read_bytes())
+        old = before["hooks"]["PreToolUse"][0]["hooks"][0]
+        new = after["hooks"]["PreToolUse"][0]["hooks"][0]
+        self.assertNotIn("--tool-cwd-override", old["command"])
+        self.assertIn("--tool-cwd-override", new["command"])
+        old["command"] = new["command"]
+        self.assertEqual(after, before)
+        self.assertIn("local workdir override", report["retained_partial_bindings"]["mainframe-commit-secrets"])
+        state = json.loads(self.adapter.state_path.read_bytes())
+        for name in codex.READ_ONLY_ROLES:
+            self.assertIn("inherits parent permissions", state["components"]["agents"][name]["reason"])
+            self.assertTrue((self.adapter.codex / "agents" / (name + ".toml")).is_file())
+        self.assertNotIn(codex.READ_ONLY_ROLE_ACTION, state["next_actions"])
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
 
     def test_every_canonical_component_has_a_truthful_private_delivery(self):
         source = inventory(self.source)
@@ -108,7 +137,10 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         hooks_path.write_bytes(encode_json(hooks))
         self.adapter.version = VERSION
         self.apply()
-        self.assertEqual(json.loads(hooks_path.read_bytes())["hooks"]["PreToolUse"], before_groups)
+        after_groups = json.loads(hooks_path.read_bytes())["hooks"]["PreToolUse"]
+        self.assertEqual(after_groups[:-1], before_groups)
+        self.assertEqual(after_groups[-1]["matcher"], "^apply_patch$")
+        self.assertIn("mainframe-fallow-quality", after_groups[-1]["hooks"][0]["command"])
         for path, snapshot in protected.items():
             self.assertEqual(observed(path), snapshot, str(path))
         self.assertEqual(self.adapter.plan()[1]["changes"], [])
@@ -202,6 +234,40 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
     def invoke(self, name, data):
         return codex_hook.dispatch(name, self.state, io.BytesIO(json.dumps(data).encode()))
 
+    def test_verified_shell_cwd_override_keeps_ambiguous_calls_context_free(self):
+        detectors = self.support / "detectors"
+        detectors.mkdir()
+        bridge = self.support / "bridge.py"
+        shutil.copyfile(ROOT / "installer/codex_hook.py", bridge)
+        for name in ("mainframe-destructive-operations", "mainframe-commit-secrets"):
+            shutil.copyfile(ROOT / "hooks" / (name + ".py"), detectors / (name + ".py"))
+        child = self.workspace / "child"
+        child.mkdir()
+        subprocess.run(["git", "-C", str(self.workspace), "init", "-q"], check=True)
+        secret = "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789"
+        (child / "staged.txt").write_text(secret + "\n")
+        subprocess.run(["git", "-C", str(self.workspace), "add", "child/staged.txt"], check=True)
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                   "session_id": "fixture", "tool_use_id": "operation"}
+
+        def callback(command, cwd, verified):
+            arguments = [sys.executable, "-B", str(bridge), "mainframe-pre-shell", str(self.state)]
+            if verified:
+                arguments.append("--tool-cwd-override")
+            result = subprocess.run(arguments, cwd=self.workspace, input=json.dumps({
+                **payload, "cwd": str(cwd), "tool_input": {"command": command},
+            }), text=True, capture_output=True, check=True, timeout=5)
+            return result.stdout
+
+        for command in ("rm -rf ..", "git commit -m test"):
+            with self.subTest(command=command):
+                self.assertEqual(callback(command, child, False), "")
+                self.assertEqual(callback(command, self.workspace, True), "")
+                result = callback(command, child, True)
+                self.assertTrue(result)
+                self.assertEqual(json.loads(result)["hookSpecificOutput"]["permissionDecision"], "deny")
+                self.assertNotIn(secret, result)
+
     def test_exact_post_patch_diff_excludes_unrelated_changes_and_retains_no_source(self):
         target = self.workspace / "file.ts"
         target.write_text("unrelated user line\nconst newValue = 2;\nanchor\n")
@@ -228,13 +294,20 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
 
     def test_add_whole_ownership_ambiguity_and_failure_are_bounded(self):
         target = self.workspace / "new.ts"
-        target.write_text("export const value = 2;\n")
         patch_text = "*** Begin Patch\n*** Add File: new.ts\n+export const value = 2;\n*** End Patch\n"
         analyze = unittest.mock.Mock(return_value=SimpleNamespace(advisory=None, unavailable=None))
         with patch.object(codex_hook, "_load_detector", return_value=SimpleNamespace(analyze=analyze)):
-            self.assertIsNone(self.invoke("mainframe-fallow-quality", self.payload(patch_text)))
+            addition = self.payload(patch_text)
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", {**addition, "hook_event_name": "PreToolUse"}))
+            target.write_text("export const value = 2;\n")
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", addition))
             self.assertEqual(analyze.call_args.kwargs["wholly_owned_paths"], [str(target)])
             analyze.reset_mock()
+            overwrite = self.payload(patch_text, "overwrite")
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", {**overwrite, "hook_event_name": "PreToolUse"}))
+            self.assertIn("unavailable", self.invoke("mainframe-fallow-quality", overwrite)["hookSpecificOutput"]["additionalContext"])
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", overwrite))
+            analyze.assert_not_called()
             target.write_text("duplicate\nduplicate\n")
             ambiguous = "*** Begin Patch\n*** Update File: new.ts\n@@\n-before\n+duplicate\n*** End Patch\n"
             data = self.payload(ambiguous, "ambiguous")
@@ -258,8 +331,8 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
             first = self.invoke("mainframe-code-quality", data)
             self.assertEqual(first["decision"], "block")
             terminal = self.invoke("mainframe-code-quality", {**data, "stop_hook_active": True})
-            self.assertFalse(terminal["continue"])
-            self.assertIn("unresolved", terminal["stopReason"])
+            self.assertEqual(set(terminal), {"systemMessage"})
+            self.assertIn("unresolved", terminal["systemMessage"])
         self.assertNotEqual(seen[0][0], "shared-parent")
         self.assertEqual(seen[0], seen[1])
 

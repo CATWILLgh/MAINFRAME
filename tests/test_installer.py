@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -755,8 +756,8 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(blocked["decision"], "block")
         continued = {**stop, "stop_hook_active": True}
         unresolved = json.loads(self.invoke_payload("mainframe-code-quality", continued).stdout)
-        self.assertFalse(unresolved["continue"])
-        self.assertIn("unresolved", unresolved["stopReason"])
+        self.assertEqual(set(unresolved), {"systemMessage"})
+        self.assertIn("unresolved", unresolved["systemMessage"])
 
         self.assertEqual(self.invoke_payload("mainframe-code-quality", event("PreToolUse", "repair")).stdout, "")
         source.write_text("package sample\n", encoding="utf-8")
@@ -891,7 +892,7 @@ class InstallationTests(unittest.TestCase):
         cwd = self.home / "isolated"
         skill = {"name": "mainframe-research", "enabled": True, "path": str(self.adapter.skills / "mainframe-research/SKILL.md")}
         skills = {"data": [{"cwd": str(cwd), "skills": [skill, skill]}]}
-        hook = {"command": hook_command(self.adapter.hooks, "mainframe-secret-access", self.adapter.event_state),
+        hook = {"command": hook_command(self.adapter.hooks, PRE_SHELL_TRANSPORT, self.adapter.event_state, runtime_bin(self.home)),
                 "eventName": "preToolUse", "matcher": "^Bash$", "enabled": True, "trustStatus": "trusted",
                 "sourcePath": "/unrelated/hooks.json", "source": "project", "handlerType": "command",
                 "timeoutSec": 5, "additionalContextLimit": 6000}
@@ -899,6 +900,99 @@ class InstallationTests(unittest.TestCase):
         result = summarize(self.adapter, source, skills, hooks, cwd)
         self.assertFalse(result["skills"]["mainframe-research"]["discovered"])
         self.assertFalse(result["hooks"]["mainframe-secret-access"]["discovered"])
+        native = {**hook, "source": "user", "sourcePath": str(self.adapter.codex / "hooks.json")}
+        for extra in (hook, native):
+            hooks["data"][0]["hooks"] = [native, extra]
+            result = summarize(self.adapter, source, skills, hooks, cwd)
+            self.assertFalse(result["hooks"]["mainframe-secret-access"]["discovered"])
+
+    def native_catalogs(self, source, cwd):
+        skills = [{"name": name, "enabled": True, "path": str(self.adapter.skills / name / "SKILL.md")}
+                  for category in ("skills", "commands") for name in source["components"][category]]
+        hooks_path = self.adapter.codex / "hooks.json"
+        groups = json.loads(hooks_path.read_bytes())["hooks"]
+        hooks = [{
+            "eventName": event[0].lower() + event[1:], "matcher": group.get("matcher"),
+            "timeoutSec": handler["timeout"], "additionalContextLimit": handler.get("additionalContextLimit"),
+            "command": handler["command"], "handlerType": handler["type"], "enabled": True,
+            "source": "user", "sourcePath": str(hooks_path), "trustStatus": "trusted",
+        } for event, event_groups in groups.items() for group in event_groups for handler in group["hooks"]]
+        return {"data": [{"cwd": str(cwd), "skills": skills}]}, {"data": [{"cwd": str(cwd), "hooks": hooks}]}
+
+    def test_native_discovery_uses_current_desktop_hook_groups(self):
+        self.adapter.version = codex.TOOL_CWD_DESKTOP_RUNTIME
+        self.adapter.surface = "desktop"
+        self.install()
+        source = json.loads((self.source / "ADAPTATION.example.json").read_bytes())
+        cwd = self.home / "isolated"
+        skills, hooks = self.native_catalogs(source, cwd)
+        result = summarize(self.adapter, source, skills, hooks, cwd)
+        for name, row in result["hooks"].items():
+            with self.subTest(name=name):
+                self.assertTrue(row["discovered"])
+                self.assertTrue(row["trusted"])
+
+        entries = hooks["data"][0]["hooks"]
+        for name, field, wrong in (
+            ("mainframe-todo-limits", "matcher", "^Bash$"),
+            ("mainframe-fallow-quality", "additionalContextLimit", 6000),
+            ("mainframe-subagent-selection", "timeoutSec", 5),
+        ):
+            with self.subTest(name=name, field=field):
+                entry = next(row for row in entries if name in shlex.split(row["command"]) and field in row)
+                actual = entry[field]
+                entry[field] = wrong
+                result = summarize(self.adapter, source, skills, hooks, cwd)
+                self.assertFalse(result["hooks"][name]["discovered"])
+                entry[field] = actual
+
+        subagent_stop = next(row for row in entries if row["eventName"] == "subagentStop")
+        entries.remove(subagent_stop)
+        result = summarize(self.adapter, source, skills, hooks, cwd)
+        self.assertFalse(result["hooks"]["mainframe-code-quality"]["discovered"])
+
+    def test_cli_native_verify_checks_only_expected_bindings_and_rejects_stale_ones(self):
+        self.adapter.surface = "cli"
+        self.install()
+        source = json.loads((self.source / "ADAPTATION.example.json").read_bytes())
+        cwd = self.home / "isolated"
+        skills, hooks = self.native_catalogs(source, cwd)
+        specification = importlib.util.spec_from_file_location("mainframe_native_verify", self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(entrypoint)
+        ready = {"ready": True, "required": [], "missing": []}
+
+        def fake_discover(adapter, _):
+            return summarize(adapter, source, skills, hooks, cwd)
+
+        args = ["codex", "verify", "--native", "--surface", "cli",
+                "--home", str(self.home), "--executable", "fixture-codex"]
+        with (patch.object(Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "native_version", return_value=self.adapter.version),
+              patch.object(entrypoint, "runtime_status", return_value=ready),
+              patch("installer.codex_native.discover", side_effect=fake_discover),
+              patch("sys.stdout", new_callable=io.StringIO) as output):
+            self.assertEqual(entrypoint.main(args), 0)
+            result = json.loads(output.getvalue())
+            self.assertTrue(result["native_discovery_passed"])
+            for name in ("mainframe-subagent-selection", "mainframe-fallow-quality"):
+                row = result["native"]["hooks"][name]
+                self.assertFalse(row["expected"])
+                self.assertFalse(row["discovered"])
+
+            selection = self.adapter.selection_group()
+            hooks["data"][0]["hooks"].append({
+                **hooks["data"][0]["hooks"][0], "command": selection["hooks"][0]["command"],
+                "matcher": selection["matcher"], "timeoutSec": selection["hooks"][0]["timeout"],
+                "additionalContextLimit": None,
+            })
+            output.seek(0)
+            output.truncate()
+            self.assertEqual(entrypoint.main(args), 1)
+            result = json.loads(output.getvalue())
+            self.assertTrue(result["structure_matches"])
+            self.assertFalse(result["native_discovery_passed"])
+            self.assertTrue(result["native"]["hooks"]["mainframe-subagent-selection"]["unexpected"])
 
     def test_native_discovery_recognizes_post_tool_advisories(self):
         source = json.loads((self.source / "ADAPTATION.example.json").read_bytes())

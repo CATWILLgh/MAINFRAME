@@ -56,8 +56,8 @@ UNSUPPORTED = {
 }
 CURRENT_UNSUPPORTED = {
     **UNSUPPORTED,
-    "mainframe-code-quality": "The attributed Write/Edit lifecycle and revalidating Stop guard are retained. Full parity is unsupported: non-blocking completion advice has no model channel, and native Stop permits at most three repair continuations; still-positive retries emit an unresolved blocked-event reason rather than claiming resolution. Child runtimes do not inherit hook runners.",
-    "mainframe-fallow-quality": "Immediate PostToolUse advice is retained for exact native Write/Edit TS/JS responses, using an in-memory diff without source retention. Full completion timing is unsupported: Stop advice reaches the model only through another continuation, and child runtimes do not inherit hooks.",
+    "mainframe-code-quality": "The attributed Write/Edit lifecycle and revalidating Stop guard are retained. Non-blocking completion advice has no model channel. Native Stop permits at most three repair continuations, and still-positive retries emit an unresolved reason. Ordinary Agent/Task subagents do not inherit hook runners.",
+    "mainframe-fallow-quality": "Immediate PostToolUse advice is retained for exact native Write/Edit TS/JS responses, using an in-memory diff without source retention. Stop advice reaches the model only through another continuation. Ordinary Agent/Task subagents do not inherit hook runners.",
     "mainframe-subagent-selection": "The native Agent input exposes neither per-call model nor reasoning effort; a strict guard requires both controls. User role model/thoughtLevel presets are preserved, but they are not explicit per-call selection. No safe preventive binding is installed.",
 }
 HOOK_SCOPE = "Primary runtime mapping. Ordinary Agent/Task subagents do not inherit the hook runner. Workflow-child delivery is unverified."

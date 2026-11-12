@@ -6,6 +6,30 @@ and representative source cases live in [hooks/README.md](../../../hooks/README.
 Read that catalog once before adapting the first hook, then revisit only the
 active hook section.
 
+## Reviewed Codex and ZCode events
+
+This table covers Codex Desktop `0.167.0-alpha.4.1` and ZCode Desktop
+`3.18.0.10300`. Evidence and activation details are version-specific.
+[Codex](../native/codex.md#desktop-01670-alpha41-hook-contract)
+[ZCode](../native/zcode-evidence.md#desktop-318010300-hook-contract)
+
+| Canonical hook | Codex | ZCode |
+| --- | --- | --- |
+| `mainframe-secret-access` | `PreToolUse Bash` denial | `PreToolUse Bash` denial |
+| `mainframe-rg-short-replace` | `PreToolUse Bash` advice | `PreToolUse Bash` advice |
+| `mainframe-destructive-operations` | `PreToolUse Bash`. Relative checks require a verified local workdir override. | `SessionStart` captures the root. `PreToolUse Bash` checks the actual local cwd. |
+| `mainframe-commit-secrets` | `PreToolUse Bash`. Staged inspection requires a verified local workdir override. | `PreToolUse Bash` inspects staged content in the actual local cwd. |
+| `mainframe-todo-limits` | `PreToolUse apply_patch` | `PreToolUse Write\|Edit` |
+| `mainframe-code-quality` | Pre/post `apply_patch`, then `Stop` or `SubagentStop` | Pre/post `Write\|Edit` with failure cleanup, then `Stop` |
+| `mainframe-commit-checkpoint` | `PostToolUse apply_patch` | `PostToolUse Write\|Edit` |
+| `mainframe-fallow-quality` | `PreToolUse apply_patch` checks new-file existence. `PostToolUse` emits advice for exact edits. | `PostToolUse Write\|Edit` with exact reconstruction |
+| `mainframe-skill-reminder` | Pre/post `Bash` and `SubagentStart` for known roles | Pre/post `Bash` and `PostToolUse Read` in the primary runtime |
+| `mainframe-subagent-selection` | `PreToolUse collaborationspawn_agent` when both fields are exposed | Unsupported by the ordinary `Agent` tool's per-call input schema |
+
+Fallow advice stays on the successful edit event because neither reviewed
+product offers non-blocking model advice at `Stop`. ZCode ordinary subagents
+also lack a runner for these callbacks.
+
 ## Keep native integration thin
 
 Prefer the canonical detector unchanged behind a small installed wrapper. Keep

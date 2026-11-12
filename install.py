@@ -169,9 +169,15 @@ def main(argv=None):
                 from installer.codex_native import discover
                 report["native"] = discover(adapter, executable)
                 native = report["native"]
-                report["native_discovery_passed"] = not native["diagnostic_errors"] and all(
-                    row["discovered"] and (category != "hooks" or row["trusted"] and not row["disabled"])
-                    for category in ("skills", "commands", "hooks") for row in native[category].values()
+                report["native_discovery_passed"] = (
+                    not native["diagnostic_errors"]
+                    and all(row["discovered"] for category in ("skills", "commands")
+                            for row in native[category].values())
+                    and all(
+                        (row["discovered"] and row["trusted"] and not row["disabled"])
+                        if row["expected"] else not row["unexpected"]
+                        for row in native["hooks"].values()
+                    )
                 )
         show(report, args.details)
         return 0 if args.action == "plan" or (report["structure_matches"] and report.get("native_discovery_passed", True)) else 1

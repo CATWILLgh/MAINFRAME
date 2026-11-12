@@ -15,12 +15,15 @@ native payload parsing and output encoding.
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import contextmanager, nullcontext
 import dataclasses
 import os
 from pathlib import Path
 import re
 import shlex
+import signal
 import subprocess
+import time
 
 
 GIT_TIMEOUT_SECONDS = 5
@@ -99,6 +102,26 @@ class InspectionUnavailable(Exception):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
+
+
+@contextmanager
+def _inspection_budget(seconds: float):
+    """Leave time for output before a synchronous native callback expires."""
+    def expired(signum, frame):
+        raise InspectionUnavailable("native_time_budget")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    started = time.monotonic()
+    signal.signal(signal.SIGALRM, expired)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0]:
+            remaining = max(0.000001, previous_timer[0] - (time.monotonic() - started))
+            signal.setitimer(signal.ITIMER_REAL, remaining, previous_timer[1])
 
 
 def _is_placeholder(value: bytes) -> bool:
@@ -771,7 +794,7 @@ def _advisory(code: str) -> str:
     )
 
 
-def check_command(command: str, cwd: str) -> CheckResult:
+def check_command(command: str, cwd: str, *, budget_seconds: float | None = None) -> CheckResult:
     """Return a block, an unavailable-check advisory, or a silent result."""
     if not isinstance(command, str) or not isinstance(cwd, str) or not command or not cwd:
         return CheckResult(advisory=_advisory("missing_hook_input"))
@@ -780,10 +803,10 @@ def check_command(command: str, cwd: str) -> CheckResult:
     if GIT_HINT_RE.search(command) is None or COMMIT_HINT_RE.search(command) is None:
         return CheckResult()
     try:
-        invocations = parse_commit_invocations(command, cwd)
         findings: list[tuple[str, str, int | None]] = []
-        for invocation in invocations:
-            findings.extend(_scan_invocation(invocation))
+        with (_inspection_budget(budget_seconds) if budget_seconds is not None else nullcontext()):
+            for invocation in parse_commit_invocations(command, cwd):
+                findings.extend(_scan_invocation(invocation))
     except Exception as exc:
         code = exc.code if isinstance(exc, InspectionUnavailable) else "detector_failure"
         return CheckResult(advisory=_advisory(code))

@@ -1,5 +1,6 @@
 """Bounded native discovery. Does not start model turns or claim behavior proof."""
 
+from collections import defaultdict
 import json
 from pathlib import Path
 import queue
@@ -8,9 +9,8 @@ import tempfile
 import threading
 import time
 
-from .codex import ROLE_MATCHER, HOOK_NAMES, PRE_SHELL_TRANSPORT, SHELL_HOOK_NAMES, hook_command, inventory
+from .codex import HOOK_NAMES, PRE_SHELL_TRANSPORT, SHELL_HOOK_NAMES, hook_binding_name, inventory
 from .core import Conflict
-from .runtime import runtime_bin
 
 
 class Native:
@@ -113,50 +113,43 @@ def summarize(adapter, source, skill_result, hook_result, cwd):
             found = [s for s in skills if s.get("name") == name]
             valid = len(found) == 1 and found[0].get("enabled") is True and found[0].get("path") == str(adapter.skills / name / "SKILL.md")
             result[category][name] = {"discovered": valid}
+    expected_by_binding = defaultdict(list)
+    for event, groups in adapter.native_hook_groups().items():
+        for group in groups:
+            for handler in group["hooks"]:
+                command = handler["command"]
+                expected_by_binding[hook_binding_name(command, adapter.hooks)].append({
+                    "command": command, "eventName": event[0].lower() + event[1:],
+                    "matcher": group.get("matcher"), "timeoutSec": handler["timeout"],
+                    "additionalContextLimit": handler.get("additionalContextLimit"),
+                    "handlerType": handler["type"], "enabled": True,
+                    "source": "user", "sourcePath": str(adapter.codex / "hooks.json"),
+                })
+    observed_by_binding = defaultdict(list)
+    for hook in hooks:
+        binding = hook_binding_name(hook.get("command"), adapter.hooks)
+        if binding:
+            observed_by_binding[binding].append(hook)
     for name in HOOK_NAMES:
-        transport = PRE_SHELL_TRANSPORT if name in SHELL_HOOK_NAMES else name
-        command = hook_command(
-            adapter.hooks, transport, adapter.event_state,
-            runtime_bin(adapter.home) if name not in ("mainframe-skill-reminder", "mainframe-commit-checkpoint") else None
-        )
-        found = [h for h in hooks if h.get("command") == command]
-        expected = (
-            [
-                {"eventName": "preToolUse", "matcher": "^apply_patch$", "timeoutSec": 180,
-                 "additionalContextLimit": 6000},
-                {"eventName": "postToolUse", "matcher": "^apply_patch$", "timeoutSec": 180,
-                 "additionalContextLimit": 6000},
-                {"eventName": "stop", "matcher": None, "timeoutSec": 180,
-                 "additionalContextLimit": None},
-            ]
-            if name == "mainframe-code-quality"
-            else [{"eventName": event, "matcher": matcher, "timeoutSec": 2,
-                   "additionalContextLimit": 300} for event, matcher in
-                  (("preToolUse", "^Bash$"), ("postToolUse", "^Bash$"), ("subagentStart", ROLE_MATCHER))]
-            if name == "mainframe-skill-reminder"
-            else [{"eventName": "postToolUse", "matcher": "^apply_patch$", "timeoutSec": 5,
-                   "additionalContextLimit": 1000}] if name == "mainframe-commit-checkpoint"
-            else [{"eventName": "preToolUse", "matcher": "^Bash$", "timeoutSec": 5,
-                   "additionalContextLimit": 6000}]
-        )
-        common = {
-            "enabled": True, "sourcePath": str(adapter.codex / "hooks.json"),
-            "source": "user", "handlerType": "command",
-        }
+        # Shell hooks share one registration. Individual legacy registrations
+        # can still appear under their canonical names and count as extra rows.
+        bindings = (name, PRE_SHELL_TRANSPORT) if name in SHELL_HOOK_NAMES else (name,)
+        expected = [row for binding in bindings for row in expected_by_binding[binding]]
+        found = [row for binding in bindings for row in observed_by_binding[binding]]
         remaining = list(found)
-        # The four shell identities intentionally share one native process and
-        # registration. Discovery of that registration establishes transport
-        # availability for each identity; behavior remains a separate probe.
-        valid = len(remaining) == len(expected)
+        valid = bool(expected) and len(remaining) == len(expected)
         for registration in expected:
             matches = [hook for hook in remaining if all(
-                hook.get(key) == value for key, value in {**common, **registration}.items()
+                hook.get(key) == value for key, value in registration.items()
             )]
             if len(matches) != 1:
                 valid = False
                 continue
             remaining.remove(matches[0])
-        result["hooks"][name] = {"discovered": valid, "trusted": valid and all(h.get("trustStatus") == "trusted" for h in found),
-                               "disabled": (adapter.hooks / (".disabled-" + name)).exists()}
+        result["hooks"][name] = {
+            "expected": bool(expected), "unexpected": not expected and bool(found),
+            "discovered": valid, "trusted": valid and all(h.get("trustStatus") == "trusted" for h in found),
+            "disabled": (adapter.hooks / (".disabled-" + name)).exists(),
+        }
     result["diagnostic_errors"] = sum(len(group.get("errors", [])) for group in skill_result["data"] + hook_result["data"])
     return result
