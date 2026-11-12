@@ -70,6 +70,16 @@ class ProfileTests(unittest.TestCase):
         docker = self.put('Dockerfile', 'FROM python:3\nCOPY . /app\n')
         self.assertEqual(candidates(docker, self.root), {'mainframe-infrastructure'})
 
+    def test_argocd_profile_requires_one_application_document(self):
+        api = 'apiVersion: argoproj.io/v1alpha1\n'
+        app = 'kind: Application\nmetadata:\n  name: service\n'
+        path = self.put('gitops/stage.yaml', api + app)
+        self.assertEqual(candidates(path, self.root), {'mainframe-argocd'})
+        path.write_text(api + 'kind: Workflow\n---\napiVersion: sample/v1\n' + app)
+        self.assertEqual(candidates(path, self.root), set())
+        example = self.put('fixtures/app.yaml', api + app)
+        self.assertEqual(candidates(example, self.root), set())
+
     def test_clickhouse_actual_import_and_sql(self):
         path = self.put('backend/analytics.py', 'import clickhouse_connect\nclient = clickhouse_connect.get_client()\n')
         self.assertIn('mainframe-clickhouse', candidates(path, self.root))

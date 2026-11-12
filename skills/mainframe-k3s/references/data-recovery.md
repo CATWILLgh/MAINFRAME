@@ -15,6 +15,9 @@ Sources: [K3s storage](https://docs.k3s.io/add-ons/storage),
 
 ## Build a usable backup
 
+Apply the shared [backup lifecycle](../../mainframe-infrastructure/references/data-stores.md#own-the-backup-lifecycle)
+to additional snapshots and temporary recovery copies.
+
 Identify SQLite, embedded etcd or external datastore first. Back up the server
 token associated with the database backup: it decrypts bootstrap data. Preserve
 relevant configuration securely. Use the datastore's proper consistent backup

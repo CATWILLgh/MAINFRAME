@@ -520,11 +520,14 @@ targets are profiled; symlinks, fixtures, generated files and obvious credential
 files stay silent. Do not infer a backend from a language extension alone. Unknown domains remain governed by ordinary proactive selection.
 
 Send one brief conditional suggestion. Deduplicate by session, recipient,
-workspace and skill, with at most three suggestions per scope and seven-day
-expiry. An explicit attempt to read an available skill suppresses a redundant reminder
-because it demonstrates awareness, not successful reading or application. Raw
+workspace and skill or operation, with at most three suggestions per scope and
+seven-day expiry. Explicit PostgreSQL or K3s backup commands get one lifecycle
+note. Named Argo CD release commands and explicit scaling of a workload to zero
+share one continuity note per scope. These fixed notes point to a readable
+method and remain useful after an explicit skill read. An explicit read attempt
+suppresses the generic skill suggestion and establishes awareness only. Raw
 output cannot prove read success; never parse content as a status envelope. Bounded private state contains hashes and skill identities,
-never source or raw native IDs. Disable/missing identity/state failures are silent;
+fixed operation keys, and expiry, never source or raw native IDs. Disable/missing identity/state failures are silent;
 a cached launcher must remain harmless after files are retired. Native receipt
 and useful application require separate observations from a successful callback.
 

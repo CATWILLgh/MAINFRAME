@@ -47,6 +47,7 @@ evidence; consumer project names and transcripts do not belong in delivery.
 | `mainframe-notifications` | Explicit application notification delivery/settings or channel repair assignment | Reading SMTP, bot or service-worker configuration alone does not establish this workflow | Ordinary proactive selection; no automatic hook binding without attributable task evidence |
 | `mainframe-keycloak-sso` | Explicit application SSO integration or repair assignment | Reading auth settings, a Keycloak deployment manifest or login theme alone does not establish application integration | New method: ordinary proactive skill selection; no automatic hook binding until attributable task evidence distinguishes integration from deployment/theming |
 | `mainframe-k3s` | Parsed K3s cluster operation, including literal SSH/sudo wrappers; or exact non-secret K3s configuration ownership | Bare kubectl, arbitrary directory named k3s, application-only pod work, help/version; do not read kubeconfig credentials to classify | SSH/sudo K3s chains were observed. Inspect the subcommand and resource: K3s executable identity alone does not establish cluster-level work |
+| `mainframe-argocd` | A named `argocd app diff/sync/rollback` or an Application/ApplicationSet declaration with the Argo API version in the same YAML document | Dry-run sync, app status reads, YAML examples or unrelated kinds, prose about Argo | Release advice in PreToolUse, earlier method advice on an attributed manifest read |
 | `mainframe-infrastructure` | Recognized Dockerfile/Compose/IaC owner, configured infrastructure map, or identified deployment/runtime management operation | Fixture/example/vendor config, broad `infra` directory, ordinary CI test execution, more specific verified K3s/ClickHouse route | Dockerfile reads and remote Docker operations were observed. Conditional file/operation route is feasible |
 | `mainframe-ops-app-server-safety` | Parsed service lifecycle operation with independently established local executor and target, or a resolved project script that starts that local service | Remote SSH, remote Docker context/endpoint, `ps`/version, one-shot scripts, guessing local from localhost or workdir | Actual method reads were observed. Current Bash payload lacks enough executor evidence for blanket local-lifecycle classification; use a verified local binding or retain infrastructure advice |
 | `mainframe-testing` | Existing test/CI file route; extend to identified test runners and configured verification scripts | Help/version, printing a command example, arbitrary `npm run` name, a deployment job misclassified as ordinary tests | Test method reads and test-runner operations were observed. Known script body and test purpose strengthen routing |
@@ -88,7 +89,8 @@ actual relevance and subsequent method application.
 | Subset | Event / outcome | Explicit remaining boundary |
 | --- | --- | --- |
 | Credential helper, HTTP curl, ClickHouse client, K3s cluster operation, Docker/Terraform, named test runners, explicit Codex headless peer work | Codex `PreToolUse` Bash | Only bounded literal supported syntax; no command rewrite or guard; no proof the first operation used the method |
-| Backend module, React web application, ClickHouse integration, infrastructure configuration | Codex `PostToolUse` Bash reads with bounded source/package evidence | Eight read targets maximum; fixtures, generated files, secret/key files, unsafe paths and ambiguous ownership stay silent |
+| PostgreSQL dump/base backup, K3s snapshot save, named Argo release command, scale named Deployment or StatefulSet to zero | `PreToolUse` Bash, one fixed backup or rollout note per scope | Literal commands and known wrappers only; PostgreSQL includes explicit `kubectl exec ... --` and a literal trailing output destination. Heredocs, dynamic shell programs and Git pushes remain outside the operation detector |
+| Backend module, React web application, ClickHouse integration, infrastructure configuration and Argo Application/ApplicationSet | `PostToolUse` reads with bounded source/package evidence | Eight read targets maximum; fixtures, generated files, secret/key files, unsafe paths and ambiguous ownership stay silent |
 | Researcher, test auditor, consequential reviewer and four engineering roles | Codex `SubagentStart` exact native MAINFRAME role | Generic/default/explorer roles do not establish the specialized task |
 | Project engineering method | Project-guidance-bound unique method after an otherwise unclassified project read | Does not displace a recognized specialist or repeat after the specialist was already suggested |
 | Local application-server safety | Not automatically selected; identifiable Docker/runtime work can receive infrastructure advice | Current Bash payload and outer-call workdir hint do not prove local executor/target identity. Remote and tunneled endpoints remain possible |
@@ -115,9 +117,10 @@ Both maintained global adapters reuse one detector, source profiles and recipien
 budget through a small native normalizer. No callback executes the inspected
 command, reads the complete skill body into the model, changes permission or
 forces a model turn. One readable path is suggested conditionally; explicit
-skill-read awareness suppresses further advice for that method. State stores
-only expiring scope hashes and skill identities, at most three sent suggestions
-per recipient/workspace and one per skill. Unknown or conflicting identity,
+skill-read awareness suppresses the generic method suggestion. State stores
+expiring scope hashes, skill identities and fixed operation keys, at most three
+sent suggestions per recipient/workspace and one per skill or operation.
+Unknown or conflicting identity,
 context, invocation policy and state failures stay silent.
 
 | Adapter | Operation advice | Read advice | Attribution and limits |

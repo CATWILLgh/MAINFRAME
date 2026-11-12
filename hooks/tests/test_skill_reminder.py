@@ -154,6 +154,52 @@ class CandidateSkillTests(unittest.TestCase):
 
 
 class OperationSkillTests(unittest.TestCase):
+    def test_backup_advice_requires_an_executed_backup_command(self) -> None:
+        for command, route in (
+            ("pg_dump -h db -Fc --file=backup.dump app", "postgres-backup"),
+            ("pg_basebackup -D /tmp/base", "postgres-backup"),
+            ("pg_dumpall --globals-only | gzip > globals.gz", "postgres-backup"),
+            ("kubectl -n stage exec db-0 -- env PGOPTIONS=-cstatement_timeout=10s pg_dump -Fc app > backup.dump",
+             "postgres-backup"),
+            ("ssh stage 'sudo -n k3s kubectl -n stage exec db-0 -- pg_dump -Fc app > backup.dump'",
+             "postgres-backup"),
+            ("k3s etcd-snapshot save --name before-upgrade", "k3s-backup"),
+        ):
+            with self.subTest(command=command):
+                self.assertIn(route, DETECTOR.operation_candidates(command))
+        for command in (
+            "rg pg_dump runbook.md", "echo 'pg_dump app > backup.dump'", "pg_dump --help",
+            "pg_dump --schema-only --file=/dev/null app", "pg_dump -f /dev/null app",
+            "pg_dump -h", "pg_dump app > \"$TARGET\"", "pg_dump app >> backup.dump",
+            "pg_dump app > backup.dump; pytest", "pg_dump app > backup.dump 2> error.log",
+            "kubectl exec db-0 -- echo pg_dump", "kubectl exec db-0 pg_dump",
+            "kubectl -n exec get pg_dump", "k3s etcd-snapshot list --name save",
+        ):
+            with self.subTest(command=command):
+                self.assertFalse(DETECTOR.operation_candidates(command) & {"postgres-backup", "k3s-backup"})
+
+    def test_rollout_advice_matches_named_argo_operations_and_scaling_to_zero(self) -> None:
+        for command, route in (
+            ("argocd app diff service --revision candidate", "argo-release"),
+            ("argocd app sync service --async", "argo-release"),
+            ("argocd app sync service --strategy hook --revision candidate", "argo-release"),
+            ("argocd app rollback service 42", "argo-release"),
+            ("ssh stage 'sudo -n k3s kubectl -n app scale deployment/web --current-replicas=1 --replicas=0'",
+             "scale-to-zero"),
+            ("kubectl scale statefulset db --replicas 0", "scale-to-zero"),
+        ):
+            with self.subTest(command=command):
+                self.assertIn(route, DETECTOR.operation_candidates(command))
+        for command in (
+            "argocd app sync --revision candidate", "argocd app sync service --dry-run",
+            "argocd app get service", "argocd app diff --help",
+            "kubectl get deployment --namespace scale", "kubectl scale deployment",
+            "kubectl scale deployment/web --replicas=1", "kubectl scale deployment/web --replicas=0 --dry-run=client",
+            "echo 'argocd app sync service'", "rg -- 'scale deployment --replicas=0' scripts",
+        ):
+            with self.subTest(command=command):
+                self.assertFalse(DETECTOR.operation_candidates(command) & {"argo-release", "scale-to-zero"})
+
     def test_documented_codex_headless_peer_commands_without_authority_inference(self) -> None:
         session_id = "12345678-1234-4567-89ab-0123456789ab"
         for command in (

@@ -1483,6 +1483,17 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(context['hookEventName'],'PreToolUse')
         self.assertIn('mainframe-curl-requests',context['additionalContext'])
         self.assertNotIn('permissionDecision',context)
+        for command, expected in (
+            ('kubectl -n stage exec db-0 -- pg_dump -Fc app > copy.dump', 'cleanup owner'),
+            ('argocd app diff service --revision candidate', 'user route'),
+        ):
+            payload['tool_input'] = {'command': command}
+            result = self.invoke_payload('mainframe-skill-reminder', payload)
+            self.assertEqual(result.returncode, 0)
+            context = json.loads(result.stdout)['hookSpecificOutput']
+            self.assertEqual(set(context), {'hookEventName', 'additionalContext'})
+            self.assertIn(expected, context['additionalContext'])
+            self.assertEqual(self.invoke_payload('mainframe-skill-reminder', payload).stdout, '')
         payload={'hook_event_name':'SubagentStart','session_id':'operation',
                  'agent_id':'research-child','agent_type':'mainframe-researcher','cwd':str(self.home)}
         result=self.invoke_payload('mainframe-skill-reminder',payload)

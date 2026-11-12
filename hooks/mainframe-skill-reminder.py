@@ -21,9 +21,8 @@ Calls have no IO, subprocess, network, state, environment, or content reads.
 Commands over 32768 UTF-8 bytes, 512 tokens, 64 simple commands, 128 unique
 targets, or paths over 4096 UTF-8 bytes return no targets (never a partial list).
 
-The separate ``operation_skills`` API reuses that literal grammar for narrow
-credential, HTTP transfer, cluster, infrastructure and test-runner candidates.
-Its documented wrapper subset does not expand the read-target grammar.
+Operation candidates reuse that literal grammar. Their documented wrapper
+subset and backup output redirection do not expand the read-target grammar.
 """
 
 from __future__ import annotations
@@ -41,7 +40,7 @@ _SHELL_CONTROL = {"if", "then", "elif", "else", "fi", "for", "while", "until", "
                   "case", "esac", "select", "function", "!", "time", "coproc"}
 
 
-def _tokens(command: str) -> list[tuple[str, str]] | None:
+def _tokens(command: str, *, backup_output: bool = False) -> list[tuple[str, str]] | None:
     """Tokenize only a deliberately literal shell subset, preserving separators."""
     tokens: list[tuple[str, str]] = []
     word: list[str] = []
@@ -85,6 +84,8 @@ def _tokens(command: str) -> list[tuple[str, str]] | None:
         elif char in "'\"":
             quote = char
             started = True
+        elif char == ">" and backup_output and not started and index > 0 and command[index - 1] in " \t":
+            tokens.append(("output", char))
         elif char in "$`<>()[*?]{}~" or (char == "#" and not started):
             return None
         elif char in " \t\r":
@@ -344,6 +345,25 @@ def read_targets(command: str, cwd: str | None) -> list[str]:
 
 MAX_OPERATION_DEPTH = 6
 _HELP_VERSION = {"--help", "-h", "--version", "-V"}
+_BACKUP_NOTE = (
+    "Reuse an adequate recovery point. For a needed, authorized backup, set a protected "
+    "destination, restore check, retention and cleanup owner."
+)
+OPERATION_ADVISORIES = {
+    "postgres-backup": ("backup", "mainframe-infrastructure", _BACKUP_NOTE),
+    "k3s-backup": ("backup", "mainframe-k3s", _BACKUP_NOTE),
+    "argo-release": (
+        "rollout", "mainframe-argocd",
+        "Check old/new compatibility and serving endpoint overlap. Probe a real user route "
+        "before, during and after the rollout. Account for any necessary maintenance window.",
+    ),
+    "scale-to-zero": (
+        "rollout", "mainframe-infrastructure",
+        "Scaling to zero can remove all serving endpoints. Confirm the maintenance impact "
+        "and recovery path. Probe a real user route across the change.",
+    ),
+}
+_BACKUP_ROUTES = {"postgres-backup", "k3s-backup"}
 
 
 def _operation_operands(
@@ -396,6 +416,71 @@ def _operation_operands(
                 operands.append(value)
         index += 1
     return operands
+
+
+def _postgres_backup(argv: list[str]) -> bool:
+    if argv and posixpath.basename(argv[0]) == "env":
+        index = 1
+        while index < len(argv) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[index]):
+            index += 1
+        argv = argv[index:]
+    if not argv or posixpath.basename(argv[0]) not in {"pg_dump", "pg_dumpall", "pg_basebackup"}:
+        return False
+    # In PostgreSQL clients -h takes a hostname and -? prints help.
+    args = argv[1:]
+    if any(arg in {"--file=/dev/null", "-f/dev/null"} or (
+        arg in {"--file", "-f"} and args[index + 1:index + 2] == ["/dev/null"]
+    ) for index, arg in enumerate(args)):
+        return False
+    return not set(args) & {"--help", "-?", "--version", "-V"} and (
+        "-h" not in args or args.index("-h") + 1 < len(args)
+    )
+
+
+def _argo_release(args: list[str]) -> bool:
+    if len(args) < 3 or args[0] != "app" or args[1] not in {"diff", "sync", "rollback"}:
+        return False
+    operands = _operation_operands(
+        args[2:], {"--async", "--prune", "--force", "--grpc-web", "--insecure", "--core"},
+        {"--revision", "--server", "--timeout", "--app-namespace", "-N", "--resource", "--retry-limit", "--strategy"},
+    )
+    if not operands or not re.fullmatch(r"[a-zA-Z0-9][\w./-]*", operands[0]):
+        return False
+    return len(operands) == 1 or (args[1] == "rollback" and len(operands) == 2 and operands[1].isdigit())
+
+
+def _kubectl_advisory(args: list[str]) -> str | None:
+    boundary = args.index("--") if "--" in args else len(args)
+    values: dict[str, list[str]] = {}
+    operands = _operation_operands(
+        args[:boundary], {"-i", "-t", "--stdin", "--tty"},
+        {"-n", "--namespace", "-c", "--container", "--context", "--kubeconfig",
+         "--request-timeout", "--timeout", "--replicas", "--current-replicas"}, values,
+    )
+    if not operands or len(operands) < 2:
+        return None
+    if operands[0] == "exec" and len(operands) == 2 and _postgres_backup(args[boundary + 1:]):
+        return "postgres-backup"
+    if operands[0] == "scale" and boundary == len(args) and values.get("--replicas") == ["0"]:
+        resource = operands[1].split("/", 1)
+        if resource[0] in {"deploy", "deployment", "deployments", "sts", "statefulset", "statefulsets"}:
+            if (len(resource) == 2 and resource[1]) or (len(resource) == 1 and len(operands) >= 3):
+                return "scale-to-zero"
+    return None
+
+
+def _operation_advisory(argv: list[str], executable: str, args: list[str]) -> str | None:
+    if _postgres_backup(argv):
+        return "postgres-backup"
+    if executable == "kubectl":
+        return _kubectl_advisory(args)
+    if executable == "k3s" and args[:1] == ["kubectl"]:
+        return _kubectl_advisory(args[1:])
+    if executable == "argocd" and _argo_release(args):
+        return "argo-release"
+    if executable == "k3s" and args[:2] == ["etcd-snapshot", "save"] and not _HELP_VERSION.intersection(args):
+        return "k3s-backup"
+    return None
 
 
 def _curl_transfer(args: list[str]) -> bool:
@@ -581,9 +666,14 @@ def _operation_argv(
 ) -> set[str]:
     if depth > MAX_OPERATION_DEPTH:
         raise ValueError("wrapper depth limit")
-    if not argv or any(arg in _HELP_VERSION for arg in argv[1:]):
+    if not argv:
         return set()
     executable, args = posixpath.basename(argv[0]), argv[1:]
+    route = _operation_advisory(argv, executable, args)
+    if route:
+        return {route}
+    if _HELP_VERSION.intersection(args):
+        return set()
     if executable == "sudo":
         if not args or args[0] != "-n":
             return set()
@@ -634,11 +724,22 @@ def _operation_argv(
 def _operation_sequence(command: str, depth: int, remote: bool, budget: list[int]) -> set[str]:
     if depth > MAX_OPERATION_DEPTH or len(command.encode("utf-8")) > MAX_COMMAND_BYTES:
         raise ValueError("operation size/depth limit")
-    tokens = _tokens(command)
+    tokens = _tokens(command, backup_output=True)
     if tokens is None:
         raise ValueError("non-literal shell")
-    commands = _commands(tokens)
     budget[0] += len(tokens)
+    redirected = ("output", ">") in tokens
+    if redirected:
+        while tokens[-1:] == [("op", "\n")]:
+            tokens.pop()
+        if tokens[-2:-1] != [("output", ">")] or tokens[-1][0] != "word" or not tokens[-1][1]:
+            raise ValueError("unknown output redirection")
+        tokens = tokens[:-2]
+        if ("output", ">") in tokens:
+            raise ValueError("output redirection outside one pipeline")
+    commands = _commands(tokens)
+    if redirected and any(separator not in {"|", None} for _, separator in commands):
+        raise ValueError("output redirection outside one pipeline")
     budget[1] += len(commands)
     if budget[0] > MAX_TOKENS or budget[1] > MAX_SEGMENTS:
         raise ValueError("aggregate operation limit")
@@ -646,11 +747,13 @@ def _operation_sequence(command: str, depth: int, remote: bool, budget: list[int
     for index, (argv, _) in enumerate(commands):
         piped_input = index > 0 and commands[index - 1][1] == "|"
         result.update(_operation_argv(argv, depth, remote, budget, piped_input))
+    if redirected and not result & _BACKUP_ROUTES:
+        raise ValueError("output redirection outside a backup")
     return result
 
 
-def operation_skills(command: str) -> set[str]:
-    """Return literal operation candidates, without IO, execution or authority.
+def operation_candidates(command: str) -> set[str]:
+    """Return skill names or keys of OPERATION_ADVISORIES without IO or execution.
 
     The read tokenizer's shell and size limits also apply here, including across
     nested SSH strings. Only ``sudo -n [--]``, the canonical credential helper,
@@ -663,10 +766,12 @@ def operation_skills(command: str) -> set[str]:
     or pipeline input, K3s cluster operations, Docker/Terraform operations and
     named test runners and documented Codex exec/exact-ID resume forms are
     candidates. Peer relevance does not establish product-assignment authority.
-    Bare kubectl, application-only K3s
-    pod work, opaque shell wrappers, config-loaded/dynamic commands, arbitrary
-    package scripts and help/version requests stay silent. A malformed nested
-    string or exceeded limit silences the complete result, never a partial set.
+    The additional operation advisories cover named Argo CD release commands,
+    scaling a workload to zero, and explicit PostgreSQL/K3s backup commands.
+    A single trailing literal stdout destination is accepted for a backup.
+    Other application-only kubectl/K3s work, opaque shell wrappers and dynamic
+    commands stay silent. A malformed nested string or exceeded limit silences
+    the complete result, never a partial set.
     """
     if not isinstance(command, str):
         return set()
@@ -674,6 +779,12 @@ def operation_skills(command: str) -> set[str]:
         return _operation_sequence(command, 0, False, [0, 0])
     except (UnicodeError, ValueError, TypeError):
         return set()
+
+
+def operation_skills(command: str) -> set[str]:
+    """Return skill identities associated with recognized literal operations."""
+    return {OPERATION_ADVISORIES[route][1] if route in OPERATION_ADVISORIES else route
+            for route in operation_candidates(command)}
 
 
 def candidate_skill(relative_path: str) -> str | None:

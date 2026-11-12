@@ -195,6 +195,12 @@ def candidates(path: Path, project: Path) -> set[str]:
                 elif path.suffix in {'.tsx', '.jsx'} and 'react' in deps and deps & {'react-dom', 'next'} and 'react-native' not in deps and _web_app(manifest[0], project, deps):
                     result.add('mainframe-frontend')
         yaml = path.suffix.lower() in {'.yaml', '.yml'}
+        if yaml and 'argoproj.io/v1alpha1' in source and any(
+            re.search(r'(?m)^apiVersion:[ \t]*argoproj\.io/v1alpha1[ \t]*\r?$', doc)
+            and re.search(r'(?m)^kind:[ \t]*Application(?:Set)?[ \t]*\r?$', doc)
+            for doc in re.split(r'(?m)^---(?:[ \t]+[^\n]*)?\r?$', source)
+        ):
+            result.add('mainframe-argocd')
         kube = yaml and re.search(r'(?m)^apiVersion:\s*\S+', source) and re.search(
             r'(?m)^kind:\s*(?:Deployment|StatefulSet|DaemonSet|Service|Ingress|Job|CronJob|ConfigMap|Secret|Namespace|PersistentVolumeClaim)\s*$', source)
         compose = yaml and path.name.lower() in {'compose.yml', 'compose.yaml', 'docker-compose.yml', 'docker-compose.yaml'} and re.search(r'(?m)^services:\s*$', source)

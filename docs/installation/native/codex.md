@@ -656,6 +656,19 @@ three-suggestion budget and once-per-method state with role-start advice.
 Explicit attempts to read an available skill suppress redundant advice as
 awareness evidence, without claiming successful reading or application.
 
+The backup and rollout notes use the same Bash callback and shared budget.
+An attributed Argo Application manifest read also uses the existing read
+callback. Neither route adds a registration or completion event. Check
+the notes and their silent controls through the existing disposable-home
+reminder tests before claiming delivery.
+
+On 2026-11-12, an isolated app-server probe using the Desktop-bundled
+`0.167.0-alpha.4.1` engine listed the Bash registration as enabled and
+untrusted and discovered the Argo CD, infrastructure and testing skills.
+The launcher returned bounded context for synthetic backup and rollout events
+and silence for an ordinary read. This verifies catalog and callback behavior
+in the fixture. Full installer support remains version-scoped.
+
 Disposable-home tests exercise all three native output envelopes, packaging,
 disablement, reconciliation and duplicate suppression. Native activation of new
 registrations remains separate from these checks and may require user trust.

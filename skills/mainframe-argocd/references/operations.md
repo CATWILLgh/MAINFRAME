@@ -66,9 +66,22 @@ revision before deciding to change infrastructure. Failed sync can be partial.
 Terminating an operation stops further orchestration, not previously applied
 changes or all external effects; it requires authority and post-checks.
 
-After rollout, verify expected revisions/image identities, operation result,
-relevant resource readiness and the actual user-facing behavior. Custom health
-checks and ignored differences can make a badge incomplete evidence.
+## Verify availability through the rollout
+
+For a compatible release, keep a serving endpoint available until its
+replacement is ready. Before sync or the Git change that triggers it, check the
+rendered rollout strategy, readiness and traffic draining, capacity for
+overlap, and compatibility of old/new application versions with migrations
+and shared workers. If the change requires taking serving endpoints offline,
+establish the maintenance impact, authority, recovery path and expected duration.
+
+Start a bounded external probe before the change and continue through the
+handoff. Exercise a representative read-only user journey as well as any
+necessary readiness check. Record HTTP and content failures, maximum gap
+between probes and affected revision. Verify serving endpoint overlap and the
+final operation result, revision, image identities and resource readiness.
+Argo operation duration measures controller work. User-facing outage is
+measured at the external route.
 
 ## Rollback and removal are different operations
 

@@ -63,3 +63,19 @@ class NativeSkillReminderTests(unittest.TestCase):
             self.assertIsNone(call())
             data['tool_response'] = {'isError': False}
             self.assertIn('mainframe-testing', call()['hookSpecificOutput']['additionalContext'])
+
+    def test_zcode_backup_uses_existing_nonblocking_bash_callback(self):
+        base = self.home / '.zcode/mainframe/hooks'
+        skills = self.home / '.zcode/skills'
+        self.prepare(base, skills)
+        skill = skills / 'mainframe-infrastructure/SKILL.md'
+        skill.parent.mkdir()
+        skill.write_text('---\nname: mainframe-infrastructure\ndescription: Operations\n---\n')
+        data = dict(self.payload, hook_event_name='PreToolUse', tool_name='Bash',
+                    tool_input={'command': 'pg_dump -Fc app > backup.dump'})
+        with patch.object(zcode_hook, 'ROOT', base):
+            output = zcode_hook.dispatch('mainframe-skill-reminder', self.state,
+                                         io.BytesIO(json.dumps(data).encode()))
+        context = output['hookSpecificOutput']
+        self.assertEqual(set(context), {'hookEventName', 'additionalContext'})
+        self.assertIn('cleanup owner', context['additionalContext'])

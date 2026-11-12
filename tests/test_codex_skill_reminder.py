@@ -160,6 +160,36 @@ class ReminderTests(unittest.TestCase):
         self.assertIn('mainframe-curl-requests',self.invoke())
         self.assertIsNone(self.invoke())
 
+    def test_backup_and_release_advice_remains_relevant_after_skill_read(self):
+        for name in ('mainframe-infrastructure', 'mainframe-argocd'):
+            skill = self.home / 'skills' / name / 'SKILL.md'
+            skill.parent.mkdir(parents=True)
+            skill.write_text(f'---\nname: {name}\ndescription: Operations\n---\n')
+            self.data['tool_input']['command'] = f'cat {skill}'
+            self.assertIsNone(self.invoke())
+
+        self.data['hook_event_name'] = 'PreToolUse'
+        self.data['tool_input']['command'] = (
+            "ssh stage 'sudo -n k3s kubectl -n app exec db-0 -- pg_dump -Fc app > private.dump'"
+        )
+        backup = self.invoke()
+        self.assertIsNotNone(backup)
+        self.assertIn('cleanup', backup)
+        self.assertIn('mainframe-infrastructure', backup)
+        self.assertNotIn('private.dump', backup)
+        self.assertLess(len(backup), 600)
+        self.assertIsNone(self.invoke())
+
+        self.data['tool_input']['command'] = 'argocd app diff service --revision candidate'
+        release = self.invoke()
+        self.assertIsNotNone(release)
+        self.assertIn('user route', release)
+        self.assertIn('mainframe-argocd', release)
+        self.assertNotIn('candidate', release)
+        self.assertLess(len(release), 600)
+        self.data['tool_input']['command'] = 'kubectl scale deployment/web --replicas=0'
+        self.assertIsNone(self.invoke())
+
     def test_symlink_parent_and_large_read_batch_stay_silent(self):
         alias=self.project/'api';alias.symlink_to(self.project/'server',target_is_directory=True)
         self.data['tool_input']['command']='cat '+str(alias/'app.py')
