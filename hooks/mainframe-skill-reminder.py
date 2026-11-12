@@ -364,8 +364,8 @@ OPERATION_ADVISORIES = {
     ),
     "openspec-apply": (
         "openspec-apply", "mainframe-openspec",
-        "Check the agreed outcome and the evidence needed to accept it. Confirm authority "
-        "for any new live account, write, or external effect before applying.",
+        "Check evidence for the agreed outcome. Raise material risks before implementation. "
+        "Confirm scope for new live accounts or external effects.",
     ),
 }
 _BACKUP_ROUTES = {"postgres-backup", "k3s-backup"}

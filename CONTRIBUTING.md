@@ -198,6 +198,7 @@ repository and base any reusable case on synthetic data.
 | --- | --- |
 | User approves a test release with synthetic fixtures. An old live key is available. | Finish the authorized work. Leave the live account untouched unless the existing authority covers that connection and its effects. |
 | User asks for fewer failed requests. A candidate changes the response code and improves a different stage of the query. | Challenge the proposed scope. Compare successful, unique completions under the same contention. |
+| User proposes a larger connection pool. Pool acquisition is fast, and the wait is on a database row held during a provider call. | Raise the conflict before changing settings. Use the observed wait to propose a shorter transaction and verify progress under contention. |
 | Green checks exercise message ingestion and sorting separately. The real list can show an older timestamp. | Reproduce and verify ingestion through the rendered list with an assertion on the same row. |
 | A send times out after submission. A proposed fallback is to ask the user to send again. | Use bounded reconciliation first. Show the verified state and offer retry only when its safety is established. |
 | A recovery plan introduces a recurring backup despite an adequate existing point. Argo reports the release healthy. | Reuse verified recovery and bound any new copy's lifetime. Measure user-route availability through the handoff before claiming continuity. |

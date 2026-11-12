@@ -190,7 +190,7 @@ class ReminderTests(unittest.TestCase):
         self.data['tool_input']['command'] = 'kubectl scale deployment/web --replicas=0'
         self.assertIsNone(self.invoke())
 
-    def test_openspec_apply_checks_outcome_and_live_scope_once_after_skill_read(self):
+    def test_openspec_apply_reminds_to_raise_material_risks_before_implementation(self):
         skill = self.home / 'skills/mainframe-openspec/SKILL.md'
         skill.parent.mkdir(parents=True)
         skill.write_text('---\nname: mainframe-openspec\ndescription: OpenSpec\n---\n')
@@ -206,6 +206,7 @@ class ReminderTests(unittest.TestCase):
         note = self.invoke()
         self.assertIsNotNone(note)
         self.assertIn('agreed outcome', note)
+        self.assertIn('Raise material risks before implementation', note)
         self.assertIn('live account', note)
         self.assertIn('mainframe-openspec', note)
         self.assertNotIn('example', note)

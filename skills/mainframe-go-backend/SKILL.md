@@ -53,6 +53,7 @@ behavior. Prefer the owning project's source and current primary documentation.
 | Queries, transactions, locks, pool pressure, migrations, or concurrent state transitions | [data and concurrency](references/data-and-concurrency.md) |
 | Outbound APIs, retries, rate limits, idempotency, or ambiguous external writes | [integrations and resilience](references/integrations-and-resilience.md) |
 | Goroutines, workers, schedulers, synchronization, pagination checkpoints, or realtime delivery | [background and lifecycle](references/background-and-lifecycle.md) |
+| Structured logs, correlation, and diagnostic coverage | [logging baseline](../mainframe-logging/SKILL.md) |
 | Choosing focused Go evidence, race checks, or a real dependency boundary | [testing](references/testing.md) |
 
 ## Complete and verify the assigned result

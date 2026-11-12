@@ -98,6 +98,11 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-logging": {
+        "source": "skills/mainframe-logging",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-frontend": {
         "source": "skills/mainframe-frontend",
         "delivery": "pending",

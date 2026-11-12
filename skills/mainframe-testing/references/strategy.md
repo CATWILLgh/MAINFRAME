@@ -12,7 +12,8 @@ Start with the observable guarantee and choose the smallest boundary that can fa
 | Components and contracts | Actual handler/module behavior, serialization, error mapping and collaborator protocols | In-process component tests; consumer/provider contract checks at their real boundary. A fake alone does not establish provider compatibility |
 | Real integrations | Database constraints, transactions, migrations, queue delivery and external-service semantics | Correct-engine tests: isolated verified local PostgreSQL where appropriate; other service-backed checks in CI by default |
 | Critical journeys | Essential user or system outcomes across the assembled application | A small selected set of end-to-end checks in CI; passing component tests do not establish the assembled journey |
-| Specialized risks | Relevant concurrency, performance, security, recovery, upgrade or compatibility guarantees | Focused evidence at the affected boundary; expensive environments and campaigns in CI. Cheap concurrency or security checks can still be local |
+| Performance and database cost | Critical-path latency, useful throughput, progress under contention, and bounded resource use | Fast causal regressions and correct-engine contention checks. Use controlled benchmark or CI budgets when elapsed time or capacity is the guarantee |
+| Specialized risks | Relevant security, recovery, upgrade or compatibility guarantees | Focused evidence at the affected boundary, with expensive environments and campaigns in CI |
 
 Specialized risks apply across the other levels; they are not a final optional bucket or automatically a costly suite. Do not defer required security, migration or recovery evidence to an optional scheduled job. A library need not have a browser journey, and a service without a database need not set up PostgreSQL. An infrastructure or documentation repository still needs the relevant contract, configuration or artifact checks, not invented business logic.
 
@@ -20,34 +21,9 @@ Use [local boundaries](local.md) for infrastructure authority and [the CI contra
 
 ## Protect performance and progress
 
-When a change adds work to a hot path, shares capacity with existing work, or
-claims a speed or resource improvement, choose an observable outcome and a
-budget from the product requirement or measured baseline. Compare the same
-workload before and after with realistic data size and skew, cache state,
-concurrency, and resource limits. Separate queue, lock or connection wait from
-execution time. Check correctness, completions, timeouts, and tail latency
-together so a fast rejection or delayed worker cannot hide lost work.
-
-Prefer a fast regression that fails on the mechanism. Assert progress while
-the competing transaction, worker, or upstream call is deliberately held.
-Use query/row counts, repeated work, or bounded concurrency when those expose
-the cost reliably. For an actual latency or resource budget, use a controlled
-benchmark or CI job with an explicit acceptance bound. Timing printed in a log
-is diagnostic evidence. Keep preparation out of the timed window and prove
-the check can reject the baseline defect.
-
-Define the conditions that make the comparison valid separately from the
-guarantees the candidate must pass. Decide what baseline failures should
-count as evidence and what would invalidate the experiment. If a chosen
-control fails, diagnose that distinction before repeating the run. Correct a
-faulty measuring tool within scope and bring any change to an agreed
-acceptance condition back to its decision owner.
-
-For a new integration sharing a queue, pool, or rate limit, exercise the
-existing user path and the new work together. Verify admission, durable
-completion, progress on the next item, and the effect of a slow or failed
-dependency at the relevant boundary. Keep the existing performance evidence
-linked to the guarantee and executable check in the project verification map.
+Use [performance and database checks](performance.md) for changes to critical
+paths, shared capacity, and data access. Keep the workload, acceptance
+condition, and executable check in the existing project verification map.
 
 ## Keep one project verification map
 

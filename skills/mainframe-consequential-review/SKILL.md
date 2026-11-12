@@ -23,9 +23,27 @@ Identify the strongest realistic way the decision or result could fail. Work bac
 
 Test the assumptions that must hold for acceptance. State what observation would make each assumption false and whether that observation is present, absent, or unavailable.
 
-For a proposed decision, compare another approach only when there is a genuine decision fork. Evaluate it under the same constraints and explain where it is better or worse. Do not invent an alternative merely to appear critical.
+For a proposed decision, separate the caller's goal and constraints from the
+suggested means. Check the cheapest decisive evidence. If the suggestion can
+break the outcome, tell the caller before implementation what would happen,
+under which conditions, and what supports that concern. Recommend the simplest
+viable path and explain the tradeoff. When the evidence is uncertain, say
+what would settle it and continue useful reversible work within scope.
+For a proposed layer or fallback, check which reachable failure the existing
+design misses and what state, cost, or maintenance the addition introduces.
+[Google Engineering Practices on design and complexity](https://google.github.io/eng-practices/review/reviewer/looking-for.html#complexity)
 
-For a completion claim, map each material acceptance condition to evidence that directly observes it. A successful build, nearby test, file presence, or structural check does not prove behavior outside what it actually measured. Evidence produced before later changes is stale for risks affected by those changes.
+For example, a higher connection limit may help when pool acquisition is the
+bottleneck. If requests are waiting on the same row lock, more connections
+may increase contention. Check the wait boundary before changing either limit.
+
+For a completion claim, map each material acceptance condition to evidence
+that directly observes it. For a critical journey, verify the user can finish
+the normal workflow with the required correctness, responsiveness, and
+recovery under relevant conditions. Record what the synthetic environment
+covered and which operator, device, or deployment evidence is still needed.
+Evidence produced before later changes is stale for risks affected by those
+changes.
 
 Keep only objections that could change acceptance, mitigation, or residual risk. A review with no grounded objection is a useful result.
 
