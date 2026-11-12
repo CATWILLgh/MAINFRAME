@@ -1,6 +1,6 @@
 ---
 name: mainframe-consequential-review
-description: Assess a consequential decision or readiness claim when mistaken acceptance could cause material harm, such as a production rollout, migration, or recovery. Not routine code review.
+description: Challenge a high-stakes plan or readiness claim before acceptance, such as rollout, migration, or recovery. Skip routine code review.
 ---
 
 # Review consequential decisions and results

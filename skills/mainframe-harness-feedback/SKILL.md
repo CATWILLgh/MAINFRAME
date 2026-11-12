@@ -1,6 +1,6 @@
 ---
 name: mainframe-harness-feedback
-description: Record an observed MAINFRAME or agent-harness fault, including missing skills, broken hooks, conflicting instructions, or adapter failures. Not application bug reports.
+description: Record a MAINFRAME or agent-harness fault in skills, hooks, commands, instructions, or adapters. Application bugs belong to the project.
 ---
 
 # Report a MAINFRAME harness fault

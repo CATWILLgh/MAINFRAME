@@ -1,6 +1,6 @@
 ---
 name: mainframe-openspec
-description: Use OpenSpec for a substantial change when the user chooses that workflow, or resume an assigned OpenSpec change. Covers collaborative specification, implementation handoff, and archive.
+description: Start, revise, implement, or archive an OpenSpec change explicitly chosen or assigned by the caller.
 ---
 
 # Develop a change with OpenSpec

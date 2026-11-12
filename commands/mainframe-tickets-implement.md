@@ -8,13 +8,18 @@ When the user starts a native goal and then invokes this command separately, pro
 
 ## Read the initialized ticket contract
 
-Read `docs/tickets/AGENTS.md` and check its directory, record-format, and lifecycle rules before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+Use only the current project's `docs/tickets/`. Before writing, read its
+`AGENTS.md` and check layout, record format, and lifecycle. If missing or
+conflicting, report the need for explicit `mainframe-tickets-init`.
+Directories own state. Use no YAML `status` field. Preserve string IDs,
+required YAML, evidence, and links. Exclude `.campaigns/` and `.migration/`
+from scans.
 
 Select only `docs/tickets/open/ready/` records with `execution: autonomous` and an evidenced `Autonomous implementation boundary`. Do not consume `user-approved` records through this queue-wide command. Keep the active record in ready while implementing. Add `Implementation` with source locations, pre-change evidence, checks, limitations and checkpoint references; preserve investigation, acceptance, identity and execution metadata. Move a completed verified correction to `open/needs-verification/`; route missing evidence to `open/needs-scope-review/`, unresolved user choices to `open/needs-decision/`, and disproved or duplicate claims to `archive/rejected/` with evidence. Save continuation and resulting commit identities under `.campaigns/`. Preserve ignored record ownership and validate YAML, destination and links after each move.
 
 ## Establish the queue and authority
 
-Use the initialized local queue and the stage-specific destinations above. A missing or conflicting contract is an initialization issue, not permission to invent lifecycle states. Preserve the project's tracked or ignored ownership.
+Preserve the queue's tracked or ignored ownership.
 
 The explicit invocation authorizes the local, reversible project and ticket changes required to implement ready tickets in the current checkout. It does not authorize deployment, writes to remote or shared environments, destructive data operations, material infrastructure changes, destructive history changes, or pushes. Unless the caller or effective project policy forbids commits, the invocation also authorizes a local Conventional Commit for each completed, verified ticket. It does not authorize a push. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
 

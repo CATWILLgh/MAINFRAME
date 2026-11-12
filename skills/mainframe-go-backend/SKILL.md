@@ -1,6 +1,6 @@
 ---
 name: mainframe-go-backend
-description: Design, implement, debug, or review Go services, APIs, and workers, including transactions, concurrency, retries, and backend tests.
+description: Design, change, or review Go services, APIs, and workers, including transactions, locks, concurrency, retries, and backend tests.
 ---
 
 # Go backend engineering

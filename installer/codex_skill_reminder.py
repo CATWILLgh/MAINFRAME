@@ -356,5 +356,5 @@ def _advisory(data, state, hooks, detector, *, skill_roots=None, read_cwd=None):
             return None
     name, path = chosen
     location = json.dumps(str(path), ensure_ascii=True)
-    return (f'MAINFRAME skill reminder: consider `{name}` at {location} for this work. '
-            'Read it if relevant and not already applied. This advisory does not change your task or authority.')
+    return (f'MAINFRAME skill reminder: `{name}` at {location}. '
+            'Read if relevant and not already applied. Stay within assigned authority.')

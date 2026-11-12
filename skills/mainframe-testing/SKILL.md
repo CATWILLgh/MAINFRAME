@@ -1,29 +1,35 @@
 ---
 name: mainframe-testing
-description: Design, write, run, or repair tests and GitHub/GitLab CI during development. Use for test strategy, TDD, analysis tools, fixtures, local/CI boundaries, and verification evidence. Use mainframe-test-audit to assess an existing test system.
+description: Design, run, or repair tests and CI. Use for TDD, regressions, performance or database checks, and GitHub/GitLab test gates.
 ---
 
 # Own the behavior and its verification
 
-Apply this method as the primary agent or a delegated engineer within the same task authority. Use the stack-specific engineering skill for native tools and contracts. This method does not authorize implementation during read-only investigation or verification, global installation, remote access, publication, or deployment.
+Use this method for authorized behavior changes and test or CI work. Pair
+it with stack-specific guidance when the changed contract needs it.
 
-For a behavior change, use test-driven development: demonstrate the relevant failing behavior before the fix, implement the smallest complete correction, then refactor while the focused checks remain green. A compiler, import, setup, credential, or network failure is not the intended red result. Reuse an existing test that already demonstrates the defect; do not add a duplicate solely to claim TDD.
+- State the observable result and protected side effects. Choose the smallest
+  faithful boundary. For a behavior change, see the focused failure for that
+  behavior, make the complete correction, then refactor with checks green.
+  Reuse an existing red. Setup, syntax, and dependency failures are not red
+  evidence. For prose and reversible low-impact changes use direct validation.
+- Cover reachable failure, rejection, retry, concurrency, and cleanup as
+  relevant. Assert the real contract. Preserve meaningful coverage, report
+  failures, and diagnose flakes instead of repeating them until green.
+- Use focused checks and the nearest fast suite. Broaden for changed risk,
+  integration, or an actual gate. Keep the local loop in-process or on verified
+  isolated PostgreSQL where needed. Use CI for other real dependencies and
+  expensive, compatibility, or end-to-end checks by default. Broaden locally
+  only with authority. A substitute engine cannot prove real semantics.
 
-Keep the red/green cycle small within a coherent functional result. Carry related changes through integration; use focused checks for the behavior being changed and shared build, lint and regression checks at integration and acceptance boundaries. Repeat or widen a passed check when changed inputs, a failure, an unresolved material concern or an explicit project gate requires it. An edit, helper, commit or goal-turn boundary alone is not a reason for another full run or final report. Run earlier when needed to diagnose a failure or protect a material invariant. Complete all required checks before accepting the result; grouping work must not hide failures or reduce coverage.
-
-State what observable behavior must change, what must remain true, and which boundary can prove it. Test user-visible results and protected side effects rather than private implementation details. Include meaningful rejection, boundary, failure, retry, concurrency, and cleanup cases when the contract contains them; do not generate an indiscriminate test matrix.
-
-## Choose the operation
-
-Use this method proactively when implementation requires tests, test changes, or CI work; an explicit request to “use TDD” is unnecessary. It owns how verification is built and run, including ordinary regression checks after a change. Its result is the authorized change with meaningful tests and accurately bounded evidence.
-
-Use `mainframe-test-audit` when the task is to assess the quality of an existing test system, or concrete escaped regressions, flakiness, misleading green results, or measured cost warrant investigation within scope. That method evaluates the same criteria without changing the audited system. Do not start an audit for every test run or load both full methods by default.
-
-For an assignment that includes both audit and repair, keep findings and implementation as explicit phases and reuse the caller's existing repair authority. A delegated read-only auditor returns findings to its caller; it does not become an implementer. An author may review their own work but must not claim an independent audit.
+Use `mainframe-test-audit` to assess an existing test system for an assigned
+audit or a concrete escaped regression, false green, flake, or cost problem.
+An audit-only assignment stays read-only. When both audit and repair are
+authorized, establish findings first, then use this method for the repair.
 
 ## Load the method needed now
 
-Reuse the method while its relevant instructions remain available in context. Read again when needed guidance is missing or may have changed, not merely because a new turn began.
+Read only the reference for the current decision. Reuse guidance still in context.
 
 | Decision | Reference |
 | --- | --- |
@@ -36,16 +42,17 @@ Reuse the method while its relevant instructions remain available in context. Re
 | GitHub workflow authoring or troubleshooting | [GitHub Actions](references/github.md) |
 | GitLab pipeline authoring or troubleshooting | [GitLab CI](references/gitlab.md) |
 
-Keep the normal local loop lightweight: pure or in-process checks first, isolated verified local PostgreSQL when its semantics are needed. Other service-backed, expensive, compatibility, and end-to-end suites run in CI by default. Do not start a local service fleet or replace an engine with PostgreSQL merely to fit this policy. A more permissive local pass requires explicit caller/project authority for that pass; cheap tests are not proof of a dependency's untested semantics.
-
-A prose-only or reversible low-impact change needs the smallest meaningful validation, not an artificial failing test. For a behavior change that cannot be faithfully observed locally, demonstrate the local portion, provide the CI test at its real boundary, and record the missing red/green evidence honestly. Never weaken the requirement just to obtain a green local result.
-
-For substantive behavior or CI work, use the project’s existing verification map to connect the affected guarantee to its test boundary, runnable command, execution route and acceptance condition. Establish or reconcile only the relevant missing entries under [the shared strategy](references/strategy.md); do not perform a repository-wide inventory for each change.
 
 ## Finish with evidence
 
-Run the focused proof and nearest relevant fast checks. Inspect failures and fix in-scope problems; do not weaken assertions, accept snapshots blindly, hide failures, rerun flakes until green, or equate coverage percentage with correctness. A check or workaround that only conceals the failure is not evidence that its cause or the requested behavior was corrected. Expected-error handling, bounded retries and fallbacks are valid when they satisfy the actual contract.
-
-When delegating, supply the behavior, test boundary, local/CI split, permitted infrastructure, and completion evidence. The implementer returns observed red and green outcomes (or the exact exception), changed tests, and remaining required CI jobs. The coordinator verifies the integrated result and relevant cross-component checks after integration; per-agent green checks do not establish combined correctness.
-
-Distinguish local validation, CI configuration validation, a run for the exact revision and event, and live acceptance. If CI has not run or cannot be observed, report that limitation and the exact pending job; do not claim full verification or silently mark required evidence unnecessary. Run or inspect CI only within existing authority. Preserve the project's useful test map and commands through its existing project skill when authorized; do not add task logs or a new progress system.
+- For behavior or CI work, connect the changed guarantee to an executable
+  check, route, and pass condition in the existing project verification map.
+  Reconcile only relevant gaps. Include actual latency, resource, and DB
+  progress where those are the risk.
+- Give delegated implementers the behavior, local/CI boundary, permitted
+  infrastructure, and required proof. They report observed red/green and
+  pending jobs. The primary agent checks the integrated behavior and CI coverage.
+- Distinguish local results, configuration checks, actual CI for the revision
+  and event, and live acceptance. If local reproduction cannot observe the
+  behavior, exercise the faithful CI boundary where authorized. State any
+  missing red/green evidence and the exact pending check or job.

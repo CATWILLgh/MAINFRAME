@@ -1,6 +1,6 @@
 ---
 name: mainframe-keycloak-sso
-description: Implement, adapt, or troubleshoot Keycloak OIDC login in a web application, including an admin connection screen, group-to-role mapping, account linking, and session lifecycle. Not Keycloak server deployment or login-page theming alone.
+description: Keycloak OIDC application login, admin settings, group-to-role mapping, account linking, and sessions. Excludes server deployment and theming.
 ---
 
 # Keycloak SSO integration

@@ -6,7 +6,12 @@ Repeatedly choose a random project area, investigate it, immediately persist a s
 
 ## Read the initialized ticket contract
 
-Read `docs/tickets/AGENTS.md` and check its directory, record-format, and lifecycle rules before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+Use only the current project's `docs/tickets/`. Before writing, read its
+`AGENTS.md` and check layout, record format, and lifecycle. If missing or
+conflicting, report the need for explicit `mainframe-tickets-init`.
+Directories own state. Use no YAML `status` field. Preserve string IDs,
+required YAML, evidence, and links. Exclude `.campaigns/` and `.migration/`
+from scans.
 
 Read only relevant matches across the five `docs/tickets/open/` queues for deduplication. Create new records in `open/observations/` with `id`, `title`, `component`, `created`, `created-from` and an `Evidence` section. New IDs are quoted four-character lowercase hexadecimal strings checked against open and archived IDs; retain existing IDs. Add new facts to matching open records without changing their lifecycle or execution marker. Record trigger/location, actual and expected behavior with sources, consequence, and uncertainty. Keep this campaign's random-point history and duplicate streak under `.campaigns/`; never count state files, migration snapshots, or terminal records as open duplicates.
 

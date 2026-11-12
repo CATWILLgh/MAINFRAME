@@ -1,6 +1,6 @@
 ---
 name: mainframe-record-project-problem
-description: Preserve unresolved project findings as structured tickets during ordinary work; establish a local ticket queue when none exists. Not an audit campaign or a way to defer unfinished work.
+description: File evidenced, unresolved project problems outside the assigned result. Reuse or establish the local ticket queue.
 ---
 
 # Record a project problem

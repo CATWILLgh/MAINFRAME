@@ -1,6 +1,6 @@
 ---
 name: mainframe-notifications
-description: Implement or troubleshoot application notifications and their settings UI, event routing, templates and delivery through Bitrix24, Telegram, webhooks, email or Web Push. Not one-off message sending, chat UI toasts or messaging-server deployment alone.
+description: Application notification routing, settings, templates, and delivery via Bitrix24, Telegram, webhooks, email, or Web Push. Excludes one-off sends and UI toasts.
 ---
 
 # Application notifications

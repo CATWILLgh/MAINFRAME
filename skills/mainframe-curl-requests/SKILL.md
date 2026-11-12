@@ -1,6 +1,6 @@
 ---
 name: mainframe-curl-requests
-description: Run bounded HTTP(S) requests with curl when no narrower client can provide the needed evidence.
+description: Bounded HTTP(S) requests with curl when a narrower client cannot provide the evidence.
 ---
 
 # Bounded curl requests

@@ -49,28 +49,34 @@ Use this `SKILL.md` template and replace every angle-bracket token with verified
 ```markdown
 ---
 name: <mainframe-project-skill-id>
-description: Plan, implement, debug, review, or maintain <project-name> using its source owners, established decisions, and verification routes. Use when project-specific context affects the work.
+description: Use <project-name> source owners, design decisions, and checks when project context affects substantive work or discussion.
 ---
 
 # Use and maintain <project-name> project knowledge
 
-Use this skill during substantive project work and discussion when project-specific constraints, source ownership, design decisions, or verification affect the next step; do not wait for the user to name it. Consult [references/project-knowledge.md](references/project-knowledge.md) and follow only the relevant supporting links. Apply the knowledge to the actual decision. Reuse current material already loaded; a localized wording fix needs only its owner and relevant constraints. Investigate gaps and verify facts that could have changed.
-
-Work from the current project state. Separate user decisions, implemented behavior, verified runtime evidence, and unknowns. Preserve unrelated work and keep global configuration unchanged unless the current request separately authorizes a global change.
+For substantive work or discussion, consult [the project map](references/project-knowledge.md)
+when ownership, design, or verification matters. Follow only relevant links
+and apply them to the decision. Reuse current guidance. A wording fix needs
+only its owner and constraints. Inspect current state and recheck changed facts.
+Distinguish decisions, implementation, verified behavior, and unknowns.
 
 ## Keep the knowledge useful
 
-Maintain this skill as part of ordinary authorized project work; no repeat invocation of the creation command is needed. Update the narrowest existing entry when the task establishes a durable user decision, resolves a recurring trap, changes a source owner or verification route, or disproves maintained knowledge. Ground updates in the user decision, current source, authoritative documentation, or a reproducible check, and state the consequence for future work.
+During authorized work, update the narrowest owner when a durable decision,
+recurring trap, owner, or check changes. Give the evidence and consequence.
+Before handoff, persist such changes within scope. Leave the skill alone
+when nothing durable changed. For read-only work, return the exact proposed
+correction. Preserve unrelated work and keep global config under its own authority.
 
-Before handing back a completed substantive task, check whether its findings changed any such knowledge. Persist a useful change within the assignment's write authority and mention it briefly in the handoff. If nothing durable changed, leave the skill untouched; do not add a per-task log or completion ritual. If the assignment is read-only or excludes this skill, return the exact supported correction instead of writing it.
+Keep this entrypoint and the map short. Put substantial details behind concrete
+reading triggers. Reuse existing files and add scripts or assets for demonstrated
+needs. Replace obsolete conclusions and merge duplicate evidence. Link sources.
+Keep transient status, unapproved proposals, guesses, prompts, transcripts,
+raw outputs, telemetry, secrets, personal data, and copied project documentation
+out of maintained knowledge.
 
-Keep the shared working procedure and reading triggers in this `SKILL.md`. Keep `references/project-knowledge.md` short: essential project constraints and routes to the sources needed for common decisions. Put substantial domain knowledge, evidence, schemas, and examples in focused supporting files, each linked with a concrete reason to read it. Use scripts for useful deterministic operations and assets for reusable output material. Add them when the current task demonstrates their value; do not wait for repeated failures or create empty structure.
-
-Replace obsolete conclusions and merge repeated evidence at their existing owner. Keep one current actionable account; link detailed evidence. Remove expired next-session instructions from current guidance.
-
-Do not record guesses, proposals awaiting approval, session chronology, temporary status, task notes, raw output, secrets, credentials, prompts, responses, telemetry, personal data, or copied project documentation. Link to an existing source of truth instead of duplicating it.
-
-After changing the skill, validate its native structure, links, and any executable resources. Confirm that the project still discovers the same effective skill and that the edit did not change its tracked or ignored ownership.
+After editing, validate structure, links, resources, discovery, and existing
+Git ownership.
 ```
 
 For a software project, initialize or reconcile a compact verification map using `mainframe-testing` and its `references/strategy.md` when available. Reuse and link the existing owner; otherwise place the minimal supported map in the project knowledge reference. Connect each established material guarantee to its test level and real boundary, owning tests/runnable command, local or CI job/event, and acceptance condition or evidence gap. Inspect current project evidence within this command’s scope; mark unknown or absent checks instead of inventing them or claiming full coverage. For established analyzers, link their purpose, scope, configuration/command and dependency owner using the testing skill’s small tool profiles; record missing capabilities without installing tools during skill initialization. Do not create tests, pipelines, services, empty level sections or a second map as part of skill initialization. Maintain changed entries during later authorized engineering work; read-only work proposes corrections. Keep the shared strategy in the testing skill rather than copying it into every project skill.

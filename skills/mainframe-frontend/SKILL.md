@@ -1,6 +1,6 @@
 ---
 name: mainframe-frontend
-description: Design, build, review, polish, or debug React web interfaces, including screens, components, dashboards, landing pages, and product demos. Use for visual planning and screenshot reviews as well as implementation.
+description: React web UI design, implementation, review, or debugging, including visual plans, screenshots, layout, and accessibility.
 ---
 
 # React frontend design and engineering

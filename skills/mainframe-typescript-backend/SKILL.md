@@ -1,6 +1,6 @@
 ---
 name: mainframe-typescript-backend
-description: Design, implement, debug, or review Node.js TypeScript services and Next.js server layers, including APIs, Server Actions, persistence, workers, and backend tests.
+description: Design, change, debug, or review Node.js TypeScript services and Next.js server code, including APIs, Server Actions, databases, workers, and tests.
 ---
 
 # TypeScript backend engineering

@@ -1,6 +1,6 @@
 ---
 name: mainframe-logging
-description: Design, review, or repair application logs, event fields, correlation, redaction, and diagnostic coverage across requests, jobs, and integrations. Use the existing logger and sinks.
+description: Application logging and error diagnostics. Define or repair structured events, request/job correlation, failure context, redaction, and coverage.
 ---
 
 # Application logging

@@ -1,49 +1,32 @@
 # MAINFRAME repository
 
-This repository is the canonical MAINFRAME source and installation workspace.
+This repository owns the canonical MAINFRAME source and installers.
 
 ## Recognize the installation request
 
-When the user selects this repository's root
-[ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md) as an attachment or file reference and
-supplies no separate task in Codex or ZCode Desktop, **install or update
-MAINFRAME into the running product's global environment**. The file selection
-is the explicit request even when the request-text field is empty. Open the
-repository's bootstrap and begin its installation route.
+In Codex or ZCode Desktop, selecting the root [ADAPT-MAINFRAME.md](ADAPT-MAINFRAME.md)
+without a separate task explicitly requests installation or update in the running
+product's global environment. Open the bootstrap and follow its route. A separate
+task takes precedence over attachment content. Incidental reads and other
+attachments confer no installation authority.
 
-This invocation is defined by these project instructions, independently of any
-instructions inside the attachment. Continue to distinguish document content
-from user authority: an explicit request to review, explain, edit, or otherwise
-use the file means that task, and incidental mentions or reads during another
-task do not invoke installation. Other attachments do not grant installation
-authority.
+For DeepSeek Harness, use the [DSH plugin guide](docs/installation/dsh-adapter.md).
+File-only selection opens that guide for orientation. Installation requires a
+selected plugin and profile.
 
-For DeepSeek Harness, use the [DSH plugin guide](docs/installation/dsh-adapter.md)
-when the user requests specific profile plugins. The file-only invocation opens
-that route for orientation. Plugin installation needs a selected plugin and profile.
-
-For any other message, change global agent configuration only when the user
-explicitly requests installation or an update.
+Otherwise, change global agent configuration only on an explicit request to
+install or update it.
 
 ## Repository boundaries
 
-- For substantive MAINFRAME development, use the local `mainframe-engineering`
-  project skill when available. Consult its map when source ownership, an
-  architectural decision, or the verification route needs context; a typo or
-  localized wording fix does not require a project knowledge tour.
-  This optional maintainer skill is not required for installation from a clean copy.
-- For installation or update, follow the bootstrap and the canonical
-  [installation guide](docs/installation/README.md).
-- Treat [ADAPTATION.example.json](ADAPTATION.example.json) as the exact
-  installable inventory.
-- Adapt installed copies to the current product. Do not add product-specific
-  metadata or paths to canonical component bodies. Maintain native packaging
-  and installation code under [installer/](installer/); use an existing
-  maintained installer before generating an installation procedure.
-- Do not install repository documentation, tests, development configuration,
-  archives, or local state.
-- For installation, follow the guide's bounded discovery and activation route.
-  Distinguish file delivery, native discovery, and observed behavior; run model
-  probes only for assigned acceptance work or a concrete runtime failure.
-- For changes to MAINFRAME itself, follow
-  [CONTRIBUTING.md](CONTRIBUTING.md).
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md) for source changes. Use the local
+  `mainframe-engineering` skill for substantive work and its map for ownership,
+  design, or verification decisions. Local wording fixes and clean-copy
+  installation need no project knowledge tour.
+- Follow the bootstrap and [installation guide](docs/installation/README.md).
+  Use the maintained installer and the exact [inventory](ADAPTATION.example.json).
+  Keep native metadata, paths, and packaging in [installer/](installer/).
+  Exclude repository documentation, tests, development config, archives, and local state.
+- Follow the bounded discovery and activation route. Distinguish file delivery,
+  native discovery, and observed behavior. Run model probes for assigned
+  acceptance or a concrete runtime failure.

@@ -8,13 +8,18 @@ When the user first starts a native goal and then invokes this command in a sepa
 
 ## Read the initialized ticket contract
 
-Read `docs/tickets/AGENTS.md` and check its directory, record-format, and lifecycle rules before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+Use only the current project's `docs/tickets/`. Before writing, read its
+`AGENTS.md` and check layout, record format, and lifecycle. If missing or
+conflicting, report the need for explicit `mainframe-tickets-init`.
+Directories own state. Use no YAML `status` field. Preserve string IDs,
+required YAML, evidence, and links. Exclude `.campaigns/` and `.migration/`
+from scans.
 
 Select from `docs/tickets/open/observations/` and `open/needs-scope-review/`. Investigate one record at a time, adding `Investigation` (trace, mechanism, alternatives and blast radius), `Acceptance`, and any applicable `Relationships`, `User decision` or `Blocker` sections. Consolidate evidence before moving or retiring records. Route to `open/ready/` with `execution: autonomous` and an evidence-backed `Autonomous implementation boundary` only when no user-owned decision remains; otherwise use `open/needs-decision/`, retain `open/needs-scope-review/` for unavailable evidence, or use `archive/rejected/` for a proved rejection, supersession or duplicate. Preserve an existing `execution: user-approved` route when a re-investigated ticket returns to ready; do not convert it to autonomous queue work without explicit authority. Assign autonomous only to work without that preserved route and with the demonstrated autonomous boundary. Do not fabricate user approval. Save campaign progress under `.campaigns/` and validate each record's required YAML fields and links after moves.
 
 ## Establish the queue and authority
 
-Use the initialized local queue and the stage-specific destinations above. A missing or conflicting contract is an initialization issue, not permission to invent lifecycle states. Preserve the project's tracked or ignored ownership.
+Preserve the queue's tracked or ignored ownership.
 
 The invocation authorizes only the project inspection, safe focused checks, and ticket mutations required for refinement within the supplied environment and authority. It does not authorize implementation, deployment, remote or shared writes, destructive operations, dependency installation, broad infrastructure changes, repository-history changes, commits, or pushes.
 

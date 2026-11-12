@@ -1,6 +1,6 @@
 ---
 name: mainframe-argocd
-description: Plan, operate, or troubleshoot Argo CD GitOps through its CLI or REST API, including Application/ApplicationSet ownership, sync, drift, rollout verification, rollback and deletion. Not Argo Workflows or application implementation.
+description: Argo CD GitOps application ownership, sync, drift, rollout, rollback, or deletion via CLI/API. Excludes Argo Workflows.
 ---
 
 # Operate Argo CD against an explicit target
