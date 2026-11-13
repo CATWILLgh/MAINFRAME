@@ -268,6 +268,9 @@ Treat `mainframe-code-quality.py` as one component with these fixed effects:
 - a post-edit advisory for newly introduced blocking calls in Python async code;
 - a post-edit advisory for newly introduced swallowed exceptions, unsafe control
   flow in `finally`, and async Promise executors;
+- a post-edit advisory for newly introduced assertions that can pass without
+  testing their intended behavior, and Python background tasks without a
+  retained reference;
 - context-dependent Semgrep review advice that never blocks completion;
 - a `new-growth-pressure` structure advisory for a file or Python function that
   crosses a conservative size-review threshold in the current edit;
@@ -365,17 +368,24 @@ rules `S102`, `S307`, `S506`, `S602`, `S605`, `S501`, and `S324`. Discard Ruff's
 explicitly safe shell-call variants. The same before/after invocation also checks
 `ASYNC210`, `ASYNC212`, `ASYNC221`, `ASYNC230`, and `ASYNC251` for blocking
 calls, and `S110` and `B012` for suppressed exceptions.
+Also select `F631` for truthy tuple assertions, `PT012` for multi-statement
+`pytest.raises` blocks, and `RUF006` for discarded `asyncio` task references.
 
 For JavaScript and TypeScript, run Oxlint with nested configuration and ignores
 disabled. Select `no-eval`, `no-new-func`, `no-script-url`, and `no-implied-eval`
 for security and `no-unsafe-finally` and `no-async-promise-executor` for review.
 Supply the canonical read-only `setTimeout`, `setInterval`, and `window` globals
 so `no-implied-eval` works without consuming project lint settings.
+In `*.test.*`, `*.spec.*`, and `__tests__/` sources, use Oxlint's
+`vitest/valid-expect` rule for the async assertion syntax shared by Jest
+and Vitest. Report only unawaited assertions whose result is clearly
+discarded. The pinned analyzer also flags some valid code, such as an
+assertion that is saved and awaited later.
 
 Both scanners include the review rules on the first supported edit, including
 new files, without project configuration. Report only newly introduced
 findings. Completion revalidation keeps the security rules and leaves the
-async and error-handling rules advisory.
+correctness rules advisory.
 
 Run Semgrep only when a cheap source prefilter finds a candidate for dynamically
 constructed child-process execution or disabled HTTPS certificate verification.

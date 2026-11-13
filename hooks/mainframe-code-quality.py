@@ -611,8 +611,10 @@ _FILE_GROWTH_EXTENSIONS = CODE_EXTENSIONS - {".sql"}
 _PYTHON_SECURITY_CHANNEL = "python-security"
 _PYTHON_ASYNC_CHANNEL = "python-async-advice"
 _PYTHON_ERROR_CHANNEL = "python-error-advice"
+_PYTHON_CORRECTNESS_CHANNEL = "python-correctness-advice"
 _NODE_SECURITY_CHANNEL = "node-security"
 _NODE_CORRECTNESS_CHANNEL = "node-correctness-advice"
+_NODE_TEST_CHANNEL = "node-test-advice"
 _SEMGREP_SECURITY_CHANNEL = "semgrep-security-advice"
 _PYTHON_EXTENSIONS = {".py", ".pyi"}
 _NODE_EXTENSIONS = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
@@ -636,6 +638,11 @@ _RUFF_ERROR_LABELS = {
     "S110": "Python S110: exception silently discarded by except ... pass",
     "B012": "Python B012: control flow in finally can suppress an exception",
 }
+_RUFF_CORRECTNESS_LABELS = {
+    "F631": "Python F631: an assert on a non-empty tuple always passes",
+    "PT012": "Python PT012: an earlier statement in pytest.raises can make the test pass",
+    "RUF006": "Python RUF006: the background task may be collected before it finishes",
+}
 _RUFF_SHELL_RULES = {"S602", "S605"}
 _OXLINT_SECURITY_LABELS = {
     "no-eval": "JavaScript security: eval()",
@@ -651,6 +658,11 @@ _OXLINT_CORRECTNESS_LABELS = {
         "JavaScript no-async-promise-executor: an async executor rejection can leave the Promise pending"
     ),
 }
+_OXLINT_ASYNC_ASSERTION_LABEL = (
+    "JavaScript valid-expect: the test discards an async assertion; await or return it"
+)
+_JS_CALL_END = re.compile(rb"(?!(?:if|for|while|with|switch|catch)\()[\w.$]+\([^\r\n]*\)")
+_JS_ASYNC_ASSERTION_END = re.compile(rb"\s*(?:[;}]|\Z)")
 _OXLINT_CONFIG = {
     "globals": {
         "setInterval": "readonly",
@@ -833,7 +845,7 @@ def _python_findings(text: str, path: Path, *, include_advisory: bool = True) ->
         raise RuntimeError("ruff unavailable")
     labels = _RUFF_SECURITY_LABELS
     if include_advisory:
-        labels = labels | _RUFF_ASYNC_LABELS | _RUFF_ERROR_LABELS
+        labels = labels | _RUFF_ASYNC_LABELS | _RUFF_ERROR_LABELS | _RUFF_CORRECTNESS_LABELS
     completed = subprocess.run(
         [
             executable,
@@ -880,8 +892,10 @@ def _python_findings(text: str, path: Path, *, include_advisory: bool = True) ->
             channel = _PYTHON_SECURITY_CHANNEL
         elif code in _RUFF_ASYNC_LABELS:
             channel = _PYTHON_ASYNC_CHANNEL
-        else:
+        elif code in _RUFF_ERROR_LABELS:
             channel = _PYTHON_ERROR_CHANNEL
+        else:
+            channel = _PYTHON_CORRECTNESS_CHANNEL
         rows.append(
             _occurrence(
                 labels[code],
@@ -902,17 +916,49 @@ def _normalized_oxlint_code(value: object) -> str:
     return code
 
 
-def _node_findings(text: str, extension: str, *, include_advisory: bool = True) -> list[Occurrence]:
+def _js_test_file(path: Path) -> bool:
+    return path.stem.endswith((".test", ".spec")) or "__tests__" in path.parts
+
+
+def _discarded_async_assertion(item: dict, span: dict, source: bytes) -> bool:
+    if item.get("message") != "Async assertions must be awaited.":
+        return False
+    start, length = span.get("offset"), span.get("length")
+    if not isinstance(start, int) or not isinstance(length, int):
+        return False
+    end = start + length
+    if not 0 <= start < end <= len(source):
+        return False
+    # The pinned rule also flags valid awaits through parentheses or a variable.
+    # Require an unambiguous statement boundary on both sides of its byte span.
+    prefix = source[:start]
+    before = prefix.rstrip()
+    if before.endswith(b"{"):
+        # JSX and template interpolations also start with a brace.
+        at_boundary = before[:-1].rstrip().endswith((b")", b"=>"))
+    elif before.endswith(b")") and b"\n" in prefix[len(before):]:
+        # A completed call on the preceding line can omit its semicolon.
+        previous_line = before.rsplit(b"\n", 1)[-1].strip()
+        at_boundary = _JS_CALL_END.fullmatch(previous_line) is not None
+    else:
+        at_boundary = not before or before.endswith(b";")
+    if not at_boundary:
+        return False
+    return _JS_ASYNC_ASSERTION_END.match(source, end) is not None
+
+
+def _node_findings(text: str, path: Path, *, include_advisory: bool = True) -> list[Occurrence]:
     executable = shutil.which("oxlint")
     if executable is None:
         raise RuntimeError("oxlint unavailable")
     labels = _OXLINT_SECURITY_LABELS
     if include_advisory:
         labels = labels | _OXLINT_CORRECTNESS_LABELS
+    check_tests = include_advisory and _js_test_file(path)
     with tempfile.TemporaryDirectory(prefix="mainframe-node-quality-") as directory:
         root = Path(directory)
         config = root / "oxlint.json"
-        source = root / f"source{extension}"
+        source = root / f"source{path.suffix.lower()}"
         config.write_text(json.dumps(_OXLINT_CONFIG), encoding="utf-8")
         source.write_text(text, encoding="utf-8")
         command = [
@@ -927,6 +973,8 @@ def _node_findings(text: str, extension: str, *, include_advisory: bool = True) 
         ]
         for rule in labels:
             command.extend(["-D", rule])
+        if check_tests:
+            command.extend(["--vitest-plugin", "-D", "vitest/valid-expect"])
         command.append(str(source))
         completed = subprocess.run(
             command,
@@ -948,9 +996,10 @@ def _node_findings(text: str, extension: str, *, include_advisory: bool = True) 
         raise RuntimeError("invalid Oxlint diagnostic")
 
     rows: list[Occurrence] = []
+    source_bytes = text.encode("utf-8") if check_tests else b""
     for item in raw["diagnostics"]:
         code = _normalized_oxlint_code(item.get("code"))
-        if code not in labels:
+        if code not in labels and not (check_tests and code == "valid-expect"):
             continue
         diagnostic_labels = item.get("labels") or []
         span = (
@@ -961,13 +1010,21 @@ def _node_findings(text: str, extension: str, *, include_advisory: bool = True) 
         row = int(span.get("line") or 0)
         end_row = int(span.get("line_end") or row)
         security = code in _OXLINT_SECURITY_LABELS
+        if code == "valid-expect":
+            if not _discarded_async_assertion(item, span, source_bytes):
+                continue
+            label = _OXLINT_ASYNC_ASSERTION_LABEL
+            channel = _NODE_TEST_CHANNEL
+        else:
+            label = labels[code]
+            channel = _NODE_SECURITY_CHANNEL if security else _NODE_CORRECTNESS_CHANNEL
         rows.append(
             _occurrence(
-                labels[code],
+                label,
                 row,
                 "scanner",
                 _source_excerpt(text, row, end_row),
-                channel=_NODE_SECURITY_CHANNEL if security else _NODE_CORRECTNESS_CHANNEL,
+                channel=channel,
                 blocking=security,
             )
         )
@@ -1341,10 +1398,11 @@ def _scan_source(
             if include_advisory:
                 channels.add(_PYTHON_ASYNC_CHANNEL)
                 channels.add(_PYTHON_ERROR_CHANNEL)
+                channels.add(_PYTHON_CORRECTNESS_CHANNEL)
         except Exception:
             message = "Python security scanning is unavailable; Ruff safety rules were not checked."
             if include_advisory:
-                message += " Python async and error-handling rules were also unavailable."
+                message += " Python async, error-handling, and test rules were also unavailable."
             issues.append(
                 ScanIssue(
                     "scanner:python-security",
@@ -1353,15 +1411,20 @@ def _scan_source(
             )
 
     if extension in _NODE_EXTENSIONS:
+        check_tests = include_advisory and _js_test_file(path)
         try:
-            rows.extend(_node_findings(text, extension, include_advisory=include_advisory))
+            rows.extend(_node_findings(text, path, include_advisory=include_advisory))
             channels.add(_NODE_SECURITY_CHANNEL)
             if include_advisory:
                 channels.add(_NODE_CORRECTNESS_CHANNEL)
+            if check_tests:
+                channels.add(_NODE_TEST_CHANNEL)
         except Exception:
             message = "JavaScript security scanning is unavailable; Oxlint safety rules were not checked."
             if include_advisory:
                 message += " JavaScript error-handling and Promise rules were also unavailable."
+            if check_tests:
+                message += " Async test assertions were not checked."
             issues.append(
                 ScanIssue(
                     "scanner:node-security",

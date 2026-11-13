@@ -285,6 +285,90 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.after("scope", "repair"), QUALITY.QualityResult())
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
+    def test_python_reports_false_green_tests_and_unretained_tasks_from_first_write(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        file = self.workspace / "jobs" / "test_worker.py"
+        source = (
+            "import asyncio\nimport pytest\n\n"
+            "def test_worker():\n"
+            "    assert (work_finished(), 'work must finish')\n"
+            "    with pytest.raises(RuntimeError):\n"
+            "        configure()\n"
+            "        run_job()\n\n"
+            "async def launch():\n"
+            "    asyncio.create_task(run_async_job())\n"
+            "    async with asyncio.TaskGroup() as group:\n"
+            "        group.create_task(run_async_job())\n"
+        )
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text(source, encoding="utf-8")
+        advice = self.after("scope", "create").advisory or ""
+        for line, rule in ((5, "F631"), (6, "PT012"), (11, "RUF006")):
+            self.assertIn(f"jobs/test_worker.py:{line} — Python {rule}", advice)
+            self.assertEqual(advice.count(rule), 1)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(source + "\nmax_attempts = 2\n", encoding="utf-8")
+        self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
+
+    def test_async_assertions_report_only_discarded_results_in_jest_and_vitest_tests(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        for name, imports in (
+            ("worker.test.ts", "import { expect, test } from '@jest/globals';\n"),
+            ("worker.spec.js", "import { expect, test } from 'vitest';\n"),
+            ("__tests__/worker.ts", ""),
+        ):
+            with self.subTest(name=name):
+                file = self.workspace / name
+                file.parent.mkdir(exist_ok=True)
+                source = imports + (
+                    "test('ошибка', async () => { expect(runJob()).rejects.toThrow(); });\n"
+                    "test('awaited', async () => { await (expect(runJob()).rejects.toThrow()); });\n"
+                    "test('returned', () => expect(runJob()).rejects.toThrow());\n"
+                    "test('held', async () => {\n"
+                    "    const pending =\n"
+                    "        expect(runJob()).rejects.toThrow();\n"
+                    "    await pending;\n"
+                    "});\n"
+                )
+                if "vitest" in imports:
+                    source += (
+                        "test('getter assertion', () => { expect(true).to.be.true; });\n"
+                        "test('unawaited without semicolons', () => {\n"
+                        "    prepare()\n"
+                        "    expect(runJob()).resolves.toBe(true)\n"
+                        "})\n"
+                    )
+                self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+                file.write_text(source, encoding="utf-8")
+                advice = self.after("scope", "create").advisory or ""
+                self.assertIn(f"{name}:{2 if imports else 1} — JavaScript valid-expect", advice)
+                if "vitest" in imports:
+                    self.assertIn(f"{name}:13 — JavaScript valid-expect", advice)
+                self.assertEqual(advice.count("valid-expect"), 2 if "vitest" in imports else 1)
+                self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+                self.assertEqual(self.capture("scope", "unrelated", file), QUALITY.QualityResult())
+                file.write_text(source + "\nconst fixtureSize = 2;\n", encoding="utf-8")
+                self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
+
+    def test_async_assertion_rule_ignores_non_test_files_and_jsx_expressions(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        file = self.workspace / "worker.ts"
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.write_text("expect(runJob()).rejects.toThrow();\n", encoding="utf-8")
+        self.assertEqual(self.after("scope", "create"), QUALITY.QualityResult())
+
+        test_file = self.workspace / "worker.test.tsx"
+        self.assertEqual(self.capture("scope", "jsx", test_file), QUALITY.QualityResult())
+        test_file.write_text(
+            "const child = <Result>{expect(runJob()).rejects.toThrow()}</Result>;\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(self.after("scope", "jsx"), QUALITY.QualityResult())
+
     def test_scanner_outage_does_not_hardlock_and_recovery_revalidates(self) -> None:
         finding = QUALITY._occurrence(
             "Python security S307: dynamic eval()",
@@ -515,7 +599,7 @@ class CodeQualityTests(unittest.TestCase):
             "run",
             side_effect=oxlint_completed,
         ) as run:
-            rows = NODE_FINDINGS('setTimeout("work()", 1);\nalert(1);\n', ".ts")
+            rows = NODE_FINDINGS('setTimeout("work()", 1);\nalert(1);\n', self.workspace / "a.ts")
         self.assertEqual(
             [row.label for row in rows],
             ["JavaScript security: implicit string evaluation"],
