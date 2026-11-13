@@ -2,6 +2,7 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import tarfile
 import tempfile
@@ -43,6 +44,82 @@ class RuntimeSupportTests(unittest.TestCase):
             shim = runtime.runtime_bin(self.home) / name
             self.assertTrue(shim.is_file())
             self.assertTrue(os.access(shim, os.X_OK))
+
+    def test_reuses_newer_ruff_only_when_it_reports_an_expected_finding(self):
+        source = self.tool("ruff", "0.17.5")
+        source.write_text("""#!/bin/sh
+if [ "$1" = "--version" ]; then
+    printf 'ruff 0.17.5\\n'
+    exit
+fi
+case "$(/bin/cat)" in
+    *'eval('*)
+        printf '%s\\n' '[{"code":"S307","location":{"row":1}}]'
+        exit 1 ;;
+    *'value = )'*)
+        printf '%s\\n' '[{"code":"invalid-syntax","location":{"row":1},"message":"parse error"}]'
+        exit 1 ;;
+    *) printf '[]\\n' ;;
+esac
+""")
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.external)}),
+            mock.patch.object(runtime, "_managed_python") as install,
+        ):
+            result = runtime.ensure(self.home, ("ruff",))
+            self.assertEqual(result["versions"], {"ruff": "0.17.5"})
+            self.assertTrue(runtime.status(self.home, ("ruff",))["ready"])
+            install.assert_not_called()
+
+    def test_newer_ruff_with_no_findings_uses_the_tested_distribution(self):
+        source = self.tool("ruff", "0.17.5")
+        source.write_text("""#!/bin/sh
+case "$1" in
+    --version) printf 'ruff 0.17.5\\n' ;;
+    *) printf '[]\\n' ;;
+esac
+""")
+        floor = runtime.TOOL_SPECS["ruff"][2]
+        managed = self.tool("managed-ruff", floor)
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.external)}),
+            mock.patch.object(runtime, "_managed_python", return_value={"ruff": managed}) as install,
+        ):
+            result = runtime.ensure(self.home, ("ruff",))
+        self.assertEqual(result["versions"], {"ruff": floor})
+        install.assert_called_once()
+        self.assertIn(str(managed), (runtime.runtime_bin(self.home) / "ruff").read_text())
+
+    def test_runtime_rejects_versions_below_minimum_and_prereleases(self):
+        for version in ("0.15.14", "0.15.15-rc.1", "0.17.5rc1"):
+            with self.subTest(version=version):
+                self.assertIsNone(runtime._analyzer_version("ruff", self.tool("ruff", version)))
+
+    def test_runtime_reuses_a_compatible_executable_after_an_old_path_entry(self):
+        self.tool("ruff", "0.15.14")
+        floor = runtime.TOOL_SPECS["ruff"][2]
+        other = self.external / "other"
+        other.mkdir()
+        self.tool("other/ruff", floor)
+        with (
+            mock.patch.dict(os.environ, {"PATH": os.pathsep.join(map(str, (self.external, other)))}),
+            mock.patch.object(runtime, "_managed_python") as install,
+        ):
+            self.assertEqual(runtime.ensure(self.home, ("ruff",))["versions"], {"ruff": floor})
+            install.assert_not_called()
+
+    def test_analyzer_probe_timeout_terminates_the_process_group(self):
+        executable = self.tool("ruff", "0.17.5")
+        process = mock.MagicMock(pid=12345)
+        process.wait.side_effect = subprocess.TimeoutExpired("probe", 5)
+        with (
+            mock.patch.object(runtime.subprocess, "Popen") as spawn,
+            mock.patch.object(os, "killpg") as kill,
+        ):
+            spawn.return_value.__enter__.return_value = process
+            self.assertFalse(runtime._check_analyzer("ruff", executable))
+        self.assertTrue(spawn.call_args.kwargs["start_new_session"])
+        kill.assert_called_once_with(process.pid, signal.SIGKILL)
 
     def test_missing_node_installer_stops_before_activation_manifest(self):
         with mock.patch.object(runtime.shutil, "which", return_value=None):
@@ -278,6 +355,22 @@ printf 'attempt\\n' >> "$OPENSPEC_FIXTURE_ATTEMPTS"
         with mock.patch.dict(os.environ, env):
             self.assertTrue(runtime.ensure(self.home, ("openspec",))["ready"])
         self.assertTrue(Path(env["OPENSPEC_FIXTURE_ATTEMPTS"]).is_file())
+
+    def test_openspec_reuses_newer_stable_cli_with_working_list(self):
+        standalone = self.tool("openspec", "1.17.0")
+        standalone.write_text("""#!/bin/sh
+case "$*" in
+    --version) printf '1.17.0\\n' ;;
+    'list --json') printf '{"changes":[]}\\n' ;;
+    *) exit 2 ;;
+esac
+""")
+        with mock.patch.dict(os.environ, {"PATH": str(self.external)}):
+            result = runtime.ensure(self.home, ("openspec",))
+            self.assertEqual(result["versions"], {"openspec": "1.17.0"})
+            self.assertTrue(runtime.status(self.home, ("openspec",))["ready"])
+            self.tool("openspec", "1.18.0")
+            self.assertFalse(runtime.status(self.home, ("openspec",))["ready"])
 
     def test_openspec_reuses_standalone_and_survives_analyzer_repair(self):
         standalone = self.tool("openspec", "1.16.1")

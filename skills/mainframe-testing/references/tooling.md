@@ -23,7 +23,7 @@ The profile is a small set of facts, not a new package manager. For each selecte
 
 Prepare missing dependencies during authorized project setup or hook installation, before relying on the check. Do not download packages or silently update versions inside a hook. Avoid launch commands that may install implicitly in the execution path. Resolve installation explicitly, then invoke the prepared executable. An offline or failed installation is an unavailable check with a concrete cause, not a passing result.
 
-Use the same rule/configuration semantics in local checks, hooks and CI where they claim the same guarantee. Honor project lockfiles; for managed hook tools preserve the installer-tested version until compatibility is verified. Maintain an explicit update route rather than abandoned pins or uncontrolled latest-version downloads. Do not swap tools or loosen versions behind an existing output parser.
+Use the same rule and configuration semantics where local checks, hooks, and CI claim the same guarantee. Honor project lockfiles. Reuse a newer managed hook tool only after the actual hook invocation and parser pass a bounded check. Keep a tested release for automatic provisioning and regression runs.
 
 ## Keep execution small and useful
 

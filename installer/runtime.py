@@ -10,6 +10,7 @@ import platform
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -23,6 +24,8 @@ from .core import (
 )
 
 
+# Each version is both the minimum and the tested distribution used for
+# provisioning. Reuse above the minimum requires a compatibility sample.
 TOOL_SPECS = {
     "ruff": ("python", "ruff", "0.15.15"),
     "semgrep": ("python", "semgrep", "1.164.0"),
@@ -135,7 +138,7 @@ def _managed_release(root: Path, name: str) -> Path:
         atomic_write(target, data, 0o755)
     except (OSError, ValueError, KeyError, tarfile.TarError) as error:
         raise Conflict(f"Could not prepare the pinned {name} release.") from error
-    if not _compatible(name, target)[0]:
+    if _analyzer_release(name, target) != TOOL_SPECS[name][2]:
         raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
     return target
 
@@ -158,13 +161,18 @@ def tools_for_hook(all_tools: tuple[str, ...], hook: str | None) -> tuple[str, .
     return ()
 
 
-def _version(executable: Path, *arguments: Path, path: str | None = None,
-             exact: bool = False, flag: str = "--version") -> str | None:
-    environment = {
+def _probe_environment() -> dict[str, str]:
+    return {
         **os.environ, "SEMGREP_SEND_METRICS": "off",
+        "SEMGREP_ENABLE_VERSION_CHECK": "false",
         "FALLOW_TELEMETRY": "off", "FALLOW_TELEMETRY_DISABLED": "1",
         "FALLOW_UPDATE_CHECK": "off", **OPENSPEC_ENV,
     }
+
+
+def _version(executable: Path, *arguments: Path, path: str | None = None,
+             exact: bool = False, flag: str = "--version") -> str | None:
+    environment = _probe_environment()
     if path is not None:
         environment["PATH"] = path
     try:
@@ -178,9 +186,12 @@ def _version(executable: Path, *arguments: Path, path: str | None = None,
         return None
     if exact:
         output = result.stdout.strip() or result.stderr.strip()
-        match = re.fullmatch(r"(?:openspec\s+)?v?(\d+\.\d+\.\d+)", output, re.IGNORECASE)
+        match = re.fullmatch(r"(?:openspec\s+)?v?(\d+\.\d+\.\d+)(?:\+[\w.-]+)?", output, re.IGNORECASE)
     else:
-        match = re.search(r"(?<!\d)(\d+\.\d+\.\d+)(?!\d)", result.stdout + "\n" + result.stderr)
+        match = re.search(r"(?<![\d.])(\d+\.\d+\.\d+)([-.\w]*)",
+                          result.stdout + "\n" + result.stderr)
+        if match and match[2]:
+            return None
     return match.group(1) if match else None
 
 
@@ -189,11 +200,41 @@ def _parts(value: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
-def _compatible(name: str, executable: Path) -> tuple[bool, str | None]:
-    version_flag = {"actionlint": "-version", "kube-linter": "version"}.get(name, "--version")
-    version = _version(executable, flag=version_flag)
-    tested = TOOL_SPECS[name][2]
-    return bool(version and _parts(version) == _parts(tested)), version
+def _analyzer_release(name: str, executable: Path) -> str | None:
+    flag = {"actionlint": "-version", "kube-linter": "version"}.get(name, "--version")
+    return _version(executable, flag=flag)
+
+
+def _check_analyzer(name: str, executable: Path) -> bool:
+    probe = Path(__file__).with_name("runtime_checks.py")
+    try:
+        with tempfile.TemporaryDirectory(prefix="mainframe-runtime-probe-") as directory:
+            with subprocess.Popen(
+                [sys.executable, "-B", str(probe), name, str(probe.parent.parent), str(executable)],
+                cwd=directory, env=_probe_environment(), stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, start_new_session=True,
+            ) as process:
+                try:
+                    return process.wait(timeout=5) == 0
+                except subprocess.TimeoutExpired:
+                    # A timed-out probe can still have the analyzer as a child.
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    return False
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _analyzer_version(name: str, executable: Path) -> str | None:
+    version = _analyzer_release(name, executable)
+    minimum = TOOL_SPECS[name][2]
+    if version == minimum:
+        return version
+    if version is not None and _parts(version) > _parts(minimum) and _check_analyzer(name, executable):
+        return version
+    return None
 
 
 def _manifest(root: Path) -> dict:
@@ -232,8 +273,7 @@ def status(home: Path, required: tuple[str, ...]) -> dict:
         if name == "openspec":
             version = _openspec_status(shim, row)
         else:
-            compatible, detected = _compatible(name, shim)
-            version = detected if compatible else None
+            version = _analyzer_version(name, shim)
         if version is None:
             missing.append(name)
             continue
@@ -319,17 +359,36 @@ def _supported_openspec_node(node: Path) -> bool:
     return bool(version and _parts(version) >= OPENSPEC_NODE_MINIMUM)
 
 
-def _compatible_openspec(*command: Path) -> bool:
-    return _version(*command, path=os.defpath, exact=True) == OPENSPEC_VERSION
+def _openspec_version(*command: Path) -> str | None:
+    version = _version(*command, path=os.defpath, exact=True)
+    if version is None or _parts(version) < _parts(OPENSPEC_VERSION):
+        return None
+    if version == OPENSPEC_VERSION:
+        return version
+    try:
+        with tempfile.TemporaryDirectory(prefix="mainframe-openspec-probe-") as directory:
+            workspace = Path(directory)
+            (workspace / "openspec/changes").mkdir(parents=True)
+            result = subprocess.run(
+                [*command, "list", "--json"], cwd=workspace,
+                env={**_probe_environment(), "PATH": os.defpath},
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            report = json.loads(result.stdout) if result.returncode == 0 else None
+            if isinstance(report, dict) and report.get("changes") == []:
+                return version
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return None
 
 
 def _openspec_status(shim: Path, row: dict) -> str | None:
     command = _openspec_command(row, shim)
-    if (command is None or row.get("version") != OPENSPEC_VERSION
+    if (command is None
             or regular_bytes(shim) != _openspec_shim(command)
             or (len(command) == 2 and not _supported_openspec_node(command[0]))):
         return None
-    return OPENSPEC_VERSION if _compatible_openspec(shim) else None
+    return _openspec_version(shim)
 
 
 def _openspec_node(previous: tuple[Path, ...] | None) -> Path | None:
@@ -341,11 +400,13 @@ def _openspec_node(previous: tuple[Path, ...] | None) -> Path | None:
 
 
 def _openspec_candidate(shim: Path, previous: tuple[Path, ...] | None,
-                        node: Path | None) -> tuple[Path, ...] | None:
+                        node: Path | None) -> tuple[tuple[Path, ...], str] | None:
     if previous and len(previous) == 2:
         previous = (node, previous[-1]) if node else None
-    if previous and previous[-1].resolve() != shim and _compatible_openspec(*previous):
-        return previous
+    if previous and previous[-1].resolve() != shim:
+        version = _openspec_version(*previous)
+        if version:
+            return previous, version
     for directory in os.get_exec_path():
         located = shutil.which("openspec", path=directory)
         if not located:
@@ -359,8 +420,9 @@ def _openspec_candidate(shim: Path, previous: tuple[Path, ...] | None,
             command = (node, executable)
         else:
             command = (executable,)
-        if _compatible_openspec(*command):
-            return command
+        version = _openspec_version(*command)
+        if version:
+            return command, version
     return None
 
 
@@ -374,7 +436,7 @@ def _install_openspec(target: Path, npm: str, node: Path) -> tuple[Path, ...]:
           "--no-audit", "--no-fund", "--save-exact", f"{OPENSPEC_PACKAGE}@{OPENSPEC_VERSION}"],
          timeout=900, env=environment, cwd=target)
     entrypoint = target / "node_modules" / OPENSPEC_PACKAGE / "bin/openspec.js"
-    if not _compatible_openspec(node, entrypoint):
+    if _version(node, entrypoint, path=os.defpath, exact=True) != OPENSPEC_VERSION:
         raise Conflict("MAINFRAME runtime dependency openspec failed its version probe.")
     return (node, entrypoint)
 
@@ -391,10 +453,10 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
         raise Conflict(f"Existing file has no installer ownership: {shim}")
 
     node = _openspec_node(previous)
-    command = _openspec_candidate(shim, previous, node)
+    candidate = _openspec_candidate(shim, previous, node)
     staged = None
     try:
-        if command is None:
+        if candidate is None:
             if node is None:
                 minimum = ".".join(map(str, OPENSPEC_NODE_MINIMUM))
                 raise Conflict(f"Node.js {minimum} or newer on PATH is required to install OpenSpec.")
@@ -408,8 +470,10 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
             # Keep this prefix separate from the analyzers and the active OpenSpec release.
             staged = Path(tempfile.mkdtemp(prefix="openspec-", dir=packages))
             command = _install_openspec(staged, str(Path(npm).absolute()), node)
-
-        row = {"version": OPENSPEC_VERSION, "executable": str(command[-1])}
+            version = OPENSPEC_VERSION
+        else:
+            command, version = candidate
+        row = {"version": version, "executable": str(command[-1])}
         if len(command) == 2:
             row["node"] = str(command[0])
         record = {**manifest, "schema": 1, "tools": {**existing, "openspec": row}}
@@ -423,8 +487,10 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
         raise
 
 
-def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tuple[dict[str, Path], dict[str, list[str]]]:
-    resolved: dict[str, Path] = {}
+def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tuple[
+    dict[str, tuple[Path, str]], dict[str, list[str]]
+]:
+    resolved: dict[str, tuple[Path, str]] = {}
     missing: dict[str, list[str]] = {"python": [], "node": [], "release": []}
     for name in wanted:
         if name not in TOOL_SPECS:
@@ -434,15 +500,21 @@ def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tu
         executable = (Path(recorded).resolve()
                       if isinstance(recorded, str) and Path(recorded).is_absolute()
                       else None)
-        compatible, _ = _compatible(name, executable) if executable else (False, None)
-        if not compatible:
-            located = shutil.which(name)
-            executable = Path(located).resolve() if located else None
-            if executable == (runtime_bin(home) / name).resolve():
-                executable = None
-        compatible, _ = _compatible(name, executable) if executable else (False, None)
-        if compatible and executable:
-            resolved[name] = executable
+        version = _analyzer_version(name, executable) if executable else None
+        if version is None:
+            seen = {executable, (runtime_bin(home) / name).resolve()}
+            for directory in os.get_exec_path():
+                located = shutil.which(name, path=directory)
+                candidate = Path(located).resolve() if located else None
+                if candidate in seen or candidate is None:
+                    continue
+                seen.add(candidate)
+                version = _analyzer_version(name, candidate)
+                if version is not None:
+                    executable = candidate
+                    break
+        if executable and version is not None:
+            resolved[name] = executable, version
         else:
             missing[TOOL_SPECS[name][0]].append(name)
     managed_targets = {
@@ -453,7 +525,7 @@ def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tu
         names = missing[ecosystem]
         if not names:
             continue
-        for name, executable in list(resolved.items()):
+        for name, (executable, _) in list(resolved.items()):
             if TOOL_SPECS[name][0] == ecosystem and executable.is_relative_to(target):
                 names.append(name)
                 del resolved[name]
@@ -495,20 +567,21 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
     candidates, missing = _candidates(root, home, wanted, existing)
     if missing["node"] and not shutil.which("npm"):
         raise Conflict("npm is required to install Oxlint or Fallow for active MAINFRAME hooks; no hook files were changed.")
-    for name in missing["release"]:
-        candidates[name] = _managed_release(root, name)
+    provisioned = {name: _managed_release(root, name) for name in missing["release"]}
     if missing["python"]:
-        candidates.update(_managed_python(root, missing["python"]))
+        provisioned.update(_managed_python(root, missing["python"]))
     if missing["node"]:
-        candidates.update(_managed_node(root, missing["node"]))
+        provisioned.update(_managed_node(root, missing["node"]))
+    for name, executable in provisioned.items():
+        version = _analyzer_release(name, executable)
+        if version != TOOL_SPECS[name][2]:
+            raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+        candidates[name] = executable, version
     rows = dict(existing)
     for name in wanted:
-        executable = candidates.get(name)
-        if executable is None:
+        if name not in candidates:
             raise Conflict(f"MAINFRAME runtime dependency {name} could not be resolved.")
-        compatible, version = _compatible(name, executable)
-        if not compatible or version is None:
-            raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+        executable, version = candidates[name]
         shim = runtime_bin(home) / name
         body = "#!/bin/sh\nexec " + shlex.quote(str(executable)) + ' "$@"\n'
         atomic_write(shim, body.encode(), 0o755)

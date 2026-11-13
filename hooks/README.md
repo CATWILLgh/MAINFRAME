@@ -403,7 +403,7 @@ Run Semgrep only on candidate files. JavaScript and TypeScript retain their
 embedded checks for dynamic child-process execution and disabled TLS
 verification. For an edited `.go` file containing the pgx v5 pool import and a
 candidate discard, check explicit discarded results from `Query` or
-`Acquire` on a recognizable pool. The Go scan uses the pinned release's native
+`Acquire` on a recognizable pool. The Go scan uses Semgrep's native
 CLI, a one-second deadline, and the before/after file snapshots. Its scope is
 the explicit discard patterns in that file. It does not trace a result through
 other files or prove that every exit from a function closes it.
@@ -415,7 +415,7 @@ off. Findings are review advice and stay outside completion revalidation.
 Run the file-specific analyzers against the exact before and after source text
 in an isolated temporary directory. Bound each invocation to one second.
 Use static diagnostic descriptions and compare only new findings. See
-[the release pins](../installer/runtime.py) and
+[the tested runtime versions](../installer/runtime.py) and
 [the executable tests](tests/test_code_quality.py).
 
 | Tool | Automatic scope | Reported findings |
@@ -430,13 +430,10 @@ Use static diagnostic descriptions and compare only new findings. See
 | Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, column type changes that can block access, and concurrent index creation inside an explicit SQL transaction. Runner-supplied PostgreSQL version, locks, and transaction policy require migration CI. |
 
 The code-quality hook uses its existing edit events and configured analyzer
-runtime paths. During adaptation, reuse required executables at the tested
-versions or install their pinned distributions through the shared runtime. Test
-each with a harmless representative sample and
-stop installation before hook activation when a required scanner cannot be
-supplied. A missing, timed-out, malformed, or failed
-scanner must leave the action and completion unblocked and emit only its
-deduplicated unavailable-check advisory.
+runtime paths. Use the shared runtime's
+[compatibility and provisioning policy](../docs/installation/components/hooks.md#runtime-support).
+A missing, timed-out, malformed, or failed scanner must leave the action and
+completion unblocked and emit only its deduplicated unavailable-check advisory.
 
 ## Adapt `mainframe-fallow-quality`
 
@@ -445,7 +442,7 @@ detector. It complements the per-edit `mainframe-code-quality` checks with Fallo
 cross-file structural view; it does not share the completion guard, create a
 second blocking gate, or own project architecture policy.
 
-Reuse or install the tested official Fallow distribution and verify
+Reuse Fallow under the shared runtime compatibility policy and verify
 that its `audit` command supports `--diff-stdin`, `--gate new-only`, JSON output,
 an explicit project root, and `--no-cache`. Set `FALLOW_TELEMETRY=off`, the
 stronger `FALLOW_TELEMETRY_DISABLED=1` kill switch, and

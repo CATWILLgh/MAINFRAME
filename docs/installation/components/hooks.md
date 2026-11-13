@@ -120,17 +120,21 @@ repeatedly inspecting only one fixed directory prefix can starve cleanup.
 
 ## Runtime support
 
-Ruff, Oxlint, Semgrep, yamllint, ShellCheck, actionlint, KubeLinter, Squawk, and Fallow are
-hook runtime dependencies. The maintained installer prepares them before
-changing an active hook's files or registration. It reuses compatible resolved
-executables or installs the tested official distributions in shared
-MAINFRAME-owned user storage, then gives native hook launchers that explicit
-runtime path. The native release installer verifies pinned SHA256s for Linux and
-macOS on x86-64 and ARM64. Plan reports missing support without mutation; verify fails while
-required support is unavailable. Preserve bounded execution, isolated scanner
-configuration, disabled metrics and telemetry, and the catalog's representative
-checks. Do not install a tool's own hooks as a substitute for the MAINFRAME
-trigger contract.
+Ruff, Oxlint, Semgrep, yamllint, ShellCheck, actionlint, KubeLinter, Squawk,
+and Fallow are hook runtime dependencies. The installer prepares them before
+changing hook files or registration. It can reuse a stable executable at the
+[tested minimum version](../../../installer/runtime.py) or a newer stable
+release that passes a bounded synthetic check through the hook's parser.
+If no candidate is compatible, it provisions the tested official release
+in shared MAINFRAME-owned user storage. Native archives are verified against
+pinned SHA256s for Linux and macOS on x86-64 and ARM64.
+
+The native launchers use the shared runtime path. Plan reports missing support
+without mutation. Apply and verify check the actual executable and report its
+version. The synthetic checks run during runtime preparation and verification.
+Keep hook execution bounded with isolated scanner configuration and disabled
+telemetry. Check a new tool release against the full hook suite before raising
+the tested minimum or changing the provisioned release.
 
 The Go, Dart, and Rust syntax checks use existing SDK executables. Rust also
 discovers local rustup toolchains when `rustfmt` is absent from `PATH`. A
@@ -138,8 +142,7 @@ missing SDK produces one advisory per execution scope when a file of that
 language is edited.
 
 Product uninstall retains this shared runtime because another MAINFRAME adapter
-may still use it. A later apply or verify rechecks every required executable and
-its exact tested version.
+may still use it.
 
 ## Verify
 
