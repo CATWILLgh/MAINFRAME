@@ -227,7 +227,7 @@ class CodeQualityTests(unittest.TestCase):
 
     def test_python_swallowed_errors_are_advice_on_first_write(self) -> None:
         self.scanners[0].side_effect = PYTHON_FINDINGS
-        file = self.workspace / "worker.py"
+        file = self.workspace / "jobs" / "worker.py"
         source = (
             "try:\n    start_job()\nexcept Exception:\n    pass\n\n"
             "def finish_job():\n"
@@ -236,10 +236,11 @@ class CodeQualityTests(unittest.TestCase):
             "attempts = 1\n"
         )
         self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
         file.write_text(source, encoding="utf-8")
         result = self.after("scope", "create")
-        self.assertIn("worker.py:3 — Python S110", result.advisory or "")
-        self.assertIn("worker.py:10 — Python B012", result.advisory or "")
+        self.assertIn("jobs/worker.py:3 — Python S110", result.advisory or "")
+        self.assertIn("jobs/worker.py:10 — Python B012", result.advisory or "")
         self.assertIsNone(result.block_reason)
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 

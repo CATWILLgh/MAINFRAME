@@ -826,6 +826,8 @@ def _source_excerpt(text: str, row: int, end_row: int) -> str:
 
 
 def _python_findings(text: str, path: Path, *, include_advisory: bool = True) -> list[Occurrence]:
+    if not text:
+        return []
     executable = shutil.which("ruff")
     if executable is None:
         raise RuntimeError("ruff unavailable")
