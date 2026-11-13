@@ -302,6 +302,7 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
             target.write_text("export const value = 2;\n")
             self.assertIsNone(self.invoke("mainframe-fallow-quality", addition))
             self.assertEqual(analyze.call_args.kwargs["wholly_owned_paths"], [str(target)])
+            self.assertTrue(analyze.call_args.args[2].startswith("--- /dev/null\n+++ b/new.ts\n"))
             analyze.reset_mock()
             overwrite = self.payload(patch_text, "overwrite")
             self.assertIsNone(self.invoke("mainframe-fallow-quality", {**overwrite, "hook_event_name": "PreToolUse"}))

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import difflib
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -98,6 +100,44 @@ class FallowQualityTests(unittest.TestCase):
         self.assertIsNone(
             FALLOW.build_advisory(isolated, self.root, ["src/new.ts"])
         )
+
+    def test_new_file_complexity_without_a_git_commit(self) -> None:
+        def source(name):
+            branches = "".join(f"    if (value === {n}) return {n};\n" for n in range(27))
+            return f"export function {name}(value) {{\n{branches}    return -1;\n}}\n"
+
+        (self.root / "src/unrelated.js").write_text(source("unrelated"), encoding="utf-8")
+        new = self.root / "src/new.js"
+        clean = self.root / "src/clean.js"
+        new.write_text(source("newWork"), encoding="utf-8")
+        clean.write_text("export const value = 1;\n", encoding="utf-8")
+
+        def creation_diff(path):
+            return "".join(difflib.unified_diff(
+                [], path.read_text(encoding="utf-8").splitlines(keepends=True),
+                fromfile="/dev/null", tofile="b/" + path.relative_to(self.root).as_posix(),
+            ))
+
+        for initialized in (False, True):
+            with self.subTest(initialized=initialized):
+                if initialized:
+                    subprocess.run(["git", "init", "-q", str(self.root)], check=True, timeout=5)
+                diff = creation_diff(new)
+                result = FALLOW.analyze(self.root, [new], diff, wholly_owned_paths=[new])
+                self.assertIsNone(result.unavailable)
+                self.assertIn("complexity: src/new.js:1", result.advisory or "")
+                self.assertNotIn("unrelated.js", result.advisory or "")
+                self.assertNotIn("clean.js", result.advisory or "")
+                self.assertEqual(FALLOW.analyze(
+                    self.root, [clean], creation_diff(clean), wholly_owned_paths=[clean]
+                ), FALLOW.FallowResult())
+                changed = FALLOW.analyze(
+                    self.root, [new], diff.replace("--- /dev/null", "--- a/src/new.js", 1),
+                    wholly_owned_paths=[new],
+                )
+                self.assertIsNone(changed.advisory)
+                self.assertIsNotNone(changed.unavailable)
+                self.assertEqual((self.root / ".git").exists(), initialized)
 
     def test_non_javascript_scope_is_silent_without_invoking_fallow(self) -> None:
         with mock.patch.object(FALLOW.subprocess, "run") as run:

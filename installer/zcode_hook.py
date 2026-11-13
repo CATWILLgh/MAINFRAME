@@ -407,6 +407,7 @@ def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
         raise ValueError("conflicting result path")
     original = response.get("originalFile", _MISSING)
     wholly_owned = []
+    created = tool == "Write" and response.get("type") == "create"
     if tool == "Write":
         after = response.get("content")
         kind = response.get("type")
@@ -441,7 +442,8 @@ def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
         raise ValueError("addressed postimage changed")
     relative = path.relative_to(root).as_posix()
     diff = "".join(difflib.unified_diff([line + "\n" for line in before.splitlines()], [line + "\n" for line in after.splitlines()],
-                                        fromfile="a/" + relative, tofile="b/" + relative))
+                                        fromfile="/dev/null" if created else "a/" + relative,
+                                        tofile="b/" + relative))
     if len(diff.encode("utf-8")) > FALLOW_MAX_BYTES:
         raise ValueError("oversized edit diff")
     return [str(path)], wholly_owned, diff

@@ -419,9 +419,13 @@ replacement and locking, expire abandoned state, and never retain source or
 diff text. Reuse the proven state mechanics of `mainframe-code-quality` when practical;
 do not merge the semantic components or inventory rows.
 
-The detector runs Fallow with the diff on standard input and reports only
-findings marked newly introduced that intersect the supplied paths. It reports
-an unused file only when the adapter also supplied whole-file ownership. Output
+The detector runs Fallow with the diff on standard input and reports
+newly introduced findings that intersect the supplied paths. It reports
+an unused file only when the adapter also supplied whole-file ownership. Mark
+verified file creation with a `/dev/null` before path. If Fallow cannot resolve
+`HEAD`, use `health --complexity` for a single verified new file within the
+same timeout. This mode reports measured complexity. Import graphs and clone
+comparisons use the ordinary audit once a Git baseline exists. Output
 is limited to six rows of at most 240 displayed characters plus a truncation
 suffix per row, with control characters neutralized, and asks the recipient to
 verify findings rather than treating the analyzer as authoritative. Validate

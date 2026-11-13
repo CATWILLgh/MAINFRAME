@@ -324,7 +324,7 @@ def _capture_fallow_additions(data: dict, state: Path, workspace: str, patch: st
 
 def _fallow_diff(data: dict, workspace: str, patch: str, *, additions_verified: bool):
     root, cwd = Path(workspace), Path(data["cwd"]).resolve(strict=True)
-    diffs, affected, wholly_owned = [], [], []
+    diffs, affected, created = [], [], []
     total = 0
     if any(PATCH_MOVE.match(line) for line in patch.splitlines()):
         raise ValueError("unsupported move attribution")
@@ -344,17 +344,18 @@ def _fallow_diff(data: dict, workspace: str, patch: str, *, additions_verified: 
             if not additions_verified or any(not line.startswith("+") for line in body) or after != [line[1:] for line in body]:
                 raise ValueError("unverified creation or changed postimage")
             before = []
-            wholly_owned.append(str(path))
+            created.append(str(path))
         else:
             before = _reverse_update(after, body)
         relative = path.relative_to(root).as_posix()
         diffs.extend(difflib.unified_diff([line + "\n" for line in before], [line + "\n" for line in after],
-                                        fromfile="a/" + relative, tofile="b/" + relative))
+                                        fromfile="/dev/null" if operation == "Add" else "a/" + relative,
+                                        tofile="b/" + relative))
         affected.append(str(path))
     diff = "".join(diffs)
     if len(diff.encode("utf-8")) > FALLOW_MAX_BYTES:
         raise ValueError("oversized diff")
-    return affected, wholly_owned, diff
+    return affected, created, diff
 
 
 def _dispatch_fallow(data: dict, state: Path, event: str) -> dict | None:
@@ -384,10 +385,10 @@ def _dispatch_fallow(data: dict, state: Path, event: str) -> dict | None:
         return None
     try:
         additions_verified = has_add and _has_event(data, state, _fallow_add_key(workspace, patch))
-        affected, owned, diff = _fallow_diff(data, workspace, patch, additions_verified=additions_verified)
+        affected, created, diff = _fallow_diff(data, workspace, patch, additions_verified=additions_verified)
         if not affected or not diff:
             return None
-        result = detector.analyze(workspace, affected, diff, wholly_owned_paths=owned, timeout_seconds=7)
+        result = detector.analyze(workspace, affected, diff, wholly_owned_paths=created, timeout_seconds=7)
         message = result.advisory or result.unavailable
     except (OSError, ValueError, RuntimeError, sqlite3.Error):
         message = FALLOW_ATTRIBUTION_UNAVAILABLE

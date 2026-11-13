@@ -183,6 +183,11 @@ class CurrentZCodeFallowTests(unittest.TestCase):
         edit["tool_response"] = {"filePath": str(self.path), "originalFile": "const before = 2;\n", "oldString": "before", "newString": "after", "replaceAll": False, "userModified": False}
         self.assertIsNotNone(self.invoke(edit))
         self.assertEqual(self.calls[-1][1]["wholly_owned_paths"], [])
+        create = deepcopy(self.payload)
+        create["tool_use_id"] = "create"
+        create["tool_response"].update(type="create", originalFile=None)
+        self.assertIsNotNone(self.invoke(create))
+        self.assertTrue(self.calls[-1][0][2].startswith("--- /dev/null\n+++ b/"))
         for path in self.state.rglob("*"):
             if path.is_file():
                 raw = path.read_bytes()
