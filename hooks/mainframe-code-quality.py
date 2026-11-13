@@ -44,6 +44,7 @@ import subprocess
 import tempfile
 import time
 import tokenize
+import tomllib
 from typing import Iterable, NamedTuple
 
 
@@ -75,7 +76,7 @@ class QualityResult(NamedTuple):
 
 class Occurrence(NamedTuple):
     label: str
-    line: int
+    line: int | None
     fingerprint: str
     channel: str = "markers"
     blocking: bool = True
@@ -594,7 +595,7 @@ def _fingerprint(label: str, kind: str, evidence: str) -> str:
 
 def _occurrence(
     label: str,
-    line: int,
+    line: int | None,
     kind: str,
     evidence: str,
     *,
@@ -602,7 +603,7 @@ def _occurrence(
     blocking: bool = True,
 ) -> Occurrence:
     fingerprint = _fingerprint(label, f"{channel}:{kind}", evidence)
-    return Occurrence(label, max(1, line), fingerprint, channel, blocking)
+    return Occurrence(label, max(1, line) if line is not None else None, fingerprint, channel, blocking)
 
 
 FILE_LENGTH_THRESHOLD = 400
@@ -616,6 +617,44 @@ _NODE_SECURITY_CHANNEL = "node-security"
 _NODE_CORRECTNESS_CHANNEL = "node-correctness-advice"
 _NODE_TEST_CHANNEL = "node-test-advice"
 _SEMGREP_SECURITY_CHANNEL = "semgrep-security-advice"
+_WORKFLOW_DIRECTORY = (".github", "workflows")
+_YAML_EXTENSIONS = {".yaml", ".yml"}
+_SHELL_EXTENSIONS = {".sh", ".bash"}
+_SHELLCHECK_LABELS = {
+    1072: "shell parser could not read this statement",
+    1073: "shell parser could not read this construct",
+    2155: "a declaration can mask the command's failed exit status",
+    2164: "a failed cd can leave subsequent commands in the wrong directory",
+    2094: "this pipeline reads and overwrites the same file",
+}
+# These diagnostics are intrinsic to the workflow and do not need repository
+# metadata for local actions, reusable workflows, or self-hosted runners.
+_ACTIONLINT_LABELS = {
+    "syntax-check": "invalid workflow YAML or schema",
+    "job-needs": "job dependency is missing or cyclic",
+    "matrix": "invalid job matrix",
+    "expression": "invalid workflow expression",
+    "if-cond": "invalid condition",
+    "id": "invalid or duplicate identifier",
+}
+_KUBE_LABELS = {
+    "mismatching-selector": "workload selector does not match pod labels",
+    "no-readiness-probe": "container has no readiness probe",
+}
+_KUBE_WORKLOAD = re.compile(
+    r"(?m)^kind:[ \t]*['\"]?(?:Deployment|StatefulSet|DaemonSet)['\"]?[ \t]*(?:#.*)?$"
+)
+_KUBE_API = re.compile(r"(?m)^apiVersion:[ \t]*['\"]?apps/v1['\"]?[ \t]*(?:#.*)?$")
+_KUBE_CONTAINER = re.compile(r"(?m)^[ \t]+containers[ \t]*:")
+_SQUAWK_LABELS = {
+    "ban-drop-table": "dropping a table can remove data and break existing clients",
+    "ban-drop-column": "dropping a column can remove data and break existing clients",
+    "ban-drop-schema": "dropping a schema can remove objects used by existing clients",
+    "ban-drop-database": "dropping a database removes its data",
+    "ban-truncate-cascade": "TRUNCATE CASCADE can erase related tables",
+    "changing-column-type": "changing a column type can block access while rewriting the table",
+    "ban-concurrent-index-creation-in-transaction": "CREATE INDEX CONCURRENTLY cannot run inside an explicit transaction",
+}
 _PYTHON_EXTENSIONS = {".py", ".pyi"}
 _NODE_EXTENSIONS = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
 _RUFF_SECURITY_LABELS = {
@@ -1031,6 +1070,223 @@ def _node_findings(text: str, path: Path, *, include_advisory: bool = True) -> l
     return rows
 
 
+def _run_review_tool(tool: str, args: list[str], text: str) -> object:
+    executable = shutil.which(tool)
+    if executable is None:
+        raise RuntimeError(f"{tool} unavailable")
+    environment = {**os.environ}
+    environment.pop("SHELLCHECK_OPTS", None)
+    with tempfile.TemporaryDirectory(prefix=f"mainframe-{tool}-") as root:
+        completed = subprocess.run(
+            [executable, *args], input=text, capture_output=True, encoding="utf-8",
+            cwd=root, env=environment, timeout=1, check=False,
+        )
+    if completed.returncode not in {0, 1}:
+        raise RuntimeError(f"{tool} execution failed")
+    return json.loads(completed.stdout)
+
+
+def _diagnostic_rows(raw: object) -> list[dict]:
+    if not isinstance(raw, list) or any(not isinstance(item, dict) for item in raw):
+        raise ValueError("invalid analyzer diagnostics")
+    return raw
+
+
+def _shellcheck_findings(text: str, extension: str) -> list[Occurrence]:
+    shebang = text.partition("\n")[0] if text.startswith("#!") else ""
+    interpreter = re.match(
+        r"^#![ \t]*(?:\S*/env[ \t]+(?:-S[ \t]+)?)?(?:\S*/)?(bash|sh|dash|ksh|busybox)(?=\s|$)",
+        shebang,
+    )
+    if shebang and interpreter is None:
+        return []
+    args = ["--norc", "--format=json",
+            "--include=" + ",".join(f"SC{code}" for code in _SHELLCHECK_LABELS), "-"]
+    if interpreter:
+        args.insert(0, f"--shell={interpreter.group(1)}")
+    elif extension == ".bash":
+        args.insert(0, "--shell=bash")
+    raw = _run_review_tool("shellcheck", args, text)
+    rows = []
+    for item in _diagnostic_rows(raw):
+        code = item.get("code")
+        if code not in _SHELLCHECK_LABELS:
+            continue
+        line, end_line = int(item["line"]), int(item["endLine"])
+        rows.append(_occurrence(
+            f"ShellCheck SC{code}: {_SHELLCHECK_LABELS[code]}", line, "scanner",
+            _source_excerpt(text, line, end_line), channel="shellcheck", blocking=False,
+        ))
+    return rows
+
+
+def _github_workflow(path: Path, workspace: Path) -> bool:
+    return path.suffix.lower() in _YAML_EXTENSIONS and path.parent.relative_to(workspace).parts == _WORKFLOW_DIRECTORY
+
+
+def _actionlint_findings(text: str) -> list[Occurrence]:
+    raw = _run_review_tool(
+        "actionlint",
+        ["-config-file", os.devnull, "-shellcheck=", "-pyflakes=",
+         "-no-color", "-format", "{{json .}}", "-"],
+        text,
+    )
+    rows = []
+    for item in _diagnostic_rows(raw):
+        kind = item.get("kind")
+        if kind not in _ACTIONLINT_LABELS:
+            continue
+        line = int(item["line"])
+        message = " ".join(str(item["message"]).split())
+        # The analyzer may repeat input values. Put identity in the fingerprint
+        # and send only the fixed rule description to the agent.
+        rows.append(_occurrence(
+            f"actionlint {kind}: {_ACTIONLINT_LABELS[kind]}", line, "scanner",
+            message + "\n" + _source_excerpt(text, line, line),
+            channel="actionlint", blocking=False,
+        ))
+    return rows
+
+
+def _kube_candidate(text: str, path: Path, workspace: Path) -> bool:
+    relative = path.relative_to(workspace)
+    if (
+        {"templates", "patches", "overlays"}.intersection(relative.parts[:-1])
+        or path.stem.startswith(("patch-", "patch_")) or "{{" in text
+    ):
+        return False
+    return any(
+        _KUBE_API.search(document) and _KUBE_WORKLOAD.search(document) and _KUBE_CONTAINER.search(document)
+        for document in re.split(r"(?m)^---[ \t]*(?:#.*)?$", text)
+    )
+
+
+def _kube_findings(text: str) -> list[Occurrence]:
+    raw = _run_review_tool(
+        "kube-linter", ["lint", "--with-color=false", "--format=json", "--fail-if-no-objects-found",
+                       "--do-not-auto-add-defaults", "--include=" + ",".join(_KUBE_LABELS), "-"],
+        text,
+    )
+    if not isinstance(raw, dict) or "Reports" not in raw:
+        raise ValueError("invalid KubeLinter report")
+    rows = []
+    reports = [] if raw["Reports"] is None else raw["Reports"]
+    for item in _diagnostic_rows(reports):
+        check = item.get("Check")
+        if check not in _KUBE_LABELS:
+            continue
+        diagnostic = item["Diagnostic"]["Message"]
+        resource = item["Object"]["K8sObject"]
+        kind, name = resource["GroupVersionKind"]["Kind"], resource["Name"]
+        namespace = resource.get("Namespace") or "default"
+        identity = f"{kind} {namespace}/{name}"
+        safe_identity = all(
+            isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,63}", value)
+            for value in (kind, name, namespace)
+        )
+        container = re.fullmatch(r'container "([A-Za-z0-9_.-]{1,63})" does not specify a readiness probe', diagnostic)
+        if container and check == "no-readiness-probe":
+            identity += f", container {container.group(1)}"
+        label = f"{identity}: " if safe_identity else ""
+        rows.append(_occurrence(
+            f"KubeLinter {check}: {label}{_KUBE_LABELS[check]}", None, "scanner",
+            identity, channel="kube-linter", blocking=False,
+        ))
+    return sorted(rows, key=lambda row: row.label)
+
+
+def _migration_metadata(path: Path, workspace: Path) -> str:
+    try:
+        return _read_source(path, workspace) or ""
+    except RuntimeError:
+        return ""
+
+
+def _postgres_migration(path: Path, workspace: Path) -> bool:
+    relative = path.relative_to(workspace)
+    if (
+        relative.parts[-4:-2] == ("prisma", "migrations")
+        and path.name == "migration.sql"
+        and re.fullmatch(r"\d{14}_.+", path.parent.name)
+    ):
+        try:
+            lock = tomllib.loads(_migration_metadata(path.parent.parent / "migration_lock.toml", workspace))
+        except ValueError:
+            return False
+        return lock.get("provider") == "postgresql"
+    if not re.fullmatch(r"[0-9]{4}_.+\.sql", path.name):
+        return False
+    journal = _migration_metadata(path.parent / "meta/_journal.json", workspace)
+    try:
+        metadata = json.loads(journal or "null")
+    except ValueError:
+        return False
+    if isinstance(metadata, dict):
+        return metadata.get("dialect") == "postgresql"
+    # The known CSS migration runner embeds its repository's SQL and uses pgx.
+    # A numbered path or a Go dependency alone cannot identify its dialect.
+    if len(relative.parts) != 2 or path.parent.name != "migrations":
+        return False
+    module = _migration_metadata(workspace / "go.mod", workspace)
+    embedded = _migration_metadata(path.parent / "migrations.go", workspace)
+    return (
+        re.search(r"(?m)^module[ \t]+icover-vozvrat[ \t]*$", module) is not None
+        and re.search(r"(?m)^[ \t]*github\.com/jackc/pgx/v5[ \t]", module) is not None
+        and re.search(r"(?m)^//go:embed[ \t]+\*\.sql[ \t]*$", embedded) is not None
+    )
+
+
+def _squawk_findings(text: str) -> list[Occurrence]:
+    raw = _run_review_tool(
+        "squawk", ["--config", os.devnull, "--reporter=json", "--no-assume-in-transaction",
+                   "--stdin-filepath=source.sql"], text,
+    )
+    diagnostics = _diagnostic_rows(raw)
+    if any(item.get("rule_name") == "syntax-error" for item in diagnostics):
+        raise ValueError("Squawk did not parse this migration")
+    rows = []
+    for item in diagnostics:
+        rule = item.get("rule_name")
+        if rule not in _SQUAWK_LABELS:
+            continue
+        line = int(item["line"]) + 1
+        end_line = int(item["line_end"]) + 1
+        rows.append(_occurrence(
+            f"Squawk {rule}: {_SQUAWK_LABELS[rule]}", line, "scanner",
+            _source_excerpt(text, line, end_line), channel="squawk", blocking=False,
+        ))
+    return rows
+
+
+def _scan_file_advice(
+    text: str, extension: str, path: Path, workspace: Path,
+) -> tuple[str | None, list[Occurrence], ScanIssue | None]:
+    if extension in _SHELL_EXTENSIONS:
+        tool, scan, args = "shellcheck", _shellcheck_findings, (text, extension)
+    elif _github_workflow(path, workspace):
+        tool, scan, args = "actionlint", _actionlint_findings, (text,)
+    elif extension in _YAML_EXTENSIONS:
+        if not _kube_candidate(text, path, workspace):
+            # Plain YAML can become a manifest during this edit.
+            return "kube-linter", [], None
+        tool, scan, args = "kube-linter", _kube_findings, (text,)
+    elif extension == ".sql":
+        # A Prisma or Drizzle lock can be created alongside a new migration.
+        if not text:
+            return "squawk", [], None
+        if not _postgres_migration(path, workspace):
+            return None, [], None
+        tool, scan, args = "squawk", _squawk_findings, (text,)
+    else:
+        return None, [], None
+    if not text:
+        return tool, [], None
+    try:
+        return tool, scan(*args), None
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
+        return None, [], ScanIssue(f"scanner:{tool}", f"{tool} review was unavailable for the edited file.")
+
+
 def _semgrep_candidate(text: str) -> bool:
     return bool(_SEMGREP_EXEC_CANDIDATE.search(text) or _SEMGREP_TLS_CANDIDATE.search(text))
 
@@ -1333,7 +1589,9 @@ def _normalize_paths(
             candidate = (candidate if candidate.is_absolute() else workspace / candidate).resolve()
         except (OSError, TypeError, ValueError):
             continue
-        if not _inside_workspace(candidate, workspace) or candidate.suffix.lower() not in CODE_EXTENSIONS:
+        if not _inside_workspace(candidate, workspace):
+            continue
+        if candidate.suffix.lower() not in CODE_EXTENSIONS and candidate.suffix.lower() not in _YAML_EXTENSIONS:
             continue
         if candidate not in result:
             if len(result) >= MAX_FILES_PER_EDIT:
@@ -1372,6 +1630,7 @@ def _scan_source(
     text: str,
     extension: str,
     path: Path,
+    workspace: Path,
     *,
     include_advisory: bool,
 ) -> ScanResult:
@@ -1443,6 +1702,14 @@ def _scan_source(
                     )
                 )
 
+    if include_advisory:
+        channel, findings, issue = _scan_file_advice(text, extension, path, workspace)
+        if channel:
+            channels.add(channel)
+            rows.extend(findings)
+        if issue:
+            issues.append(issue)
+
     try:
         growth = _growth_metrics(text, extension)
     except Exception:
@@ -1474,6 +1741,7 @@ def _read_scan(
         text,
         path.suffix.lower(),
         path,
+        workspace,
         include_advisory=include_advisory,
     )
 
@@ -1693,7 +1961,12 @@ def _advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> str:
 
 
 def _review_advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> str:
-    locations = [f"{_display_path(path, workspace)}:{row.line} — {row.label}" for path, row in rows]
+    locations = []
+    for path, row in rows:
+        location = _display_path(path, workspace)
+        if row.line is not None:
+            location += f":{row.line}"
+        locations.append(f"{location} — {row.label}")
     body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"

@@ -369,6 +369,167 @@ class CodeQualityTests(unittest.TestCase):
         )
         self.assertEqual(self.after("scope", "jsx"), QUALITY.QualityResult())
 
+    def test_shellcheck_reports_masked_failures_only_for_applicable_shells(self) -> None:
+        script = 'check() { local data="$(generate)"; }\n'
+        file = self.workspace / "new" / "release.sh"
+        self.assertEqual(self.capture("shell", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text("#!/usr/bin/env bash\n" + script, encoding="utf-8")
+        with mock.patch.dict(os.environ, {"SHELLCHECK_OPTS": "--exclude=SC2155"}):
+            advice = self.after("shell", "create").advisory or ""
+        self.assertIn("new/release.sh:2 — ShellCheck SC2155", advice)
+        self.assertEqual(self.completion("shell"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("shell", "unrelated", file), QUALITY.QualityResult())
+        with file.open("a", encoding="utf-8") as stream:
+            stream.write("printf 'release\n'\n")
+        self.assertEqual(self.after("shell", "unrelated"), QUALITY.QualityResult())
+
+        for name, shebang in (("release.zsh", "#!/bin/zsh\n"), ("other.sh", "#!/bin/zsh\n")):
+            with self.subTest(name=name):
+                file = self.workspace / name
+                self.assertEqual(self.capture("shell", name, file), QUALITY.QualityResult())
+                file.write_text(shebang + script, encoding="utf-8")
+                self.assertEqual(self.after("shell", name), QUALITY.QualityResult())
+
+        broken = self.workspace / "broken.bash"
+        self.assertEqual(self.capture("shell", "malformed", broken), QUALITY.QualityResult())
+        broken.write_text("if true; then\n", encoding="utf-8")
+        self.assertIn("ShellCheck SC1073", self.after("shell", "malformed").advisory or "")
+
+    def test_actionlint_checks_workflows_from_first_write(self) -> None:
+        source = (
+            "on: [push]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: custom-self-hosted\n"
+            "    needs: [absent]\n"
+            "    steps:\n"
+            "      - run: echo build\n"
+        )
+        file = self.workspace / ".github" / "workflows" / "release.yml"
+        self.assertEqual(self.capture("workflow", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir(parents=True)
+        file.write_text(source, encoding="utf-8")
+        advice = self.after("workflow", "create").advisory or ""
+        self.assertIn(".github/workflows/release.yml:3 — actionlint", advice)
+        self.assertIn("job dependency is missing or cyclic", advice)
+        self.assertNotIn("custom-self-hosted", advice)
+        self.assertEqual(self.completion("workflow"), QUALITY.QualityResult())
+
+        other = self.workspace / "app.yml"
+        self.assertEqual(self.capture("workflow", "other", other), QUALITY.QualityResult())
+        other.write_text(source, encoding="utf-8")
+        self.assertEqual(self.after("workflow", "other"), QUALITY.QualityResult())
+
+    def test_unavailable_file_analyzer_is_reported_once_and_never_blocks(self) -> None:
+        file = self.workspace / "release.bash"
+        with mock.patch.object(QUALITY, "_run_review_tool", side_effect=RuntimeError("offline")):
+            self.assertEqual(self.capture("shell", "first", file), QUALITY.QualityResult())
+            file.write_text("cd target\n", encoding="utf-8")
+            self.assertIn("shellcheck review was unavailable", self.after("shell", "first").advisory or "")
+            self.assertEqual(self.capture("shell", "second", file), QUALITY.QualityResult())
+            file.write_text("cd other\n", encoding="utf-8")
+            self.assertEqual(self.after("shell", "second"), QUALITY.QualityResult())
+            self.assertEqual(self.completion("shell"), QUALITY.QualityResult())
+
+    def test_kubernetes_checks_plain_workloads_and_skips_overlay_patches(self) -> None:
+        workload = (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: worker\n"
+            "spec:\n  selector:\n    matchLabels:\n      app: worker\n"
+            "  template:\n    metadata:\n      labels:\n        app: worker\n"
+            "    spec:\n      containers:\n        - name: worker\n          image: worker:1\n"
+        )
+        file = self.workspace / "deploy" / "worker.yaml"
+        self.assertEqual(self.capture("kube", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text(workload, encoding="utf-8")
+        advice = self.after("kube", "create").advisory or ""
+        self.assertIn("deploy/worker.yaml — KubeLinter no-readiness-probe", advice)
+        self.assertEqual(self.completion("kube"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("kube", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(workload.replace("worker:1", "worker:2"), encoding="utf-8")
+        self.assertEqual(self.after("kube", "unrelated"), QUALITY.QualityResult())
+
+        patch = self.workspace / "overlays" / "stage" / "worker.yaml"
+        self.assertEqual(self.capture("kube", "patch", patch), QUALITY.QualityResult())
+        patch.parent.mkdir(parents=True)
+        patch.write_text(workload, encoding="utf-8")
+        self.assertEqual(self.after("kube", "patch"), QUALITY.QualityResult())
+
+        renamed_selector = workload.replace("app: worker", "app: another-worker", 1)
+        self.assertEqual(self.capture("kube", "selector", file), QUALITY.QualityResult())
+        file.write_text(renamed_selector, encoding="utf-8")
+        advice = self.after("kube", "selector").advisory or ""
+        self.assertIn("KubeLinter mismatching-selector", advice)
+        self.assertNotIn("no-readiness-probe", advice)
+
+        invalid = self.workspace / "values.yaml"
+        config = "apiVersion: apps/v1\n---\nkind: Deployment\n  containers: []\n"
+        self.assertEqual(self.capture("kube", "plain-yaml", invalid), QUALITY.QualityResult())
+        invalid.write_text(config, encoding="utf-8")
+        with mock.patch.object(QUALITY, "_run_review_tool", side_effect=AssertionError("unexpected tool")):
+            self.assertEqual(self.after("kube", "plain-yaml"), QUALITY.QualityResult())
+
+    def test_squawk_checks_recognized_postgresql_migrations_on_first_edit(self) -> None:
+        root = self.workspace / "service" / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n', encoding="utf-8")
+        file = root / "20261113000000_drop_job_data" / "migration.sql"
+        self.assertEqual(self.capture("sql", "first", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text("DROP TABLE history;\n", encoding="utf-8")
+        advice = self.after("sql", "first").advisory or ""
+        self.assertIn("migration.sql:1 — Squawk ban-drop-table", advice)
+        self.assertNotIn("ban-drop-table: DROP", advice)
+        self.assertEqual(self.completion("sql"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("sql", "another", file), QUALITY.QualityResult())
+        file.write_text("DROP TABLE history;\nCREATE INDEX idx_status ON jobs (status);\n", encoding="utf-8")
+        self.assertEqual(self.after("sql", "another"), QUALITY.QualityResult())
+
+        other = self.workspace / "clickhouse" / "migrations" / "0001_remove_table.sql"
+        self.assertEqual(self.capture("sql", "other", other), QUALITY.QualityResult())
+        other.parent.mkdir(parents=True)
+        other.write_text("DROP TABLE history;\n", encoding="utf-8")
+        self.assertEqual(self.after("sql", "other"), QUALITY.QualityResult())
+
+    def test_postgresql_migration_detection_uses_existing_dialect_metadata(self) -> None:
+        drizzle = self.workspace / "db" / "drizzle"
+        (drizzle / "meta").mkdir(parents=True)
+        (drizzle / "meta" / "_journal.json").write_text('{"dialect": "postgresql"}', encoding="utf-8")
+        file = drizzle / "0000_truncate.sql"
+        self.assertEqual(self.capture("sql", "drizzle", file), QUALITY.QualityResult())
+        file.write_text("TRUNCATE TABLE events CASCADE;\n", encoding="utf-8")
+        self.assertIn("Squawk ban-truncate-cascade", self.after("sql", "drizzle").advisory or "")
+
+        css = self.workspace / "migrations"
+        css.mkdir()
+        (self.workspace / "go.mod").write_text(
+            "module icover-vozvrat\n\nrequire (\n\tgithub.com/jackc/pgx/v5 v5.11.0\n)\n", encoding="utf-8",
+        )
+        (css / "migrations.go").write_text("package migrations\n\n//go:embed *.sql\n", encoding="utf-8")
+        file = css / "0127_online_index.sql"
+        self.assertEqual(self.capture("sql", "css", file), QUALITY.QualityResult())
+        file.write_text("CREATE INDEX idx ON events (status);\n", encoding="utf-8")
+        self.assertEqual(self.after("sql", "css"), QUALITY.QualityResult())
+        self.assertEqual(self.capture("sql", "css-explicit-transaction", file), QUALITY.QualityResult())
+        file.write_text("BEGIN;\nCREATE INDEX CONCURRENTLY idx ON events (status);\nCOMMIT;\n", encoding="utf-8")
+        self.assertIn("Squawk ban-concurrent-index-creation-in-transaction",
+                      self.after("sql", "css-explicit-transaction").advisory or "")
+        self.assertEqual(self.capture("sql", "rewrite", file), QUALITY.QualityResult())
+        file.write_text("ALTER TABLE events ALTER COLUMN status TYPE bigint USING status::bigint;\n",
+                        encoding="utf-8")
+        self.assertIn("Squawk changing-column-type", self.after("sql", "rewrite").advisory or "")
+
+        raw = drizzle / "0001_invalid.sql"
+        self.assertEqual(self.capture("sql", "invalid", raw), QUALITY.QualityResult())
+        raw.write_text("CREATE INDEX broken\n", encoding="utf-8")
+        advice = self.after("sql", "invalid").advisory or ""
+        self.assertIn("squawk review was unavailable", advice)
+        self.assertEqual(self.completion("sql"), QUALITY.QualityResult())
+
     def test_scanner_outage_does_not_hardlock_and_recovery_revalidates(self) -> None:
         finding = QUALITY._occurrence(
             "Python security S307: dynamic eval()",

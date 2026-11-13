@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
+from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 from .core import (
-    Change, Conflict, atomic_write, encode_json, installation_lock, observed, regular_bytes,
+    Change, Conflict, atomic_write, digest, encode_json, installation_lock, observed, regular_bytes,
     restore, transact,
 )
 
@@ -23,14 +28,115 @@ TOOL_SPECS = {
     "semgrep": ("python", "semgrep", "1.164.0"),
     "oxlint": ("node", "oxlint", "1.67.0"),
     "fallow": ("node", "fallow", "2.92.1"),
+    "shellcheck": ("release", "koalaman/shellcheck", "0.11.0"),
+    "actionlint": ("release", "rhysd/actionlint", "1.7.12"),
+    "kube-linter": ("release", "stackrox/kube-linter", "0.8.3"),
+    "squawk": ("release", "sbdchd/squawk", "2.72.0"),
 }
-CODE_QUALITY_TOOLS = ("ruff", "oxlint", "semgrep")
+CODE_QUALITY_TOOLS = ("ruff", "oxlint", "semgrep", "shellcheck", "actionlint", "kube-linter", "squawk")
 FALLOW_TOOLS = ("fallow",)
 OPENSPEC_TOOLS = ("openspec",)
 OPENSPEC_PACKAGE = "@fission-ai/openspec"
 OPENSPEC_VERSION = "1.16.1"
 OPENSPEC_NODE_MINIMUM = (22, 12, 0)
 OPENSPEC_ENV = {"OPENSPEC_TELEMETRY": "0", "OPENSPEC_NO_UPDATE_CHECK": "1"}
+
+# Upstream SHA256s from the pinned official GitHub release assets.
+# Ordered by (darwin amd64, darwin arm64, linux amd64, linux arm64).
+_RELEASE_SHA256 = {
+    "shellcheck": (
+        "3c89db4edcab7cf1c27bff178882e0f6f27f7afdf54e859fa041fca10febe4c6",
+        "56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0a79",
+        "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198",
+        "12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588",
+    ),
+    "actionlint": (
+        "5b44c3bc2255115c9b69e30efc0fecdf498fdb63c5d58e17084fd5f16324c644",
+        "aba9ced2dee8d27fecca3dc7feb1a7f9a52caefa1eb46f3271ea66b6e0e6953f",
+        "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8",
+        "325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6",
+    ),
+    "kube-linter": (
+        "c62e8af3c9df2557c7a3922119ea1b35597794737d1ccad493f63a0d66e7b8fc",
+        "6e3443a8ff8625a9fc31a38682c783988d7559018f7ff707a4f8c77c18c92f14",
+        "1a6d8419b11971372971fdbc22682b684ebfb7cf1c39591662d1b6ca736c41df",
+        "802e1b09eabd08f6f0a060a6b8ab2bf7bc7e6bf4f673bb2692303704c84b3e22",
+    ),
+    "squawk": (
+        "ba255f16260663457e66e6888fcecebcfb64e9e35d7ef041e92834f8c9d2d849",
+        "f2cced2d962a5642a089a90a0cf826c65786a59a0a2bd3cd96ddadff3583c2b4",
+        "b4cda2069a3ca5b75b47f025b569df9e6a762262b9258bc4db3f43381f8544d8",
+        "a6d0eb855ca69fa2a70e518c99b24bd4fd7d2f869a884e139de4730c0ca0be2c",
+    ),
+}
+_RELEASE_PLATFORMS = (
+    ("darwin", "amd64"), ("darwin", "arm64"), ("linux", "amd64"), ("linux", "arm64"),
+)
+_MAX_NATIVE_BYTES = 64_000_000
+
+
+def _native_release(name: str) -> tuple[str, str, str, str | None, str]:
+    _, repo, version = TOOL_SPECS[name]
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(machine, machine)
+    try:
+        index = _RELEASE_PLATFORMS.index((system, arch))
+    except ValueError as error:
+        raise Conflict(f"No pinned {name} release for {system}/{machine}.") from error
+    if name == "shellcheck":
+        archive_arch = "x86_64" if arch == "amd64" else "aarch64"
+        asset = f"shellcheck-v{version}.{system}.{archive_arch}.tar.xz"
+        member = f"shellcheck-v{version}/shellcheck"
+    elif name == "actionlint":
+        asset, member = f"actionlint_{version}_{system}_{arch}.tar.gz", "actionlint"
+    elif name == "kube-linter":
+        suffix = "_arm64" if arch == "arm64" else ""
+        asset, member = f"kube-linter-{system}{suffix}.tar.gz", "kube-linter"
+    elif name == "squawk":
+        suffix = "x64" if arch == "amd64" else "arm64"
+        prefix = "linux-musl" if system == "linux" else system
+        asset, member = f"squawk-{prefix}-{suffix}", None
+    else:
+        raise Conflict(f"No pinned native release mapping for {name}.")
+    return repo, f"v{version}", asset, member, _RELEASE_SHA256[name][index]
+
+
+def _download_release(repo: str, tag: str, asset: str) -> bytes:
+    url = f"https://github.com/{repo}/releases/download/{tag}/{asset}"
+    with urlopen(Request(url, headers={"User-Agent": "MAINFRAME-installer"}), timeout=30) as response:
+        target = urlsplit(response.geturl())
+        if target.scheme != "https" or target.hostname not in {
+            "github.com", "release-assets.githubusercontent.com",
+        }:
+            raise ValueError("unexpected release host")
+        return response.read(_MAX_NATIVE_BYTES + 1)
+
+
+def _managed_release(root: Path, name: str) -> Path:
+    repo, tag, asset, member, checksum = _native_release(name)
+    target = root / "packages/release" / name / tag / name
+    try:
+        data = _download_release(repo, tag, asset)
+        if len(data) > _MAX_NATIVE_BYTES or digest(data) != checksum:
+            raise Conflict(f"{name} release checksum did not match the pinned artifact.")
+        if member is not None:
+            with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+                entry = archive.getmember(member)
+                if not entry.isfile() or not 0 < entry.size <= _MAX_NATIVE_BYTES:
+                    raise ValueError("invalid release member")
+                stream = archive.extractfile(entry)
+                if stream is None:
+                    raise ValueError("missing executable")
+                with stream:
+                    data = stream.read()
+        regular_bytes(target)
+        atomic_write(target, data, 0o755)
+    except (OSError, ValueError, KeyError, tarfile.TarError) as error:
+        raise Conflict(f"Could not prepare the pinned {name} release.") from error
+    if not _compatible(name, target)[0]:
+        raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+    return target
 
 
 def runtime_root(home: Path) -> Path:
@@ -52,7 +158,7 @@ def tools_for_hook(all_tools: tuple[str, ...], hook: str | None) -> tuple[str, .
 
 
 def _version(executable: Path, *arguments: Path, path: str | None = None,
-             exact: bool = False) -> str | None:
+             exact: bool = False, flag: str = "--version") -> str | None:
     environment = {
         **os.environ, "SEMGREP_SEND_METRICS": "off",
         "FALLOW_TELEMETRY": "off", "FALLOW_TELEMETRY_DISABLED": "1",
@@ -62,7 +168,7 @@ def _version(executable: Path, *arguments: Path, path: str | None = None,
         environment["PATH"] = path
     try:
         result = subprocess.run(
-            [str(executable), *(str(argument) for argument in arguments), "--version"],
+            [str(executable), *(str(argument) for argument in arguments), flag],
             capture_output=True, text=True, timeout=20, check=False, env=environment,
         )
     except (OSError, subprocess.SubprocessError):
@@ -83,7 +189,8 @@ def _parts(value: str) -> tuple[int, int, int]:
 
 
 def _compatible(name: str, executable: Path) -> tuple[bool, str | None]:
-    version = _version(executable)
+    version_flag = {"actionlint": "-version", "kube-linter": "version"}.get(name, "--version")
+    version = _version(executable, flag=version_flag)
     tested = TOOL_SPECS[name][2]
     return bool(version and _parts(version) == _parts(tested)), version
 
@@ -317,7 +424,7 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
 
 def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tuple[dict[str, Path], dict[str, list[str]]]:
     resolved: dict[str, Path] = {}
-    missing: dict[str, list[str]] = {"python": [], "node": []}
+    missing: dict[str, list[str]] = {"python": [], "node": [], "release": []}
     for name in wanted:
         if name not in TOOL_SPECS:
             continue
@@ -341,10 +448,10 @@ def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tu
         "python": root / "packages/python",
         "node": root / "packages/node",
     }
-    for ecosystem, names in missing.items():
+    for ecosystem, target in managed_targets.items():
+        names = missing[ecosystem]
         if not names:
             continue
-        target = managed_targets[ecosystem]
         for name, executable in list(resolved.items()):
             if TOOL_SPECS[name][0] == ecosystem and executable.is_relative_to(target):
                 names.append(name)
@@ -387,6 +494,8 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
     candidates, missing = _candidates(root, home, wanted, existing)
     if missing["node"] and not shutil.which("npm"):
         raise Conflict("npm is required to install Oxlint or Fallow for active MAINFRAME hooks; no hook files were changed.")
+    for name in missing["release"]:
+        candidates[name] = _managed_release(root, name)
     if missing["python"]:
         candidates.update(_managed_python(root, missing["python"]))
     if missing["node"]:

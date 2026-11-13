@@ -1,12 +1,14 @@
+import io
 import json
 import os
 from pathlib import Path
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from unittest import mock
 
-from installer.core import Conflict
+from installer.core import Conflict, digest
 from installer import runtime
 
 
@@ -91,6 +93,42 @@ class RuntimeSupportTests(unittest.TestCase):
             result = runtime.ensure(self.home, ("ruff", "semgrep"))
         self.assertTrue(result["ready"])
         self.assertEqual(installed, ["ruff", "semgrep"])
+
+    def test_native_analyzer_is_prepared_once_and_reused_without_network(self):
+        binary = self.tool("actionlint", "1.7.12").read_bytes()
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+            member = tarfile.TarInfo("actionlint")
+            member.size = len(binary)
+            archive.addfile(member, io.BytesIO(binary))
+        content = buffer.getvalue()
+        release = ("example/actionlint", "v1.7.12", "standalone.tar.gz", "actionlint", digest(content))
+        with (
+            mock.patch.object(runtime, "_native_release", return_value=release),
+            mock.patch.object(runtime, "_download_release", return_value=content) as fetch,
+            mock.patch.object(runtime.shutil, "which", return_value=None),
+        ):
+            result = runtime.ensure(self.home, ("actionlint",))
+            self.assertEqual(result["versions"], {"actionlint": "1.7.12"})
+            self.assertTrue(runtime.ensure(self.home, ("actionlint",))["ready"])
+            fetch.assert_called_once()
+        job = subprocess.run(
+            [runtime.runtime_bin(self.home) / "actionlint", "-version"],
+            capture_output=True, text=True, check=True, timeout=2,
+        )
+        self.assertEqual(job.stdout, "actionlint 1.7.12\n")
+
+    def test_native_analyzer_digest_mismatch_does_not_activate_it(self):
+        release = ("example/actionlint", "v1.7.12", "standalone.tar.gz", "actionlint", "0" * 64)
+        with (
+            mock.patch.object(runtime, "_native_release", return_value=release),
+            mock.patch.object(runtime, "_download_release", return_value=b"wrong archive"),
+            mock.patch.object(runtime.shutil, "which", return_value=None),
+            self.assertRaisesRegex(Conflict, "checksum"),
+        ):
+            runtime.ensure(self.home, ("actionlint",))
+        self.assertFalse((runtime.runtime_bin(self.home) / "actionlint").exists())
+        self.assertFalse((runtime.runtime_root(self.home) / "installation.json").exists())
 
     def test_hook_dependency_selection_is_exact(self):
         all_tools = (*runtime.CODE_QUALITY_TOOLS, *runtime.FALLOW_TOOLS, "openspec")

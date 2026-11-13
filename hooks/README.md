@@ -271,6 +271,8 @@ Treat `mainframe-code-quality.py` as one component with these fixed effects:
 - a post-edit advisory for newly introduced assertions that can pass without
   testing their intended behavior, and Python background tasks without a
   retained reference;
+- a post-edit advisory for newly introduced errors in shell scripts, GitHub
+  Actions workflows, Kubernetes workloads, or recognized PostgreSQL migrations;
 - context-dependent Semgrep review advice that never blocks completion;
 - a `new-growth-pressure` structure advisory for a file or Python function that
   crosses a conservative size-review threshold in the current edit;
@@ -393,10 +395,23 @@ Use only the two embedded canonical rules, one job, bounded file, memory, and
 time limits, version checks disabled, and metrics off. Semgrep findings are
 review advice only and are never persisted as completion blockers.
 
-`ruff`, `oxlint`, and `semgrep` are direct runtime support for this one hook,
-not separate hook components. During adaptation, reuse executables at the
-tested versions or install those exact official distributions through the
-maintained shared runtime. Prove each with a harmless representative sample and
+Run the file-specific analyzers against the exact before and after source text
+in an isolated temporary directory. Bound each invocation to one second.
+Use static diagnostic descriptions and compare only new findings. See
+[the release pins](../installer/runtime.py) and
+[the executable tests](tests/test_code_quality.py).
+
+| Tool | Automatic scope | Reported findings |
+| --- | --- | --- |
+| ShellCheck | `.sh` and `.bash` with a supported interpreter or no shebang. | Shell parse errors, masked command failure, unchecked `cd`, and a pipeline that reads and writes the same file. |
+| actionlint | `.github/workflows/*.yml` and `.github/workflows/*.yaml` at the repository root. | Workflow YAML or schema errors, missing or cyclic job dependencies, and invalid identifiers, expressions, conditions, or matrices. |
+| KubeLinter | Plain Kubernetes deployment, stateful set, and daemon set YAML with a container specification. Skip Helm templates and recognized Kustomize overlays and patches. | A workload selector that does not match its pod template, or a container without a readiness probe. Check service selectors and routes against the rendered manifest set. |
+| Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, column type changes that can block access, and concurrent index creation inside an explicit SQL transaction. Runner-supplied PostgreSQL version, locks, and transaction policy require migration CI. |
+
+The code-quality hook uses its existing edit events and configured analyzer
+runtime paths. During adaptation, reuse executables at the tested versions or
+install the pinned distributions through the maintained shared runtime. Test
+each with a harmless representative sample and
 stop installation before hook activation when a required scanner cannot be
 supplied. A missing, timed-out, malformed, or failed
 scanner must leave the action and completion unblocked and emit only its

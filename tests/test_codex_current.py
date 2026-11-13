@@ -59,8 +59,8 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
                 self.assertTrue(codex.mapping_supported(version, "desktop"))
                 self.assertFalse(codex.mapping_supported(version, "cli"))
                 self.assertFalse(codex.mapping_supported(neighbor, "desktop"))
-                self.assertEqual(codex.runtime_tools(version, "desktop"), ("ruff", "oxlint", "semgrep", "fallow"))
-        self.assertEqual(codex.runtime_tools("0.153.4", "cli"), ("ruff", "oxlint", "semgrep"))
+                self.assertEqual(codex.runtime_tools(version, "desktop"), codex.CODE_QUALITY_TOOLS + ("fallow",))
+        self.assertEqual(codex.runtime_tools("0.153.4", "cli"), codex.CODE_QUALITY_TOOLS)
 
     def test_desktop_tool_cwd_upgrade_changes_only_owned_shell_binding(self):
         self.apply()
@@ -157,7 +157,7 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         entrypoint = importlib.util.module_from_spec(specification)
         specification.loader.exec_module(entrypoint)
         options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION]
-        required = ("ruff", "oxlint", "semgrep", "fallow", "openspec")
+        required = codex.CODE_QUALITY_TOOLS + ("fallow", "openspec")
         ready = {"ready": True, "required": list(required), "missing": []}
         with (patch.object(Path, "cwd", return_value=self.source),
               patch.object(entrypoint, "ensure_runtime", return_value=ready) as ensure,

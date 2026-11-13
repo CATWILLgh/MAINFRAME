@@ -12,7 +12,7 @@ from installer.zcode import (ZCode, HOOK_NAMES, SHELL_HOOK_NAMES,
     _is_validated_hook_config_update, _legacy_hook_registration,
     role_body, command_body)
 from installer.core import Change, Conflict, transact, restore
-from installer.runtime import OPENSPEC_VERSION, runtime_bin, TOOL_SPECS
+from installer.runtime import CODE_QUALITY_TOOLS, OPENSPEC_VERSION, runtime_bin, TOOL_SPECS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,7 +48,7 @@ class ZCodeInstallationTests(unittest.TestCase):
         # These tests cover delivery routing with local version probes.
         tools = self.home / 'version-fixtures'
         tools.mkdir(exist_ok=True)
-        for name in ('ruff', 'oxlint', 'semgrep'):
+        for name in CODE_QUALITY_TOOLS:
             tool = tools / name
             tool.write_text('#!/bin/sh\nprintf "%s\\n" "' + name + ' ' + TOOL_SPECS[name][2] + '"\n')
             tool.chmod(0o755)

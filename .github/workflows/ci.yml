@@ -33,6 +33,17 @@ jobs:
         run: |
           python3 -m pip install --disable-pip-version-check ruff==0.15.15 semgrep==1.164.0
           npm install --global --no-audit --no-fund oxlint@1.67.0 fallow@2.92.1
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          from installer.runtime import CODE_QUALITY_TOOLS, TOOL_SPECS, ensure
+
+          home = Path(os.environ["RUNNER_TEMP"]) / "mainframe"
+          required = tuple(name for name in CODE_QUALITY_TOOLS if TOOL_SPECS[name][0] == "release")
+          ready = ensure(home, required)
+          with Path(os.environ["GITHUB_PATH"]).open("a", encoding="utf-8") as path:
+              print(ready["bin"], file=path)
+          PY
 
       - name: Validate repository structure
         run: python3 -m unittest discover -s tests -p 'test_*.py'

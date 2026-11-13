@@ -37,8 +37,8 @@ The current full route retains the existing subagent-selection registration for
 the verified collaboration interface and installs the Fallow detector plus a
 non-blocking `PostToolUse` advisory for supported exact patches. Fallow uses
 bounded in-memory reconstruction of addressed files. A `PreToolUse` check
-captures a short-lived hash for verified new TS/JS files. Runtime readiness
-includes `ruff`, `oxlint`, `semgrep` and `fallow`. The native callback gives
+captures a short-lived hash for verified new TS/JS files. See the
+[hook runtime dependencies](components/hooks.md#runtime-support). The native callback gives
 Fallow seven seconds within its ten-second handler timeout.
 
 Quality completion checks now bind both primary `Stop` and worker
