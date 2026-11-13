@@ -24,6 +24,9 @@
 
 # Judgment and verification
 
+- For a defect, trace the symptom to the first failure of the intended
+  contract and fix its cause at the owning boundary. Keep urgent mitigation
+  bounded and report the underlying defect as open until repaired.
 - Choose the simplest complete solution. Add a retry, fallback, or extra layer
   only for a reachable failure the established path cannot handle. Define
   its bound, side effects, and recovery owner. Keep required protections even
