@@ -8,8 +8,8 @@ component with fixed advisory and guard effects:
   suppression, disabled-test, debug, or security findings;
 * a completion guard blocks only while an attributed blocking finding remains
   after re-reading and re-scanning the file;
-* context-dependent Semgrep findings are review advice and never enter the
-  completion guard;
+* Ruff async and context-dependent Semgrep findings are review advice and
+  never enter the completion guard;
 * a file or Python function that crosses a conservative size-review threshold
   produces one non-blocking cohesion advisory;
 * unavailable protection is reported once per execution scope and never
@@ -609,12 +609,12 @@ FILE_LENGTH_THRESHOLD = 400
 PYTHON_FUNCTION_LENGTH_THRESHOLD = 60
 _FILE_GROWTH_EXTENSIONS = CODE_EXTENSIONS - {".sql"}
 _PYTHON_SECURITY_CHANNEL = "python-security"
+_PYTHON_ASYNC_CHANNEL = "python-async-advice"
 _NODE_SECURITY_CHANNEL = "node-security"
 _SEMGREP_SECURITY_CHANNEL = "semgrep-security-advice"
 _PYTHON_EXTENSIONS = {".py", ".pyi"}
 _NODE_EXTENSIONS = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
-_RUFF_RULES = "S102,S307,S506,S602,S605,S501,S324"
-_RUFF_LABELS = {
+_RUFF_SECURITY_LABELS = {
     "S102": "Python security S102: dynamic exec()",
     "S307": "Python security S307: dynamic eval()",
     "S506": "Python security S506: unsafe YAML loading",
@@ -622,6 +622,13 @@ _RUFF_LABELS = {
     "S605": "Python security S605: shell process execution",
     "S501": "Python security S501: TLS verification disabled",
     "S324": "Python security S324: weak cryptographic hash",
+}
+_RUFF_ASYNC_LABELS = {
+    "ASYNC210": "Python ASYNC210: blocking HTTP call in async function",
+    "ASYNC212": "Python ASYNC212: synchronous HTTPX call in async function",
+    "ASYNC221": "Python ASYNC221: blocking process call in async function",
+    "ASYNC230": "Python ASYNC230: blocking open() in async function",
+    "ASYNC251": "Python ASYNC251: blocking time.sleep() in async function",
 }
 _RUFF_SHELL_RULES = {"S602", "S605"}
 _OXLINT_LABELS = {
@@ -804,17 +811,20 @@ def _source_excerpt(text: str, row: int, end_row: int) -> str:
     return "\n".join(line.strip() for line in lines[start:end])[:1000]
 
 
-def _python_security_findings(text: str, path: Path) -> list[Occurrence]:
+def _python_findings(text: str, path: Path, *, include_advisory: bool = True) -> list[Occurrence]:
     executable = shutil.which("ruff")
     if executable is None:
         raise RuntimeError("ruff unavailable")
+    labels = _RUFF_SECURITY_LABELS
+    if include_advisory:
+        labels = labels | _RUFF_ASYNC_LABELS
     completed = subprocess.run(
         [
             executable,
             "check",
             "--isolated",
             "--select",
-            _RUFF_RULES,
+            ",".join(labels),
             "--output-format",
             "json",
             "--no-cache",
@@ -842,20 +852,22 @@ def _python_security_findings(text: str, path: Path) -> list[Occurrence]:
     rows: list[Occurrence] = []
     for item in raw:
         code = item.get("code")
-        if code not in _RUFF_LABELS:
+        if code not in labels:
             continue
         message = str(item.get("message") or "")
         if code in _RUFF_SHELL_RULES and "seems safe" in message:
             continue
         row = int((item.get("location") or {}).get("row") or 0)
         end_row = int((item.get("end_location") or {}).get("row") or row)
+        security = code in _RUFF_SECURITY_LABELS
         rows.append(
             _occurrence(
-                _RUFF_LABELS[code],
+                labels[code],
                 row,
                 "scanner",
                 _source_excerpt(text, row, end_row),
-                channel=_PYTHON_SECURITY_CHANNEL,
+                channel=_PYTHON_SECURITY_CHANNEL if security else _PYTHON_ASYNC_CHANNEL,
+                blocking=security,
             )
         )
     return rows
@@ -1293,13 +1305,18 @@ def _scan_source(
 
     if extension in _PYTHON_EXTENSIONS:
         try:
-            rows.extend(_python_security_findings(text, path))
+            rows.extend(_python_findings(text, path, include_advisory=include_advisory))
             channels.add(_PYTHON_SECURITY_CHANNEL)
+            if include_advisory:
+                channels.add(_PYTHON_ASYNC_CHANNEL)
         except Exception:
+            message = "Python security scanning is unavailable; Ruff safety rules were not checked."
+            if include_advisory:
+                message += " Python async rules were also unavailable."
             issues.append(
                 ScanIssue(
                     "scanner:python-security",
-                    "Python security scanning is unavailable; Ruff safety rules were not checked.",
+                    message,
                 )
             )
 
@@ -1580,6 +1597,12 @@ def _review_advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> st
     body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
+    if any(row.channel == _PYTHON_ASYNC_CHANNEL for _, row in rows):
+        return (
+            "Code review advice for newly introduced findings:\n"
+            + body
+            + "\nCheck whether the flagged calls can block the event loop or cross a trust boundary."
+        )
     return (
         "Security review advice for newly introduced code:\n"
         + body

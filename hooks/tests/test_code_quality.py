@@ -17,7 +17,7 @@ SPEC = importlib.util.spec_from_file_location("code_quality", SOURCE)
 assert SPEC is not None and SPEC.loader is not None
 QUALITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(QUALITY)
-PYTHON_SECURITY_FINDINGS = QUALITY._python_security_findings
+PYTHON_FINDINGS = QUALITY._python_findings
 NODE_SECURITY_FINDINGS = QUALITY._node_security_findings
 SEMGREP_SECURITY_FINDINGS = QUALITY._semgrep_security_findings
 
@@ -34,7 +34,7 @@ class CodeQualityTests(unittest.TestCase):
         self.state = self.root / "state"
         self.workspace.mkdir()
         self.scanner_patchers = [
-            mock.patch.object(QUALITY, "_python_security_findings", return_value=[]),
+            mock.patch.object(QUALITY, "_python_findings", return_value=[]),
             mock.patch.object(QUALITY, "_node_security_findings", return_value=[]),
             mock.patch.object(QUALITY, "_semgrep_security_findings", return_value=[]),
         ]
@@ -143,7 +143,7 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIsNone(self.completion("scope").block_reason)
 
     def test_python_security_finding_warns_and_blocks_until_removed(self) -> None:
-        def scan(text: str, _path: Path):
+        def scan(text: str, _path: Path, **_options):
             if "eval(" not in text:
                 return []
             return [
@@ -171,7 +171,7 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIsNone(self.completion("scope").block_reason)
 
     def test_preexisting_security_finding_is_not_claimed(self) -> None:
-        def scan(text: str, _path: Path):
+        def scan(text: str, _path: Path, **_options):
             if "eval(" not in text:
                 return []
             return [
@@ -192,6 +192,39 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
+    def test_new_blocking_calls_in_async_code_are_advice_without_project_configuration(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        file = self.workspace / "worker.py"
+        base = (
+            "import asyncio\nimport subprocess\nimport time\nimport urllib.request\nimport httpx\n\n"
+            "def synchronous_worker():\n    time.sleep(1)\n\n"
+            "async def existing_worker():\n    time.sleep(2)\n\n"
+            "async def new_worker():\n    await asyncio.sleep(3)\n"
+        )
+        file.write_text(base, encoding="utf-8")
+        self.assertEqual(self.capture("scope", "introduce", file), QUALITY.QualityResult())
+        changed = base.replace("    await asyncio.sleep(3)", (
+            "    urllib.request.urlopen('https://example.invalid')\n"
+            "    client = httpx.Client()\n"
+            "    client.get('https://example.invalid')\n"
+            "    subprocess.run(['printf', 'fixture'], check=True)\n"
+            "    open('fixture.txt')\n"
+            "    time.sleep(3)"
+        ))
+        file.write_text(changed, encoding="utf-8")
+        result = self.after("scope", "introduce")
+        advisory = result.advisory or ""
+        expected = {14: "ASYNC210", 16: "ASYNC212", 17: "ASYNC221", 18: "ASYNC230", 19: "ASYNC251"}
+        for line, rule in expected.items():
+            self.assertIn(f"worker.py:{line} — Python {rule}", advisory)
+            self.assertEqual(advisory.count(rule), 1)
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "repair", file), QUALITY.QualityResult())
+        file.write_text(base, encoding="utf-8")
+        self.assertEqual(self.after("scope", "repair"), QUALITY.QualityResult())
+
     def test_scanner_outage_does_not_hardlock_and_recovery_revalidates(self) -> None:
         finding = QUALITY._occurrence(
             "Python security S307: dynamic eval()",
@@ -200,7 +233,7 @@ class CodeQualityTests(unittest.TestCase):
             "eval(value)",
             channel=QUALITY._PYTHON_SECURITY_CHANNEL,
         )
-        self.scanners[0].side_effect = lambda text, _path: [finding] if "eval(" in text else []
+        self.scanners[0].side_effect = lambda text, _path, **_options: [finding] if "eval(" in text else []
         file = self.workspace / "module.py"
         file.write_text("value = 1\n", encoding="utf-8")
         self.capture("scope", "risk", file)
@@ -213,7 +246,7 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIsNone(unavailable.block_reason)
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
-        self.scanners[0].side_effect = lambda text, _path: [finding] if "eval(" in text else []
+        self.scanners[0].side_effect = lambda text, _path, **_options: [finding] if "eval(" in text else []
         recovered = self.completion("scope")
         self.assertIn("Completion blocked", recovered.block_reason or "")
 
@@ -380,7 +413,7 @@ class CodeQualityTests(unittest.TestCase):
             "run",
             return_value=QUALITY.subprocess.CompletedProcess([], 1, ruff_output, ""),
         ) as run:
-            rows = PYTHON_SECURITY_FINDINGS("import os\neval(value)\n", self.workspace / "a.py")
+            rows = PYTHON_FINDINGS("import os\neval(value)\n", self.workspace / "a.py")
         self.assertEqual([row.label for row in rows], ["Python security S307: dynamic eval()"])
         command = run.call_args.args[0]
         self.assertIn("--isolated", command)
@@ -775,7 +808,7 @@ class CodeQualityTests(unittest.TestCase):
         entered = threading.Event()
         release = threading.Event()
 
-        def scan(_text: str, path: Path):
+        def scan(_text: str, path: Path, **_options):
             if path == first.resolve():
                 entered.set()
                 self.assertTrue(release.wait(timeout=2))
