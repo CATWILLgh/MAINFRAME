@@ -10,6 +10,7 @@ component with fixed advisory and guard effects:
   after re-reading and re-scanning the file;
 * Ruff async and context-dependent Semgrep findings are review advice and
   never enter the completion guard;
+* syntax errors and duplicate configuration keys are post-edit review advice;
 * a file or Python function that crosses a conservative size-review threshold
   produces one non-blocking cohesion advisory;
 * unavailable protection is reported once per execution scope and never
@@ -57,9 +58,10 @@ LOCK_MAX_AGE_SECONDS = 60
 LOCK_RETRIES = 100
 LOCK_RETRY_SECONDS = 0.005
 
-CODE_EXTENSIONS = frozenset(
+_TS_EXTENSIONS = frozenset({".ts", ".tsx", ".mts", ".cts"})
+CODE_EXTENSIONS = _TS_EXTENSIONS | frozenset(
     {
-        ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+        ".py", ".pyi", ".js", ".jsx", ".mjs", ".cjs",
         ".dart", ".go", ".rb", ".rs", ".java", ".kt", ".kts", ".swift",
         ".cs", ".cpp", ".cc", ".c", ".h", ".hpp", ".scala", ".php",
         ".lua", ".sh", ".bash", ".zsh", ".sql", ".vue", ".svelte",
@@ -104,6 +106,26 @@ class ScanResult(NamedTuple):
     issues: tuple[ScanIssue, ...]
     revision: str | None
     growth: GrowthMetrics | None = None
+
+    @property
+    def revalidation_channels(self) -> frozenset[str]:
+        if any(row.channel == _SYNTAX_CHANNEL for row in self.rows):
+            # Parser diagnostics can accompany a partial lint result. Keep the
+            # before/after comparison, but require a complete parse to clear a
+            # previously attributed security finding.
+            return self.channels - {_PYTHON_SECURITY_CHANNEL, _NODE_SECURITY_CHANNEL}
+        return self.channels
+
+
+class SourceSnapshot(NamedTuple):
+    text: str
+    exists: bool
+
+    @property
+    def revision(self) -> str:
+        if not self.exists:
+            return "missing"
+        return hashlib.sha256(self.text.encode("utf-8", errors="replace")).hexdigest()
 
 
 class GrowthFinding(NamedTuple):
@@ -164,9 +186,8 @@ _LANG_PROFILES = {
     ".js": _profile(("//",), _C_BLOCK, backtick=True),
     ".mjs": _profile(("//",), _C_BLOCK, backtick=True),
     ".cjs": _profile(("//",), _C_BLOCK, backtick=True),
-    ".ts": _profile(("//",), _C_BLOCK, backtick=True),
     ".jsx": _profile(("//",), _C_BLOCK, backtick=True),
-    ".tsx": _profile(("//",), _C_BLOCK, backtick=True),
+    **dict.fromkeys(_TS_EXTENSIONS, _profile(("//",), _C_BLOCK, backtick=True)),
     ".vue": _profile(("//",), _C_BLOCK, backtick=True),
     ".svelte": _profile(("//",), _C_BLOCK, backtick=True),
     ".sql": _profile(("--",), _C_BLOCK, strings="'", sql_double=True, no_escape="'"),
@@ -545,7 +566,8 @@ _COMMENT_MARKERS = (
     ("pylint: disable", re.compile(r"pylint:\s*disable\b")),
 )
 
-_JS_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte"}
+_NODE_EXTENSIONS = _TS_EXTENSIONS | {".js", ".jsx", ".mjs", ".cjs"}
+_JS_EXTENSIONS = _NODE_EXTENSIONS | {".vue", ".svelte"}
 _CODE_MARKERS = (
     (
         "skipped/focused test (.skip/.only/xit/fit)",
@@ -618,8 +640,14 @@ _NODE_CORRECTNESS_CHANNEL = "node-correctness-advice"
 _NODE_TEST_CHANNEL = "node-test-advice"
 _SEMGREP_SECURITY_CHANNEL = "semgrep-security-advice"
 _SEMGREP_GO_CHANNEL = "semgrep-go-advice"
+_SYNTAX_CHANNEL = "syntax"
+_DUPLICATE_KEY_CHANNEL = "duplicate-key"
 _WORKFLOW_DIRECTORY = (".github", "workflows")
 _YAML_EXTENSIONS = {".yaml", ".yml"}
+_JSON_EXTENSIONS = {".json", ".jsonc"}
+_CONFIG_EXTENSIONS = _YAML_EXTENSIONS | _JSON_EXTENSIONS | {".toml"}
+_EDIT_EXTENSIONS = CODE_EXTENSIONS | _CONFIG_EXTENSIONS
+_SDK_SYNTAX_TOOLS = {".go": ("Go", "gofmt"), ".dart": ("Dart", "dart")}
 _SHELL_EXTENSIONS = {".sh", ".bash"}
 _SHELLCHECK_LABELS = {
     1072: "shell parser could not read this statement",
@@ -657,7 +685,6 @@ _SQUAWK_LABELS = {
     "ban-concurrent-index-creation-in-transaction": "CREATE INDEX CONCURRENTLY cannot run inside an explicit transaction",
 }
 _PYTHON_EXTENSIONS = {".py", ".pyi"}
-_NODE_EXTENSIONS = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
 _RUFF_SECURITY_LABELS = {
     "S102": "Python security S102: dynamic exec()",
     "S307": "Python security S307: dynamic eval()",
@@ -910,6 +937,14 @@ def _source_excerpt(text: str, row: int, end_row: int) -> str:
     return "\n".join(line.strip() for line in lines[start:end])[:1000]
 
 
+def _syntax_finding(language: str, line: int, message: str, text: str) -> Occurrence:
+    return _occurrence(
+        f"{language} syntax error", line, "parser",
+        message + "\n" + _source_excerpt(text, line, line),
+        channel=_SYNTAX_CHANNEL, blocking=False,
+    )
+
+
 def _python_findings(text: str, path: Path, *, include_advisory: bool = True) -> list[Occurrence]:
     if not text:
         return []
@@ -953,6 +988,10 @@ def _python_findings(text: str, path: Path, *, include_advisory: bool = True) ->
     rows: list[Occurrence] = []
     for item in raw:
         code = item.get("code")
+        if code == "invalid-syntax":
+            line = int(item["location"]["row"])
+            rows.append(_syntax_finding("Python", line, item["message"], text))
+            continue
         if code not in labels:
             continue
         message = str(item.get("message") or "")
@@ -1021,6 +1060,8 @@ def _discarded_async_assertion(item: dict, span: dict, source: bytes) -> bool:
 
 
 def _node_findings(text: str, path: Path, *, include_advisory: bool = True) -> list[Occurrence]:
+    if not text:
+        return []
     executable = shutil.which("oxlint")
     if executable is None:
         raise RuntimeError("oxlint unavailable")
@@ -1072,7 +1113,8 @@ def _node_findings(text: str, path: Path, *, include_advisory: bool = True) -> l
     source_bytes = text.encode("utf-8") if check_tests else b""
     for item in raw["diagnostics"]:
         code = _normalized_oxlint_code(item.get("code"))
-        if code not in labels and not (check_tests and code == "valid-expect"):
+        parser_error = not code and item.get("severity") == "error"
+        if not (parser_error or code in labels or (check_tests and code == "valid-expect")):
             continue
         diagnostic_labels = item.get("labels") or []
         span = (
@@ -1081,6 +1123,10 @@ def _node_findings(text: str, path: Path, *, include_advisory: bool = True) -> l
             else {}
         )
         row = int(span.get("line") or 0)
+        if parser_error:
+            language = "TypeScript" if path.suffix.lower() in _TS_EXTENSIONS else "JavaScript"
+            rows.append(_syntax_finding(language, row, item["message"], text))
+            continue
         end_row = int(span.get("line_end") or row)
         security = code in _OXLINT_SECURITY_LABELS
         if code == "valid-expect":
@@ -1104,7 +1150,7 @@ def _node_findings(text: str, path: Path, *, include_advisory: bool = True) -> l
     return rows
 
 
-def _run_review_tool(tool: str, args: list[str], text: str) -> object:
+def _run_review_command(tool: str, args: list[str], text: str) -> subprocess.CompletedProcess[str]:
     executable = shutil.which(tool)
     if executable is None:
         raise RuntimeError(f"{tool} unavailable")
@@ -1117,7 +1163,149 @@ def _run_review_tool(tool: str, args: list[str], text: str) -> object:
         )
     if completed.returncode not in {0, 1}:
         raise RuntimeError(f"{tool} execution failed")
-    return json.loads(completed.stdout)
+    return completed
+
+
+def _run_review_tool(tool: str, args: list[str], text: str) -> object:
+    return json.loads(_run_review_command(tool, args, text).stdout)
+
+
+def _duplicate_key_finding(language: str, line: int | None, key: str) -> Occurrence:
+    return _occurrence(
+        f"{language} duplicate key", line, "mapping",
+        key, channel=_DUPLICATE_KEY_CHANNEL, blocking=False,
+    )
+
+
+_JSON_STRING = r'"(?:[^"\\]|\\.)*"'
+_JSONC_COMMENTS = re.compile(_JSON_STRING + r"|//[^\r\n]*|/\*[\s\S]*?\*/")
+_JSONC_TRAILING_COMMAS = re.compile(_JSON_STRING + r"|,(?=\s*[}\]])")
+
+
+def _json_findings(text: str, path: Path) -> list[Occurrence]:
+    def blank_comment_or_comma(match: re.Match[str]) -> str:
+        value = match[0]
+        return value if value.startswith('"') else re.sub(r"[^\r\n]", " ", value)
+
+    def count_keys(pairs: list[tuple[str, object]]) -> None:
+        # The stdlib gives the decoded key and its owning object, not a position.
+        for key, count in Counter(key for key, _ in pairs).items():
+            if count > 1:
+                rows.extend(_duplicate_key_finding("JSON", None, key) for _ in range(count - 1))
+
+    rows: list[Occurrence] = []
+    text = text.removeprefix("\ufeff")
+    if (
+        path.suffix.lower() == ".jsonc"
+        or re.fullmatch(r"(?:tsconfig|jsconfig)(?:\.[^.]+)*\.json", path.name)
+        or path.name == "devcontainer.json"
+        or path.parent.name == ".vscode"
+    ):
+        text = _JSONC_COMMENTS.sub(blank_comment_or_comma, text)
+        text = _JSONC_TRAILING_COMMAS.sub(blank_comment_or_comma, text)
+
+    def read_constant(value: str) -> None:
+        constants.add(value)
+
+    constants: set[str] = set()
+    try:
+        json.loads(text, object_pairs_hook=count_keys, parse_constant=read_constant,
+                   parse_int=str, parse_float=str)
+    except json.JSONDecodeError as error:
+        return [_syntax_finding("JSON", error.lineno, error.msg, text)]
+    if constants:
+        return [_occurrence("JSON syntax error", None, "parser", value,
+                            channel=_SYNTAX_CHANNEL, blocking=False) for value in sorted(constants)]
+    return rows
+
+
+def _toml_findings(text: str) -> list[Occurrence]:
+    try:
+        tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        # Python 3.11 and 3.12 expose the location only in the exception message.
+        message = str(error)
+        location = re.search(r" \(at (?:(?:line (\d+), column \d+)|end of document)\)$", message)
+        line = getattr(error, "lineno", None)
+        if location and line is None:
+            line = int(location[1]) if location[1] else 1 + text.count("\n")
+        if location:
+            message = message[:location.start()]
+        if message.startswith(("Cannot overwrite a value", "Cannot declare ",
+                               "Cannot redefine namespace", "Duplicate inline table key ")):
+            evidence = message + "\n" + _source_excerpt(text, line or 1, line or 1).split("=", 1)[0]
+            return [_duplicate_key_finding("TOML", line, evidence)]
+        return [_syntax_finding("TOML", line or 1, message, text)]
+    return []
+
+
+_YAML_DIAGNOSTIC = re.compile(
+    r"^stdin:(\d+):\d+: \[error\] (.*?) \((syntax|key-duplicates)\)(?:\n|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def _yaml_findings(text: str) -> list[Occurrence]:
+    result = _run_review_command(
+        "yamllint", ["--format", "parsable", "--config-data",
+                     '{"rules":{"key-duplicates":{"forbid-duplicated-merge-keys":true}}}', "-"],
+        text,
+    )
+    rows = []
+    offset = 0
+    for match in _YAML_DIAGNOSTIC.finditer(result.stdout):
+        if match.start() != offset:
+            break
+        offset = match.end()
+        line, message, rule = int(match[1]), match[2], match[3]
+        if rule == "key-duplicates":
+            rows.append(_duplicate_key_finding("YAML", line, message))
+        else:
+            rows.append(_syntax_finding("YAML", line, message, text))
+    if offset != len(result.stdout) or bool(result.returncode) != bool(rows):
+        raise RuntimeError("invalid yamllint output")
+    return rows
+
+
+def _sdk_syntax_findings(text: str, extension: str) -> list[Occurrence]:
+    language, tool = _SDK_SYNTAX_TOOLS[extension]
+    executable = shutil.which(tool)
+    if executable is None:
+        raise RuntimeError(f"{tool} unavailable")
+    with tempfile.TemporaryDirectory(prefix=f"mainframe-{tool}-") as directory:
+        root = Path(directory)
+        source = root / f"source{extension}"
+        source.write_text(text, encoding="utf-8")
+        environment = {**os.environ}
+        if tool == "dart":
+            # Take the already installed SDK behind Flutter's launcher, which
+            # can otherwise initialize or update the Flutter cache.
+            resolved = Path(executable).resolve()
+            sdk = resolved.parent / "cache/dart-sdk/bin/dart"
+            if (resolved.parent / "internal/shared.sh").is_file():
+                executable = shutil.which(sdk)
+                if executable is None:
+                    raise RuntimeError("Flutter's Dart SDK is unavailable")
+            args = ["--suppress-analytics", "format", "--output=none", source.name]
+        else:
+            (root / "mode").write_text("off\n", encoding="utf-8")
+            environment["TEST_TELEMETRY_DIR"] = directory
+            args = ["-l", source.name]
+        result = subprocess.run(
+            [executable, *args], capture_output=True, encoding="utf-8",
+            cwd=root, env=environment, timeout=1, check=False,
+        )
+    if not result.returncode:
+        return []
+    if tool == "dart" and result.returncode == 65:
+        match = re.search(r"(?m)^line (\d+), column \d+ of source\.dart: (.+)$", result.stderr)
+    elif tool == "gofmt" and result.returncode == 2:
+        match = re.search(r"(?m)^source\.go:(\d+):\d+: (.+)$", result.stderr)
+    else:
+        match = None
+    if match is None:
+        raise RuntimeError(f"{tool} did not report a syntax diagnostic")
+    return [_syntax_finding(language, int(match[1]), match[2], text)]
 
 
 def _diagnostic_rows(raw: object) -> list[dict]:
@@ -1231,7 +1419,8 @@ def _kube_findings(text: str) -> list[Occurrence]:
 
 def _migration_metadata(path: Path, workspace: Path) -> str:
     try:
-        return _read_source(path, workspace) or ""
+        source = _read_source(path, workspace)
+        return source.text if source else ""
     except RuntimeError:
         return ""
 
@@ -1331,6 +1520,10 @@ def _semgrep_security_findings(
 ) -> list[Occurrence]:
     if not _semgrep_candidate(text):
         return []
+    # The pinned Semgrep target selector skips the two Node TypeScript suffixes.
+    # Only the disposable parser input needs the .ts name.
+    if extension in {".mts", ".cts"}:
+        extension = ".ts"
     return _semgrep_findings(text, extension, _SEMGREP_CONFIG, _SEMGREP_LABELS, _SEMGREP_SECURITY_CHANNEL)
 
 
@@ -1656,7 +1849,7 @@ def _normalize_paths(
             continue
         if not _inside_workspace(candidate, workspace):
             continue
-        if candidate.suffix.lower() not in CODE_EXTENSIONS and candidate.suffix.lower() not in _YAML_EXTENSIONS:
+        if candidate.suffix.lower() not in _EDIT_EXTENSIONS:
             continue
         if candidate not in result:
             if len(result) >= MAX_FILES_PER_EDIT:
@@ -1666,16 +1859,16 @@ def _normalize_paths(
     return result, truncated
 
 
-def _read_source(path: Path, workspace: Path) -> str | None:
+def _read_source(path: Path, workspace: Path) -> SourceSnapshot | None:
     try:
         resolved = path.resolve()
         if resolved != path or not _inside_workspace(resolved, workspace) or path.is_symlink():
             return None
         if path.stat().st_size > MAX_FILE_BYTES:
             return None
-        text = path.read_text(encoding="utf-8", errors="replace")
+        source = SourceSnapshot(path.read_text(encoding="utf-8", errors="replace"), True)
     except FileNotFoundError:
-        text = ""
+        source = SourceSnapshot("", False)
     except OSError:
         return None
     try:
@@ -1688,17 +1881,57 @@ def _read_source(path: Path, workspace: Path) -> str | None:
             return None
     except OSError:
         return None
-    return text
+    return source
+
+
+def _is_helm_template(text: str, path: Path, workspace: Path) -> bool:
+    if "{{" not in text:
+        return False
+    for parent in path.parents:
+        if parent == workspace:
+            break
+        if parent.name == "templates" and (parent.parent / "Chart.yaml").is_file():
+            return True
+    return False
+
+
+def _scan_syntax_advice(
+    source: SourceSnapshot, extension: str, path: Path, workspace: Path,
+) -> tuple[list[Occurrence], tuple[str, ...], ScanIssue | None]:
+    text = source.text
+    channels = (_SYNTAX_CHANNEL,)
+    if extension in _SDK_SYNTAX_TOOLS:
+        _, tool = _SDK_SYNTAX_TOOLS[extension]
+        scanner, args = _sdk_syntax_findings, (text, extension)
+    else:
+        channels += (_DUPLICATE_KEY_CHANNEL,)
+        if extension in _JSON_EXTENSIONS:
+            tool, scanner, args = "JSON parser", _json_findings, (text, path)
+        elif extension == ".toml":
+            tool, scanner, args = "TOML parser", _toml_findings, (text,)
+        elif _is_helm_template(text, path, workspace):
+            # Rendered Helm output is YAML. The template source is not.
+            return [], (), None
+        else:
+            tool, scanner, args = "yamllint", _yaml_findings, (text,)
+    if not source.exists:
+        return [], channels, None
+    try:
+        return scanner(*args), channels, None
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
+        issue = ScanIssue(f"scanner:{tool}", f"{tool} syntax or key review was unavailable for the edited file.")
+        return [], (), issue
 
 
 def _scan_source(
-    text: str,
+    source: SourceSnapshot,
     extension: str,
     path: Path,
     workspace: Path,
     *,
     include_advisory: bool,
 ) -> ScanResult:
+    text = source.text
     rows: list[Occurrence] = []
     channels: set[str] = set()
     issues: list[ScanIssue] = []
@@ -1720,13 +1953,12 @@ def _scan_source(
             rows.extend(_python_findings(text, path, include_advisory=include_advisory))
             channels.add(_PYTHON_SECURITY_CHANNEL)
             if include_advisory:
-                channels.add(_PYTHON_ASYNC_CHANNEL)
-                channels.add(_PYTHON_ERROR_CHANNEL)
-                channels.add(_PYTHON_CORRECTNESS_CHANNEL)
+                channels.update((_SYNTAX_CHANNEL, _PYTHON_ASYNC_CHANNEL, _PYTHON_ERROR_CHANNEL,
+                                 _PYTHON_CORRECTNESS_CHANNEL))
         except Exception:
             message = "Python security scanning is unavailable; Ruff safety rules were not checked."
             if include_advisory:
-                message += " Python async, error-handling, and test rules were also unavailable."
+                message += " Python syntax, async, error-handling, and test rules were also unavailable."
             issues.append(
                 ScanIssue(
                     "scanner:python-security",
@@ -1740,13 +1972,13 @@ def _scan_source(
             rows.extend(_node_findings(text, path, include_advisory=include_advisory))
             channels.add(_NODE_SECURITY_CHANNEL)
             if include_advisory:
-                channels.add(_NODE_CORRECTNESS_CHANNEL)
+                channels.update((_SYNTAX_CHANNEL, _NODE_CORRECTNESS_CHANNEL))
             if check_tests:
                 channels.add(_NODE_TEST_CHANNEL)
         except Exception:
             message = "JavaScript security scanning is unavailable; Oxlint safety rules were not checked."
             if include_advisory:
-                message += " JavaScript error-handling and Promise rules were also unavailable."
+                message += " JavaScript and TypeScript syntax, error-handling, and Promise rules were also unavailable."
             if check_tests:
                 message += " Async test assertions were not checked."
             issues.append(
@@ -1768,6 +2000,12 @@ def _scan_source(
                 )
 
     if include_advisory:
+        if extension in _CONFIG_EXTENSIONS or extension in _SDK_SYNTAX_TOOLS:
+            findings, syntax_channels, issue = _scan_syntax_advice(source, extension, path, workspace)
+            rows.extend(findings)
+            channels.update(syntax_channels)
+            if issue:
+                issues.append(issue)
         if extension == ".go":
             try:
                 rows.extend(_pgxpool_findings(text))
@@ -1787,8 +2025,7 @@ def _scan_source(
         growth = _growth_metrics(text, extension)
     except Exception:
         growth = None
-    revision = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
-    return ScanResult(rows, frozenset(channels), tuple(issues), revision, growth)
+    return ScanResult(rows, frozenset(channels), tuple(issues), source.revision, growth)
 
 
 def _read_scan(
@@ -1797,8 +2034,8 @@ def _read_scan(
     *,
     include_advisory: bool,
 ) -> ScanResult:
-    text = _read_source(path, workspace)
-    if text is None:
+    source = _read_source(path, workspace)
+    if source is None:
         return ScanResult(
             [],
             frozenset(),
@@ -1811,7 +2048,7 @@ def _read_scan(
             None,
         )
     return _scan_source(
-        text,
+        source,
         path.suffix.lower(),
         path,
         workspace,
@@ -1822,11 +2059,8 @@ def _read_scan(
 def _revision_matches(path: Path, workspace: Path, revision: str | None) -> bool:
     if revision is None:
         return False
-    text = _read_source(path, workspace)
-    if text is None:
-        return False
-    current = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
-    return current == revision
+    source = _read_source(path, workspace)
+    return source is not None and source.revision == revision
 
 
 def _serialize_counts(rows: list[Occurrence]) -> dict[str, dict[str, object]]:
@@ -2003,11 +2237,12 @@ def _revalidate_path(
     if not records:
         return False
     counts = Counter(row.fingerprint for row in scan.rows)
+    revalidation_channels = scan.revalidation_channels
     unavailable = False
     for fingerprint, record in list(records.items()):
         baseline = record.get("baseline") if isinstance(record, dict) else None
         channel = record.get("channel", "markers") if isinstance(record, dict) else None
-        if not isinstance(channel, str) or channel not in scan.channels:
+        if not isinstance(channel, str) or channel not in revalidation_channels:
             unavailable = True
             continue
         if not isinstance(baseline, int) or counts.get(fingerprint, 0) <= baseline:
@@ -2047,7 +2282,7 @@ def _review_advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> st
         return (
             "Code review advice for newly introduced findings:\n"
             + body
-            + "\nVerify how the affected path handles errors and completes."
+            + "\nReview the affected line or configuration."
         )
     return (
         "Security review advice for newly introduced code:\n"
@@ -2279,6 +2514,7 @@ def _current_unresolved(
                 )
             )
         records = active.get(raw_path, {})
+        revalidation_channels = scan.revalidation_channels
         counts = Counter(row.fingerprint for row in scan.rows)
         by_fingerprint: dict[str, list[Occurrence]] = {}
         for row in scan.rows:
@@ -2286,7 +2522,7 @@ def _current_unresolved(
         for fingerprint, record in records.items():
             baseline = record.get("baseline") if isinstance(record, dict) else None
             channel = record.get("channel", "markers") if isinstance(record, dict) else None
-            if not isinstance(channel, str) or channel not in scan.channels:
+            if not isinstance(channel, str) or channel not in revalidation_channels:
                 continue
             if not isinstance(baseline, int) or baseline < 0:
                 issues.append(

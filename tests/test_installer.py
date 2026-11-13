@@ -764,6 +764,36 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(self.invoke_payload("mainframe-code-quality", event("PostToolUse", "repair")).stdout, "")
         self.assertEqual(self.invoke_payload("mainframe-code-quality", stop).stdout, "")
 
+    def test_code_quality_advises_on_first_patch_in_unconfigured_workspace(self):
+        self.install()
+        workspace = (Path(self.temporary.name) / "empty").resolve()
+        workspace.mkdir()
+        event = {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {
+                "command": "*** Begin Patch\n*** Add File: new/worker.mts\n"
+                           "+export const result: number = ;\n"
+                           "*** Add File: new/config.json\n+{\"limit\": 1, \"limit\": 2}\n"
+                           "*** End Patch\n",
+            },
+            "session_id": "quality-first-patch",
+            "tool_use_id": "write",
+            "cwd": str(workspace),
+        }
+        before = self.invoke_payload("mainframe-code-quality", event)
+        self.assertEqual((before.returncode, before.stdout, before.stderr), (0, "", ""))
+        (workspace / "new").mkdir()
+        (workspace / "new" / "worker.mts").write_text("export const result: number = ;\n")
+        (workspace / "new" / "config.json").write_text('{"limit": 1, "limit": 2}\n')
+        after = self.invoke_payload(
+            "mainframe-code-quality", {**event, "hook_event_name": "PostToolUse"},
+        )
+        self.assertEqual((after.returncode, after.stderr), (0, ""))
+        advice = json.loads(after.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("new/worker.mts:1 — TypeScript syntax error", advice)
+        self.assertIn("new/config.json — JSON duplicate key", advice)
+
     def test_permission_comments_are_preserved_for_a_bounded_handoff(self):
         raw = b'[sandbox_workspace_write]\nwritable_roots = [\n  "/user", # important user annotation\n]\n'
         result, _, note = merge_permission(raw, "/feedback", {})

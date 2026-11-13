@@ -26,6 +26,7 @@ from .core import (
 TOOL_SPECS = {
     "ruff": ("python", "ruff", "0.15.15"),
     "semgrep": ("python", "semgrep", "1.164.0"),
+    "yamllint": ("python", "yamllint", "1.38.0"),
     "oxlint": ("node", "oxlint", "1.67.0"),
     "fallow": ("node", "fallow", "2.92.1"),
     "shellcheck": ("release", "koalaman/shellcheck", "0.11.0"),
@@ -33,7 +34,7 @@ TOOL_SPECS = {
     "kube-linter": ("release", "stackrox/kube-linter", "0.8.3"),
     "squawk": ("release", "sbdchd/squawk", "2.72.0"),
 }
-CODE_QUALITY_TOOLS = ("ruff", "oxlint", "semgrep", "shellcheck", "actionlint", "kube-linter", "squawk")
+CODE_QUALITY_TOOLS = ("ruff", "oxlint", "semgrep", "yamllint", "shellcheck", "actionlint", "kube-linter", "squawk")
 FALLOW_TOOLS = ("fallow",)
 OPENSPEC_TOOLS = ("openspec",)
 OPENSPEC_PACKAGE = "@fission-ai/openspec"

@@ -120,7 +120,7 @@ repeatedly inspecting only one fixed directory prefix can starve cleanup.
 
 ## Runtime support
 
-Ruff, Oxlint, Semgrep, ShellCheck, actionlint, KubeLinter, Squawk, and Fallow are
+Ruff, Oxlint, Semgrep, yamllint, ShellCheck, actionlint, KubeLinter, Squawk, and Fallow are
 hook runtime dependencies. The maintained installer prepares them before
 changing an active hook's files or registration. It reuses compatible resolved
 executables or installs the tested official distributions in shared
@@ -131,6 +131,10 @@ required support is unavailable. Preserve bounded execution, isolated scanner
 configuration, disabled metrics and telemetry, and the catalog's representative
 checks. Do not install a tool's own hooks as a substitute for the MAINFRAME
 trigger contract.
+
+The Go and Dart syntax checks use SDK executables already on the hook's
+`PATH`. A missing SDK produces one advisory per execution scope when a file
+of that language is edited.
 
 Product uninstall retains this shared runtime because another MAINFRAME adapter
 may still use it. A later apply or verify rechecks every required executable and

@@ -244,6 +244,34 @@ class ZCodeHookFixture(unittest.TestCase):
         self.assertEqual(repaired.stdout, "")
         self.assertEqual(self.invoke("mainframe-code-quality", stop).stdout, "")
 
+    def test_code_quality_advises_on_first_write_in_unconfigured_workspace(self):
+        project = (Path(self.temporary.name) / "empty").resolve()
+        project.mkdir()
+        for filename, source, finding in (
+            ("worker.cts", "export const result: number = ;\n", ":1 — TypeScript syntax error"),
+            ("settings.yml", "limit: 1\nlimit: 2\n", ":2 — YAML duplicate key"),
+        ):
+            with self.subTest(filename=filename):
+                path = project / "new" / filename
+                event = {
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Write",
+                    "tool_input": {"file_path": str(path)},
+                    "session_id": "quality-first-write",
+                    "tool_use_id": filename,
+                    "cwd": str(project),
+                }
+                before = self.invoke("mainframe-code-quality", event)
+                self.assertEqual((before.returncode, before.stdout, before.stderr), (0, "", ""))
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(source, encoding="utf-8")
+                after = self.invoke(
+                    "mainframe-code-quality", {**event, "hook_event_name": "PostToolUse"},
+                )
+                self.assertEqual((after.returncode, after.stderr), (0, ""))
+                advice = json.loads(after.stdout)["hookSpecificOutput"]["additionalContext"]
+                self.assertIn(f"new/{filename}{finding}", advice)
+
     def git(self, root, *args):
         return subprocess.run(["git", "-C", str(root), *args], check=True,
                               capture_output=True, timeout=5)

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import threading
 import time
@@ -397,6 +398,196 @@ class CodeQualityTests(unittest.TestCase):
         broken.write_text("if true; then\n", encoding="utf-8")
         self.assertIn("ShellCheck SC1073", self.after("shell", "malformed").advisory or "")
 
+    def test_source_syntax_is_advisory_on_first_write(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        self.scanners[1].side_effect = NODE_FINDINGS
+        cases = {
+            ".py": ("value = None\nresult = )\n", "Python"),
+            ".pyi": ("def result( -> None: ...\n", "Python"),
+            ".js": ("const result = ;\n", "JavaScript"),
+            ".tsx": ("const result = <span>\n", "TypeScript"),
+            ".mts": ("export const result: number = ;\n", "TypeScript"),
+            ".cts": ("export const result: number = ;\n", "TypeScript"),
+        }
+        for extension, (source, language) in cases.items():
+            with self.subTest(extension=extension):
+                path = self.workspace / "new" / f"worker{extension}"
+                self.assertEqual(self.capture(extension, "create", path), QUALITY.QualityResult())
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(source, encoding="utf-8")
+                result = self.after(extension, "create")
+                self.assertIn(f"worker{extension}:", result.advisory or "")
+                self.assertIn(f"{language} syntax error", result.advisory or "")
+                self.assertIsNone(result.block_reason)
+                self.assertEqual(self.completion(extension), QUALITY.QualityResult())
+
+    def test_go_syntax_checks_a_complete_file_without_formatting(self) -> None:
+        path = self.workspace / "worker.go"
+        self.assertEqual(self.capture("go", "create", path), QUALITY.QualityResult())
+        path.write_text("func run() {}\n", encoding="utf-8")
+        self.assertIn("worker.go:1 — Go syntax error", self.after("go", "create").advisory or "")
+        self.assertEqual(self.completion("go"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("go", "repair", path), QUALITY.QualityResult())
+        valid = "package jobs\nfunc run(){println(1)}\n"
+        path.write_text(valid, encoding="utf-8")
+        self.assertEqual(self.after("go", "repair"), QUALITY.QualityResult())
+        self.assertEqual(path.read_text(encoding="utf-8"), valid)
+
+    def test_dart_syntax_is_reviewed_without_formatting(self) -> None:
+        path = self.workspace / "worker.dart"
+        self.assertEqual(self.capture("dart", "create", path), QUALITY.QualityResult())
+        source = "void main() {\n  final result = ;\n}\n"
+        path.write_text(source, encoding="utf-8")
+        failed_parse = subprocess.CompletedProcess(
+            ["dart", "format"], 65, "",
+            "Could not format because the source could not be parsed:\n\n"
+            "line 2, column 18 of source.dart: Expected an identifier.\n",
+        )
+        # The Dart SDK is optional. Keep the detector contract exercised in CI
+        # even on a host without a Dart installation.
+        with (
+            mock.patch.object(QUALITY.shutil, "which", return_value="/usr/bin/dart"),
+            mock.patch.object(QUALITY.subprocess, "run", return_value=failed_parse) as run,
+        ):
+            self.assertIn("worker.dart:2 — Dart syntax error", self.after("dart", "create").advisory or "")
+        self.assertEqual(run.call_args.args[0][1:4], ["--suppress-analytics", "format", "--output=none"])
+        self.assertEqual(path.read_text(encoding="utf-8"), source)
+        self.assertEqual(self.completion("dart"), QUALITY.QualityResult())
+
+    def test_node_module_extensions_keep_security_and_test_checks(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        self.scanners[2].side_effect = SEMGREP_SECURITY_FINDINGS
+        source = (
+            'const agent = new https.Agent({ rejectUnauthorized: false });\n'
+            'eval(input);\n'
+            'test("rejects", () => {\n'
+            '    expect(run()).rejects.toThrow();\n'
+            '});\n'
+        )
+        for extension in (".mts", ".cts"):
+            with self.subTest(extension=extension):
+                path = self.workspace / f"worker.test{extension}"
+                self.assertEqual(self.capture(extension, "create", path), QUALITY.QualityResult())
+                path.write_text(source, encoding="utf-8")
+                advice = self.after(extension, "create").advisory or ""
+                self.assertIn("JavaScript security: eval()", advice)
+                self.assertIn("TLS verification disabled", advice)
+                self.assertIn("the test discards an async assertion", advice)
+                self.assertIn("JavaScript security: eval()", self.completion(extension).block_reason or "")
+
+    def test_syntax_error_does_not_clear_an_attributed_security_finding(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        self.scanners[1].side_effect = NODE_FINDINGS
+        for extension, risky, malformed, label in (
+            (".py", "eval(user_input)\n", "result = )\n", "Python security S307"),
+            (".mts", "eval(userInput);\n", "const result = ;\n", "JavaScript security: eval()"),
+        ):
+            with self.subTest(extension=extension):
+                path = self.workspace / f"worker{extension}"
+                self.assertEqual(self.capture(extension, "introduce", path), QUALITY.QualityResult())
+                path.write_text(risky, encoding="utf-8")
+                self.assertIn(label, self.after(extension, "introduce").advisory or "")
+
+                self.assertEqual(self.capture(extension, "break", path), QUALITY.QualityResult())
+                path.write_text(risky + malformed, encoding="utf-8")
+                self.assertIn("syntax error", self.after(extension, "break").advisory or "")
+                self.assertIsNone(self.completion(extension).block_reason)
+
+                self.capture(extension, "repair", path)
+                path.write_text(risky, encoding="utf-8")
+                self.assertEqual(self.after(extension, "repair"), QUALITY.QualityResult())
+                self.assertIn(label, self.completion(extension).block_reason or "")
+
+                scope = extension + "-repair"
+                self.assertEqual(self.capture(scope, "malformed", path), QUALITY.QualityResult())
+                path.write_text(malformed, encoding="utf-8")
+                self.after(scope, "malformed")
+                self.assertEqual(self.capture(scope, "first-valid", path), QUALITY.QualityResult())
+                path.write_text(risky, encoding="utf-8")
+                self.assertIn(label, self.after(scope, "first-valid").advisory or "")
+                self.assertIn(label, self.completion(scope).block_reason or "")
+
+    def test_config_duplicate_keys_on_first_write_and_unrelated_edits(self) -> None:
+        cases = {
+            "config.json": ('{"limits": {"workers": 4, "workers": 400}, "keep": 1}\n', "JSON"),
+            "config.yml": ("limits:\n  workers: 4\n  workers: 400\nkeep: 1\n", "YAML"),
+            "config.yaml": (
+                'limits: {workers: 4, "workers": 400}\n'
+                '? "multi\\nline"\n: first\n? "multi\\nline"\n: second\nkeep: 1\n',
+                "YAML",
+            ),
+            "config.toml": ("keep = 1\n[limits]\nworkers = 4\nworkers = 400\n", "TOML"),
+        }
+        for name, (source, language) in cases.items():
+            with self.subTest(name=name):
+                path = self.workspace / "config" / name
+                self.assertEqual(self.capture(name, "create", path), QUALITY.QualityResult())
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(source, encoding="utf-8")
+                advice = self.after(name, "create").advisory or ""
+                self.assertIn(f"config/{name}", advice)
+                self.assertIn(f"{language} duplicate key", advice)
+                if name == "config.yaml":
+                    self.assertEqual(advice.count("YAML duplicate key"), 2)
+                self.assertNotIn("workers", advice)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+
+                self.assertEqual(self.capture(name, "unrelated", path), QUALITY.QualityResult())
+                path.write_text(source.replace("1", "2"), encoding="utf-8")
+                self.assertEqual(self.after(name, "unrelated"), QUALITY.QualityResult())
+
+    def test_json_with_comments_checks_duplicate_keys_without_style_warnings(self) -> None:
+        path = self.workspace / "tsconfig.app.json"
+        self.assertEqual(self.capture("tsconfig", "create", path), QUALITY.QualityResult())
+        valid = '{ // build settings\n "include": ["src/**"], /* sources */\n}\n'
+        path.write_text(valid, encoding="utf-8")
+        self.assertEqual(self.after("tsconfig", "create"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("tsconfig", "duplicate", path), QUALITY.QualityResult())
+        path.write_text(valid.replace(' "include"', ' "include": [],\n "include"'), encoding="utf-8")
+        self.assertIn("JSON duplicate key", self.after("tsconfig", "duplicate").advisory or "")
+
+    def test_config_scopes_and_yaml_document_boundaries(self) -> None:
+        cases = {
+            "config.json": '{"a": {"name": "a"}, "b": {"name": "b"}}\n',
+            "config.yaml": (
+                "on: &defaults {name: a}\n"
+                "jobs: {<<: *defaults, name: b}\n"
+                "child: !reference [job, script]\n"
+                "---\non: {name: c}\n"
+            ),
+            "config.toml": '[[jobs]]\nname = "a"\n[[jobs]]\nname = "b"\n',
+        }
+        for name, source in cases.items():
+            with self.subTest(name=name):
+                path = self.workspace / name
+                self.assertEqual(self.capture(name, "create", path), QUALITY.QualityResult())
+                path.write_text(source, encoding="utf-8")
+                self.assertEqual(self.after(name, "create"), QUALITY.QualityResult())
+
+    def test_helm_template_is_not_mistaken_for_plain_yaml(self) -> None:
+        chart = self.workspace / "chart"
+        path = chart / "templates" / "deployment.yaml"
+        path.parent.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text("name: sample\n", encoding="utf-8")
+        self.assertEqual(self.capture("helm", "create", path), QUALITY.QualityResult())
+        path.write_text("{{- if .Values.enabled }}\nkind: Deployment\n{{- end }}\n", encoding="utf-8")
+        self.assertEqual(self.after("helm", "create"), QUALITY.QualityResult())
+
+    def test_config_syntax_is_reported_from_first_write(self) -> None:
+        for filename, text, label in (
+            ("settings.json", "", "JSON syntax error"),
+            ("settings.yml", "items: [1, 2\n", "YAML syntax error"),
+            ("settings.toml", "items = [1, 2\n", "TOML syntax error"),
+        ):
+            with self.subTest(filename=filename):
+                path = self.workspace / filename
+                self.assertEqual(self.capture(filename, "create", path), QUALITY.QualityResult())
+                path.write_text(text, encoding="utf-8")
+                self.assertIn(label, self.after(filename, "create").advisory or "")
+                self.assertEqual(self.completion(filename), QUALITY.QualityResult())
+
     def test_actionlint_checks_workflows_from_first_write(self) -> None:
         source = (
             "on: [push]\n"
@@ -410,9 +601,10 @@ class CodeQualityTests(unittest.TestCase):
         file = self.workspace / ".github" / "workflows" / "release.yml"
         self.assertEqual(self.capture("workflow", "create", file), QUALITY.QualityResult())
         file.parent.mkdir(parents=True)
-        file.write_text(source, encoding="utf-8")
+        file.write_text("on: [push]\n" + source, encoding="utf-8")
         advice = self.after("workflow", "create").advisory or ""
-        self.assertIn(".github/workflows/release.yml:3 — actionlint", advice)
+        self.assertIn(".github/workflows/release.yml:4 — actionlint", advice)
+        self.assertIn(".github/workflows/release.yml:2 — YAML duplicate key", advice)
         self.assertIn("job dependency is missing or cyclic", advice)
         self.assertNotIn("custom-self-hosted", advice)
         self.assertEqual(self.completion("workflow"), QUALITY.QualityResult())
@@ -470,7 +662,7 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.capture("kube", "plain-yaml", invalid), QUALITY.QualityResult())
         invalid.write_text(config, encoding="utf-8")
         with mock.patch.object(QUALITY, "_run_review_tool", side_effect=AssertionError("unexpected tool")):
-            self.assertEqual(self.after("kube", "plain-yaml"), QUALITY.QualityResult())
+            self.assertIn("YAML syntax error", self.after("kube", "plain-yaml").advisory or "")
 
     def test_squawk_checks_recognized_postgresql_migrations_on_first_edit(self) -> None:
         root = self.workspace / "service" / "prisma" / "migrations"

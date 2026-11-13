@@ -271,6 +271,8 @@ Treat `mainframe-code-quality.py` as one component with these fixed effects:
 - a post-edit advisory for newly introduced assertions that can pass without
   testing their intended behavior, and Python background tasks without a
   retained reference;
+- a post-edit advisory for new syntax errors or duplicate configuration keys
+  in the supported formats, starting with file creation;
 - a post-edit advisory for newly introduced errors in shell scripts, GitHub
   Actions workflows, Kubernetes workloads, or recognized PostgreSQL migrations;
 - a post-edit advisory for Go code that discards rows or a connection from
@@ -376,7 +378,8 @@ Also select `F631` for truthy tuple assertions, `PT012` for multi-statement
 `pytest.raises` blocks, and `RUF006` for discarded `asyncio` task references.
 
 For JavaScript and TypeScript, run Oxlint with nested configuration and ignores
-disabled. Select `no-eval`, `no-new-func`, `no-script-url`, and `no-implied-eval`
+disabled. Apply the TypeScript checks to `.ts`, `.tsx`, `.mts`, and `.cts`.
+Select `no-eval`, `no-new-func`, `no-script-url`, and `no-implied-eval`
 for security and `no-unsafe-finally` and `no-async-promise-executor` for review.
 Supply the canonical read-only `setTimeout`, `setInterval`, and `window` globals
 so `no-implied-eval` works without consuming project lint settings.
@@ -385,6 +388,11 @@ In `*.test.*`, `*.spec.*`, and `__tests__/` sources, use Oxlint's
 and Vitest. Report only unawaited assertions whose result is clearly
 discarded. The pinned analyzer also flags some valid code, such as an
 assertion that is saved and awaited later.
+
+Report Python and JavaScript/TypeScript parser diagnostics from the existing
+Ruff and Oxlint invocations. A failed parse cannot confirm that an existing
+security finding was removed. Keep its attribution until a successful scan
+can revalidate it.
 
 Both scanners include the review rules on the first supported edit, including
 new files, without project configuration. Report only newly introduced
@@ -412,14 +420,17 @@ Use static diagnostic descriptions and compare only new findings. See
 
 | Tool | Automatic scope | Reported findings |
 | --- | --- | --- |
+| `gofmt` and `dart format` | `.go` and `.dart` with the corresponding local SDK executable on `PATH`. Use the existing Dart SDK bundled with Flutter when present. | Syntax errors. Invoke the parser on the snapshot without formatting the project file or fetching dependencies. |
+| Python standard library | `.json`, `.jsonc`, and `.toml`. Accept JSON comments and trailing commas in `.jsonc`, TypeScript and JavaScript config names, `devcontainer.json`, and files in `.vscode/`. | Syntax errors and duplicate keys. JSON reports the file when a duplicate has no parser position. TOML reports the first parser diagnostic using the hook's Python version. |
+| yamllint | `.yml` and `.yaml`. Skip Helm template sources and honor yamllint's inline directives. | YAML syntax errors and repeated keys in the same mapping. YAML syntax and key review runs alongside workflow and Kubernetes checks. |
 | ShellCheck | `.sh` and `.bash` with a supported interpreter or no shebang. | Shell parse errors, masked command failure, unchecked `cd`, and a pipeline that reads and writes the same file. |
 | actionlint | `.github/workflows/*.yml` and `.github/workflows/*.yaml` at the repository root. | Workflow YAML or schema errors, missing or cyclic job dependencies, and invalid identifiers, expressions, conditions, or matrices. |
 | KubeLinter | Plain Kubernetes deployment, stateful set, and daemon set YAML with a container specification. Skip Helm templates and recognized Kustomize overlays and patches. | A workload selector that does not match its pod template, or a container without a readiness probe. Check service selectors and routes against the rendered manifest set. |
 | Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, column type changes that can block access, and concurrent index creation inside an explicit SQL transaction. Runner-supplied PostgreSQL version, locks, and transaction policy require migration CI. |
 
 The code-quality hook uses its existing edit events and configured analyzer
-runtime paths. During adaptation, reuse executables at the tested versions or
-install the pinned distributions through the maintained shared runtime. Test
+runtime paths. During adaptation, reuse required executables at the tested
+versions or install their pinned distributions through the shared runtime. Test
 each with a harmless representative sample and
 stop installation before hook activation when a required scanner cannot be
 supplied. A missing, timed-out, malformed, or failed
