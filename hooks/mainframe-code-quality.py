@@ -610,7 +610,9 @@ PYTHON_FUNCTION_LENGTH_THRESHOLD = 60
 _FILE_GROWTH_EXTENSIONS = CODE_EXTENSIONS - {".sql"}
 _PYTHON_SECURITY_CHANNEL = "python-security"
 _PYTHON_ASYNC_CHANNEL = "python-async-advice"
+_PYTHON_ERROR_CHANNEL = "python-error-advice"
 _NODE_SECURITY_CHANNEL = "node-security"
+_NODE_CORRECTNESS_CHANNEL = "node-correctness-advice"
 _SEMGREP_SECURITY_CHANNEL = "semgrep-security-advice"
 _PYTHON_EXTENSIONS = {".py", ".pyi"}
 _NODE_EXTENSIONS = {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
@@ -630,12 +632,24 @@ _RUFF_ASYNC_LABELS = {
     "ASYNC230": "Python ASYNC230: blocking open() in async function",
     "ASYNC251": "Python ASYNC251: blocking time.sleep() in async function",
 }
+_RUFF_ERROR_LABELS = {
+    "S110": "Python S110: exception silently discarded by except ... pass",
+    "B012": "Python B012: control flow in finally can suppress an exception",
+}
 _RUFF_SHELL_RULES = {"S602", "S605"}
-_OXLINT_LABELS = {
+_OXLINT_SECURITY_LABELS = {
     "no-eval": "JavaScript security: eval()",
     "no-new-func": "JavaScript security: dynamic Function()",
     "no-script-url": "JavaScript security: javascript URL",
     "no-implied-eval": "JavaScript security: implicit string evaluation",
+}
+_OXLINT_CORRECTNESS_LABELS = {
+    "no-unsafe-finally": (
+        "JavaScript no-unsafe-finally: control flow in finally can suppress an exception"
+    ),
+    "no-async-promise-executor": (
+        "JavaScript no-async-promise-executor: an async executor rejection can leave the Promise pending"
+    ),
 }
 _OXLINT_CONFIG = {
     "globals": {
@@ -817,7 +831,7 @@ def _python_findings(text: str, path: Path, *, include_advisory: bool = True) ->
         raise RuntimeError("ruff unavailable")
     labels = _RUFF_SECURITY_LABELS
     if include_advisory:
-        labels = labels | _RUFF_ASYNC_LABELS
+        labels = labels | _RUFF_ASYNC_LABELS | _RUFF_ERROR_LABELS
     completed = subprocess.run(
         [
             executable,
@@ -860,13 +874,19 @@ def _python_findings(text: str, path: Path, *, include_advisory: bool = True) ->
         row = int((item.get("location") or {}).get("row") or 0)
         end_row = int((item.get("end_location") or {}).get("row") or row)
         security = code in _RUFF_SECURITY_LABELS
+        if security:
+            channel = _PYTHON_SECURITY_CHANNEL
+        elif code in _RUFF_ASYNC_LABELS:
+            channel = _PYTHON_ASYNC_CHANNEL
+        else:
+            channel = _PYTHON_ERROR_CHANNEL
         rows.append(
             _occurrence(
                 labels[code],
                 row,
                 "scanner",
                 _source_excerpt(text, row, end_row),
-                channel=_PYTHON_SECURITY_CHANNEL if security else _PYTHON_ASYNC_CHANNEL,
+                channel=channel,
                 blocking=security,
             )
         )
@@ -880,11 +900,14 @@ def _normalized_oxlint_code(value: object) -> str:
     return code
 
 
-def _node_security_findings(text: str, extension: str) -> list[Occurrence]:
+def _node_findings(text: str, extension: str, *, include_advisory: bool = True) -> list[Occurrence]:
     executable = shutil.which("oxlint")
     if executable is None:
         raise RuntimeError("oxlint unavailable")
-    with tempfile.TemporaryDirectory(prefix="mainframe-node-security-") as directory:
+    labels = _OXLINT_SECURITY_LABELS
+    if include_advisory:
+        labels = labels | _OXLINT_CORRECTNESS_LABELS
+    with tempfile.TemporaryDirectory(prefix="mainframe-node-quality-") as directory:
         root = Path(directory)
         config = root / "oxlint.json"
         source = root / f"source{extension}"
@@ -900,7 +923,7 @@ def _node_security_findings(text: str, extension: str) -> list[Occurrence]:
             "--no-ignore",
             "--format=json",
         ]
-        for rule in _OXLINT_LABELS:
+        for rule in labels:
             command.extend(["-D", rule])
         command.append(str(source))
         completed = subprocess.run(
@@ -925,19 +948,25 @@ def _node_security_findings(text: str, extension: str) -> list[Occurrence]:
     rows: list[Occurrence] = []
     for item in raw["diagnostics"]:
         code = _normalized_oxlint_code(item.get("code"))
-        if code not in _OXLINT_LABELS:
+        if code not in labels:
             continue
-        labels = item.get("labels") or []
-        span = labels[0].get("span", {}) if labels and isinstance(labels[0], dict) else {}
+        diagnostic_labels = item.get("labels") or []
+        span = (
+            diagnostic_labels[0].get("span", {})
+            if diagnostic_labels and isinstance(diagnostic_labels[0], dict)
+            else {}
+        )
         row = int(span.get("line") or 0)
         end_row = int(span.get("line_end") or row)
+        security = code in _OXLINT_SECURITY_LABELS
         rows.append(
             _occurrence(
-                _OXLINT_LABELS[code],
+                labels[code],
                 row,
                 "scanner",
                 _source_excerpt(text, row, end_row),
-                channel=_NODE_SECURITY_CHANNEL,
+                channel=_NODE_SECURITY_CHANNEL if security else _NODE_CORRECTNESS_CHANNEL,
+                blocking=security,
             )
         )
     return rows
@@ -1309,10 +1338,11 @@ def _scan_source(
             channels.add(_PYTHON_SECURITY_CHANNEL)
             if include_advisory:
                 channels.add(_PYTHON_ASYNC_CHANNEL)
+                channels.add(_PYTHON_ERROR_CHANNEL)
         except Exception:
             message = "Python security scanning is unavailable; Ruff safety rules were not checked."
             if include_advisory:
-                message += " Python async rules were also unavailable."
+                message += " Python async and error-handling rules were also unavailable."
             issues.append(
                 ScanIssue(
                     "scanner:python-security",
@@ -1322,13 +1352,18 @@ def _scan_source(
 
     if extension in _NODE_EXTENSIONS:
         try:
-            rows.extend(_node_security_findings(text, extension))
+            rows.extend(_node_findings(text, extension, include_advisory=include_advisory))
             channels.add(_NODE_SECURITY_CHANNEL)
+            if include_advisory:
+                channels.add(_NODE_CORRECTNESS_CHANNEL)
         except Exception:
+            message = "JavaScript security scanning is unavailable; Oxlint safety rules were not checked."
+            if include_advisory:
+                message += " JavaScript error-handling and Promise rules were also unavailable."
             issues.append(
                 ScanIssue(
                     "scanner:node-security",
-                    "JavaScript security scanning is unavailable; Oxlint safety rules were not checked.",
+                    message,
                 )
             )
         if include_advisory:
@@ -1597,11 +1632,11 @@ def _review_advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> st
     body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
-    if any(row.channel == _PYTHON_ASYNC_CHANNEL for _, row in rows):
+    if any(row.channel != _SEMGREP_SECURITY_CHANNEL for _, row in rows):
         return (
             "Code review advice for newly introduced findings:\n"
             + body
-            + "\nCheck whether the flagged calls can block the event loop or cross a trust boundary."
+            + "\nVerify how the affected path handles errors and completes."
         )
     return (
         "Security review advice for newly introduced code:\n"

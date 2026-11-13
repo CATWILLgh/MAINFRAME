@@ -18,7 +18,7 @@ assert SPEC is not None and SPEC.loader is not None
 QUALITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(QUALITY)
 PYTHON_FINDINGS = QUALITY._python_findings
-NODE_SECURITY_FINDINGS = QUALITY._node_security_findings
+NODE_FINDINGS = QUALITY._node_findings
 SEMGREP_SECURITY_FINDINGS = QUALITY._semgrep_security_findings
 
 
@@ -35,7 +35,7 @@ class CodeQualityTests(unittest.TestCase):
         self.workspace.mkdir()
         self.scanner_patchers = [
             mock.patch.object(QUALITY, "_python_findings", return_value=[]),
-            mock.patch.object(QUALITY, "_node_security_findings", return_value=[]),
+            mock.patch.object(QUALITY, "_node_findings", return_value=[]),
             mock.patch.object(QUALITY, "_semgrep_security_findings", return_value=[]),
         ]
         self.scanners = [patcher.start() for patcher in self.scanner_patchers]
@@ -224,6 +224,65 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.capture("scope", "repair", file), QUALITY.QualityResult())
         file.write_text(base, encoding="utf-8")
         self.assertEqual(self.after("scope", "repair"), QUALITY.QualityResult())
+
+    def test_python_swallowed_errors_are_advice_on_first_write(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        file = self.workspace / "worker.py"
+        source = (
+            "try:\n    start_job()\nexcept Exception:\n    pass\n\n"
+            "def finish_job():\n"
+            "    try:\n        return run_job()\n"
+            "    finally:\n        return None\n\n"
+            "attempts = 1\n"
+        )
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.write_text(source, encoding="utf-8")
+        result = self.after("scope", "create")
+        self.assertIn("worker.py:3 — Python S110", result.advisory or "")
+        self.assertIn("worker.py:10 — Python B012", result.advisory or "")
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(source.replace("attempts = 1", "attempts = 2"), encoding="utf-8")
+        self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
+
+    def test_javascript_error_handling_and_async_executor_are_advice_on_first_write(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        file = self.workspace / "worker.ts"
+        async_executor = "new Promise(async (resolve) => { resolve(await runJob()); })"
+        source = (
+            "export function finishJob() {\n"
+            "  try { return runJob(); }\n"
+            "  finally { return undefined; }\n"
+            "}\n"
+            f"export const job = {async_executor};\n"
+        )
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.write_text(source, encoding="utf-8")
+        result = self.after("scope", "create")
+        self.assertIn("worker.ts:3 — JavaScript no-unsafe-finally", result.advisory or "")
+        self.assertIn("worker.ts:5 — JavaScript no-async-promise-executor", result.advisory or "")
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "security-risk", file), QUALITY.QualityResult())
+        file.write_text(source + "eval(input);\n", encoding="utf-8")
+        result = self.after("scope", "security-risk")
+        self.assertIn("worker.ts:6 — JavaScript security: eval()", result.advisory or "")
+        self.assertNotIn("no-async-promise-executor", result.advisory or "")
+        blocked = self.completion("scope").block_reason or ""
+        self.assertIn("JavaScript security: eval()", blocked)
+        self.assertNotIn("no-unsafe-finally", blocked)
+        self.assertNotIn("no-async-promise-executor", blocked)
+
+        self.assertEqual(self.capture("scope", "repair", file), QUALITY.QualityResult())
+        repaired = source.replace("return undefined;", "cleanup();").replace(
+            async_executor, "Promise.resolve().then(runJob)"
+        )
+        file.write_text(repaired, encoding="utf-8")
+        self.assertEqual(self.after("scope", "repair"), QUALITY.QualityResult())
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
     def test_scanner_outage_does_not_hardlock_and_recovery_revalidates(self) -> None:
         finding = QUALITY._occurrence(
@@ -455,7 +514,7 @@ class CodeQualityTests(unittest.TestCase):
             "run",
             side_effect=oxlint_completed,
         ) as run:
-            rows = NODE_SECURITY_FINDINGS('setTimeout("work()", 1);\nalert(1);\n', ".ts")
+            rows = NODE_FINDINGS('setTimeout("work()", 1);\nalert(1);\n', ".ts")
         self.assertEqual(
             [row.label for row in rows],
             ["JavaScript security: implicit string evaluation"],
