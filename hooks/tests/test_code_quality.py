@@ -582,6 +582,72 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIn("Security review advice", advisory.advisory or "")
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
+    def test_pgxpool_advice_reports_new_discarded_resources_from_the_first_write(self) -> None:
+        file = self.workspace / "db" / "worker.go"
+        source = (
+            "package sample\n"
+            'import p "github.com/jackc/pgx/v5/pgxpool"\n'
+            "type Store struct { pool *p.Pool }\n"
+            "func (s *Store) discardQuery() error {\n"
+            '    _, err := s.pool.Query(ctx, "SELECT 1")\n'
+            "    return err\n"
+            "}\n"
+            "func discardAssigned(pool *p.Pool) error {\n"
+            '    rows, err := pool.Query(ctx, "SELECT 1")\n'
+            "    _ = rows\n"
+            "    return err\n"
+            "}\n"
+            "func discardConnection(pool *p.Pool) error {\n"
+            "    _, err := pool.Acquire(ctx)\n"
+            "    return err\n"
+            "}\n"
+            "func useRows(pool *p.Pool) error {\n"
+            '    rows, err := pool.Query(ctx, "SELECT 1")\n'
+            "    if err != nil { return err }\n"
+            "    defer rows.Close()\n"
+            "    for rows.Next() {}\n"
+            "    return rows.Err()\n"
+            "}\n"
+            "func giveRowsToCaller(pool *p.Pool) (any, error) {\n"
+            '    return pool.Query(ctx, "SELECT 1")\n'
+            "}\n"
+            "func useConnection(pool *p.Pool) error {\n"
+            "    conn, err := pool.Acquire(ctx)\n"
+            "    if err != nil { return err }\n"
+            "    defer conn.Release()\n"
+            "    return nil\n"
+            "}\n"
+        )
+        self.assertEqual(self.capture("go", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text(source, encoding="utf-8")
+        advice = self.after("go", "create").advisory or ""
+        self.assertIn("db/worker.go:5 — Go pgxpool.Query", advice)
+        self.assertIn("db/worker.go:9 — Go pgxpool.Query", advice)
+        self.assertIn("db/worker.go:14 — Go pgxpool.Acquire", advice)
+        self.assertEqual(advice.count(" — Go pgxpool."), 3)
+        self.assertNotIn("SELECT", advice)
+        self.assertEqual(self.completion("go"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("go", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(source + "\nconst limit = 5\n", encoding="utf-8")
+        self.assertEqual(self.after("go", "unrelated"), QUALITY.QualityResult())
+
+    def test_pgxpool_advice_skips_other_go_clients_without_invoking_semgrep(self) -> None:
+        file = self.workspace / "other.go"
+        self.assertEqual(self.capture("go", "create", file), QUALITY.QualityResult())
+        file.write_text(
+            'package other\nimport "example.invalid/pgxpool"\n'
+            "func use(pool *pgxpool.Pool) error {\n"
+            '    _, err := pool.Query(ctx, "SELECT 1")\n'
+            "    return err\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(QUALITY, "_semgrep_findings") as scan:
+            self.assertEqual(self.after("go", "create"), QUALITY.QualityResult())
+            scan.assert_not_called()
+
     def test_file_growth_crossing_is_advisory_and_never_blocks(self) -> None:
         file = self.workspace / "service.go"
         file.write_text(source_lines(399), encoding="utf-8")
@@ -811,6 +877,7 @@ class CodeQualityTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[command.index("--metrics") + 1], "off")
         self.assertIn("--disable-version-check", command)
+        self.assertNotIn("--experimental", command)
         self.assertEqual(command[command.index("--jobs") + 1], "1")
 
     def test_process_comments_are_targeted_not_generic(self) -> None:

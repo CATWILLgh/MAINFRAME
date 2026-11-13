@@ -273,6 +273,8 @@ Treat `mainframe-code-quality.py` as one component with these fixed effects:
   retained reference;
 - a post-edit advisory for newly introduced errors in shell scripts, GitHub
   Actions workflows, Kubernetes workloads, or recognized PostgreSQL migrations;
+- a post-edit advisory for Go code that discards rows or a connection from
+  `pgxpool` in a recognized pattern;
 - context-dependent Semgrep review advice that never blocks completion;
 - a `new-growth-pressure` structure advisory for a file or Python function that
   crosses a conservative size-review threshold in the current edit;
@@ -389,11 +391,18 @@ new files, without project configuration. Report only newly introduced
 findings. Completion revalidation keeps the security rules and leaves the
 correctness rules advisory.
 
-Run Semgrep only when a cheap source prefilter finds a candidate for dynamically
-constructed child-process execution or disabled HTTPS certificate verification.
-Use only the two embedded canonical rules, one job, bounded file, memory, and
-time limits, version checks disabled, and metrics off. Semgrep findings are
-review advice only and are never persisted as completion blockers.
+Run Semgrep only on candidate files. JavaScript and TypeScript retain their
+embedded checks for dynamic child-process execution and disabled TLS
+verification. For an edited `.go` file containing the pgx v5 pool import and a
+candidate discard, check explicit discarded results from `Query` or
+`Acquire` on a recognizable pool. The Go scan uses the pinned release's native
+CLI, a one-second deadline, and the before/after file snapshots. Its scope is
+the explicit discard patterns in that file. It does not trace a result through
+other files or prove that every exit from a function closes it.
+
+Semgrep runs the selected embedded rules locally with one job, bounded file
+and memory limits, disposable settings, version checks disabled, and metrics
+off. Findings are review advice and stay outside completion revalidation.
 
 Run the file-specific analyzers against the exact before and after source text
 in an isolated temporary directory. Bound each invocation to one second.

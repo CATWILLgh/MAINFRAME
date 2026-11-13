@@ -617,6 +617,7 @@ _NODE_SECURITY_CHANNEL = "node-security"
 _NODE_CORRECTNESS_CHANNEL = "node-correctness-advice"
 _NODE_TEST_CHANNEL = "node-test-advice"
 _SEMGREP_SECURITY_CHANNEL = "semgrep-security-advice"
+_SEMGREP_GO_CHANNEL = "semgrep-go-advice"
 _WORKFLOW_DIRECTORY = (".github", "workflows")
 _YAML_EXTENSIONS = {".yaml", ".yml"}
 _SHELL_EXTENSIONS = {".sh", ".bash"}
@@ -761,6 +762,39 @@ _SEMGREP_EXEC_CANDIDATE = re.compile(
     r"[\s\S]{0,400}?\.exec(?:Sync)?\s*\("
 )
 _SEMGREP_TLS_CANDIDATE = re.compile(r"\brejectUnauthorized\s*:\s*false\b")
+_PGXPOOL_IMPORT = '"github.com/jackc/pgx/v5/pgxpool"'
+_PGXPOOL_DISCARD = re.compile(r"\b_\s*(?:,|=[^=])")
+_PGXPOOL_CALL = re.compile(r"\.\s*(?:Query|Acquire)\s*\(")
+_PGXPOOL_HINTS = {
+    "Query": "discarded rows can hold a connection; close them or use Exec when no rows are needed",
+    "Acquire": "discarded connection cannot be released; retain it and call Release",
+}
+_PGXPOOL_LABELS = {
+    f"mainframe.go.pgxpool-{method.lower()}": f"Go pgxpool.{method}: {hint}"
+    for method, hint in _PGXPOOL_HINTS.items()
+}
+_PGXPOOL_RULES = {
+    "rules": [
+        {
+            "id": f"mainframe.go.pgxpool-{method.lower()}",
+            "languages": ["go"],
+            "message": hint,
+            "severity": "WARNING",
+            "patterns": [
+                {"pattern-either": [
+                    {"pattern": f"_, $ERR = $POOL.{method}(...)"},
+                    {"pattern": f"$RESOURCE, $ERR := $POOL.{method}(...)\n_ = $RESOURCE\nreturn $ERR"},
+                    {"pattern": (
+                        f"$RESOURCE, $ERR := $POOL.{method}(...)\n"
+                        "if $ERR != nil { return $ERR }\n_ = $RESOURCE\nreturn nil"
+                    )},
+                ]},
+                {"metavariable-type": {"metavariable": "$POOL", "type": "*pgxpool.Pool"}},
+            ],
+        }
+        for method, hint in _PGXPOOL_HINTS.items()
+    ],
+}
 
 
 def _growth_function_key(name: str) -> str:
@@ -1297,19 +1331,45 @@ def _semgrep_security_findings(
 ) -> list[Occurrence]:
     if not _semgrep_candidate(text):
         return []
+    return _semgrep_findings(text, extension, _SEMGREP_CONFIG, _SEMGREP_LABELS, _SEMGREP_SECURITY_CHANNEL)
+
+
+def _pgxpool_findings(text: str) -> list[Occurrence]:
+    if _PGXPOOL_IMPORT not in text or not _PGXPOOL_DISCARD.search(text) or not _PGXPOOL_CALL.search(text):
+        return []
+    return _semgrep_findings(
+        text, ".go", _PGXPOOL_RULES, _PGXPOOL_LABELS, _SEMGREP_GO_CHANNEL, native=True,
+    )
+
+
+def _semgrep_findings(
+    text: str, extension: str, config: dict, labels: dict[str, str], channel: str,
+    *, native: bool = False,
+) -> list[Occurrence]:
     executable = shutil.which("semgrep")
     if executable is None:
         raise RuntimeError("semgrep unavailable")
-    with tempfile.TemporaryDirectory(prefix="mainframe-semgrep-security-") as directory:
+    # The pinned native CLI avoids Python startup for this narrow Go check.
+    native_cli = ["--experimental"] if native else []
+    with tempfile.TemporaryDirectory(prefix="mainframe-semgrep-") as directory:
         root = Path(directory)
         rules = root / "rules.json"
         source = root / f"source{extension}"
-        rules.write_text(json.dumps(_SEMGREP_CONFIG), encoding="utf-8")
+        rules.write_text(json.dumps(config), encoding="utf-8")
         source.write_text(text, encoding="utf-8")
+        environment = {
+            **os.environ,
+            "XDG_CONFIG_HOME": str(root),
+            "XDG_CACHE_HOME": str(root),
+            "SEMGREP_LOG_FILE": str(root / "semgrep.log"),
+            "SEMGREP_SETTINGS_FILE": str(root / "settings.yml"),
+        }
+        environment.pop("SEMGREP_APP_TOKEN", None)
         completed = subprocess.run(
             [
                 executable,
                 "scan",
+                *native_cli,
                 "--config",
                 str(rules),
                 "--oss-only",
@@ -1336,14 +1396,19 @@ def _semgrep_security_findings(
             ],
             capture_output=True,
             text=True,
-            timeout=12,
+            timeout=1 if native else 12,
             cwd=root,
+            env=environment,
             check=False,
         )
     if completed.returncode != 0:
         raise RuntimeError("Semgrep scan failed")
+    return _parse_semgrep_findings(completed.stdout, text, labels, channel)
+
+
+def _parse_semgrep_findings(output: str, text: str, labels: dict[str, str], channel: str) -> list[Occurrence]:
     try:
-        raw = json.loads(completed.stdout)
+        raw = json.loads(output)
     except json.JSONDecodeError as error:
         raise RuntimeError("invalid Semgrep output") from error
     if (
@@ -1360,17 +1425,17 @@ def _semgrep_security_findings(
         raw_id = str(item.get("check_id") or "")
         marker = raw_id.find("mainframe.")
         rule_id = raw_id[marker:] if marker >= 0 else raw_id
-        if rule_id not in _SEMGREP_LABELS:
+        if rule_id not in labels:
             continue
         row = int((item.get("start") or {}).get("line") or 0)
         end_row = int((item.get("end") or {}).get("line") or row)
         rows.append(
             _occurrence(
-                _SEMGREP_LABELS[rule_id],
+                labels[rule_id],
                 row,
                 "scanner",
                 _source_excerpt(text, row, end_row),
-                channel=_SEMGREP_SECURITY_CHANNEL,
+                channel=channel,
                 blocking=False,
             )
         )
@@ -1703,6 +1768,14 @@ def _scan_source(
                 )
 
     if include_advisory:
+        if extension == ".go":
+            try:
+                rows.extend(_pgxpool_findings(text))
+                channels.add(_SEMGREP_GO_CHANNEL)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+                issues.append(ScanIssue(
+                    "scanner:semgrep-go", "Semgrep pgxpool review was unavailable for a candidate Go edit.",
+                ))
         channel, findings, issue = _scan_file_advice(text, extension, path, workspace)
         if channel:
             channels.add(channel)
