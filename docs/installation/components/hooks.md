@@ -132,9 +132,10 @@ configuration, disabled metrics and telemetry, and the catalog's representative
 checks. Do not install a tool's own hooks as a substitute for the MAINFRAME
 trigger contract.
 
-The Go and Dart syntax checks use SDK executables already on the hook's
-`PATH`. A missing SDK produces one advisory per execution scope when a file
-of that language is edited.
+The Go, Dart, and Rust syntax checks use existing SDK executables. Rust also
+discovers local rustup toolchains when `rustfmt` is absent from `PATH`. A
+missing SDK produces one advisory per execution scope when a file of that
+language is edited.
 
 Product uninstall retains this shared runtime because another MAINFRAME adapter
 may still use it. A later apply or verify rechecks every required executable and

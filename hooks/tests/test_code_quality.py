@@ -455,6 +455,66 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(path.read_text(encoding="utf-8"), source)
         self.assertEqual(self.completion("dart"), QUALITY.QualityResult())
 
+    def test_rust_syntax_is_advisory_on_the_first_write_without_cargo(self) -> None:
+        path = self.workspace / "new" / "worker.rs"
+        source = "pub fn run() {\n    let count = 3\n}\n"
+        self.assertEqual(self.capture("rust", "create", path), QUALITY.QualityResult())
+        path.parent.mkdir()
+        path.write_text(source, encoding="utf-8")
+        advice = self.after("rust", "create").advisory or ""
+        self.assertIn("new/worker.rs:2 — Rust syntax error", advice)
+        self.assertNotIn("count", advice)
+        self.assertEqual(path.read_text(encoding="utf-8"), source)
+        self.assertEqual(self.completion("rust"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("rust", "unrelated", path), QUALITY.QualityResult())
+        path.write_text("\n" + source, encoding="utf-8")
+        self.assertEqual(self.after("rust", "unrelated"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("rust", "repair", path), QUALITY.QualityResult())
+        valid = (
+            '#[path = "missing.rs"] mod external;\n'
+            'unsafe extern "C" { safe fn tick(); }\n'
+            'fn work(){let _=1;}\n'
+        )
+        path.write_text(valid, encoding="utf-8")
+        self.assertEqual(self.after("rust", "repair"), QUALITY.QualityResult())
+        self.assertEqual(path.read_text(encoding="utf-8"), valid)
+
+    def test_rust_syntax_uses_the_inherited_cargo_edition(self) -> None:
+        root_manifest = self.workspace / "Cargo.toml"
+        root_manifest.write_text(
+            '[workspace]\nmembers = ["crates/worker"]\n[workspace.package]\nedition = "2021"\n',
+            encoding="utf-8",
+        )
+        crate = self.workspace / "crates" / "worker"
+        path = crate / "src" / "lib.rs"
+        path.parent.mkdir(parents=True)
+        (crate / "Cargo.toml").write_text(
+            '[package]\nname = "worker"\nedition.workspace = true\n', encoding="utf-8",
+        )
+        self.assertEqual(self.capture("rust", "create", path), QUALITY.QualityResult())
+        path.write_text("fn gen() {}\n", encoding="utf-8")
+        self.assertEqual(self.after("rust", "create"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("rust", "replace", path), QUALITY.QualityResult())
+        path.write_text("fn run() {\n    let count = ;\n}\n", encoding="utf-8")
+        self.assertIn("lib.rs:2 — Rust syntax error", self.after("rust", "replace").advisory or "")
+
+    def test_missing_rustfmt_warns_once_without_blocking(self) -> None:
+        path = self.workspace / "worker.rs"
+        with (
+            mock.patch.object(QUALITY.shutil, "which", return_value=None),
+            mock.patch.dict(os.environ, {"RUSTUP_HOME": str(self.root / "missing-rustup")}),
+        ):
+            self.assertEqual(self.capture("rust", "create", path), QUALITY.QualityResult())
+            path.write_text("fn run() {}\n", encoding="utf-8")
+            self.assertIn("rustfmt", self.after("rust", "create").advisory or "")
+            self.assertEqual(self.capture("rust", "repeat", path), QUALITY.QualityResult())
+            path.write_text("fn second() {}\n", encoding="utf-8")
+            self.assertEqual(self.after("rust", "repeat"), QUALITY.QualityResult())
+            self.assertEqual(self.completion("rust"), QUALITY.QualityResult())
+
     def test_node_module_extensions_keep_security_and_test_checks(self) -> None:
         self.scanners[1].side_effect = NODE_FINDINGS
         self.scanners[2].side_effect = SEMGREP_SECURITY_FINDINGS

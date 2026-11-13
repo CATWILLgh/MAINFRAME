@@ -647,7 +647,12 @@ _YAML_EXTENSIONS = {".yaml", ".yml"}
 _JSON_EXTENSIONS = {".json", ".jsonc"}
 _CONFIG_EXTENSIONS = _YAML_EXTENSIONS | _JSON_EXTENSIONS | {".toml"}
 _EDIT_EXTENSIONS = CODE_EXTENSIONS | _CONFIG_EXTENSIONS
-_SDK_SYNTAX_TOOLS = {".go": ("Go", "gofmt"), ".dart": ("Dart", "dart")}
+_SDK_SYNTAX_TOOLS = {
+    ".go": ("Go", "gofmt"),
+    ".dart": ("Dart", "dart"),
+    ".rs": ("Rust", "rustfmt"),
+}
+_RUST_EDITIONS = ("2015", "2018", "2021", "2024")
 _SHELL_EXTENSIONS = {".sh", ".bash"}
 _SHELLCHECK_LABELS = {
     1072: "shell parser could not read this statement",
@@ -1267,16 +1272,68 @@ def _yaml_findings(text: str) -> list[Occurrence]:
     return rows
 
 
-def _sdk_syntax_findings(text: str, extension: str) -> list[Occurrence]:
+def _rustfmt_executable() -> str | None:
+    executable = shutil.which("rustfmt")
+    if executable:
+        return executable
+    # Desktop PATH may omit rustup's proxies even when an SDK is installed.
+    root = Path(os.environ.get("RUSTUP_HOME") or Path.home() / ".rustup")
+    installed = [path for path in root.glob("toolchains/*/bin/rustfmt")
+                 if path.is_file() and os.access(path, os.X_OK)]
+    stable = [path for path in installed if path.parent.parent.name.startswith("stable-")]
+    candidates = stable or installed
+    return str(candidates[0]) if len(candidates) == 1 else None
+
+
+def _rust_edition(path: Path, workspace: Path) -> str:
+    edition = _RUST_EDITIONS[-1]
+    inherited = False
+    for parent in path.parents:
+        if not parent.is_relative_to(workspace):
+            break
+        manifest = _read_source(parent / "Cargo.toml", workspace)
+        if manifest is None:
+            raise RuntimeError("Cargo manifest is unavailable")
+        if not manifest.exists:
+            continue
+        data = tomllib.loads(manifest.text)
+        if not inherited:
+            package = data.get("package")
+            if not isinstance(package, dict):
+                continue
+            edition = package.get("edition", "2015")
+            inherited = edition == {"workspace": True}
+            if not inherited:
+                break
+            if "workspace" in package:
+                root = (parent / package["workspace"]).resolve()
+                referenced = _read_source(root / "Cargo.toml", workspace)
+                if not referenced or not referenced.exists:
+                    raise RuntimeError("Cargo workspace manifest is unavailable")
+                data = tomllib.loads(referenced.text)
+                edition = data["workspace"]["package"]["edition"]
+                break
+        if "workspace" in data:
+            edition = data["workspace"]["package"]["edition"]
+            break
+    if edition not in _RUST_EDITIONS:
+        raise RuntimeError("Cargo edition is unsupported or missing")
+    return edition
+
+
+def _sdk_syntax_findings(text: str, path: Path, workspace: Path) -> list[Occurrence]:
+    extension = path.suffix.lower()
     language, tool = _SDK_SYNTAX_TOOLS[extension]
-    executable = shutil.which(tool)
+    executable = _rustfmt_executable() if tool == "rustfmt" else shutil.which(tool)
     if executable is None:
         raise RuntimeError(f"{tool} unavailable")
     with tempfile.TemporaryDirectory(prefix=f"mainframe-{tool}-") as directory:
         root = Path(directory)
         source = root / f"source{extension}"
-        source.write_text(text, encoding="utf-8")
         environment = {**os.environ}
+        input_text = None
+        if tool != "rustfmt":
+            source.write_text(text, encoding="utf-8")
         if tool == "dart":
             # Take the already installed SDK behind Flutter's launcher, which
             # can otherwise initialize or update the Flutter cache.
@@ -1287,25 +1344,35 @@ def _sdk_syntax_findings(text: str, extension: str) -> list[Occurrence]:
                 if executable is None:
                     raise RuntimeError("Flutter's Dart SDK is unavailable")
             args = ["--suppress-analytics", "format", "--output=none", source.name]
-        else:
+        elif tool == "gofmt":
             (root / "mode").write_text("off\n", encoding="utf-8")
             environment["TEST_TELEMETRY_DIR"] = directory
             args = ["-l", source.name]
+        else:
+            config = root / "rustfmt.toml"
+            config.touch()
+            args = ["--emit", "stdout", "--edition", _rust_edition(path, workspace),
+                    "--color", "never", "--config-path", str(config)]
+            environment["RUSTUP_AUTO_INSTALL"] = "0"
+            input_text = text
         result = subprocess.run(
-            [executable, *args], capture_output=True, encoding="utf-8",
+            [executable, *args], input=input_text, capture_output=True, encoding="utf-8",
             cwd=root, env=environment, timeout=1, check=False,
         )
     if not result.returncode:
         return []
     if tool == "dart" and result.returncode == 65:
-        match = re.search(r"(?m)^line (\d+), column \d+ of source\.dart: (.+)$", result.stderr)
+        pattern = r"(?m)^line (?P<line>\d+), column \d+ of source\.dart: (?P<message>.+)$"
     elif tool == "gofmt" and result.returncode == 2:
-        match = re.search(r"(?m)^source\.go:(\d+):\d+: (.+)$", result.stderr)
+        pattern = r"(?m)^source\.go:(?P<line>\d+):\d+: (?P<message>.+)$"
+    elif tool == "rustfmt" and result.returncode == 1:
+        pattern = r"(?m)^error: (?P<message>.+)\n *--> <stdin>:(?P<line>\d+):\d+$"
     else:
-        match = None
+        pattern = None
+    match = re.search(pattern, result.stderr) if pattern else None
     if match is None:
         raise RuntimeError(f"{tool} did not report a syntax diagnostic")
-    return [_syntax_finding(language, int(match[1]), match[2], text)]
+    return [_syntax_finding(language, int(match["line"]), match["message"], text)]
 
 
 def _diagnostic_rows(raw: object) -> list[dict]:
@@ -1902,7 +1969,7 @@ def _scan_syntax_advice(
     channels = (_SYNTAX_CHANNEL,)
     if extension in _SDK_SYNTAX_TOOLS:
         _, tool = _SDK_SYNTAX_TOOLS[extension]
-        scanner, args = _sdk_syntax_findings, (text, extension)
+        scanner, args = _sdk_syntax_findings, (text, path, workspace)
     else:
         channels += (_DUPLICATE_KEY_CHANNEL,)
         if extension in _JSON_EXTENSIONS:
@@ -1914,7 +1981,7 @@ def _scan_syntax_advice(
             return [], (), None
         else:
             tool, scanner, args = "yamllint", _yaml_findings, (text,)
-    if not source.exists:
+    if not source.exists or (extension == ".rs" and not text.strip()):
         return [], channels, None
     try:
         return scanner(*args), channels, None

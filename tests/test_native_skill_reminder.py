@@ -64,6 +64,21 @@ class NativeSkillReminderTests(unittest.TestCase):
             data['tool_response'] = {'isError': False}
             self.assertIn('mainframe-testing', call()['hookSpecificOutput']['additionalContext'])
 
+    def test_zcode_reminds_about_rust_on_read(self):
+        base = self.home / '.zcode/mainframe/hooks'
+        skills = self.home / '.zcode/skills'
+        self.prepare(base, skills)
+        skill = skills / 'mainframe-rust/SKILL.md'
+        skill.parent.mkdir()
+        shutil.copyfile(ROOT / 'skills/mainframe-rust/SKILL.md', skill)
+        source = self.project / 'lib.rs'
+        source.write_text('pub fn run() {}\n')
+        data = dict(self.payload, tool_input={'file_path': str(source)})
+        with patch.object(zcode_hook, 'ROOT', base):
+            output = zcode_hook.dispatch('mainframe-skill-reminder', self.state,
+                                         io.BytesIO(json.dumps(data).encode()))
+        self.assertIn('mainframe-rust', output['hookSpecificOutput']['additionalContext'])
+
     def test_zcode_backup_uses_existing_nonblocking_bash_callback(self):
         base = self.home / '.zcode/mainframe/hooks'
         skills = self.home / '.zcode/skills'

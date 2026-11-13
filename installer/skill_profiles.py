@@ -154,20 +154,26 @@ def candidates(path: Path, project: Path) -> set[str]:
                 r'(^|[._-])(?:secret|secrets|credential|credentials|password|private|key)(?:[._-]|$)', filename)
                 or filename in {'id_rsa', 'id_ed25519', 'id_ecdsa'}):
             return set()
-        if path.suffix.lower() not in SOURCE_SUFFIXES and not (path.name == 'Dockerfile' or path.name.startswith('Dockerfile.')):
+        rust = path.suffix.lower() == '.rs' or path.name == 'Cargo.toml'
+        if path.suffix.lower() not in SOURCE_SUFFIXES and not (
+            rust or path.name == 'Dockerfile' or path.name.startswith('Dockerfile.')
+        ):
             return set()
         if not _safe(path, project):
             return set()
         rel = path.relative_to(project)
-        if any(p.lower() in EXCLUDED for p in rel.parts[:-1]):
+        parts = {p.lower() for p in rel.parts[:-1]}
+        excluded = (EXCLUDED - {'cli', 'scripts'}) | {'target'} if rust else EXCLUDED
+        if parts & excluded:
             return set()
         if re.search(r'(?:\.test\.|\.spec\.|_test\.|^test_)', path.name):
             return set()
         source = _text(path, project)
         if not source or re.search(r'(?im)^\s*(?://|#|/\*)\s*(?:code )?generated\b', source):
             return set()
+        if rust:
+            return {'mainframe-rust'}
         result = set()
-        parts = {p.lower() for p in rel.parts[:-1]}
         backend_path = bool(parts & BACKEND or any(p.endswith('-backend') for p in parts))
         if _clickhouse(path, project, source):
             result.add('mainframe-clickhouse')

@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -38,6 +39,17 @@ class ReminderTests(unittest.TestCase):
         self.assertIsNone(self.invoke())
         self.data['agent_id']='child'
         self.assertIn('mainframe-python-backend',self.invoke())
+
+    def test_rust_manifest_routes_to_installed_skill(self):
+        skill = self.home / 'skills/mainframe-rust/SKILL.md'
+        skill.parent.mkdir()
+        shutil.copyfile(ROOT / 'skills/mainframe-rust/SKILL.md', skill)
+        (self.project / 'Cargo.toml').write_text('[package]\nname = "worker"\n')
+        command = 'cat Cargo.toml'
+        self.data['tool_input']['command'] = command
+        self.write_call({'cmd': command, 'workdir': str(self.project)})
+        self.assertIn('mainframe-rust', self.invoke())
+        self.assertIsNone(self.invoke())
 
     def test_workdir_conflict_and_dynamic_are_unknown(self):
         self.write_call({'cmd':'cat server/app.py','workdir':str(self.project)}, '; await tools.exec_command({cmd:"cat server/app.py",workdir:"/other"})')

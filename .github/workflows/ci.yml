@@ -49,9 +49,9 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_*.py'
 
       - name: Test hooks
-        env:
-          PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 -m unittest discover -s hooks/tests -p 'test_*.py'
+        run: |
+          rustfmt --version
+          python3 -B -m unittest discover -s hooks/tests -p 'test_*.py'
 
       - name: Test credential helper
         env:

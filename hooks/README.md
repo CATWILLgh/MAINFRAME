@@ -421,6 +421,7 @@ Use static diagnostic descriptions and compare only new findings. See
 | Tool | Automatic scope | Reported findings |
 | --- | --- | --- |
 | `gofmt` and `dart format` | `.go` and `.dart` with the corresponding local SDK executable on `PATH`. Use the existing Dart SDK bundled with Flutter when present. | Syntax errors. Invoke the parser on the snapshot without formatting the project file or fetching dependencies. |
+| `rustfmt` | `.rs` with the formatter on `PATH` or in a local rustup toolchain. | Syntax errors from stdin using the owning Cargo edition, including workspace inheritance. Standalone files use Edition 2024. The hook does not run Cargo, expand macros, or apply formatting. |
 | Python standard library | `.json`, `.jsonc`, and `.toml`. Accept JSON comments and trailing commas in `.jsonc`, TypeScript and JavaScript config names, `devcontainer.json`, and files in `.vscode/`. | Syntax errors and duplicate keys. JSON reports the file when a duplicate has no parser position. TOML reports the first parser diagnostic using the hook's Python version. |
 | yamllint | `.yml` and `.yaml`. Skip Helm template sources and honor yamllint's inline directives. | YAML syntax errors and repeated keys in the same mapping. YAML syntax and key review runs alongside workflow and Kubernetes checks. |
 | ShellCheck | `.sh` and `.bash` with a supported interpreter or no shebang. | Shell parse errors, masked command failure, unchecked `cd`, and a pipeline that reads and writes the same file. |

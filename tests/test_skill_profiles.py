@@ -37,6 +37,19 @@ class ProfileTests(unittest.TestCase):
         named = self.put('example-backend/services/orders.py', 'def get_order(): pass\n')
         self.assertEqual(candidates(named, self.root), {'mainframe-python-backend'})
 
+    def test_rust_source_and_manifest_route_to_the_rust_skill(self):
+        for name, text in (
+            ('src/shared.rs', 'pub fn value() -> u32 { 1 }\n'),
+            ('cli/converter/Cargo.toml', '[package]\nname = "converter"\n'),
+        ):
+            with self.subTest(name=name):
+                path = self.put(name, text)
+                self.assertEqual(candidates(path, self.root), {'mainframe-rust'})
+        other = self.put('tools/pyproject.toml', '[project]\nname = "converter"\n')
+        generated = self.put('target/generated.rs', 'fn f() {}\n')
+        self.assertEqual(candidates(other, self.root), set())
+        self.assertEqual(candidates(generated, self.root), set())
+
     def test_ts_service_react_web_and_native(self):
         self.put('server/package.json', '{"dependencies":{"@nestjs/core":"1"}}')
         path = self.put('server/src/orders/service.ts', 'export class Orders {}')
