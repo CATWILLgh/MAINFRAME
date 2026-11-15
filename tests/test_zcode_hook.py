@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -28,7 +29,7 @@ class ZCodeHookFixture(unittest.TestCase):
         self.detectors.mkdir(parents=True)
         self.bridge = self.root / "bridge.py"
         shutil.copyfile(SOURCE / "installer" / "zcode_hook.py", self.bridge)
-        for name in zcode_hook.SUPPORTED_HOOKS - {zcode_hook.PRE_SHELL_TRANSPORT}:
+        for name in zcode_hook.SUPPORTED_HOOKS - {zcode_hook.PRE_SHELL_TRANSPORT, "mainframe-before-shell", "mainframe-post-edit"}:
             shutil.copyfile(SOURCE / "hooks" / (name + ".py"), self.detectors / (name + ".py"))
         self.state = Path(self.temporary.name) / "state"
 
@@ -82,6 +83,36 @@ class ZCodeHookFixture(unittest.TestCase):
         self.assertEqual(specific["permissionDecisionReason"], "synthetic denial")
         self.assertEqual(specific["additionalContext"], "synthetic advice")
 
+    def test_all_native_outputs_fit_small_message_and_wire_budgets(self):
+        message = "😀" * 6000
+        outputs = [
+            zcode_hook._native_output("PreToolUse", "additionalContext", message),
+            zcode_hook._stop_block(message),
+            zcode_hook._combine_pre_shell([
+                zcode_hook._native_output("PreToolUse", "permissionDecisionReason", message),
+                zcode_hook._native_output("PreToolUse", "additionalContext", message),
+            ], "PreToolUse"),
+        ]
+        for output in outputs:
+            specific = output.get("hookSpecificOutput", {})
+            fields = [specific.get("permissionDecisionReason", ""), specific.get("additionalContext", ""),
+                      output.get("reason", "")]
+            self.assertLessEqual(sum(map(len, fields)), 1600)
+            self.assertLessEqual(len(zcode_hook._serialize(output).encode()) + 1, 8192)
+            if specific.get("permissionDecision") == "deny":
+                self.assertTrue(specific["permissionDecisionReason"])
+                self.assertTrue(specific["additionalContext"])
+
+    def test_composites_keep_unicode_multiline_channel_prefixes(self):
+        messages = [label + "\n" + "😀" * 1500 for label in ("QUALITY", "FALLOW", "CHECKPOINT")]
+        outputs = [zcode_hook._native_output("PostToolUse", "additionalContext", message) for message in messages]
+        for output in (zcode_hook._combine_post_edit(outputs), zcode_hook._combine_pre_shell(outputs, "PostToolUse")):
+            context = output["hookSpecificOutput"]["additionalContext"]
+            for label in ("QUALITY", "FALLOW", "CHECKPOINT"):
+                self.assertIn(label + "\n😀", context)
+            self.assertLessEqual(len(context), 1600)
+            self.assertLessEqual(len(zcode_hook._serialize(output).encode()) + 1, 8192)
+
     def test_combined_pre_shell_transport_honors_individual_disable_markers(self):
         (self.root / ".disabled-mainframe-rg-short-replace").touch()
         result = self.invoke(
@@ -96,6 +127,35 @@ class ZCodeHookFixture(unittest.TestCase):
         self.assertEqual(
             json.loads(secret.stdout)["hookSpecificOutput"]["permissionDecision"], "deny"
         )
+
+    def test_before_shell_combines_guard_and_skill_advice_with_individual_disables(self):
+        data = self.payload("synthetic")
+        data["cwd"] = self.temporary.name
+        detectors = {"mainframe-secret-access": SimpleNamespace(decision_reason=lambda command: "deny"),
+                     "mainframe-rg-short-replace": SimpleNamespace(advisory_message=lambda command: "guard advice")}
+        skill = SimpleNamespace(advise=lambda *args: "skill advice")
+        with (patch.object(zcode_hook, "ROOT", self.root),
+              patch.object(zcode_hook, "_load_detector", side_effect=detectors.get),
+              patch.object(zcode_hook, "skill_advice", skill)):
+            result = zcode_hook._dispatch_data("mainframe-before-shell", self.state, data)
+            specific = result["hookSpecificOutput"]
+            self.assertEqual(specific["permissionDecisionReason"], "deny")
+            self.assertIn("guard advice", specific["additionalContext"])
+            self.assertIn("skill advice", specific["additionalContext"])
+            (self.root / ".disabled-mainframe-skill-reminder").touch()
+            data["tool_use_id"] = "second"
+            result = zcode_hook._dispatch_data("mainframe-before-shell", self.state, data)
+            self.assertNotIn("skill advice", result["hookSpecificOutput"].get("additionalContext", ""))
+            (self.root / ".disabled-mainframe-secret-access").touch()
+            data["tool_use_id"] = "third"
+            result = zcode_hook._dispatch_data("mainframe-before-shell", self.state, data)
+            self.assertNotIn("permissionDecisionReason", result["hookSpecificOutput"])
+            (self.root / ".disabled-mainframe-skill-reminder").unlink()
+            (self.root / ".disabled-mainframe-pre-shell").touch()
+            data["tool_use_id"] = "fourth"
+            result = zcode_hook._dispatch_data("mainframe-before-shell", self.state, data)
+            self.assertEqual(result["hookSpecificOutput"]["additionalContext"], "skill advice")
+            self.assertNotIn("permissionDecisionReason", result["hookSpecificOutput"])
 
     def test_secret_finding_is_a_native_denial_without_cwd_or_identity(self):
         payload = self.payload("mainframe-secret get synthetic")
@@ -234,9 +294,9 @@ class ZCodeHookFixture(unittest.TestCase):
         blocked = json.loads(self.invoke("mainframe-code-quality", stop).stdout)
         self.assertEqual(blocked["decision"], "block")
         stop["stop_hook_active"] = True
-        retry = json.loads(self.invoke("mainframe-code-quality", stop).stdout)
-        self.assertEqual(retry["decision"], "block")
-        self.assertIn("remains unresolved", retry["reason"])
+        self.assertEqual(self.invoke("mainframe-code-quality", stop).stdout, "")
+        stop["stop_hook_active"] = False
+        self.assertEqual(json.loads(self.invoke("mainframe-code-quality", stop).stdout)["decision"], "block")
 
         self.assertEqual(self.invoke("mainframe-code-quality", event("PreToolUse", "repair")).stdout, "")
         source.write_text("package sample\n", encoding="utf-8")
@@ -396,6 +456,25 @@ class ZCodeHookFixture(unittest.TestCase):
                 specific = json.loads(result.stdout)["hookSpecificOutput"]
                 self.assertEqual(specific["permissionDecision"], "deny")
         self.assertFalse(self.state.exists())
+
+    def test_pre_shell_fault_isolation_keeps_independent_guards(self):
+        payload = self.payload("rm -rf /")
+        payload["cwd"] = self.temporary.name
+        with (patch.object(zcode_hook, "ROOT", self.root),
+              patch.object(zcode_hook, "session_root", side_effect=sqlite3.OperationalError("busy"))):
+            output = zcode_hook._dispatch_data(zcode_hook.PRE_SHELL_TRANSPORT, self.state, payload)
+        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_pre_shell_dedup_failure_does_not_swallow_later_denial(self):
+        import types
+        detectors = {
+            "mainframe-rg-short-replace": types.SimpleNamespace(advisory_message=lambda command: "advice"),
+            "mainframe-destructive-operations": types.SimpleNamespace(context_free_decision_reason=lambda command: "denied"),
+        }
+        with (patch.object(zcode_hook, "_load_detector", side_effect=detectors.get),
+              patch.object(zcode_hook, "claim_event", side_effect=sqlite3.OperationalError("busy"))):
+            output = zcode_hook._dispatch_data(zcode_hook.PRE_SHELL_TRANSPORT, self.state, self.payload())
+        self.assertEqual(output["hookSpecificOutput"]["permissionDecisionReason"], "denied")
 
 
 class ZCodeEventStateTests(unittest.TestCase):

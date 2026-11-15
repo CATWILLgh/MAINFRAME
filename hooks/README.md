@@ -318,7 +318,7 @@ advisory once to the recipient responsible for the edit. Do not call the compone
 unsupported extensions, paths outside the current workspace, or changes not
 made through the bound native event.
 
-Deduplicate native pre/post event redelivery in the adapter. Preserve the first
+Deduplicate native pre/post event redelivery. Preserve the first
 before snapshot for an operation and consume it through its matching success or
 failure event only once; a missing snapshot is unavailable attribution, not
 proof of a clean edit. A completion callback must not discard another in-flight
@@ -331,22 +331,34 @@ From a documented continuation-capable completion event, call
 same execution scope and feed the bounded reason back to the responsible agent.
 An empty result permits completion silently. A returned `advisory` means the
 check was operationally unavailable; it never blocks and must be delivered only
-through a documented non-blocking channel. Do not stop repeated guard calls
-merely because the native event says a stop hook is already active: the current
-files, not a retry counter, determine whether the positive finding remains.
+through a documented non-blocking channel. Bound automatic repair to one
+continuation per completion attempt. On an already-active Stop callback,
+preserve unresolved findings without requesting another continuation. Use a
+non-blocking unresolved message only where the native event supports it. A later
+ordinary completion attempt revalidates the current files before blocking.
 
 The detector owns one private state file below the system temporary directory
 for each adapter namespace, scope, and workspace. It stores only hashes,
 counts, paths, line metrics, hashed function identities, notice keys, and
 short-lived operation metadata, never source text, function names, transcripts,
 prompts, or telemetry. Preserve its atomic replacement,
-bounded lock recovery, one-hour pending-operation expiry, seven-day
+bounded lock recovery, one-hour pending-operation expiry, at most 512 recent
+completed-operation receipts plus the current receipt, seven-day
 abandoned-state expiry, workspace confinement, source-size bounds, successful
 cleanup, and revalidation before blocking. Scanners run outside the state lock;
 unique temporary scanner directories are removed after each call. Do not
 replace this with a repository-wide scan or persist it in the receiving project.
 Expiry must also apply when the abandoned scope itself resumes; cleanup by
 another scope is not a prerequisite.
+
+Share a five-second external-scanner budget across the addressed files in each
+capture, post-edit check, or completion check. Exhaustion produces deduplicated
+unavailable-check advice. Bound regular-file reads before scanning and reject
+nonregular inputs without waiting for a writer. Bound each finding row to 240
+characters, preserving its path prefix and diagnostic suffix. Compact combined
+quality advice to 480 characters, reserving evidence for each subsection before
+omitting extra rows and explanatory footers. Native adapters own the combined
+event-message and serialized-output limits.
 
 Preserve the high-signal detector set: TODO/FIXME/HACK/XXX comments, diagnostic
 suppressions, skipped or focused tests, explicit debugger residue, and comments
@@ -484,8 +496,11 @@ an unsupported analyzer shape is an unavailable check, not a clean result.
 A normal clean result is silent. Missing Fallow, invalid input, oversized
 scope, timeout, nonzero analyzer failure, or unsupported output returns at most
 one bounded unavailable-check advisory and never prevents completion. Deliver
-advice only through a documented non-blocking channel and deduplicate duplicate
-delivery of one native completion event. If exact attribution or non-blocking
+advice only through a documented non-blocking channel. Deduplicate native event
+redelivery and repeated generic unavailable-check advice within the same
+recipient/workspace scope. A recovery can make a later failure actionable
+again. Newly introduced findings in a separate edit remain independently
+reportable. If exact attribution or non-blocking
 completion delivery is unavailable, record this component as `unsupported`;
 do not substitute a whole-repository scan or an always-on instruction.
 

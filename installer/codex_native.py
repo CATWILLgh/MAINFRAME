@@ -9,7 +9,9 @@ import tempfile
 import threading
 import time
 
-from .codex import HOOK_NAMES, PRE_SHELL_TRANSPORT, SHELL_HOOK_NAMES, hook_binding_name, inventory
+from .codex import (HOOK_NAMES, PRE_SHELL_TRANSPORT, SHELL_HOOK_NAMES,
+                    POST_EDIT_TRANSPORT, POST_EDIT_HOOKS, hook_binding_name, inventory,
+                    EXTENDED_DESKTOP_RUNTIMES, PRE_EVENT_TRANSPORT)
 from .core import Conflict
 
 
@@ -134,6 +136,13 @@ def summarize(adapter, source, skill_result, hook_result, cwd):
         # Shell hooks share one registration. Individual legacy registrations
         # can still appear under their canonical names and count as extra rows.
         bindings = (name, PRE_SHELL_TRANSPORT) if name in SHELL_HOOK_NAMES else (name,)
+        if name in SHELL_HOOK_NAMES or name == "mainframe-skill-reminder":
+            bindings = (*bindings, PRE_EVENT_TRANSPORT)
+        if name in POST_EDIT_HOOKS and (
+            name != "mainframe-fallow-quality"
+            or (adapter.surface == "desktop" and adapter.version in EXTENDED_DESKTOP_RUNTIMES)
+        ):
+            bindings = (*bindings, POST_EDIT_TRANSPORT)
         expected = [row for binding in bindings for row in expected_by_binding[binding]]
         found = [row for binding in bindings for row in observed_by_binding[binding]]
         remaining = list(found)

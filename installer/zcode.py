@@ -32,6 +32,8 @@ TODO_HOOK = "mainframe-todo-limits"
 ROOT_START_MATCHER = "startup|clear|resume|fork"
 SHELL_HOOK_NAMES = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
+PRE_EVENT_TRANSPORT = "mainframe-before-shell"
+POST_EDIT_TRANSPORT = "mainframe-post-edit"
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", TODO_HOOK, "mainframe-fallow-quality")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
@@ -56,7 +58,7 @@ UNSUPPORTED = {
 }
 CURRENT_UNSUPPORTED = {
     **UNSUPPORTED,
-    "mainframe-code-quality": "The attributed Write/Edit lifecycle and revalidating Stop guard are retained. Non-blocking completion advice has no model channel. Native Stop permits at most three repair continuations, and still-positive retries emit an unresolved reason. Ordinary Agent/Task subagents do not inherit hook runners.",
+    "mainframe-code-quality": "The attributed Write/Edit lifecycle and revalidating Stop guard are retained. Non-blocking completion advice has no model channel. The adapter requests at most one repair continuation and retains unresolved findings for a later completion check. Ordinary Agent/Task subagents do not inherit hook runners.",
     "mainframe-fallow-quality": "Immediate PostToolUse advice is retained for exact native Write/Edit TS/JS responses, using an in-memory diff without source retention. Stop advice reaches the model only through another continuation. Ordinary Agent/Task subagents do not inherit hook runners.",
     "mainframe-subagent-selection": "The native Agent input exposes neither per-call model nor reasoning effort; a strict guard requires both controls. User role model/thoughtLevel presets are preserved, but they are not explicit per-call selection. No safe preventive binding is installed.",
 }
@@ -140,10 +142,10 @@ def _is_validated_hook_config_update(before: bytes, after: bytes, base: Path, st
         expected["hooks"]["events"]["SessionStart"][0]["matcher"] = new_start["matcher"]
         changed = True
     variants = {
-        ("PreToolUse", "Bash"): [(PRE_SHELL_TRANSPORT, 5000), ("mainframe-skill-reminder", 2000)],
+        ("PreToolUse", "Bash"): [(PRE_SHELL_TRANSPORT, 5000), (PRE_EVENT_TRANSPORT, 7000), ("mainframe-skill-reminder", 2000)],
         ("PostToolUse", "Bash|Read"): [("mainframe-skill-reminder", 2000)],
         ("PreToolUse", "Write|Edit"): [("mainframe-code-quality", 30000), (TODO_HOOK, 5000)],
-        ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000), ("mainframe-commit-checkpoint", 5000)],
+        ("PostToolUse", "Write|Edit"): [("mainframe-code-quality", 60000), ("mainframe-commit-checkpoint", 5000), (POST_EDIT_TRANSPORT, 20000)],
         ("PostToolUseFailure", "Write|Edit"): [("mainframe-code-quality", 30000)],
         ("Stop", None): [("mainframe-code-quality", 60000)],
         ("SessionStart", ROOT_START_MATCHER): [("mainframe-destructive-operations", 5000)],
@@ -512,9 +514,44 @@ class ZCode:
             }
             desired_groups["PreToolUse"].append({"matcher": "Bash", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
             desired_groups["PostToolUse"].append({"matcher": "Bash|Read", "hooks": [hook_registration(self.hooks, "mainframe-skill-reminder", self.event_state, 2000, runtime_bin(self.home))]})
+            prior_shell = [group for group in prior_groups.get("PreToolUse", [])
+                           if group.get("matcher") == "Bash"
+                           and any(hook.get("args", [])[-2:-1] in
+                                   ([PRE_SHELL_TRANSPORT], ["mainframe-skill-reminder"], *([name] for name in SHELL_HOOK_NAMES))
+                                   for hook in group.get("hooks", []))]
+            shell_split_disabled = any(hook.get("enabled") is False
+                                       for group in prior_shell for hook in group.get("hooks", []))
+            if shell_split_disabled:
+                desired_groups["PreToolUse"] = [group for group in desired_groups["PreToolUse"] if group.get("matcher") != "Bash"]
+                desired_groups["PreToolUse"] = prior_shell + desired_groups["PreToolUse"]
+            else:
+                desired_groups["PreToolUse"] = [group for group in desired_groups["PreToolUse"] if group.get("matcher") != "Bash"]
+                desired_groups["PreToolUse"].insert(0, {"matcher": "Bash", "hooks": [hook_registration(
+                    self.hooks, PRE_EVENT_TRANSPORT, self.event_state, 7000, runtime_bin(self.home))]})
             if self.version in EXTENDED_HOOK_RUNTIMES:
                 desired_groups["PostToolUse"].append({"matcher": "Write|Edit", "hooks": [hook_registration(
                     self.hooks, "mainframe-fallow-quality", self.event_state, 10000, runtime_bin(self.home))]})
+            # Preserve independently disabled native callbacks until the user
+            # chooses to re-enable them. A migrated composite keeps its own bit.
+            split_disabled = any(
+                hook.get("enabled") is False
+                and hook.get("args", [])[-2:-1] in (["mainframe-code-quality"], ["mainframe-commit-checkpoint"], ["mainframe-fallow-quality"])
+                for group in prior_groups.get("PostToolUse", [])
+                if group.get("matcher") == "Write|Edit"
+                for hook in group.get("hooks", [])
+            )
+            if not split_disabled:
+                desired_groups["PostToolUse"] = [
+                    group for group in desired_groups["PostToolUse"]
+                    if group.get("matcher") != "Write|Edit"
+                ]
+                post = hook_registration(self.hooks, POST_EDIT_TRANSPORT, self.event_state, 20000, runtime_bin(self.home))
+                for group in prior_groups.get("PostToolUse", []):
+                    for hook in group.get("hooks", []):
+                        if group.get("matcher") == "Write|Edit" and hook.get("args", [])[-2:-1] == [POST_EDIT_TRANSPORT]:
+                            post["enabled"] = hook["enabled"]
+                desired_groups["PostToolUse"].insert(0, {"matcher": "Write|Edit", "hooks": [post]})
+            if self.version in EXTENDED_HOOK_RUNTIMES:
                 for event, groups in desired_groups.items():
                     for group in groups:
                         for hook in group["hooks"]:
@@ -540,7 +577,7 @@ class ZCode:
                     has_split_pre_shell = any(
                         str(self.hooks) in hook.get("args", [])
                         and len(hook.get("args", [])) >= 2
-                        and hook["args"][-2] in {*SHELL_HOOK_NAMES, PRE_SHELL_TRANSPORT}
+                        and hook["args"][-2] in {*SHELL_HOOK_NAMES, PRE_SHELL_TRANSPORT, PRE_EVENT_TRANSPORT}
                         for hook in callbacks
                     )
                     if has_split_pre_shell or any(h in expected_callbacks for h in callbacks):

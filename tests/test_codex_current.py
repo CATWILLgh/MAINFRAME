@@ -112,7 +112,7 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         groups = json.loads((self.adapter.codex / "hooks.json").read_bytes())["hooks"]
         self.assertTrue(any("mainframe-subagent-selection" in handler["command"]
                             for group in groups["PreToolUse"] for handler in group["hooks"]))
-        self.assertTrue(any("mainframe-fallow-quality" in handler["command"]
+        self.assertTrue(any("mainframe-post-edit" in handler["command"]
                             for group in groups["PostToolUse"] for handler in group["hooks"]))
         self.assertIn("SubagentStop", groups)
         self.assertEqual(self.adapter.plan()[1]["changes"], [])
@@ -151,6 +151,52 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         self.assertTrue(role.exists())
         self.assertEqual(trust.read_bytes(), b"untouched native trust")
         self.assertEqual(json.loads(hooks_path.read_bytes())["hooks"]["PreToolUse"], [user])
+
+    def test_split_upgrade_preserves_native_control_coordinates(self):
+        history = {"hook_groups": {
+            "PreToolUse": [{"hooks": [{"command": codex.hook_command(
+                self.adapter.hooks, codex.PRE_SHELL_TRANSPORT, self.adapter.event_state,
+            )}]}],
+            "PostToolUse": [{"hooks": [{"command": codex.hook_command(
+                self.adapter.hooks, "mainframe-code-quality", self.adapter.event_state,
+            )}]}],
+        }}
+        legacy = self.adapter.native_hook_groups(history)
+        with patch.object(self.adapter, "native_hook_groups", return_value=legacy):
+            self.apply()
+        path = self.adapter.codex / "hooks.json"
+        document = json.loads(path.read_bytes())
+        foreign = {"matcher": "^Foreign$", "hooks": [{"type": "command", "command": "true"}]}
+        document["hooks"]["PreToolUse"].insert(1, foreign)
+        document["hooks"]["PostToolUse"].append(foreign)
+        path.write_bytes(encode_json(document))
+
+        def coordinates(value):
+            return {
+                (event, index, handler_index): handler["command"]
+                for event, groups in value["hooks"].items()
+                for index, group in enumerate(groups)
+                for handler_index, handler in enumerate(group["hooks"])
+            }
+
+        before = coordinates(document)
+        self.apply()
+        after = coordinates(json.loads(path.read_bytes()))
+        # Codex resolves enabled/trusted state using these native coordinates.
+        # Every possible independent disable still addresses the same handler.
+        self.assertEqual(after, before)
+        self.assertFalse(any("mainframe-post-edit" in command for command in after.values()))
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+
+    def test_older_surfaces_keep_fallow_out_of_the_post_transport(self):
+        for version, surface in (("0.153.4", "cli"), ("0.159.2", "desktop")):
+            with self.subTest(version=version, surface=surface):
+                self.adapter.version, self.adapter.surface = version, surface
+                groups = self.adapter.native_hook_groups({})
+                commands = [handler["command"] for group in groups["PostToolUse"]
+                            for handler in group["hooks"]]
+                self.assertFalse(any(codex.POST_EDIT_TRANSPORT in command for command in commands))
+                self.assertFalse(any("mainframe-fallow-quality" in command for command in commands))
 
     def test_entrypoint_full_apply_requests_fallow_and_scoped_routes_skip_dependencies(self):
         specification = importlib.util.spec_from_file_location("mainframe_current_entrypoint", self.source / "install.py")
@@ -313,7 +359,7 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
             ambiguous = "*** Begin Patch\n*** Update File: new.ts\n@@\n-before\n+duplicate\n*** End Patch\n"
             data = self.payload(ambiguous, "ambiguous")
             output = self.invoke("mainframe-fallow-quality", data)
-            self.assertIn("unavailable", output["hookSpecificOutput"]["additionalContext"])
+            self.assertIsNone(output)
             self.assertIsNone(self.invoke("mainframe-fallow-quality", data))
             analyze.assert_not_called()
             self.assertIsNone(self.invoke("mainframe-fallow-quality", {**data, "tool_use_id": "failure", "tool_response": {"isError": True}}))

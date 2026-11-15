@@ -34,6 +34,7 @@ from __future__ import annotations
 import ast
 from collections import Counter
 from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import io
 import json
@@ -41,6 +42,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -52,6 +54,11 @@ from typing import Iterable, NamedTuple
 MAX_FILE_BYTES = 2_000_000
 MAX_FILES_PER_EDIT = 24
 MAX_MESSAGE_ROWS = 6
+MAX_ROW_CHARS = 240
+MAX_ADVISORY_CHARS = 480
+SCAN_BUDGET_SECONDS = 5
+MAX_COMPLETED_OPERATIONS = 512
+_SCAN_DEADLINE = ContextVar("mainframe_quality_deadline", default=None)
 PENDING_MAX_AGE_SECONDS = 60 * 60
 STATE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 LOCK_MAX_AGE_SECONDS = 60
@@ -579,13 +586,13 @@ _CODE_MARKERS = (
     ),
     (
         "pytest/unittest skip",
-        re.compile(r"(?m)^[ \t]*@(?:pytest\.mark\.skip|unittest\.skip)"),
+        re.compile(r"(?m)^[ \t]*@(?:pytest\.mark\.skip|unittest\.skip)\b"),
         {".py", ".pyi"},
     ),
 )
 
 _DEBUG_MARKERS = (
-    ("debugger statement", re.compile(r"(?m)^[ \t]*debugger\s*;?[ \t]*(?://.*)?$"), _JS_EXTENSIONS),
+    ("debugger statement", re.compile(r"(?m)^[ \t]*debugger[ \t]*(?:;[ \t]*)?$"), _JS_EXTENSIONS),
     ("console.debug", re.compile(r"(?m)^[ \t]*console\.debug\s*\("), _JS_EXTENSIONS),
     ("breakpoint()", re.compile(r"(?m)^[ \t]*breakpoint\s*\("), {".py", ".pyi"}),
     ("pdb.set_trace()", re.compile(r"(?m)^[ \t]*pdb\.set_trace\s*\("), {".py", ".pyi"}),
@@ -942,6 +949,16 @@ def _source_excerpt(text: str, row: int, end_row: int) -> str:
     return "\n".join(line.strip() for line in lines[start:end])[:1000]
 
 
+def _run_scanner(command, **options):
+    deadline = _SCAN_DEADLINE.get()
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("code-quality scan budget exhausted")
+        options["timeout"] = min(options["timeout"], remaining)
+    return subprocess.run(command, **options)
+
+
 def _syntax_finding(language: str, line: int, message: str, text: str) -> Occurrence:
     return _occurrence(
         f"{language} syntax error", line, "parser",
@@ -959,7 +976,7 @@ def _python_findings(text: str, path: Path, *, include_advisory: bool = True) ->
     labels = _RUFF_SECURITY_LABELS
     if include_advisory:
         labels = labels | _RUFF_ASYNC_LABELS | _RUFF_ERROR_LABELS | _RUFF_CORRECTNESS_LABELS
-    completed = subprocess.run(
+    completed = _run_scanner(
         [
             executable,
             "check",
@@ -1095,7 +1112,7 @@ def _node_findings(text: str, path: Path, *, include_advisory: bool = True) -> l
         if check_tests:
             command.extend(["--vitest-plugin", "-D", "vitest/valid-expect"])
         command.append(str(source))
-        completed = subprocess.run(
+        completed = _run_scanner(
             command,
             capture_output=True,
             text=True,
@@ -1162,7 +1179,7 @@ def _run_review_command(tool: str, args: list[str], text: str) -> subprocess.Com
     environment = {**os.environ}
     environment.pop("SHELLCHECK_OPTS", None)
     with tempfile.TemporaryDirectory(prefix=f"mainframe-{tool}-") as root:
-        completed = subprocess.run(
+        completed = _run_scanner(
             [executable, *args], input=text, capture_output=True, encoding="utf-8",
             cwd=root, env=environment, timeout=1, check=False,
         )
@@ -1355,7 +1372,7 @@ def _sdk_syntax_findings(text: str, path: Path, workspace: Path) -> list[Occurre
                     "--color", "never", "--config-path", str(config)]
             environment["RUSTUP_AUTO_INSTALL"] = "0"
             input_text = text
-        result = subprocess.run(
+        result = _run_scanner(
             [executable, *args], input=input_text, capture_output=True, encoding="utf-8",
             cwd=root, env=environment, timeout=1, check=False,
         )
@@ -1625,7 +1642,7 @@ def _semgrep_findings(
             "SEMGREP_SETTINGS_FILE": str(root / "settings.yml"),
         }
         environment.pop("SEMGREP_APP_TOKEN", None)
-        completed = subprocess.run(
+        completed = _run_scanner(
             [
                 executable,
                 "scan",
@@ -1931,9 +1948,15 @@ def _read_source(path: Path, workspace: Path) -> SourceSnapshot | None:
         resolved = path.resolve()
         if resolved != path or not _inside_workspace(resolved, workspace) or path.is_symlink():
             return None
-        if path.stat().st_size > MAX_FILE_BYTES:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(descriptor, "rb") as handle:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
+                return None
+            raw = handle.read(MAX_FILE_BYTES + 1)
+        if len(raw) > MAX_FILE_BYTES:
             return None
-        source = SourceSnapshot(path.read_text(encoding="utf-8", errors="replace"), True)
+        source = SourceSnapshot(raw.decode("utf-8", errors="replace"), True)
     except FileNotFoundError:
         source = SourceSnapshot("", False)
     except OSError:
@@ -2100,7 +2123,12 @@ def _read_scan(
     workspace: Path,
     *,
     include_advisory: bool,
+    deadline: float | None = None,
 ) -> ScanResult:
+    if deadline is not None and time.monotonic() >= deadline:
+        return ScanResult([], frozenset(), (ScanIssue(
+            "boundary:scan-budget", "The edit reached its code-quality scan time budget.",
+        ),), None)
     source = _read_source(path, workspace)
     if source is None:
         return ScanResult(
@@ -2114,13 +2142,13 @@ def _read_scan(
             ),
             None,
         )
-    return _scan_source(
-        source,
-        path.suffix.lower(),
-        path,
-        workspace,
-        include_advisory=include_advisory,
-    )
+    token = _SCAN_DEADLINE.set(deadline)
+    try:
+        return _scan_source(
+            source, path.suffix.lower(), path, workspace, include_advisory=include_advisory,
+        )
+    finally:
+        _SCAN_DEADLINE.reset(token)
 
 
 def _revision_matches(path: Path, workspace: Path, revision: str | None) -> bool:
@@ -2175,6 +2203,15 @@ def _display_path(path: Path, workspace: Path) -> str:
         return path.name
 
 
+def _bounded_row(value: str, limit: int = MAX_ROW_CHARS) -> str:
+    value = "".join(char if char.isprintable() else "?" for char in value)
+    if len(value) <= limit:
+        return value
+    # Preserve both the directory prefix and the file/line/diagnostic suffix.
+    half = (limit - 3) // 2
+    return value[:half] + " … " + value[-half:]
+
+
 def _unavailable(stage: str) -> QualityResult:
     return QualityResult(
         advisory=(
@@ -2215,7 +2252,30 @@ def _issue_advisory(messages: Iterable[str]) -> str | None:
 
 
 def _join_notes(*notes: str | None) -> str | None:
-    return "\n".join(note for note in notes if note) or None
+    sections = [section for note in notes if note for section in note.split("\n\n") if section]
+    if not sections:
+        return None
+    limit = (MAX_ADVISORY_CHARS - 2 * (len(sections) - 1)) // len(sections)
+    compact = []
+    for section in sections:
+        if len(section) <= limit:
+            compact.append(section)
+            continue
+        lines = section.splitlines()
+        rows = [line for line in lines[1:] if line.startswith("  - ")]
+        if not rows:
+            compact.append(_bounded_row(section, limit))
+            continue
+        heading = lines[0]
+        findings = heading + "\n" + "\n".join(rows)
+        if len(findings) <= limit:
+            compact.append(findings)
+            continue
+        marker = "\n  - … more findings" if len(rows) > 1 else ""
+        row_limit = limit - len(heading) - len(marker) - 1
+        first = _bounded_row(rows[0], row_limit)
+        compact.append(heading + "\n" + first + marker)
+    return "\n\n".join(compact)
 
 
 def _prune_pending(state: dict[str, object]) -> bool:
@@ -2223,6 +2283,17 @@ def _prune_pending(state: dict[str, object]) -> bool:
     if not isinstance(pending, dict):
         raise ValueError("invalid pending state")
     cutoff = time.time() - PENDING_MAX_AGE_SECONDS
+    notices = state["notices"]
+    operations = [
+        key for key, timestamp in notices.items()
+        if key.startswith("operation:") and isinstance(timestamp, (int, float))
+    ]
+    for key in operations:
+        if notices[key] < cutoff:
+            del notices[key]
+    operations = [key for key in operations if key in notices]
+    for key in sorted(operations, key=notices.get)[:-MAX_COMPLETED_OPERATIONS]:
+        del notices[key]
     removed = False
     for key, value in list(pending.items()):
         created = value.get("created") if isinstance(value, dict) else None
@@ -2248,6 +2319,7 @@ def capture_before(
         namespace = _require_identity(state_namespace, "state_namespace")
         workspace = _workspace(workspace_root)
         selected, truncated = _normalize_paths(paths, workspace)
+        deadline = time.monotonic() + SCAN_BUDGET_SECONDS
         snapshots: dict[str, object] = {}
         issues: list[ScanIssue] = []
         if truncated:
@@ -2258,7 +2330,7 @@ def capture_before(
                 )
             )
         for selected_path in selected:
-            scan = _read_scan(selected_path, workspace, include_advisory=True)
+            scan = _read_scan(selected_path, workspace, include_advisory=True, deadline=deadline)
             issues.extend(scan.issues)
             snapshots[str(selected_path)] = {
                 "available": scan.revision is not None,
@@ -2274,13 +2346,15 @@ def capture_before(
             claimed = _claim_issues(state, issues)
             pending = state["pending"]
             assert isinstance(pending, dict)
-            pending[_operation_key(operation)] = {
-                "created": time.time(),
-                "paths": snapshots,
-            }
+            operation_key = _operation_key(operation)
+            if "operation:" + operation_key not in state["notices"]:
+                pending.setdefault(operation_key, {
+                    "created": time.time(),
+                    "paths": snapshots,
+                })
             _save(path, state)
         _cleanup_stale(path.parent)
-        note = _issue_advisory(claimed)
+        note = _join_notes(_issue_advisory(claimed))
         if recovered:
             note = _join_notes(note, _unavailable("before-edit capture").advisory)
         return QualityResult(advisory=note)
@@ -2320,18 +2394,14 @@ def _revalidate_path(
 
 
 def _advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> str:
-    locations = [f"{_display_path(path, workspace)}:{row.line} — {row.label}" for path, row in rows]
+    locations = [_bounded_row(f"{_display_path(path, workspace)}:{row.line} — {row.label}") for path, row in rows]
     body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
     return (
-        "Code-quality check found newly introduced unfinished, suppressed, or "
-        "high-confidence security-sensitive work:\n"
+        "Code quality — new findings:\n"
         + body
-        + "\nResolve the underlying behavior and run relevant verification. Do "
-        "not merely delete a marker or suppress a diagnostic that represents "
-        "required work; route a truly unrelated observation through the "
-        "project's issue workflow."
+        + "\nResolve the underlying behavior and verify the affected path."
     )
 
 
@@ -2341,7 +2411,7 @@ def _review_advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> st
         location = _display_path(path, workspace)
         if row.line is not None:
             location += f":{row.line}"
-        locations.append(f"{location} — {row.label}")
+        locations.append(_bounded_row(f"{location} — {row.label}"))
     body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
@@ -2374,7 +2444,7 @@ def _growth_advisory(rows: list[GrowthFinding], workspace: Path) -> str:
                 f"{PYTHON_FUNCTION_LENGTH_THRESHOLD} lines "
                 f"({row.before} -> {row.after})"
             )
-    body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
+    body = "\n".join(f"  - {_bounded_row(location)}" for location in locations[:MAX_MESSAGE_ROWS])
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
     return (
@@ -2407,19 +2477,29 @@ def record_after(
             expired_before = _prune_pending(state)
             pending = state["pending"]
             assert isinstance(pending, dict)
-            snapshot = pending.pop(_operation_key(operation), None)
+            operation_key = _operation_key(operation)
+            notice_key = "operation:" + operation_key
+            if notice_key in state["notices"]:
+                return QualityResult()
+            _claim_issues(state, [ScanIssue(notice_key, "")])
+            snapshot = pending.pop(operation_key, None)
             if not succeeded:
                 _save(path, state)
                 if recovered_before or expired_before:
                     return _unavailable("after-edit verification")
                 return QualityResult()
             if not isinstance(snapshot, dict) or not isinstance(snapshot.get("paths"), dict):
+                claimed = _claim_issues(state, [ScanIssue(
+                    "boundary:missing-snapshot",
+                    "An edit could not be paired with its before snapshot.",
+                )])
                 _save(path, state)
-                return _unavailable("after-edit verification")
+                return QualityResult(advisory=_issue_advisory(claimed))
             _save(path, state)
 
         scanned: list[tuple[Path, dict[str, object], ScanResult]] = []
         issues: list[ScanIssue] = []
+        deadline = time.monotonic() + SCAN_BUDGET_SECONDS
         for raw_path, before_record in snapshot["paths"].items():
             if not isinstance(raw_path, str) or not isinstance(before_record, dict):
                 issues.append(
@@ -2438,7 +2518,7 @@ def record_after(
                     )
                 )
                 continue
-            scan = _read_scan(file_path, workspace, include_advisory=True)
+            scan = _read_scan(file_path, workspace, include_advisory=True, deadline=deadline)
             issues.extend(scan.issues)
             scanned.append((file_path, before_record, scan))
 
@@ -2607,7 +2687,7 @@ def _current_unresolved(
 
 
 def _block(rows: list[tuple[Path, Occurrence]], workspace: Path) -> str:
-    locations = [f"{_display_path(path, workspace)}:{row.line} — {row.label}" for path, row in rows]
+    locations = [_bounded_row(f"{_display_path(path, workspace)}:{row.line} — {row.label}") for path, row in rows]
     body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
@@ -2648,6 +2728,7 @@ def check_completion(
 
         scans: dict[str, ScanResult] = {}
         issues: list[ScanIssue] = []
+        deadline = time.monotonic() + SCAN_BUDGET_SECONDS
         if incomplete_edits:
             issues.append(
                 ScanIssue(
@@ -2657,7 +2738,7 @@ def check_completion(
             )
         for raw_path in paths:
             candidate = Path(raw_path)
-            scan = _read_scan(candidate, workspace, include_advisory=False)
+            scan = _read_scan(candidate, workspace, include_advisory=False, deadline=deadline)
             scans[raw_path] = scan
             issues.extend(scan.issues)
 
@@ -2676,7 +2757,7 @@ def check_completion(
             if issue_note:
                 reason += "\n" + issue_note
             return QualityResult(block_reason=reason)
-        note = _issue_advisory(claimed)
+        note = _join_notes(_issue_advisory(claimed))
         if recovered_before or recovered_after or expired_before or expired_after:
             note = _join_notes(note, _unavailable("completion verification").advisory)
         return QualityResult(advisory=note)

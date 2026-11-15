@@ -30,6 +30,20 @@ Fallow advice stays on the successful edit event because neither reviewed
 product offers non-blocking model advice at `Stop`. ZCode ordinary subagents
 also lack a runner for these callbacks.
 
+Fresh reviewed Desktop mappings combine quality, Fallow, and checkpoint advice
+into one successful-edit callback and one context message. They also combine
+Bash guard output and skill advice.
+Keep distinct detectors and disable markers behind these private transports.
+Isolate detector exceptions so an unavailable advisory cannot suppress a
+recognized denial from another detector. Limit combined text to 1600 characters
+and serialized output to 8 KiB, allocating space across active channels. A clean
+event emits nothing. The post-edit callback has a 20-second native timeout.
+Existing Codex split layouts retain native group/handler positions and their
+independent controls. ZCode split callbacks with native disable choices retain
+that layout and those choices. Replacing Codex hook definitions requires native
+trust review during delivery. Source tests alone establish neither trust nor
+live receipt.
+
 ## Keep native integration thin
 
 Prefer the canonical detector unchanged behind a small installed wrapper. Keep
@@ -156,6 +170,14 @@ operational failure behavior, context bounds, and the required advisory or
 blocking effect. Use synthetic payloads and isolated temporary files or Git
 repositories. Never test destructive behavior against a real root, home, or
 project path.
+
+The local regression routes are `python3 -B -m unittest discover -s hooks/tests`
+for canonical behavior and `python3 -B -m unittest discover -s tests` for
+adapters and lifecycle. Their cases cover duplicate callbacks, bounded scanner
+waits, nonregular files, disabled legacy layouts, per-detector fault isolation,
+Unicode wire budgets, and multi-channel consolidation. Native installed-build
+contract tests remain separate from disposable source fixtures and can reject
+an unreviewed application upgrade.
 
 For edit-dependent hooks, perform a real harmless native edit, observe the
 newly introduced finding, repair it, and prove the finding clears. For a

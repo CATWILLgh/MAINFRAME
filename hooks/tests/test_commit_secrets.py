@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -73,6 +74,12 @@ class CommitSecretsTests(unittest.TestCase):
             f"git commit -F {absolute}"
         )
         self.assertIn("github_pat in commit-message-file", file_result.block_reason or "")
+        link = self.root / "message-link"
+        link.symlink_to(absolute)
+        self.assertIn(
+            "github_pat in commit-message-file",
+            DETECTOR.check_context_free_metadata(f"git commit -F {link}").block_reason or "",
+        )
 
         relative = self.root / "relative.txt"
         relative.write_text(token, encoding="utf-8")
@@ -84,6 +91,38 @@ class CommitSecretsTests(unittest.TestCase):
             DETECTOR.check_context_free_metadata("git commit -m '$TOKEN'"),
             DETECTOR.CheckResult(),
         )
+
+    def test_fifo_reads_are_bounded_and_never_block_the_commit(self) -> None:
+        fifo = self.root / "pipe"
+        os.mkfifo(fifo)
+        script = """import importlib.util, sys
+spec = importlib.util.spec_from_file_location('commit_secrets', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+root, fifo = sys.argv[2:]
+assert module.check_command('git commit -F pipe', root).block_reason is None
+assert module.check_context_free_metadata('git commit -F ' + fifo).block_reason is None
+try:
+    module._working_tree_bytes(root, 'pipe')
+except module.InspectionUnavailable:
+    pass
+else:
+    raise AssertionError('FIFO must be unavailable')
+from pathlib import Path
+path = Path(fifo)
+path.unlink()
+path.write_text('regular')
+real_open = module.os.open
+def swap_then_open(name, flags, *args):
+    path.unlink()
+    module.os.mkfifo(path)
+    return real_open(name, flags, *args)
+module.os.open = swap_then_open
+assert module.check_context_free_metadata('git commit -F ' + fifo).block_reason is None
+"""
+        subprocess.run([sys.executable, "-c", script, str(SOURCE), str(self.root), str(fifo)],
+                       check=True, timeout=3)
 
     def test_staged_secret_blocks_without_exposing_value(self) -> None:
         token = _token()

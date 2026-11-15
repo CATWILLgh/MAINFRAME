@@ -1,7 +1,9 @@
 """Validate only addressed task-index rows and note edits; adapters encode effects."""
 from collections import Counter
+import os
 from pathlib import Path
 import re
+import stat
 
 MAX_BYTES = 1_000_000
 GROUPS = ('Запланировано', 'На рассмотрении', 'Отложено', 'Отказались')
@@ -35,7 +37,11 @@ def _read(path):
     try:
         if path.is_symlink():
             return None
-        with path.open('rb') as f:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, 'O_NOFOLLOW', 0))
+        with os.fdopen(descriptor, 'rb') as f:
+            info = os.fstat(f.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_BYTES:
+                return None
             raw = f.read(MAX_BYTES + 1)
         return raw.decode('utf-8') if len(raw) <= MAX_BYTES else None
     except FileNotFoundError:
@@ -104,6 +110,8 @@ def _check(root, path, relative, before, after, overlay):
         if target is None:
             return locus + ': note link must address a regular project note without symlink traversal'
         note = overlay.get(note_path) if note_path in overlay else _read(note_path)
+        if note is None and note_path not in overlay:
+            continue
         if not note:
             return locus + ': linked note is missing or unreadable; write the note before its index entry'
         problem = _note_problem(note)
@@ -139,8 +147,16 @@ def check_edit(workspace, path, old, new, replace_all=False, *, blank_characters
     if before is None:
         return None
     if old:
-        if old not in before or (not replace_all and before.count(old) != 1):
+        count = before.count(old)
+        if not count or (not replace_all and count != 1):
             return None
+        count = count if replace_all else 1
+        if str(relative) == '.docs/todo':
+            size = len(before.encode('utf-8')) + count * (len(new.encode('utf-8')) - len(old.encode('utf-8')))
+            if size > MAX_BYTES:
+                return None
+        elif len(before) + count * (len(new) - len(old)) > 5000:
+            return f'{relative}: note exceeds 5000 characters; consolidate its content without losing requirements'
         after = before.replace(old, new, -1 if replace_all else 1)
     else:
         # A verified native empty-old form writes the whole blank or absent file.

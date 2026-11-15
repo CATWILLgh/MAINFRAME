@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -45,6 +46,31 @@ class CodeQualityTests(unittest.TestCase):
         for patcher in reversed(self.scanner_patchers):
             patcher.stop()
         self.temporary.cleanup()
+
+    def test_compact_advice_keeps_each_subsection_and_diagnostic_suffix(self) -> None:
+        long_path = self.workspace.joinpath(*(["directory" * 10] * 6), "worker.py")
+        rows = [(long_path, QUALITY.Occurrence("TODO comment", line, str(line)))
+                for line in range(1, 7)]
+        quality = QUALITY._advisory(rows, self.workspace)
+        growth = QUALITY._growth_advisory([
+            QUALITY.GrowthFinding(long_path, "file", None, None, 399, 405),
+        ], self.workspace)
+        unavailable = QUALITY._issue_advisory([
+            QUALITY.ScanIssue("ruff", "Ruff review was unavailable."),
+        ])
+        message = QUALITY._join_notes(quality, growth, unavailable)
+        self.assertLessEqual(len(message), QUALITY.MAX_ADVISORY_CHARS)
+        self.assertIn("Code quality", message)
+        self.assertIn("TODO comment", message)
+        self.assertIn("Code structure review", message)
+        self.assertIn("crossed 400", message)
+        self.assertIn("Ruff review was unavailable", message)
+        self.assertIn("more findings", message)
+
+        repeated_join = QUALITY._join_notes(message, QUALITY._unavailable("verification").advisory)
+        self.assertLessEqual(len(repeated_join), QUALITY.MAX_ADVISORY_CHARS)
+        for heading in ("Code quality", "Code structure review", "protection unavailable"):
+            self.assertIn(heading, repeated_join)
 
     def capture(self, scope: str, operation: str, *paths: Path):
         return QUALITY.capture_before(
@@ -342,18 +368,18 @@ class CodeQualityTests(unittest.TestCase):
                         "    expect(runJob()).resolves.toBe(true)\n"
                         "})\n"
                     )
-                self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+                self.assertEqual(self.capture("scope", f"create-{name}", file), QUALITY.QualityResult())
                 file.write_text(source, encoding="utf-8")
-                advice = self.after("scope", "create").advisory or ""
+                advice = self.after("scope", f"create-{name}").advisory or ""
                 self.assertIn(f"{name}:{2 if imports else 1} — JavaScript valid-expect", advice)
                 if "vitest" in imports:
                     self.assertIn(f"{name}:13 — JavaScript valid-expect", advice)
                 self.assertEqual(advice.count("valid-expect"), 2 if "vitest" in imports else 1)
                 self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
-                self.assertEqual(self.capture("scope", "unrelated", file), QUALITY.QualityResult())
+                self.assertEqual(self.capture("scope", f"unrelated-{name}", file), QUALITY.QualityResult())
                 file.write_text(source + "\nconst fixtureSize = 2;\n", encoding="utf-8")
-                self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
+                self.assertEqual(self.after("scope", f"unrelated-{name}"), QUALITY.QualityResult())
 
     def test_async_assertion_rule_ignores_non_test_files_and_jsx_expressions(self) -> None:
         self.scanners[1].side_effect = NODE_FINDINGS
@@ -1183,7 +1209,8 @@ class CodeQualityTests(unittest.TestCase):
         file.write_text("value = 1\n", encoding="utf-8")
         self.assertEqual(self.after("scope", "remove"), QUALITY.QualityResult())
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
-        self.assertFalse(list(self.state.glob("*.json")))
+        states = [json.loads(path.read_text()) for path in self.state.glob("*.json")]
+        self.assertTrue(all(not state["findings"] and not state["pending"] for state in states))
 
     def test_changed_marker_remains_owned_even_when_category_count_is_equal(self) -> None:
         file = self.workspace / "module.py"
@@ -1222,10 +1249,74 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.after("scope", "failed", succeeded=False), QUALITY.QualityResult())
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
+    def test_conditional_test_decorators_do_not_block_completion(self) -> None:
+        file = self.workspace / "test_runner.py"
+        self.capture("scope", "create", file)
+        file.write_text(
+            '@unittest.skipUnless(True, "requirement met")\n'
+            'def test_available():\n    pass\n'
+            '@pytest.mark.skipif(False, reason="requirement met")\n'
+            'def test_enabled():\n    pass\n',
+            encoding="utf-8",
+        )
+        self.assertEqual(self.after("scope", "create"), QUALITY.QualityResult())
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+    def test_debugger_object_key_is_silent_and_debugger_statement_is_reported(self) -> None:
+        line = "  debugger" + " " * 6000 + ": false,"
+        self.assertEqual(QUALITY.scan_text("const settings = {\n" + line + "\n};\n", ".js"), [])
+        self.assertEqual(
+            [row.label for row in QUALITY.scan_text("  debugger  ;  // development\n", ".js")],
+            ["debugger statement"],
+        )
+
+    def test_duplicate_tool_event_preserves_the_first_snapshot_and_clean_replay_is_silent(self) -> None:
+        file = self.workspace / "sample.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        self.capture("scope", "edit", file)
+        file.write_text("# TODO: finish work\n", encoding="utf-8")
+        self.capture("scope", "edit", file)
+        self.assertIn("TODO/FIXME/HACK/XXX", self.after("scope", "edit").advisory or "")
+        self.assertEqual(self.after("scope", "edit"), QUALITY.QualityResult())
+
+        self.capture("scope", "clean", file)
+        file.write_text("value = 2\n", encoding="utf-8")
+        self.assertEqual(self.after("scope", "clean"), QUALITY.QualityResult())
+        self.assertEqual(self.after("scope", "clean"), QUALITY.QualityResult())
+
+    def test_scanner_timeout_uses_the_remaining_shared_budget(self) -> None:
+        executable = self.root / "ruff"
+        executable.write_text("#!/bin/sh\nexec /bin/sleep 1\n")
+        executable.chmod(0o755)
+        file = self.workspace / "module.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        started = time.monotonic()
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.root)}),
+            mock.patch.object(QUALITY, "SCAN_BUDGET_SECONDS", 0.1),
+        ):
+            result = self.capture("scope", "slow", file)
+        self.assertIn("unavailable", result.advisory or "")
+        self.assertLess(time.monotonic() - started, 0.6)
+        self.assertIsNone(result.block_reason)
+
+    def test_completed_event_retention_is_bounded(self) -> None:
+        file = self.workspace / "module.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        with mock.patch.object(QUALITY, "MAX_COMPLETED_OPERATIONS", 4):
+            for number in range(10):
+                self.capture("scope", str(number), file)
+                self.after("scope", str(number))
+        path = QUALITY._state_path("scope", self.workspace, "test-adapter", self.state)
+        notices = json.loads(path.read_text())["notices"]
+        self.assertLessEqual(len(notices), 5)
+
     def test_missing_snapshot_and_invalid_identity_fail_open(self) -> None:
         result = self.after("scope", "missing")
         self.assertIn("protection unavailable", (result.advisory or "").lower())
         self.assertIsNone(result.block_reason)
+        self.assertEqual(self.after("scope", "another-missing"), QUALITY.QualityResult())
 
         invalid = QUALITY.capture_before(
             "",
@@ -1268,6 +1359,29 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIn("protection unavailable", (after.advisory or "").lower())
         self.assertIsNone(after.block_reason)
         self.assertNotIn("Completion blocked", self.completion("scope").block_reason or "")
+
+    def test_fifo_source_is_unavailable_without_waiting_for_a_writer(self) -> None:
+        workspace = self.workspace.resolve()
+        fifo = workspace / "pipe.py"
+        os.mkfifo(fifo)
+        script = """import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location('quality', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module._read_source(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])) is None
+path = pathlib.Path(sys.argv[2])
+path.unlink()
+path.write_text('regular')
+real_open = module.os.open
+def swap_then_open(name, flags, *args):
+    path.unlink()
+    module.os.mkfifo(path)
+    return real_open(name, flags, *args)
+module.os.open = swap_then_open
+assert module._read_source(path, pathlib.Path(sys.argv[3])) is None
+"""
+        subprocess.run([sys.executable, "-c", script, str(SOURCE), str(fifo), str(workspace)],
+                       check=True, timeout=3)
 
     def test_paths_outside_workspace_and_unsupported_files_are_ignored(self) -> None:
         outside = self.root / "outside.py"

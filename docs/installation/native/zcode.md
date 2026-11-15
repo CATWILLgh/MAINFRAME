@@ -108,11 +108,13 @@ hook configuration, so a change requires a new session. A disabled registration
 must not invoke a missing executable.
 [Hook documentation](https://zcode.z.ai/en/docs/hooks)
 
-ZCode runs hooks from one source in array order. Register the four Bash
-pre-action detectors through one product-private `mainframe-pre-shell` bridge
-process so the same payload starts Python once. The bridge runs the canonical
-detectors in inventory order, preserves their individual disable markers,
-deduplicates advice, and aggregates output with denial taking precedence.
+ZCode runs hooks from one source in array order. New and all-enabled mappings
+register the four Bash pre-action detectors and skill advice through one private
+`mainframe-before-shell` bridge. Successful-edit quality, Fallow, and checkpoint
+advice share `mainframe-post-edit`. Preserve existing split callbacks when native
+disable choices would be lost by merging them. The bridge isolates detector
+exceptions, preserves individual disable markers, deduplicates advice, and
+aggregates output with denial taking precedence.
 SessionStart root capture and the Write/Edit/Stop quality lifecycle remain
 separate registrations because they consume different events and state.
 
@@ -141,8 +143,10 @@ This is the smallest event set that preserves the canonical timing and effect:
 - `Stop` is used only to revalidate and block a still-live attributed quality
   finding. ZCode ignores matchers for Stop and caps continuation at three, so
   the clean path must remain silent. Completion-only advisories are left
-  unsupported instead of forcing another model turn. A still-positive repair
-  retry is explicitly labeled unresolved; the native cap does not prove repair.
+  unsupported instead of forcing another model turn. The adapter requests at
+  most one repair continuation and returns neutral on `stop_hook_active`, while
+  retaining unresolved findings for a later ordinary completion check. The
+  native cap does not prove repair.
 - `SessionStart` supplies the initialized runtime root before later Bash calls
   can change cwd. The current bundle emits startup, resume, and fork. The
   compatibility matcher accepts clear. Compact can pass a mutable subdirectory

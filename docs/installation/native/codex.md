@@ -61,6 +61,18 @@ valid spawn delivered native `SubagentStart` and `SubagentStop`. The run used
 a temporary profile. Desktop activation, user trust and remote delivery
 require their own evidence.
 
+Fresh extended Desktop mappings group successful-edit quality, Fallow, and
+checkpoint advice in the private `mainframe-post-edit` transport.
+`mainframe-before-shell` also groups shell guards and skill advice. Both isolate
+detector failures and emit one bounded context. Existing split layouts keep
+their group/handler cardinality and positions, preserving independent native
+disable choices. Older mappings retain their supported detector set.
+These source changes require delivery and native trust review before a live
+activation claim. Preserve owned-group positions and unrelated callbacks when
+upgrading. Codex identifies native trust and enabled state by source, event,
+group and handler position, with a separate definition hash for each handler.
+[Hook discovery](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/hooks/src/engine/discovery.rs#L769-L808)
+
 ## Desktop 0.167.0-alpha.3.2 skill-only delivery
 
 The signed ChatGPT Desktop release `26.1103.41825`, build `25679`, bundles

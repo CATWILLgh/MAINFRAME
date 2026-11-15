@@ -22,6 +22,7 @@ from pathlib import Path
 import re
 import shlex
 import signal
+import stat
 import subprocess
 import time
 
@@ -604,6 +605,23 @@ def _blob(root: str, spec: str, *, missing_ok: bool = False) -> bytes:
     return data
 
 
+def _regular_file_bytes(path: str | bytes, *, follow_symlinks: bool = True) -> bytes:
+    flags = os.O_RDONLY | os.O_NONBLOCK
+    if not follow_symlinks:
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("not a regular file")
+        if info.st_size > MAX_BLOB_BYTES:
+            raise InspectionUnavailable("blob_too_large")
+        data = handle.read(MAX_BLOB_BYTES + 1)
+    if len(data) > MAX_BLOB_BYTES:
+        raise InspectionUnavailable("blob_too_large")
+    return data
+
+
 def _working_tree_bytes(root: str, path: str) -> bytes:
     relative = Path(path)
     if relative.is_absolute() or ".." in relative.parts:
@@ -615,14 +633,7 @@ def _working_tree_bytes(root: str, path: str) -> bytes:
             return data if isinstance(data, bytes) else os.fsencode(data)
         if os.path.isdir(target) or not os.path.exists(target):
             return b""
-        size = os.path.getsize(target)
-        if size > MAX_BLOB_BYTES:
-            raise InspectionUnavailable("blob_too_large")
-        with open(target, "rb") as handle:
-            data = handle.read(MAX_BLOB_BYTES + 1)
-        if len(data) > MAX_BLOB_BYTES:
-            raise InspectionUnavailable("blob_too_large")
-        return data
+        return _regular_file_bytes(target, follow_symlinks=False)
     except InspectionUnavailable:
         raise
     except OSError as exc:
@@ -684,13 +695,9 @@ def _scan_metadata(invocation: CommitInvocation) -> list[tuple[str, str, int | N
             raise InspectionUnavailable("dynamic_commit_metadata_file")
         path = value if os.path.isabs(value) else os.path.join(invocation.cwd, value)
         try:
-            size = os.path.getsize(path)
-            if size > MAX_BLOB_BYTES:
-                raise InspectionUnavailable("metadata_file_too_large")
-            with open(path, "rb") as handle:
-                data = handle.read(MAX_BLOB_BYTES + 1)
-        except InspectionUnavailable:
-            raise
+            data = _regular_file_bytes(path)
+        except InspectionUnavailable as exc:
+            raise InspectionUnavailable("metadata_file_too_large") from exc
         except OSError as exc:
             raise InspectionUnavailable("metadata_file_read_failed") from exc
         findings.extend((item.kind, label, item.line) for item in _introduced(b"", data))
@@ -713,12 +720,8 @@ def _scan_context_free_metadata(
         if DYNAMIC_PATH_RE.search(value) or not os.path.isabs(value):
             continue
         try:
-            size = os.path.getsize(value)
-            if size > MAX_BLOB_BYTES:
-                continue
-            with open(value, "rb") as handle:
-                data = handle.read(MAX_BLOB_BYTES + 1)
-        except OSError:
+            data = _regular_file_bytes(value)
+        except (OSError, InspectionUnavailable):
             continue
         findings.extend(
             (item.kind, label, item.line) for item in _introduced(b"", data)

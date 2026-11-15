@@ -31,6 +31,9 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
+PRE_EVENT_TRANSPORT = "mainframe-before-shell"
+POST_EDIT_TRANSPORT = "mainframe-post-edit"
+POST_EDIT_HOOKS = {"mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-fallow-quality"}
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits", "mainframe-fallow-quality")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
@@ -508,9 +511,17 @@ class Codex:
             artifacts[self.skills / name / "agents/openai.yaml"] = (b"policy:\n  allow_implicit_invocation: false\n", 0o600, "commands." + name, False)
         return artifacts
 
-    def native_hook_groups(self) -> dict:
+    def native_hook_groups(self, previous: dict | None = None) -> dict:
         """Native registrations shared by planning and catalog verification."""
-        shell = hook_command(self.hooks, PRE_SHELL_TRANSPORT, self.event_state, runtime_bin(self.home),
+        extended = self.surface == "desktop" and self.version in EXTENDED_DESKTOP_RUNTIMES
+        previous = self.receipt() if previous is None else previous
+        prior_groups = previous.get("hook_groups", {})
+        split_shell = any(PRE_SHELL_TRANSPORT in _binding_names(group, self.hooks)
+                          for group in prior_groups.get("PreToolUse", []))
+        split_post = any(_binding_names(group, self.hooks) & POST_EDIT_HOOKS
+                         for group in prior_groups.get("PostToolUse", []))
+        shell = hook_command(self.hooks, PRE_SHELL_TRANSPORT,
+                             self.event_state, runtime_bin(self.home),
                              tool_cwd_override=self.surface == "desktop" and self.version == TOOL_CWD_DESKTOP_RUNTIME)
         groups = {"PreToolUse": [
             {"matcher": "^Bash$", "hooks": [{"type": "command", "command": shell,
@@ -537,13 +548,26 @@ class Codex:
         if self.version in SELECTION_BINDING_RUNTIMES:
             groups["PreToolUse"].append(self.selection_group())
         groups["PreToolUse"].append(self.todo_group())
-        if self.surface == "desktop" and self.version in EXTENDED_DESKTOP_RUNTIMES:
+        if extended:
+            # Native controls use group/handler indices. Retain split layouts
+            # on upgrades so independent disables and foreign keys keep meaning.
+            if not split_shell:
+                groups["PreToolUse"][0]["hooks"] = [{"type": "command",
+                    "command": hook_command(self.hooks, PRE_EVENT_TRANSPORT, self.event_state,
+                                            runtime_bin(self.home),
+                                            tool_cwd_override=self.version == TOOL_CWD_DESKTOP_RUNTIME),
+                    "timeout": 7, "additionalContextLimit": 1600}]
+            if not split_post:
+                groups["PostToolUse"][0]["hooks"] = [{"type": "command",
+                    "command": hook_command(self.hooks, POST_EDIT_TRANSPORT, self.event_state, runtime_bin(self.home)),
+                    "timeout": 20, "additionalContextLimit": 1600}]
             fallow = hook_command(self.hooks, "mainframe-fallow-quality", self.event_state, runtime_bin(self.home))
             groups["PreToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
                 "type": "command", "command": fallow, "timeout": 2}]})
-            groups["PostToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
-                "type": "command", "command": fallow,
-                "timeout": 10, "additionalContextLimit": 2000}]})
+            if split_post:
+                groups["PostToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
+                    "type": "command", "command": fallow,
+                    "timeout": 10, "additionalContextLimit": 2000}]})
             groups["SubagentStop"] = [{"hooks": [{
                 "type": "command", "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
                 "timeout": 180}]}]
@@ -694,7 +718,7 @@ class Codex:
             instruction_record["user_sha256"] = user_digest
         changes.append(Change.from_snapshot(instruction_path, instruction_snapshot, instruction,
                        mode=instruction_snapshot[1] or 0o600, component="instructions.global"))
-        desired_hooks = {} if remove else self.native_hook_groups()
+        desired_hooks = {} if remove else self.native_hook_groups(previous)
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
         old_hooks = hook_snapshot[0]

@@ -36,10 +36,14 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent
 PRE_SHELL_HOOKS = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-todo-limits", "mainframe-fallow-quality"})
+PRE_EVENT_TRANSPORT = "mainframe-before-shell"
+POST_EDIT_TRANSPORT = "mainframe-post-edit"
+POST_EDIT_HOOKS = ("mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint")
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, PRE_EVENT_TRANSPORT, POST_EDIT_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-todo-limits", "mainframe-fallow-quality"})
 MAX_INPUT_BYTES = 262_144
-MAX_MESSAGE_CHARS = 6_000
-MAX_OUTPUT_BYTES = 32_768
+MAX_POST_INPUT_BYTES = 4 * 1024 * 1024
+MAX_MESSAGE_CHARS = 1_600
+MAX_OUTPUT_BYTES = 8_192
 MAX_ROOTS = 4_096
 COMMIT_BUDGET_SECONDS = 3.0
 MAX_EVENTS = 4_096
@@ -258,9 +262,9 @@ def _serialize(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
-def _read_payload(stream: BinaryIO) -> dict | None:
-    raw = stream.read(MAX_INPUT_BYTES + 1)
-    if len(raw) > MAX_INPUT_BYTES:
+def _read_payload(stream: BinaryIO, limit: int = MAX_INPUT_BYTES) -> dict | None:
+    raw = stream.read(limit + 1)
+    if len(raw) > limit:
         return None
     try:
         data = json.loads(raw)
@@ -300,6 +304,8 @@ def _edit_paths(data: dict, cwd: str) -> list[str]:
 
 
 def _quality_dispatch(data: dict, state: Path, event: str) -> dict | None:
+    if event == "Stop" and _native_value(data, "stop_hook_active", "stopHookActive") is True:
+        return None
     cwd = _cwd(data)
     scope = _native_value(data, "session_id", "sessionId")
     tool = _native_value(data, "tool_name", "toolName")
@@ -348,9 +354,7 @@ def _quality_dispatch(data: dict, state: Path, event: str) -> dict | None:
             scope, workspace, state_namespace="mainframe-zcode-v2", state_root=state
         )
         if result.block_reason:
-            active = _native_value(data, "stop_hook_active", "stopHookActive")
-            prefix = "MAINFRAME quality check remains unresolved after its repair continuation: " if active is True else ""
-            return _stop_block(prefix + result.block_reason)
+            return _stop_block(result.block_reason)
         # Stop advice is not visible to the responsible model unless it forces
         # another turn. Keep advisory-only results silent at this event.
     return None
@@ -428,6 +432,11 @@ def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
                 raise ValueError("ambiguous Edit response")
             # Native Edit deletes the following line break with an empty replacement.
             matched = old + "\n" if not new and not old.endswith("\n") and old + "\n" in before else old
+            count = before.count(matched) if replace_all else 1
+            before_bytes = len(before.encode("utf-8"))
+            after_bytes = before_bytes + count * (len(new.encode("utf-8")) - len(matched.encode("utf-8")))
+            if before_bytes + after_bytes > FALLOW_MAX_BYTES:
+                raise ValueError("oversized native edit")
             after = before.replace(matched, new, -1 if replace_all else 1)
         else:
             if before.strip(EDIT_BLANK_CHARACTERS):
@@ -436,7 +445,10 @@ def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
             wholly_owned = [str(path)]
     if len(before.encode("utf-8")) + len(after.encode("utf-8")) > FALLOW_MAX_BYTES:
         raise ValueError("oversized native edit")
-    with path.open("rb") as stream:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("postimage is not a regular file")
         observed = stream.read(FALLOW_MAX_BYTES + 1)
     if observed != after.encode("utf-8"):
         raise ValueError("addressed postimage changed")
@@ -467,10 +479,19 @@ def _fallow_dispatch(data: dict, state: Path, event: str) -> dict | None:
             return None
         result = detector.analyze(workspace, affected, diff, wholly_owned_paths=owned, timeout_seconds=7)
         message = result.advisory or result.unavailable
+        unavailable = not result.advisory and bool(result.unavailable)
     except (OSError, ValueError, RuntimeError, UnicodeError):
         message = FALLOW_UNAVAILABLE
+        unavailable = True
+    claim_data = data
+    if unavailable:
+        claim_data = {key: value for key, value in data.items()
+                      if key not in {"tool_use_id", "toolUseId", "toolCallId"}}
+        identity = "fallow-unavailable:" + workspace
+        claim_data["tool_use_id"] = (identity if len(identity) <= MAX_ID_CHARS else
+                                     "fallow-unavailable:" + hashlib.sha256(workspace.encode()).hexdigest())
     return (_native_output(event, "additionalContext", message)
-            if message and claim_event(data, state, "mainframe-fallow-quality:post") else None)
+            if message and claim_event(claim_data, state, "mainframe-fallow-quality:post") else None)
 
 
 def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
@@ -487,20 +508,62 @@ def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
     if not reasons and not advice:
         return None
     specific = {"hookEventName": event}
-    if reasons:
-        specific.update(permissionDecision="deny", permissionDecisionReason="\n\n".join(reasons))
-    if advice:
-        specific["additionalContext"] = "\n\n".join(advice)
     output = {"hookSpecificOutput": specific}
-    for field in ("permissionDecisionReason", "additionalContext"):
-        if field in specific:
-            specific[field] = specific[field][:MAX_MESSAGE_CHARS]
+    def join(messages, budget):
+        share = max(1, (budget - 2 * (len(messages) - 1)) // len(messages))
+        return "\n\n".join(message[:share] for message in messages)
+
+    budget = MAX_MESSAGE_CHARS
+    while True:
+        if reasons:
+            specific.update(permissionDecision="deny", permissionDecisionReason=join(
+                reasons, budget if not advice else budget * 3 // 4))
+        if advice:
+            specific["additionalContext"] = join(advice, budget if not reasons else budget // 4)
+        if len(_serialize(output).encode("utf-8")) + 1 <= MAX_OUTPUT_BYTES:
+            break
+        budget = budget * 3 // 4
+    return output
+
+
+def _dispatch_composite(names: tuple[str, ...], data: dict, state: Path) -> list[dict]:
+    outputs = []
+    for name in names:
+        try:
+            output = _dispatch_data(name, state, data)
+            if output is not None:
+                outputs.append(output)
+        except Exception:
+            continue
+    return outputs
+
+
+def _combine_post_edit(outputs: list[dict]) -> dict | None:
+    messages = []
+    for output in outputs:
+        message = output.get("hookSpecificOutput", {}).get("additionalContext")
+        if isinstance(message, str) and message and message not in messages:
+            messages.append(message)
+    if not messages:
+        return None
+    def limited_message(message: str, limit: int) -> str:
+        if len(message) <= limit:
+            return message
+        prefix = message[:limit]
+        boundary = prefix.rfind("\n")
+        return prefix[:boundary] if boundary >= limit // 2 else prefix
+
+    def joined(limit: int) -> str:
+        share = max(1, (limit - 2 * (len(messages) - 1)) // len(messages))
+        return "\n\n".join(limited_message(message, share) for message in messages)
+
+    limit = MAX_MESSAGE_CHARS
+    message = joined(limit)
+    output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": message}}
     while len(_serialize(output).encode("utf-8")) + 1 > MAX_OUTPUT_BYTES:
-        field = max(
-            (name for name in ("permissionDecisionReason", "additionalContext") if name in specific),
-            key=lambda name: len(specific[name]),
-        )
-        specific[field] = specific[field][:len(specific[field]) // 2]
+        limit = limit * 3 // 4
+        message = joined(limit)
+        output["hookSpecificOutput"]["additionalContext"] = message
     return output
 
 
@@ -556,11 +619,15 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
                                       *identity, command, event)
         return _native_output(event, "additionalContext", message) if message else None
     if name == PRE_SHELL_TRANSPORT:
-        outputs = [
-            output for hook in PRE_SHELL_HOOKS
-            if (output := _dispatch_data(hook, state, data)) is not None
-        ]
+        outputs = _dispatch_composite(PRE_SHELL_HOOKS, data, state)
         return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
+    if name == PRE_EVENT_TRANSPORT:
+        outputs = _dispatch_composite((PRE_SHELL_TRANSPORT, "mainframe-skill-reminder"), data, state)
+        return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
+    if name == POST_EDIT_TRANSPORT:
+        if event != "PostToolUse" or _native_value(data, "tool_name", "toolName") not in {"Write", "Edit"}:
+            return None
+        return _combine_post_edit(_dispatch_composite(POST_EDIT_HOOKS, data, state))
     if name == "mainframe-destructive-operations" and event == "SessionStart":
         session_root(data, state, capture=True)
         return None
@@ -589,10 +656,12 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
         return None
 
     if name == "mainframe-destructive-operations":
+        reason = detector.context_free_decision_reason(command)
+        if isinstance(reason, str) and reason:
+            return _native_output(event, "permissionDecisionReason", reason)
         cwd = _cwd(data)
         root = session_root(data, state) if cwd else None
-        reason = (detector.decision_reason(command, cwd, root) if root
-                  else detector.context_free_decision_reason(command))
+        reason = detector.decision_reason(command, cwd, root) if root else None
         return (_native_output(event, "permissionDecisionReason", reason)
                 if isinstance(reason, str) and reason else None)
     if name == "mainframe-commit-secrets":
@@ -617,7 +686,7 @@ def dispatch(name: str, state: Path, stream: BinaryIO) -> dict | None:
     """Return one native decision/context object, or the neutral result."""
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
-    data = _read_payload(stream)
+    data = _read_payload(stream, MAX_POST_INPUT_BYTES if name == POST_EDIT_TRANSPORT else MAX_INPUT_BYTES)
     if data is None:
         return None
     return _dispatch_data(name, state, data)
