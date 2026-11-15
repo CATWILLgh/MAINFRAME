@@ -765,7 +765,9 @@ class CodeQualityTests(unittest.TestCase):
 
         self.assertEqual(self.capture("sql", "another", file), QUALITY.QualityResult())
         file.write_text("DROP TABLE history;\nCREATE INDEX idx_status ON jobs (status);\n", encoding="utf-8")
-        self.assertEqual(self.after("sql", "another"), QUALITY.QualityResult())
+        advice = self.after("sql", "another").advisory or ""
+        self.assertIn("Squawk require-concurrent-index-creation", advice)
+        self.assertNotIn("Squawk ban-drop-table", advice)
 
         other = self.workspace / "clickhouse" / "migrations" / "0001_remove_table.sql"
         self.assertEqual(self.capture("sql", "other", other), QUALITY.QualityResult())
@@ -791,7 +793,7 @@ class CodeQualityTests(unittest.TestCase):
         file = css / "0127_online_index.sql"
         self.assertEqual(self.capture("sql", "css", file), QUALITY.QualityResult())
         file.write_text("CREATE INDEX idx ON events (status);\n", encoding="utf-8")
-        self.assertEqual(self.after("sql", "css"), QUALITY.QualityResult())
+        self.assertIn("Squawk require-concurrent-index-creation", self.after("sql", "css").advisory or "")
         self.assertEqual(self.capture("sql", "css-explicit-transaction", file), QUALITY.QualityResult())
         file.write_text("BEGIN;\nCREATE INDEX CONCURRENTLY idx ON events (status);\nCOMMIT;\n", encoding="utf-8")
         self.assertIn("Squawk ban-concurrent-index-creation-in-transaction",
@@ -807,6 +809,68 @@ class CodeQualityTests(unittest.TestCase):
         advice = self.after("sql", "invalid").advisory or ""
         self.assertIn("squawk review was unavailable", advice)
         self.assertEqual(self.completion("sql"), QUALITY.QualityResult())
+
+    def test_online_postgresql_risks_are_advisory_on_the_first_edit(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        cases = (
+            ("index", "CREATE INDEX idx ON events (status);", "require-concurrent-index-creation"),
+            ("drop_index", "DROP INDEX idx;", "require-concurrent-index-deletion"),
+            ("check", "ALTER TABLE events ADD CONSTRAINT valid CHECK (status IS NOT NULL);", "constraint-missing-not-valid"),
+            ("foreign_key", "ALTER TABLE events ADD CONSTRAINT owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id);", "constraint-missing-not-valid"),
+            ("unique", "ALTER TABLE events ADD CONSTRAINT unique_status UNIQUE (status);", "disallowed-unique-constraint"),
+            ("not_null", "ALTER TABLE events ALTER COLUMN status SET NOT NULL;", "adding-not-nullable-field"),
+            ("required", "ALTER TABLE events ADD COLUMN status text NOT NULL;", "adding-required-field"),
+            ("volatile_default", "ALTER TABLE events ADD COLUMN token uuid DEFAULT gen_random_uuid();", "adding-field-with-default"),
+            ("rename_column", "ALTER TABLE events RENAME COLUMN status TO state;", "renaming-column"),
+            ("rename_table", "ALTER TABLE events RENAME TO records;", "renaming-table"),
+        )
+        for name, statement, rule in cases:
+            with self.subTest(rule=rule, name=name):
+                file = root / f"20261115000000_{name}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                advice = self.after(name, "create").advisory or ""
+                self.assertIn(f"migration.sql:2 — Squawk {rule}", advice)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+                self.capture(name, "unchanged", file)
+                self.assertEqual(self.after(name, "unchanged"), QUALITY.QualityResult())
+
+    def test_postgresql_lock_timeout_and_safe_alternatives(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        for name, prefix in (("missing", ""), ("zero", "SET lock_timeout = '0ms';\n")):
+            with self.subTest(timeout=name):
+                file = root / f"20261115000000_{name}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text(prefix + "ALTER TABLE events ADD COLUMN status text;\n")
+                advice = self.after(name, "create").advisory or ""
+                self.assertIn("Squawk require-lock-timeout", advice)
+                self.assertIn("runner", advice)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+
+        safe = (
+            "CREATE INDEX CONCURRENTLY idx ON events (status);",
+            "DROP INDEX CONCURRENTLY idx;",
+            "ALTER TABLE events ADD CONSTRAINT valid CHECK (status IS NOT NULL) NOT VALID;",
+            "ALTER TABLE events ADD CONSTRAINT unique_status UNIQUE USING INDEX idx;",
+            "ALTER TABLE events ADD COLUMN status text NOT NULL DEFAULT 'active';",
+            "ALTER TABLE events ADD COLUMN status text;",
+            "UPDATE events SET status = 'active' WHERE id = 42;",
+            "BEGIN; CREATE TABLE new_events (id bigint PRIMARY KEY, status text); CREATE INDEX idx ON new_events (status); COMMIT;",
+        )
+        for index, statement in enumerate(safe):
+            with self.subTest(safe_statement=statement):
+                name = f"safe-{index}"
+                file = root / f"20261115000000_safe_{index}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                self.assertEqual(self.after(name, "create"), QUALITY.QualityResult())
 
     def test_scanner_outage_does_not_hardlock_and_recovery_revalidates(self) -> None:
         finding = QUALITY._occurrence(

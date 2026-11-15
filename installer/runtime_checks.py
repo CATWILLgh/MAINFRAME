@@ -82,7 +82,15 @@ def _analyzer(root: Path, workspace: Path, tool: str) -> bool:
         )
         checks = ((quality._kube_findings(workload), "KubeLinter no-readiness-probe", None),)
     elif tool == "squawk":
-        checks = ((quality._squawk_findings("DROP TABLE history;\n"), "Squawk ban-drop-table", 1),)
+        checks = (
+            (quality._squawk_findings("DROP TABLE history;\n"), "Squawk ban-drop-table", 1),
+            (quality._squawk_findings("CREATE INDEX idx ON events (status);\n"), "Squawk require-concurrent-index-creation", 1),
+            (quality._squawk_findings("ALTER TABLE events ADD CONSTRAINT c CHECK (id > 0);\n"), "Squawk constraint-missing-not-valid", 1),
+            (quality._squawk_findings("ALTER TABLE events ADD COLUMN status text;\n"), "Squawk require-lock-timeout", 1),
+        )
+        safe = "SET lock_timeout = '1s';\nCREATE INDEX CONCURRENTLY idx ON events (status);\n"
+        if quality._squawk_findings(safe):
+            return False
     else:
         return False
     return all(any(row.label.startswith(prefix) and row.line == line for row in rows)

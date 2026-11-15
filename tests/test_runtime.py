@@ -121,6 +121,21 @@ esac
         self.assertTrue(spawn.call_args.kwargs["start_new_session"])
         kill.assert_called_once_with(process.pid, signal.SIGKILL)
 
+    def test_squawk_reuse_rejects_an_analyzer_missing_online_migration_checks(self):
+        executable = self.external / "squawk"
+        executable.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "import sys\n"
+            "source = sys.stdin.read()\n"
+            "rows = []\n"
+            "if 'DROP TABLE' in source:\n"
+            "    rows.append({'rule_name': 'ban-drop-table', 'line': 0, 'line_end': 0})\n"
+            "print(json.dumps(rows))\n"
+        )
+        executable.chmod(0o755)
+        self.assertFalse(runtime._check_analyzer("squawk", executable))
+
     def test_missing_node_installer_stops_before_activation_manifest(self):
         with mock.patch.object(runtime.shutil, "which", return_value=None):
             with self.assertRaisesRegex(Conflict, "npm is required"):

@@ -1,6 +1,6 @@
 ---
 name: mainframe-rust
-description: Develop, debug, or review Rust crates, libraries, CLIs, services, and workers, including Cargo workspaces, async Rust, and FFI.
+description: Develop, debug, or review Rust crates, libraries, CLIs, services, and workers, including Cargo workspaces, async Rust, migrations, and FFI.
 ---
 
 # Rust engineering
@@ -11,6 +11,10 @@ test target. Read the crate manifest, inherited workspace settings,
 edition, minimum supported Rust version, feature defaults, target platforms,
 dependency constraints, and public API. Check which feature and target
 actually exercises the edited path.
+
+For schema, migration, index, or constraint work, use the shared
+[migration method](../mainframe-testing/references/migrations.md) with the
+crate's actual database client and migration runner.
 
 ## Keep failure and ownership visible
 

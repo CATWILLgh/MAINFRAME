@@ -439,7 +439,15 @@ Use static diagnostic descriptions and compare only new findings. See
 | ShellCheck | `.sh` and `.bash` with a supported interpreter or no shebang. | Shell parse errors, masked command failure, unchecked `cd`, and a pipeline that reads and writes the same file. |
 | actionlint | `.github/workflows/*.yml` and `.github/workflows/*.yaml` at the repository root. | Workflow YAML or schema errors, missing or cyclic job dependencies, and invalid identifiers, expressions, conditions, or matrices. |
 | KubeLinter | Plain Kubernetes deployment, stateful set, and daemon set YAML with a container specification. Skip Helm templates and recognized Kustomize overlays and patches. | A workload selector that does not match its pod template, or a container without a readiness probe. Check service selectors and routes against the rendered manifest set. |
-| Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, column type changes that can block access, and concurrent index creation inside an explicit SQL transaction. Runner-supplied PostgreSQL version, locks, and transaction policy require migration CI. |
+| Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, type changes, ordinary index creation/removal, immediate constraint validation, required columns, rewrite-prone defaults, rolling-deployment renames, missing lock timeouts, and concurrent index creation inside an explicit SQL transaction. |
+
+These migration findings are advisory, attributed to the current edit, and
+deduplicated against its before snapshot. Connection-setting advice follows
+specific schema risks so a truncated message retains the actionable operation.
+Squawk recognizes file-level timeout declarations. Actual connection settings,
+runner-owned transactions, server/version restrictions, data volume, and progress
+under contention require the normal-runner engine checks in the shared
+[migration method](../skills/mainframe-testing/references/migrations.md).
 
 The code-quality hook uses its existing edit events and configured analyzer
 runtime paths. Use the shared runtime's

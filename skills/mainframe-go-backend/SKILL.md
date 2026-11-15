@@ -1,6 +1,6 @@
 ---
 name: mainframe-go-backend
-description: Design, change, or review Go services, APIs, and workers, including transactions, locks, concurrency, retries, and backend tests.
+description: Design, change, or review Go services, APIs, and workers, including migrations, transactions, locks, concurrency, retries, and backend tests.
 ---
 
 # Go backend engineering
@@ -11,6 +11,10 @@ scope and authority supplied through the current execution path; this skill does
 not expand either.
 
 For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
+
+For schema, migration, index, or constraint work, use the shared
+[migration method](../mainframe-testing/references/migrations.md) alongside the
+data reference below.
 
 ## Establish the active service boundary
 

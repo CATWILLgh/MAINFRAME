@@ -12,6 +12,9 @@ holder, waiter, and affected request progress on the actual engine.
 
 Review loading strategy and query count at the affected path. Avoid accidental lazy I/O after a session closes, implicit I/O in async code, unbounded reads, per-row queries, and serialization that changes query behavior.
 
-Treat migrations as compatibility work, not only schema syntax. Determine code-version overlap, existing data, defaults, backfill volume, locks, index construction, constraint validation, rollback or forward-recovery strategy, and deployment order. Separate expand, backfill, switch, and contract when one-step change is unsafe.
+For schema, migration, index, constraint, or backfill changes, use the shared
+[migration method](../../mainframe-testing/references/migrations.md). Inspect the
+active framework's migration graph, generated operations, transaction settings,
+and actual runner; ORM declarations alone do not establish database behavior.
 
 Run against the real database engine only when engine-specific behavior is the risk and the project layer and current authority allow it. A lightweight substitute is not proof of dialect, isolation, locking, constraint, or migration behavior.

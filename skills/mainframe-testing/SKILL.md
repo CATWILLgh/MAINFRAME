@@ -1,6 +1,6 @@
 ---
 name: mainframe-testing
-description: Design, run, or repair tests and CI. Use for TDD, regressions, performance or database checks, and GitHub/GitLab test gates.
+description: Design, run, or repair tests and CI. Use for TDD, regressions, performance, database migrations and checks, and GitHub/GitLab test gates.
 ---
 
 # Own the behavior and its verification
@@ -35,6 +35,7 @@ Read only the reference for the current decision. Reuse guidance still in contex
 | --- | --- |
 | Project strategy, test levels, or the project verification map | [Shared strategy](references/strategy.md) |
 | Changed latency, resource use, database access, or shared background capacity | [Performance and database checks](references/performance.md) |
+| Schema, migration, index, constraint, or data rollout design and verification | [Migration method](references/migrations.md) |
 | Red/green/refactor, regression design, or an inherited implementation | [Behavior and TDD](references/tdd.md) |
 | Local scope, fixtures, a runaway check, PostgreSQL identity, or an unavailable dependency | [Local test boundary](references/local.md) |
 | Analyzer selection, installation, reuse, or hook execution | [Small tool profiles](references/tooling.md) |

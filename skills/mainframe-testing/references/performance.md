@@ -38,6 +38,7 @@ as a successful completion.
 | --- | --- |
 | Repeated work, queries growing with item count, or unbounded fan-out | A fast regression with a meaningful bound on calls, rows, concurrency, or allocations, plus the correct result |
 | DB locks, transaction timing, pool exhaustion, or worker overlap | Correct-engine test with controlled concurrency. Hold the competing operation explicitly and assert required progress, or a bounded failure with no lost or repeated effect |
+| Schema changes, index/constraint operations, or backfills | [Migration method](migrations.md), including representative upgrade, runner transaction boundaries, and application progress under overlap |
 | User latency, throughput, saturation, or resource regression | A controlled before/after benchmark or CI job with an explicit pass condition. Preserve correctness, timeout and successful-completion counts |
 | A claim about the deployed journey | Observe the normal user or system path in the authorized environment, including the relevant background load, role or device. Keep the preceding test evidence and name any missing acceptance |
 

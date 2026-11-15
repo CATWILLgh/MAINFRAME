@@ -13,11 +13,13 @@
 
 ## Schema and data rollout
 
-- Treat schema and data changes as compatibility and rollout contracts. Determine whether old and new application versions, workers, or clients can overlap.
-- Preserve migration ordering and ownership. Do not rewrite an applied migration unless the project's explicit policy permits it.
-- Separate compatible expansion, backfill, behavioral switch, and destructive contraction when a one-step change would risk availability or rollback.
-- Evaluate locks, table or collection size, index creation, defaults, nullability, validation, transaction support, backfill restartability, and rollback for the actual engine and migration tool.
-- Applying migrations or data transformations to a shared or live database requires the corresponding authority. Repository permission alone is insufficient.
+Use the shared [migration method](../../mainframe-testing/references/migrations.md)
+for schema, migration, index, constraint, or backfill changes. Inspect generated
+SQL and the actual CLI or deployment runner, including transaction opt-outs;
+client schema declarations and a separate migration file do not prove execution
+semantics.
+
+Applying migrations or data transformations to a shared or live database requires the corresponding authority. Repository permission alone is insufficient.
 
 Use a real database boundary only when engine-specific semantics are the changed risk and the project layer permits that infrastructure. A substitute database does not prove another engine's queries, migrations, constraints, locks, isolation, or concurrency behavior.
 

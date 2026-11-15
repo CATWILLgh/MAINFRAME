@@ -28,11 +28,10 @@ versions as defined outcomes. Retry only the intended transaction scope with a
 bounded termination rule. Use `errors.Is` with the selected database package's
 documented sentinel errors rather than comparing error text.
 
-Apply schema changes through the project's ordered migration owner. Consider
-existing data, defaults, backfill size, table rewrites, index/constraint locks,
-concurrent application versions, and forward recovery. Serialize multiple
-processes applying migrations when the deployment can start them together.
-Never edit already-applied history casually.
+For schema, migration, index, constraint, or backfill changes, use the shared
+[migration method](../../mainframe-testing/references/migrations.md). Keep the
+project's existing migration owner and runner; inspect its Go transaction and
+connection handling rather than inferring them from a migration filename.
 
 Database collation and Unicode behavior are part of correctness. Verify
 case-insensitive or normalized uniqueness with the actual engine and locale

@@ -280,6 +280,38 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
     def invoke(self, name, data):
         return codex_hook.dispatch(name, self.state, io.BytesIO(json.dumps(data).encode()))
 
+    def test_post_edit_reports_sql_migration_risk_once_and_releases_after_repair(self):
+        detectors = self.support / "detectors"
+        detectors.mkdir()
+        shutil.copyfile(ROOT / "hooks/mainframe-code-quality.py", detectors / "mainframe-code-quality.py")
+        migrations = self.workspace / "prisma/migrations"
+        migrations.mkdir(parents=True)
+        (migrations / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        relative = "prisma/migrations/20261115000000_index/migration.sql"
+        target = self.workspace / relative
+        sql = "SET lock_timeout = '1s';\nCREATE INDEX idx ON events (status);\n"
+        patch_text = "*** Begin Patch\n*** Add File: " + relative + "\n" + "".join(
+            "+" + line for line in sql.splitlines(keepends=True)
+        ) + "*** End Patch\n"
+        event = self.payload(patch_text, "sql-create")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "PreToolUse"}))
+        target.parent.mkdir()
+        target.write_text(sql)
+        result = self.invoke(codex_hook.POST_EDIT_TRANSPORT, event)
+        context = result["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Squawk require-concurrent-index-creation", context)
+        self.assertNotIn("CREATE INDEX idx ON", context)
+        self.assertNotIn("permissionDecision", result["hookSpecificOutput"])
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, event))
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "Stop"}))
+
+        repair = self.payload("*** Begin Patch\n*** Update File: " + relative
+                              + "\n@@\n-CREATE INDEX idx ON events (status);\n"
+                              + "+CREATE INDEX CONCURRENTLY idx ON events (status);\n*** End Patch\n", "sql-repair")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**repair, "hook_event_name": "PreToolUse"}))
+        target.write_text(sql.replace("CREATE INDEX", "CREATE INDEX CONCURRENTLY"))
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, repair))
+
     def test_verified_shell_cwd_override_keeps_ambiguous_calls_context_free(self):
         detectors = self.support / "detectors"
         detectors.mkdir()

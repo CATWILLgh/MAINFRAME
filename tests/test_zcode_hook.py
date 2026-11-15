@@ -332,6 +332,36 @@ class ZCodeHookFixture(unittest.TestCase):
                 advice = json.loads(after.stdout)["hookSpecificOutput"]["additionalContext"]
                 self.assertIn(f"new/{filename}{finding}", advice)
 
+    def test_post_edit_reports_sql_migration_risk_once_and_releases_after_repair(self):
+        project = (Path(self.temporary.name) / "sql-project").resolve()
+        migrations = project / "prisma/migrations"
+        migrations.mkdir(parents=True)
+        (migrations / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        target = migrations / "20261115000000_index/migration.sql"
+        sql = "SET lock_timeout = '1s';\nCREATE INDEX idx ON events (status);\n"
+        event = {"hook_event_name": "PreToolUse", "tool_name": "Write",
+                 "tool_input": {"file_path": str(target), "content": sql},
+                 "session_id": "sql-session", "tool_use_id": "sql-create", "cwd": str(project)}
+        self.assertEqual(self.invoke("mainframe-code-quality", event).stdout, "")
+        target.parent.mkdir()
+        target.write_text(sql)
+        post = {**event, "hook_event_name": "PostToolUse"}
+        result = self.invoke(zcode_hook.POST_EDIT_TRANSPORT, post)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        specific = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertIn("Squawk require-concurrent-index-creation", specific["additionalContext"])
+        self.assertNotIn("CREATE INDEX idx ON", specific["additionalContext"])
+        self.assertNotIn("permissionDecision", specific)
+        self.assertEqual(self.invoke(zcode_hook.POST_EDIT_TRANSPORT, post).stdout, "")
+        self.assertEqual(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "Stop"}).stdout, "")
+
+        repair = {**event, "tool_use_id": "sql-repair",
+                  "tool_input": {"file_path": str(target), "content": sql.replace("CREATE INDEX", "CREATE INDEX CONCURRENTLY")}}
+        self.assertEqual(self.invoke("mainframe-code-quality", repair).stdout, "")
+        target.write_text(repair["tool_input"]["content"])
+        self.assertEqual(self.invoke(zcode_hook.POST_EDIT_TRANSPORT,
+                                     {**repair, "hook_event_name": "PostToolUse"}).stdout, "")
+
     def git(self, root, *args):
         return subprocess.run(["git", "-C", str(root), *args], check=True,
                               capture_output=True, timeout=5)

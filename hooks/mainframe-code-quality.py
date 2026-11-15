@@ -695,6 +695,16 @@ _SQUAWK_LABELS = {
     "ban-truncate-cascade": "TRUNCATE CASCADE can erase related tables",
     "changing-column-type": "changing a column type can block access while rewriting the table",
     "ban-concurrent-index-creation-in-transaction": "CREATE INDEX CONCURRENTLY cannot run inside an explicit transaction",
+    "require-concurrent-index-creation": "ordinary index creation can block writes on a live table; review CONCURRENTLY and runner transaction mode",
+    "require-concurrent-index-deletion": "ordinary index deletion can block table access; review online removal and constraint dependencies",
+    "constraint-missing-not-valid": "immediate constraint validation can block writes during a table scan; separate the short add from later validation",
+    "disallowed-unique-constraint": "adding uniqueness can build an index while blocking writes; review concurrent index creation followed by constraint attachment",
+    "adding-not-nullable-field": "SET NOT NULL can scan existing rows; verify prior constraint validation and bounded lock acquisition",
+    "adding-required-field": "a required column without a default can reject existing rows; use a compatible staged addition and backfill",
+    "adding-field-with-default": "this column default can rewrite existing rows; verify volatility, server version, and a staged backfill",
+    "renaming-column": "renaming a column can break active readers and writers during a rolling deployment",
+    "renaming-table": "renaming a table can break active readers and writers during a rolling deployment",
+    "require-lock-timeout": "a finite lock_timeout is not declared before this DDL; verify the migration runner's connection setting or declare a scoped timeout",
 }
 _PYTHON_EXTENSIONS = {".py", ".pyi"}
 _RUFF_SECURITY_LABELS = {
@@ -1552,7 +1562,8 @@ def _squawk_findings(text: str) -> list[Occurrence]:
     if any(item.get("rule_name") == "syntax-error" for item in diagnostics):
         raise ValueError("Squawk did not parse this migration")
     rows = []
-    for item in diagnostics:
+    # Keep the specific schema risk visible ahead of connection-setting advice.
+    for item in sorted(diagnostics, key=lambda item: item.get("rule_name") == "require-lock-timeout"):
         rule = item.get("rule_name")
         if rule not in _SQUAWK_LABELS:
             continue

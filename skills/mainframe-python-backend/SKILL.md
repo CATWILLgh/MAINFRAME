@@ -1,6 +1,6 @@
 ---
 name: mainframe-python-backend
-description: Design, change, debug, or review Python web services and workers, including APIs, async lifecycle, persistence, and tests. Excludes data and ML pipelines.
+description: Design, change, debug, or review Python web services and workers, including APIs, async lifecycle, persistence, migrations, and tests. Excludes data and ML pipelines.
 ---
 
 # Python backend engineering
@@ -8,6 +8,10 @@ description: Design, change, debug, or review Python web services and workers, i
 Apply this method whenever the active work matches the description, whether you are the primary implementer, a delegated engineer, or a reviewer. Follow the scope and authority supplied through the current execution path; this skill does not expand either.
 
 For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
+
+For schema, migration, index, or constraint work, use the shared
+[migration method](../mainframe-testing/references/migrations.md) alongside the
+data reference below.
 
 ## Establish the active server boundary
 
