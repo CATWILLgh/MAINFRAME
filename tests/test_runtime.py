@@ -136,6 +136,20 @@ esac
         executable.chmod(0o755)
         self.assertFalse(runtime._check_analyzer("squawk", executable))
 
+    def test_modern_web_reuse_rejects_an_analyzer_that_always_reports_clean(self):
+        executable = self.external / "modern-web-guidance"
+        executable.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "import sys\n"
+            "if '--version' in sys.argv:\n"
+            "    print('1.1.0')\n"
+            "else:\n"
+            "    print(json.dumps({'targetDir': sys.argv[2], 'activeRuleCount': 1, 'guides': []}))\n"
+        )
+        executable.chmod(0o755)
+        self.assertIsNone(runtime._analyzer_version("modern-web-guidance", executable))
+
     def test_missing_node_installer_stops_before_activation_manifest(self):
         with mock.patch.object(runtime.shutil, "which", return_value=None):
             with self.assertRaisesRegex(Conflict, "npm is required"):
@@ -185,6 +199,83 @@ esac
             result = runtime.ensure(self.home, ("ruff", "semgrep"))
         self.assertTrue(result["ready"])
         self.assertEqual(installed, ["ruff", "semgrep"])
+
+    def test_semgrep_version_probe_preserves_user_logs_settings_and_credentials(self):
+        user_log = self.root / "user-semgrep.log"
+        user_settings = self.root / "user-settings.yml"
+        user_log.write_text("preserve log")
+        user_settings.write_text("preserve settings")
+        executable = self.external / "semgrep"
+        executable.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "assert 'SEMGREP_APP_TOKEN' not in os.environ\n"
+            "Path(os.environ['SEMGREP_LOG_FILE']).write_text('temporary probe log')\n"
+            "Path(os.environ['SEMGREP_SETTINGS_FILE']).write_text('temporary settings')\n"
+            "print('semgrep 1.164.0')\n"
+        )
+        executable.chmod(0o755)
+        with mock.patch.dict(os.environ, {"SEMGREP_LOG_FILE": str(user_log), "SEMGREP_SETTINGS_FILE": str(user_settings), "SEMGREP_APP_TOKEN": "synthetic-token"}):
+            self.assertEqual(runtime._analyzer_release("semgrep", executable), "1.164.0")
+        self.assertEqual(user_log.read_text(), "preserve log")
+        self.assertEqual(user_settings.read_text(), "preserve settings")
+
+    def test_failed_node_preparation_preserves_previous_analyzers(self):
+        root = runtime.runtime_root(self.home)
+        previous = root / "packages/node/node_modules/.bin/oxlint"
+        previous.parent.mkdir(parents=True)
+        previous.write_bytes(b"previous usable analyzer")
+        with (
+            mock.patch.object(runtime.shutil, "which", return_value="/synthetic/npm"),
+            mock.patch.object(runtime, "_version", return_value="22.12.0"),
+            mock.patch.object(runtime, "_run", side_effect=Conflict("synthetic installation failure")),
+            self.assertRaisesRegex(Conflict, "synthetic installation failure"),
+        ):
+            runtime._managed_node(root, ["modern-web-guidance", "oxlint"])
+        self.assertEqual(previous.read_bytes(), b"previous usable analyzer")
+        self.assertEqual(list((root / "packages/node").glob("mainframe-node-*")), [])
+
+    def test_node_activation_keeps_old_tools_until_new_generation_is_ready(self):
+        root = runtime.runtime_root(self.home)
+        old = root / "packages/node/node_modules/.bin/oxlint"
+        old.parent.mkdir(parents=True)
+        old.write_text("#!/bin/sh\nprintf 'oxlint 1.67.0\\n'\n")
+        old.chmod(0o755)
+        (root / "installation.json").write_text(json.dumps({
+            "schema": 1, "tools": {"oxlint": {"version": "1.67.0", "executable": str(old)}},
+        }))
+        node = self.tool("node", "22.12.0")
+        node.write_text("#!/bin/sh\nprintf 'v22.12.0\\n'\n")
+        self.tool("npm", "10.0.0")
+        marker = root / "packages/node/user-note"
+        marker.write_text("preserve")
+
+        def install(command, **options):
+            self.assertTrue(old.exists())
+            target = Path(command[command.index("--prefix") + 1]) / "node_modules/.bin"
+            target.mkdir(parents=True)
+            for name in ("oxlint", "modern-web-guidance"):
+                executable = target / name
+                executable.write_text(f"#!/bin/sh\nprintf '{name} {runtime.TOOL_SPECS[name][2]}\\n'\n")
+                executable.chmod(0o755)
+
+        with mock.patch.dict(os.environ, {"PATH": str(self.external)}), mock.patch.object(runtime, "_run", side_effect=install):
+            self.assertTrue(runtime.ensure(self.home, ("modern-web-guidance",))["ready"])
+        self.assertFalse(old.exists())
+        self.assertEqual(marker.read_text(), "preserve")
+        record = json.loads((root / "installation.json").read_text())["tools"]
+        for name in ("oxlint", "modern-web-guidance"):
+            self.assertTrue(Path(record[name]["executable"]).is_file())
+        self.assertEqual(len(list((root / "packages/node").glob("mainframe-node-*"))), 1)
+
+    def test_node_cleanup_preserves_unregistered_legacy_modules(self):
+        root = runtime.runtime_root(self.home)
+        unregistered = root / "packages/node/node_modules/user-file"
+        unregistered.parent.mkdir(parents=True)
+        unregistered.write_text("preserve")
+        runtime._cleanup_node_generations(root, {}, {})
+        self.assertEqual(unregistered.read_text(), "preserve")
 
     def test_native_analyzer_is_prepared_once_and_reused_without_network(self):
         binary = self.tool("actionlint", "1.7.12").read_bytes()

@@ -135,8 +135,9 @@ repeatedly inspecting only one fixed directory prefix can starve cleanup.
 ## Runtime support
 
 Ruff, Oxlint, Semgrep, yamllint, ShellCheck, actionlint, KubeLinter, Squawk,
-and Fallow are hook runtime dependencies. The installer prepares them before
-changing hook files or registration. It can reuse a stable executable at the
+Fallow, and Modern Web Guidance are hook runtime dependencies. The installer
+prepares them before changing hook files or registration. It can reuse a stable
+executable at the
 [tested minimum version](../../../installer/runtime.py) or a newer stable
 release that passes a bounded synthetic check through the hook's parser.
 If no candidate is compatible, it provisions the tested official release
@@ -149,6 +150,15 @@ version. The synthetic checks run during runtime preparation and verification.
 Keep hook execution bounded with isolated scanner configuration and disabled
 telemetry. Check a new tool release against the full hook suite before raising
 the tested minimum or changing the provisioned release.
+
+Modern Web Guidance uses the prepared CLI and requires Node.js 22 or later.
+The hook invokes only its local single-file scanner. Installer verification of
+newer versions covers the curated rules and their safe counterparts. Prepare
+dependencies during delivery, before changing hook files or registrations.
+Node.js package preparation preserves the active analyzers until the new
+generation is ready. Remove unused owned generations after activation and a
+failed generation on preparation failure. Semgrep version probes use temporary
+log/settings paths without the user's application token.
 
 The Go, Dart, and Rust syntax checks use existing SDK executables. Rust also
 discovers local rustup toolchains when `rustfmt` is absent from `PATH`. A

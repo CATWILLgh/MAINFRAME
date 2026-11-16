@@ -91,6 +91,20 @@ def _analyzer(root: Path, workspace: Path, tool: str) -> bool:
         safe = "SET lock_timeout = '1s';\nCREATE INDEX CONCURRENTLY idx ON events (status);\n"
         if quality._squawk_findings(safe):
             return False
+    elif tool == "modern-web-guidance":
+        scan = quality._modern_web_findings
+        checks = (
+            (scan('input:invalid { border-color: red; }\n', workspace / "form.css", workspace), "Modern Web validate-input-after-interaction", 1),
+            (scan('<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>\n', workspace / "page.html", workspace), "Modern Web secure-external-subresources", 1),
+            (scan('document.querySelector("input").addEventListener("keydown", e => { if (e.key === "Enter") submit(); });\n', workspace / "form.ts", workspace), "Modern Web ime-safe-enter-submit", 1),
+        )
+        safe = (
+            ('@supports not selector(:user-invalid) { input:invalid { border-color: red; } }\ninput:user-invalid { border-color: red; }\n', "safe.css"),
+            ('document.querySelector("input").addEventListener("keydown", e => { if (e.isComposing) return; if (e.key === "Enter") submit(); });\n', "safe.ts"),
+            ('<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" integrity="sha384-Zml4dHVyZQ==" crossorigin="anonymous"></script>\n', "safe.html"),
+        )
+        if any(scan(text, workspace / name, workspace) for text, name in safe):
+            return False
     else:
         return False
     return all(any(row.label.startswith(prefix) and row.line == line for row in rows)

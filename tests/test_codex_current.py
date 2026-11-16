@@ -312,6 +312,30 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
         target.write_text(sql.replace("CREATE INDEX", "CREATE INDEX CONCURRENTLY"))
         self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, repair))
 
+    def test_post_edit_checks_web_files_without_project_setup(self):
+        detectors = self.support / "detectors"
+        detectors.mkdir()
+        shutil.copyfile(ROOT / "hooks/mainframe-code-quality.py", detectors / "mainframe-code-quality.py")
+        source = "input:invalid { border-color: red; }\n"
+        patch_text = "*** Begin Patch\n*** Add File: form.css\n+" + source + "*** End Patch\n"
+        event = self.payload(patch_text, "web-create")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "PreToolUse"}))
+        target = self.workspace / "form.css"
+        target.write_text(source)
+        result = self.invoke(codex_hook.POST_EDIT_TRANSPORT, event)
+        specific = result["hookSpecificOutput"]
+        self.assertIn("validate-input-after-interaction", specific["additionalContext"])
+        self.assertNotIn("permissionDecision", specific)
+        self.assertLessEqual(len(specific["additionalContext"]), 1600)
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, event))
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "Stop"}))
+
+        repair = self.payload("*** Begin Patch\n*** Update File: form.css\n@@\n-" + source
+                              + "+" + source.replace(":invalid", ":user-invalid") + "*** End Patch\n", "web-repair")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**repair, "hook_event_name": "PreToolUse"}))
+        target.write_text(source.replace(":invalid", ":user-invalid"))
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, repair))
+
     def test_verified_shell_cwd_override_keeps_ambiguous_calls_context_free(self):
         detectors = self.support / "detectors"
         detectors.mkdir()

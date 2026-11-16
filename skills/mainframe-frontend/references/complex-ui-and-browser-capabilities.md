@@ -11,3 +11,8 @@ For IndexedDB, offline queues, and service workers, define schema and upgrade be
 For realtime state, handle disconnect, reconnect, duplicate and out-of-order events, and canonical resynchronization. Events should reconcile the existing authority rather than create a second one.
 
 Check permissions, availability, fallback, cancellation, size, memory, and failure behavior for cameras, scanners, notifications, clipboard, downloads, uploads, storage, and other browser APIs. Verify the actual browser semantics when they are part of the risk.
+
+Use [modern web guidance](modern-web.md) for current platform support and
+decisions about replacing custom browser behavior. Preserve the existing
+serialization, accessibility, and interaction contract while evaluating native
+alternatives.

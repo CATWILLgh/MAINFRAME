@@ -273,6 +273,8 @@ Treat `mainframe-code-quality.py` as one component with these fixed effects:
   retained reference;
 - a post-edit advisory for new syntax errors or duplicate configuration keys
   in the supported formats, starting with file creation;
+- a post-edit advisory for new composition-unsafe Enter actions, premature form
+  error styling, and missing integrity/CORS on supported external resources;
 - a post-edit advisory for newly introduced errors in shell scripts, GitHub
   Actions workflows, Kubernetes workloads, or recognized PostgreSQL migrations;
 - a post-edit advisory for Go code that discards rows or a connection from
@@ -440,6 +442,7 @@ Use static diagnostic descriptions and compare only new findings. See
 | actionlint | `.github/workflows/*.yml` and `.github/workflows/*.yaml` at the repository root. | Workflow YAML or schema errors, missing or cyclic job dependencies, and invalid identifiers, expressions, conditions, or matrices. |
 | KubeLinter | Plain Kubernetes deployment, stateful set, and daemon set YAML with a container specification. Skip Helm templates and recognized Kustomize overlays and patches. | A workload selector that does not match its pod template, or a container without a readiness probe. Check service selectors and routes against the rendered manifest set. |
 | Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, type changes, ordinary index creation/removal, immediate constraint validation, required columns, rewrite-prone defaults, rolling-deployment renames, missing lock timeouts, and concurrent index creation inside an explicit SQL transaction. |
+| Modern Web Guidance | `.html`, `.htm`, `.css`, JS/TS module extensions, JSX/TSX, Vue and Svelte. Use snapshot content and the upstream AST/DOM/CSS parsers. | Curated `ime-safe-enter-submit`, `validate-input-after-interaction`, and `secure-external-subresources` findings. |
 
 These migration findings are advisory, attributed to the current edit, and
 deduplicated against its before snapshot. Connection-setting advice follows
@@ -448,6 +451,19 @@ Squawk recognizes file-level timeout declarations. Actual connection settings,
 runner-owned transactions, server/version restrictions, data volume, and progress
 under contention require the normal-runner engine checks in the shared
 [migration method](../skills/mainframe-testing/references/migrations.md).
+
+Modern Web Guidance runs only for candidate syntax in an addressed web file.
+Skip generated/vendor/build paths, minified bundles, and recognized JS test
+files. The scanner receives one temporary snapshot, with telemetry and file
+logging disabled and no project configuration. Limit its input to 128 KB and
+2000 characters per line, its subprocess to one second within the shared scan
+budget, and its output to the ordinary combined quality advisory. A reached
+bound or unavailable scanner emits one deduplicated availability notice.
+Preserve upstream exclusions for composition guards, modifier shortcuts,
+post-interaction styles, intentional support fallbacks, and mutable CDN URLs.
+Return only fixed rule labels and validated source locations. Keep these
+findings advisory and preserve existing completion guards if web review fails.
+Broader modernization uses the [frontend method](../skills/mainframe-frontend/references/modern-web.md).
 
 The code-quality hook uses its existing edit events and configured analyzer
 runtime paths. Use the shared runtime's

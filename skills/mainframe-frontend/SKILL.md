@@ -1,6 +1,6 @@
 ---
 name: mainframe-frontend
-description: React web UI design, implementation, review, or debugging, including visual plans, screenshots, layout, and accessibility.
+description: React web UI design, implementation, review, or debugging, including visual plans, screenshots, layout, accessibility, browser APIs, compatibility, and performance.
 ---
 
 # React frontend design and engineering
@@ -28,6 +28,11 @@ baseline, constraints, or intended hierarchy. Use
 [browser verification](references/browser-verification.md) for the observations
 that matter. For a behavior-only React fix, go straight to the affected behavior.
 
+For browser APIs, browser-dependent HTML/CSS behavior, compatibility, performance, or legacy web
+modernization, use [modern web guidance](references/modern-web.md). Choose
+features against the product's browser targets and preserve its interaction
+contracts when replacing existing code.
+
 ## Work with the product
 
 Identify the package and trace the affected user journey, its contracts, and
@@ -51,6 +56,7 @@ to select focused evidence. Exercise changed interactions in the browser.
 
 | Changed concern | Read |
 | --- | --- |
+| Browser support, native platform features, web performance, or legacy web patterns | [Modern web guidance](references/modern-web.md) |
 | Responsive layout, density, overflow, typography, or motion | [Layout, type, and motion](references/layout-type-and-motion.md) |
 | Accessibility, keyboard, focus, feedback, or reachable states | [Flows and accessibility](references/flows-and-accessibility.md) |
 | Shared controls, component variants, or overlays | [Components and interaction](references/components-and-interaction.md) |

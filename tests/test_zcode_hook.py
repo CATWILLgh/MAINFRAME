@@ -362,6 +362,33 @@ class ZCodeHookFixture(unittest.TestCase):
         self.assertEqual(self.invoke(zcode_hook.POST_EDIT_TRANSPORT,
                                      {**repair, "hook_event_name": "PostToolUse"}).stdout, "")
 
+    def test_post_edit_checks_web_files_without_project_setup(self):
+        project = (Path(self.temporary.name) / "web-project").resolve()
+        project.mkdir()
+        target = project / "form.css"
+        source = "input:invalid { border-color: red; }\n"
+        event = {"hook_event_name": "PreToolUse", "tool_name": "Write",
+                 "tool_input": {"file_path": str(target), "content": source},
+                 "session_id": "web-session", "tool_use_id": "web-create", "cwd": str(project)}
+        self.assertEqual(self.invoke("mainframe-code-quality", event).stdout, "")
+        target.write_text(source)
+        post = {**event, "hook_event_name": "PostToolUse"}
+        result = self.invoke(zcode_hook.POST_EDIT_TRANSPORT, post)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        specific = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertIn("validate-input-after-interaction", specific["additionalContext"])
+        self.assertNotIn("permissionDecision", specific)
+        self.assertLessEqual(len(specific["additionalContext"]), 1600)
+        self.assertEqual(self.invoke(zcode_hook.POST_EDIT_TRANSPORT, post).stdout, "")
+        self.assertEqual(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "Stop"}).stdout, "")
+
+        repair = {**event, "tool_use_id": "web-repair",
+                  "tool_input": {"file_path": str(target), "content": source.replace(":invalid", ":user-invalid")}}
+        self.assertEqual(self.invoke("mainframe-code-quality", repair).stdout, "")
+        target.write_text(repair["tool_input"]["content"])
+        self.assertEqual(self.invoke(zcode_hook.POST_EDIT_TRANSPORT,
+                                     {**repair, "hook_event_name": "PostToolUse"}).stdout, "")
+
     def git(self, root, *args):
         return subprocess.run(["git", "-C", str(root), *args], check=True,
                               capture_output=True, timeout=5)

@@ -32,12 +32,13 @@ TOOL_SPECS = {
     "yamllint": ("python", "yamllint", "1.38.0"),
     "oxlint": ("node", "oxlint", "1.67.0"),
     "fallow": ("node", "fallow", "2.92.1"),
+    "modern-web-guidance": ("node", "modern-web-guidance", "1.0.0"),
     "shellcheck": ("release", "koalaman/shellcheck", "0.11.0"),
     "actionlint": ("release", "rhysd/actionlint", "1.7.12"),
     "kube-linter": ("release", "stackrox/kube-linter", "0.8.3"),
     "squawk": ("release", "sbdchd/squawk", "2.72.0"),
 }
-CODE_QUALITY_TOOLS = ("ruff", "oxlint", "semgrep", "yamllint", "shellcheck", "actionlint", "kube-linter", "squawk")
+CODE_QUALITY_TOOLS = ("ruff", "oxlint", "semgrep", "yamllint", "shellcheck", "actionlint", "kube-linter", "squawk", "modern-web-guidance")
 FALLOW_TOOLS = ("fallow",)
 OPENSPEC_TOOLS = ("openspec",)
 OPENSPEC_PACKAGE = "@fission-ai/openspec"
@@ -167,12 +168,14 @@ def _probe_environment() -> dict[str, str]:
         "SEMGREP_ENABLE_VERSION_CHECK": "false",
         "FALLOW_TELEMETRY": "off", "FALLOW_TELEMETRY_DISABLED": "1",
         "FALLOW_UPDATE_CHECK": "off", **OPENSPEC_ENV,
+        "DISABLE_TELEMETRY": "1", "ENABLE_FILE_LOGGING": "false",
     }
 
 
 def _version(executable: Path, *arguments: Path, path: str | None = None,
-             exact: bool = False, flag: str = "--version") -> str | None:
-    environment = _probe_environment()
+             exact: bool = False, flag: str = "--version",
+             env: dict[str, str] | None = None) -> str | None:
+    environment = dict(_probe_environment() if env is None else env)
     if path is not None:
         environment["PATH"] = path
     try:
@@ -202,6 +205,13 @@ def _parts(value: str) -> tuple[int, int, int]:
 
 def _analyzer_release(name: str, executable: Path) -> str | None:
     flag = {"actionlint": "-version", "kube-linter": "version"}.get(name, "--version")
+    if name == "semgrep":
+        with tempfile.TemporaryDirectory(prefix="mainframe-semgrep-version-") as directory:
+            environment = _probe_environment()
+            environment.pop("SEMGREP_APP_TOKEN", None)
+            environment.update(SEMGREP_LOG_FILE=str(Path(directory) / "semgrep.log"),
+                               SEMGREP_SETTINGS_FILE=str(Path(directory) / "settings.yml"))
+            return _version(executable, flag=flag, env=environment)
     return _version(executable, flag=flag)
 
 
@@ -323,15 +333,48 @@ def _managed_python(root: Path, names: list[str]) -> dict[str, Path]:
 def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
     npm = shutil.which("npm")
     if not npm:
-        raise Conflict("npm is required to install Oxlint or Fallow for active MAINFRAME hooks.")
-    target = root / "packages/node"
-    _safe_rebuild(target, root)
-    target.mkdir(parents=True, mode=0o700)
+        raise Conflict("npm is required to install active MAINFRAME Node.js analyzers.")
+    if "modern-web-guidance" in names:
+        node = shutil.which("node")
+        version = _version(Path(node), exact=True) if node else None
+        if version is None or _parts(version) < (22, 0, 0):
+            raise Conflict("Modern Web Guidance requires Node.js 22 or later before runtime preparation.")
+    parent = root / "packages/node"
+    if parent.is_symlink():
+        raise Conflict("Refusing to replace an unowned runtime dependency path.")
+    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    target = Path(tempfile.mkdtemp(prefix="mainframe-node-", dir=parent))
     packages = [f"{TOOL_SPECS[name][1]}@{TOOL_SPECS[name][2]}" for name in names]
     environment = {**os.environ, "NO_UPDATE_NOTIFIER": "1", "NPM_CONFIG_UPDATE_NOTIFIER": "false"}
-    _run([npm, "install", "--prefix", str(target), "--no-audit", "--no-fund",
-          "--save-exact", *packages], timeout=900, env=environment)
-    return {name: (target / "node_modules/.bin" / name).resolve() for name in names}
+    try:
+        _run([npm, "install", "--prefix", str(target), "--no-audit", "--no-fund",
+              "--save-exact", *packages], timeout=900, env=environment)
+        executables = {name: (target / "node_modules/.bin" / name).resolve() for name in names}
+        for name, executable in executables.items():
+            if _analyzer_release(name, executable) != TOOL_SPECS[name][2]:
+                raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+        return executables
+    except BaseException:
+        shutil.rmtree(target)
+        raise
+
+
+def _cleanup_node_generations(root: Path, previous: dict, rows: dict) -> None:
+    parent = root / "packages/node"
+    if not parent.is_dir() or parent.is_symlink():
+        return
+    active = [Path(row["executable"]) for row in rows.values()
+              if isinstance(row, dict) and isinstance(row.get("executable"), str)]
+    prior = [Path(row["executable"]) for row in previous.values()
+             if isinstance(row, dict) and isinstance(row.get("executable"), str)]
+    for candidate in parent.iterdir():
+        if candidate.name == "node_modules" and not any(path.is_relative_to(candidate) for path in prior):
+            continue
+        if candidate.name != "node_modules" and not re.fullmatch(r"mainframe-node-[a-z0-9_]{8}", candidate.name):
+            continue
+        if candidate.is_symlink() or not candidate.is_dir() or any(path.is_relative_to(candidate) for path in active):
+            continue
+        shutil.rmtree(candidate)
 
 
 def _recorded_path(row: dict, key: str) -> Path | None:
@@ -566,7 +609,7 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
     wanted = sorted(set(TOOL_SPECS).intersection(set(existing).union(required)))
     candidates, missing = _candidates(root, home, wanted, existing)
     if missing["node"] and not shutil.which("npm"):
-        raise Conflict("npm is required to install Oxlint or Fallow for active MAINFRAME hooks; no hook files were changed.")
+        raise Conflict("npm is required to install active MAINFRAME Node.js analyzers; no hook files were changed.")
     provisioned = {name: _managed_release(root, name) for name in missing["release"]}
     if missing["python"]:
         provisioned.update(_managed_python(root, missing["python"]))
@@ -587,3 +630,4 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
         atomic_write(shim, body.encode(), 0o755)
         rows[name] = {"version": version, "executable": str(executable)}
     atomic_write(root / "installation.json", encode_json({**manifest, "schema": 1, "tools": rows}), 0o600)
+    _cleanup_node_generations(root, existing, rows)

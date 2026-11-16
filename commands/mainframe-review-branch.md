@@ -57,6 +57,10 @@ Review these risks where the changed paths expose them.
   through their normal entrypoints. Verify authorization, compatibility, error
   handling, and recovery. UI states explain what happened and offer an action
   when the user can take one. Keep operational detail in diagnostics.
+- **Browser platform.** For changed web UI, use `mainframe-frontend` and its
+  modern web method. Check actual browser targets, affected interactions, and
+  measured benefit when replacing older code. Review scoped legacy-scan
+  findings against their context before accepting a modernization.
 - **Queues and dependencies.** Trace sync and async boundaries, admission,
   ordering, capacity, and durable completion. Exercise overlapping work,
   slow dependencies, and retry or cancellation when relevant. Reconcile

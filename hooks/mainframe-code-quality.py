@@ -575,6 +575,17 @@ _COMMENT_MARKERS = (
 
 _NODE_EXTENSIONS = _TS_EXTENSIONS | {".js", ".jsx", ".mjs", ".cjs"}
 _JS_EXTENSIONS = _NODE_EXTENSIONS | {".vue", ".svelte"}
+_WEB_EXTENSIONS = _JS_EXTENSIONS | {".css", ".html", ".htm"}
+_WEB_MARKUP_EXTENSIONS = {".html", ".htm", ".jsx", ".tsx", ".vue", ".svelte"}
+_WEB_STYLE_EXTENSIONS = {".css", ".html", ".htm", ".vue", ".svelte"}
+_WEB_MAX_BYTES = 128_000
+_WEB_MAX_LINE_CHARS = 2_000
+_WEB_LABELS = {
+    "ime-safe-enter-submit": "Enter actions can interrupt text composition; review the keydown guard",
+    "validate-input-after-interaction": "error styling can appear before interaction; preserve validation timing and browser support",
+    "secure-external-subresources": "review integrity and CORS for external scripts or styles",
+}
+_WEB_IGNORED_DIRS = {"node_modules", "vendor", "third_party", "dist", "build", "coverage", ".next", "generated"}
 _CODE_MARKERS = (
     (
         "skipped/focused test (.skip/.only/xit/fit)",
@@ -653,7 +664,7 @@ _WORKFLOW_DIRECTORY = (".github", "workflows")
 _YAML_EXTENSIONS = {".yaml", ".yml"}
 _JSON_EXTENSIONS = {".json", ".jsonc"}
 _CONFIG_EXTENSIONS = _YAML_EXTENSIONS | _JSON_EXTENSIONS | {".toml"}
-_EDIT_EXTENSIONS = CODE_EXTENSIONS | _CONFIG_EXTENSIONS
+_EDIT_EXTENSIONS = CODE_EXTENSIONS | _CONFIG_EXTENSIONS | _WEB_EXTENSIONS
 _SDK_SYNTAX_TOOLS = {
     ".go": ("Go", "gofmt"),
     ".dart": ("Dart", "dart"),
@@ -1200,6 +1211,76 @@ def _run_review_command(tool: str, args: list[str], text: str) -> subprocess.Com
 
 def _run_review_tool(tool: str, args: list[str], text: str) -> object:
     return json.loads(_run_review_command(tool, args, text).stdout)
+
+
+def _modern_web_findings(text: str, path: Path, workspace: Path) -> list[Occurrence]:
+    extension = path.suffix.lower()
+    if extension not in _WEB_EXTENSIONS or not text:
+        return []
+    relative = path.relative_to(workspace)
+    if (set(relative.parts[:-1]) & _WEB_IGNORED_DIRS
+            or re.search(r"\.(?:min|bundle|generated)\.", path.name)
+            or _js_test_file(path)):
+        return []
+    lower = text.lower()
+    guides = []
+    if (extension in _JS_EXTENSIONS | _WEB_MARKUP_EXTENSIONS
+            and "Enter" in text and "keydown" in lower):
+        guides.append("ime-safe-enter-submit")
+    if extension in _WEB_STYLE_EXTENSIONS and ":invalid" in lower and ("input" in lower or "textarea" in lower):
+        guides.append("validate-input-after-interaction")
+    if extension in _WEB_MARKUP_EXTENSIONS and "https://" in lower and re.search(r"<(?:script|link)\b", lower):
+        guides.append("secure-external-subresources")
+    if not guides:
+        return []
+    if len(text.encode("utf-8")) > _WEB_MAX_BYTES or any(len(line) > _WEB_MAX_LINE_CHARS for line in text.splitlines()):
+        raise ValueError("web snapshot exceeds the bounded parser input")
+    executable = shutil.which("modern-web-guidance")
+    if executable is None:
+        raise RuntimeError("modern-web-guidance unavailable")
+    suffix = ".ts" if extension in {".mts", ".cts"} else ".html" if extension == ".htm" else extension
+    environment = {**os.environ, "DISABLE_TELEMETRY": "1", "ENABLE_FILE_LOGGING": "false"}
+    environment.pop("NODE_OPTIONS", None)
+    environment.pop("NODE_PATH", None)
+    with tempfile.TemporaryDirectory(prefix="mainframe-web-review-") as directory:
+        root = Path(directory)
+        source = root / ("source" + suffix)
+        source.write_text(text, encoding="utf-8")
+        command = [executable, "legacy-scan", source.name, "--json"]
+        if len(guides) == 1:
+            command.extend(["--guide", guides[0]])
+        completed = _run_scanner(command, capture_output=True, text=True, cwd=root,
+                                 env=environment, timeout=1, check=False)
+    if completed.returncode != 0:
+        raise RuntimeError("web scanner failed")
+    raw = json.loads(completed.stdout)
+    if (not isinstance(raw, dict) or raw.get("error") or raw.get("targetDir") != source.name
+            or type(raw.get("activeRuleCount")) is not int or raw["activeRuleCount"] < 1
+            or not isinstance(raw.get("guides"), list)):
+        raise ValueError("invalid web scanner output")
+    rows = []
+    line_count = text.count("\n") + 1
+    for guide in raw["guides"]:
+        if not isinstance(guide, dict) or not isinstance(guide.get("rules"), list):
+            raise ValueError("invalid web guide output")
+        if guide.get("guideId") not in guides:
+            continue
+        for rule in guide["rules"]:
+            if not isinstance(rule, dict) or not isinstance(rule.get("findings"), list):
+                raise ValueError("invalid web rule output")
+            identity = rule.get("ruleId")
+            if identity not in _WEB_LABELS or identity != guide["guideId"]:
+                raise ValueError("unsupported web rule output")
+            for finding in rule["findings"]:
+                if (not isinstance(finding, dict) or finding.get("file") != source.name
+                        or type(finding.get("line")) is not int or not 1 <= finding["line"] <= line_count):
+                    raise ValueError("unattributed web finding")
+                line = finding["line"]
+                rows.append(_occurrence(
+                    f"Modern Web {identity}: {_WEB_LABELS[identity]}", line, "scanner",
+                    _source_excerpt(text, line, line), channel="modern-web", blocking=False,
+                ))
+    return rows
 
 
 def _duplicate_key_finding(language: str, line: int | None, key: str) -> Occurrence:
@@ -2101,6 +2182,12 @@ def _scan_source(
                 )
 
     if include_advisory:
+        if extension in _WEB_EXTENSIONS:
+            try:
+                rows.extend(_modern_web_findings(text, path, workspace))
+                channels.add("modern-web")
+            except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
+                issues.append(ScanIssue("scanner:modern-web", "Modern web review was unavailable for the edited file."))
         if extension in _CONFIG_EXTENSIONS or extension in _SDK_SYNTAX_TOOLS:
             findings, syntax_channels, issue = _scan_syntax_advice(source, extension, path, workspace)
             rows.extend(findings)
