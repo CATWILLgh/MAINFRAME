@@ -24,7 +24,7 @@ class WebQualityTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="mainframe-web-quality-")
         self.addCleanup(self.temporary.cleanup)
-        self.workspace = Path(self.temporary.name) / "workspace"
+        self.workspace = (Path(self.temporary.name) / "workspace").resolve()
         self.workspace.mkdir()
         self.state = Path(self.temporary.name) / "state"
         for name in ("_node_findings", "_semgrep_security_findings"):
@@ -37,6 +37,13 @@ class WebQualityTests(unittest.TestCase):
 
     def after(self, operation):
         return QUALITY.record_after("web", self.workspace, operation, state_root=self.state)
+
+    @staticmethod
+    def scanner_output(raw):
+        def scan(command, **options):
+            options["stdout"].write(json.dumps(raw).encode())
+            return subprocess.CompletedProcess(command, 0)
+        return scan
 
     def test_first_edit_reports_each_web_file_type_and_replay_is_silent(self):
         cases = (
@@ -68,6 +75,82 @@ class WebQualityTests(unittest.TestCase):
                 self.capture(extension, path)
                 path.write_text(ENTER)
                 self.assertIn("ime-safe-enter-submit", self.after(extension).advisory or "")
+
+    def test_tagged_css_templates_are_checked_without_reclassifying_plain_strings(self):
+        for extension in (".ts", ".tsx", ".mts", ".cts", ".js"):
+            path = self.workspace / ("styles" + extension)
+            with self.subTest(extension=extension):
+                rows = QUALITY._modern_web_findings('const styles = css`' + INVALID + '`;\n', path, self.workspace)
+                self.assertTrue(any("validate-input-after-interaction" in row.label for row in rows))
+                safe = 'const styles = css`input:user-invalid { border-color: red; }`;\n'
+                self.assertEqual(QUALITY._modern_web_findings(safe, path, self.workspace), [])
+                self.assertEqual(QUALITY._modern_web_findings('const example = ' + json.dumps(INVALID) + ';', path, self.workspace), [])
+
+    def test_large_valid_scanner_output_is_complete_and_advice_stays_bounded(self):
+        path = self.workspace / "forms.css"
+        self.assertEqual(len(QUALITY._modern_web_findings(INVALID * 200, path, self.workspace)), 200)
+        self.capture("large-output", path)
+        path.write_text(INVALID * 200)
+        result = self.after("large-output")
+        self.assertIn("validate-input-after-interaction", result.advisory or "")
+        self.assertNotIn("unavailable", result.advisory or "")
+        self.assertLessEqual(len(result.advisory or ""), QUALITY.MAX_ADVISORY_CHARS)
+
+    def test_web_budget_exhaustion_preserves_security_on_later_paths(self):
+        paths = [self.workspace / f"form{i:02}.css" for i in range(23)]
+        worker = self.workspace / "zz_worker.py"
+        for path in paths:
+            path.write_text(INVALID)
+        worker.write_text("value = 1\n")
+        paths.append(worker)
+        clock = [0.0]
+        calls = []
+        python_scan = QUALITY._python_findings
+
+        def scan_python(*args, **kwargs):
+            calls.append("security")
+            return python_scan(*args, **kwargs)
+
+        def consume_web_budget(*args):
+            calls.append("web")
+            clock[0] += 0.3
+            return []
+
+        with (
+            mock.patch.object(QUALITY.time, "monotonic", side_effect=lambda: clock[0]),
+            mock.patch.object(QUALITY, "_modern_web_findings", side_effect=consume_web_budget),
+            mock.patch.object(QUALITY, "_python_findings", side_effect=scan_python),
+        ):
+            QUALITY.capture_before("web", self.workspace, "budget", paths, state_root=self.state)
+            self.assertEqual(calls[0], "security")
+            calls.clear()
+            worker.write_text("eval(value)\n")
+            result = self.after("budget")
+            self.assertEqual(calls[0], "security")
+            self.assertIn("Python security S307", result.advisory or "")
+            self.assertIn("Python security S307", QUALITY.check_completion("web", self.workspace, state_root=self.state).block_reason or "")
+
+    def test_web_enrichment_rejects_a_revision_changed_after_core_scanning(self):
+        path = self.workspace / "form.css"
+        worker = self.workspace / "worker.py"
+        path.write_text(INVALID)
+        worker.write_text("value = 1\n")
+        read_scan = QUALITY._read_scan
+
+        def mutate_after_core(candidate, *args, **kwargs):
+            scan = read_scan(candidate, *args, **kwargs)
+            if candidate == worker:
+                path.write_text(INVALID.replace(":invalid", ":user-invalid"))
+            return scan
+
+        with (
+            mock.patch.object(QUALITY, "_read_scan", side_effect=mutate_after_core),
+            mock.patch.object(QUALITY, "_modern_web_findings", side_effect=AssertionError("mixed revision")),
+        ):
+            scans = QUALITY._read_edit_scans([path, worker], self.workspace, time.monotonic() + 5)
+        self.assertNotIn("modern-web", scans[path].channels)
+        self.assertTrue(any(issue.key == "scanner:modern-web" for issue in scans[path].issues))
+        self.assertIn(QUALITY._PYTHON_SECURITY_CHANNEL, scans[worker].channels)
 
     def test_safe_patterns_and_intentional_fallbacks_stay_silent(self):
         cases = (
@@ -137,7 +220,7 @@ class WebQualityTests(unittest.TestCase):
             self.assertLess(time.monotonic() - start, 2)
 
         for raw in ([], {"guides": []}, {"error": "synthetic failure", "guides": []}):
-            with self.subTest(raw=raw), mock.patch.object(QUALITY, "_run_scanner", return_value=subprocess.CompletedProcess([], 0, json.dumps(raw), "")):
+            with self.subTest(raw=raw), mock.patch.object(QUALITY, "_run_scanner", side_effect=self.scanner_output(raw)):
                 with self.assertRaises(ValueError):
                     QUALITY._modern_web_findings(INVALID, self.workspace / "form.css", self.workspace)
 
@@ -149,9 +232,15 @@ class WebQualityTests(unittest.TestCase):
                     "ruleId": "validate-input-after-interaction", "findings": [{**finding, **replacement}],
                 }],
             }]}
-            with self.subTest(replacement=replacement), mock.patch.object(QUALITY, "_run_scanner", return_value=subprocess.CompletedProcess([], 0, json.dumps(raw), "")):
+            with self.subTest(replacement=replacement), mock.patch.object(QUALITY, "_run_scanner", side_effect=self.scanner_output(raw)):
                 with self.assertRaises(ValueError):
                     QUALITY._modern_web_findings(INVALID, self.workspace / "form.css", self.workspace)
+
+    def test_scanner_output_read_has_a_size_bound(self):
+        raw = {"targetDir": "source.css", "activeRuleCount": 1, "guides": [], "padding": "x" * QUALITY.MAX_FILE_BYTES}
+        with mock.patch.object(QUALITY, "_run_scanner", side_effect=self.scanner_output(raw)):
+            with self.assertRaisesRegex(ValueError, "output exceeds"):
+                QUALITY._modern_web_findings(INVALID, self.workspace / "form.css", self.workspace)
 
     def test_scanner_is_isolated_and_raw_diagnostics_stay_out_of_findings(self):
         snapshots = []
@@ -174,7 +263,8 @@ class WebQualityTests(unittest.TestCase):
                     }],
                 }],
             }]}
-            return subprocess.CompletedProcess(command, 0, json.dumps(raw), "")
+            options["stdout"].write(json.dumps(raw).encode())
+            return subprocess.CompletedProcess(command, 0)
 
         with (
             mock.patch.dict(QUALITY.os.environ, {"NODE_OPTIONS": "--synthetic-probe", "NODE_PATH": "/synthetic"}),

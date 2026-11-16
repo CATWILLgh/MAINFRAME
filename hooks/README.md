@@ -456,13 +456,23 @@ Modern Web Guidance runs only for candidate syntax in an addressed web file.
 Skip generated/vendor/build paths, minified bundles, and recognized JS test
 files. The scanner receives one temporary snapshot, with telemetry and file
 logging disabled and no project configuration. Limit its input to 128 KB and
-2000 characters per line, its subprocess to one second within the shared scan
-budget, and its output to the ordinary combined quality advisory. A reached
+2000 characters per line, and read at most 2 MB of JSON from a private temporary
+stdout file. This avoids the upstream dispatcher's premature pipe exit.
+Finish established checks for every path before adding web advice from the
+same source revision. All web subprocesses together have at most one second
+within the unchanged shared scan budget. Include upstream-supported tagged
+`css` templates in JS/TS files. Keep output in the ordinary combined advisory. A reached
 bound or unavailable scanner emits one deduplicated availability notice.
 Preserve upstream exclusions for composition guards, modifier shortcuts,
 post-interaction styles, intentional support fallbacks, and mutable CDN URLs.
 Return only fixed rule labels and validated source locations. Keep these
 findings advisory and preserve existing completion guards if web review fails.
+The upstream matcher is an opportunity scanner. It reports only the first
+external-resource finding per document, can mistake non-text Enter handlers
+for text input, and can miss framework handlers or unsafe code when unrelated
+composition/validation markers appear. A clean result does not establish full
+coverage. Apply its contextual rubric before changing behavior; do not alter
+buttons or links to satisfy an IME finding.
 Broader modernization uses the [frontend method](../skills/mainframe-frontend/references/modern-web.md).
 
 The code-quality hook uses its existing edit events and configured analyzer

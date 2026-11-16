@@ -137,4 +137,4 @@ Installation preserves unrelated user configuration, authentication, histories,
 sessions, memories, and projects. MAINFRAME sends no telemetry. The optional DSH
 Activity Analytics plugin stores timing data within its profile. [Analytics storage](plugins/dsh/activity-analytics/README.md#storage-and-deployment) · [Security reporting](SECURITY.md)
 
-[Contributing](CONTRIBUTING.md) · [Repository sharing](docs/repository-sharing.md) · [MIT license](LICENSE)
+[Contributing](CONTRIBUTING.md) · [Repository sharing](docs/repository-sharing.md) · [MIT license](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)

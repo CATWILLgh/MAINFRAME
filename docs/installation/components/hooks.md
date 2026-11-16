@@ -155,6 +155,8 @@ Modern Web Guidance uses the prepared CLI and requires Node.js 22 or later.
 The hook invokes only its local single-file scanner. Installer verification of
 newer versions covers the curated rules and their safe counterparts. Prepare
 dependencies during delivery, before changing hook files or registrations.
+Keep the official package's license and third-party notices intact; see
+[provenance](../../../THIRD_PARTY_NOTICES.md).
 Node.js package preparation preserves the active analyzers until the new
 generation is ready. Remove unused owned generations after activation and a
 failed generation on preparation failure. Semgrep version probes use temporary

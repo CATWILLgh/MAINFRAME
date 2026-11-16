@@ -580,8 +580,9 @@ _WEB_MARKUP_EXTENSIONS = {".html", ".htm", ".jsx", ".tsx", ".vue", ".svelte"}
 _WEB_STYLE_EXTENSIONS = {".css", ".html", ".htm", ".vue", ".svelte"}
 _WEB_MAX_BYTES = 128_000
 _WEB_MAX_LINE_CHARS = 2_000
+_WEB_SCAN_BUDGET_SECONDS = 1
 _WEB_LABELS = {
-    "ime-safe-enter-submit": "Enter actions can interrupt text composition; review the keydown guard",
+    "ime-safe-enter-submit": "review text-entry composition guards; ignore buttons and links",
     "validate-input-after-interaction": "error styling can appear before interaction; preserve validation timing and browser support",
     "secure-external-subresources": "review integrity and CORS for external scripts or styles",
 }
@@ -1227,7 +1228,10 @@ def _modern_web_findings(text: str, path: Path, workspace: Path) -> list[Occurre
     if (extension in _JS_EXTENSIONS | _WEB_MARKUP_EXTENSIONS
             and "Enter" in text and "keydown" in lower):
         guides.append("ime-safe-enter-submit")
-    if extension in _WEB_STYLE_EXTENSIONS and ":invalid" in lower and ("input" in lower or "textarea" in lower):
+    style_candidate = extension in _WEB_STYLE_EXTENSIONS or (
+        extension in _NODE_EXTENSIONS and re.search(r"\bcss\s*`", text)
+    )
+    if style_candidate and ":invalid" in lower and ("input" in lower or "textarea" in lower):
         guides.append("validate-input-after-interaction")
     if extension in _WEB_MARKUP_EXTENSIONS and "https://" in lower and re.search(r"<(?:script|link)\b", lower):
         guides.append("secure-external-subresources")
@@ -1249,17 +1253,25 @@ def _modern_web_findings(text: str, path: Path, workspace: Path) -> list[Occurre
         command = [executable, "legacy-scan", source.name, "--json"]
         if len(guides) == 1:
             command.extend(["--guide", guides[0]])
-        completed = _run_scanner(command, capture_output=True, text=True, cwd=root,
-                                 env=environment, timeout=1, check=False)
+        # The upstream dispatcher calls process.exit before piped stdout drains.
+        # Node writes stdout synchronously when it targets a regular file.
+        with tempfile.TemporaryFile() as output:
+            completed = _run_scanner(command, stdout=output, stderr=subprocess.DEVNULL,
+                                     cwd=root, env=environment, timeout=1, check=False)
+            output.seek(0)
+            data = output.read(MAX_FILE_BYTES + 1)
     if completed.returncode != 0:
         raise RuntimeError("web scanner failed")
-    raw = json.loads(completed.stdout)
+    if len(data) > MAX_FILE_BYTES:
+        raise ValueError("web scanner output exceeds the bounded parser input")
+    raw = json.loads(data)
     if (not isinstance(raw, dict) or raw.get("error") or raw.get("targetDir") != source.name
             or type(raw.get("activeRuleCount")) is not int or raw["activeRuleCount"] < 1
             or not isinstance(raw.get("guides"), list)):
         raise ValueError("invalid web scanner output")
     rows = []
-    line_count = text.count("\n") + 1
+    source_lines = text.splitlines()
+    line_count = len(source_lines)
     for guide in raw["guides"]:
         if not isinstance(guide, dict) or not isinstance(guide.get("rules"), list):
             raise ValueError("invalid web guide output")
@@ -1278,7 +1290,7 @@ def _modern_web_findings(text: str, path: Path, workspace: Path) -> list[Occurre
                 line = finding["line"]
                 rows.append(_occurrence(
                     f"Modern Web {identity}: {_WEB_LABELS[identity]}", line, "scanner",
-                    _source_excerpt(text, line, line), channel="modern-web", blocking=False,
+                    source_lines[line - 1].strip()[:1000], channel="modern-web", blocking=False,
                 ))
     return rows
 
@@ -2182,12 +2194,6 @@ def _scan_source(
                 )
 
     if include_advisory:
-        if extension in _WEB_EXTENSIONS:
-            try:
-                rows.extend(_modern_web_findings(text, path, workspace))
-                channels.add("modern-web")
-            except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
-                issues.append(ScanIssue("scanner:modern-web", "Modern web review was unavailable for the edited file."))
         if extension in _CONFIG_EXTENSIONS or extension in _SDK_SYNTAX_TOOLS:
             findings, syntax_channels, issue = _scan_syntax_advice(source, extension, path, workspace)
             rows.extend(findings)
@@ -2254,6 +2260,31 @@ def _revision_matches(path: Path, workspace: Path, revision: str | None) -> bool
         return False
     source = _read_source(path, workspace)
     return source is not None and source.revision == revision
+
+
+def _read_edit_scans(paths: Iterable[Path], workspace: Path, deadline: float) -> dict[Path, ScanResult]:
+    # Finish established checks for every path before spending time on new web advice.
+    scans = {path: _read_scan(path, workspace, include_advisory=True, deadline=deadline) for path in paths}
+    web_deadline = min(deadline, time.monotonic() + _WEB_SCAN_BUDGET_SECONDS)
+    token = _SCAN_DEADLINE.set(web_deadline)
+    try:
+        for path, scan in scans.items():
+            if path.suffix.lower() not in _WEB_EXTENSIONS or scan.revision is None:
+                continue
+            try:
+                if time.monotonic() >= web_deadline:
+                    raise TimeoutError("web review has no remaining edit budget")
+                source = _read_source(path, workspace)
+                if source is None or source.revision != scan.revision:
+                    raise ValueError("web review snapshot changed after core scanning")
+                rows = _modern_web_findings(source.text, path, workspace)
+                scans[path] = scan._replace(rows=scan.rows + rows, channels=scan.channels | {"modern-web"})
+            except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
+                issue = ScanIssue("scanner:modern-web", "Modern web review was unavailable for the edited file.")
+                scans[path] = scan._replace(issues=scan.issues + (issue,))
+    finally:
+        _SCAN_DEADLINE.reset(token)
+    return scans
 
 
 def _serialize_counts(rows: list[Occurrence]) -> dict[str, dict[str, object]]:
@@ -2427,8 +2458,7 @@ def capture_before(
                     "The edit named more code paths than one bounded hook pass can inspect.",
                 )
             )
-        for selected_path in selected:
-            scan = _read_scan(selected_path, workspace, include_advisory=True, deadline=deadline)
+        for selected_path, scan in _read_edit_scans(selected, workspace, deadline).items():
             issues.extend(scan.issues)
             snapshots[str(selected_path)] = {
                 "available": scan.revision is not None,
@@ -2595,7 +2625,7 @@ def record_after(
                 return QualityResult(advisory=_issue_advisory(claimed))
             _save(path, state)
 
-        scanned: list[tuple[Path, dict[str, object], ScanResult]] = []
+        before_records: dict[Path, dict[str, object]] = {}
         issues: list[ScanIssue] = []
         deadline = time.monotonic() + SCAN_BUDGET_SECONDS
         for raw_path, before_record in snapshot["paths"].items():
@@ -2616,9 +2646,9 @@ def record_after(
                     )
                 )
                 continue
-            scan = _read_scan(file_path, workspace, include_advisory=True, deadline=deadline)
-            issues.extend(scan.issues)
-            scanned.append((file_path, before_record, scan))
+            before_records[file_path] = before_record
+        scanned = _read_edit_scans(before_records, workspace, deadline)
+        issues.extend(issue for scan in scanned.values() for issue in scan.issues)
 
         new_rows: list[tuple[Path, Occurrence]] = []
         growth_rows: list[GrowthFinding] = []
@@ -2627,7 +2657,8 @@ def record_after(
             state, recovered_after = _load(path)
             expired_after = _prune_pending(state)
             active = _active_records(state)
-            for file_path, before_record, scan in scanned:
+            for file_path, scan in scanned.items():
+                before_record = before_records[file_path]
                 if scan.revision is None or not _revision_matches(
                     file_path, workspace, scan.revision
                 ):

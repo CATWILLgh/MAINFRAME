@@ -28,19 +28,25 @@ Reuse the current framework, component owner, and product contracts.
 
 Search the official Modern Web Guidance catalog for the specific capability,
 such as dialog dismissal, container layout, input validation, or input latency.
+If results are empty or unrelated, rephrase once with the concrete UI or platform
+term; continue without unrelated guides if there is still no match.
 Read the matching guide and its compatibility constraints. Preserve intentional
 fallbacks and project behavior while applying its relevant recommendations.
 
-The prepared CLI can search and retrieve guides without installing its skill.
-Disable its default telemetry and optional file logging for these calls:
+Set `mwg_cli` to the prepared executable at
+`~/.local/share/mainframe/runtime/bin/modern-web-guidance`, then check
+`modern-web-guidance` on `PATH` if the prepared executable is absent. Reuse that
+path for search, retrieve, and legacy scans without installing tools or skills,
+changing persistent `PATH`, or setting up the project. Disable telemetry and
+optional file logging on every call:
 
 ```sh
-DISABLE_TELEMETRY=1 ENABLE_FILE_LOGGING=false modern-web-guidance search "dialog light dismiss"
+DISABLE_TELEMETRY=1 ENABLE_FILE_LOGGING=false "$mwg_cli" search "dialog light dismiss"
 ```
 
-Use `retrieve <guide-id>` for the matching result. Official documentation can
-supply the same decision evidence when the CLI is unavailable. Remove temporary
-files created solely for the lookup after use.
+Use `retrieve <guide-id>` for the matching result; if output points to a temporary
+file, read that guide before removing the lookup file. When the CLI is unavailable,
+use official documentation for decision evidence and report any missing scan.
 
 ## Preserve the interaction contract
 
@@ -63,9 +69,11 @@ files created solely for the lookup after use.
 
 ## Modernize within the assigned scope
 
-For an assigned legacy-code or branch audit, run the prepared CLI's
-`legacy-scan <addressed-file-or-folder> --json` with the same telemetry controls.
-Use narrow paths and `--guide <guide-id>` when one capability owns the question.
+For an assigned broad legacy-pattern or modernization review, run
+`"$mwg_cli" legacy-scan <addressed-file-or-folder> --json` with the same telemetry
+controls. A focused feature or component review uses its relevant guide and
+interaction checks. Keep scan paths within the assigned scope and use
+`--guide <guide-id>` when one capability owns the question.
 Review each matching rule's `keepWhen`/`dropWhen` rubric against surrounding code.
 The scanner's opportunity list is input to that review.
 
@@ -77,8 +85,16 @@ neighboring existing path. A reduced finding count alone cannot prove success.
 The edit hook independently checks a curated subset of new IME, validation,
 and external-resource findings. Broader modernization and actual browser support
 need the checks selected by [frontend testing](testing.md).
+The scanner can miss additional resources, framework-bound handlers, or unsafe
+code masked by unrelated composition/validation markers. It can also flag
+non-text Enter handlers: preserve buttons and links. Use findings as review
+candidates; an empty result cannot replace the affected interaction checks.
 
 ## Primary references
+
+Adapted using GoogleChrome Modern Web Guidance; the externally installed CLI
+retains its [Apache-2.0 license](https://github.com/GoogleChrome/modern-web-guidance/blob/main/LICENSE)
+and bundled third-party notices.
 
 - [Modern Web Guidance](https://developer.chrome.com/docs/modern-web-guidance)
   and its [modernization workflow](https://developer.chrome.com/docs/modern-web-guidance/modernization-workflow).
