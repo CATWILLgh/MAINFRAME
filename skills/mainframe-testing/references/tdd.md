@@ -2,9 +2,9 @@
 
 1. Identify the externally meaningful rule and its owning path. Use accepted requirements, current implementation contracts, and relevant authoritative documentation; resolve a missing product decision rather than encoding a guess into a test.
 2. Choose the smallest faithful boundary. For an existing defect, reproduce it with the existing test or a focused new regression before touching production behavior. For a new capability, express its intended observable result first.
-3. Run that focused test and inspect why it fails. It must observe the missing or wrong behavior, not missing dependencies, a broken fixture, a syntax error, or a different pre-existing failure. Preserve enough evidence to explain the original defect; a transcript of every command is unnecessary.
+3. Run the focused test and trace the failing request, job, or state transition back from the symptom. Compare with a working path when useful to isolate the first incorrect decision or state change. Test the suspected cause with a discriminating observation or focused experiment and state what remains uncertain. A failure in setup or the fixture invalidates the probe.
 4. Implement the smallest complete change across affected owners. Keep validation, authorization, serialization, transaction and side-effect boundaries real where they are the contract under test.
-5. Run the regression and related fast checks. Once green, refactor if it improves the result and recheck the affected behavior. Extend tests for material branches exposed by the change, without writing one test per implementation line.
+5. Run the regression through the original entrypoint and verify the affected paths that already worked. Assert the expected result and any protected side effects. Once green, refactor if it improves the result and recheck the affected behavior.
 
 ## Faithful tests
 

@@ -15,9 +15,9 @@ import tomllib
 MAX_BYTES = 262144
 TTL = 7 * 86400
 NAMES = {'mainframe-python-backend', 'mainframe-go-backend', 'mainframe-typescript-backend',
-         'mainframe-frontend', 'mainframe-testing', 'mainframe-infrastructure',
-         'mainframe-secrets', 'mainframe-curl-requests', 'mainframe-clickhouse', 'mainframe-k3s',
-         'mainframe-research', 'mainframe-test-audit', 'mainframe-consequential-review',
+         'mainframe-rust', 'mainframe-frontend', 'mainframe-testing', 'mainframe-infrastructure',
+         'mainframe-secrets', 'mainframe-curl-requests', 'mainframe-clickhouse', 'mainframe-k3s', 'mainframe-argocd',
+         'mainframe-research', 'mainframe-test-audit', 'mainframe-consequential-review', 'mainframe-openspec',
          'mainframe-peer-work'}
 ROLE_SKILLS = {
     'mainframe-researcher': 'mainframe-research',
@@ -275,7 +275,7 @@ def _advisory(data, state, hooks, detector, *, skill_roots=None, read_cwd=None):
                        and response['exit_code'] == 0 and response.get('isError') is not True)
             if not success and not isinstance(response, str):
                 return None
-        operations = detector.operation_skills(command) if event == 'PreToolUse' else set()
+        operations = detector.operation_candidates(command) if event == 'PreToolUse' else set()
         if event == 'PreToolUse' and not operations:
             return None
         paths = []
@@ -297,6 +297,10 @@ def _advisory(data, state, hooks, detector, *, skill_roots=None, read_cwd=None):
         return None
     scope = hashlib.sha256((session+'\0'+(agent or 'root')+'\0'+str(project)).encode()).hexdigest()
     methods, project_method = catalog(hooks.parent.parent, project, cwd, skill_roots=skill_roots)
+    for route, (key, skill, note) in detector.OPERATION_ADVISORIES.items():
+        if route in operations and skill in methods and reserve(state, scope, f'operation:{key}'):
+            location = json.dumps(str(methods[skill]), ensure_ascii=True)
+            return f'MAINFRAME skill reminder: {note} See `{skill}` at {location}.'
     candidates = set(operations) & methods.keys()
     if role:
         candidates = {role} & methods.keys()
@@ -333,7 +337,7 @@ def _advisory(data, state, hooks, detector, *, skill_roots=None, read_cwd=None):
         elif profile:
             candidates.update(profile.candidates(path, project))
     candidates &= methods.keys()
-    if candidates & {'mainframe-k3s', 'mainframe-clickhouse'}:
+    if candidates & {'mainframe-k3s', 'mainframe-clickhouse', 'mainframe-argocd'}:
         candidates.discard('mainframe-infrastructure')
     # Credential delivery is an independent operation; prefer it once before
     # the consumer method, while preserving the shared per-recipient budget.
@@ -352,5 +356,5 @@ def _advisory(data, state, hooks, detector, *, skill_roots=None, read_cwd=None):
             return None
     name, path = chosen
     location = json.dumps(str(path), ensure_ascii=True)
-    return (f'MAINFRAME skill reminder: consider `{name}` at {location} for this work. '
-            'Read it if relevant and not already applied. This advisory does not change your task or authority.')
+    return (f'MAINFRAME skill reminder: `{name}` at {location}. '
+            'Read if relevant and not already applied. Stay within assigned authority.')

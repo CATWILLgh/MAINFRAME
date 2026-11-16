@@ -1,6 +1,6 @@
 ---
 name: mainframe-peer-work
-description: Use an external coding-agent CLI only when the user or project agreement explicitly assigns that product work.
+description: Use an external coding-agent CLI for explicitly assigned work in that product.
 ---
 
 # Work with an external agent peer

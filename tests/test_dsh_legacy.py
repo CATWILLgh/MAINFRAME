@@ -16,7 +16,7 @@ PLUGINS = {name: f"plugins/dsh/{name}" for name in
            ("activity-analytics", "message-time", "secrets-vault", "session-collaboration")}
 ADAPTERS = (
     (codex.Codex, "0.153.4", "cli"),
-    (codex.Codex, codex.CURRENT_DESKTOP_RUNTIME, "desktop"),
+    (codex.Codex, codex.TOOL_CWD_DESKTOP_RUNTIME, "desktop"),
     (ZCode, "3.11.2.6792", "desktop"),
     (ZCode, "3.17.1.9553", "desktop"),
 )
@@ -109,7 +109,7 @@ class DshLegacyCompatibilityTests(unittest.TestCase):
 
     def test_inventory_rejects_missing_unknown_or_redirected_plugins(self):
         source = inventory(self.source)
-        self.assertEqual(sum(map(len, source["components"].values())), 56)
+        self.assertEqual(sum(map(len, source["components"].values())), 59)
         for mutation in ("missing", "unknown", "redirected"):
             with self.subTest(mutation=mutation):
                 changed = deepcopy(source)

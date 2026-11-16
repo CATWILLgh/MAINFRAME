@@ -105,10 +105,11 @@ def _unpack(value: str | None) -> bytes | None:
     return None if value is None else base64.b64decode(value, validate=True)
 
 
-def restore(journal: Path, allowed_path) -> None:
+def restore(journal: Path, allowed_path, *, after_restore=None) -> list[Change]:
+    """Restore known files; retain the journal until owner cleanup succeeds."""
     raw = regular_bytes(journal)
     if raw is None:
-        return
+        return []
     record = json.loads(raw)
     if record.get("version") != 1:
         raise Conflict("Unrecognized recovery format; preserve the recovery file.")
@@ -143,10 +144,13 @@ def restore(journal: Path, allowed_path) -> None:
                 path.rmdir()
             except OSError:
                 pass  # Never remove a directory containing someone else's work.
+    if after_restore is not None:
+        after_restore(changes)
     journal.unlink()
+    return changes
 
 
-def transact(changes: list[Change], journal: Path, allowed_path) -> None:
+def transact(changes: list[Change], journal: Path, allowed_path, *, after_restore=None) -> None:
     changes = [change for change in changes if change.needed]
     if not changes:
         return
@@ -176,7 +180,7 @@ def transact(changes: list[Change], journal: Path, allowed_path) -> None:
             else:
                 atomic_write(change.path, change.after, change.mode)
     except Exception:
-        restore(journal, allowed_path)
+        restore(journal, allowed_path, after_restore=after_restore)
         raise
     journal.unlink()
 

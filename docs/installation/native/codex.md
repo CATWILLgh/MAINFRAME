@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed: 2026-11-01 (full Desktop 0.165.0-alpha.1.2 delivery).
+Last reviewed 2026-11-12 for Desktop engine `0.167.0-alpha.4.1`.
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -8,6 +8,70 @@ the installer owns repeatable packaging and lifecycle operations. Recheck the
 version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
+
+## Desktop 0.167.0-alpha.4.1 hook contract
+
+ChatGPT Desktop `26.1106.51428` build `26605` bundles this engine. The exact
+[OpenAI release](https://github.com/openai/codex/releases/tag/rust-v0.167.0-alpha.4.1)
+resolves to `d2c035639366e0bf2c316aa2065c24aabc12bcdc`. The checked skill
+parser, role parser and loader, and global instruction reader match the
+`0.165.0-alpha.1.2` sources. The private `$CODEX_HOME/skills` root remains
+available. In a disposable profile the bundled app-server discovered all ten
+hook identities, 26 skills and nine explicit commands, with zero diagnostics.
+The new hook definitions were untrusted. The separately resolved PATH CLI
+reported `0.153.4` and retains its own mapping.
+[Private skill roots](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/ext/skills/src/host_roots.rs)
+
+- `exec_command` maps to `Bash` before and after execution. The payload contains
+  `command`, plus a top-level `cwd`. A local workdir override is reflected in
+  that `cwd` while the callback process runs in the host fallback directory.
+  Remote execution supplies the fallback and has no executor identity in the
+  hook payload. An unequal resolved `cwd` enables relative-target and
+  staged-content checks on this exact runtime. An equal `cwd` retains the
+  context-free shell checks. Interactive `write_stdin` has no preventive Bash
+  callback. [Exec handler](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs#L319-L394)
+- The native `apply_patch` route delivers the addressed patch before execution
+  and on success. A rejected or failed patch lacks that post event, as does a
+  shell-intercepted patch. Native `Add File` can overwrite. Fallow's pre hook
+  records a short-lived hash only when the addressed TS/JS targets were absent.
+  Post advice verifies the exact postimage. For overwrites it reports unavailable
+  attribution. Remote edit delivery and path attribution remain unverified.
+  [Patch handler](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/core/src/tools/handlers/apply_patch.rs)
+- Role-start advice uses `SubagentStart`. Worker completion uses
+  `SubagentStop` and a separate agent identity. An active quality retry emits
+  a visible unresolved warning without canceling another hook's continuation.
+  Stop has no non-blocking model context channel for Fallow or unavailable
+  advice. [Hook dispatcher](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/core/src/hook_runtime.rs)
+  [Output contract](https://learn.chatgpt.com/docs/hooks#common-output-fields)
+- The default MultiAgentV2 `collaboration` namespace still supplies both
+  selection fields and emits `collaborationspawn_agent`. A custom namespace
+  or an interface without both fields has no strict binding. On both
+  inspected extended runtimes, the child inherits its parent's permissions.
+  The installed role file supplies a method, but its `sandbox_mode` does not
+  enforce read-only access in that child. [Configuration defaults](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/core/src/config/mod.rs)
+  [Role override implementation](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/core/src/agent/role.rs)
+
+An isolated run of the bundled engine with a deterministic loopback provider
+observed pre- and post-Bash events, model receipt of ripgrep advice, a staged
+fixture secret denied before commit, an oversized todo patch denied, a clean
+native patch applied with pre/post callbacks, a failed patch with pre only,
+and primary `Stop`. Fallow distinguished a creation from an overwrite. The
+selection guard blocked a spawn request without model and effort. An explicit
+valid spawn delivered native `SubagentStart` and `SubagentStop`. The run used
+a temporary profile. Desktop activation, user trust and remote delivery
+require their own evidence.
+
+Fresh extended Desktop mappings group successful-edit quality, Fallow, and
+checkpoint advice in the private `mainframe-post-edit` transport.
+`mainframe-before-shell` also groups shell guards and skill advice. Both isolate
+detector failures and emit one bounded context. Existing split layouts keep
+their group/handler cardinality and positions, preserving independent native
+disable choices. Older mappings retain their supported detector set.
+These source changes require delivery and native trust review before a live
+activation claim. Preserve owned-group positions and unrelated callbacks when
+upgrading. Codex identifies native trust and enabled state by source, event,
+group and handler position, with a separate definition hash for each handler.
+[Hook discovery](https://github.com/openai/codex/blob/rust-v0.167.0-alpha.4.1/codex-rs/hooks/src/engine/discovery.rs#L769-L808)
 
 ## Desktop 0.167.0-alpha.3.2 skill-only delivery
 
@@ -46,8 +110,8 @@ or nearby prereleases, and does not establish live native acceptance.
 | --- | --- |
 | Shared credential helper: 1 | Preserve the existing helper/index mechanism; installation never reads protected credential values |
 | Skills | All approved packages from the [current inventory](../../../ADAPTATION.example.json) under `$CODEX_HOME/skills`, with placeholders resolved through the existing selector |
-| Roles: 7 | Private `$CODEX_HOME/agents/*.toml`, canonical role bodies and method links; the three read-only roles retain native `sandbox_mode = "read-only"`, with parent-permission acceptance pending |
-| Commands: 8 | Explicit-only native skills; `todo` accepts caller prose, other command contracts remain unchanged; actual slash-menu discovery remains pending |
+| Roles: 7 | Private `$CODEX_HOME/agents/*.toml` with canonical role bodies and method links. The three read-only profiles inherit parent permissions in the native child. |
+| Commands | Explicit-only native skills. `todo` accepts caller prose. Actual slash-menu discovery remains pending |
 | Hooks: 10 | Every canonical detector is delivered; six contracts are represented directly and four remain explicitly unsupported with useful partial bindings |
 | Global instruction: 1 | Managed block in the existing global owner, preserving user text and override precedence |
 
@@ -84,18 +148,16 @@ Four full contracts remain unsupported for verified reasons:
   no non-blocking model channel for completion-only unavailable advice. The
   [native turn loop](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/session/turn.rs)
   continues after every block without a hook-specific retry cap. After one
-  repair continuation, a still-positive callback emits `continue: false` with
-  visible `stopReason`/`systemMessage`, preserving state. Native code breaks and
-  returns normally; this is a truthful unresolved terminal warning, not a failed
-  turn or the canonical repeated-finding guard. Automatic recovery is deliberately
-  bounded; repeated positive-guard parity remains unsupported.
+  repair continuation, a still-positive callback emits only a visible
+  `systemMessage` and retains state. Other hooks can still request continuation.
+  Repeated positive-guard parity remains unsupported.
 - Fallow cannot provide its completion-time non-blocking model advisory. The
-  immediate post-edit fallback instead reverses uniquely anchored supported
-  Add/Update hunks against only bounded addressed TS/JS postimages, builds an
-  in-memory unified diff, and calls the unchanged detector. It never persists
-  source/diff text or infers attribution from a dirty worktree. Moves, deletes,
-  ambiguous hunks and unavailable postimages produce at most one bounded
-  unavailable advisory per native operation. A clean result is silent.
+  immediate post-edit fallback reverses uniquely anchored updates against
+  bounded addressed TS/JS postimages and includes new files verified by a pre
+  event. It builds the diff in memory and calls the unchanged detector. Moves,
+  deletes, overwrites, ambiguous hunks and unavailable postimages produce at
+  most one bounded unavailable advisory per native operation. A clean result
+  is silent.
 
 The existing `collaborationspawn_agent` selection binding is retained. The
 tagged [native spawn schema](https://github.com/openai/codex/blob/rust-v0.165.0-alpha.1.2/codex-rs/core/src/tools/handlers/multi_agents_spec.rs)
@@ -655,6 +717,19 @@ prove the model reconsidered its already-submitted command. Both share the same
 three-suggestion budget and once-per-method state with role-start advice.
 Explicit attempts to read an available skill suppress redundant advice as
 awareness evidence, without claiming successful reading or application.
+
+The backup and rollout notes use the same Bash callback and shared budget.
+An attributed Argo Application manifest read also uses the existing read
+callback. Neither route adds a registration or completion event. Check
+the notes and their silent controls through the existing disposable-home
+reminder tests before claiming delivery.
+
+On 2026-11-12, an isolated app-server probe using the Desktop-bundled
+`0.167.0-alpha.4.1` engine listed the Bash registration as enabled and
+untrusted and discovered the Argo CD, infrastructure and testing skills.
+The launcher returned bounded context for synthetic backup and rollout events
+and silence for an ordinary read. This verifies catalog and callback behavior
+in the fixture. Full installer support remains version-scoped.
 
 Disposable-home tests exercise all three native output envelopes, packaging,
 disablement, reconciliation and duplicate suppression. Native activation of new

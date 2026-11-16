@@ -35,6 +35,27 @@ For distributed reads, inspect completeness-affecting settings such as
 `skip_unavailable_shards`. Missing shards can yield plausible incomplete answers;
 do not enable silent skipping to make a failed report look successful.
 
+## Verify index benefit
+
+Derive sorting/primary-key order, skipping-index or projection candidates from
+actual application filters, ordering and data distribution. Compare existing
+definitions first; adding an index to every filtered column is not a strategy.
+Use the supported `EXPLAIN` index/projection output to check parts/granules
+pruned. Follow the target version's inspection settings; caches and newer
+read-time skip-index evaluation can change what a planning report shows.
+
+Compare the actual query and correct application result before/after under
+representative parameters, data, concurrency and cache conditions. Use bounded
+existing telemetry for elapsed time, read rows/bytes and memory; pair read
+benefit with index/projection storage and insert/merge cost. Pruning or an index
+name in a plan alone does not establish improvement. Retain a real-engine
+correctness and cost/time check; for a performance fix, show it rejects the known
+defect. Costly workloads belong on the existing CI route. Reuse the shared
+[performance method](../../mainframe-testing/references/performance.md) for
+workload and acceptance design. Use [writes and schema](writes.md) to verify
+coverage of existing data and rollout completion; definition existence alone
+does not prove either. Do not apply PostgreSQL catalog flags or B-tree rules.
+
 ## Preserve correctness and confidentiality
 
 Inspect the engine's semantics. A ClickHouse primary key is not a uniqueness

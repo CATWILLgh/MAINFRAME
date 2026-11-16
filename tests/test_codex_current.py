@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -52,11 +53,39 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         return report
 
     def test_exact_current_desktop_mapping_keeps_other_surfaces_out(self):
-        self.assertTrue(codex.mapping_supported(VERSION, "desktop"))
-        self.assertFalse(codex.mapping_supported(VERSION, "cli"))
-        self.assertFalse(codex.mapping_supported("0.165.0-alpha.1.3", "desktop"))
-        self.assertEqual(codex.runtime_tools(VERSION, "desktop"), ("ruff", "oxlint", "semgrep", "fallow"))
-        self.assertEqual(codex.runtime_tools("0.153.4", "cli"), ("ruff", "oxlint", "semgrep"))
+        for version, neighbor in ((VERSION, "0.165.0-alpha.1.3"),
+                                  ("0.167.0-alpha.4.1", "0.167.0-alpha.4.2")):
+            with self.subTest(version=version):
+                self.assertTrue(codex.mapping_supported(version, "desktop"))
+                self.assertFalse(codex.mapping_supported(version, "cli"))
+                self.assertFalse(codex.mapping_supported(neighbor, "desktop"))
+                self.assertEqual(codex.runtime_tools(version, "desktop"), codex.CODE_QUALITY_TOOLS + ("fallow",))
+        self.assertEqual(codex.runtime_tools("0.153.4", "cli"), codex.CODE_QUALITY_TOOLS)
+
+    def test_desktop_tool_cwd_upgrade_changes_only_owned_shell_binding(self):
+        self.apply()
+        path = self.adapter.codex / "hooks.json"
+        before = json.loads(path.read_bytes())
+        foreign = {"matcher": "^Bash$", "hooks": [{"type": "command", "command": "true"}]}
+        before["hooks"]["PreToolUse"].insert(1, foreign)
+        path.write_bytes(encode_json(before))
+
+        self.adapter.version = "0.167.0-alpha.4.1"
+        report = self.apply()
+        after = json.loads(path.read_bytes())
+        old = before["hooks"]["PreToolUse"][0]["hooks"][0]
+        new = after["hooks"]["PreToolUse"][0]["hooks"][0]
+        self.assertNotIn("--tool-cwd-override", old["command"])
+        self.assertIn("--tool-cwd-override", new["command"])
+        old["command"] = new["command"]
+        self.assertEqual(after, before)
+        self.assertIn("local workdir override", report["retained_partial_bindings"]["mainframe-commit-secrets"])
+        state = json.loads(self.adapter.state_path.read_bytes())
+        for name in codex.READ_ONLY_ROLES:
+            self.assertIn("inherits parent permissions", state["components"]["agents"][name]["reason"])
+            self.assertTrue((self.adapter.codex / "agents" / (name + ".toml")).is_file())
+        self.assertNotIn(codex.READ_ONLY_ROLE_ACTION, state["next_actions"])
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
 
     def test_every_canonical_component_has_a_truthful_private_delivery(self):
         source = inventory(self.source)
@@ -83,7 +112,7 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         groups = json.loads((self.adapter.codex / "hooks.json").read_bytes())["hooks"]
         self.assertTrue(any("mainframe-subagent-selection" in handler["command"]
                             for group in groups["PreToolUse"] for handler in group["hooks"]))
-        self.assertTrue(any("mainframe-fallow-quality" in handler["command"]
+        self.assertTrue(any("mainframe-post-edit" in handler["command"]
                             for group in groups["PostToolUse"] for handler in group["hooks"]))
         self.assertIn("SubagentStop", groups)
         self.assertEqual(self.adapter.plan()[1]["changes"], [])
@@ -108,7 +137,10 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         hooks_path.write_bytes(encode_json(hooks))
         self.adapter.version = VERSION
         self.apply()
-        self.assertEqual(json.loads(hooks_path.read_bytes())["hooks"]["PreToolUse"], before_groups)
+        after_groups = json.loads(hooks_path.read_bytes())["hooks"]["PreToolUse"]
+        self.assertEqual(after_groups[:-1], before_groups)
+        self.assertEqual(after_groups[-1]["matcher"], "^apply_patch$")
+        self.assertIn("mainframe-fallow-quality", after_groups[-1]["hooks"][0]["command"])
         for path, snapshot in protected.items():
             self.assertEqual(observed(path), snapshot, str(path))
         self.assertEqual(self.adapter.plan()[1]["changes"], [])
@@ -120,12 +152,58 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         self.assertEqual(trust.read_bytes(), b"untouched native trust")
         self.assertEqual(json.loads(hooks_path.read_bytes())["hooks"]["PreToolUse"], [user])
 
+    def test_split_upgrade_preserves_native_control_coordinates(self):
+        history = {"hook_groups": {
+            "PreToolUse": [{"hooks": [{"command": codex.hook_command(
+                self.adapter.hooks, codex.PRE_SHELL_TRANSPORT, self.adapter.event_state,
+            )}]}],
+            "PostToolUse": [{"hooks": [{"command": codex.hook_command(
+                self.adapter.hooks, "mainframe-code-quality", self.adapter.event_state,
+            )}]}],
+        }}
+        legacy = self.adapter.native_hook_groups(history)
+        with patch.object(self.adapter, "native_hook_groups", return_value=legacy):
+            self.apply()
+        path = self.adapter.codex / "hooks.json"
+        document = json.loads(path.read_bytes())
+        foreign = {"matcher": "^Foreign$", "hooks": [{"type": "command", "command": "true"}]}
+        document["hooks"]["PreToolUse"].insert(1, foreign)
+        document["hooks"]["PostToolUse"].append(foreign)
+        path.write_bytes(encode_json(document))
+
+        def coordinates(value):
+            return {
+                (event, index, handler_index): handler["command"]
+                for event, groups in value["hooks"].items()
+                for index, group in enumerate(groups)
+                for handler_index, handler in enumerate(group["hooks"])
+            }
+
+        before = coordinates(document)
+        self.apply()
+        after = coordinates(json.loads(path.read_bytes()))
+        # Codex resolves enabled/trusted state using these native coordinates.
+        # Every possible independent disable still addresses the same handler.
+        self.assertEqual(after, before)
+        self.assertFalse(any("mainframe-post-edit" in command for command in after.values()))
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+
+    def test_older_surfaces_keep_fallow_out_of_the_post_transport(self):
+        for version, surface in (("0.153.4", "cli"), ("0.159.2", "desktop")):
+            with self.subTest(version=version, surface=surface):
+                self.adapter.version, self.adapter.surface = version, surface
+                groups = self.adapter.native_hook_groups({})
+                commands = [handler["command"] for group in groups["PostToolUse"]
+                            for handler in group["hooks"]]
+                self.assertFalse(any(codex.POST_EDIT_TRANSPORT in command for command in commands))
+                self.assertFalse(any("mainframe-fallow-quality" in command for command in commands))
+
     def test_entrypoint_full_apply_requests_fallow_and_scoped_routes_skip_dependencies(self):
         specification = importlib.util.spec_from_file_location("mainframe_current_entrypoint", self.source / "install.py")
         entrypoint = importlib.util.module_from_spec(specification)
         specification.loader.exec_module(entrypoint)
         options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION]
-        required = ("ruff", "oxlint", "semgrep", "fallow", "openspec")
+        required = codex.CODE_QUALITY_TOOLS + ("fallow", "openspec")
         ready = {"ready": True, "required": list(required), "missing": []}
         with (patch.object(Path, "cwd", return_value=self.source),
               patch.object(entrypoint, "ensure_runtime", return_value=ready) as ensure,
@@ -142,6 +220,28 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
                 self.assertEqual(entrypoint.main(["codex", "verify", *options, *selector]), 0)
             ensure.assert_not_called()
             status.assert_not_called()
+
+    def test_full_apply_does_not_activate_hooks_when_runtime_preparation_fails(self):
+        specification = importlib.util.spec_from_file_location("mainframe_failed_runtime", self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(entrypoint)
+        foreign = self.home / "foreign-native-state"
+        foreign.write_bytes(b"preserve user state")
+        before = {path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}
+        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION]
+        required = codex.CODE_QUALITY_TOOLS + ("fallow", "openspec")
+        with (patch.object(Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "ensure_runtime", side_effect=Conflict("fixture runtime unavailable")) as ensure,
+              patch("sys.stdout", new_callable=io.StringIO)):
+            with self.assertRaisesRegex(Conflict, "fixture runtime unavailable"):
+                entrypoint.main(["codex", "apply", *options, "--instructions-reviewed"])
+            ensure.assert_called_once_with(self.home, required)
+        # Preserve the lock inode used for mutual exclusion.
+        self.assertEqual(before, {path: path.read_bytes() for path in self.home.rglob("*")
+                                  if path.is_file() and path != self.adapter.lock_path})
+        self.assertFalse(self.adapter.receipt_path.exists())
+        self.assertFalse(self.adapter.state_path.exists())
+        self.assertFalse(self.adapter.index.exists())
 
     def test_scoped_openspec_checks_and_provisions_only_its_cli(self):
         self.apply()
@@ -202,6 +302,96 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
     def invoke(self, name, data):
         return codex_hook.dispatch(name, self.state, io.BytesIO(json.dumps(data).encode()))
 
+    def test_post_edit_reports_sql_migration_risk_once_and_releases_after_repair(self):
+        detectors = self.support / "detectors"
+        detectors.mkdir()
+        shutil.copyfile(ROOT / "hooks/mainframe-code-quality.py", detectors / "mainframe-code-quality.py")
+        migrations = self.workspace / "prisma/migrations"
+        migrations.mkdir(parents=True)
+        (migrations / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        relative = "prisma/migrations/20261115000000_index/migration.sql"
+        target = self.workspace / relative
+        sql = "SET lock_timeout = '1s';\nCREATE INDEX idx ON events (status);\n"
+        patch_text = "*** Begin Patch\n*** Add File: " + relative + "\n" + "".join(
+            "+" + line for line in sql.splitlines(keepends=True)
+        ) + "*** End Patch\n"
+        event = self.payload(patch_text, "sql-create")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "PreToolUse"}))
+        target.parent.mkdir()
+        target.write_text(sql)
+        result = self.invoke(codex_hook.POST_EDIT_TRANSPORT, event)
+        context = result["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Squawk require-concurrent-index-creation", context)
+        self.assertNotIn("CREATE INDEX idx ON", context)
+        self.assertNotIn("permissionDecision", result["hookSpecificOutput"])
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, event))
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "Stop"}))
+
+        repair = self.payload("*** Begin Patch\n*** Update File: " + relative
+                              + "\n@@\n-CREATE INDEX idx ON events (status);\n"
+                              + "+CREATE INDEX CONCURRENTLY idx ON events (status);\n*** End Patch\n", "sql-repair")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**repair, "hook_event_name": "PreToolUse"}))
+        target.write_text(sql.replace("CREATE INDEX", "CREATE INDEX CONCURRENTLY"))
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, repair))
+
+    def test_post_edit_checks_web_files_without_project_setup(self):
+        detectors = self.support / "detectors"
+        detectors.mkdir()
+        shutil.copyfile(ROOT / "hooks/mainframe-code-quality.py", detectors / "mainframe-code-quality.py")
+        source = "input:invalid { border-color: red; }\n"
+        patch_text = "*** Begin Patch\n*** Add File: form.css\n+" + source + "*** End Patch\n"
+        event = self.payload(patch_text, "web-create")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "PreToolUse"}))
+        target = self.workspace / "form.css"
+        target.write_text(source)
+        result = self.invoke(codex_hook.POST_EDIT_TRANSPORT, event)
+        specific = result["hookSpecificOutput"]
+        self.assertIn("validate-input-after-interaction", specific["additionalContext"])
+        self.assertNotIn("permissionDecision", specific)
+        self.assertLessEqual(len(specific["additionalContext"]), 1600)
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, event))
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**event, "hook_event_name": "Stop"}))
+
+        repair = self.payload("*** Begin Patch\n*** Update File: form.css\n@@\n-" + source
+                              + "+" + source.replace(":invalid", ":user-invalid") + "*** End Patch\n", "web-repair")
+        self.assertIsNone(self.invoke("mainframe-code-quality", {**repair, "hook_event_name": "PreToolUse"}))
+        target.write_text(source.replace(":invalid", ":user-invalid"))
+        self.assertIsNone(self.invoke(codex_hook.POST_EDIT_TRANSPORT, repair))
+
+    def test_verified_shell_cwd_override_keeps_ambiguous_calls_context_free(self):
+        detectors = self.support / "detectors"
+        detectors.mkdir()
+        bridge = self.support / "bridge.py"
+        shutil.copyfile(ROOT / "installer/codex_hook.py", bridge)
+        for name in ("mainframe-destructive-operations", "mainframe-commit-secrets"):
+            shutil.copyfile(ROOT / "hooks" / (name + ".py"), detectors / (name + ".py"))
+        child = self.workspace / "child"
+        child.mkdir()
+        subprocess.run(["git", "-C", str(self.workspace), "init", "-q"], check=True)
+        secret = "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789"
+        (child / "staged.txt").write_text(secret + "\n")
+        subprocess.run(["git", "-C", str(self.workspace), "add", "child/staged.txt"], check=True)
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                   "session_id": "fixture", "tool_use_id": "operation"}
+
+        def callback(command, cwd, verified):
+            arguments = [sys.executable, "-B", str(bridge), "mainframe-pre-shell", str(self.state)]
+            if verified:
+                arguments.append("--tool-cwd-override")
+            result = subprocess.run(arguments, cwd=self.workspace, input=json.dumps({
+                **payload, "cwd": str(cwd), "tool_input": {"command": command},
+            }), text=True, capture_output=True, check=True, timeout=5)
+            return result.stdout
+
+        for command in ("rm -rf ..", "git commit -m test"):
+            with self.subTest(command=command):
+                self.assertEqual(callback(command, child, False), "")
+                self.assertEqual(callback(command, self.workspace, True), "")
+                result = callback(command, child, True)
+                self.assertTrue(result)
+                self.assertEqual(json.loads(result)["hookSpecificOutput"]["permissionDecision"], "deny")
+                self.assertNotIn(secret, result)
+
     def test_exact_post_patch_diff_excludes_unrelated_changes_and_retains_no_source(self):
         target = self.workspace / "file.ts"
         target.write_text("unrelated user line\nconst newValue = 2;\nanchor\n")
@@ -228,18 +418,26 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
 
     def test_add_whole_ownership_ambiguity_and_failure_are_bounded(self):
         target = self.workspace / "new.ts"
-        target.write_text("export const value = 2;\n")
         patch_text = "*** Begin Patch\n*** Add File: new.ts\n+export const value = 2;\n*** End Patch\n"
         analyze = unittest.mock.Mock(return_value=SimpleNamespace(advisory=None, unavailable=None))
         with patch.object(codex_hook, "_load_detector", return_value=SimpleNamespace(analyze=analyze)):
-            self.assertIsNone(self.invoke("mainframe-fallow-quality", self.payload(patch_text)))
+            addition = self.payload(patch_text)
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", {**addition, "hook_event_name": "PreToolUse"}))
+            target.write_text("export const value = 2;\n")
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", addition))
             self.assertEqual(analyze.call_args.kwargs["wholly_owned_paths"], [str(target)])
+            self.assertTrue(analyze.call_args.args[2].startswith("--- /dev/null\n+++ b/new.ts\n"))
             analyze.reset_mock()
+            overwrite = self.payload(patch_text, "overwrite")
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", {**overwrite, "hook_event_name": "PreToolUse"}))
+            self.assertIn("unavailable", self.invoke("mainframe-fallow-quality", overwrite)["hookSpecificOutput"]["additionalContext"])
+            self.assertIsNone(self.invoke("mainframe-fallow-quality", overwrite))
+            analyze.assert_not_called()
             target.write_text("duplicate\nduplicate\n")
             ambiguous = "*** Begin Patch\n*** Update File: new.ts\n@@\n-before\n+duplicate\n*** End Patch\n"
             data = self.payload(ambiguous, "ambiguous")
             output = self.invoke("mainframe-fallow-quality", data)
-            self.assertIn("unavailable", output["hookSpecificOutput"]["additionalContext"])
+            self.assertIsNone(output)
             self.assertIsNone(self.invoke("mainframe-fallow-quality", data))
             analyze.assert_not_called()
             self.assertIsNone(self.invoke("mainframe-fallow-quality", {**data, "tool_use_id": "failure", "tool_response": {"isError": True}}))
@@ -258,8 +456,8 @@ class CurrentCodexAdvisoryTests(unittest.TestCase):
             first = self.invoke("mainframe-code-quality", data)
             self.assertEqual(first["decision"], "block")
             terminal = self.invoke("mainframe-code-quality", {**data, "stop_hook_active": True})
-            self.assertFalse(terminal["continue"])
-            self.assertIn("unresolved", terminal["stopReason"])
+            self.assertEqual(set(terminal), {"systemMessage"})
+            self.assertIn("unresolved", terminal["systemMessage"])
         self.assertNotEqual(seen[0][0], "shared-parent")
         self.assertEqual(seen[0], seen[1])
 

@@ -3,11 +3,13 @@
 
 This canonical detector is a stateless completion advisory. An adapter supplies
 the normalized project root, the explicit paths changed by one native execution
-scope, and an in-memory unified diff reconstructed from that scope. The diff is
-passed directly to ``fallow audit`` over stdin and is never persisted here.
+scope, and an in-memory unified diff reconstructed from that scope. Fallow reads
+the diff on stdin. With no Git commit, complexity advice can use verified new
+files as its baseline.
 
-Only findings that Fallow attributes as newly introduced and that intersect the
-supplied paths are reported. Unused-file findings are reported only for files
+Audit findings must be attributed as newly introduced and intersect the supplied
+paths. Without a base commit, only measured complexity on a verified new file
+is reported. Unused-file findings are reported only for files
 the adapter identifies as wholly created or replaced by the same scope. Missing
 tools, invalid input, timeouts, analyzer errors, and unsupported output return a
 bounded unavailable-check advisory and never block completion.
@@ -24,6 +26,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import time
 from typing import Iterable, NamedTuple
 
 
@@ -35,6 +38,8 @@ MAX_PATHS = 64
 MAX_MESSAGE_ROWS = 6
 MAX_ROW_CHARS = 240
 ANALYZE_TIMEOUT_SECONDS = 180
+CREATION_DIFF_PREFIX = "--- /dev/null\n+++ b/"
+UNRESOLVED_HEAD_MESSAGE = "could not determine changed files for base ref 'HEAD'. Verify the ref exists in this git repository"
 
 
 class FallowResult(NamedTuple):
@@ -140,7 +145,12 @@ def _supported_report(report: object) -> bool:
 
 def _bounded_row(value: str) -> str:
     safe = "".join(character if character.isprintable() else "?" for character in value)
-    return safe[:MAX_ROW_CHARS] + ("..." if len(safe) > MAX_ROW_CHARS else "")
+    if len(safe) <= MAX_ROW_CHARS:
+        return safe
+    # Keep the finding kind and the diagnostic location/measurement at the end.
+    prefix = (MAX_ROW_CHARS - 3) // 2
+    suffix = MAX_ROW_CHARS - 3 - prefix
+    return safe[:prefix] + "..." + safe[-suffix:]
 
 
 def _number(value: object) -> str:
@@ -159,6 +169,27 @@ def _touches(root: Path, finding: dict[str, object], owned: set[Path]) -> bool:
             for item in value:
                 values.append(item.get("file") if isinstance(item, dict) else item)
     return any(_finding_path(root, value) in owned for value in values)
+
+
+def _complexity_row(root: Path, finding: dict[str, object]) -> str:
+    return (
+        f"complexity: {_display(root, finding.get('path'))}:{_number(finding.get('line'))} "
+        f"`{finding.get('name', '?')}` (cyclomatic {_number(finding.get('cyclomatic'))})"
+    )
+
+
+def _bounded_advice(rows: list[str], introduction: str) -> str | None:
+    if not rows:
+        return None
+    shown = [_bounded_row(row) for row in rows[:MAX_MESSAGE_ROWS]]
+    remainder = len(rows) - len(shown)
+    more = f"\n  - ...and {remainder} more" if remainder else ""
+    return (
+        "Fallow advisory (non-blocking). Verify findings before acting; resolve "
+        "in-scope findings and report evidenced out-of-scope issues via the "
+        "project's configured issue route.\n"
+        + introduction + ":\n  - " + "\n  - ".join(shown) + more
+    )
 
 
 def build_advisory(
@@ -234,12 +265,7 @@ def build_advisory(
             f"{_display(root, finding.get('to_path') or finding.get('callee'))}"
         )
     for finding in complex_rows:
-        rows.append(
-            "complexity: "
-            f"{_display(root, finding.get('path'))}:{_number(finding.get('line'))} "
-            f"`{finding.get('name', '?')}` "
-            f"(cyclomatic {_number(finding.get('cyclomatic'))})"
-        )
+        rows.append(_complexity_row(root, finding))
     for finding in duplicate_rows:
         instances = finding.get("instances") or []
         first = instances[0] if isinstance(instances, list) and instances else {}
@@ -250,20 +276,27 @@ def build_advisory(
             f"({_number(finding.get('line_count'))} lines)"
         )
 
-    if not rows:
-        return None
-    shown = [_bounded_row(row) for row in rows[:MAX_MESSAGE_ROWS]]
-    remainder = len(rows) - len(shown)
-    more = f"\n  - ...and {remainder} more" if remainder else ""
-    return (
-        f"Fallow structural review found {len(rows)} newly introduced issue(s) "
-        "in the current TS/JS edit scope:\n  - "
-        + "\n  - ".join(shown)
-        + more
-        + "\nVerify each finding before acting. Resolve what belongs to the current "
-        "result and surface evidenced out-of-scope problems through the project's "
-        "configured issue route. This is advisory and did not block completion."
+    return _bounded_advice(
+        rows, f"Found {len(rows)} newly introduced issue(s) in current TS/JS edit scope"
     )
+
+
+def _creation_advice(report: object, root: Path, created: Path) -> FallowResult:
+    if not isinstance(report, dict) or report.get("kind") != "health" or report.get("error") is True:
+        return _unavailable()
+    findings = report.get("findings")
+    if not isinstance(findings, list) or any(
+        not isinstance(row, dict) or not isinstance(row.get("path"), str)
+        or not isinstance(row.get("exceeded"), str) for row in findings
+    ):
+        return _unavailable()
+    # Fallow's estimated coverage can raise a score in the first edit. Only
+    # report measured complexity thresholds on files created by this edit.
+    rows = [
+        _complexity_row(root, row) for row in findings
+        if _finding_path(root, row["path"]) == created and row["exceeded"] in {"cyclomatic", "cognitive", "both", "all"}
+    ]
+    return FallowResult(advisory=_bounded_advice(rows, "High complexity in newly created file"))
 
 
 def analyze(
@@ -298,32 +331,42 @@ def analyze(
         environment["FALLOW_TELEMETRY"] = "off"
         environment["FALLOW_TELEMETRY_DISABLED"] = "1"
         environment["FALLOW_UPDATE_CHECK"] = "off"
+        options = ["--root", str(root), "--diff-stdin", "--format", "json", "--quiet", "--no-cache"]
+        timeout = max(1, int(timeout_seconds))
+        started = time.monotonic()
         process = subprocess.run(
-            [
-                binary,
-                "audit",
-                "--root",
-                str(root),
-                "--base",
-                "HEAD",
-                "--diff-stdin",
-                "--gate",
-                "new-only",
-                "--format",
-                "json",
-                "--quiet",
-                "--no-cache",
-            ],
+            [binary, "audit", "--base", "HEAD", "--gate", "new-only", *options],
             input=diff_text,
             capture_output=True,
             text=True,
             cwd=root,
             env=environment,
-            timeout=max(1, int(timeout_seconds)),
+            timeout=timeout,
             check=False,
         )
         if process.returncode not in (0, 1):
-            return _unavailable()
+            report = json.loads(process.stdout)
+            if (process.returncode != 2 or not isinstance(report, dict)
+                    or report.get("error") is not True or report.get("message") != UNRESOLVED_HEAD_MESSAGE):
+                return _unavailable()
+            # A single explicit creation header cannot be confused with lines
+            # inside a multi-file diff. Whole-file ownership also covers updates.
+            if not diff_text.startswith(CREATION_DIFF_PREFIX) or len(relevant) != 1:
+                return _unavailable()
+            relative = diff_text[len(CREATION_DIFF_PREFIX):].partition("\n")[0]
+            path = _finding_path(root, relative)
+            if path is None or path not in wholly_owned or path not in relevant:
+                return _unavailable()
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                return _unavailable()
+            health = subprocess.run(
+                [binary, "health", "--complexity", *options], input=diff_text,
+                capture_output=True, text=True, cwd=root, env=environment, timeout=remaining, check=False,
+            )
+            if health.returncode not in (0, 1):
+                return _unavailable()
+            return _creation_advice(json.loads(health.stdout), root, path)
         report = json.loads(process.stdout)
         if not _supported_report(report):
             return _unavailable()
@@ -335,7 +378,6 @@ def analyze(
         )
         return FallowResult(advisory=note)
     except (
-        json.JSONDecodeError,
         OSError,
         RuntimeError,
         subprocess.SubprocessError,

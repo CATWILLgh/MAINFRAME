@@ -5,6 +5,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -17,8 +19,8 @@ SPEC = importlib.util.spec_from_file_location("code_quality", SOURCE)
 assert SPEC is not None and SPEC.loader is not None
 QUALITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(QUALITY)
-PYTHON_SECURITY_FINDINGS = QUALITY._python_security_findings
-NODE_SECURITY_FINDINGS = QUALITY._node_security_findings
+PYTHON_FINDINGS = QUALITY._python_findings
+NODE_FINDINGS = QUALITY._node_findings
 SEMGREP_SECURITY_FINDINGS = QUALITY._semgrep_security_findings
 
 
@@ -34,8 +36,8 @@ class CodeQualityTests(unittest.TestCase):
         self.state = self.root / "state"
         self.workspace.mkdir()
         self.scanner_patchers = [
-            mock.patch.object(QUALITY, "_python_security_findings", return_value=[]),
-            mock.patch.object(QUALITY, "_node_security_findings", return_value=[]),
+            mock.patch.object(QUALITY, "_python_findings", return_value=[]),
+            mock.patch.object(QUALITY, "_node_findings", return_value=[]),
             mock.patch.object(QUALITY, "_semgrep_security_findings", return_value=[]),
         ]
         self.scanners = [patcher.start() for patcher in self.scanner_patchers]
@@ -44,6 +46,31 @@ class CodeQualityTests(unittest.TestCase):
         for patcher in reversed(self.scanner_patchers):
             patcher.stop()
         self.temporary.cleanup()
+
+    def test_compact_advice_keeps_each_subsection_and_diagnostic_suffix(self) -> None:
+        long_path = self.workspace.joinpath(*(["directory" * 10] * 6), "worker.py")
+        rows = [(long_path, QUALITY.Occurrence("TODO comment", line, str(line)))
+                for line in range(1, 7)]
+        quality = QUALITY._advisory(rows, self.workspace)
+        growth = QUALITY._growth_advisory([
+            QUALITY.GrowthFinding(long_path, "file", None, None, 399, 405),
+        ], self.workspace)
+        unavailable = QUALITY._issue_advisory([
+            QUALITY.ScanIssue("ruff", "Ruff review was unavailable."),
+        ])
+        message = QUALITY._join_notes(quality, growth, unavailable)
+        self.assertLessEqual(len(message), QUALITY.MAX_ADVISORY_CHARS)
+        self.assertIn("Code quality", message)
+        self.assertIn("TODO comment", message)
+        self.assertIn("Code structure review", message)
+        self.assertIn("crossed 400", message)
+        self.assertIn("Ruff review was unavailable", message)
+        self.assertIn("more findings", message)
+
+        repeated_join = QUALITY._join_notes(message, QUALITY._unavailable("verification").advisory)
+        self.assertLessEqual(len(repeated_join), QUALITY.MAX_ADVISORY_CHARS)
+        for heading in ("Code quality", "Code structure review", "protection unavailable"):
+            self.assertIn(heading, repeated_join)
 
     def capture(self, scope: str, operation: str, *paths: Path):
         return QUALITY.capture_before(
@@ -54,6 +81,34 @@ class CodeQualityTests(unittest.TestCase):
             state_namespace="test-adapter",
             state_root=self.state,
         )
+
+    def test_mixed_advice_preserves_decision_boundaries_within_context_budget(self) -> None:
+        file = self.workspace / "worker.js"
+        before = "const value = 1;\n" * 399
+        file.write_text(before, encoding="utf-8")
+        self.capture("mixed", "edit", file)
+        self.scanners[1].side_effect = RuntimeError("unavailable")
+        self.scanners[2].return_value = [QUALITY.Occurrence(
+            "Review dynamic subprocess", 2, "review",
+            channel=QUALITY._SEMGREP_SECURITY_CHANNEL, blocking=False,
+        )]
+        file.write_text("// TODO: finish\n" + before + "\n" * 5, encoding="utf-8")
+
+        result = self.after("mixed", "edit")
+        message = result.advisory or ""
+        self.assertLessEqual(len(message), QUALITY.MAX_ADVISORY_CHARS)
+        for evidence in ("worker.js:1", "TODO", "crossed 400", "unavailable"):
+            self.assertIn(evidence, message)
+        for boundary in ("non-blocking", "no forced split", "verify directly"):
+            self.assertIn(boundary, message)
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.after("mixed", "edit"), QUALITY.QualityResult())
+        self.assertIn("Completion blocked", self.completion("mixed").block_reason or "")
+
+        self.capture("mixed", "repair", file)
+        file.write_text(before, encoding="utf-8")
+        self.after("mixed", "repair")
+        self.assertIsNone(self.completion("mixed").block_reason)
 
     def after(self, scope: str, operation: str, *, succeeded: bool = True):
         return QUALITY.record_after(
@@ -143,7 +198,7 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIsNone(self.completion("scope").block_reason)
 
     def test_python_security_finding_warns_and_blocks_until_removed(self) -> None:
-        def scan(text: str, _path: Path):
+        def scan(text: str, _path: Path, **_options):
             if "eval(" not in text:
                 return []
             return [
@@ -171,7 +226,7 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIsNone(self.completion("scope").block_reason)
 
     def test_preexisting_security_finding_is_not_claimed(self) -> None:
-        def scan(text: str, _path: Path):
+        def scan(text: str, _path: Path, **_options):
             if "eval(" not in text:
                 return []
             return [
@@ -192,6 +247,760 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
+    def test_new_blocking_calls_in_async_code_are_advice_without_project_configuration(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        file = self.workspace / "worker.py"
+        base = (
+            "import asyncio\nimport subprocess\nimport time\nimport urllib.request\nimport httpx\n\n"
+            "def synchronous_worker():\n    time.sleep(1)\n\n"
+            "async def existing_worker():\n    time.sleep(2)\n\n"
+            "async def new_worker():\n    await asyncio.sleep(3)\n"
+        )
+        file.write_text(base, encoding="utf-8")
+        self.assertEqual(self.capture("scope", "introduce", file), QUALITY.QualityResult())
+        changed = base.replace("    await asyncio.sleep(3)", (
+            "    urllib.request.urlopen('https://example.invalid')\n"
+            "    client = httpx.Client()\n"
+            "    client.get('https://example.invalid')\n"
+            "    subprocess.run(['printf', 'fixture'], check=True)\n"
+            "    open('fixture.txt')\n"
+            "    time.sleep(3)"
+        ))
+        file.write_text(changed, encoding="utf-8")
+        result = self.after("scope", "introduce")
+        advisory = result.advisory or ""
+        expected = {14: "ASYNC210", 16: "ASYNC212", 17: "ASYNC221", 18: "ASYNC230", 19: "ASYNC251"}
+        for line, rule in expected.items():
+            self.assertIn(f"worker.py:{line} — Python {rule}", advisory)
+            self.assertEqual(advisory.count(rule), 1)
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "repair", file), QUALITY.QualityResult())
+        file.write_text(base, encoding="utf-8")
+        self.assertEqual(self.after("scope", "repair"), QUALITY.QualityResult())
+
+    def test_python_swallowed_errors_are_advice_on_first_write(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        file = self.workspace / "jobs" / "worker.py"
+        source = (
+            "try:\n    start_job()\nexcept Exception:\n    pass\n\n"
+            "def finish_job():\n"
+            "    try:\n        return run_job()\n"
+            "    finally:\n        return None\n\n"
+            "attempts = 1\n"
+        )
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text(source, encoding="utf-8")
+        result = self.after("scope", "create")
+        self.assertIn("jobs/worker.py:3 — Python S110", result.advisory or "")
+        self.assertIn("jobs/worker.py:10 — Python B012", result.advisory or "")
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(source.replace("attempts = 1", "attempts = 2"), encoding="utf-8")
+        self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
+
+    def test_javascript_error_handling_and_async_executor_are_advice_on_first_write(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        file = self.workspace / "worker.ts"
+        async_executor = "new Promise(async (resolve) => { resolve(await runJob()); })"
+        source = (
+            "export function finishJob() {\n"
+            "  try { return runJob(); }\n"
+            "  finally { return undefined; }\n"
+            "}\n"
+            f"export const job = {async_executor};\n"
+        )
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.write_text(source, encoding="utf-8")
+        result = self.after("scope", "create")
+        self.assertIn("worker.ts:3 — JavaScript no-unsafe-finally", result.advisory or "")
+        self.assertIn("worker.ts:5 — JavaScript no-async-promise-executor", result.advisory or "")
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "security-risk", file), QUALITY.QualityResult())
+        file.write_text(source + "eval(input);\n", encoding="utf-8")
+        result = self.after("scope", "security-risk")
+        self.assertIn("worker.ts:6 — JavaScript security: eval()", result.advisory or "")
+        self.assertNotIn("no-async-promise-executor", result.advisory or "")
+        blocked = self.completion("scope").block_reason or ""
+        self.assertIn("JavaScript security: eval()", blocked)
+        self.assertNotIn("no-unsafe-finally", blocked)
+        self.assertNotIn("no-async-promise-executor", blocked)
+
+        self.assertEqual(self.capture("scope", "repair", file), QUALITY.QualityResult())
+        repaired = source.replace("return undefined;", "cleanup();").replace(
+            async_executor, "Promise.resolve().then(runJob)"
+        )
+        file.write_text(repaired, encoding="utf-8")
+        self.assertEqual(self.after("scope", "repair"), QUALITY.QualityResult())
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+    def test_python_reports_false_green_tests_and_unretained_tasks_from_first_write(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        file = self.workspace / "jobs" / "test_worker.py"
+        source = (
+            "import asyncio\nimport pytest\n\n"
+            "def test_worker():\n"
+            "    assert (work_finished(), 'work must finish')\n"
+            "    with pytest.raises(RuntimeError):\n"
+            "        configure()\n"
+            "        run_job()\n\n"
+            "async def launch():\n"
+            "    asyncio.create_task(run_async_job())\n"
+            "    async with asyncio.TaskGroup() as group:\n"
+            "        group.create_task(run_async_job())\n"
+        )
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text(source, encoding="utf-8")
+        advice = self.after("scope", "create").advisory or ""
+        for line, rule in ((5, "F631"), (6, "PT012"), (11, "RUF006")):
+            self.assertIn(f"jobs/test_worker.py:{line} — Python {rule}", advice)
+            self.assertEqual(advice.count(rule), 1)
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("scope", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(source + "\nmax_attempts = 2\n", encoding="utf-8")
+        self.assertEqual(self.after("scope", "unrelated"), QUALITY.QualityResult())
+
+    def test_async_assertions_report_only_discarded_results_in_jest_and_vitest_tests(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        for name, imports in (
+            ("worker.test.ts", "import { expect, test } from '@jest/globals';\n"),
+            ("worker.spec.js", "import { expect, test } from 'vitest';\n"),
+            ("__tests__/worker.ts", ""),
+        ):
+            with self.subTest(name=name):
+                file = self.workspace / name
+                file.parent.mkdir(exist_ok=True)
+                source = imports + (
+                    "test('ошибка', async () => { expect(runJob()).rejects.toThrow(); });\n"
+                    "test('awaited', async () => { await (expect(runJob()).rejects.toThrow()); });\n"
+                    "test('returned', () => expect(runJob()).rejects.toThrow());\n"
+                    "test('held', async () => {\n"
+                    "    const pending =\n"
+                    "        expect(runJob()).rejects.toThrow();\n"
+                    "    await pending;\n"
+                    "});\n"
+                )
+                if "vitest" in imports:
+                    source += (
+                        "test('getter assertion', () => { expect(true).to.be.true; });\n"
+                        "test('unawaited without semicolons', () => {\n"
+                        "    prepare()\n"
+                        "    expect(runJob()).resolves.toBe(true)\n"
+                        "})\n"
+                    )
+                self.assertEqual(self.capture("scope", f"create-{name}", file), QUALITY.QualityResult())
+                file.write_text(source, encoding="utf-8")
+                advice = self.after("scope", f"create-{name}").advisory or ""
+                self.assertIn(f"{name}:{2 if imports else 1} — JavaScript valid-expect", advice)
+                if "vitest" in imports:
+                    self.assertIn(f"{name}:13 — JavaScript valid-expect", advice)
+                self.assertEqual(advice.count("valid-expect"), 2 if "vitest" in imports else 1)
+                self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+                self.assertEqual(self.capture("scope", f"unrelated-{name}", file), QUALITY.QualityResult())
+                file.write_text(source + "\nconst fixtureSize = 2;\n", encoding="utf-8")
+                self.assertEqual(self.after("scope", f"unrelated-{name}"), QUALITY.QualityResult())
+
+    def test_async_assertion_rule_ignores_non_test_files_and_jsx_expressions(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        file = self.workspace / "worker.ts"
+        self.assertEqual(self.capture("scope", "create", file), QUALITY.QualityResult())
+        file.write_text("expect(runJob()).rejects.toThrow();\n", encoding="utf-8")
+        self.assertEqual(self.after("scope", "create"), QUALITY.QualityResult())
+
+        test_file = self.workspace / "worker.test.tsx"
+        self.assertEqual(self.capture("scope", "jsx", test_file), QUALITY.QualityResult())
+        test_file.write_text(
+            "const child = <Result>{expect(runJob()).rejects.toThrow()}</Result>;\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(self.after("scope", "jsx"), QUALITY.QualityResult())
+
+    def test_shellcheck_reports_masked_failures_only_for_applicable_shells(self) -> None:
+        script = 'check() { local data="$(generate)"; }\n'
+        file = self.workspace / "new" / "release.sh"
+        self.assertEqual(self.capture("shell", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text("#!/usr/bin/env bash\n" + script, encoding="utf-8")
+        with mock.patch.dict(os.environ, {"SHELLCHECK_OPTS": "--exclude=SC2155"}):
+            advice = self.after("shell", "create").advisory or ""
+        self.assertIn("new/release.sh:2 — ShellCheck SC2155", advice)
+        self.assertEqual(self.completion("shell"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("shell", "unrelated", file), QUALITY.QualityResult())
+        with file.open("a", encoding="utf-8") as stream:
+            stream.write("printf 'release\n'\n")
+        self.assertEqual(self.after("shell", "unrelated"), QUALITY.QualityResult())
+
+        for name, shebang in (("release.zsh", "#!/bin/zsh\n"), ("other.sh", "#!/bin/zsh\n")):
+            with self.subTest(name=name):
+                file = self.workspace / name
+                self.assertEqual(self.capture("shell", name, file), QUALITY.QualityResult())
+                file.write_text(shebang + script, encoding="utf-8")
+                self.assertEqual(self.after("shell", name), QUALITY.QualityResult())
+
+        broken = self.workspace / "broken.bash"
+        self.assertEqual(self.capture("shell", "malformed", broken), QUALITY.QualityResult())
+        broken.write_text("if true; then\n", encoding="utf-8")
+        self.assertIn("ShellCheck SC1073", self.after("shell", "malformed").advisory or "")
+
+    def test_source_syntax_is_advisory_on_first_write(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        self.scanners[1].side_effect = NODE_FINDINGS
+        cases = {
+            ".py": ("value = None\nresult = )\n", "Python"),
+            ".pyi": ("def result( -> None: ...\n", "Python"),
+            ".js": ("const result = ;\n", "JavaScript"),
+            ".tsx": ("const result = <span>\n", "TypeScript"),
+            ".mts": ("export const result: number = ;\n", "TypeScript"),
+            ".cts": ("export const result: number = ;\n", "TypeScript"),
+        }
+        for extension, (source, language) in cases.items():
+            with self.subTest(extension=extension):
+                path = self.workspace / "new" / f"worker{extension}"
+                self.assertEqual(self.capture(extension, "create", path), QUALITY.QualityResult())
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(source, encoding="utf-8")
+                result = self.after(extension, "create")
+                self.assertIn(f"worker{extension}:", result.advisory or "")
+                self.assertIn(f"{language} syntax error", result.advisory or "")
+                self.assertIsNone(result.block_reason)
+                self.assertEqual(self.completion(extension), QUALITY.QualityResult())
+
+    def test_go_syntax_checks_a_complete_file_without_formatting(self) -> None:
+        path = self.workspace / "worker.go"
+        self.assertEqual(self.capture("go", "create", path), QUALITY.QualityResult())
+        path.write_text("func run() {}\n", encoding="utf-8")
+        self.assertIn("worker.go:1 — Go syntax error", self.after("go", "create").advisory or "")
+        self.assertEqual(self.completion("go"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("go", "repair", path), QUALITY.QualityResult())
+        valid = "package jobs\nfunc run(){println(1)}\n"
+        path.write_text(valid, encoding="utf-8")
+        self.assertEqual(self.after("go", "repair"), QUALITY.QualityResult())
+        self.assertEqual(path.read_text(encoding="utf-8"), valid)
+
+    def test_dart_syntax_is_reviewed_without_formatting(self) -> None:
+        path = self.workspace / "worker.dart"
+        self.assertEqual(self.capture("dart", "create", path), QUALITY.QualityResult())
+        source = "void main() {\n  final result = ;\n}\n"
+        path.write_text(source, encoding="utf-8")
+        failed_parse = subprocess.CompletedProcess(
+            ["dart", "format"], 65, "",
+            "Could not format because the source could not be parsed:\n\n"
+            "line 2, column 18 of source.dart: Expected an identifier.\n",
+        )
+        # The Dart SDK is optional. Keep the detector contract exercised in CI
+        # even on a host without a Dart installation.
+        with (
+            mock.patch.object(QUALITY.shutil, "which", return_value="/usr/bin/dart"),
+            mock.patch.object(QUALITY.subprocess, "run", return_value=failed_parse) as run,
+        ):
+            self.assertIn("worker.dart:2 — Dart syntax error", self.after("dart", "create").advisory or "")
+        self.assertEqual(run.call_args.args[0][1:4], ["--suppress-analytics", "format", "--output=none"])
+        self.assertEqual(path.read_text(encoding="utf-8"), source)
+        self.assertEqual(self.completion("dart"), QUALITY.QualityResult())
+
+    def test_rust_syntax_is_advisory_on_the_first_write_without_cargo(self) -> None:
+        path = self.workspace / "new" / "worker.rs"
+        source = "pub fn run() {\n    let count = 3\n}\n"
+        self.assertEqual(self.capture("rust", "create", path), QUALITY.QualityResult())
+        path.parent.mkdir()
+        path.write_text(source, encoding="utf-8")
+        advice = self.after("rust", "create").advisory or ""
+        self.assertIn("new/worker.rs:2 — Rust syntax error", advice)
+        self.assertNotIn("count", advice)
+        self.assertEqual(path.read_text(encoding="utf-8"), source)
+        self.assertEqual(self.completion("rust"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("rust", "unrelated", path), QUALITY.QualityResult())
+        path.write_text("\n" + source, encoding="utf-8")
+        self.assertEqual(self.after("rust", "unrelated"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("rust", "repair", path), QUALITY.QualityResult())
+        valid = (
+            '#[path = "missing.rs"] mod external;\n'
+            'unsafe extern "C" { safe fn tick(); }\n'
+            'fn work(){let _=1;}\n'
+        )
+        path.write_text(valid, encoding="utf-8")
+        self.assertEqual(self.after("rust", "repair"), QUALITY.QualityResult())
+        self.assertEqual(path.read_text(encoding="utf-8"), valid)
+
+    def test_rust_syntax_uses_the_inherited_cargo_edition(self) -> None:
+        root_manifest = self.workspace / "Cargo.toml"
+        root_manifest.write_text(
+            '[workspace]\nmembers = ["crates/worker"]\n[workspace.package]\nedition = "2021"\n',
+            encoding="utf-8",
+        )
+        crate = self.workspace / "crates" / "worker"
+        path = crate / "src" / "lib.rs"
+        path.parent.mkdir(parents=True)
+        (crate / "Cargo.toml").write_text(
+            '[package]\nname = "worker"\nedition.workspace = true\n', encoding="utf-8",
+        )
+        self.assertEqual(self.capture("rust", "create", path), QUALITY.QualityResult())
+        path.write_text("fn gen() {}\n", encoding="utf-8")
+        self.assertEqual(self.after("rust", "create"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("rust", "replace", path), QUALITY.QualityResult())
+        path.write_text("fn run() {\n    let count = ;\n}\n", encoding="utf-8")
+        self.assertIn("lib.rs:2 — Rust syntax error", self.after("rust", "replace").advisory or "")
+
+    def test_missing_rustfmt_warns_once_without_blocking(self) -> None:
+        path = self.workspace / "worker.rs"
+        with (
+            mock.patch.object(QUALITY.shutil, "which", return_value=None),
+            mock.patch.dict(os.environ, {"RUSTUP_HOME": str(self.root / "missing-rustup")}),
+        ):
+            self.assertEqual(self.capture("rust", "create", path), QUALITY.QualityResult())
+            path.write_text("fn run() {}\n", encoding="utf-8")
+            self.assertIn("rustfmt", self.after("rust", "create").advisory or "")
+            self.assertEqual(self.capture("rust", "repeat", path), QUALITY.QualityResult())
+            path.write_text("fn second() {}\n", encoding="utf-8")
+            self.assertEqual(self.after("rust", "repeat"), QUALITY.QualityResult())
+            self.assertEqual(self.completion("rust"), QUALITY.QualityResult())
+
+    def test_node_module_extensions_keep_security_and_test_checks(self) -> None:
+        self.scanners[1].side_effect = NODE_FINDINGS
+        self.scanners[2].side_effect = SEMGREP_SECURITY_FINDINGS
+        source = (
+            'const agent = new https.Agent({ rejectUnauthorized: false });\n'
+            'eval(input);\n'
+            'test("rejects", () => {\n'
+            '    expect(run()).rejects.toThrow();\n'
+            '});\n'
+        )
+        for extension in (".mts", ".cts"):
+            with self.subTest(extension=extension):
+                path = self.workspace / f"worker.test{extension}"
+                self.assertEqual(self.capture(extension, "create", path), QUALITY.QualityResult())
+                path.write_text(source, encoding="utf-8")
+                advice = self.after(extension, "create").advisory or ""
+                self.assertIn("JavaScript security: eval()", advice)
+                self.assertIn("TLS verification disabled", advice)
+                self.assertIn("the test discards an async assertion", advice)
+                self.assertIn("JavaScript security: eval()", self.completion(extension).block_reason or "")
+
+    def test_syntax_error_does_not_clear_an_attributed_security_finding(self) -> None:
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        self.scanners[1].side_effect = NODE_FINDINGS
+        for extension, risky, malformed, label in (
+            (".py", "eval(user_input)\n", "result = )\n", "Python security S307"),
+            (".mts", "eval(userInput);\n", "const result = ;\n", "JavaScript security: eval()"),
+        ):
+            with self.subTest(extension=extension):
+                path = self.workspace / f"worker{extension}"
+                self.assertEqual(self.capture(extension, "introduce", path), QUALITY.QualityResult())
+                path.write_text(risky, encoding="utf-8")
+                self.assertIn(label, self.after(extension, "introduce").advisory or "")
+
+                self.assertEqual(self.capture(extension, "break", path), QUALITY.QualityResult())
+                path.write_text(risky + malformed, encoding="utf-8")
+                self.assertIn("syntax error", self.after(extension, "break").advisory or "")
+                self.assertIsNone(self.completion(extension).block_reason)
+
+                self.capture(extension, "repair", path)
+                path.write_text(risky, encoding="utf-8")
+                self.assertEqual(self.after(extension, "repair"), QUALITY.QualityResult())
+                self.assertIn(label, self.completion(extension).block_reason or "")
+
+                scope = extension + "-repair"
+                self.assertEqual(self.capture(scope, "malformed", path), QUALITY.QualityResult())
+                path.write_text(malformed, encoding="utf-8")
+                self.after(scope, "malformed")
+                self.assertEqual(self.capture(scope, "first-valid", path), QUALITY.QualityResult())
+                path.write_text(risky, encoding="utf-8")
+                self.assertIn(label, self.after(scope, "first-valid").advisory or "")
+                self.assertIn(label, self.completion(scope).block_reason or "")
+
+    def test_config_duplicate_keys_on_first_write_and_unrelated_edits(self) -> None:
+        cases = {
+            "config.json": ('{"limits": {"workers": 4, "workers": 400}, "keep": 1}\n', "JSON"),
+            "config.yml": ("limits:\n  workers: 4\n  workers: 400\nkeep: 1\n", "YAML"),
+            "config.yaml": (
+                'limits: {workers: 4, "workers": 400}\n'
+                '? "multi\\nline"\n: first\n? "multi\\nline"\n: second\nkeep: 1\n',
+                "YAML",
+            ),
+            "config.toml": ("keep = 1\n[limits]\nworkers = 4\nworkers = 400\n", "TOML"),
+        }
+        for name, (source, language) in cases.items():
+            with self.subTest(name=name):
+                path = self.workspace / "config" / name
+                self.assertEqual(self.capture(name, "create", path), QUALITY.QualityResult())
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(source, encoding="utf-8")
+                advice = self.after(name, "create").advisory or ""
+                self.assertIn(f"config/{name}", advice)
+                self.assertIn(f"{language} duplicate key", advice)
+                if name == "config.yaml":
+                    self.assertEqual(advice.count("YAML duplicate key"), 2)
+                self.assertNotIn("workers", advice)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+
+                self.assertEqual(self.capture(name, "unrelated", path), QUALITY.QualityResult())
+                path.write_text(source.replace("1", "2"), encoding="utf-8")
+                self.assertEqual(self.after(name, "unrelated"), QUALITY.QualityResult())
+
+    def test_json_with_comments_checks_duplicate_keys_without_style_warnings(self) -> None:
+        path = self.workspace / "tsconfig.app.json"
+        self.assertEqual(self.capture("tsconfig", "create", path), QUALITY.QualityResult())
+        valid = '{ // build settings\n "include": ["src/**"], /* sources */\n}\n'
+        path.write_text(valid, encoding="utf-8")
+        self.assertEqual(self.after("tsconfig", "create"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("tsconfig", "duplicate", path), QUALITY.QualityResult())
+        path.write_text(valid.replace(' "include"', ' "include": [],\n "include"'), encoding="utf-8")
+        self.assertIn("JSON duplicate key", self.after("tsconfig", "duplicate").advisory or "")
+
+    def test_config_scopes_and_yaml_document_boundaries(self) -> None:
+        cases = {
+            "config.json": '{"a": {"name": "a"}, "b": {"name": "b"}}\n',
+            "config.yaml": (
+                "on: &defaults {name: a}\n"
+                "jobs: {<<: *defaults, name: b}\n"
+                "child: !reference [job, script]\n"
+                "---\non: {name: c}\n"
+            ),
+            "config.toml": '[[jobs]]\nname = "a"\n[[jobs]]\nname = "b"\n',
+        }
+        for name, source in cases.items():
+            with self.subTest(name=name):
+                path = self.workspace / name
+                self.assertEqual(self.capture(name, "create", path), QUALITY.QualityResult())
+                path.write_text(source, encoding="utf-8")
+                self.assertEqual(self.after(name, "create"), QUALITY.QualityResult())
+
+    def test_helm_template_is_not_mistaken_for_plain_yaml(self) -> None:
+        chart = self.workspace / "chart"
+        path = chart / "templates" / "deployment.yaml"
+        path.parent.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text("name: sample\n", encoding="utf-8")
+        self.assertEqual(self.capture("helm", "create", path), QUALITY.QualityResult())
+        path.write_text("{{- if .Values.enabled }}\nkind: Deployment\n{{- end }}\n", encoding="utf-8")
+        self.assertEqual(self.after("helm", "create"), QUALITY.QualityResult())
+
+    def test_config_syntax_is_reported_from_first_write(self) -> None:
+        for filename, text, label in (
+            ("settings.json", "", "JSON syntax error"),
+            ("settings.yml", "items: [1, 2\n", "YAML syntax error"),
+            ("settings.toml", "items = [1, 2\n", "TOML syntax error"),
+        ):
+            with self.subTest(filename=filename):
+                path = self.workspace / filename
+                self.assertEqual(self.capture(filename, "create", path), QUALITY.QualityResult())
+                path.write_text(text, encoding="utf-8")
+                self.assertIn(label, self.after(filename, "create").advisory or "")
+                self.assertEqual(self.completion(filename), QUALITY.QualityResult())
+
+    def test_actionlint_checks_workflows_from_first_write(self) -> None:
+        source = (
+            "on: [push]\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: custom-self-hosted\n"
+            "    needs: [absent]\n"
+            "    steps:\n"
+            "      - run: echo build\n"
+        )
+        file = self.workspace / ".github" / "workflows" / "release.yml"
+        self.assertEqual(self.capture("workflow", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir(parents=True)
+        file.write_text("on: [push]\n" + source, encoding="utf-8")
+        advice = self.after("workflow", "create").advisory or ""
+        self.assertIn(".github/workflows/release.yml:4 — actionlint", advice)
+        self.assertIn(".github/workflows/release.yml:2 — YAML duplicate key", advice)
+        self.assertIn("job dependency is missing or cyclic", advice)
+        self.assertNotIn("custom-self-hosted", advice)
+        self.assertEqual(self.completion("workflow"), QUALITY.QualityResult())
+
+        other = self.workspace / "app.yml"
+        self.assertEqual(self.capture("workflow", "other", other), QUALITY.QualityResult())
+        other.write_text(source, encoding="utf-8")
+        self.assertEqual(self.after("workflow", "other"), QUALITY.QualityResult())
+
+    def test_unavailable_file_analyzer_is_reported_once_and_never_blocks(self) -> None:
+        file = self.workspace / "release.bash"
+        with mock.patch.object(QUALITY, "_run_review_tool", side_effect=RuntimeError("offline")):
+            self.assertEqual(self.capture("shell", "first", file), QUALITY.QualityResult())
+            file.write_text("cd target\n", encoding="utf-8")
+            self.assertIn("shellcheck review was unavailable", self.after("shell", "first").advisory or "")
+            self.assertEqual(self.capture("shell", "second", file), QUALITY.QualityResult())
+            file.write_text("cd other\n", encoding="utf-8")
+            self.assertEqual(self.after("shell", "second"), QUALITY.QualityResult())
+            self.assertEqual(self.completion("shell"), QUALITY.QualityResult())
+
+    def test_kubernetes_checks_plain_workloads_and_skips_overlay_patches(self) -> None:
+        workload = (
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: worker\n"
+            "spec:\n  selector:\n    matchLabels:\n      app: worker\n"
+            "  template:\n    metadata:\n      labels:\n        app: worker\n"
+            "    spec:\n      containers:\n        - name: worker\n          image: worker:1\n"
+        )
+        file = self.workspace / "deploy" / "worker.yaml"
+        self.assertEqual(self.capture("kube", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text(workload, encoding="utf-8")
+        advice = self.after("kube", "create").advisory or ""
+        self.assertIn("deploy/worker.yaml — KubeLinter no-readiness-probe", advice)
+        self.assertEqual(self.completion("kube"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("kube", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(workload.replace("worker:1", "worker:2"), encoding="utf-8")
+        self.assertEqual(self.after("kube", "unrelated"), QUALITY.QualityResult())
+
+        patch = self.workspace / "overlays" / "stage" / "worker.yaml"
+        self.assertEqual(self.capture("kube", "patch", patch), QUALITY.QualityResult())
+        patch.parent.mkdir(parents=True)
+        patch.write_text(workload, encoding="utf-8")
+        self.assertEqual(self.after("kube", "patch"), QUALITY.QualityResult())
+
+        renamed_selector = workload.replace("app: worker", "app: another-worker", 1)
+        self.assertEqual(self.capture("kube", "selector", file), QUALITY.QualityResult())
+        file.write_text(renamed_selector, encoding="utf-8")
+        advice = self.after("kube", "selector").advisory or ""
+        self.assertIn("KubeLinter mismatching-selector", advice)
+        self.assertNotIn("no-readiness-probe", advice)
+
+        invalid = self.workspace / "values.yaml"
+        config = "apiVersion: apps/v1\n---\nkind: Deployment\n  containers: []\n"
+        self.assertEqual(self.capture("kube", "plain-yaml", invalid), QUALITY.QualityResult())
+        invalid.write_text(config, encoding="utf-8")
+        with mock.patch.object(QUALITY, "_run_review_tool", side_effect=AssertionError("unexpected tool")):
+            self.assertIn("YAML syntax error", self.after("kube", "plain-yaml").advisory or "")
+
+    def test_squawk_checks_recognized_postgresql_migrations_on_first_edit(self) -> None:
+        root = self.workspace / "service" / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n', encoding="utf-8")
+        file = root / "20261113000000_drop_job_data" / "migration.sql"
+        self.assertEqual(self.capture("sql", "first", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text("DROP TABLE history;\n", encoding="utf-8")
+        advice = self.after("sql", "first").advisory or ""
+        self.assertIn("migration.sql:1 — Squawk ban-drop-table", advice)
+        self.assertNotIn("ban-drop-table: DROP", advice)
+        self.assertEqual(self.completion("sql"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("sql", "another", file), QUALITY.QualityResult())
+        file.write_text("DROP TABLE history;\nCREATE INDEX idx_status ON jobs (status);\n", encoding="utf-8")
+        advice = self.after("sql", "another").advisory or ""
+        self.assertIn("Squawk require-concurrent-index-creation", advice)
+        self.assertNotIn("Squawk ban-drop-table", advice)
+
+        other = self.workspace / "clickhouse" / "migrations" / "0001_remove_table.sql"
+        self.assertEqual(self.capture("sql", "other", other), QUALITY.QualityResult())
+        other.parent.mkdir(parents=True)
+        other.write_text("DROP TABLE history;\n", encoding="utf-8")
+        self.assertEqual(self.after("sql", "other"), QUALITY.QualityResult())
+
+    def test_postgresql_migration_detection_uses_existing_dialect_metadata(self) -> None:
+        drizzle = self.workspace / "db" / "drizzle"
+        (drizzle / "meta").mkdir(parents=True)
+        (drizzle / "meta" / "_journal.json").write_text('{"dialect": "postgresql"}', encoding="utf-8")
+        file = drizzle / "0000_truncate.sql"
+        self.assertEqual(self.capture("sql", "drizzle", file), QUALITY.QualityResult())
+        file.write_text("TRUNCATE TABLE events CASCADE;\n", encoding="utf-8")
+        self.assertIn("Squawk ban-truncate-cascade", self.after("sql", "drizzle").advisory or "")
+
+        css = self.workspace / "migrations"
+        css.mkdir()
+        (self.workspace / "go.mod").write_text(
+            "module icover-vozvrat\n\nrequire (\n\tgithub.com/jackc/pgx/v5 v5.11.0\n)\n", encoding="utf-8",
+        )
+        (css / "migrations.go").write_text("package migrations\n\n//go:embed *.sql\n", encoding="utf-8")
+        file = css / "0127_online_index.sql"
+        self.assertEqual(self.capture("sql", "css", file), QUALITY.QualityResult())
+        file.write_text("CREATE INDEX idx ON events (status);\n", encoding="utf-8")
+        self.assertIn("Squawk require-concurrent-index-creation", self.after("sql", "css").advisory or "")
+        self.assertEqual(self.capture("sql", "css-explicit-transaction", file), QUALITY.QualityResult())
+        file.write_text("BEGIN;\nCREATE INDEX CONCURRENTLY idx ON events (status);\nCOMMIT;\n", encoding="utf-8")
+        self.assertIn("Squawk ban-concurrent-index-creation-in-transaction",
+                      self.after("sql", "css-explicit-transaction").advisory or "")
+        self.assertEqual(self.capture("sql", "rewrite", file), QUALITY.QualityResult())
+        file.write_text("ALTER TABLE events ALTER COLUMN status TYPE bigint USING status::bigint;\n",
+                        encoding="utf-8")
+        self.assertIn("Squawk changing-column-type", self.after("sql", "rewrite").advisory or "")
+
+        raw = drizzle / "0001_invalid.sql"
+        self.assertEqual(self.capture("sql", "invalid", raw), QUALITY.QualityResult())
+        raw.write_text("CREATE INDEX broken\n", encoding="utf-8")
+        advice = self.after("sql", "invalid").advisory or ""
+        self.assertIn("0001_invalid.sql:1 — Squawk syntax-error", advice)
+        self.assertEqual(advice.count("Squawk syntax-error"), 1)
+        self.assertNotIn("more findings", advice)
+        self.assertIn("parser", advice)
+        self.assertNotIn("review was unavailable", advice)
+        self.assertEqual(self.completion("sql"), QUALITY.QualityResult())
+
+    def test_index_rebuild_and_name_advice_is_new_attributed_and_nonblocking(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        cases = (
+            ("rebuild", "REINDEX INDEX events_status_idx;", "require-concurrent-reindex"),
+            ("rebuild_table", "REINDEX TABLE events;", "require-concurrent-reindex"),
+            ("long_name", "CREATE INDEX CONCURRENTLY " + "i" * 64 + " ON events (id);", "identifier-too-long"),
+            ("unicode_name", 'CREATE INDEX CONCURRENTLY "' + "я" * 32 + '" ON events (id);', "identifier-too-long"),
+            ("rebuild_transaction", "BEGIN; REINDEX INDEX CONCURRENTLY events_idx; COMMIT;", "ban-concurrent-index-creation-in-transaction"),
+        )
+        for name, statement, rule in cases:
+            with self.subTest(case=name):
+                file = root / f"20261116000000_{name}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                result = self.after(name, "create")
+                advice = result.advisory or ""
+                self.assertIn(f"migration.sql:2 — Squawk {rule}", advice)
+                self.assertLessEqual(len(advice), QUALITY.MAX_ADVISORY_CHARS)
+                self.assertIsNone(result.block_reason)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+                if name == "rebuild_transaction":
+                    self.assertIn("concurrent index operation", advice)
+                    self.assertNotIn("CREATE INDEX CONCURRENTLY cannot", advice)
+                self.capture(name, "unrelated", file)
+                file.write_text(file.read_text() + "-- unrelated comment\n")
+                self.assertEqual(self.after(name, "unrelated"), QUALITY.QualityResult())
+
+    def test_index_safe_forms_byte_boundaries_and_ignores_stay_silent(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        statements = (
+            "REINDEX INDEX CONCURRENTLY events_idx;",
+            "REINDEX TABLE CONCURRENTLY events;",
+            "REINDEX SYSTEM app;",
+            "CREATE INDEX CONCURRENTLY " + "i" * 63 + " ON events (id);",
+            'CREATE INDEX CONCURRENTLY "' + "я" * 31 + 'x" ON events (id);',
+            "-- squawk-ignore require-concurrent-reindex\nREINDEX INDEX events_idx;",
+            "-- squawk-ignore identifier-too-long\nCREATE INDEX CONCURRENTLY " + "i" * 64 + " ON events (id);",
+            "SELECT 'REINDEX INDEX events_idx; " + "i" * 64 + "';",
+            "-- REINDEX INDEX events_idx;\nSELECT 1;",
+        )
+        for index, statement in enumerate(statements):
+            with self.subTest(case=index):
+                file = root / f"20261116000000_safe_{index}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture("safe-index", str(index), file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                self.assertEqual(self.after("safe-index", str(index)), QUALITY.QualityResult())
+
+    def test_sql_parse_advice_repeats_silently_and_clears_after_repair(self) -> None:
+        root = self.workspace / "db" / "meta"
+        root.mkdir(parents=True)
+        (root / "_journal.json").write_text('{"dialect": "postgresql"}')
+        file = root.parent / "0000_index.sql"
+        self.capture("sql-parse", "create", file)
+        file.write_text("CREATE INDEX CONCURRENTLY idx ON events (id,);\n")
+        advice = self.after("sql-parse", "create").advisory or ""
+        self.assertIn("0000_index.sql:1 — Squawk syntax-error", advice)
+        self.assertIn("parser", advice)
+        self.assertNotIn("review was unavailable", advice)
+        self.assertEqual(self.completion("sql-parse"), QUALITY.QualityResult())
+        self.capture("sql-parse", "unchanged", file)
+        self.assertEqual(self.after("sql-parse", "unchanged"), QUALITY.QualityResult())
+        self.capture("sql-parse", "repair", file)
+        file.write_text("SET lock_timeout = '1s';\nCREATE INDEX CONCURRENTLY idx ON events (id);\n")
+        self.assertEqual(self.after("sql-parse", "repair"), QUALITY.QualityResult())
+
+    def test_index_checks_skip_unidentified_sql_and_preserve_scanner_failure(self) -> None:
+        paths = (
+            self.workspace / "clickhouse" / "0000_index.sql",
+            self.workspace / "schema.sql",
+            self.workspace / "prisma" / "migrations" / "20261116000000_index" / "migration.sql",
+        )
+        for index, file in enumerate(paths):
+            file.parent.mkdir(parents=True, exist_ok=True)
+            self.capture("other-dialect", str(index), file)
+            file.write_text("REINDEX INDEX events_idx;\n")
+            with mock.patch.object(QUALITY, "_run_review_tool", side_effect=AssertionError("wrong dialect")):
+                self.assertEqual(self.after("other-dialect", str(index)), QUALITY.QualityResult())
+
+        root = self.workspace / "db" / "meta"
+        root.mkdir(parents=True)
+        (root / "_journal.json").write_text('{"dialect": "postgresql"}')
+        for index, error in enumerate((ValueError("bad JSON"), subprocess.TimeoutExpired("squawk", 1))):
+            file = root.parent / f"000{index}_index.sql"
+            self.capture(f"outage-{index}", "create", file)
+            file.write_text("REINDEX INDEX events_idx;\n")
+            with mock.patch.object(QUALITY, "_run_review_tool", side_effect=error):
+                advice = self.after(f"outage-{index}", "create").advisory or ""
+            self.assertIn("squawk review was unavailable", advice)
+            self.assertNotIn("Squawk syntax-error", advice)
+            self.assertEqual(self.completion(f"outage-{index}"), QUALITY.QualityResult())
+
+    def test_online_postgresql_risks_are_advisory_on_the_first_edit(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        cases = (
+            ("index", "CREATE INDEX idx ON events (status);", "require-concurrent-index-creation"),
+            ("drop_index", "DROP INDEX idx;", "require-concurrent-index-deletion"),
+            ("check", "ALTER TABLE events ADD CONSTRAINT valid CHECK (status IS NOT NULL);", "constraint-missing-not-valid"),
+            ("foreign_key", "ALTER TABLE events ADD CONSTRAINT owner_fk FOREIGN KEY (owner_id) REFERENCES owners (id);", "constraint-missing-not-valid"),
+            ("unique", "ALTER TABLE events ADD CONSTRAINT unique_status UNIQUE (status);", "disallowed-unique-constraint"),
+            ("not_null", "ALTER TABLE events ALTER COLUMN status SET NOT NULL;", "adding-not-nullable-field"),
+            ("required", "ALTER TABLE events ADD COLUMN status text NOT NULL;", "adding-required-field"),
+            ("volatile_default", "ALTER TABLE events ADD COLUMN token uuid DEFAULT gen_random_uuid();", "adding-field-with-default"),
+            ("rename_column", "ALTER TABLE events RENAME COLUMN status TO state;", "renaming-column"),
+            ("rename_table", "ALTER TABLE events RENAME TO records;", "renaming-table"),
+        )
+        for name, statement, rule in cases:
+            with self.subTest(rule=rule, name=name):
+                file = root / f"20261115000000_{name}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                advice = self.after(name, "create").advisory or ""
+                self.assertIn(f"migration.sql:2 — Squawk {rule}", advice)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+                self.capture(name, "unchanged", file)
+                self.assertEqual(self.after(name, "unchanged"), QUALITY.QualityResult())
+
+    def test_postgresql_lock_timeout_and_safe_alternatives(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        for name, prefix in (("missing", ""), ("zero", "SET lock_timeout = '0ms';\n")):
+            with self.subTest(timeout=name):
+                file = root / f"20261115000000_{name}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text(prefix + "ALTER TABLE events ADD COLUMN status text;\n")
+                advice = self.after(name, "create").advisory or ""
+                self.assertIn("Squawk require-lock-timeout", advice)
+                self.assertIn("runner", advice)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+
+        safe = (
+            "CREATE INDEX CONCURRENTLY idx ON events (status);",
+            "DROP INDEX CONCURRENTLY idx;",
+            "ALTER TABLE events ADD CONSTRAINT valid CHECK (status IS NOT NULL) NOT VALID;",
+            "ALTER TABLE events ADD CONSTRAINT unique_status UNIQUE USING INDEX idx;",
+            "ALTER TABLE events ADD COLUMN status text NOT NULL DEFAULT 'active';",
+            "ALTER TABLE events ADD COLUMN status text;",
+            "UPDATE events SET status = 'active' WHERE id = 42;",
+            "BEGIN; CREATE TABLE new_events (id bigint PRIMARY KEY, status text); CREATE INDEX idx ON new_events (status); COMMIT;",
+        )
+        for index, statement in enumerate(safe):
+            with self.subTest(safe_statement=statement):
+                name = f"safe-{index}"
+                file = root / f"20261115000000_safe_{index}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                self.assertEqual(self.after(name, "create"), QUALITY.QualityResult())
+
     def test_scanner_outage_does_not_hardlock_and_recovery_revalidates(self) -> None:
         finding = QUALITY._occurrence(
             "Python security S307: dynamic eval()",
@@ -200,7 +1009,7 @@ class CodeQualityTests(unittest.TestCase):
             "eval(value)",
             channel=QUALITY._PYTHON_SECURITY_CHANNEL,
         )
-        self.scanners[0].side_effect = lambda text, _path: [finding] if "eval(" in text else []
+        self.scanners[0].side_effect = lambda text, _path, **_options: [finding] if "eval(" in text else []
         file = self.workspace / "module.py"
         file.write_text("value = 1\n", encoding="utf-8")
         self.capture("scope", "risk", file)
@@ -213,7 +1022,7 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIsNone(unavailable.block_reason)
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
-        self.scanners[0].side_effect = lambda text, _path: [finding] if "eval(" in text else []
+        self.scanners[0].side_effect = lambda text, _path, **_options: [finding] if "eval(" in text else []
         recovered = self.completion("scope")
         self.assertIn("Completion blocked", recovered.block_reason or "")
 
@@ -243,6 +1052,72 @@ class CodeQualityTests(unittest.TestCase):
         advisory = self.after("scope", "add-review")
         self.assertIn("Security review advice", advisory.advisory or "")
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+    def test_pgxpool_advice_reports_new_discarded_resources_from_the_first_write(self) -> None:
+        file = self.workspace / "db" / "worker.go"
+        source = (
+            "package sample\n"
+            'import p "github.com/jackc/pgx/v5/pgxpool"\n'
+            "type Store struct { pool *p.Pool }\n"
+            "func (s *Store) discardQuery() error {\n"
+            '    _, err := s.pool.Query(ctx, "SELECT 1")\n'
+            "    return err\n"
+            "}\n"
+            "func discardAssigned(pool *p.Pool) error {\n"
+            '    rows, err := pool.Query(ctx, "SELECT 1")\n'
+            "    _ = rows\n"
+            "    return err\n"
+            "}\n"
+            "func discardConnection(pool *p.Pool) error {\n"
+            "    _, err := pool.Acquire(ctx)\n"
+            "    return err\n"
+            "}\n"
+            "func useRows(pool *p.Pool) error {\n"
+            '    rows, err := pool.Query(ctx, "SELECT 1")\n'
+            "    if err != nil { return err }\n"
+            "    defer rows.Close()\n"
+            "    for rows.Next() {}\n"
+            "    return rows.Err()\n"
+            "}\n"
+            "func giveRowsToCaller(pool *p.Pool) (any, error) {\n"
+            '    return pool.Query(ctx, "SELECT 1")\n'
+            "}\n"
+            "func useConnection(pool *p.Pool) error {\n"
+            "    conn, err := pool.Acquire(ctx)\n"
+            "    if err != nil { return err }\n"
+            "    defer conn.Release()\n"
+            "    return nil\n"
+            "}\n"
+        )
+        self.assertEqual(self.capture("go", "create", file), QUALITY.QualityResult())
+        file.parent.mkdir()
+        file.write_text(source, encoding="utf-8")
+        advice = self.after("go", "create").advisory or ""
+        self.assertIn("db/worker.go:5 — Go pgxpool.Query", advice)
+        self.assertIn("db/worker.go:9 — Go pgxpool.Query", advice)
+        self.assertIn("db/worker.go:14 — Go pgxpool.Acquire", advice)
+        self.assertEqual(advice.count(" — Go pgxpool."), 3)
+        self.assertNotIn("SELECT", advice)
+        self.assertEqual(self.completion("go"), QUALITY.QualityResult())
+
+        self.assertEqual(self.capture("go", "unrelated", file), QUALITY.QualityResult())
+        file.write_text(source + "\nconst limit = 5\n", encoding="utf-8")
+        self.assertEqual(self.after("go", "unrelated"), QUALITY.QualityResult())
+
+    def test_pgxpool_advice_skips_other_go_clients_without_invoking_semgrep(self) -> None:
+        file = self.workspace / "other.go"
+        self.assertEqual(self.capture("go", "create", file), QUALITY.QualityResult())
+        file.write_text(
+            'package other\nimport "example.invalid/pgxpool"\n'
+            "func use(pool *pgxpool.Pool) error {\n"
+            '    _, err := pool.Query(ctx, "SELECT 1")\n'
+            "    return err\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(QUALITY, "_semgrep_findings") as scan:
+            self.assertEqual(self.after("go", "create"), QUALITY.QualityResult())
+            scan.assert_not_called()
 
     def test_file_growth_crossing_is_advisory_and_never_blocks(self) -> None:
         file = self.workspace / "service.go"
@@ -380,7 +1255,7 @@ class CodeQualityTests(unittest.TestCase):
             "run",
             return_value=QUALITY.subprocess.CompletedProcess([], 1, ruff_output, ""),
         ) as run:
-            rows = PYTHON_SECURITY_FINDINGS("import os\neval(value)\n", self.workspace / "a.py")
+            rows = PYTHON_FINDINGS("import os\neval(value)\n", self.workspace / "a.py")
         self.assertEqual([row.label for row in rows], ["Python security S307: dynamic eval()"])
         command = run.call_args.args[0]
         self.assertIn("--isolated", command)
@@ -422,7 +1297,7 @@ class CodeQualityTests(unittest.TestCase):
             "run",
             side_effect=oxlint_completed,
         ) as run:
-            rows = NODE_SECURITY_FINDINGS('setTimeout("work()", 1);\nalert(1);\n', ".ts")
+            rows = NODE_FINDINGS('setTimeout("work()", 1);\nalert(1);\n', self.workspace / "a.ts")
         self.assertEqual(
             [row.label for row in rows],
             ["JavaScript security: implicit string evaluation"],
@@ -473,6 +1348,7 @@ class CodeQualityTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[command.index("--metrics") + 1], "off")
         self.assertIn("--disable-version-check", command)
+        self.assertNotIn("--experimental", command)
         self.assertEqual(command[command.index("--jobs") + 1], "1")
 
     def test_process_comments_are_targeted_not_generic(self) -> None:
@@ -526,7 +1402,8 @@ class CodeQualityTests(unittest.TestCase):
         file.write_text("value = 1\n", encoding="utf-8")
         self.assertEqual(self.after("scope", "remove"), QUALITY.QualityResult())
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
-        self.assertFalse(list(self.state.glob("*.json")))
+        states = [json.loads(path.read_text()) for path in self.state.glob("*.json")]
+        self.assertTrue(all(not state["findings"] and not state["pending"] for state in states))
 
     def test_changed_marker_remains_owned_even_when_category_count_is_equal(self) -> None:
         file = self.workspace / "module.py"
@@ -565,10 +1442,74 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.after("scope", "failed", succeeded=False), QUALITY.QualityResult())
         self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
 
+    def test_conditional_test_decorators_do_not_block_completion(self) -> None:
+        file = self.workspace / "test_runner.py"
+        self.capture("scope", "create", file)
+        file.write_text(
+            '@unittest.skipUnless(True, "requirement met")\n'
+            'def test_available():\n    pass\n'
+            '@pytest.mark.skipif(False, reason="requirement met")\n'
+            'def test_enabled():\n    pass\n',
+            encoding="utf-8",
+        )
+        self.assertEqual(self.after("scope", "create"), QUALITY.QualityResult())
+        self.assertEqual(self.completion("scope"), QUALITY.QualityResult())
+
+    def test_debugger_object_key_is_silent_and_debugger_statement_is_reported(self) -> None:
+        line = "  debugger" + " " * 6000 + ": false,"
+        self.assertEqual(QUALITY.scan_text("const settings = {\n" + line + "\n};\n", ".js"), [])
+        self.assertEqual(
+            [row.label for row in QUALITY.scan_text("  debugger  ;  // development\n", ".js")],
+            ["debugger statement"],
+        )
+
+    def test_duplicate_tool_event_preserves_the_first_snapshot_and_clean_replay_is_silent(self) -> None:
+        file = self.workspace / "sample.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        self.capture("scope", "edit", file)
+        file.write_text("# TODO: finish work\n", encoding="utf-8")
+        self.capture("scope", "edit", file)
+        self.assertIn("TODO/FIXME/HACK/XXX", self.after("scope", "edit").advisory or "")
+        self.assertEqual(self.after("scope", "edit"), QUALITY.QualityResult())
+
+        self.capture("scope", "clean", file)
+        file.write_text("value = 2\n", encoding="utf-8")
+        self.assertEqual(self.after("scope", "clean"), QUALITY.QualityResult())
+        self.assertEqual(self.after("scope", "clean"), QUALITY.QualityResult())
+
+    def test_scanner_timeout_uses_the_remaining_shared_budget(self) -> None:
+        executable = self.root / "ruff"
+        executable.write_text("#!/bin/sh\nexec /bin/sleep 1\n")
+        executable.chmod(0o755)
+        file = self.workspace / "module.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        self.scanners[0].side_effect = PYTHON_FINDINGS
+        started = time.monotonic()
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.root)}),
+            mock.patch.object(QUALITY, "SCAN_BUDGET_SECONDS", 0.1),
+        ):
+            result = self.capture("scope", "slow", file)
+        self.assertIn("unavailable", result.advisory or "")
+        self.assertLess(time.monotonic() - started, 0.6)
+        self.assertIsNone(result.block_reason)
+
+    def test_completed_event_retention_is_bounded(self) -> None:
+        file = self.workspace / "module.py"
+        file.write_text("value = 1\n", encoding="utf-8")
+        with mock.patch.object(QUALITY, "MAX_COMPLETED_OPERATIONS", 4):
+            for number in range(10):
+                self.capture("scope", str(number), file)
+                self.after("scope", str(number))
+        path = QUALITY._state_path("scope", self.workspace, "test-adapter", self.state)
+        notices = json.loads(path.read_text())["notices"]
+        self.assertLessEqual(len(notices), 5)
+
     def test_missing_snapshot_and_invalid_identity_fail_open(self) -> None:
         result = self.after("scope", "missing")
         self.assertIn("protection unavailable", (result.advisory or "").lower())
         self.assertIsNone(result.block_reason)
+        self.assertEqual(self.after("scope", "another-missing"), QUALITY.QualityResult())
 
         invalid = QUALITY.capture_before(
             "",
@@ -611,6 +1552,29 @@ class CodeQualityTests(unittest.TestCase):
         self.assertIn("protection unavailable", (after.advisory or "").lower())
         self.assertIsNone(after.block_reason)
         self.assertNotIn("Completion blocked", self.completion("scope").block_reason or "")
+
+    def test_fifo_source_is_unavailable_without_waiting_for_a_writer(self) -> None:
+        workspace = self.workspace.resolve()
+        fifo = workspace / "pipe.py"
+        os.mkfifo(fifo)
+        script = """import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location('quality', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module._read_source(pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])) is None
+path = pathlib.Path(sys.argv[2])
+path.unlink()
+path.write_text('regular')
+real_open = module.os.open
+def swap_then_open(name, flags, *args):
+    path.unlink()
+    module.os.mkfifo(path)
+    return real_open(name, flags, *args)
+module.os.open = swap_then_open
+assert module._read_source(path, pathlib.Path(sys.argv[3])) is None
+"""
+        subprocess.run([sys.executable, "-c", script, str(SOURCE), str(fifo), str(workspace)],
+                       check=True, timeout=3)
 
     def test_paths_outside_workspace_and_unsupported_files_are_ignored(self) -> None:
         outside = self.root / "outside.py"
@@ -775,7 +1739,7 @@ class CodeQualityTests(unittest.TestCase):
         entered = threading.Event()
         release = threading.Event()
 
-        def scan(_text: str, path: Path):
+        def scan(_text: str, path: Path, **_options):
             if path == first.resolve():
                 entered.set()
                 self.assertTrue(release.wait(timeout=2))

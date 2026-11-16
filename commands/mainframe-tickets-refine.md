@@ -8,13 +8,18 @@ When the user first starts a native goal and then invokes this command in a sepa
 
 ## Read the initialized ticket contract
 
-Read `docs/tickets/AGENTS.md` and check its directory, record-format, and lifecycle rules before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+Use only the current project's `docs/tickets/`. Before writing, read its
+`AGENTS.md` and check layout, record format, and lifecycle. If missing or
+conflicting, report the need for explicit `mainframe-tickets-init`.
+Directories own state. Use no YAML `status` field. Preserve string IDs,
+required YAML, evidence, and links. Exclude `.campaigns/` and `.migration/`
+from scans.
 
 Select from `docs/tickets/open/observations/` and `open/needs-scope-review/`. Investigate one record at a time, adding `Investigation` (trace, mechanism, alternatives and blast radius), `Acceptance`, and any applicable `Relationships`, `User decision` or `Blocker` sections. Consolidate evidence before moving or retiring records. Route to `open/ready/` with `execution: autonomous` and an evidence-backed `Autonomous implementation boundary` only when no user-owned decision remains; otherwise use `open/needs-decision/`, retain `open/needs-scope-review/` for unavailable evidence, or use `archive/rejected/` for a proved rejection, supersession or duplicate. Preserve an existing `execution: user-approved` route when a re-investigated ticket returns to ready; do not convert it to autonomous queue work without explicit authority. Assign autonomous only to work without that preserved route and with the demonstrated autonomous boundary. Do not fabricate user approval. Save campaign progress under `.campaigns/` and validate each record's required YAML fields and links after moves.
 
 ## Establish the queue and authority
 
-Use the initialized local queue and the stage-specific destinations above. A missing or conflicting contract is an initialization issue, not permission to invent lifecycle states. Preserve the project's tracked or ignored ownership.
+Preserve the queue's tracked or ignored ownership.
 
 The invocation authorizes only the project inspection, safe focused checks, and ticket mutations required for refinement within the supplied environment and authority. It does not authorize implementation, deployment, remote or shared writes, destructive operations, dependency installation, broad infrastructure changes, repository-history changes, commits, or pushes.
 
@@ -26,7 +31,7 @@ Read the current eligible queue afresh. Select one ticket and keep it as the onl
 
 After routing the active ticket, refresh the queue and select the next eligible ticket, including tickets created by a justified split. Do not retry a ticket again in the same run when its recorded evidence gap and available conditions have not changed. Continue with every other eligible ticket.
 
-Persist useful evidence in the active ticket as it is established, without waiting for the entire investigation to finish. Keep resumable campaign progress in the project's established goal or agent-state location: active ticket, completed investigation steps, remaining leads, handled ticket identities and their evidence boundaries, and pending writes. Preserve this state across context changes; do not use the conversation as the only record or invent a new storage convention.
+Persist useful evidence in the active ticket as it is established, without waiting for the entire investigation to finish. Keep resumable campaign progress under the initialized contract's `.campaigns/`: active ticket, completed investigation steps, remaining leads, handled ticket identities and their evidence boundaries, and pending writes. Preserve this state across context changes; do not use the conversation as the only record or invent a new storage convention.
 
 If a ticket update cannot be written, preserve the complete proposed update and missing action in permitted campaign state and continue with other tickets. Reconsider an unchanged blocked ticket only when its state, evidence, or authority materially changes. Do not claim the persistent queue changed or mark the campaign successfully complete while required writes remain pending.
 
@@ -48,16 +53,7 @@ Do not change application behavior, weaken a test, or implement a proposed fix t
 
 ## Expand evidence, scope, and identity
 
-Update the ticket with the strongest evidence obtained during this run while preserving its earlier history. Record:
-
-- the exact observed behavior and a reproducible trigger when available;
-- the required behavior and the project or external source that defines it;
-- confirmation or disconfirmation evidence;
-- the traced execution path and relevant source locations;
-- the blast radius, affected callers and consumers, direct and indirect consequences, and evidence for each material boundary;
-- the alternative explanation checked;
-- the limits of the evidence and every material unknown;
-- the smallest observable boundary that a later implementation and verification must satisfy.
+Consolidate the findings above into the ticket's owning sections, preserving useful history: observed behavior and a reproducible trigger when available; expected behavior and its source; confirmation or disconfirmation, traced execution path and locations, alternatives, blast radius and supporting evidence; material unknowns; and the smallest observable implementation and verification boundary.
 
 Do not invent cause, severity, priority, business behavior, or certainty. Do not prescribe implementation details beyond what is necessary to define the confirmed problem and its acceptance boundary.
 

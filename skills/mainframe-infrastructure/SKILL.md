@@ -1,6 +1,6 @@
 ---
 name: mainframe-infrastructure
-description: "Plan, diagnose, change, or verify project infrastructure: deployment, CI/CD, containers, networking, TLS, storage, and recovery. Not application implementation."
+description: Plan, change, or troubleshoot deployment, CI runners, containers, networking, TLS, storage, and recovery. Verify live infrastructure changes.
 ---
 
 # Infrastructure work

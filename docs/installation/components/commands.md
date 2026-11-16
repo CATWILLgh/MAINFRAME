@@ -74,6 +74,15 @@ Find continues until its duplicate-saturation criterion; refine, implement and
 verify process their eligible queue one item at a time. Do not turn project
 tickets into MAINFRAME harness feedback or implicitly invoke initialization.
 
+## `mainframe-review-branch`
+
+Deliver the [current-branch review command](../../../commands/mainframe-review-branch.md)
+as an explicit no-argument workflow in the receiving worktree. It compares
+pending branch changes with integration, publication, and release evidence,
+then repairs and verifies authorized local work in dependency order. Preserve
+the local checkpoint and read-only assignment boundaries. The invocation alone
+supplies no authority to push, merge, release, or perform live provider actions.
+
 ## Verify
 
 Run these native checks during adapter development or explicitly requested

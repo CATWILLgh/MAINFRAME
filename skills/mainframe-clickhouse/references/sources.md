@@ -11,6 +11,8 @@ the active operation. Do not upgrade or enable a feature merely to fit an exampl
 | Query budgets, overflow and distributed limits | [Query complexity](https://clickhouse.com/docs/operations/settings/query-complexity) |
 | Client response completeness and disconnection | [HTTP interface](https://clickhouse.com/docs/interfaces/http) |
 | Non-executing plan inspection | [EXPLAIN](https://clickhouse.com/docs/sql-reference/statements/explain) |
+| Sorting/primary-key design, skipping-index suitability and existing-data coverage | [Choosing a primary key](https://clickhouse.com/docs/best-practices/choosing-a-primary-key), [Skipping indexes](https://clickhouse.com/docs/concepts/features/performance/skip-indexes/skipping-indexes), [ALTER INDEX](https://clickhouse.com/docs/sql-reference/statements/alter/skipping-index) |
+| Projection design, existing parts and write/storage cost | [Projections](https://clickhouse.com/docs/data-modeling/projections) |
 | Replacement, versioning and query-time correctness | [ReplacingMergeTree](https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree) |
 | Batching, asynchronous acknowledgments and retry deduplication | [Insert strategy](https://clickhouse.com/docs/best-practices/selecting-an-insert-strategy) and its linked retry/deduplication reference |
 | Buffered shard delivery | [Distributed engine](https://clickhouse.com/docs/engines/table-engines/special/distributed) |

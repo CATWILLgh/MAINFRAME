@@ -1,6 +1,6 @@
 ---
 name: mainframe-project-harness
-description: Audit or repair project agent configuration when instructions conflict, skills are missing, or hooks, permissions, and tool policies misbehave. Not a routine setup check.
+description: Audit project agent configuration or repair broken skill discovery, conflicting instructions, hooks, permissions, or tool policies.
 ---
 
 # Maintain the project harness

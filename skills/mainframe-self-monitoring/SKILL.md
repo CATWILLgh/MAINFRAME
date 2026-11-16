@@ -1,6 +1,6 @@
 ---
 name: mainframe-self-monitoring
-description: Design, implement or repair an application's System/Diagnostics page with service health, resource metrics, logs and optional scoped container controls or data previews. Use for embedded operational consoles and misleading diagnostic states; not standalone monitoring-platform deployment or one-off infrastructure diagnosis.
+description: Build or repair an application's System/Diagnostics console for health, metrics, logs, scoped controls, or data previews. Excludes standalone monitoring.
 ---
 
 # Embedded system diagnostics

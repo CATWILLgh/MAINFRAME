@@ -1,5 +1,35 @@
 # ZCode bundled runtime hook evidence
 
+## Desktop 3.18.0.10300 hook contract
+
+On 2026-11-12 the installed Desktop plist reported `3.18.0.10300`. The shipped
+`Resources/glm/zcode.cjs` matches its resource-seal SHA-256
+`26785f28ab8fb9f8b0f3821f2bf71d294f4d0b8bf28108785292f86c7e14090d`.
+Full signature verification of the inspected app copy failed. This is evidence
+from the pinned runtime resource and isolated code slices.
+
+The [pinned source probe](../../../tests/probes/zcode_current_contract.cjs)
+checks matcher aliases, pre-tool denial, successful and failed post advice,
+fork and compact dispatch, the Stop predicate and three-continuation cap, and
+native Write/Edit result shape. It also checks the ordinary Agent constructor
+and schema for the absent child hook runner and per-call selection controls.
+Run it against the installed resource without launching the app or a model.
+
+```sh
+node tests/probes/zcode_current_contract.cjs /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs 3.18.0.10300
+```
+
+Resume restores the recorded directory and initializes the runtime before
+dispatching resume or fork. Compact dispatch uses the mutable working directory.
+The adapter registers root capture on initialization sources and keeps the
+earlier capture through compaction. Shell tool and process callbacks use the
+same execution port and cwd in the primary local runtime. Native Edit with an
+empty `old_string` creates an absent file or fills a blank file. Its successful
+response supplies an empty or blank `originalFile` and the actual `newString`.
+The todo guard and Fallow fallback exercise these supported inputs in their
+adapter fixtures. Live Desktop callback delivery and remote installation remain
+pending acceptance. [Official hook contract](https://zcode.z.ai/en/docs/hooks)
+
 ## Desktop 3.17.2.9661 private skill reader
 
 On 2026-11-04 the installed Desktop plist identified **3.17.2.9661**. macOS

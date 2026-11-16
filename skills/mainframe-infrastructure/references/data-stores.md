@@ -31,6 +31,17 @@ restart behavior, and client expectations before changing policy. Do not treat
 a cache and durable store as interchangeable because they currently contain
 similar data.
 
-For backups, prove the intended scope, destination, retention, encryption,
-completion, and restorability. A successful backup command is not evidence that
-the correct data can be restored.
+## Own the backup lifecycle
+
+Reuse an adequate recovery point when it covers the operation. Create a new
+copy only for a concrete recovery need within the task's authority. Before
+creation, settle the scope, protected destination, retention or expiry, and
+cleanup owner. Verify access and encryption appropriate to the data, available
+space, and workload impact on a shared host.
+
+Verify completion and restorability at the level the operation depends on. Keep
+the protected location, verification, and retention in the existing runbook
+or task record. After acceptance, remove temporary copies whose recovery
+purpose has ended when cleanup is already authorized. For a copy still needed
+or awaiting disposal authority, report who owns it, where it is, and when it
+should be reviewed. Preserve required recovery points.

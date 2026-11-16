@@ -1,16 +1,18 @@
 ---
 name: mainframe-go-backend
-description: Design, implement, debug, or review Go services, APIs, and workers, including transactions, concurrency, retries, and backend tests.
+description: Design, change, or review Go services, APIs, and workers, including migrations, transactions, locks, concurrency, retries, and backend tests.
 ---
 
 # Go backend engineering
 
-Apply this method whenever the active work matches the description, whether you
-are the primary implementer, a delegated engineer, or a reviewer. Follow the
-scope and authority supplied through the current execution path; this skill does
-not expand either.
+Apply within the immediate caller's scope and authority, whether implementing,
+delegated, or reviewing.
 
 For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
+
+For schema, migration, index, or constraint work, use the shared
+[migration method](../mainframe-testing/references/migrations.md) alongside the
+data reference below.
 
 ## Establish the active service boundary
 
@@ -53,6 +55,7 @@ behavior. Prefer the owning project's source and current primary documentation.
 | Queries, transactions, locks, pool pressure, migrations, or concurrent state transitions | [data and concurrency](references/data-and-concurrency.md) |
 | Outbound APIs, retries, rate limits, idempotency, or ambiguous external writes | [integrations and resilience](references/integrations-and-resilience.md) |
 | Goroutines, workers, schedulers, synchronization, pagination checkpoints, or realtime delivery | [background and lifecycle](references/background-and-lifecycle.md) |
+| Structured logs, correlation, and diagnostic coverage | [logging baseline](../mainframe-logging/SKILL.md) |
 | Choosing focused Go evidence, race checks, or a real dependency boundary | [testing](references/testing.md) |
 
 ## Complete and verify the assigned result
@@ -63,12 +66,11 @@ concrete action and resource server-side, preserve causal errors, and make
 atomicity, lock order, compare-and-set behavior, idempotency, retry termination,
 and side-effect timing explicit wherever correctness depends on them.
 
-Use the project's native commands and the smallest faithful evidence for the
-changed risk. Run focused tests first, then the nearest relevant fast package
-checks. Use `-race`, the real database engine, a real process boundary, or a
-provider call only when that behavior is the risk and current instructions and
-authority permit it. Keep local simulation, live read compatibility, and real
-external mutation as separate evidence levels.
+Use project-native commands, the focused proof and nearest relevant fast package
+checks. Use `-race`, a real database engine, process boundary or provider call
+only for its changed risk and within the shared local/CI and authority boundary.
+Distinguish local simulation, live read compatibility and external mutation
+evidence.
 
 Do not replace completion with TODOs, weakened validation or assertions,
 unbounded retries, swallowed errors, leaked goroutines, compatibility debris,

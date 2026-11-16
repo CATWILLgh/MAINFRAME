@@ -10,6 +10,17 @@ The files in this directory define product-agnostic behavior; globally installed
 adapter copies supply native event names, payload and output encoding, paths,
 timeouts, registration, and permissions.
 
+Automatic project checks must work after supported adapter installation and
+native activation, without additional consumer-project setup or agent invocation.
+Select applicable checks from the native event, addressed files and unambiguous
+existing metadata. Do not require project-specific configuration, custom test/CI
+integration, database endpoints or new services. Prepare required tool dependencies
+through the maintained installer, not in the consuming project or on each event.
+Keep inapplicable checks silent. Where the available evidence cannot establish a
+runtime guarantee, state the coverage limit rather than presenting a project
+integration proposal as an automatic MAINFRAME capability. Skills may guide
+project engineering; that method is distinct from an installed automatic check.
+
 Install only hooks listed in `ADAPTATION.<product-id>.json`. Preserve their
 trigger timing, filtering, blocking or advisory effect, failure behavior,
 attribution, deduplication, and bounded context. Do not add telemetry or claim
@@ -71,6 +82,8 @@ supported native edit into `check_write(workspace, path, content)`,
 `check_edit(workspace, path, old, new, replace_all=False)`, or
 `check_patch(workspace, patch)`. A returned string is a preventive denial;
 `None` is neutral. No raw record content is returned, written or retained.
+If native Edit uses an empty old string to create or fill a blank file, pass
+the verified native `blank_characters` set to `check_edit`.
 
 Validate only the root `.docs/todo` index's changed entries (including a group
 move) and changed `.docs/todos/<name>.md` notes. Inspect their direct link/index
@@ -258,11 +271,25 @@ documented non-blocking context channel.
 
 ## Adapt `mainframe-code-quality`
 
-Treat `mainframe-code-quality.py` as one component. It has five fixed effects:
+Treat `mainframe-code-quality.py` as one component with these fixed effects:
 
 - a post-edit advisory for newly introduced high-confidence quality residue;
 - a post-edit advisory for newly introduced high-confidence Ruff or Oxlint
   security findings;
+- a post-edit advisory for newly introduced blocking calls in Python async code;
+- a post-edit advisory for newly introduced swallowed exceptions, unsafe control
+  flow in `finally`, and async Promise executors;
+- a post-edit advisory for newly introduced assertions that can pass without
+  testing their intended behavior, and Python background tasks without a
+  retained reference;
+- a post-edit advisory for new syntax errors or duplicate configuration keys
+  in the supported formats, starting with file creation;
+- a post-edit advisory for new composition-unsafe Enter actions, premature form
+  error styling, and missing integrity/CORS on supported external resources;
+- a post-edit advisory for newly introduced errors in shell scripts, GitHub
+  Actions workflows, Kubernetes workloads, or recognized PostgreSQL migrations;
+- a post-edit advisory for Go code that discards rows or a connection from
+  `pgxpool` in a recognized pattern;
 - context-dependent Semgrep review advice that never blocks completion;
 - a `new-growth-pressure` structure advisory for a file or Python function that
   crosses a conservative size-review threshold in the current edit;
@@ -304,7 +331,7 @@ advisory once to the recipient responsible for the edit. Do not call the compone
 unsupported extensions, paths outside the current workspace, or changes not
 made through the bound native event.
 
-Deduplicate native pre/post event redelivery in the adapter. Preserve the first
+Deduplicate native pre/post event redelivery. Preserve the first
 before snapshot for an operation and consume it through its matching success or
 failure event only once; a missing snapshot is unavailable attribution, not
 proof of a clean edit. A completion callback must not discard another in-flight
@@ -317,22 +344,43 @@ From a documented continuation-capable completion event, call
 same execution scope and feed the bounded reason back to the responsible agent.
 An empty result permits completion silently. A returned `advisory` means the
 check was operationally unavailable; it never blocks and must be delivered only
-through a documented non-blocking channel. Do not stop repeated guard calls
-merely because the native event says a stop hook is already active: the current
-files, not a retry counter, determine whether the positive finding remains.
+through a documented non-blocking channel. Bound automatic repair to one
+continuation per completion attempt. On an already-active Stop callback,
+preserve unresolved findings without requesting another continuation. Use a
+non-blocking unresolved message only where the native event supports it. A later
+ordinary completion attempt revalidates the current files before blocking.
 
 The detector owns one private state file below the system temporary directory
 for each adapter namespace, scope, and workspace. It stores only hashes,
 counts, paths, line metrics, hashed function identities, notice keys, and
 short-lived operation metadata, never source text, function names, transcripts,
 prompts, or telemetry. Preserve its atomic replacement,
-bounded lock recovery, one-hour pending-operation expiry, seven-day
+bounded lock recovery, one-hour pending-operation expiry, at most 512 recent
+completed-operation receipts plus the current receipt, seven-day
 abandoned-state expiry, workspace confinement, source-size bounds, successful
 cleanup, and revalidation before blocking. Scanners run outside the state lock;
 unique temporary scanner directories are removed after each call. Do not
 replace this with a repository-wide scan or persist it in the receiving project.
 Expiry must also apply when the abandoned scope itself resumes; cleanup by
 another scope is not a prerequisite.
+
+Share a five-second external-scanner budget across the addressed files in each
+capture, post-edit check, or completion check. Exhaustion produces deduplicated
+unavailable-check advice. Bound regular-file reads before scanning and reject
+nonregular inputs without waiting for a writer. Bound each finding row to 240
+characters, preserving its path prefix and diagnostic suffix. Compact combined
+quality advice to 480 characters, reserving evidence for each subsection before
+omitting extra rows and explanatory footers. Keep decision boundaries in the
+retained headings: review advice is non-blocking, size alone does not require
+a split, and unavailable protection requires direct verification. The mixed
+advice lifecycle regression in `hooks/tests/test_code_quality.py` checks these
+boundaries, redelivery silence, completion blocking, and release after repair.
+Native adapters own the combined event-message and serialized-output limits.
+Blocking-finding text reserves repair, verification, and no-suppression
+instructions before rows within 1600 characters; adapters bound the final
+output with any availability notice. The native
+context regression in `tests/test_hook_context.py` exercises six long-path
+findings through both maintained encoders, including Unicode wire limits.
 
 Preserve the high-signal detector set: TODO/FIXME/HACK/XXX comments, diagnostic
 suppressions, skipped or focused tests, explicit debugger residue, and comments
@@ -355,30 +403,128 @@ are review pressure, not project policy; project-specific generated-file,
 complexity, and structural rules remain with the receiving project's own
 configuration and tooling.
 
-For Python files, run Ruff in isolated, no-cache, ignore-noqa mode and keep only
-`S102`, `S307`, `S506`, `S602`, `S605`, `S501`, and `S324`. Discard Ruff's
-explicitly safe shell-call variants. For JavaScript and TypeScript, run Oxlint
-with nested configuration and ignores disabled, all unrelated rules allowed,
-and only `no-eval`, `no-new-func`, `no-script-url`, and `no-implied-eval`
-denied. Supply the canonical read-only `setTimeout`, `setInterval`, and `window`
-globals so `no-implied-eval` works without consuming project lint settings.
-These findings use the same before/after attribution and completion
-revalidation as quality residue; pre-existing findings are not claimed.
+For Python files, run Ruff in isolated, no-cache, ignore-noqa mode. Keep security
+rules `S102`, `S307`, `S506`, `S602`, `S605`, `S501`, and `S324`. Discard Ruff's
+explicitly safe shell-call variants. The same before/after invocation also checks
+`ASYNC210`, `ASYNC212`, `ASYNC221`, `ASYNC230`, and `ASYNC251` for blocking
+calls, and `S110` and `B012` for suppressed exceptions.
+Also select `F631` for truthy tuple assertions, `PT012` for multi-statement
+`pytest.raises` blocks, and `RUF006` for discarded `asyncio` task references.
 
-Run Semgrep only when a cheap source prefilter finds a candidate for dynamically
-constructed child-process execution or disabled HTTPS certificate verification.
-Use only the two embedded canonical rules, one job, bounded file, memory, and
-time limits, version checks disabled, and metrics off. Semgrep findings are
-review advice only and are never persisted as completion blockers.
+For JavaScript and TypeScript, run Oxlint with nested configuration and ignores
+disabled. Apply the TypeScript checks to `.ts`, `.tsx`, `.mts`, and `.cts`.
+Select `no-eval`, `no-new-func`, `no-script-url`, and `no-implied-eval`
+for security and `no-unsafe-finally` and `no-async-promise-executor` for review.
+Supply the canonical read-only `setTimeout`, `setInterval`, and `window` globals
+so `no-implied-eval` works without consuming project lint settings.
+In `*.test.*`, `*.spec.*`, and `__tests__/` sources, use Oxlint's
+`vitest/valid-expect` rule for the async assertion syntax shared by Jest
+and Vitest. Report only unawaited assertions whose result is clearly
+discarded. The pinned analyzer also flags some valid code, such as an
+assertion that is saved and awaited later.
 
-`ruff`, `oxlint`, and `semgrep` are direct runtime support for this one hook,
-not separate hook components. During adaptation, reuse executables at the
-tested versions or install those exact official distributions through the
-maintained shared runtime. Prove each with a harmless representative sample and
-stop installation before hook activation when a required scanner cannot be
-supplied. A missing, timed-out, malformed, or failed
-scanner must leave the action and completion unblocked and emit only its
-deduplicated unavailable-check advisory.
+Report Python and JavaScript/TypeScript parser diagnostics from the existing
+Ruff and Oxlint invocations. A failed parse cannot confirm that an existing
+security finding was removed. Keep its attribution until a successful scan
+can revalidate it.
+
+Both scanners include the review rules on the first supported edit, including
+new files, without project configuration. Report only newly introduced
+findings. Completion revalidation keeps the security rules and leaves the
+correctness rules advisory.
+
+Run Semgrep only on candidate files. JavaScript and TypeScript retain their
+embedded checks for dynamic child-process execution and disabled TLS
+verification. For an edited `.go` file containing the pgx v5 pool import and a
+candidate discard, check explicit discarded results from `Query` or
+`Acquire` on a recognizable pool. The Go scan uses Semgrep's native
+CLI, a one-second deadline, and the before/after file snapshots. Its scope is
+the explicit discard patterns in that file. It does not trace a result through
+other files or prove that every exit from a function closes it.
+
+Semgrep runs the selected embedded rules locally with one job, bounded file
+and memory limits, disposable settings, version checks disabled, and metrics
+off. Findings are review advice and stay outside completion revalidation.
+
+Run the file-specific analyzers against the exact before and after source text
+in an isolated temporary directory. Bound each invocation to one second.
+Use static diagnostic descriptions and compare only new findings. See
+[the tested runtime versions](../installer/runtime.py) and
+[the executable tests](tests/test_code_quality.py).
+
+| Tool | Automatic scope | Reported findings |
+| --- | --- | --- |
+| `gofmt` and `dart format` | `.go` and `.dart` with the corresponding local SDK executable on `PATH`. Use the existing Dart SDK bundled with Flutter when present. | Syntax errors. Invoke the parser on the snapshot without formatting the project file or fetching dependencies. |
+| `rustfmt` | `.rs` with the formatter on `PATH` or in a local rustup toolchain. | Syntax errors from stdin using the owning Cargo edition, including workspace inheritance. Standalone files use Edition 2024. The hook does not run Cargo, expand macros, or apply formatting. |
+| Python standard library | `.json`, `.jsonc`, and `.toml`. Accept JSON comments and trailing commas in `.jsonc`, TypeScript and JavaScript config names, `devcontainer.json`, and files in `.vscode/`. | Syntax errors and duplicate keys. JSON reports the file when a duplicate has no parser position. TOML reports the first parser diagnostic using the hook's Python version. |
+| yamllint | `.yml` and `.yaml`. Skip Helm template sources and honor yamllint's inline directives. | YAML syntax errors and repeated keys in the same mapping. YAML syntax and key review runs alongside workflow and Kubernetes checks. |
+| ShellCheck | `.sh` and `.bash` with a supported interpreter or no shebang. | Shell parse errors, masked command failure, unchecked `cd`, and a pipeline that reads and writes the same file. |
+| actionlint | `.github/workflows/*.yml` and `.github/workflows/*.yaml` at the repository root. | Workflow YAML or schema errors, missing or cyclic job dependencies, and invalid identifiers, expressions, conditions, or matrices. |
+| KubeLinter | Plain Kubernetes deployment, stateful set, and daemon set YAML with a container specification. Skip Helm templates and recognized Kustomize overlays and patches. | A workload selector that does not match its pod template, or a container without a readiness probe. Check service selectors and routes against the rendered manifest set. |
+| Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, type changes, ordinary index creation/removal/rebuilding, overlong SQL identifiers, SQL parser diagnostics, immediate constraint validation, required columns, rewrite-prone defaults, rolling-deployment renames, missing lock timeouts, and concurrent index operations inside an explicit SQL transaction. |
+| Modern web rules | `.html`, `.htm`, `.css`, JS/TS module extensions, JSX/TSX, Vue and Svelte. Use isolated snapshots, Modern Web Guidance's AST/DOM/CSS parser APIs, and the official Svelte compiler for Svelte templates. | Maintained `ime-safe-enter-submit`, `validate-input-after-interaction`, and `secure-external-subresources` rules. |
+
+These migration findings are advisory, attributed to the current edit, and
+deduplicated against its before snapshot. Connection-setting advice follows
+specific schema risks so a truncated message retains the actionable operation.
+Squawk recognizes file-level timeout declarations. Actual connection settings,
+runner-owned transactions, server/version restrictions, data volume, and progress
+under contention require the normal-runner engine checks in the shared
+[migration method](../skills/mainframe-testing/references/migrations.md).
+
+Index rebuild advice requires review of the actual target/version, constraints
+and runner before choosing `CONCURRENTLY`; it is not an automatic rewrite.
+Identifier advice concerns SQL names generally, including index names, and the
+default 63-byte PostgreSQL limit. Preserve upstream inline ignores. SQL parse
+diagnostics identify the first parser error only: a parser/server syntax mismatch
+is possible, so do not claim the live database rejected the statement. Actual
+analyzer failure remains a distinct unavailable check. These rules share the
+existing Squawk invocation per snapshot, attribution, combined message and limits.
+They do not connect to a database or prove index readiness, application use or
+performance.
+The existing [quality tests](tests/test_code_quality.py) cover first-edit advice,
+safe forms, byte boundaries, repetition/repair, dialect exclusion and failures;
+the [runtime probes](../installer/runtime_checks.py) require the new diagnostics
+and clean counterparts before reusing a newer analyzer. Run the quality tests
+locally with the prepared runtime; CI prepares dependencies and runs the full
+hook suite. Native delivery and live database behavior remain separate evidence.
+
+Modern Web Guidance runs only for candidate syntax in an addressed web file.
+Skip generated/vendor/build paths, minified bundles, and recognized JS test
+files. The scanner receives one temporary snapshot, with telemetry and file
+logging disabled and no project configuration. Limit its input to 128 KB and
+2000 characters per line, and read at most 2 MB of JSON from a private temporary
+stdout file. Keep all child temporary files inside the snapshot directory so
+the parent removes them after failure or timeout.
+Finish established checks for every path before adding web advice from the
+same source revision. All web subprocesses together have at most one second
+within the unchanged shared scan budget. Include upstream-supported tagged
+`css` templates in JS/TS files. Keep output in the ordinary combined advisory. A reached
+bound or unavailable scanner emits one deduplicated availability notice.
+Preserve relevant exclusions for composition guards, modifier shortcuts,
+post-interaction styles, intentional support fallbacks, and mutable CDN URLs.
+Return only fixed rule labels and validated source locations. Keep these
+findings advisory and preserve existing completion guards if web review fails.
+The hook supplies its own narrow rules through the prepared parser API. Check
+every supported static external resource, require a same-event composition
+guard before a reachable Enter action, exclude non-text controls, and evaluate
+validation timing per CSS rule. Resolve local callbacks, simple selectors and
+framework bindings; leave imported callbacks, complex/dynamic targets and cross-function data flow outside
+static coverage. Reached unsupported control flow or an exhausted AST budget
+reports unavailable. Version the web channel when semantics change so old
+snapshots cannot attribute inherited findings to a new edit. A clean static
+result does not replace affected browser interaction checks.
+Broader modernization uses the [frontend method](../skills/mainframe-frontend/references/modern-web.md).
+
+The code-quality hook uses its existing edit events and configured analyzer
+runtime paths. Use the shared runtime's
+[compatibility and provisioning policy](../docs/installation/components/hooks.md#runtime-support).
+A missing, timed-out, malformed, or failed scanner must leave the action and
+completion unblocked and emit only its deduplicated unavailable-check advisory.
+For full quality contract tests, use the contributor
+[analyzer preparation and preflight route](../CONTRIBUTING.md#run-the-quality-analyzer-contracts).
+Keep missing prerequisites distinct from detector regressions; the focused
+in-process route does not require installing analyzers.
 
 ## Adapt `mainframe-fallow-quality`
 
@@ -387,7 +533,7 @@ detector. It complements the per-edit `mainframe-code-quality` checks with Fallo
 cross-file structural view; it does not share the completion guard, create a
 second blocking gate, or own project architecture policy.
 
-Reuse or install the tested official Fallow distribution and verify
+Reuse Fallow under the shared runtime compatibility policy and verify
 that its `audit` command supports `--diff-stdin`, `--gate new-only`, JSON output,
 an explicit project root, and `--no-cache`. Set `FALLOW_TELEMETRY=off`, the
 stronger `FALLOW_TELEMETRY_DISABLED=1` kill switch, and
@@ -413,20 +559,30 @@ replacement and locking, expire abandoned state, and never retain source or
 diff text. Reuse the proven state mechanics of `mainframe-code-quality` when practical;
 do not merge the semantic components or inventory rows.
 
-The detector runs Fallow with the diff on standard input and reports only
-findings marked newly introduced that intersect the supplied paths. It reports
-an unused file only when the adapter also supplied whole-file ownership. Output
-is limited to six rows of at most 240 displayed characters plus a truncation
-suffix per row, with control characters neutralized, and asks the recipient to
-verify findings rather than treating the analyzer as authoritative. Validate
+The detector runs Fallow with the diff on standard input and reports
+newly introduced findings that intersect the supplied paths. It reports
+an unused file only when the adapter also supplied whole-file ownership. Mark
+verified file creation with a `/dev/null` before path. If Fallow cannot resolve
+`HEAD`, use `health --complexity` for a single verified new file within the
+same timeout. This mode reports measured complexity. Import graphs and clone
+comparisons use the ordinary audit once a Git baseline exists. Output
+is limited to six rows of at most 240 displayed characters, including middle
+elision that preserves the path prefix and diagnostic suffix. Neutralize control
+characters. Put verification, non-blocking effect, and scoped issue routing
+before findings, including the creation fallback, so native composite limits
+retain those boundaries. `tests/test_hook_context.py` checks the actual detector
+text in both three-channel native encoders. Validate
 the audit envelope, finding-list shapes, and Boolean `introduced` attribution;
 an unsupported analyzer shape is an unavailable check, not a clean result.
 
 A normal clean result is silent. Missing Fallow, invalid input, oversized
 scope, timeout, nonzero analyzer failure, or unsupported output returns at most
 one bounded unavailable-check advisory and never prevents completion. Deliver
-advice only through a documented non-blocking channel and deduplicate duplicate
-delivery of one native completion event. If exact attribution or non-blocking
+advice only through a documented non-blocking channel. Deduplicate native event
+redelivery and repeated generic unavailable-check advice within the same
+recipient/workspace scope. A recovery can make a later failure actionable
+again. Newly introduced findings in a separate edit remain independently
+reportable. If exact attribution or non-blocking
 completion delivery is unavailable, record this component as `unsupported`;
 do not substitute a whole-repository scan or an always-on instruction.
 
@@ -520,11 +676,15 @@ targets are profiled; symlinks, fixtures, generated files and obvious credential
 files stay silent. Do not infer a backend from a language extension alone. Unknown domains remain governed by ordinary proactive selection.
 
 Send one brief conditional suggestion. Deduplicate by session, recipient,
-workspace and skill, with at most three suggestions per scope and seven-day
-expiry. An explicit attempt to read an available skill suppresses a redundant reminder
-because it demonstrates awareness, not successful reading or application. Raw
+workspace and skill or operation, with at most three suggestions per scope and
+seven-day expiry. Explicit PostgreSQL or K3s backup commands get one lifecycle
+note. Named Argo CD release commands and explicit scaling of a workload to zero
+share one continuity note per scope. A named OpenSpec apply instruction request
+gets one note on challenging material risks, acceptance evidence, and live-operation authority. These fixed notes point to a readable
+method and remain useful after an explicit skill read. An explicit read attempt
+suppresses the generic skill suggestion and establishes awareness only. Raw
 output cannot prove read success; never parse content as a status envelope. Bounded private state contains hashes and skill identities,
-never source or raw native IDs. Disable/missing identity/state failures are silent;
+fixed operation keys, and expiry, never source or raw native IDs. Disable/missing identity/state failures are silent;
 a cached launcher must remain harmless after files are retired. Native receipt
 and useful application require separate observations from a successful callback.
 

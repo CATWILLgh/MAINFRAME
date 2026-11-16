@@ -1,6 +1,6 @@
 ---
 name: mainframe-sentry
-description: Plan, install, configure, upgrade, recover, or troubleshoot self-hosted Sentry and its event ingestion. Use for Sentry server operations; not standalone SDK instrumentation or Sentry product development.
+description: Operate or troubleshoot self-hosted Sentry, including install, upgrade, recovery, and event ingestion. Excludes application SDK work.
 ---
 
 # Operate self-hosted Sentry
