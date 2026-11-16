@@ -236,10 +236,12 @@ raise SystemExit(subprocess.run(
 PY
 ```
 
-On the tested macOS environment, Semgrep 1.164.0 failed at startup with
+In the sandboxed macOS test runner, Semgrep 1.164.0 failed at startup with
 `ca-certs: empty trust anchors`, even for `--version`. Setting
 `SSL_CERT_FILE=/etc/ssl/cert.pem` for the setup/test process restored startup
-and the real scans using the existing trusted PEM bundle. Use this only for
+and the real scans using the existing trusted PEM bundle. The same installed
+binary started normally outside that sandbox without a CA override; ordinary
+adapter installation needs no persistent certificate setting. Use this only for
 that observed CA failure with a verified existing bundle; keep certificate
 verification enabled. The [upstream startup issue](https://github.com/semgrep/semgrep/issues/11525)
 also distinguishes this initialization failure from findings in local rules.

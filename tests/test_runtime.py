@@ -590,6 +590,86 @@ esac
         runtime._cleanup_node_generations(root, {}, {})
         self.assertEqual(unregistered.read_text(), "preserve")
 
+    def test_npm_preparation_uses_disposable_cache_and_logs_on_success_and_failure(self):
+        environment = self.openspec_fixture()
+        cache = self.root / "user-npm-cache"
+        cache_store = self.root / "existing-cache-store"
+        logs = self.root / "user-npm-logs"
+        cache_store.mkdir()
+        cache.symlink_to(cache_store, target_is_directory=True)
+        logs.mkdir()
+        (cache / "user-note").write_text("preserve cache")
+        (logs / "user-note").write_text("preserve logs")
+        config = self.root / "user.npmrc"
+        config.write_text(f"cache={cache}\nlogs-dir={logs}\n")
+        environment.update(NPM_CONFIG_CACHE=str(cache), npm_config_cache=str(cache),
+                           NPM_CONFIG_LOGS_DIR=str(logs), NPM_CONFIG_USERCONFIG=str(config))
+        for ecosystem in ("node", "openspec"):
+            for failed in (False, True):
+                with self.subTest(ecosystem=ecosystem, failed=failed):
+                    operation_paths = []
+                    root = self.root / f"{ecosystem}-{failed}"
+
+                    def install(command, **options):
+                        def option(name, fallback):
+                            return Path(command[command.index(name) + 1]) if name in command else fallback
+                        operation_cache = option("--cache", cache)
+                        operation_logs = option("--logs-dir", logs)
+                        operation_paths.extend((operation_cache, operation_logs))
+                        operation_cache.mkdir(parents=True, exist_ok=True)
+                        operation_logs.mkdir(parents=True, exist_ok=True)
+                        (operation_cache / "download").write_text("temporary package bytes")
+                        (operation_logs / "debug.log").write_text("temporary install log")
+                        self.assertEqual(options["env"]["NPM_CONFIG_USERCONFIG"], str(config))
+                        self.assertEqual(options["env"]["NPM_CONFIG_CACHE"], str(operation_cache))
+                        self.assertEqual(options["env"]["npm_config_cache"], str(operation_cache))
+                        self.assertEqual(options["env"]["NPM_CONFIG_LOGS_DIR"], str(operation_logs))
+                        self.assertEqual(options["env"]["npm_config_logs_dir"], str(operation_logs))
+                        if failed:
+                            raise Conflict("synthetic npm failure")
+                        target = Path(command[command.index("--prefix") + 1])
+                        if ecosystem == "openspec":
+                            executable = target / "node_modules" / runtime.OPENSPEC_PACKAGE / "bin/openspec.js"
+                            executable.parent.mkdir(parents=True)
+                            executable.write_bytes(Path(environment["OPENSPEC_FIXTURE_ENTRY"]).read_bytes())
+                        else:
+                            executable = target / "node_modules/.bin/oxlint"
+                            executable.parent.mkdir(parents=True)
+                            executable.write_text(f"#!/bin/sh\nprintf 'oxlint {runtime.TOOL_SPECS['oxlint'][2]}\\n'\n")
+                        executable.chmod(0o755)
+
+                    with mock.patch.dict(os.environ, environment), mock.patch.object(runtime, "_run", side_effect=install):
+                        def prepare():
+                            if ecosystem == "node":
+                                return runtime._managed_node(root, ["oxlint"])
+                            target = root / "openspec-stage"
+                            target.mkdir(parents=True)
+                            return runtime._install_openspec(target, str(self.external / "npm"), self.external / "node")
+                        if failed:
+                            with self.assertRaisesRegex(Conflict, "synthetic npm failure"):
+                                prepare()
+                        else:
+                            prepare()
+                    self.assertEqual(len(operation_paths), 2)
+                    self.assertNotEqual(operation_paths[0], cache)
+                    self.assertNotEqual(operation_paths[1], logs)
+                    self.assertTrue(all(not path.exists() for path in operation_paths))
+                    self.assertTrue(cache.is_symlink())
+                    self.assertEqual(list(cache.iterdir()), [cache / "user-note"])
+                    self.assertEqual(list(logs.iterdir()), [logs / "user-note"])
+                    self.assertEqual(config.read_text(), f"cache={cache}\nlogs-dir={logs}\n")
+
+    def test_compatible_npm_tools_are_reused_without_preparing_a_cache(self):
+        environment = self.openspec_fixture()
+        self.tool("openspec", runtime.OPENSPEC_VERSION)
+        self.tool("oxlint", runtime.TOOL_SPECS["oxlint"][2])
+        with (
+            mock.patch.dict(os.environ, environment),
+            mock.patch.object(runtime, "_npm_install", side_effect=AssertionError("unnecessary npm preparation")) as install,
+        ):
+            self.assertTrue(runtime.ensure(self.home, ("openspec", "oxlint"))["ready"])
+        install.assert_not_called()
+
     def test_native_analyzer_is_prepared_once_and_reused_without_network(self):
         binary = self.tool("actionlint", "1.7.12").read_bytes()
         buffer = io.BytesIO()
@@ -744,6 +824,141 @@ printf 'attempt\\n' >> "$OPENSPEC_FIXTURE_ATTEMPTS"
         with mock.patch.dict(os.environ, env):
             self.assertTrue(runtime.ensure(self.home, ("openspec",))["ready"])
         self.assertNotEqual(shim.read_bytes(), shim_before)
+        self.assertFalse(entrypoint.parents[4].exists())
+        self.assertEqual(len(list((root / "packages").glob("openspec-*"))), 1)
+
+    def test_openspec_replacement_cleans_previous_generation_after_commit_only(self):
+        environment = self.openspec_fixture()
+        root = runtime.runtime_root(self.home)
+        manifest = root / "installation.json"
+        with mock.patch.dict(os.environ, environment):
+            runtime.ensure(self.home, ("openspec",))
+        old = Path(json.loads(manifest.read_text())["tools"]["openspec"]["executable"])
+        generation = old.parents[4]
+        foreign = root / "packages/openspec-foreign1/user-note"
+        foreign.parent.mkdir()
+        foreign.write_text("preserve unregistered generation")
+        old.unlink()
+        transact = runtime.transact
+
+        def activate(changes, journal, allowed):
+            self.assertTrue(generation.exists())
+            transact(changes, journal, allowed)
+            self.assertTrue(generation.exists(), "cleanup must follow committed activation")
+            active = json.loads(manifest.read_text())["tools"]["openspec"]["executable"]
+            self.assertNotEqual(active, str(old))
+            self.assertTrue(Path(active).is_file())
+            self.assertFalse(journal.exists())
+
+        with mock.patch.dict(os.environ, environment), mock.patch.object(runtime, "transact", side_effect=activate):
+            self.assertTrue(runtime.ensure(self.home, ("openspec",))["ready"])
+        self.assertFalse(generation.exists())
+        self.assertEqual(foreign.read_text(), "preserve unregistered generation")
+
+    def test_openspec_cleanup_preserves_a_generation_still_referenced_by_another_tool(self):
+        environment = self.openspec_fixture()
+        root = runtime.runtime_root(self.home)
+        manifest = root / "installation.json"
+        with mock.patch.dict(os.environ, environment):
+            runtime.ensure(self.home, ("openspec",))
+        record = json.loads(manifest.read_text())
+        old = Path(record["tools"]["openspec"]["executable"])
+        retained = old.parent / "retained-reference"
+        retained.write_text("another recorded tool")
+        external_alias = self.external / "retained-tool"
+        external_alias.symlink_to(retained)
+        record["tools"]["other-tool"] = {"executable": str(external_alias)}
+        manifest.write_text(json.dumps(record))
+        old.unlink()
+        with mock.patch.dict(os.environ, environment):
+            self.assertTrue(runtime.ensure(self.home, ("openspec",))["ready"])
+        self.assertTrue(old.parents[4].is_dir())
+
+    def test_openspec_recovery_data_keeps_both_generations_after_failed_transaction(self):
+        environment = self.openspec_fixture()
+        root = runtime.runtime_root(self.home)
+        manifest = root / "installation.json"
+        shim = runtime.runtime_bin(self.home) / "openspec"
+        journal = root / ".openspec-recovery.json"
+        with mock.patch.dict(os.environ, environment):
+            runtime.ensure(self.home, ("openspec",))
+        old = Path(json.loads(manifest.read_text())["tools"]["openspec"]["executable"])
+        old.unlink()
+        before = manifest.read_bytes(), shim.read_bytes()
+
+        def interrupted(*arguments):
+            journal.write_text("synthetic recovery data")
+            raise Conflict("synthetic recovery needed")
+
+        with (
+            mock.patch.dict(os.environ, environment),
+            mock.patch.object(runtime, "transact", side_effect=interrupted),
+            self.assertRaisesRegex(Conflict, "synthetic recovery needed"),
+        ):
+            runtime.ensure(self.home, ("openspec",))
+        self.assertEqual(journal.read_text(), "synthetic recovery data")
+        self.assertEqual((manifest.read_bytes(), shim.read_bytes()), before)
+        self.assertTrue(old.parents[4].exists())
+        self.assertEqual(len(list((root / "packages").glob("openspec-*"))), 2)
+
+    def test_openspec_cleanup_preserves_symlinked_previous_generation(self):
+        environment = self.openspec_fixture()
+        root = runtime.runtime_root(self.home)
+        manifest = root / "installation.json"
+        with mock.patch.dict(os.environ, environment):
+            runtime.ensure(self.home, ("openspec",))
+        old = Path(json.loads(manifest.read_text())["tools"]["openspec"]["executable"])
+        generation = old.parents[4]
+        foreign = self.root / "foreign-openspec-generation"
+        generation.rename(foreign)
+        generation.symlink_to(foreign, target_is_directory=True)
+        old.unlink()
+        marker = foreign / "user-note"
+        marker.write_text("preserve")
+        with mock.patch.dict(os.environ, environment):
+            self.assertTrue(runtime.ensure(self.home, ("openspec",))["ready"])
+        self.assertTrue(generation.is_symlink())
+        self.assertEqual(marker.read_text(), "preserve")
+
+    def test_openspec_cleanup_refusal_after_commit_keeps_the_new_active_generation(self):
+        environment = self.openspec_fixture()
+        root = runtime.runtime_root(self.home)
+        manifest = root / "installation.json"
+        with mock.patch.dict(os.environ, environment):
+            runtime.ensure(self.home, ("openspec",))
+        old = Path(json.loads(manifest.read_text())["tools"]["openspec"]["executable"])
+        old.unlink()
+        packages = root / "packages"
+        relocated = self.root / "relocated-packages"
+        transact = runtime.transact
+
+        def activate(changes, journal, allowed):
+            transact(changes, journal, allowed)
+            packages.rename(relocated)
+            packages.symlink_to(relocated, target_is_directory=True)
+
+        with (
+            mock.patch.dict(os.environ, environment),
+            mock.patch.object(runtime, "transact", side_effect=activate),
+            self.assertRaisesRegex(Conflict, "symlink"),
+        ):
+            runtime.ensure(self.home, ("openspec",))
+        active = Path(json.loads(manifest.read_text())["tools"]["openspec"]["executable"])
+        self.assertNotEqual(active, old)
+        self.assertTrue(active.is_file())
+        self.assertTrue(runtime.status(self.home, ("openspec",))["ready"])
+        self.assertTrue(old.parents[4].is_dir())
+        self.assertFalse((root / ".openspec-recovery.json").exists())
+
+    def test_openspec_replacement_preserves_a_previously_reused_external_tool(self):
+        environment = self.openspec_fixture()
+        external = self.tool("openspec", runtime.OPENSPEC_VERSION)
+        with mock.patch.dict(os.environ, environment):
+            runtime.ensure(self.home, ("openspec",))
+        external.write_text("#!/bin/sh\nprintf '0.0.1\\n'\n")
+        with mock.patch.dict(os.environ, environment):
+            self.assertTrue(runtime.ensure(self.home, ("openspec",))["ready"])
+        self.assertEqual(external.read_text(), "#!/bin/sh\nprintf '0.0.1\\n'\n")
 
     def test_openspec_reuses_compatible_npm_link_after_managed_bin(self):
         env = self.openspec_fixture()

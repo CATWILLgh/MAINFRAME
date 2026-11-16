@@ -168,7 +168,10 @@ separate generation is ready. After activation remove only superseded
 generations proven by the previous runtime receipt; remove newly staged
 generations on preparation failure. Reject ancestor symlinks before package
 creation or cleanup. Preserve unregistered directories and legacy Python files
-whose complete ownership is unknown. Semgrep version probes use temporary
+whose complete ownership is unknown. npm preparation uses a disposable cache
+and log directory, including for child installers. OpenSpec replacement removes
+only its previously receipted generation after activation, preserving active
+references and pending recovery. Semgrep version probes use temporary
 log/settings paths without the user's application token.
 
 The Go, Dart, and Rust syntax checks use existing SDK executables. Rust also

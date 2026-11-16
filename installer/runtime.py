@@ -362,6 +362,17 @@ def _run(command: list[str], *, timeout: int, env: dict[str, str] | None = None,
         raise Conflict("MAINFRAME runtime dependency installation failed; no hook files were changed.")
 
 
+def _npm_install(command: list[str], environment: dict[str, str], *, cwd: Path | None = None) -> None:
+    with tempfile.TemporaryDirectory(prefix="mainframe-npm-cache-") as directory:
+        logs = str(Path(directory) / "_logs")
+        environment = {
+            **environment, "NPM_CONFIG_CACHE": directory, "npm_config_cache": directory,
+            "NPM_CONFIG_LOGS_DIR": logs, "npm_config_logs_dir": logs,
+        }
+        _run([*command, "--cache", directory, "--logs-dir", logs],
+             timeout=900, env=environment, cwd=cwd)
+
+
 def _runtime_directory(path: Path, root: Path) -> None:
     if root not in path.parents:
         raise Conflict("Refusing to replace an unowned runtime dependency path.")
@@ -419,8 +430,8 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
         packages.append(f"svelte@{WEB_COMPILER_VERSION}")
     environment = {**os.environ, "NO_UPDATE_NOTIFIER": "1", "NPM_CONFIG_UPDATE_NOTIFIER": "false"}
     try:
-        _run([npm, "install", "--prefix", str(target), "--no-audit", "--no-fund",
-              "--save-exact", *packages], timeout=900, env=environment)
+        _npm_install([npm, "install", "--prefix", str(target), "--no-audit", "--no-fund",
+                      "--save-exact", *packages], environment)
         executables = {name: (target / "node_modules/.bin" / name).resolve() for name in names}
         for name, executable in executables.items():
             if _analyzer_release(name, executable) != TOOL_SPECS[name][2]:
@@ -562,13 +573,42 @@ def _install_openspec(target: Path, npm: str, node: Path) -> tuple[Path, ...]:
         "NPM_CONFIG_UPDATE_NOTIFIER": "false",
         "PATH": str(node.parent) + os.pathsep + os.environ.get("PATH", os.defpath),
     }
-    _run([npm, "install", "--prefix", str(target), "--global=false", "--ignore-scripts",
-          "--no-audit", "--no-fund", "--save-exact", f"{OPENSPEC_PACKAGE}@{OPENSPEC_VERSION}"],
-         timeout=900, env=environment, cwd=target)
+    _npm_install([npm, "install", "--prefix", str(target), "--global=false", "--ignore-scripts",
+                  "--no-audit", "--no-fund", "--save-exact", f"{OPENSPEC_PACKAGE}@{OPENSPEC_VERSION}"],
+                 environment, cwd=target)
     entrypoint = target / "node_modules" / OPENSPEC_PACKAGE / "bin/openspec.js"
     if _version(node, entrypoint, path=os.defpath, exact=True) != OPENSPEC_VERSION:
         raise Conflict("MAINFRAME runtime dependency openspec failed its version probe.")
     return (node, entrypoint)
+
+
+def _cleanup_openspec_generation(root: Path, previous: tuple[Path, ...] | None, rows: dict) -> None:
+    if previous is None:
+        return
+    packages = root / "packages"
+    executable = previous[-1]
+    if not executable.is_relative_to(packages):
+        return
+    relative = executable.relative_to(packages)
+    if not relative.parts or not re.fullmatch(r"openspec-[a-z0-9_]{8}", relative.parts[0]):
+        return
+    generation = packages / relative.parts[0]
+    if executable != generation / "node_modules" / OPENSPEC_PACKAGE / "bin/openspec.js":
+        return
+    active = [_recorded_path(row, key) for row in rows.values() if isinstance(row, dict)
+              for key in ("executable", "node")]
+    try:
+        referenced = any(path is not None and (
+            path.is_relative_to(generation) or path.resolve().is_relative_to(generation)
+        ) for path in active)
+    except (OSError, RuntimeError):
+        return  # An unresolved recorded path cannot establish safe removal.
+    if referenced:
+        return
+    _runtime_directory(packages, root)
+    if generation.is_symlink() or not generation.is_dir():
+        return
+    _discard_generation(generation, root)
 
 
 def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
@@ -594,8 +634,7 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
             if npm is None:
                 raise Conflict("npm is required to install OpenSpec.")
             packages = root / "packages"
-            if packages.is_symlink() or (packages.exists() and not packages.is_dir()):
-                raise Conflict(f"Refusing to replace an unowned runtime dependency path: {packages}")
+            _runtime_directory(packages, root)
             packages.mkdir(mode=0o700, exist_ok=True)
             # Keep this prefix separate from the analyzers and the active OpenSpec release.
             staged = Path(tempfile.mkdtemp(prefix="openspec-", dir=packages))
@@ -613,8 +652,9 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
         ], journal, allowed)
     except BaseException:
         if staged is not None and not journal.exists():
-            shutil.rmtree(staged)
+            _discard_generation(staged, root)
         raise
+    _cleanup_openspec_generation(root, previous, record["tools"])
 
 
 def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tuple[
