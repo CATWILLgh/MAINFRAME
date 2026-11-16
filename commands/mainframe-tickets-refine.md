@@ -31,7 +31,7 @@ Read the current eligible queue afresh. Select one ticket and keep it as the onl
 
 After routing the active ticket, refresh the queue and select the next eligible ticket, including tickets created by a justified split. Do not retry a ticket again in the same run when its recorded evidence gap and available conditions have not changed. Continue with every other eligible ticket.
 
-Persist useful evidence in the active ticket as it is established, without waiting for the entire investigation to finish. Keep resumable campaign progress in the project's established goal or agent-state location: active ticket, completed investigation steps, remaining leads, handled ticket identities and their evidence boundaries, and pending writes. Preserve this state across context changes; do not use the conversation as the only record or invent a new storage convention.
+Persist useful evidence in the active ticket as it is established, without waiting for the entire investigation to finish. Keep resumable campaign progress under the initialized contract's `.campaigns/`: active ticket, completed investigation steps, remaining leads, handled ticket identities and their evidence boundaries, and pending writes. Preserve this state across context changes; do not use the conversation as the only record or invent a new storage convention.
 
 If a ticket update cannot be written, preserve the complete proposed update and missing action in permitted campaign state and continue with other tickets. Reconsider an unchanged blocked ticket only when its state, evidence, or authority materially changes. Do not claim the persistent queue changed or mark the campaign successfully complete while required writes remain pending.
 
@@ -53,16 +53,7 @@ Do not change application behavior, weaken a test, or implement a proposed fix t
 
 ## Expand evidence, scope, and identity
 
-Update the ticket with the strongest evidence obtained during this run while preserving its earlier history. Record:
-
-- the exact observed behavior and a reproducible trigger when available;
-- the required behavior and the project or external source that defines it;
-- confirmation or disconfirmation evidence;
-- the traced execution path and relevant source locations;
-- the blast radius, affected callers and consumers, direct and indirect consequences, and evidence for each material boundary;
-- the alternative explanation checked;
-- the limits of the evidence and every material unknown;
-- the smallest observable boundary that a later implementation and verification must satisfy.
+Consolidate the findings above into the ticket's owning sections, preserving useful history: observed behavior and a reproducible trigger when available; expected behavior and its source; confirmation or disconfirmation, traced execution path and locations, alternatives, blast radius and supporting evidence; material unknowns; and the smallest observable implementation and verification boundary.
 
 Do not invent cause, severity, priority, business behavior, or certainty. Do not prescribe implementation details beyond what is necessary to define the confirmed problem and its acceptance boundary.
 

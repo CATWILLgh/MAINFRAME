@@ -29,7 +29,7 @@ Read the ready queue afresh. Select one ticket and keep it as the only active ti
 
 After routing the active ticket, refresh the queue and select the next eligible ticket. Do not retry a rerouted or unchanged blocked ticket again in the same run unless its recorded condition has materially changed. Continue with every other ready ticket.
 
-Save evidence and meaningful progress in the active ticket as work proceeds. Keep resumable campaign state in the established project goal or agent-state location: active ticket, completed steps, remaining work, handled records, validation, commit references, and pending writes. After a context change, inspect the actual diff, ticket state, and commits before resuming so completed work is not repeated. Do not use the conversation as the only record.
+Save evidence and meaningful progress in the active ticket as work proceeds. Keep resumable campaign state under the initialized contract's `.campaigns/`: active ticket, completed steps, remaining work, handled records, validation, commit references, and pending writes. After a context change, inspect the actual diff, ticket state, and commits before resuming so completed work is not repeated. Do not use the conversation as the only record.
 
 If a ticket update cannot be written, preserve its complete proposed update and missing action in permitted campaign state and continue with independent ready work when the checkout remains safe. Do not claim the persistent queue changed or successful campaign completion while required writes or checkpoints remain unresolved.
 
@@ -79,11 +79,9 @@ If implementation evidence exposes a missing blast radius or a material decision
 
 ## Validate and route the result
 
-Run the focused proof first, then the nearest relevant fast checks needed to protect the affected business rules, logical behavior, functional behavior, and regression boundary. Use the smallest faithful test set and minimum authorized infrastructure. Run broader or expensive checks only when the changed risk specifically requires them or the current caller assigned a full verification pass.
+Run the focused proof, then the nearest relevant fast checks for affected business rules, logic, functional behavior, and regressions, using minimum authorized infrastructure. Broader or expensive checks need the changed risk or an assigned full pass. Confirm the original red is green for the intended reason and checked adjacent contracts did not regress. Preserve assertions, surface failures, and diagnose flakes; do not accept unrelated green checks as proof. State each check's meaning and material gaps.
 
-Confirm that the original red evidence is now green for the intended reason and that no checked adjacent contract regressed. Do not weaken assertions, suppress failures, retry flaky checks until they pass, or treat an unrelated green build as proof. State what each check actually establishes and every material gap.
-
-Consolidate implementation locations, relevant external sources, pre-change evidence, observed validation, and remaining limitations in the same ticket. Give the independent verifier enough context to reproduce the check and distinguish success from a false positive without this conversation. Move the ticket to the configured independent-verification state and directory only when the complete correction and its proportionate local validation are present. Validate project YAML/Markdown fields, links, and the move so no stale duplicate remains in the ready directory. Do not archive, close, or independently accept implementation completed in this invocation.
+Consolidate implementation locations, external sources, pre-change evidence, validation, and limitations in the ticket so an independent verifier can reproduce and challenge the result. Move it to independent verification only after complete correction and proportionate local validation. Validate required YAML/Markdown, links, and the move, leaving no stale ready copy. Do not close, archive, or independently accept work implemented here.
 
 ## Checkpoint the completed ticket
 

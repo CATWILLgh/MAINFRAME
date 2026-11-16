@@ -21,7 +21,7 @@ Select only `docs/tickets/open/needs-verification/`, preserving the recorded exe
 
 Preserve the queue's tracked or ignored ownership.
 
-The invocation authorizes project inspection, safe local verification, and ticket mutations required to preserve evidence and record verdicts. Only ticket records may receive persistent project edits: do not change source code, tests, fixtures, snapshots, dependencies, lockfiles, configuration, project instructions, skills, or other documentation, even to repair an obvious typo or unblock a check. It does not authorize changes to implementation code or tests, deployment, writes to remote or shared environments, destructive operations, material infrastructure changes, repository-history changes, commits, or pushes. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
+The invocation authorizes project inspection, safe local verification, and ticket mutations required to preserve evidence and record verdicts. Only ticket records may receive persistent project edits: do not change source code, tests, fixtures, snapshots, dependencies, lockfiles, configuration, project instructions, skills, or other documentation, even to repair an obvious typo or unblock a check. It does not authorize deployment, writes to remote or shared environments, destructive operations, material infrastructure changes, repository-history changes, commits, or pushes. Preserve the starting branch, unrelated dirty work, existing processes, and user-owned configuration.
 
 ## Establish independent execution
 
@@ -91,8 +91,6 @@ Repeated verification against unchanged state must converge: do not append the s
 
 ## Complete the command
 
-Continue the one-ticket cycle until a refreshed control pass finds no additional independently eligible ticket that this command can further verify under the current evidence, environment, and authority. A blocked or non-independent ticket is handled for this run only after the exact missing condition is recorded or returned to the current recipient; it must not prevent processing later tickets.
+Continue until a refreshed queue leaves no further independently eligible ticket verifiable under current evidence, environment, and authority. Record or return each blocked or non-independent ticket's exact missing condition and continue other tickets. Complete the active goal only after required observations and transitions are persisted; unresolved tickets remain unresolved. Queue processing does not mean every implementation passed. User stop or native execution limits require accurate stopped or resumable state, never successful completion.
 
-Complete the active goal successfully only when a refreshed queue leaves no further independently eligible verification under current conditions and all required observations and transitions are persisted. Tickets with specific recorded blockers remain unresolved; queue processing does not mean every implementation passed. User stop or native execution limits require an accurate stopped or resumable state, not a successful completion claim.
-
-Return the queue processed and, for each checked ticket, the independence basis, verdict, resulting state, decisive observations, and material verification gaps. State whether the refreshed queue leaves further permitted independent verification. Omit empty categories and distinguish persisted transitions from proposals.
+Return the processed queue and each checked ticket's independence basis, verdict, resulting state, decisive observations, and material gaps. State whether further permitted independent verification remains. Omit empty categories and distinguish persisted transitions from proposals.
