@@ -145,7 +145,12 @@ def _supported_report(report: object) -> bool:
 
 def _bounded_row(value: str) -> str:
     safe = "".join(character if character.isprintable() else "?" for character in value)
-    return safe[:MAX_ROW_CHARS] + ("..." if len(safe) > MAX_ROW_CHARS else "")
+    if len(safe) <= MAX_ROW_CHARS:
+        return safe
+    # Keep the finding kind and the diagnostic location/measurement at the end.
+    prefix = (MAX_ROW_CHARS - 3) // 2
+    suffix = MAX_ROW_CHARS - 3 - prefix
+    return safe[:prefix] + "..." + safe[-suffix:]
 
 
 def _number(value: object) -> str:
@@ -179,7 +184,12 @@ def _bounded_advice(rows: list[str], introduction: str) -> str | None:
     shown = [_bounded_row(row) for row in rows[:MAX_MESSAGE_ROWS]]
     remainder = len(rows) - len(shown)
     more = f"\n  - ...and {remainder} more" if remainder else ""
-    return introduction + ":\n  - " + "\n  - ".join(shown) + more
+    return (
+        "Fallow advisory (non-blocking). Verify findings before acting; resolve "
+        "in-scope findings and report evidenced out-of-scope issues via the "
+        "project's configured issue route.\n"
+        + introduction + ":\n  - " + "\n  - ".join(shown) + more
+    )
 
 
 def build_advisory(
@@ -266,16 +276,8 @@ def build_advisory(
             f"({_number(finding.get('line_count'))} lines)"
         )
 
-    advice = _bounded_advice(
-        rows, f"Fallow structural review found {len(rows)} newly introduced issue(s) in the current TS/JS edit scope"
-    )
-    if advice is None:
-        return None
-    return (
-        advice
-        + "\nVerify each finding before acting. Resolve what belongs to the current "
-        "result and surface evidenced out-of-scope problems through the project's "
-        "configured issue route. This is advisory and did not block completion."
+    return _bounded_advice(
+        rows, f"Found {len(rows)} newly introduced issue(s) in current TS/JS edit scope"
     )
 
 
@@ -294,7 +296,7 @@ def _creation_advice(report: object, root: Path, created: Path) -> FallowResult:
         _complexity_row(root, row) for row in findings
         if _finding_path(root, row["path"]) == created and row["exceeded"] in {"cyclomatic", "cognitive", "both", "all"}
     ]
-    return FallowResult(advisory=_bounded_advice(rows, "Fallow found high complexity in the newly created file"))
+    return FallowResult(advisory=_bounded_advice(rows, "High complexity in newly created file"))
 
 
 def analyze(

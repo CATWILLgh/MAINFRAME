@@ -101,6 +101,72 @@ class FallowQualityTests(unittest.TestCase):
             FALLOW.build_advisory(isolated, self.root, ["src/new.ts"])
         )
 
+    def assert_early_decision_guidance(self, note: str) -> None:
+        prefix = note[:180].lower()
+        for guidance in (
+            "non-blocking", "verify findings before acting", "in-scope",
+            "evidenced out-of-scope", "configured issue route",
+        ):
+            self.assertIn(guidance, prefix)
+        self.assertLess(note.index("configured issue route"), note.index("\n  - "))
+
+    def test_audit_guidance_precedes_findings_within_bounded_prefix(self) -> None:
+        note = FALLOW.build_advisory(
+            report(), self.root, ["src/new.ts"], wholly_owned_paths=["src/new.ts"],
+        )
+        self.assertIsNotNone(note)
+        self.assert_early_decision_guidance(note or "")
+
+    def test_long_nested_paths_retain_diagnostic_suffixes_within_row_budget(self) -> None:
+        path = "src/" + "deeply-nested-module/" * 24 + "order-handler.ts"
+        audit = {
+            "kind": "audit",
+            "complexity": {"findings": [{
+                "path": path, "line": 87, "name": "processOrder",
+                "cyclomatic": 41, "introduced": True,
+            }]},
+            "duplication": {"clone_groups": [{
+                "instances": [{"file": path, "start_line": 92}],
+                "line_count": 36, "introduced": True,
+            }]},
+        }
+        note = FALLOW.build_advisory(audit, self.root, [path]) or ""
+        rows = [line.removeprefix("  - ") for line in note.splitlines() if line.startswith("  - ")]
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(rows[0].startswith("complexity: src/"))
+        self.assertIn("order-handler.ts:87 `processOrder` (cyclomatic 41)", rows[0])
+        self.assertTrue(rows[1].startswith("duplication: src/"))
+        self.assertIn("order-handler.ts:92 (36 lines)", rows[1])
+        for row in rows:
+            self.assertIn("...", row)
+            self.assertLessEqual(len(row), 240)
+
+    def test_creation_fallback_retains_early_guidance_and_long_path_diagnostic(self) -> None:
+        path = "src/" + "deeply-nested-module/" * 24 + "order-handler.ts"
+        missing_head = mock.Mock(returncode=2, stdout=json.dumps({
+            "error": True, "message": FALLOW.UNRESOLVED_HEAD_MESSAGE,
+        }))
+        health = mock.Mock(returncode=1, stdout=json.dumps({
+            "kind": "health", "findings": [{
+                "path": path, "line": 87, "name": "processOrder",
+                "cyclomatic": 41, "exceeded": "cyclomatic",
+            }],
+        }))
+        with (
+            mock.patch.object(FALLOW.shutil, "which", return_value="/tools/fallow"),
+            mock.patch.object(FALLOW.subprocess, "run", side_effect=[missing_head, health]) as run,
+        ):
+            result = FALLOW.analyze(
+                self.root, [path], f"--- /dev/null\n+++ b/{path}\n@@ -0,0 +1 @@\n+export {{}};\n",
+                wholly_owned_paths=[path],
+            )
+        self.assertIsNone(result.unavailable)
+        note = result.advisory or ""
+        self.assert_early_decision_guidance(note)
+        self.assertIn("order-handler.ts:87 `processOrder` (cyclomatic 41)", note)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(run.call_args.args[0][1:3], ["health", "--complexity"])
+
     def test_new_file_complexity_without_a_git_commit(self) -> None:
         def source(name):
             branches = "".join(f"    if (value === {n}) return {n};\n" for n in range(27))

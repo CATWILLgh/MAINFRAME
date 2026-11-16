@@ -56,6 +56,7 @@ MAX_FILES_PER_EDIT = 24
 MAX_MESSAGE_ROWS = 6
 MAX_ROW_CHARS = 240
 MAX_ADVISORY_CHARS = 480
+MAX_COMPLETION_CHARS = 1_600
 SCAN_BUDGET_SECONDS = 5
 MAX_COMPLETED_OPERATIONS = 512
 _SCAN_DEADLINE = ContextVar("mainframe_quality_deadline", default=None)
@@ -3185,19 +3186,25 @@ def _current_unresolved(
 
 
 def _block(rows: list[tuple[Path, Occurrence]], workspace: Path) -> str:
-    locations = [_bounded_row(f"{_display_path(path, workspace)}:{row.line} — {row.label}") for path, row in rows]
-    body = "\n".join(f"  - {location}" for location in locations[:MAX_MESSAGE_ROWS])
-    if len(locations) > MAX_MESSAGE_ROWS:
-        body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
     count = len(rows)
-    return (
+    heading = (
         f"Completion blocked: {count} unfinished, suppressed, or security-sensitive code finding"
         f"{'s' if count != 1 else ''} introduced in this execution scope remain:\n"
-        + body
-        + "\nComplete or secure the underlying implementation and run relevant "
+        "Complete or secure the underlying implementation and run relevant "
         "verification before stopping. Do not remove a marker or suppress a "
-        "diagnostic when it represents required work."
+        "diagnostic when it represents required work.\n"
     )
+    shown = rows[:MAX_MESSAGE_ROWS]
+    more = f"\n  - … {count - len(shown)} more" if count > len(shown) else ""
+    row_limit = min(
+        MAX_ROW_CHARS,
+        (MAX_COMPLETION_CHARS - len(heading) - len(more)) // max(1, len(shown)) - 5,
+    )
+    body = "\n".join(
+        "  - " + _bounded_row(f"{_display_path(path, workspace)}:{row.line} — {row.label}", row_limit)
+        for path, row in shown
+    )
+    return heading + body + more
 
 
 def check_completion(

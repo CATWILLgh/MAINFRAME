@@ -376,6 +376,11 @@ a split, and unavailable protection requires direct verification. The mixed
 advice lifecycle regression in `hooks/tests/test_code_quality.py` checks these
 boundaries, redelivery silence, completion blocking, and release after repair.
 Native adapters own the combined event-message and serialized-output limits.
+Blocking-finding text reserves repair, verification, and no-suppression
+instructions before rows within 1600 characters; adapters bound the final
+output with any availability notice. The native
+context regression in `tests/test_hook_context.py` exercises six long-path
+findings through both maintained encoders, including Unicode wire limits.
 
 Preserve the high-signal detector set: TODO/FIXME/HACK/XXX comments, diagnostic
 suppressions, skipped or focused tests, explicit debugger residue, and comments
@@ -557,9 +562,12 @@ verified file creation with a `/dev/null` before path. If Fallow cannot resolve
 `HEAD`, use `health --complexity` for a single verified new file within the
 same timeout. This mode reports measured complexity. Import graphs and clone
 comparisons use the ordinary audit once a Git baseline exists. Output
-is limited to six rows of at most 240 displayed characters plus a truncation
-suffix per row, with control characters neutralized, and asks the recipient to
-verify findings rather than treating the analyzer as authoritative. Validate
+is limited to six rows of at most 240 displayed characters, including middle
+elision that preserves the path prefix and diagnostic suffix. Neutralize control
+characters. Put verification, non-blocking effect, and scoped issue routing
+before findings, including the creation fallback, so native composite limits
+retain those boundaries. `tests/test_hook_context.py` checks the actual detector
+text in both three-channel native encoders. Validate
 the audit envelope, finding-list shapes, and Boolean `introduced` attribution;
 an unsupported analyzer shape is an unavailable check, not a clean result.
 
