@@ -807,8 +807,109 @@ class CodeQualityTests(unittest.TestCase):
         self.assertEqual(self.capture("sql", "invalid", raw), QUALITY.QualityResult())
         raw.write_text("CREATE INDEX broken\n", encoding="utf-8")
         advice = self.after("sql", "invalid").advisory or ""
-        self.assertIn("squawk review was unavailable", advice)
+        self.assertIn("0001_invalid.sql:1 — Squawk syntax-error", advice)
+        self.assertEqual(advice.count("Squawk syntax-error"), 1)
+        self.assertNotIn("more findings", advice)
+        self.assertIn("parser", advice)
+        self.assertNotIn("review was unavailable", advice)
         self.assertEqual(self.completion("sql"), QUALITY.QualityResult())
+
+    def test_index_rebuild_and_name_advice_is_new_attributed_and_nonblocking(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        cases = (
+            ("rebuild", "REINDEX INDEX events_status_idx;", "require-concurrent-reindex"),
+            ("rebuild_table", "REINDEX TABLE events;", "require-concurrent-reindex"),
+            ("long_name", "CREATE INDEX CONCURRENTLY " + "i" * 64 + " ON events (id);", "identifier-too-long"),
+            ("unicode_name", 'CREATE INDEX CONCURRENTLY "' + "я" * 32 + '" ON events (id);', "identifier-too-long"),
+            ("rebuild_transaction", "BEGIN; REINDEX INDEX CONCURRENTLY events_idx; COMMIT;", "ban-concurrent-index-creation-in-transaction"),
+        )
+        for name, statement, rule in cases:
+            with self.subTest(case=name):
+                file = root / f"20261116000000_{name}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture(name, "create", file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                result = self.after(name, "create")
+                advice = result.advisory or ""
+                self.assertIn(f"migration.sql:2 — Squawk {rule}", advice)
+                self.assertLessEqual(len(advice), QUALITY.MAX_ADVISORY_CHARS)
+                self.assertIsNone(result.block_reason)
+                self.assertEqual(self.completion(name), QUALITY.QualityResult())
+                if name == "rebuild_transaction":
+                    self.assertIn("concurrent index operation", advice)
+                    self.assertNotIn("CREATE INDEX CONCURRENTLY cannot", advice)
+                self.capture(name, "unrelated", file)
+                file.write_text(file.read_text() + "-- unrelated comment\n")
+                self.assertEqual(self.after(name, "unrelated"), QUALITY.QualityResult())
+
+    def test_index_safe_forms_byte_boundaries_and_ignores_stay_silent(self) -> None:
+        root = self.workspace / "prisma" / "migrations"
+        root.mkdir(parents=True)
+        (root / "migration_lock.toml").write_text('provider = "postgresql"\n')
+        statements = (
+            "REINDEX INDEX CONCURRENTLY events_idx;",
+            "REINDEX TABLE CONCURRENTLY events;",
+            "REINDEX SYSTEM app;",
+            "CREATE INDEX CONCURRENTLY " + "i" * 63 + " ON events (id);",
+            'CREATE INDEX CONCURRENTLY "' + "я" * 31 + 'x" ON events (id);',
+            "-- squawk-ignore require-concurrent-reindex\nREINDEX INDEX events_idx;",
+            "-- squawk-ignore identifier-too-long\nCREATE INDEX CONCURRENTLY " + "i" * 64 + " ON events (id);",
+            "SELECT 'REINDEX INDEX events_idx; " + "i" * 64 + "';",
+            "-- REINDEX INDEX events_idx;\nSELECT 1;",
+        )
+        for index, statement in enumerate(statements):
+            with self.subTest(case=index):
+                file = root / f"20261116000000_safe_{index}" / "migration.sql"
+                file.parent.mkdir()
+                self.capture("safe-index", str(index), file)
+                file.write_text("SET lock_timeout = '1s';\n" + statement + "\n")
+                self.assertEqual(self.after("safe-index", str(index)), QUALITY.QualityResult())
+
+    def test_sql_parse_advice_repeats_silently_and_clears_after_repair(self) -> None:
+        root = self.workspace / "db" / "meta"
+        root.mkdir(parents=True)
+        (root / "_journal.json").write_text('{"dialect": "postgresql"}')
+        file = root.parent / "0000_index.sql"
+        self.capture("sql-parse", "create", file)
+        file.write_text("CREATE INDEX CONCURRENTLY idx ON events (id,);\n")
+        advice = self.after("sql-parse", "create").advisory or ""
+        self.assertIn("0000_index.sql:1 — Squawk syntax-error", advice)
+        self.assertIn("parser", advice)
+        self.assertNotIn("review was unavailable", advice)
+        self.assertEqual(self.completion("sql-parse"), QUALITY.QualityResult())
+        self.capture("sql-parse", "unchanged", file)
+        self.assertEqual(self.after("sql-parse", "unchanged"), QUALITY.QualityResult())
+        self.capture("sql-parse", "repair", file)
+        file.write_text("SET lock_timeout = '1s';\nCREATE INDEX CONCURRENTLY idx ON events (id);\n")
+        self.assertEqual(self.after("sql-parse", "repair"), QUALITY.QualityResult())
+
+    def test_index_checks_skip_unidentified_sql_and_preserve_scanner_failure(self) -> None:
+        paths = (
+            self.workspace / "clickhouse" / "0000_index.sql",
+            self.workspace / "schema.sql",
+            self.workspace / "prisma" / "migrations" / "20261116000000_index" / "migration.sql",
+        )
+        for index, file in enumerate(paths):
+            file.parent.mkdir(parents=True, exist_ok=True)
+            self.capture("other-dialect", str(index), file)
+            file.write_text("REINDEX INDEX events_idx;\n")
+            with mock.patch.object(QUALITY, "_run_review_tool", side_effect=AssertionError("wrong dialect")):
+                self.assertEqual(self.after("other-dialect", str(index)), QUALITY.QualityResult())
+
+        root = self.workspace / "db" / "meta"
+        root.mkdir(parents=True)
+        (root / "_journal.json").write_text('{"dialect": "postgresql"}')
+        for index, error in enumerate((ValueError("bad JSON"), subprocess.TimeoutExpired("squawk", 1))):
+            file = root.parent / f"000{index}_index.sql"
+            self.capture(f"outage-{index}", "create", file)
+            file.write_text("REINDEX INDEX events_idx;\n")
+            with mock.patch.object(QUALITY, "_run_review_tool", side_effect=error):
+                advice = self.after(f"outage-{index}", "create").advisory or ""
+            self.assertIn("squawk review was unavailable", advice)
+            self.assertNotIn("Squawk syntax-error", advice)
+            self.assertEqual(self.completion(f"outage-{index}"), QUALITY.QualityResult())
 
     def test_online_postgresql_risks_are_advisory_on_the_first_edit(self) -> None:
         root = self.workspace / "prisma" / "migrations"

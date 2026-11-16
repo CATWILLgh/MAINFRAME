@@ -1069,9 +1069,12 @@ _SQUAWK_LABELS = {
     "ban-drop-database": "dropping a database removes its data",
     "ban-truncate-cascade": "TRUNCATE CASCADE can erase related tables",
     "changing-column-type": "changing a column type can block access while rewriting the table",
-    "ban-concurrent-index-creation-in-transaction": "CREATE INDEX CONCURRENTLY cannot run inside an explicit transaction",
+    "ban-concurrent-index-creation-in-transaction": "a concurrent index operation cannot run inside an explicit transaction",
     "require-concurrent-index-creation": "ordinary index creation can block writes on a live table; review CONCURRENTLY and runner transaction mode",
     "require-concurrent-index-deletion": "ordinary index deletion can block table access; review online removal and constraint dependencies",
+    "require-concurrent-reindex": "ordinary REINDEX can block table access; check target/version, constraints and runner before using CONCURRENTLY",
+    "identifier-too-long": "SQL identifier exceeds the default 63-byte limit; truncation can cause name collisions",
+    "syntax-error": "Squawk parser could not parse this statement; check syntax and analyzer/server version support",
     "constraint-missing-not-valid": "immediate constraint validation can block writes during a table scan; separate the short add from later validation",
     "disallowed-unique-constraint": "adding uniqueness can build an index while blocking writes; review concurrent index creation followed by constraint attachment",
     "adding-not-nullable-field": "SET NOT NULL can scan existing rows; verify prior constraint validation and bounded lock acquisition",
@@ -2018,14 +2021,18 @@ def _squawk_findings(text: str) -> list[Occurrence]:
                    "--stdin-filepath=source.sql"], text,
     )
     diagnostics = _diagnostic_rows(raw)
-    if any(item.get("rule_name") == "syntax-error" for item in diagnostics):
-        raise ValueError("Squawk did not parse this migration")
     rows = []
+    parse_reported = False
     # Keep the specific schema risk visible ahead of connection-setting advice.
     for item in sorted(diagnostics, key=lambda item: item.get("rule_name") == "require-lock-timeout"):
         rule = item.get("rule_name")
         if rule not in _SQUAWK_LABELS:
             continue
+        if rule == "syntax-error":
+            # Parser recovery can emit several follow-on errors for one typo.
+            if parse_reported:
+                continue
+            parse_reported = True
         line = int(item["line"]) + 1
         end_line = int(item["line_end"]) + 1
         rows.append(_occurrence(

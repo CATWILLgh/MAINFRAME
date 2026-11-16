@@ -87,9 +87,15 @@ def _analyzer(root: Path, workspace: Path, tool: str) -> bool:
             (quality._squawk_findings("CREATE INDEX idx ON events (status);\n"), "Squawk require-concurrent-index-creation", 1),
             (quality._squawk_findings("ALTER TABLE events ADD CONSTRAINT c CHECK (id > 0);\n"), "Squawk constraint-missing-not-valid", 1),
             (quality._squawk_findings("ALTER TABLE events ADD COLUMN status text;\n"), "Squawk require-lock-timeout", 1),
+            (quality._squawk_findings("REINDEX INDEX events_idx;\n"), "Squawk require-concurrent-reindex", 1),
+            (quality._squawk_findings("CREATE INDEX CONCURRENTLY " + "i" * 64 + " ON events (id);\n"), "Squawk identifier-too-long", 1),
+            (quality._squawk_findings("CREATE INDEX CONCURRENTLY idx ON events (id,);\n"), "Squawk syntax-error", 1),
         )
-        safe = "SET lock_timeout = '1s';\nCREATE INDEX CONCURRENTLY idx ON events (status);\n"
-        if quality._squawk_findings(safe):
+        safe = (
+            "SET lock_timeout = '1s';\nCREATE INDEX CONCURRENTLY idx ON events (status);\n",
+            "SET lock_timeout = '1s';\nREINDEX INDEX CONCURRENTLY events_idx;\n",
+        )
+        if any(quality._squawk_findings(source) for source in safe):
             return False
     elif tool == "modern-web-guidance":
         scan = quality._modern_web_findings

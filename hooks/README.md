@@ -452,7 +452,7 @@ Use static diagnostic descriptions and compare only new findings. See
 | ShellCheck | `.sh` and `.bash` with a supported interpreter or no shebang. | Shell parse errors, masked command failure, unchecked `cd`, and a pipeline that reads and writes the same file. |
 | actionlint | `.github/workflows/*.yml` and `.github/workflows/*.yaml` at the repository root. | Workflow YAML or schema errors, missing or cyclic job dependencies, and invalid identifiers, expressions, conditions, or matrices. |
 | KubeLinter | Plain Kubernetes deployment, stateful set, and daemon set YAML with a container specification. Skip Helm templates and recognized Kustomize overlays and patches. | A workload selector that does not match its pod template, or a container without a readiness probe. Check service selectors and routes against the rendered manifest set. |
-| Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, type changes, ordinary index creation/removal, immediate constraint validation, required columns, rewrite-prone defaults, rolling-deployment renames, missing lock timeouts, and concurrent index creation inside an explicit SQL transaction. |
+| Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, type changes, ordinary index creation/removal/rebuilding, overlong SQL identifiers, SQL parser diagnostics, immediate constraint validation, required columns, rewrite-prone defaults, rolling-deployment renames, missing lock timeouts, and concurrent index operations inside an explicit SQL transaction. |
 | Modern web rules | `.html`, `.htm`, `.css`, JS/TS module extensions, JSX/TSX, Vue and Svelte. Use isolated snapshots, Modern Web Guidance's AST/DOM/CSS parser APIs, and the official Svelte compiler for Svelte templates. | Maintained `ime-safe-enter-submit`, `validate-input-after-interaction`, and `secure-external-subresources` rules. |
 
 These migration findings are advisory, attributed to the current edit, and
@@ -462,6 +462,23 @@ Squawk recognizes file-level timeout declarations. Actual connection settings,
 runner-owned transactions, server/version restrictions, data volume, and progress
 under contention require the normal-runner engine checks in the shared
 [migration method](../skills/mainframe-testing/references/migrations.md).
+
+Index rebuild advice requires review of the actual target/version, constraints
+and runner before choosing `CONCURRENTLY`; it is not an automatic rewrite.
+Identifier advice concerns SQL names generally, including index names, and the
+default 63-byte PostgreSQL limit. Preserve upstream inline ignores. SQL parse
+diagnostics identify the first parser error only: a parser/server syntax mismatch
+is possible, so do not claim the live database rejected the statement. Actual
+analyzer failure remains a distinct unavailable check. These rules share the
+existing Squawk invocation per snapshot, attribution, combined message and limits.
+They do not connect to a database or prove index readiness, application use or
+performance.
+The existing [quality tests](tests/test_code_quality.py) cover first-edit advice,
+safe forms, byte boundaries, repetition/repair, dialect exclusion and failures;
+the [runtime probes](../installer/runtime_checks.py) require the new diagnostics
+and clean counterparts before reusing a newer analyzer. Run the quality tests
+locally with the prepared runtime; CI prepares dependencies and runs the full
+hook suite. Native delivery and live database behavior remain separate evidence.
 
 Modern Web Guidance runs only for candidate syntax in an addressed web file.
 Skip generated/vendor/build paths, minified bundles, and recognized JS test

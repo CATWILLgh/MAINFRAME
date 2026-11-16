@@ -197,6 +197,24 @@ esac
         executable.chmod(0o755)
         self.assertFalse(runtime._check_analyzer("squawk", executable))
 
+    def test_squawk_reuse_rejects_an_analyzer_missing_index_review_checks(self):
+        executable = self.external / "squawk"
+        executable.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, sys\n"
+            "source = sys.stdin.read()\n"
+            "rules = {\n"
+            "    'DROP TABLE history': 'ban-drop-table',\n"
+            "    'CREATE INDEX idx': 'require-concurrent-index-creation',\n"
+            "    'ALTER TABLE events ADD CONSTRAINT': 'constraint-missing-not-valid',\n"
+            "    'ALTER TABLE events ADD COLUMN': 'require-lock-timeout',\n"
+            "}\n"
+            "print(json.dumps([{'rule_name': rule, 'line': 0, 'line_end': 0}\n"
+            "                  for prefix, rule in rules.items() if source.startswith(prefix)]))\n"
+        )
+        executable.chmod(0o755)
+        self.assertFalse(runtime._check_analyzer("squawk", executable))
+
     def test_modern_web_reuse_rejects_an_analyzer_that_always_reports_clean(self):
         executable = self.tool("modern-web-guidance", "1.1.0")
         executable.write_text(
