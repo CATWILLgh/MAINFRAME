@@ -163,16 +163,26 @@ pass the own-rule samples, including Svelte and multiple resource attribution.
 Prepare dependencies during delivery, before changing hook files or registrations.
 Keep the official package's license and third-party notices intact; see
 [provenance](../../../THIRD_PARTY_NOTICES.md).
-Python and Node.js package preparation preserves active analyzers until a
-separate generation is ready. After activation remove only superseded
-generations proven by the previous runtime receipt; remove newly staged
-generations on preparation failure. Reject ancestor symlinks before package
-creation or cleanup. Preserve unregistered directories and legacy Python files
-whose complete ownership is unknown. npm preparation uses a disposable cache
-and log directory, including for child installers. OpenSpec replacement removes
+Dependency preparation preserves active analyzers until a separate generation
+is ready. After activation remove only superseded generations explicitly
+recorded as installer allocations in the previous runtime receipt; reusing an
+executable never grants ownership of its directory. Remove newly staged
+generations on caught preparation failure. Reject ancestor symlinks before
+package creation or cleanup. Preserve unregistered directories and legacy files
+without allocation proof. Preparation gives child installers owned scratch paths;
+npm also uses a disposable cache and log directory. OpenSpec replacement removes
 only its previously receipted generation after activation, preserving active
-references and pending recovery. Semgrep version probes use temporary
-log/settings paths without the user's application token.
+references and pending recovery. Activation uses the existing rollback journal;
+retain it until rollback and stage cleanup finish. Stop owned preparation
+process groups before cleaning their temporary files. Commit exact pending
+retirement receipts with new bindings and retry cleanup before returning ready;
+keep those receipts until deletion succeeds, including while a generation remains
+in use. A hard interruption before a stage is recorded can leave an unregistered
+directory; preserve it
+rather than sweeping directories by name. pip preparation constrains destination,
+log and report paths while retaining index and CA configuration. Refuse edited
+launchers and preserve concurrent changes before activation. Semgrep version
+probes use temporary log/settings paths without the user's application token.
 
 The Go, Dart, and Rust syntax checks use existing SDK executables. Rust also
 discovers local rustup toolchains when `rustfmt` is absent from `PATH`. A
@@ -181,6 +191,15 @@ language is edited.
 
 Product uninstall retains this shared runtime because another MAINFRAME adapter
 may still use it.
+
+The local runtime lifecycle checks are `python3 -B -m unittest discover -s tests
+-p 'test_runtime*.py'`. They use disposable
+homes to cover reuse, failed preparation, activation rollback/recovery and
+preservation of foreign files. The full-apply cases in
+[`test_codex_current`](../../../tests/test_codex_current.py) and
+[`test_zcode_current`](../../../tests/test_zcode_current.py) require runtime
+preparation before hook activation; a dependency failure leaves product payload
+and registration unchanged.
 
 ## Verify
 

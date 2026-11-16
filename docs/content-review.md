@@ -144,3 +144,37 @@ Test dependencies were prepared only in the isolated test home; no global
 installation, product-native acceptance probes, publication or live-system
 actions were performed. Source and synthetic checks do not establish native
 activation or equal task performance across models.
+
+## Ordinary installation follow-up — 2026-11-17
+
+Full Codex and ZCode `apply` already prepares required analyzers and OpenSpec
+before changing product files or registrations. Four normal-entrypoint tests
+cover dependency selection and refusal before activation when preparation fails.
+The [runtime support contract](installation/components/hooks.md#runtime-support)
+now also defines staged preparation, explicit allocation ownership, preservation
+of edited launchers, and retryable pending retirement in the existing receipt.
+Dependency code and this report add no agent-facing prompt material.
+
+All **77 runtime lifecycle tests** passed locally through `python3 -B -m unittest
+discover -s tests -p 'test_runtime*.py'`. They cover native/Python/Node/OpenSpec preparation, failed and
+interrupted activation, alias/symlink/concurrent-edit preservation, retirement
+retry and real pip wheel/source-build cases. Synthetic destination settings
+exposed pip writes outside its stage; a timed-out source build exposed ambient
+temporary files. Both are now contained. Independent review also found lost
+retirement provenance after a deletion error; durable pending receipts repaired
+that case. The separate reviewer reran five decisive/neighbor checks and found
+no remaining material objection in the changed paths.
+
+Real public yamllint 1.38.0 and Oxlint 1.67.0 preparation succeeded in a disposable
+home. Repeat `ensure` left bindings and metadata unchanged. A final Oxlint run
+also preserved ambient cache, log, temporary and configuration paths. All smoke
+homes and the approximately 138 MiB analyzer-test home were removed. The 81 quality tests passed
+again with no assertion or membership changes. Semgrep also started normally
+outside the test sandbox without a CA override; no persistent certificate
+setting was added to adapter installation.
+
+Shared runtime and unproven legacy directories remain intentionally preserved.
+A hard stop before a stage is recorded may leave an unregistered directory;
+there is no automatic name-based sweep. Native application/authenticated-index
+acceptance and hosted CI were not run; the user's global installation was not
+updated.

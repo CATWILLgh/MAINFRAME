@@ -121,28 +121,32 @@ def _download_release(repo: str, tag: str, asset: str) -> bytes:
 
 def _managed_release(root: Path, name: str) -> Path:
     repo, tag, asset, member, checksum = _native_release(name)
-    target = root / "packages/release" / name / tag / name
+    generation = _new_generation(root, "release")
+    target = generation / name
     try:
-        data = _download_release(repo, tag, asset)
-        if len(data) > _MAX_NATIVE_BYTES or digest(data) != checksum:
-            raise Conflict(f"{name} release checksum did not match the pinned artifact.")
-        if member is not None:
-            with tarfile.open(fileobj=io.BytesIO(data)) as archive:
-                entry = archive.getmember(member)
-                if not entry.isfile() or not 0 < entry.size <= _MAX_NATIVE_BYTES:
-                    raise ValueError("invalid release member")
-                stream = archive.extractfile(entry)
-                if stream is None:
-                    raise ValueError("missing executable")
-                with stream:
-                    data = stream.read()
-        regular_bytes(target)
-        atomic_write(target, data, 0o755)
-    except (OSError, ValueError, KeyError, tarfile.TarError) as error:
-        raise Conflict(f"Could not prepare the pinned {name} release.") from error
-    if _analyzer_release(name, target) != TOOL_SPECS[name][2]:
-        raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
-    return target
+        try:
+            data = _download_release(repo, tag, asset)
+            if len(data) > _MAX_NATIVE_BYTES or digest(data) != checksum:
+                raise Conflict(f"{name} release checksum did not match the pinned artifact.")
+            if member is not None:
+                with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+                    entry = archive.getmember(member)
+                    if not entry.isfile() or not 0 < entry.size <= _MAX_NATIVE_BYTES:
+                        raise ValueError("invalid release member")
+                    stream = archive.extractfile(entry)
+                    if stream is None:
+                        raise ValueError("missing executable")
+                    with stream:
+                        data = stream.read()
+            atomic_write(target, data, 0o755)
+        except (OSError, ValueError, KeyError, tarfile.TarError) as error:
+            raise Conflict(f"Could not prepare the pinned {name} release.") from error
+        if _analyzer_release(name, target) != TOOL_SPECS[name][2]:
+            raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+        return target
+    except BaseException:
+        _discard_generation(generation, root)
+        raise
 
 
 def runtime_root(home: Path) -> Path:
@@ -377,9 +381,12 @@ def _run(command: list[str], *, timeout: int, env: dict[str, str] | None = None,
 def _npm_install(command: list[str], environment: dict[str, str], *, cwd: Path | None = None) -> None:
     with tempfile.TemporaryDirectory(prefix="mainframe-npm-cache-") as directory:
         logs = str(Path(directory) / "_logs")
+        scratch = Path(directory) / "tmp"
+        scratch.mkdir(mode=0o700)
         environment = {
             **environment, "NPM_CONFIG_CACHE": directory, "npm_config_cache": directory,
             "NPM_CONFIG_LOGS_DIR": logs, "npm_config_logs_dir": logs,
+            "TMPDIR": str(scratch), "TMP": str(scratch), "TEMP": str(scratch),
         }
         _run([*command, "--cache", directory, "--logs-dir", logs],
              timeout=900, env=environment, cwd=cwd)
@@ -412,13 +419,25 @@ def _managed_python(root: Path, names: list[str]) -> dict[str, Path]:
     target = _new_generation(root, "python")
     python = target / "bin/python"
     packages = [f"{TOOL_SPECS[name][1]}=={TOOL_SPECS[name][2]}" for name in names]
-    environment = {**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PIP_NO_INPUT": "1"}
+    filesystem_root = target.resolve().anchor
+    environment = {
+        **os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PIP_NO_INPUT": "1",
+        "PIP_PREFIX": str(target), "PIP_ROOT": filesystem_root,
+        "PIP_USER": "0", "PIP_LOG": os.devnull, "PIP_REPORT": os.devnull,
+    }
+    environment.pop("PIP_TARGET", None)
     try:
-        _run([sys.executable, "-m", "venv", str(target)], timeout=120)
-        _run([str(python), "-m", "pip", "install", "--no-input", "--no-cache-dir", *packages],
-             timeout=900, env=environment)
+        with tempfile.TemporaryDirectory(prefix=".mainframe-work-", dir=target) as directory:
+            environment.update(TMPDIR=directory, TMP=directory, TEMP=directory)
+            _run([sys.executable, "-m", "venv", str(target)], timeout=120, env=environment)
+            _run([str(python), "-m", "pip", "install", "--no-input", "--no-cache-dir",
+                  "--target", "", "--prefix", str(target), "--root", filesystem_root, "--no-user",
+                  "--log", os.devnull, "--report", os.devnull, *packages],
+                 timeout=900, env=environment, cwd=target)
         executables = {name: (target / "bin" / name).resolve() for name in names}
         for name, executable in executables.items():
+            if not executable.is_relative_to(target):
+                raise Conflict(f"Prepared runtime dependency {name} is outside its allocated generation.")
             if _analyzer_release(name, executable) != TOOL_SPECS[name][2]:
                 raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
         return executables
@@ -446,6 +465,8 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
                       "--save-exact", *packages], environment)
         executables = {name: (target / "node_modules/.bin" / name).resolve() for name in names}
         for name, executable in executables.items():
+            if not executable.is_relative_to(target):
+                raise Conflict(f"Prepared runtime dependency {name} is outside its allocated generation.")
             if _analyzer_release(name, executable) != TOOL_SPECS[name][2]:
                 raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
             if name == "modern-web-guidance" and _web_parser_modules(executable)[2] != WEB_COMPILER_VERSION:
@@ -457,20 +478,10 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
 
 
 def _cleanup_generations(root: Path, previous: dict, rows: dict, ecosystem: str) -> None:
-    parent = root / "packages" / ecosystem
-    prior = [Path(row["executable"]) for row in previous.values()
-             if isinstance(row, dict) and isinstance(row.get("executable"), str)]
-    candidates = set()
-    for path in prior:
-        if not path.is_relative_to(parent):
-            continue
-        relative = path.relative_to(parent)
-        if not relative.parts:
-            continue
-        name = relative.parts[0]
-        legacy_node = ecosystem == "node" and name == "node_modules"
-        if legacy_node or re.fullmatch(rf"mainframe-{ecosystem}-[a-z0-9_]{{8}}", name):
-            candidates.add(parent / name)
+    parent = root / "packages" if ecosystem == "openspec" else root / "packages" / ecosystem
+    candidates = {generation for name, row in previous.items()
+                  if (generation := _owned_generation(root, name, row)) is not None
+                  and generation.parent == parent}
     if not candidates:
         return
     _runtime_directory(parent, root)
@@ -496,6 +507,45 @@ def _recorded_path(row: dict, key: str) -> Path | None:
     return Path(value) if isinstance(value, str) and Path(value).is_absolute() else None
 
 
+def _owned_generation(root: Path, name: str, row: object) -> Path | None:
+    if not isinstance(row, dict):
+        return None
+    generation = _recorded_path(row, "managed_generation")
+    executable = _recorded_path(row, "executable")
+    ecosystem = "openspec" if name == "openspec" else TOOL_SPECS.get(name, (None,))[0]
+    if generation is None or executable is None or ecosystem is None:
+        return None
+    parent = root / "packages" if ecosystem == "openspec" else root / "packages" / ecosystem
+    prefix = "openspec" if ecosystem == "openspec" else f"mainframe-{ecosystem}"
+    if generation.parent != parent or not re.fullmatch(rf"{prefix}-[a-z0-9_]{{8}}", generation.name):
+        return None
+    if ".." in executable.parts or executable == generation or not executable.is_relative_to(generation):
+        return None
+    if ecosystem == "release" and executable != generation / name:
+        return None
+    if ecosystem == "openspec" and executable != generation / "node_modules" / OPENSPEC_PACKAGE / "bin/openspec.js":
+        return None
+    return generation
+
+
+def _tool_row(root: Path, name: str, executable: Path, *, version: str | None = None,
+              previous: object = None, fresh: bool = False) -> dict:
+    row = {"executable": str(executable)}
+    if version is not None:
+        row["version"] = version
+    if fresh:
+        # Only freshly allocated preparation results can acquire provenance.
+        for candidate in executable.parents:
+            proposed = {**row, "managed_generation": str(candidate)}
+            if _owned_generation(root, name, proposed) == candidate:
+                return proposed
+    elif isinstance(previous, dict) and _recorded_path(previous, "executable") == executable:
+        generation = _owned_generation(root, name, previous)
+        if generation is not None:
+            row["managed_generation"] = str(generation)
+    return row
+
+
 def _generation_referenced(generation: Path, rows: dict) -> bool:
     active = [_recorded_path(row, key) for row in rows.values() if isinstance(row, dict)
               for key in ("executable", "node")]
@@ -505,6 +555,62 @@ def _generation_referenced(generation: Path, rows: dict) -> bool:
         ) for path in active)
     except (OSError, RuntimeError):
         return True  # An unresolved recorded path cannot establish safe removal.
+
+
+def _retirement_records(root: Path, manifest: dict) -> dict[Path, dict]:
+    records = manifest.get("pending_retirements", [])
+    if not isinstance(records, list):
+        raise Conflict("Unrecognized runtime retirement records; preserve installation.json.")
+    pending = {}
+    for record in records:
+        name = record.get("tool") if isinstance(record, dict) else None
+        generation = _owned_generation(root, name, record) if isinstance(name, str) else None
+        if generation is None:
+            raise Conflict("Unrecognized runtime retirement record; preserve installation.json.")
+        pending.setdefault(generation, record)
+    return pending
+
+
+def _with_retirements(root: Path, manifest: dict, rows: dict) -> dict:
+    pending = _retirement_records(root, manifest)
+    active = {_owned_generation(root, name, row) for name, row in rows.items()}
+    for name, row in _tool_rows(manifest).items():
+        generation = _owned_generation(root, name, row)
+        if generation is not None and generation not in active:
+            pending.setdefault(generation, {"tool": name, "executable": row["executable"],
+                                            "managed_generation": str(generation)})
+    record = {**manifest, "schema": 1, "tools": rows}
+    if pending:
+        record["pending_retirements"] = [pending[path] for path in sorted(pending)]
+    else:
+        record.pop("pending_retirements", None)
+    return record
+
+
+def _reconcile_retirements(root: Path) -> None:
+    path = root / "installation.json"
+    snapshot = observed(path)
+    manifest = _manifest(root)
+    pending = _retirement_records(root, manifest)
+    if not pending:
+        return
+    retained = []
+    for generation, record in sorted(pending.items()):
+        if _generation_referenced(generation, _tool_rows(manifest)) or generation.is_symlink():
+            retained.append(record)
+            continue
+        if observed(path) != snapshot:
+            raise Conflict("Runtime installation changed during retirement; preserve installation.json.")
+        _discard_generation(generation, root)
+    updated = dict(manifest)
+    if retained:
+        updated["pending_retirements"] = retained
+    else:
+        updated.pop("pending_retirements", None)
+    if updated != manifest:
+        if observed(path) != snapshot:
+            raise Conflict("Runtime installation changed during retirement; preserve installation.json.")
+        atomic_write(path, encode_json(updated), snapshot[1] if snapshot[1] is not None else 0o600)
 
 
 def _openspec_command(row: dict, shim: Path) -> tuple[Path, ...] | None:
@@ -609,27 +715,6 @@ def _install_openspec(target: Path, npm: str, node: Path) -> tuple[Path, ...]:
     return (node, entrypoint)
 
 
-def _cleanup_openspec_generation(root: Path, previous: tuple[Path, ...] | None, rows: dict) -> None:
-    if previous is None:
-        return
-    packages = root / "packages"
-    executable = previous[-1]
-    if not executable.is_relative_to(packages):
-        return
-    relative = executable.relative_to(packages)
-    if not relative.parts or not re.fullmatch(r"openspec-[a-z0-9_]{8}", relative.parts[0]):
-        return
-    generation = packages / relative.parts[0]
-    if executable != generation / "node_modules" / OPENSPEC_PACKAGE / "bin/openspec.js":
-        return
-    if _generation_referenced(generation, rows):
-        return
-    _runtime_directory(packages, root)
-    if generation.is_symlink() or not generation.is_dir():
-        return
-    _discard_generation(generation, root)
-
-
 def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
     manifest_path = root / "installation.json"
     manifest_snapshot = observed(manifest_path)
@@ -661,10 +746,11 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
             version = OPENSPEC_VERSION
         else:
             command, version = candidate
-        row = {"version": version, "executable": str(command[-1])}
+        row = _tool_row(root, "openspec", command[-1], version=version,
+                        previous=existing.get("openspec"), fresh=staged is not None)
         if len(command) == 2:
             row["node"] = str(command[0])
-        record = {**manifest, "schema": 1, "tools": {**existing, "openspec": row}}
+        record = _with_retirements(root, manifest, {**existing, "openspec": row})
         transact([
             Change.from_snapshot(shim, snapshot, _openspec_shim(command), 0o755),
             Change.from_snapshot(manifest_path, manifest_snapshot, encode_json(record)),
@@ -673,7 +759,7 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
         if staged is not None and not journal.exists():
             _discard_generation(staged, root)
         raise
-    _cleanup_openspec_generation(root, previous, record["tools"])
+    _reconcile_retirements(root)
 
 
 def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tuple[
@@ -706,16 +792,14 @@ def _candidates(root: Path, home: Path, wanted: list[str], existing: dict) -> tu
             resolved[name] = executable, version
         else:
             missing[TOOL_SPECS[name][0]].append(name)
-    managed_targets = {
-        "python": root / "packages/python",
-        "node": root / "packages/node",
-    }
-    for ecosystem, target in managed_targets.items():
+    for ecosystem in ("python", "node"):
         names = missing[ecosystem]
         if not names:
             continue
         for name, (executable, _) in list(resolved.items()):
-            if TOOL_SPECS[name][0] == ecosystem and executable.is_relative_to(target):
+            row = existing.get(name)
+            if (TOOL_SPECS[name][0] == ecosystem and _owned_generation(root, name, row) is not None
+                    and _recorded_path(row, "executable") == executable):
                 names.append(name)
                 del resolved[name]
         names.sort()
@@ -739,6 +823,7 @@ def ensure(home: Path, required: tuple[str, ...]) -> dict:
         restore(journal, openspec_paths, after_restore=cleanup)
         restore(root / ".analyzers-recovery.json", lambda path: _analyzer_path(root, path),
                 after_restore=cleanup)
+        _reconcile_retirements(root)
         current = status(home, required)
         if current["ready"]:
             return current
@@ -757,11 +842,8 @@ def _analyzer_path(root: Path, path: Path) -> bool:
 
 
 def _cleanup_stages(root: Path, staged: dict, active: dict) -> None:
-    _cleanup_python_generations(root, staged, active)
-    _cleanup_node_generations(root, staged, active)
-    row = staged.get("openspec")
-    command = _openspec_command(row, root / "bin/openspec") if isinstance(row, dict) else None
-    _cleanup_openspec_generation(root, command, active)
+    for ecosystem in ("python", "node", "release", "openspec"):
+        _cleanup_generations(root, staged, active, ecosystem)
 
 
 def _cleanup_restored_stages(root: Path, changes: list[Change]) -> None:
@@ -776,25 +858,46 @@ def _cleanup_restored_stages(root: Path, changes: list[Change]) -> None:
             _cleanup_stages(root, _tool_rows(record), _tool_rows(_manifest(root)))
 
 
+def _analyzer_snapshot(name: str, shim: Path, row: object):
+    snapshot = observed(shim)
+    if snapshot[0] is None:
+        return snapshot
+    executable = _recorded_path(row, "executable") if isinstance(row, dict) else None
+    expected = set()
+    if executable is not None:
+        try:
+            expected.add(_analyzer_shim(name, executable))
+        except Conflict:
+            expected = set()  # Missing parser metadata cannot prove the current wrapper.
+        if name == "modern-web-guidance":
+            expected.add(f'#!/bin/sh\nexec {shlex.quote(str(executable))} "$@"\n'.encode())
+            expected.add(f'#!/bin/sh\nexec "{executable}" "$@"\n'.encode())
+    if snapshot[0] not in expected:
+        raise Conflict(f"Existing analyzer launcher was edited or has no installer ownership: {shim}")
+    return snapshot
+
+
 def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None:
     manifest_path = root / "installation.json"
     manifest_snapshot = observed(manifest_path)
     manifest = _manifest(root)
     existing = _tool_rows(manifest)
     wanted = sorted(set(TOOL_SPECS).intersection(set(existing).union(required)))
+    snapshots = {name: _analyzer_snapshot(name, runtime_bin(home) / name, existing.get(name))
+                 for name in wanted}
     candidates, missing = _candidates(root, home, wanted, existing)
     if missing["node"] and not shutil.which("npm"):
         raise Conflict("npm is required to install active MAINFRAME Node.js analyzers; no hook files were changed.")
-    provisioned = {name: _managed_release(root, name) for name in missing["release"]}
     staged = {}
     journal = root / ".analyzers-recovery.json"
     try:
+        for name in missing["release"]:
+            staged[name] = _managed_release(root, name)
         if missing["python"]:
             staged.update(_managed_python(root, missing["python"]))
         if missing["node"]:
             staged.update(_managed_node(root, missing["node"]))
-        provisioned.update(staged)
-        for name, executable in provisioned.items():
+        for name, executable in staged.items():
             version = _analyzer_release(name, executable)
             if version != TOOL_SPECS[name][2]:
                 raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
@@ -806,20 +909,18 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
                 raise Conflict(f"MAINFRAME runtime dependency {name} could not be resolved.")
             executable, version = candidates[name]
             shim = runtime_bin(home) / name
-            snapshot = observed(shim)
+            snapshot = snapshots[name]
             data = _analyzer_shim(name, executable)
-            if name not in existing and snapshot[0] not in (None, data):
-                raise Conflict(f"Existing file has no installer ownership: {shim}")
             changes.append(Change.from_snapshot(shim, snapshot, data, 0o755))
-            rows[name] = {"version": version, "executable": str(executable)}
+            rows[name] = _tool_row(root, name, executable, version=version,
+                                   previous=existing.get(name), fresh=name in staged)
         changes.append(Change.from_snapshot(manifest_path, manifest_snapshot,
-                       encode_json({**manifest, "schema": 1, "tools": rows})))
+                       encode_json(_with_retirements(root, manifest, rows))))
         transact(changes, journal, lambda path: _analyzer_path(root, path),
                  after_restore=lambda restored: _cleanup_restored_stages(root, restored))
     except BaseException:
         if not journal.exists():
-            abandoned = {name: {"executable": str(path)} for name, path in staged.items()}
+            abandoned = {name: _tool_row(root, name, path, fresh=True) for name, path in staged.items()}
             _cleanup_stages(root, abandoned, _tool_rows(_manifest(root)))
         raise
-    _cleanup_python_generations(root, existing, rows)
-    _cleanup_node_generations(root, existing, rows)
+    _reconcile_retirements(root)

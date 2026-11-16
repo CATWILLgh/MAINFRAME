@@ -270,14 +270,15 @@ esac
 
     def test_rebuilding_one_managed_ecosystem_keeps_its_other_tools(self):
         root = runtime.runtime_root(self.home)
-        managed = root / "packages/python/bin"
+        managed = root / "packages/python/mainframe-python-owned123/bin"
         managed.mkdir(parents=True)
         ruff = managed / "ruff"
         ruff.write_text("#!/bin/sh\nprintf 'ruff 0.15.15\\n'\n")
         ruff.chmod(0o755)
         (root / "installation.json").write_text(json.dumps({
             "schema": 1,
-            "tools": {"ruff": {"version": "0.15.15", "executable": str(ruff)}},
+            "tools": {"ruff": {"version": "0.15.15", "executable": str(ruff),
+                               "managed_generation": str(managed.parent)}},
         }))
         installed = []
 
@@ -371,11 +372,13 @@ esac
             self.assertTrue(runtime.ensure(self.home, ("semgrep",))["ready"])
             self.assertTrue(runtime.ensure(self.home, ("ruff", "semgrep"))["ready"])
             self.assertEqual(run.call_count, 2, "a converged environment must not reinstall")
-        self.assertEqual(installed, ["ruff==0.15.15", "semgrep==1.164.0"])
+        self.assertEqual(installed, ["semgrep==1.164.0"])
         rows = json.loads((root / "installation.json").read_text())["tools"]
         for name in ("ruff", "semgrep"):
-            self.assertIn("mainframe-python-", rows[name]["executable"])
             self.assertTrue(Path(rows[name]["executable"]).is_file())
+        self.assertNotIn("managed_generation", rows["ruff"])
+        self.assertEqual(rows["ruff"]["executable"], str(old))
+        self.assertIn("mainframe-python-", rows["semgrep"]["managed_generation"])
         self.assertTrue(old.is_file(), "legacy ownership does not cover every directory entry")
         self.assertEqual(note.read_text(), "preserve")
 
@@ -448,6 +451,39 @@ esac
         self.assertTrue(runtime.status(self.home, ("ruff",))["ready"])
         self.assertEqual(list((root / "packages/python").glob("mainframe-python-*")), [])
 
+    def test_python_destination_overrides_keep_network_and_certificate_configuration(self):
+        config = self.root / "pip.conf"
+        config.write_text("[global]\nindex-url = https://packages.example.invalid/simple\n")
+        environment = {
+            "PIP_CONFIG_FILE": str(config), "PIP_INDEX_URL": "https://packages.example.invalid/simple",
+            "PIP_CERT": str(self.root / "ca.pem"), "PIP_TARGET": str(self.root / "foreign-target"),
+            "PIP_PREFIX": str(self.root / "foreign-prefix"), "PIP_ROOT": str(self.root / "foreign-root"),
+            "PIP_USER": "1", "PIP_LOG": str(self.root / "foreign.log"),
+            "PIP_REPORT": str(self.root / "foreign-report.json"),
+        }
+        with mock.patch.dict(os.environ, environment), mock.patch.object(runtime, "_run", side_effect=self.python_packages) as run:
+            runtime._managed_python(runtime.runtime_root(self.home), ["yamllint"])
+        command = run.call_args.args[0]
+        options = run.call_args.kwargs
+        target = Path(command[0]).parent.parent
+        for flag, expected in (("--target", ""), ("--prefix", str(target)),
+                               ("--root", target.anchor), ("--log", os.devnull), ("--report", os.devnull)):
+            self.assertEqual(command[command.index(flag) + 1], expected)
+        self.assertIn("--no-user", command)
+        self.assertIn("--no-cache-dir", command)
+        self.assertEqual(options["cwd"], target)
+        for key in ("PIP_CONFIG_FILE", "PIP_INDEX_URL", "PIP_CERT"):
+            self.assertEqual(options["env"][key], environment[key])
+        for key in ("PIP_LOG", "PIP_REPORT"):
+            self.assertEqual(options["env"][key], os.devnull)
+        self.assertNotIn("PIP_TARGET", options["env"])
+        scratch = Path(options["env"]["TMPDIR"])
+        self.assertTrue(scratch.is_relative_to(target))
+        self.assertFalse(scratch.exists())
+        for key in ("TMP", "TEMP"):
+            self.assertEqual(options["env"][key], str(scratch))
+        self.assertEqual(config.read_text(), "[global]\nindex-url = https://packages.example.invalid/simple\n")
+
     def test_package_preparation_rejects_symlinked_ancestors_and_ecosystem_directories(self):
         for ecosystem in ("python", "node"):
             for linked in ("packages", f"packages/{ecosystem}"):
@@ -472,6 +508,36 @@ esac
                     self.assertEqual(marker.read_text(), "preserve")
                     self.assertEqual(list(outside.iterdir()), [marker])
 
+    def test_fresh_preparation_refuses_executables_resolving_outside_its_allocated_generation(self):
+        for ecosystem, name in (("python", "ruff"), ("node", "oxlint")):
+            with self.subTest(ecosystem=ecosystem):
+                root = self.root / ecosystem
+                foreign = self.tool(name, runtime.TOOL_SPECS[name][2])
+                before = foreign.read_bytes()
+
+                def install(command, **options):
+                    if command[1:3] == ["-m", "venv"]:
+                        target = Path(command[-1]) / "bin"
+                        target.mkdir()
+                        return
+                    if ecosystem == "python":
+                        executable = Path(command[0]).parent / name
+                    else:
+                        generation = Path(command[command.index("--prefix") + 1])
+                        executable = generation / "node_modules/.bin" / name
+                        executable.parent.mkdir(parents=True)
+                    executable.symlink_to(foreign)
+
+                prepare = runtime._managed_python if ecosystem == "python" else runtime._managed_node
+                with (
+                    mock.patch.object(runtime.shutil, "which", return_value="/synthetic/npm"),
+                    mock.patch.object(runtime, "_run", side_effect=install),
+                    self.assertRaisesRegex(Conflict, "allocated generation"),
+                ):
+                    prepare(root, [name])
+                self.assertEqual(foreign.read_bytes(), before)
+                self.assertEqual(list((root / "packages" / ecosystem).glob(f"mainframe-{ecosystem}-*")), [])
+
     def test_generation_cleanup_refuses_symlinked_parent_and_preserves_child_links(self):
         root = runtime.runtime_root(self.home)
         outside = self.root / "foreign-packages"
@@ -482,7 +548,8 @@ esac
         packages = root / "packages"
         packages.parent.mkdir(parents=True)
         packages.symlink_to(outside, target_is_directory=True)
-        previous = {"oxlint": {"executable": str(packages / "node" / candidate.name / "oxlint")}}
+        previous = {"oxlint": {"executable": str(packages / "node" / candidate.name / "oxlint"),
+                                "managed_generation": str(packages / "node" / candidate.name)}}
         with self.assertRaisesRegex(Conflict, "symlink"):
             runtime._cleanup_node_generations(root, previous, {})
         self.assertEqual(marker.read_text(), "preserve")
@@ -491,7 +558,8 @@ esac
         parent.mkdir(parents=True)
         link = parent / "mainframe-node-foreign1"
         link.symlink_to(candidate, target_is_directory=True)
-        runtime._cleanup_node_generations(root, {"oxlint": {"executable": str(link / "oxlint")}}, {})
+        runtime._cleanup_node_generations(root, {"oxlint": {"executable": str(link / "oxlint"),
+                                                           "managed_generation": str(link)}}, {})
         self.assertTrue(link.is_symlink())
         self.assertEqual(marker.read_text(), "preserve")
 
@@ -545,12 +613,14 @@ esac
 
     def test_node_activation_keeps_old_tools_until_new_generation_is_ready(self):
         root = runtime.runtime_root(self.home)
-        old = root / "packages/node/node_modules/.bin/oxlint"
+        generation = root / "packages/node/mainframe-node-owned123"
+        old = generation / "node_modules/.bin/oxlint"
         old.parent.mkdir(parents=True)
         old.write_text("#!/bin/sh\nprintf 'oxlint 1.67.0\\n'\n")
         old.chmod(0o755)
         (root / "installation.json").write_text(json.dumps({
-            "schema": 1, "tools": {"oxlint": {"version": "1.67.0", "executable": str(old)}},
+            "schema": 1, "tools": {"oxlint": {"version": "1.67.0", "executable": str(old),
+                                             "managed_generation": str(generation)}},
         }))
         node = self.tool("node", "22.12.0")
         node.write_text("#!/bin/sh\nprintf 'v22.12.0\\n'\n")
@@ -625,6 +695,12 @@ esac
                         self.assertEqual(options["env"]["npm_config_cache"], str(operation_cache))
                         self.assertEqual(options["env"]["NPM_CONFIG_LOGS_DIR"], str(operation_logs))
                         self.assertEqual(options["env"]["npm_config_logs_dir"], str(operation_logs))
+                        scratch = Path(options["env"]["TMPDIR"])
+                        self.assertTrue(scratch.is_relative_to(operation_cache))
+                        self.assertTrue(scratch.is_dir())
+                        self.assertEqual(options["env"]["TMP"], str(scratch))
+                        self.assertEqual(options["env"]["TEMP"], str(scratch))
+                        (scratch / "build-work").write_text("temporary build files")
                         if failed:
                             raise Conflict("synthetic npm failure")
                         target = Path(command[command.index("--prefix") + 1])

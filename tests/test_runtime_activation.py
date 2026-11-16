@@ -45,6 +45,7 @@ class RuntimeActivationTests(unittest.TestCase):
         manifest = root / "installation.json"
         manifest.write_text(json.dumps({"schema": 1, "tools": {"ruff": {
             "executable": str(executable), "version": runtime.TOOL_SPECS["ruff"][2],
+            "managed_generation": str(executable.parents[1]),
         }}}))
         return root, shim, manifest
 
