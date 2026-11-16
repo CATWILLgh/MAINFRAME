@@ -28,9 +28,12 @@ it provides the required evidence with narrower access or safer authentication.
   a verified local plaintext service.
 - Set both `--connect-timeout` and `--max-time` according to the operation's
   expected latency.
-- Use `--fail` when the response body is unnecessary or may be sensitive. Use
-  `--fail-with-body` only when the error body is needed and safe to retain or
-  inspect.
+- Use `--fail` for HTTP failure detection when error bodies are unnecessary.
+  It does not suppress successful bodies and can miss authentication failures.
+  Discard unneeded bodies with `--output /dev/null` (Windows: `NUL`), or use
+  `--out-null` when supported. Review needed, potentially sensitive bodies
+  through an authorized protected output boundary before exposing them.
+  Use `--fail-with-body` only when the error body is needed and safe to inspect.
 - Use `-sS` for machine-oriented output. Capture the HTTP status separately
   with `--write-out` when the result must prove both transport and application
   behavior.
@@ -54,6 +57,10 @@ curl --disable -sS --fail \
 Treat the process exit status, HTTP status, and expected response structure as
 separate evidence. A successful transfer alone does not prove correct
 application behavior.
+
+The official [failure](https://curl.se/docs/manpage.html#--fail) and
+[output](https://curl.se/docs/manpage.html#--output) contracts distinguish
+HTTP error handling from response-body suppression.
 
 ## Authentication and output
 

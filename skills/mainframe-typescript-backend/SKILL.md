@@ -5,7 +5,7 @@ description: Design, change, debug, or review Node.js TypeScript services and Ne
 
 # TypeScript backend engineering
 
-Apply this method whenever the active work matches the description, whether you are the primary implementer, a delegated engineer, or a reviewer. Follow the scope and authority supplied through the current execution path; this skill does not expand either.
+Apply within the immediate caller's scope and authority, whether implementing, delegated, or reviewing.
 
 For behavior changes, load `mainframe-testing` for the shared TDD and local/CI boundary, then use this skill's testing reference for stack-specific evidence.
 
@@ -47,8 +47,6 @@ Verify installed versions before relying on version-sensitive behavior. Prefer t
 
 Make the smallest complete change across every affected location inside the assigned boundary. Keep non-trivial business rules independent of transport when the established architecture supports that separation. Validate untrusted data at the real runtime boundary, authorize the concrete action and resource server-side, and make transactions, retries, idempotency, cache invalidation, and side effects explicit when correctness depends on them.
 
-Use the project's native commands and the smallest faithful failing test before changing behavior, with exceptions only as defined by the shared testing method. Then run the focused proof and the nearest relevant fast checks that protect the changed risk. Use a real database, broker, storage service, browser, or deployed boundary only when its semantics are the risk and the effective project instructions and current authority permit it.
+Use project-native commands: obtain faithful red evidence under the shared testing method, then run the focused proof and nearest relevant fast checks. Real database, broker, storage, browser or deployed checks require that boundary's semantics to be the risk and the shared local/CI and authority boundary to permit them.
 
-Do not replace completion with TODOs, placeholders, weakened types or assertions, skipped checks, suppressed failures, compatibility debris, or an unrecorded follow-up. State what was actually observed and every material verification gap.
-
-Keep secrets out of source, bundles, logs, errors, fixtures, telemetry, serialized output, and command traces. Preserve unrelated work. When a concrete out-of-scope project problem remains, record or reconcile it through the available project problem route when authorized, then return to the assigned result without expanding the investigation.
+Do not substitute TODOs, placeholders, weakened types or assertions, skipped checks, suppressed failures, compatibility debris, or unrecorded follow-ups for completed work. Report observed checks and material gaps. Protect secrets across source, bundles, logs, errors, fixtures, telemetry, serialization, and command traces; preserve unrelated work. Record or reconcile concrete authorized out-of-scope findings through the project route, then resume the assignment without expanding investigation.
