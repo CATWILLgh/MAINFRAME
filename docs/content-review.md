@@ -113,15 +113,34 @@ PYTHONPATH=tests python3 -B -m unittest test_delivery_parity test_hook_context t
 git diff --check
 ```
 
-The full quality suite is not green in this local environment: 39 failing
-subcases also reproduce on the unchanged baseline with missing analyzer
-dependencies. Focused in-process checks pass. Fallow's real-analyzer creation
-case and the prepared analyzer suite remain CI checks. The existing CI installs
-those tools and discovers the new tests; hosted CI for these commits was not run.
+The complete quality owner now passes locally: **81 tests, zero failures** in
+7.893 seconds with the pinned analyzers prepared in a task-owned temporary home.
+No assertions, expected findings, or test membership were changed. The earlier
+39 failures were prerequisite failures, broken down as follows:
+
+| Cause | Failed subcases |
+| --- | ---: |
+| Squawk absent | 29 |
+| yamllint absent | 4 |
+| actionlint absent | 1 |
+| KubeLinter absent | 1 |
+| ShellCheck absent | 1 |
+| Semgrep CA-store startup failure | 3 |
+
+Semgrep's existing trusted CA bundle was passed through process-scoped
+`SSL_CERT_FILE`; TLS verification remained enabled. The contributor
+[setup/preflight route](../CONTRIBUTING.md#run-the-quality-analyzer-contracts)
+now distinguishes unavailable prerequisites from failed behavior assertions.
+The complete shell route was checked with missing analyzers, missing SDK tools,
+and a reused prepared home; refusals occurred before assertions and the prepared
+route passed all 81 tests.
+Fallow's real-analyzer creation case and the other analyzer suites remain
+separate checks. Hosted CI for these commits was not run.
 
 The Python skill validator lacked PyYAML. Existing Ruby safely parsed the four
 changed entrypoint frontmatters and checked name/description constraints;
 repository links/inventory and complete Codex/ZCode delivery parity passed.
-No new dependencies, product-native acceptance probes, global installation,
-publication or live-system actions were used. Source and synthetic checks do not establish
-native activation or equal task performance across models.
+Test dependencies were prepared only in the isolated test home; no global
+installation, product-native acceptance probes, publication or live-system
+actions were performed. Source and synthetic checks do not establish native
+activation or equal task performance across models.

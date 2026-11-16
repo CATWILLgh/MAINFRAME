@@ -521,6 +521,10 @@ runtime paths. Use the shared runtime's
 [compatibility and provisioning policy](../docs/installation/components/hooks.md#runtime-support).
 A missing, timed-out, malformed, or failed scanner must leave the action and
 completion unblocked and emit only its deduplicated unavailable-check advisory.
+For full quality contract tests, use the contributor
+[analyzer preparation and preflight route](../CONTRIBUTING.md#run-the-quality-analyzer-contracts).
+Keep missing prerequisites distinct from detector regressions; the focused
+in-process route does not require installing analyzers.
 
 ## Adapt `mainframe-fallow-quality`
 

@@ -190,6 +190,60 @@ separate adapter tests on the requested surface. These are development and
 acceptance checks; an ordinary installation follows the bounded product
 procedure without replaying this development suite or starting model probes.
 
+### Run the quality analyzer contracts
+
+`hooks/tests/test_code_quality.py` combines in-process lifecycle checks with
+real analyzer/parser contracts. An unavailable scanner is not a clean result;
+do not replace expected findings with unavailable advice or skip these cases.
+Focused in-process cases remain selectable without installation, for example
+`python3 -B -m unittest discover -s hooks/tests -p test_code_quality.py -k mixed_advice`.
+
+For the complete file, run from the repository root with a task-owned runtime
+home. This explicit setup reuses compatible tools or prepares the pinned
+releases through the maintained installer, without changing global hooks.
+Reuse the same home on subsequent runs. Remove `--prepare` for a read-only
+prerequisite check followed by tests: missing/incompatible tools then stop the
+command once, before test assertions, with the missing managed analyzer names.
+The file also requires installed `gofmt` and a resolvable `rustfmt`; the block
+checks their availability using the hook's resolver without installing SDKs.
+Their parser behavior is verified by the tests.
+
+```sh
+export MAINFRAME_TEST_HOME="${MAINFRAME_TEST_HOME:-$(mktemp -d "${TMPDIR:-/tmp}/mainframe-quality.XXXXXX")}"
+python3 -B - --prepare <<'PY'
+import importlib.util, os, shutil, subprocess, sys
+from pathlib import Path
+from installer.runtime import ensure, status
+
+spec = importlib.util.spec_from_file_location("quality", "hooks/mainframe-code-quality.py")
+quality = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(quality)
+sdk_tools = {"gofmt": shutil.which("gofmt"), "rustfmt": quality._rustfmt_executable()}
+missing_sdks = [name for name, executable in sdk_tools.items() if not executable]
+if missing_sdks:
+    raise SystemExit("Installed SDK tools required: " + ", ".join(missing_sdks))
+required = ("ruff", "oxlint", "semgrep", "yamllint", "shellcheck",
+            "actionlint", "kube-linter", "squawk")
+test_home = Path(os.environ["MAINFRAME_TEST_HOME"])
+ready = (ensure if "--prepare" in sys.argv else status)(test_home, required)
+if not ready["ready"]:
+    raise SystemExit("Analyzer setup required (--prepare): " + ", ".join(ready["missing"]))
+environment = {**os.environ, "PATH": ready["bin"] + os.pathsep + os.environ.get("PATH", "")}
+raise SystemExit(subprocess.run(
+    [sys.executable, "-B", "-m", "unittest", "discover", "-s", "hooks/tests",
+     "-p", "test_code_quality.py"], env=environment, check=False,
+).returncode)
+PY
+```
+
+On the tested macOS environment, Semgrep 1.164.0 failed at startup with
+`ca-certs: empty trust anchors`, even for `--version`. Setting
+`SSL_CERT_FILE=/etc/ssl/cert.pem` for the setup/test process restored startup
+and the real scans using the existing trusted PEM bundle. Use this only for
+that observed CA failure with a verified existing bundle; keep certificate
+verification enabled. The [upstream startup issue](https://github.com/semgrep/semgrep/issues/11525)
+also distinguishes this initialization failure from findings in local rules.
+
 ### Evaluate a change in agent behavior
 
 Use a few sanitized cases when a recurring issue depends on judgment rather
