@@ -9,6 +9,9 @@ node <skill-path>/scripts/recon.mjs <package-root>
 Pass the package root explicitly. The helper does not search the repository for a package, execute package scripts, inspect environment variables, read secret files, access the network, or write files. It reads a bounded set of package metadata and walks only ancestor directories needed to locate the nearest repository boundary and package-manager lockfile.
 
 Treat its JSON as routing evidence. Dependency values are declared package specifiers, not proof of installed resolution or active use. Direct compiler options may be inherited or overridden. Directory presence is not proof that a router or entrypoint is active.
+Manifest reads are limited to 1 MiB. Treat `metadata_omissions` and
+`tsconfig_error` as unavailable evidence, not absent features. Compiler-option
+strings are declarations, not compiler validation.
 
 Confirm relevant findings through the lockfile, installed-package metadata, imports, entrypoints, registration, extended TypeScript configuration, workspace configuration, and affected code.
 
