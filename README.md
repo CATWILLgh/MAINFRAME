@@ -23,9 +23,9 @@ the requested surface.
 
 | Product | Full delivery mapping | Other maintained paths |
 | --- | --- | --- |
-| [Codex Desktop](docs/installation/codex-installer.md) | Engine `0.165.0-alpha.1.2` | `0.166.0-alpha.5.1` and `0.167.0-alpha.3.2` support skill-only updates of an existing installation. |
+| [Codex Desktop](docs/installation/codex-installer.md) | Engine `0.167.0-alpha.4.1` | `0.166.0-alpha.5.1` and `0.167.0-alpha.3.2` support skill-only updates of an existing installation. |
 | [Codex CLI](docs/installation/codex-installer.md) | Engine `0.153.4` | Read-only native discovery is available on the inspected CLI. |
-| [ZCode Desktop](docs/installation/zcode-installer.md) | Build `3.17.1.9553` | Build `3.17.2.9661` supports skill-only updates of an existing installation. |
+| [ZCode Desktop](docs/installation/zcode-installer.md) | Build `3.18.0.10300` | Build `3.17.2.9661` supports skill-only updates of an existing installation. |
 
 Some hooks have narrower native bindings. Codex retains partial shell guards
 where the host omits the actual tool working directory, and both adapters
@@ -61,14 +61,14 @@ paths need Node.js and npm. [Shared runtime and provisioning](docs/installation/
 
 ## What MAINFRAME delivers
 
-The [inventory](ADAPTATION.example.json) lists 54 MAINFRAME components and
+The [inventory](ADAPTATION.example.json) lists 55 MAINFRAME components and
 four DSH packages. Each global adapter delivers the MAINFRAME components its
 native mapping supports.
 
 | Canonical source | Native result |
 | --- | --- |
 | [Global instruction](instructions/global.md) | One owned section of the product's user-level instructions |
-| [26 skills](skills/) | Global skill packages with their approved references, scripts, and assets |
+| [27 skills](skills/) | Global skill packages with their approved references, scripts, and assets |
 | [7 roles](agents/) | Native agent or subagent profiles |
 | [9 commands](commands/) | Explicit workflows projected into the product's command mechanism |
 | [10 hooks](hooks/) | Canonical detectors bound to supported native events |
