@@ -362,24 +362,46 @@ def _run(command: list[str], *, timeout: int, env: dict[str, str] | None = None,
         raise Conflict("MAINFRAME runtime dependency installation failed; no hook files were changed.")
 
 
-def _safe_rebuild(path: Path, root: Path) -> None:
+def _runtime_directory(path: Path, root: Path) -> None:
+    if root not in path.parents:
+        raise Conflict("Refusing to replace an unowned runtime dependency path.")
+    for candidate in (path, *path.parents):
+        if candidate.is_symlink():
+            raise Conflict(f"Refusing to change a symlink or its child: {path}")
+        if candidate.exists() and not candidate.is_dir():
+            raise Conflict(f"Expected a runtime dependency directory: {candidate}")
+
+
+def _new_generation(root: Path, ecosystem: str) -> Path:
+    parent = root / "packages" / ecosystem
+    _runtime_directory(parent, root)
+    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return Path(tempfile.mkdtemp(prefix=f"mainframe-{ecosystem}-", dir=parent))
+
+
+def _discard_generation(path: Path, root: Path) -> None:
+    _runtime_directory(path, root)
     if path.exists():
-        if path.is_symlink() or root not in path.parents:
-            raise Conflict("Refusing to replace an unowned runtime dependency path.")
         shutil.rmtree(path)
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
 def _managed_python(root: Path, names: list[str]) -> dict[str, Path]:
-    target = root / "packages/python"
-    _safe_rebuild(target, root)
-    _run([sys.executable, "-m", "venv", str(target)], timeout=120)
+    target = _new_generation(root, "python")
     python = target / "bin/python"
     packages = [f"{TOOL_SPECS[name][1]}=={TOOL_SPECS[name][2]}" for name in names]
     environment = {**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1", "PIP_NO_INPUT": "1"}
-    _run([str(python), "-m", "pip", "install", "--no-input", "--no-cache-dir", *packages],
-         timeout=900, env=environment)
-    return {name: (target / "bin" / name).resolve() for name in names}
+    try:
+        _run([sys.executable, "-m", "venv", str(target)], timeout=120)
+        _run([str(python), "-m", "pip", "install", "--no-input", "--no-cache-dir", *packages],
+             timeout=900, env=environment)
+        executables = {name: (target / "bin" / name).resolve() for name in names}
+        for name, executable in executables.items():
+            if _analyzer_release(name, executable) != TOOL_SPECS[name][2]:
+                raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+        return executables
+    except BaseException:
+        _discard_generation(target, root)
+        raise
 
 
 def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
@@ -391,11 +413,7 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
         version = _version(Path(node), exact=True) if node else None
         if version is None or _parts(version) < (22, 0, 0):
             raise Conflict("Modern Web Guidance requires Node.js 22 or later before runtime preparation.")
-    parent = root / "packages/node"
-    if parent.is_symlink():
-        raise Conflict("Refusing to replace an unowned runtime dependency path.")
-    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    target = Path(tempfile.mkdtemp(prefix="mainframe-node-", dir=parent))
+    target = _new_generation(root, "node")
     packages = [f"{TOOL_SPECS[name][1]}@{TOOL_SPECS[name][2]}" for name in names]
     if "modern-web-guidance" in names:
         packages.append(f"svelte@{WEB_COMPILER_VERSION}")
@@ -411,26 +429,39 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
                 raise Conflict("The prepared Svelte parser failed its version probe.")
         return executables
     except BaseException:
-        shutil.rmtree(target)
+        _discard_generation(target, root)
         raise
 
 
-def _cleanup_node_generations(root: Path, previous: dict, rows: dict) -> None:
-    parent = root / "packages/node"
-    if not parent.is_dir() or parent.is_symlink():
-        return
+def _cleanup_generations(root: Path, previous: dict, rows: dict, ecosystem: str) -> None:
+    parent = root / "packages" / ecosystem
     active = [Path(row["executable"]) for row in rows.values()
               if isinstance(row, dict) and isinstance(row.get("executable"), str)]
     prior = [Path(row["executable"]) for row in previous.values()
              if isinstance(row, dict) and isinstance(row.get("executable"), str)]
+    if not any(path.is_relative_to(parent) for path in prior):
+        return
+    _runtime_directory(parent, root)
+    if not parent.is_dir():
+        return
     for candidate in parent.iterdir():
-        if candidate.name == "node_modules" and not any(path.is_relative_to(candidate) for path in prior):
+        if not any(path.is_relative_to(candidate) for path in prior):
             continue
-        if candidate.name != "node_modules" and not re.fullmatch(r"mainframe-node-[a-z0-9_]{8}", candidate.name):
+        legacy_node = ecosystem == "node" and candidate.name == "node_modules"
+        if not legacy_node and not re.fullmatch(rf"mainframe-{ecosystem}-[a-z0-9_]{{8}}", candidate.name):
             continue
         if candidate.is_symlink() or not candidate.is_dir() or any(path.is_relative_to(candidate) for path in active):
             continue
-        shutil.rmtree(candidate)
+        _discard_generation(candidate, root)
+
+
+def _cleanup_node_generations(root: Path, previous: dict, rows: dict) -> None:
+    _cleanup_generations(root, previous, rows, "node")
+
+
+def _cleanup_python_generations(root: Path, previous: dict, rows: dict) -> None:
+    # Legacy venv contents have no whole-directory receipt; preserve them.
+    _cleanup_generations(root, previous, rows, "python")
 
 
 def _recorded_path(row: dict, key: str) -> Path | None:
@@ -667,15 +698,23 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
     if missing["node"] and not shutil.which("npm"):
         raise Conflict("npm is required to install active MAINFRAME Node.js analyzers; no hook files were changed.")
     provisioned = {name: _managed_release(root, name) for name in missing["release"]}
-    if missing["python"]:
-        provisioned.update(_managed_python(root, missing["python"]))
-    if missing["node"]:
-        provisioned.update(_managed_node(root, missing["node"]))
-    for name, executable in provisioned.items():
-        version = _analyzer_release(name, executable)
-        if version != TOOL_SPECS[name][2]:
-            raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
-        candidates[name] = executable, version
+    staged = {}
+    try:
+        if missing["python"]:
+            staged.update(_managed_python(root, missing["python"]))
+        if missing["node"]:
+            staged.update(_managed_node(root, missing["node"]))
+        provisioned.update(staged)
+        for name, executable in provisioned.items():
+            version = _analyzer_release(name, executable)
+            if version != TOOL_SPECS[name][2]:
+                raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+            candidates[name] = executable, version
+    except BaseException:
+        abandoned = {name: {"executable": str(path)} for name, path in staged.items()}
+        _cleanup_python_generations(root, abandoned, {})
+        _cleanup_node_generations(root, abandoned, {})
+        raise
     rows = dict(existing)
     for name in wanted:
         if name not in candidates:
@@ -685,4 +724,5 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
         atomic_write(shim, _analyzer_shim(name, executable), 0o755)
         rows[name] = {"version": version, "executable": str(executable)}
     atomic_write(root / "installation.json", encode_json({**manifest, "schema": 1, "tools": rows}), 0o600)
+    _cleanup_python_generations(root, existing, rows)
     _cleanup_node_generations(root, existing, rows)

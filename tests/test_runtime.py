@@ -294,6 +294,219 @@ esac
         self.assertTrue(result["ready"])
         self.assertEqual(installed, ["ruff", "semgrep"])
 
+    def python_packages(self, command, **options):
+        if command[1:3] == ["-m", "venv"]:
+            target = Path(command[-1]) / "bin"
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "python").write_text("synthetic venv interpreter\n")
+            return
+        self.assertEqual(command[1:4], ["-m", "pip", "install"])
+        target = Path(command[0]).parent
+        for argument in command[4:]:
+            if "==" not in argument:
+                continue
+            name, version = argument.split("==")
+            executable = target / name
+            executable.write_text(f"#!/bin/sh\nprintf '{name} {version}\\n'\n")
+            executable.chmod(0o755)
+
+    def legacy_python_binding(self):
+        root = runtime.runtime_root(self.home)
+        executable = root / "packages/python/bin/ruff"
+        executable.parent.mkdir(parents=True)
+        executable.write_bytes(self.tool("ruff", runtime.TOOL_SPECS["ruff"][2]).read_bytes())
+        executable.chmod(0o755)
+        (self.external / "ruff").unlink()
+        shim = runtime.runtime_bin(self.home) / "ruff"
+        shim.parent.mkdir()
+        shim.write_bytes(runtime._analyzer_shim("ruff", executable))
+        shim.chmod(0o755)
+        (root / "installation.json").write_text(json.dumps({
+            "schema": 1, "tools": {"ruff": {
+                "version": runtime.TOOL_SPECS["ruff"][2], "executable": str(executable),
+            }},
+        }))
+        return executable
+
+    def test_failed_python_preparation_preserves_active_legacy_binding_and_foreign_files(self):
+        old = self.legacy_python_binding()
+        root = runtime.runtime_root(self.home)
+        note = old.parent / "unregistered-note"
+        note.write_text("preserve legacy user data")
+        manifest = root / "installation.json"
+        shim = runtime.runtime_bin(self.home) / "ruff"
+        before = manifest.read_bytes(), shim.read_bytes(), old.read_bytes()
+
+        def install(command, **options):
+            if command[1:3] == ["-m", "venv"]:
+                return self.python_packages(command, **options)
+            raise Conflict("synthetic pip failure")
+
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.external)}),
+            mock.patch.object(runtime, "_run", side_effect=install),
+            self.assertRaisesRegex(Conflict, "synthetic pip failure"),
+        ):
+            runtime.ensure(self.home, ("semgrep",))
+        self.assertTrue(old.is_file(), "pip failure destroyed the active environment")
+        self.assertEqual((manifest.read_bytes(), shim.read_bytes(), old.read_bytes()), before)
+        self.assertEqual(note.read_text(), "preserve legacy user data")
+        self.assertTrue(runtime.status(self.home, ("ruff",))["ready"])
+        self.assertEqual(list((root / "packages/python").glob("mainframe-python-*")), [])
+
+    def test_python_activation_migrates_legacy_without_erasing_unregistered_contents(self):
+        old = self.legacy_python_binding()
+        root = runtime.runtime_root(self.home)
+        note = old.parent / "user-note"
+        note.write_text("preserve")
+        installed = []
+
+        def install(command, **options):
+            self.assertTrue(old.is_file(), "legacy tools must work until activation")
+            self.assertEqual(note.read_text(), "preserve")
+            installed.extend(argument for argument in command if "==" in argument)
+            return self.python_packages(command, **options)
+
+        with mock.patch.dict(os.environ, {"PATH": str(self.external)}), mock.patch.object(runtime, "_run", side_effect=install) as run:
+            self.assertTrue(runtime.ensure(self.home, ("semgrep",))["ready"])
+            self.assertTrue(runtime.ensure(self.home, ("ruff", "semgrep"))["ready"])
+            self.assertEqual(run.call_count, 2, "a converged environment must not reinstall")
+        self.assertEqual(installed, ["ruff==0.15.15", "semgrep==1.164.0"])
+        rows = json.loads((root / "installation.json").read_text())["tools"]
+        for name in ("ruff", "semgrep"):
+            self.assertIn("mainframe-python-", rows[name]["executable"])
+            self.assertTrue(Path(rows[name]["executable"]).is_file())
+        self.assertTrue(old.is_file(), "legacy ownership does not cover every directory entry")
+        self.assertEqual(note.read_text(), "preserve")
+
+    def test_python_repair_cleans_only_superseded_recorded_generations_after_activation(self):
+        root = runtime.runtime_root(self.home)
+        with mock.patch.dict(os.environ, {"PATH": str(self.external)}), mock.patch.object(runtime, "_run", side_effect=self.python_packages):
+            runtime.ensure(self.home, ("ruff",))
+        manifest = root / "installation.json"
+        old = Path(json.loads(manifest.read_text())["tools"]["ruff"]["executable"])
+        generation = old.parent.parent
+        foreign = root / "packages/python/mainframe-python-foreign1/user-note"
+        foreign.parent.mkdir(parents=True)
+        foreign.write_text("preserve unregistered generation")
+        manifest_before = manifest.read_bytes()
+        shim = runtime.runtime_bin(self.home) / "ruff"
+        shim_before = shim.read_bytes()
+
+        def install(command, **options):
+            self.assertTrue(old.is_file())
+            self.assertEqual(manifest.read_bytes(), manifest_before)
+            self.assertEqual(shim.read_bytes(), shim_before)
+            return self.python_packages(command, **options)
+
+        with mock.patch.dict(os.environ, {"PATH": str(self.external)}), mock.patch.object(runtime, "_run", side_effect=install):
+            runtime.ensure(self.home, ("yamllint",))
+        self.assertFalse(generation.exists(), "the superseded recorded generation was retained")
+        self.assertEqual(foreign.read_text(), "preserve unregistered generation")
+        self.assertTrue(runtime.status(self.home, ("ruff", "yamllint"))["ready"])
+        self.assertEqual(len(list((root / "packages/python").glob("mainframe-python-*"))), 2)
+
+    def test_later_ecosystem_preparation_failure_discards_only_new_python_generation(self):
+        with mock.patch.dict(os.environ, {"PATH": str(self.external)}), mock.patch.object(runtime, "_run", side_effect=self.python_packages):
+            runtime.ensure(self.home, ("ruff",))
+        root = runtime.runtime_root(self.home)
+        manifest = root / "installation.json"
+        shim = runtime.runtime_bin(self.home) / "ruff"
+        before = manifest.read_bytes(), shim.read_bytes()
+        generation = Path(json.loads(manifest.read_text())["tools"]["ruff"]["executable"]).parent.parent
+        self.tool("npm", "10.0.0")
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.external)}),
+            mock.patch.object(runtime, "_run", side_effect=self.python_packages),
+            mock.patch.object(runtime, "_managed_node", side_effect=Conflict("synthetic npm failure")),
+            self.assertRaisesRegex(Conflict, "synthetic npm failure"),
+        ):
+            runtime.ensure(self.home, ("semgrep", "oxlint"))
+        self.assertEqual((manifest.read_bytes(), shim.read_bytes()), before)
+        self.assertEqual(list((root / "packages/python").glob("mainframe-python-*")), [generation])
+        self.assertTrue(runtime.status(self.home, ("ruff",))["ready"])
+
+    def test_python_version_probe_failure_discards_staged_generation(self):
+        old = self.legacy_python_binding()
+        root = runtime.runtime_root(self.home)
+        manifest = root / "installation.json"
+        before = manifest.read_bytes()
+
+        def install(command, **options):
+            self.python_packages(command, **options)
+            if command[1:4] == ["-m", "pip", "install"]:
+                (Path(command[0]).parent / "semgrep").write_text("#!/bin/sh\nprintf 'semgrep 1.0.0\\n'\n")
+
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.external)}),
+            mock.patch.object(runtime, "_run", side_effect=install),
+            self.assertRaisesRegex(Conflict, "failed its version probe"),
+        ):
+            runtime.ensure(self.home, ("semgrep",))
+        self.assertEqual(manifest.read_bytes(), before)
+        self.assertTrue(old.is_file())
+        self.assertTrue(runtime.status(self.home, ("ruff",))["ready"])
+        self.assertEqual(list((root / "packages/python").glob("mainframe-python-*")), [])
+
+    def test_package_preparation_rejects_symlinked_ancestors_and_ecosystem_directories(self):
+        for ecosystem in ("python", "node"):
+            for linked in ("packages", f"packages/{ecosystem}"):
+                with self.subTest(ecosystem=ecosystem, linked=linked):
+                    root = self.root / ecosystem / linked.replace("/", "-")
+                    outside = self.root / "foreign" / ecosystem / linked.replace("/", "-")
+                    outside.mkdir(parents=True)
+                    marker = outside / "user-note"
+                    marker.write_text("preserve")
+                    link = root / linked
+                    link.parent.mkdir(parents=True)
+                    link.symlink_to(outside, target_is_directory=True)
+                    prepare = runtime._managed_python if ecosystem == "python" else runtime._managed_node
+                    name = "ruff" if ecosystem == "python" else "oxlint"
+                    with (
+                        mock.patch.object(runtime.shutil, "which", return_value="/synthetic/npm"),
+                        mock.patch.object(runtime, "_run", side_effect=AssertionError("followed a symlink")) as run,
+                        self.assertRaises(Conflict),
+                    ):
+                        prepare(root, [name])
+                    run.assert_not_called()
+                    self.assertEqual(marker.read_text(), "preserve")
+                    self.assertEqual(list(outside.iterdir()), [marker])
+
+    def test_generation_cleanup_refuses_symlinked_parent_and_preserves_child_links(self):
+        root = runtime.runtime_root(self.home)
+        outside = self.root / "foreign-packages"
+        candidate = outside / "node/mainframe-node-foreign1"
+        candidate.mkdir(parents=True)
+        marker = candidate / "user-note"
+        marker.write_text("preserve")
+        packages = root / "packages"
+        packages.parent.mkdir(parents=True)
+        packages.symlink_to(outside, target_is_directory=True)
+        previous = {"oxlint": {"executable": str(packages / "node" / candidate.name / "oxlint")}}
+        with self.assertRaisesRegex(Conflict, "symlink"):
+            runtime._cleanup_node_generations(root, previous, {})
+        self.assertEqual(marker.read_text(), "preserve")
+        packages.unlink()
+        parent = packages / "node"
+        parent.mkdir(parents=True)
+        link = parent / "mainframe-node-foreign1"
+        link.symlink_to(candidate, target_is_directory=True)
+        runtime._cleanup_node_generations(root, {"oxlint": {"executable": str(link / "oxlint")}}, {})
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(marker.read_text(), "preserve")
+
+    def test_cleanup_leaves_unregistered_symlinked_ecosystems_untouched(self):
+        self.tool("ruff", runtime.TOOL_SPECS["ruff"][2])
+        root = runtime.runtime_root(self.home)
+        node = root / "packages/node"
+        node.parent.mkdir(parents=True)
+        node.symlink_to(self.external, target_is_directory=True)
+        with mock.patch.dict(os.environ, {"PATH": str(self.external)}), mock.patch.object(runtime, "_run") as install:
+            self.assertTrue(runtime.ensure(self.home, ("ruff",))["ready"])
+        install.assert_not_called()
+        self.assertTrue(node.is_symlink())
+        self.assertTrue((self.external / "ruff").is_file())
+
     def test_semgrep_version_probe_preserves_user_logs_settings_and_credentials(self):
         user_log = self.root / "user-semgrep.log"
         user_settings = self.root / "user-settings.yml"

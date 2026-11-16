@@ -198,6 +198,28 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
                     self.assertEqual([hook["enabled"] for hook in actual], list(toggles))
                 self.assertEqual(self.adapter.plan()[0], [])
 
+    def test_full_apply_does_not_activate_hooks_when_runtime_preparation_fails(self):
+        specification = importlib.util.spec_from_file_location("mainframe_zcode_failed_runtime", self.root / "install.py")
+        entrypoint = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(entrypoint)
+        foreign = self.home / "foreign-native-state"
+        foreign.write_bytes(b"preserve user state")
+        before = {path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}
+        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", CURRENT]
+        required = CODE_QUALITY_TOOLS + FALLOW_TOOLS + ("openspec",)
+        with (patch.object(Path, "cwd", return_value=self.root),
+              patch.object(entrypoint, "ensure_runtime", side_effect=Conflict("fixture runtime unavailable")) as ensure,
+              patch("sys.stdout", new_callable=io.StringIO)):
+            with self.assertRaisesRegex(Conflict, "fixture runtime unavailable"):
+                entrypoint.main(["zcode", "apply", *options])
+            ensure.assert_called_once_with(self.home, required)
+        # Preserve the lock inode used for mutual exclusion.
+        self.assertEqual(before, {path: path.read_bytes() for path in self.home.rglob("*")
+                                  if path.is_file() and path != self.adapter.lock_path})
+        self.assertFalse(self.adapter.receipt_path.exists())
+        self.assertFalse(self.adapter.state_path.exists())
+        self.assertFalse(self.adapter.index.exists())
+
     def test_entrypoint_full_routes_require_fallow_and_enable_infers_receipted_binding(self):
         specification = importlib.util.spec_from_file_location("mainframe_zcode_current_entrypoint", self.root / "install.py")
         entrypoint = importlib.util.module_from_spec(specification)

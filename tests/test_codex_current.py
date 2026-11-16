@@ -221,6 +221,28 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
             ensure.assert_not_called()
             status.assert_not_called()
 
+    def test_full_apply_does_not_activate_hooks_when_runtime_preparation_fails(self):
+        specification = importlib.util.spec_from_file_location("mainframe_failed_runtime", self.source / "install.py")
+        entrypoint = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(entrypoint)
+        foreign = self.home / "foreign-native-state"
+        foreign.write_bytes(b"preserve user state")
+        before = {path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}
+        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION]
+        required = codex.CODE_QUALITY_TOOLS + ("fallow", "openspec")
+        with (patch.object(Path, "cwd", return_value=self.source),
+              patch.object(entrypoint, "ensure_runtime", side_effect=Conflict("fixture runtime unavailable")) as ensure,
+              patch("sys.stdout", new_callable=io.StringIO)):
+            with self.assertRaisesRegex(Conflict, "fixture runtime unavailable"):
+                entrypoint.main(["codex", "apply", *options, "--instructions-reviewed"])
+            ensure.assert_called_once_with(self.home, required)
+        # Preserve the lock inode used for mutual exclusion.
+        self.assertEqual(before, {path: path.read_bytes() for path in self.home.rglob("*")
+                                  if path.is_file() and path != self.adapter.lock_path})
+        self.assertFalse(self.adapter.receipt_path.exists())
+        self.assertFalse(self.adapter.state_path.exists())
+        self.assertFalse(self.adapter.index.exists())
+
     def test_scoped_openspec_checks_and_provisions_only_its_cli(self):
         self.apply()
         specification = importlib.util.spec_from_file_location("mainframe_openspec_entrypoint", self.source / "install.py")

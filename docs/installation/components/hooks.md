@@ -163,9 +163,12 @@ pass the own-rule samples, including Svelte and multiple resource attribution.
 Prepare dependencies during delivery, before changing hook files or registrations.
 Keep the official package's license and third-party notices intact; see
 [provenance](../../../THIRD_PARTY_NOTICES.md).
-Node.js package preparation preserves the active analyzers until the new
-generation is ready. Remove unused owned generations after activation and a
-failed generation on preparation failure. Semgrep version probes use temporary
+Python and Node.js package preparation preserves active analyzers until a
+separate generation is ready. After activation remove only superseded
+generations proven by the previous runtime receipt; remove newly staged
+generations on preparation failure. Reject ancestor symlinks before package
+creation or cleanup. Preserve unregistered directories and legacy Python files
+whose complete ownership is unknown. Semgrep version probes use temporary
 log/settings paths without the user's application token.
 
 The Go, Dart, and Rust syntax checks use existing SDK executables. Rust also
