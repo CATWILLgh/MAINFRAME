@@ -12,11 +12,18 @@ Start with the observable guarantee and choose the smallest boundary that can fa
 | Components and contracts | Actual handler/module behavior, serialization, error mapping and collaborator protocols | In-process component tests; consumer/provider contract checks at their real boundary. A fake alone does not establish provider compatibility |
 | Real integrations | Database constraints, transactions, migrations, queue delivery and external-service semantics | Correct-engine tests: isolated verified local PostgreSQL where appropriate; other service-backed checks in CI by default |
 | Critical journeys | Essential user or system outcomes across the assembled application | A small selected set of end-to-end checks in CI; passing component tests do not establish the assembled journey |
-| Specialized risks | Relevant concurrency, performance, security, recovery, upgrade or compatibility guarantees | Focused evidence at the affected boundary; expensive environments and campaigns in CI. Cheap concurrency or security checks can still be local |
+| Performance and database cost | Critical-path latency, useful throughput, progress under contention, and bounded resource use | Fast causal regressions and correct-engine contention checks. Use controlled benchmark or CI budgets when elapsed time or capacity is the guarantee |
+| Specialized risks | Relevant security, recovery, upgrade or compatibility guarantees | Focused evidence at the affected boundary, with expensive environments and campaigns in CI |
 
 Specialized risks apply across the other levels; they are not a final optional bucket or automatically a costly suite. Do not defer required security, migration or recovery evidence to an optional scheduled job. A library need not have a browser journey, and a service without a database need not set up PostgreSQL. An infrastructure or documentation repository still needs the relevant contract, configuration or artifact checks, not invented business logic.
 
 Use [local boundaries](local.md) for infrastructure authority and [the CI contract](ci.md) for required events, result interpretation and cost. Test-level names vary between frameworks; judge the exercised boundary rather than renaming the project's established suites.
+
+## Protect performance and progress
+
+Use [performance and database checks](performance.md) for changes to critical
+paths, shared capacity, and data access. Keep the workload, acceptance
+condition, and executable check in the existing project verification map.
 
 ## Keep one project verification map
 

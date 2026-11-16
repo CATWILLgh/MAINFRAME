@@ -1,6 +1,6 @@
 ---
 name: mainframe-secrets
-description: Resolve credential identities, deliver secrets to a process, or administer entries through the MAINFRAME credential index and helper, without exposing values.
+description: Resolve credential names, deliver secrets to processes, or manage entries through the MAINFRAME index and helper. Keep values protected.
 ---
 
 # Credential handling

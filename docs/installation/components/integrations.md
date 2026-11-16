@@ -42,9 +42,10 @@ with `--surface desktop --skill mainframe-openspec` use the same runtime. Run th
 scoped `apply` with any supported Desktop adapter to prepare the CLI. Repeat it
 for the other adapters when their skill copies need updating.
 
-The installer reuses a compatible OpenSpec or installs the pinned official npm
-package into user storage. The npm route requires Node.js 22.12.0 or newer and
-npm. The launcher at `~/.local/share/mainframe/runtime/bin/openspec` works with
+The installer reuses OpenSpec at the tested minimum or a newer stable version
+that passes a local `list --json` check. Otherwise it installs the tested
+official npm package into user storage. The npm route requires Node.js 22.12.0
+or newer and npm. The launcher at `~/.local/share/mainframe/runtime/bin/openspec` works with
 the shell path inherited by Desktop applications. It opts out of telemetry and
 update checks. Use MAINFRAME to update the managed CLI. Each project still owns
 its OpenSpec artifacts and can select its own approved executable.

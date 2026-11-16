@@ -1,6 +1,6 @@
 ---
 name: mainframe-ops-app-server-safety
-description: Start, restart, or stop local application servers, managed services, or Compose stacks while identifying processes, ports, and ownership. Not one-shot commands.
+description: Start, stop, or restart local app servers, managed services, or Compose. Identify process, port, and owner. Excludes one-shot commands.
 ---
 
 # Local application server safety

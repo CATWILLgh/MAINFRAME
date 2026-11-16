@@ -13,6 +13,17 @@ Keep the default local loop short, deterministic and independent of external ava
 
 Broad suites, images, service stacks, real brokers, Redis, ClickHouse, Kubernetes, browsers requiring a full application stack, compatibility matrices and performance campaigns belong in CI by default. Do not install or launch them locally because a convenient test harness can. An explicit caller/project assignment can authorize a specific local exception; mere service availability or a generic development task is insufficient.
 
+## Contain a known runaway test
+
+Start with existing failure evidence and static inspection when a test or its
+diagnostics can exhaust the host. In failure messages, compare or render
+bounded scalar facts while preserving the actual assertion. A live DOM,
+request, or error graph can consume resources before an output cap takes
+effect. Before a necessary run, verify an independent bound on elapsed time
+and resources for the process and its children. Use an already authorized
+isolated runner when the local boundary cannot enforce the needed limits.
+Keep a setup refusal distinct from the product failure the test should show.
+
 ## PostgreSQL is an allowed option, not mandatory setup
 
 Use PostgreSQL locally only when the changed behavior needs PostgreSQL semantics. Reuse an established local instance when available; installing or starting a server remains subject to process and infrastructure authority. Confirm server identity from actual local process/service ownership and connection routing. `localhost`, a port, client executable, container label or SSH tunnel does not establish a local server.

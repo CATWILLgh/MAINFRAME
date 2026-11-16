@@ -190,6 +190,18 @@ class TodoZCodeTests(unittest.TestCase):
         self.assertIn("5000", json.loads(self.run_callback(payload).stdout)["hookSpecificOutput"]["permissionDecisionReason"])
         payload["tool_input"]["content"] = valid
         self.assertEqual(self.run_callback(payload).stdout, b"")
+        empty_edit = {**payload, "tool_name": "Edit", "tool_input": {
+            "file_path": str(note), "old_string": "", "new_string": valid + "x" * 5000}}
+        for before in (None, " \r\n\t", "\u00a0\ufeff\u2028"):
+            with self.subTest(before=before):
+                if before is not None:
+                    note.write_text(before)
+                result = self.run_callback(empty_edit)
+                self.assertTrue(result.stdout)
+                self.assertIn("5000", json.loads(result.stdout)["hookSpecificOutput"]["permissionDecisionReason"])
+        for before in (valid, "\u0085"):
+            note.write_text(before)
+            self.assertEqual(self.run_callback(empty_edit).stdout, b"")
         note.write_text(valid)
         index = docs / "todo"
         template = "# TODO\n\n## Запланировано\n{row}\n\n## На рассмотрении\n\n## Отложено\n\n## Отказались\n"

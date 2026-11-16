@@ -2,6 +2,7 @@
 
 - Preserve the established queue, scheduler, worker, event bus, or realtime transport. Do not add infrastructure for work that can safely remain in the owning process.
 - Establish producer, durability point, consumer, retry policy, ordering, concurrency, acknowledgement, dead-letter or terminal-failure behavior, and observability before changing delivery semantics.
+- Trace what the caller waits for and what the worker owns. Every terminal outcome, including a no-op, must release capacity for the next eligible item. Exercise shared limits under [concurrent workload](../../mainframe-testing/references/strategy.md#protect-performance-and-progress).
 - Assume retries, duplicate messages, delay, reordering, and stale payloads unless the actual transport contract proves otherwise. Make handlers idempotent when duplicate effects can cause harm.
 - Keep payloads minimal, version-tolerant, and free of secrets. Re-read canonical state when stale embedded data could violate current rules.
 - Bound retry and backoff. Distinguish transient from permanent failures and avoid unbounded poison-message loops.

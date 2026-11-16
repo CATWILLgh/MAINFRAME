@@ -15,12 +15,16 @@ native payload parsing and output encoding.
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import contextmanager, nullcontext
 import dataclasses
 import os
 from pathlib import Path
 import re
 import shlex
+import signal
+import stat
 import subprocess
+import time
 
 
 GIT_TIMEOUT_SECONDS = 5
@@ -99,6 +103,26 @@ class InspectionUnavailable(Exception):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
+
+
+@contextmanager
+def _inspection_budget(seconds: float):
+    """Leave time for output before a synchronous native callback expires."""
+    def expired(signum, frame):
+        raise InspectionUnavailable("native_time_budget")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    started = time.monotonic()
+    signal.signal(signal.SIGALRM, expired)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0]:
+            remaining = max(0.000001, previous_timer[0] - (time.monotonic() - started))
+            signal.setitimer(signal.ITIMER_REAL, remaining, previous_timer[1])
 
 
 def _is_placeholder(value: bytes) -> bool:
@@ -581,6 +605,23 @@ def _blob(root: str, spec: str, *, missing_ok: bool = False) -> bytes:
     return data
 
 
+def _regular_file_bytes(path: str | bytes, *, follow_symlinks: bool = True) -> bytes:
+    flags = os.O_RDONLY | os.O_NONBLOCK
+    if not follow_symlinks:
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("not a regular file")
+        if info.st_size > MAX_BLOB_BYTES:
+            raise InspectionUnavailable("blob_too_large")
+        data = handle.read(MAX_BLOB_BYTES + 1)
+    if len(data) > MAX_BLOB_BYTES:
+        raise InspectionUnavailable("blob_too_large")
+    return data
+
+
 def _working_tree_bytes(root: str, path: str) -> bytes:
     relative = Path(path)
     if relative.is_absolute() or ".." in relative.parts:
@@ -592,14 +633,7 @@ def _working_tree_bytes(root: str, path: str) -> bytes:
             return data if isinstance(data, bytes) else os.fsencode(data)
         if os.path.isdir(target) or not os.path.exists(target):
             return b""
-        size = os.path.getsize(target)
-        if size > MAX_BLOB_BYTES:
-            raise InspectionUnavailable("blob_too_large")
-        with open(target, "rb") as handle:
-            data = handle.read(MAX_BLOB_BYTES + 1)
-        if len(data) > MAX_BLOB_BYTES:
-            raise InspectionUnavailable("blob_too_large")
-        return data
+        return _regular_file_bytes(target, follow_symlinks=False)
     except InspectionUnavailable:
         raise
     except OSError as exc:
@@ -661,13 +695,9 @@ def _scan_metadata(invocation: CommitInvocation) -> list[tuple[str, str, int | N
             raise InspectionUnavailable("dynamic_commit_metadata_file")
         path = value if os.path.isabs(value) else os.path.join(invocation.cwd, value)
         try:
-            size = os.path.getsize(path)
-            if size > MAX_BLOB_BYTES:
-                raise InspectionUnavailable("metadata_file_too_large")
-            with open(path, "rb") as handle:
-                data = handle.read(MAX_BLOB_BYTES + 1)
-        except InspectionUnavailable:
-            raise
+            data = _regular_file_bytes(path)
+        except InspectionUnavailable as exc:
+            raise InspectionUnavailable("metadata_file_too_large") from exc
         except OSError as exc:
             raise InspectionUnavailable("metadata_file_read_failed") from exc
         findings.extend((item.kind, label, item.line) for item in _introduced(b"", data))
@@ -690,12 +720,8 @@ def _scan_context_free_metadata(
         if DYNAMIC_PATH_RE.search(value) or not os.path.isabs(value):
             continue
         try:
-            size = os.path.getsize(value)
-            if size > MAX_BLOB_BYTES:
-                continue
-            with open(value, "rb") as handle:
-                data = handle.read(MAX_BLOB_BYTES + 1)
-        except OSError:
+            data = _regular_file_bytes(value)
+        except (OSError, InspectionUnavailable):
             continue
         findings.extend(
             (item.kind, label, item.line) for item in _introduced(b"", data)
@@ -771,7 +797,7 @@ def _advisory(code: str) -> str:
     )
 
 
-def check_command(command: str, cwd: str) -> CheckResult:
+def check_command(command: str, cwd: str, *, budget_seconds: float | None = None) -> CheckResult:
     """Return a block, an unavailable-check advisory, or a silent result."""
     if not isinstance(command, str) or not isinstance(cwd, str) or not command or not cwd:
         return CheckResult(advisory=_advisory("missing_hook_input"))
@@ -780,10 +806,10 @@ def check_command(command: str, cwd: str) -> CheckResult:
     if GIT_HINT_RE.search(command) is None or COMMIT_HINT_RE.search(command) is None:
         return CheckResult()
     try:
-        invocations = parse_commit_invocations(command, cwd)
         findings: list[tuple[str, str, int | None]] = []
-        for invocation in invocations:
-            findings.extend(_scan_invocation(invocation))
+        with (_inspection_budget(budget_seconds) if budget_seconds is not None else nullcontext()):
+            for invocation in parse_commit_invocations(command, cwd):
+                findings.extend(_scan_invocation(invocation))
     except Exception as exc:
         code = exc.code if isinstance(exc, InspectionUnavailable) else "detector_failure"
         return CheckResult(advisory=_advisory(code))

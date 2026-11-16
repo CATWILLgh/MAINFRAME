@@ -1,7 +1,11 @@
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 SPEC = importlib.util.spec_from_file_location('todo_limits', Path(__file__).resolve().parents[1] / 'mainframe-todo-limits.py')
@@ -38,6 +42,24 @@ class TodoLimitsTests(unittest.TestCase):
         self.assertIsNotNone(guard.check_write(str(self.root), str(self.note), 'Как выше обсудили.'))
         self.assertIsNotNone(guard.check_write(str(self.root), str(self.index), self.index_text(target='todos/missing.md')))
         self.assertIsNotNone(guard.check_write(str(self.root), str(self.index), self.index_text(target='../outside.md')))
+
+    def test_unreadable_note_is_neutral_but_deleted_note_is_missing(self):
+        self.note.write_bytes(b'\xff')
+        self.assertIsNone(guard.check_write(str(self.root), str(self.index), self.index_text()))
+        self.note.write_text(NOTE)
+        patch_text = ('*** Begin Patch\n*** Delete File: .docs/todos/filters.md\n'
+                      '*** Add File: .docs/todo\n' +
+                      ''.join('+' + line + '\n' for line in self.index_text().splitlines()) +
+                      '*** End Patch\n')
+        self.assertIsNotNone(guard.check_patch(str(self.root), patch_text))
+
+    def test_large_replacement_is_rejected_before_materializing(self):
+        class Tracked(str):
+            def replace(self, *args):
+                raise AssertionError('oversized replacement was materialized')
+        with patch.object(guard, '_read', return_value=Tracked('a' * 800_000)):
+            self.assertIsNone(guard.check_edit(str(self.root), str(self.index), 'a', 'x' * 64, True))
+            self.assertIn('5000', guard.check_edit(str(self.root), str(self.note), 'a', 'x' * 64, True))
 
     def test_declined_entry_requires_decision_in_linked_note(self):
         self.assertIsNotNone(guard.check_write(str(self.root), str(self.index), self.index_text(group=3)))
@@ -84,6 +106,28 @@ class TodoLimitsTests(unittest.TestCase):
         self.assertIsNone(guard.check_patch(None, 'not a patch'))
         self.assertEqual(outside.read_text(), 'private synthetic material')
         self.assertEqual(self.note.read_text(), NOTE)
+
+    def test_fifo_index_is_neutral_without_waiting_for_a_writer(self):
+        os.mkfifo(self.index)
+        script = """import importlib.util, sys
+spec = importlib.util.spec_from_file_location('todo', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module.check_edit(sys.argv[2], sys.argv[3], 'old', 'new') is None
+from pathlib import Path
+path = Path(sys.argv[3])
+path.unlink()
+path.write_text('old')
+real_open = module.os.open
+def swap_then_open(name, flags, *args):
+    path.unlink()
+    module.os.mkfifo(path)
+    return real_open(name, flags, *args)
+module.os.open = swap_then_open
+assert module.check_edit(sys.argv[2], sys.argv[3], 'old', 'new') is None
+"""
+        subprocess.run([sys.executable, '-c', script, SPEC.origin, str(self.root), str(self.index)],
+                       check=True, timeout=3)
 
 
 if __name__ == '__main__':

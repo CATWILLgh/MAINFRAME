@@ -1,6 +1,6 @@
 ---
 name: mainframe-research
-description: Resolve dependent, disputed, or consequential external claims through authoritative sources, including compatibility comparisons and conflicting documentation. Not routine single-fact lookups.
+description: Resolve linked, disputed, or high-stakes external claims with current primary sources. Excludes routine lookups and repository exploration.
 ---
 
 # External research

@@ -5,12 +5,15 @@ effective `go.work` above it. Read manifests and existing project instructions
 before running package commands. Inspect only the commands, packages, generated
 owners, configuration, and tests relevant to the behavior.
 
-Use `go env GOMOD GOWORK GOVERSION GOOS GOARCH` from the intended package root
-when the selected module or toolchain is unclear. This reads Go configuration;
-it does not prove the process command, build tags, runtime environment,
-dependency wiring, or deployed binary. Use `go list` only at the bounded package
-scope needed for the task and avoid commands that download or rewrite modules
-unless that effect is in scope.
+When module or toolchain selection is unclear, inspect manifests and existing
+toolchain configuration first. Use process-scoped
+`GOTOOLCHAIN=local go env GOMOD GOWORK GOVERSION GOOS GOARCH` from the package
+root for discovery without automatic toolchain downloads. This observes the
+bundled toolchain, not the normally selected or deployed version, process wiring,
+or build tags. If it cannot handle the project's required version, report the
+mismatch and continue static inspection rather than installing implicitly.
+Keep `go list` bounded and avoid module downloads or rewrites unless authorized.
+See the official [toolchain selection contract](https://go.dev/doc/toolchain#select).
 
 Trace from the actual `cmd/...` entrypoint, service constructor, router or
 worker registration, and process command into the affected package. Locate

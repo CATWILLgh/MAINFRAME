@@ -1,8 +1,8 @@
 # Observability and lifecycle
 
-- Preserve the project's logger, metrics, tracing, error-reporting, and correlation mechanisms unless changing one belongs to the task.
-- Use stable structured events and only fields needed to answer an operational question. Redact credentials, tokens, cookies, secret-bearing URLs, sensitive personal data, and protected payloads.
-- Avoid high-cardinality labels, duplicate reporting of the same failure, and telemetry that changes business behavior or leaks tenant boundaries.
+- Use the shared [logging baseline](../../mainframe-logging/SKILL.md) with the
+  project's logger, tracing and error reporting. Keep metric labels bounded
+  and preserve tenant isolation.
 - Distinguish liveness, readiness, startup completion, and degraded dependency state. A remote dependency outage should not automatically create a liveness restart loop.
 - Give each long-lived resource one owner. On termination, stop accepting new work, bound drain behavior, and close servers, pools, workers, queues, sockets, file handles, and telemetry in the framework's supported order.
 - Preserve request or job correlation across the actual async boundary. Process-local context does not automatically survive queues, schedulers, or external events.

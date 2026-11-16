@@ -98,6 +98,16 @@
         "delivery": "pending",
         "verification": "pending"
       },
+      "mainframe-rust": {
+        "source": "skills/mainframe-rust",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-logging": {
+        "source": "skills/mainframe-logging",
+        "delivery": "pending",
+        "verification": "pending"
+      },
       "mainframe-frontend": {
         "source": "skills/mainframe-frontend",
         "delivery": "pending",
@@ -204,6 +214,11 @@
       },
       "mainframe-project-skill": {
         "source": "commands/mainframe-project-skill.md",
+        "delivery": "pending",
+        "verification": "pending"
+      },
+      "mainframe-review-branch": {
+        "source": "commands/mainframe-review-branch.md",
         "delivery": "pending",
         "verification": "pending"
       },

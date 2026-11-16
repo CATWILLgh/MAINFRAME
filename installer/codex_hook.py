@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import subprocess
 import sys
 import time
@@ -25,44 +26,60 @@ PRE_SHELL_HOOKS = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits", "mainframe-fallow-quality"})
+PRE_EVENT_TRANSPORT = "mainframe-before-shell"
+POST_EDIT_TRANSPORT = "mainframe-post-edit"
+POST_EDIT_HOOKS = ("mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint")
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, PRE_EVENT_TRANSPORT, POST_EDIT_TRANSPORT, *POST_EDIT_HOOKS, "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits"})
 # Exact verified V2 surface; V1 uses different fork controls.
 SUBAGENT_TOOLS = {"collaborationspawn_agent"}
 MAX_INPUT_BYTES = 262_144
-MAX_MESSAGE_CHARS = 6_000
-MAX_OUTPUT_BYTES = 32_768
+MAX_EDIT_INPUT_BYTES = 4 * 1024 * 1024
+MAX_MESSAGE_CHARS = 1_600
+MAX_OUTPUT_BYTES = 8_192
 MAX_EVENTS = 4_096
 EVENT_TTL = 7 * 24 * 60 * 60
+COMMIT_BUDGET_SECONDS = 3.0
 ADAPTER_NAMESPACE = "mainframe-codex-v2"
 PATCH_PATH = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+?)\s*$")
 PATCH_MOVE = re.compile(r"^\*\*\* Move to: (.+?)\s*$")
 FALLOW_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte"}
 FALLOW_MAX_BYTES = 2_000_000
 FALLOW_MAX_PATHS = 64
+FALLOW_PRE_TTL = 15 * 60
 FALLOW_ATTRIBUTION_UNAVAILABLE = "Fallow structural review was unavailable: the addressed TS/JS patch could not be reconstructed unambiguously. Review the changed structure; this advisory does not block the edit or completion."
 
 
-def claim_event(data: dict, state: Path, kind: str = "advisory") -> bool:
-    """Claim one advisory kind for one real native tool event."""
-    scope, operation = _scope(data), data.get("tool_use_id")
-    if not all(
-        isinstance(value, str) and 0 < len(value) <= 512
-        for value in (scope, operation)
-    ) or not isinstance(kind, str) or not kind:
-        return False
+def _event_key(data: dict, kind: str) -> str | None:
+    scope, operation = _scope(data), _identity(data, "tool_use_id")
+    if scope and operation and isinstance(kind, str) and kind:
+        return hashlib.sha256((kind + "\0" + scope + "\0" + operation).encode()).hexdigest()
+    return None
+
+
+def _event_database(state: Path, *, create: bool) -> Path | None:
     if state.is_symlink():
-        return False
-    state.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return None
+    if create:
+        state.mkdir(mode=0o700, parents=True, exist_ok=True)
+    elif not state.is_dir():
+        return None
     if state.stat().st_uid != os.getuid() or state.stat().st_mode & 0o077:
-        return False
+        return None
     database = state / "events.sqlite3"
     if database.is_symlink():
+        return None
+    if create:
+        fd = os.open(database, os.O_CREAT | os.O_WRONLY, 0o600)
+        os.close(fd)
+    return database if database.is_file() else None
+
+
+def claim_event(data: dict, state: Path, kind: str = "advisory", *, ttl: int = EVENT_TTL) -> bool:
+    """Record one kind for one native tool event and report its first delivery."""
+    key = _event_key(data, kind)
+    database = _event_database(state, create=True) if key else None
+    if database is None:
         return False
-    fd = os.open(database, os.O_CREAT | os.O_WRONLY, 0o600)
-    os.close(fd)
-    key = hashlib.sha256(
-        (kind + "\0" + scope + "\0" + operation).encode()
-    ).hexdigest()
     with closing(sqlite3.connect(database, timeout=0.1)) as connection, connection:
         connection.execute(
             "CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, expires REAL)"
@@ -76,13 +93,24 @@ def claim_event(data: dict, state: Path, kind: str = "advisory") -> bool:
             return False
         if connection.execute("SELECT count(*) FROM events").fetchone()[0] >= MAX_EVENTS:
             return False
-        connection.execute("INSERT INTO events VALUES (?, ?)", (key, now + EVENT_TTL))
+        connection.execute("INSERT INTO events VALUES (?, ?)", (key, now + ttl))
     return True
 
 
-def _read_payload(stream: BinaryIO) -> dict | None:
-    raw = stream.read(MAX_INPUT_BYTES + 1)
-    if len(raw) > MAX_INPUT_BYTES:
+def _has_event(data: dict, state: Path, kind: str) -> bool:
+    key = _event_key(data, kind)
+    database = _event_database(state, create=False) if key else None
+    if database is None:
+        return False
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=0.1)) as connection:
+        return connection.execute(
+            "SELECT 1 FROM events WHERE id = ? AND expires > ?", (key, time.time())
+        ).fetchone() is not None
+
+
+def _read_payload(stream: BinaryIO, limit: int = MAX_INPUT_BYTES) -> dict | None:
+    raw = stream.read(limit + 1)
+    if len(raw) > limit:
         return None
     try:
         value = json.loads(raw)
@@ -107,22 +135,37 @@ def _load_detector(name: str):
 
 
 def _context(event: str, message: str) -> dict:
-    return {
+    output = {
         "hookSpecificOutput": {
             "hookEventName": event,
             "additionalContext": message[:MAX_MESSAGE_CHARS],
         }
     }
+    return _bound_output(output)
 
 
 def _deny(reason: str) -> dict:
-    return {
+    return _bound_output({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
             "permissionDecisionReason": reason[:MAX_MESSAGE_CHARS],
         }
-    }
+    })
+
+
+def _bound_output(output: dict) -> dict:
+    specific = output.get("hookSpecificOutput", output)
+    fields = [key for key in ("additionalContext", "permissionDecisionReason", "reason", "systemMessage")
+              if isinstance(specific.get(key), str)]
+    for field in fields:
+        message = specific[field]
+        if len(message) > MAX_MESSAGE_CHARS:
+            specific[field] = message[:MAX_MESSAGE_CHARS - 2].rstrip() + " …"
+    while len(json.dumps(output, ensure_ascii=True, separators=(",", ":")).encode()) + 1 > MAX_OUTPUT_BYTES:
+        field = max(fields, key=lambda key: len(specific[key]))
+        specific[field] = specific[field][:len(specific[field]) // 2].rstrip() + " …"
+    return output
 
 
 def _command(data: dict) -> str | None:
@@ -179,7 +222,7 @@ def _edit_patch(data: dict, patch: str) -> str:
     return "".join(lines)
 
 
-def _workspace(data: dict) -> str | None:
+def _workspace(data: dict, *, timeout: float = 2) -> str | None:
     cwd = _cwd(data)
     if cwd is None:
         return None
@@ -188,7 +231,7 @@ def _workspace(data: dict) -> str | None:
             ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
-            timeout=2,
+            timeout=timeout,
             check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -269,64 +312,114 @@ def _reverse_update(after: list[str], body: list[str]) -> list[str]:
     return before
 
 
-def _fallow_diff(data: dict, workspace: str, patch: str):
+def _fallow_path(raw: str, root: Path, cwd: Path) -> Path:
+    path = Path(raw)
+    path = path if path.is_absolute() else cwd / path
+    path.relative_to(root)
+    if ".." in path.parts or any(parent.is_symlink() for parent in (path, *path.parents) if parent.is_relative_to(root)):
+        raise ValueError("unsafe path")
+    return path
+
+
+def _fallow_add_key(workspace: str, patch: str) -> str:
+    return "mainframe-fallow-quality:add:" + hashlib.sha256((workspace + "\0" + patch).encode()).hexdigest()
+
+
+def _capture_fallow_additions(data: dict, state: Path, workspace: str, patch: str) -> None:
     root, cwd = Path(workspace), Path(data["cwd"]).resolve(strict=True)
-    diffs, affected, wholly_owned = [], [], []
+    additions = [raw for operation, raw, _ in _patch_blocks(patch)
+                 if operation == "Add" and Path(raw).suffix.lower() in FALLOW_SUFFIXES]
+    if not 0 < len(additions) <= FALLOW_MAX_PATHS:
+        return
+    for raw in additions:
+        path = _fallow_path(raw, root, cwd)
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            continue
+        # Native Add also overwrites existing files. We cannot recover that preimage.
+        return
+    claim_event(data, state, _fallow_add_key(workspace, patch), ttl=FALLOW_PRE_TTL)
+
+
+def _fallow_diff(data: dict, workspace: str, patch: str, *, additions_verified: bool):
+    root, cwd = Path(workspace), Path(data["cwd"]).resolve(strict=True)
+    diffs, affected, created = [], [], []
     total = 0
     if any(PATCH_MOVE.match(line) for line in patch.splitlines()):
         raise ValueError("unsupported move attribution")
     for operation, raw, body in _patch_blocks(patch):
         if Path(raw).suffix.lower() not in FALLOW_SUFFIXES:
             continue
-        path = Path(raw)
-        path = path if path.is_absolute() else cwd / path
-        path.relative_to(root)
-        if ".." in path.parts or any(parent.is_symlink() for parent in (path, *path.parents) if parent.is_relative_to(root)):
-            raise ValueError("unsafe path")
+        path = _fallow_path(raw, root, cwd)
         if operation == "Delete" or not path.is_file():
             raise ValueError("missing addressed postimage")
-        with path.open("rb") as stream:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(descriptor, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError("nonregular addressed postimage")
             raw_after = stream.read(FALLOW_MAX_BYTES + 1)
         total += len(raw_after)
         if total > FALLOW_MAX_BYTES or len(affected) >= FALLOW_MAX_PATHS or str(path) in affected:
             raise ValueError("oversized or repeated edit scope")
         after = raw_after.decode("utf-8").splitlines()
         if operation == "Add":
-            if any(not line.startswith("+") for line in body) or after != [line[1:] for line in body]:
-                raise ValueError("created file changed before callback")
+            if not additions_verified or any(not line.startswith("+") for line in body) or after != [line[1:] for line in body]:
+                raise ValueError("unverified creation or changed postimage")
             before = []
-            wholly_owned.append(str(path))
+            created.append(str(path))
         else:
             before = _reverse_update(after, body)
         relative = path.relative_to(root).as_posix()
         diffs.extend(difflib.unified_diff([line + "\n" for line in before], [line + "\n" for line in after],
-                                        fromfile="a/" + relative, tofile="b/" + relative))
+                                        fromfile="/dev/null" if operation == "Add" else "a/" + relative,
+                                        tofile="b/" + relative))
         affected.append(str(path))
     diff = "".join(diffs)
     if len(diff.encode("utf-8")) > FALLOW_MAX_BYTES:
         raise ValueError("oversized diff")
-    return affected, wholly_owned, diff
+    return affected, created, diff
 
 
 def _dispatch_fallow(data: dict, state: Path, event: str) -> dict | None:
-    if event != "PostToolUse" or data.get("tool_name") != "apply_patch" or not _tool_succeeded(data):
+    if event not in {"PreToolUse", "PostToolUse"} or data.get("tool_name") != "apply_patch":
         return None
-    patch, workspace = _patch(data), _workspace(data)
-    if not patch or not workspace or not _identity(data, "tool_use_id") or not _scope(data):
+    patch = _patch(data)
+    if not patch or not _identity(data, "tool_use_id") or not _scope(data):
+        return None
+    has_add = "\n*** Add File:" in patch
+    if event == "PreToolUse" and not has_add:
+        return None
+    if event == "PostToolUse" and not _tool_succeeded(data):
         return None
     if not any(Path(path).suffix.lower() in FALLOW_SUFFIXES for path in _patch_paths(patch)):
+        return None
+    workspace = _workspace(data, timeout=0.5)
+    if not workspace:
+        return None
+    if event == "PreToolUse":
+        try:
+            _capture_fallow_additions(data, state, workspace, patch)
+        except (OSError, ValueError, RuntimeError, sqlite3.Error):
+            pass
         return None
     detector = _load_detector("mainframe-fallow-quality")
     if detector is None:
         return None
+    unavailable = None
     try:
-        affected, owned, diff = _fallow_diff(data, workspace, patch)
+        additions_verified = has_add and _has_event(data, state, _fallow_add_key(workspace, patch))
+        affected, created, diff = _fallow_diff(data, workspace, patch, additions_verified=additions_verified)
         if not affected or not diff:
             return None
-        result = detector.analyze(workspace, affected, diff, wholly_owned_paths=owned, timeout_seconds=7)
+        result = detector.analyze(workspace, affected, diff, wholly_owned_paths=created, timeout_seconds=7)
         message = result.advisory or result.unavailable
-    except (OSError, ValueError, RuntimeError, UnicodeError):
+        unavailable = "scanner" if result.unavailable else None
+    except (OSError, ValueError, RuntimeError, sqlite3.Error):
         message = FALLOW_ATTRIBUTION_UNAVAILABLE
+        unavailable = "attribution"
+    if unavailable:
+        data = {**data, "tool_use_id": f"fallow-unavailable:{unavailable}:{workspace}"}
     if message and claim_event(data, state, "mainframe-fallow-quality:post"):
         return _context(event, message)
     return None
@@ -384,15 +477,15 @@ def _dispatch_quality(data: dict, state: Path, event: str) -> dict | None:
             scope, workspace, state_namespace=ADAPTER_NAMESPACE, state_root=state
         )
         if result.block_reason and data.get("stop_hook_active") is not True:
-            return {
+            return _bound_output({
                 "decision": "block",
-                "reason": result.block_reason[:MAX_MESSAGE_CHARS],
-            }
+                "reason": result.block_reason,
+            })
         if result.block_reason:
-            reason = "MAINFRAME quality check remains unresolved after its repair continuation: " + result.block_reason
-            return {"continue": False, "stopReason": reason[:MAX_MESSAGE_CHARS],
-                    "systemMessage": reason[:MAX_MESSAGE_CHARS]}
-        # Keep unresolved state, but never create a repeated automatic Stop loop.
+            reason = "MAINFRAME quality check remains unresolved at completion recheck: " + result.block_reason
+            # A hard stop here would suppress another hook's continuation.
+            return _bound_output({"systemMessage": reason})
+        # Keep unresolved state without starting a repeated automatic Stop loop.
         # Stop has no non-blocking model-context channel. Protection
         # availability advice is emitted on edit events when possible and is
         # deliberately silent here instead of forcing another model turn.
@@ -412,22 +505,43 @@ def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
             advice.append(context)
     if not reasons and not advice:
         return None
+    def join(messages, budget):
+        if not messages:
+            return ""
+        limit = max(1, (budget - 2 * (len(messages) - 1)) // len(messages))
+        return "\n\n".join(
+            message if len(message) <= limit else message[:limit - 2].rstrip() + " …"
+            for message in messages
+        )
     specific: dict[str, str] = {"hookEventName": event}
-    if reasons:
-        specific.update(
-            permissionDecision="deny",
-            permissionDecisionReason="\n\n".join(reasons)[:MAX_MESSAGE_CHARS],
-        )
-    if advice:
-        specific["additionalContext"] = "\n\n".join(advice)[:MAX_MESSAGE_CHARS]
     output = {"hookSpecificOutput": specific}
-    while len(json.dumps(output, ensure_ascii=True, separators=(",", ":")).encode()) + 1 > MAX_OUTPUT_BYTES:
-        field = max(
-            (key for key in ("permissionDecisionReason", "additionalContext") if key in specific),
-            key=lambda key: len(specific[key]),
-        )
-        specific[field] = specific[field][: len(specific[field]) // 2]
+    budget = MAX_MESSAGE_CHARS
+    while True:
+        if reasons:
+            specific.update(
+                permissionDecision="deny",
+                permissionDecisionReason=join(reasons, budget if not advice else budget * 3 // 4),
+            )
+        if advice:
+            specific["additionalContext"] = join(advice, budget if not reasons else budget // 4)
+        if len(json.dumps(output, ensure_ascii=True, separators=(",", ":")).encode()) + 1 <= MAX_OUTPUT_BYTES:
+            break
+        budget = budget * 3 // 4
     return output
+
+
+def _dispatch_combined(names: tuple[str, ...], state: Path, data: dict,
+                       *, shell_cwd: Path | None = None) -> dict | None:
+    outputs = []
+    for name in names:
+        try:
+            output = _dispatch_data(name, state, data, shell_cwd=shell_cwd)
+        except Exception:
+            continue
+        if output is not None:
+            outputs.append(output)
+    event = data.get("hook_event_name")
+    return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
 
 
 def _dispatch_checkpoint(data: dict, state: Path, event: str) -> dict | None:
@@ -472,7 +586,7 @@ def _dispatch_selection(data: dict) -> dict | None:
     return None
 
 
-def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
+def _dispatch_data(name: str, state: Path, data: dict, *, shell_cwd: Path | None = None) -> dict | None:
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
     event = data.get("hook_event_name")
@@ -490,12 +604,14 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
         reason = detector.check_patch(_workspace(data), _edit_patch(data, patch))
         return _deny(reason) if isinstance(reason, str) and reason else None
     if name == PRE_SHELL_TRANSPORT:
-        outputs = [
-            output
-            for hook in PRE_SHELL_HOOKS
-            if (output := _dispatch_data(hook, state, data)) is not None
-        ]
-        return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
+        return _dispatch_combined(PRE_SHELL_HOOKS, state, data, shell_cwd=shell_cwd)
+    if name == PRE_EVENT_TRANSPORT:
+        return _dispatch_combined((PRE_SHELL_TRANSPORT, "mainframe-skill-reminder"),
+                                  state, data, shell_cwd=shell_cwd)
+    if name == POST_EDIT_TRANSPORT:
+        if event == "PostToolUse" and data.get("tool_name") == "apply_patch":
+            return _dispatch_combined(POST_EDIT_HOOKS, state, data)
+        return None
     if name == "mainframe-skill-reminder":
         if event != "SubagentStart" and (event not in {"PreToolUse", "PostToolUse"} or data.get("tool_name") != "Bash"):
             return None
@@ -527,32 +643,50 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
         return _deny(reason) if isinstance(reason, str) and reason else None
     if name == "mainframe-destructive-operations":
         reason = detector.context_free_decision_reason(command)
+        if reason is None and shell_cwd is not None and detector.RM_HINT_RE.search(command):
+            root = _workspace({"cwd": str(Path.cwd())}, timeout=0.5)
+            if root is not None:
+                reason = detector.decision_reason(command, str(shell_cwd), root)
         return _deny(reason) if isinstance(reason, str) and reason else None
     if name == "mainframe-commit-secrets":
         result = detector.check_context_free_metadata(command)
-        return _deny(result.block_reason) if isinstance(result.block_reason, str) else None
-    message = detector.advisory_message(command)
+        if result.block_reason is None and shell_cwd is not None:
+            result = detector.check_command(command, str(shell_cwd), budget_seconds=COMMIT_BUDGET_SECONDS)
+        if isinstance(result.block_reason, str):
+            return _deny(result.block_reason)
+        message = result.advisory
+    else:
+        message = detector.advisory_message(command)
     if isinstance(message, str) and message and claim_event(data, state, name):
         return _context(event, message)
     return None
 
 
-def dispatch(name: str, state: Path, stream: BinaryIO) -> dict | None:
+def dispatch(name: str, state: Path, stream: BinaryIO, *, tool_cwd_override: bool = False) -> dict | None:
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
-    data = _read_payload(stream)
+    edit = name in {POST_EDIT_TRANSPORT, "mainframe-code-quality", "mainframe-fallow-quality", "mainframe-todo-limits"}
+    data = _read_payload(stream, MAX_EDIT_INPUT_BYTES if edit else MAX_INPUT_BYTES)
     if data is None:
         return None
-    return _dispatch_data(name, state, data)
+    shell_cwd = None
+    if (tool_cwd_override and name in {PRE_SHELL_TRANSPORT, PRE_EVENT_TRANSPORT}
+            and data.get("hook_event_name") == "PreToolUse" and data.get("tool_name") == "Bash"):
+        # The reviewed host runs the callback in its fallback cwd. Only local
+        # exec can override cwd in stdin. Equality also occurs for remote tools.
+        candidate = _cwd(data)
+        if candidate is not None and candidate != Path.cwd().resolve():
+            shell_cwd = candidate
+    return _dispatch_data(name, state, data, shell_cwd=shell_cwd)
 
 
 def main() -> None:
-    if len(sys.argv) != 3 or not sys.argv[2]:
+    if len(sys.argv) not in (3, 4) or not sys.argv[2] or sys.argv[3:] not in ([], ["--tool-cwd-override"]):
         return
     try:
-        result = dispatch(sys.argv[1], Path(sys.argv[2]), sys.stdin.buffer)
+        result = dispatch(sys.argv[1], Path(sys.argv[2]), sys.stdin.buffer, tool_cwd_override=len(sys.argv) == 4)
         if result is not None:
-            print(json.dumps(result, ensure_ascii=True, separators=(",", ":")))
+            print(json.dumps(_bound_output(result), ensure_ascii=True, separators=(",", ":")))
     except Exception:
         return
 

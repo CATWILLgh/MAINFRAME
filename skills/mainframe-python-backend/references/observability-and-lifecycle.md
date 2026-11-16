@@ -1,6 +1,8 @@
 # Observability and lifecycle
 
-Follow the project's established logging, metrics, tracing, and error-reporting conventions. Preserve correlation across requests, jobs, outbound calls, and realtime events without exposing secrets or sensitive payloads. Use bounded-cardinality labels and stable event names.
+Use the shared [logging baseline](../../mainframe-logging/SKILL.md) with the
+project's existing logger and error reporting. Keep metric labels bounded and
+propagate correlation across requests, jobs, outbound calls and realtime events.
 
 Make failure reasons actionable at the owning boundary. Do not swallow exceptions, convert every failure into a generic success, or log the same exception repeatedly at multiple layers. Keep expected domain failures distinct from dependency, programming, and cancellation failures.
 

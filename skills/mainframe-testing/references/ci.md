@@ -18,6 +18,13 @@ Check test collection and subprocess exit propagation. JUnit/coverage reports ai
 
 Use a measured job graph. Parallelize independent jobs and shard long suites with isolated fixtures, disjoint test membership and bounded runner/database concurrency. Account for queue time, dependency setup and total compute, not only one job's duration. Use fail-fast deliberately: stopping siblings speeds routine feedback but may lose compatibility diagnostics.
 
+When a required pipeline repeatedly exceeds its feedback or deployment budget,
+trace the critical path and runner cost from a real run. Measure runner wait,
+cache and setup, test execution, and deploy wait separately. Check duplicate
+work and serialized dependencies before adding capacity or extending a
+timeout. Batch related fixes, prove the affected checks first, then compare an
+authorized full run with the same required coverage and resource limits.
+
 Cache reproducible dependencies keyed by relevant lockfiles, OS, architecture and toolchain. A cache is an optimization, not a required source of correctness; a miss must work, and a hit must not bypass validation. Partition trust boundaries and avoid secrets in caches. Use explicit artifacts for outputs consumed by downstream jobs, with producer identity, exact revision and relevant platform, expiry and failure-time diagnostics. Never treat a cache as release provenance.
 
 Cancel superseded test runs when safe; do not interrupt deployment, data migration or a publication operation midway simply because a newer commit exists. Serialize shared-state mutations with the host's appropriate control. Keep bounded timeouts and cleanup. Retry only classified transient infrastructure failures, with bounded attempts; test assertions failing repeatedly are not green results. Quarantined flaky coverage needs an owner, tracked repair and explicit acceptance consequences.

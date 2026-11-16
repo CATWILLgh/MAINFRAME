@@ -11,3 +11,7 @@ Create hierarchy through content order, spacing, scale, weight, contrast, alignm
 Use motion for cause, continuity, feedback, or deliberate expression. Reuse project tokens, keep operational transitions interruptible, avoid `transition: all`, and honor reduced motion. Measure layout-affecting animation on representative devices instead of assuming it is harmless.
 
 Inspect shared edges, baselines, icon boxes, wrapping, overflow, and vertical reachability in a normal, narrow, wide, and reduced-height view. Source values alone do not prove optical alignment.
+
+Use [modern web guidance](modern-web.md) for container queries, newer sizing,
+containment, and animation capabilities. Check the actual browser targets and
+measure the affected work while preserving the intended layout and motion.

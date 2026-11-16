@@ -1,6 +1,6 @@
 ---
 name: mainframe-clickhouse
-description: Plan, query, integrate, or troubleshoot ClickHouse, including query cost, ingestion, schema changes, deletion, and recovery across production, shared test, and disposable targets.
+description: ClickHouse queries, ingestion, schema, cost, deletion, and recovery. Use for ClickHouse integration and operations.
 ---
 
 # Use ClickHouse within a verified boundary
@@ -33,8 +33,8 @@ disposal permission from a policy covering another database.
 | Current decision | Read |
 | --- | --- |
 | Target ambiguity, environment classification, or permission boundary | [Target and authority](references/target-authority.md) |
-| SQL analysis, diagnostics, query correctness, or resource limits | [Safe queries](references/queries.md) |
-| Ingestion, retries, schema, updates, deletes, or cluster-wide changes | [Writes and schema](references/writes.md) |
+| SQL analysis, index/pruning benefit, diagnostics, query correctness, or resource limits | [Safe queries](references/queries.md) |
+| Ingestion, retries, schema/index rollout, updates, deletes, or cluster-wide changes | [Writes and schema](references/writes.md) |
 | Capacity, maintenance, incident cancellation, backup, or restore | [Operations and recovery](references/operations.md) |
 | Version-sensitive syntax, settings, engine behavior, or missing details | [Official source map](references/sources.md), then applicable current documentation |
 

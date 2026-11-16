@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -38,6 +39,17 @@ class ReminderTests(unittest.TestCase):
         self.assertIsNone(self.invoke())
         self.data['agent_id']='child'
         self.assertIn('mainframe-python-backend',self.invoke())
+
+    def test_rust_manifest_routes_to_installed_skill(self):
+        skill = self.home / 'skills/mainframe-rust/SKILL.md'
+        skill.parent.mkdir()
+        shutil.copyfile(ROOT / 'skills/mainframe-rust/SKILL.md', skill)
+        (self.project / 'Cargo.toml').write_text('[package]\nname = "worker"\n')
+        command = 'cat Cargo.toml'
+        self.data['tool_input']['command'] = command
+        self.write_call({'cmd': command, 'workdir': str(self.project)})
+        self.assertIn('mainframe-rust', self.invoke())
+        self.assertIsNone(self.invoke())
 
     def test_workdir_conflict_and_dynamic_are_unknown(self):
         self.write_call({'cmd':'cat server/app.py','workdir':str(self.project)}, '; await tools.exec_command({cmd:"cat server/app.py",workdir:"/other"})')
@@ -158,6 +170,58 @@ class ReminderTests(unittest.TestCase):
         self.data['tool_input']['command']='curl https://example.invalid/status'
         self.data['hook_event_name']='PreToolUse';self.data.pop('tool_response')
         self.assertIn('mainframe-curl-requests',self.invoke())
+        self.assertIsNone(self.invoke())
+
+    def test_backup_and_release_advice_remains_relevant_after_skill_read(self):
+        for name in ('mainframe-infrastructure', 'mainframe-argocd'):
+            skill = self.home / 'skills' / name / 'SKILL.md'
+            skill.parent.mkdir(parents=True)
+            skill.write_text(f'---\nname: {name}\ndescription: Operations\n---\n')
+            self.data['tool_input']['command'] = f'cat {skill}'
+            self.assertIsNone(self.invoke())
+
+        self.data['hook_event_name'] = 'PreToolUse'
+        self.data['tool_input']['command'] = (
+            "ssh stage 'sudo -n k3s kubectl -n app exec db-0 -- pg_dump -Fc app > private.dump'"
+        )
+        backup = self.invoke()
+        self.assertIsNotNone(backup)
+        self.assertIn('cleanup', backup)
+        self.assertIn('mainframe-infrastructure', backup)
+        self.assertNotIn('private.dump', backup)
+        self.assertLess(len(backup), 600)
+        self.assertIsNone(self.invoke())
+
+        self.data['tool_input']['command'] = 'argocd app diff service --revision candidate'
+        release = self.invoke()
+        self.assertIsNotNone(release)
+        self.assertIn('user route', release)
+        self.assertIn('mainframe-argocd', release)
+        self.assertNotIn('candidate', release)
+        self.assertLess(len(release), 600)
+        self.data['tool_input']['command'] = 'kubectl scale deployment/web --replicas=0'
+        self.assertIsNone(self.invoke())
+
+    def test_openspec_apply_reminds_to_raise_material_risks_before_implementation(self):
+        skill = self.home / 'skills/mainframe-openspec/SKILL.md'
+        skill.parent.mkdir(parents=True)
+        skill.write_text('---\nname: mainframe-openspec\ndescription: OpenSpec\n---\n')
+        self.data['tool_input']['command'] = f'cat {skill}'
+        self.assertIsNone(self.invoke())
+
+        self.data['hook_event_name'] = 'PreToolUse'
+        self.data['tool_input']['command'] = 'openspec instructions archive --change example --json'
+        self.assertIsNone(self.invoke())
+        self.data['tool_input']['command'] = (
+            '/opt/bin/openspec instructions apply --change example --json'
+        )
+        note = self.invoke()
+        self.assertIsNotNone(note)
+        self.assertIn('agreed outcome', note)
+        self.assertIn('Raise material risks before implementation', note)
+        self.assertIn('live account', note)
+        self.assertIn('mainframe-openspec', note)
+        self.assertNotIn('example', note)
         self.assertIsNone(self.invoke())
 
     def test_symlink_parent_and_large_read_batch_stay_silent(self):

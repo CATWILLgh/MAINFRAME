@@ -14,3 +14,17 @@ Protect only the reachable states and transitions relevant to the change. Prefer
 Begin with focused evidence that fails for the reported behavior before changing the implementation, then run the repaired proof and nearest relevant fast checks. Broad or expensive suites belong in CI or a specifically authorized local pass.
 
 Automated tests do not replace rendered browser acceptance. Report the exact behavior proved, the environment used, and every untested boundary.
+
+For [modern web changes](modern-web.md), exercise the affected contract in the
+supported browser engines and relevant mobile/embedded environment. Cover
+composition-aware text input, pristine/touched validation, focus and dismissal,
+reduced motion, and the supported enhancement/fallback path as applicable.
+
+For frontend performance, use the shared
+[workload and budget method](../../mainframe-testing/references/performance.md).
+Compare the same route, data, device, browser, cache, and network conditions.
+Choose LCP, INP, CLS, long-task, transfer, or memory evidence for the changed
+risk. Assert a meaningful budget or causal work bound in the owning test.
+Separate synthetic measurements from field evidence and use a sample that
+supports the reported percentile. Keep expensive browser/load work on the
+project's established CI or specifically authorized route.

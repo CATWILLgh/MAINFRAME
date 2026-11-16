@@ -11,6 +11,12 @@ in production logic and tests when a channel, clock, barrier, or stored schedule
 can express the condition. Bound queues and concurrent work, and define what
 happens during overload and shutdown.
 
+Trace what the caller waits for and what a worker owns after acknowledgement.
+Every terminal outcome, including a successful no-op, must release its slot
+and allow the next eligible item to progress. Keep interactive work within
+its latency budget while background work uses the shared pool or rate limit.
+Prove the relevant overlap with [performance and progress checks](../../mainframe-testing/references/strategy.md#protect-performance-and-progress).
+
 For polling and synchronization, make page import and its durable checkpoint
 atomic when replay or skipping would violate correctness. Detect repeated or
 non-advancing cursors, bound pages per pass, preserve a high-water rule suited to

@@ -6,7 +6,12 @@ Repeatedly choose a random project area, investigate it, immediately persist a s
 
 ## Read the initialized ticket contract
 
-Read `docs/tickets/AGENTS.md` and check its directory, record-format, and lifecycle rules before queue writes. If the root, contract, or required layout is missing or conflicts with effective project rules, report that `mainframe-tickets-init` must initialize or reconcile it; do not run initialization implicitly, invent another tracker, or migrate unrelated records. Use `docs/tickets/` in the current project only. The directory is state: do not add a YAML `status` field. Preserve string IDs, required frontmatter, meaningful evidence and links. Exclude `.campaigns/` and `.migration/` from every ticket scan.
+Use only the current project's `docs/tickets/`. Before writing, read its
+`AGENTS.md` and check layout, record format, and lifecycle. If missing or
+conflicting, report the need for explicit `mainframe-tickets-init`.
+Directories own state. Use no YAML `status` field. Preserve string IDs,
+required YAML, evidence, and links. Exclude `.campaigns/` and `.migration/`
+from scans.
 
 Read only relevant matches across the five `docs/tickets/open/` queues for deduplication. Create new records in `open/observations/` with `id`, `title`, `component`, `created`, `created-from` and an `Evidence` section. New IDs are quoted four-character lowercase hexadecimal strings checked against open and archived IDs; retain existing IDs. Add new facts to matching open records without changing their lifecycle or execution marker. Record trigger/location, actual and expected behavior with sources, consequence, and uncertainty. Keep this campaign's random-point history and duplicate streak under `.campaigns/`; never count state files, migration snapshots, or terminal records as open duplicates.
 
@@ -32,15 +37,11 @@ Record only a problem supported by current evidence: an affected project locatio
 
 An optimization qualifies when evidence establishes a meaningful avoidable cost or constraint violation. Do not create tickets for stylistic preferences, speculative mechanisms, newer technology alone, or guessed business requirements. Full root cause, complete blast radius, priority, and implementation design belong to later stages when not yet established.
 
-Before every write, search the configured open queue for the same behavior, mechanism, and affected boundary. Read relevant matches rather than re-auditing every open ticket. Follow moved code when needed; keywords or an old path alone do not establish identity.
+Before every ticket write, search relevant open records for the same behavior, mechanism, and affected boundary, following moved code. Keywords or an old path alone do not prove identity. Create an observation if unmatched; consolidate substantial new evidence into a matching record's owning sections, correcting stale conclusions while preserving identity, useful history, lifecycle, and execution marker. Do not append repeated investigation diaries. Leave matches with no substantial new evidence unchanged.
 
-- No matching record: create one ticket using the configured identity, initial lifecycle state, YAML and Markdown requirements.
-- A matching record with substantial new evidence: consolidate that evidence into its relevant sections, correcting stale conclusions while preserving identity and useful history. Do not append a repeated investigation diary or change the lifecycle state.
-- A matching record with no substantial new evidence: leave it unchanged and continue.
+Preserve enough sources, conditions, observed and expected behavior, and uncertainty for another session. Save and confirm each update before selecting another point. If writing is unavailable, retain ticket-ready evidence in permitted campaign state and report the missing action; pending writes prevent successful completion.
 
-Preserve sources, conditions, observed and expected behavior, and important unknowns in the ticket itself so another session can continue without this conversation. Save and confirm each ticket update before moving to the next point. If a write is unavailable, retain ticket-ready evidence in permitted campaign state and report the exact missing action; do not claim persistence or successful campaign completion.
-
-Do not mutate closed or archived records. If a matching terminal record is encountered, verify whether this is a recurrence; a present recurrence needs a new linked observation under the project's rules and does not count as an already-covered open problem.
+Do not mutate terminal records. Check a matching terminal record for recurrence; a demonstrated recurrence needs a new linked observation under the project's rules and does not count as an already-covered open problem.
 
 ## Preserve campaign continuity and count saturation
 

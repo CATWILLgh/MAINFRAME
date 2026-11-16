@@ -36,16 +36,23 @@ except ImportError:
 ROOT = Path(__file__).resolve().parent
 PRE_SHELL_HOOKS = ("mainframe-secret-access", "mainframe-rg-short-replace", "mainframe-destructive-operations", "mainframe-commit-secrets")
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
-SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-todo-limits", "mainframe-fallow-quality"})
+PRE_EVENT_TRANSPORT = "mainframe-before-shell"
+POST_EDIT_TRANSPORT = "mainframe-post-edit"
+POST_EDIT_HOOKS = ("mainframe-code-quality", "mainframe-fallow-quality", "mainframe-commit-checkpoint")
+SUPPORTED_HOOKS = frozenset({*PRE_SHELL_HOOKS, PRE_SHELL_TRANSPORT, PRE_EVENT_TRANSPORT, POST_EDIT_TRANSPORT, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-todo-limits", "mainframe-fallow-quality"})
 MAX_INPUT_BYTES = 262_144
-MAX_MESSAGE_CHARS = 6_000
-MAX_OUTPUT_BYTES = 32_768
+MAX_POST_INPUT_BYTES = 4 * 1024 * 1024
+MAX_MESSAGE_CHARS = 1_600
+MAX_OUTPUT_BYTES = 8_192
 MAX_ROOTS = 4_096
 COMMIT_BUDGET_SECONDS = 3.0
 MAX_EVENTS = 4_096
 EVENT_TTL = 7 * 24 * 60 * 60
 MAX_ID_CHARS = 512
 _MISSING = object()
+# ECMAScript String.trim() whitespace and line terminators used by empty-old Edit.
+EDIT_BLANK_CHARACTERS = (" \t\r\n\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+                         "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff")
 FALLOW_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte"})
 FALLOW_MAX_BYTES = 2_000_000
 FALLOW_UNAVAILABLE = "Fallow structural review was unavailable: the native edit response could not be attributed exactly. Completion was not blocked; verify the addressed TS/JS edit manually."
@@ -157,7 +164,8 @@ def session_root(data: dict, state: Path, *, capture: bool = False) -> str | Non
         return None
     root = _cwd(data) if capture else None
     if capture and (
-        data.get("source") not in {"startup", "clear", "compact", "resume"}
+        # Compact uses the mutable working directory, not the session root.
+        data.get("source") not in {"startup", "clear", "resume", "fork"}
         or root is None
     ):
         return None
@@ -210,7 +218,7 @@ def _load_detector(name: str):
 
 @contextmanager
 def _commit_budget(detector):
-    """Reserve time for native output after the canonical Git inspection."""
+    """Bound the scan even when a scoped bridge update retains an older detector."""
     def expired(signum, frame):
         raise detector.InspectionUnavailable("native_time_budget")
 
@@ -254,9 +262,9 @@ def _serialize(payload: dict) -> str:
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
-def _read_payload(stream: BinaryIO) -> dict | None:
-    raw = stream.read(MAX_INPUT_BYTES + 1)
-    if len(raw) > MAX_INPUT_BYTES:
+def _read_payload(stream: BinaryIO, limit: int = MAX_INPUT_BYTES) -> dict | None:
+    raw = stream.read(limit + 1)
+    if len(raw) > limit:
         return None
     try:
         data = json.loads(raw)
@@ -296,6 +304,8 @@ def _edit_paths(data: dict, cwd: str) -> list[str]:
 
 
 def _quality_dispatch(data: dict, state: Path, event: str) -> dict | None:
+    if event == "Stop" and _native_value(data, "stop_hook_active", "stopHookActive") is True:
+        return None
     cwd = _cwd(data)
     scope = _native_value(data, "session_id", "sessionId")
     tool = _native_value(data, "tool_name", "toolName")
@@ -344,9 +354,7 @@ def _quality_dispatch(data: dict, state: Path, event: str) -> dict | None:
             scope, workspace, state_namespace="mainframe-zcode-v2", state_root=state
         )
         if result.block_reason:
-            active = _native_value(data, "stop_hook_active", "stopHookActive")
-            prefix = "MAINFRAME quality check remains unresolved after its repair continuation: " if active is True else ""
-            return _stop_block(prefix + result.block_reason)
+            return _stop_block(result.block_reason)
         # Stop advice is not visible to the responsible model unless it forces
         # another turn. Keep advisory-only results silent at this event.
     return None
@@ -377,7 +385,10 @@ def _todo_dispatch(data: dict, event: str) -> dict | None:
         replace_all = inputs.get("replace_all", False)
         if not isinstance(old, str) or not isinstance(new, str) or not isinstance(replace_all, bool):
             return None
-        reason = detector.check_edit(workspace, paths[0], old, new, replace_all=replace_all)
+        if old:
+            reason = detector.check_edit(workspace, paths[0], old, new, replace_all=replace_all)
+        else:
+            reason = detector.check_edit(workspace, paths[0], old, new, blank_characters=EDIT_BLANK_CHARACTERS)
     return (_native_output(event, "permissionDecisionReason", reason)
             if isinstance(reason, str) and reason else None)
 
@@ -400,6 +411,7 @@ def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
         raise ValueError("conflicting result path")
     original = response.get("originalFile", _MISSING)
     wholly_owned = []
+    created = tool == "Write" and response.get("type") == "create"
     if tool == "Write":
         after = response.get("content")
         kind = response.get("type")
@@ -411,23 +423,39 @@ def _fallow_diff(data: dict, cwd: str, workspace: str, tool: str):
         wholly_owned = [str(path)]
     else:
         old, new, replace_all = response.get("oldString"), response.get("newString"), response.get("replaceAll")
-        if (not isinstance(original, str) or not isinstance(old, str) or not old
-                or not isinstance(new, str) or not isinstance(replace_all, bool)
-                or original.count(old) == 0 or (not replace_all and original.count(old) != 1)):
-            raise ValueError("ambiguous Edit response")
+        if not (isinstance(original, str) and isinstance(old, str)
+                and isinstance(new, str) and isinstance(replace_all, bool)):
+            raise ValueError("missing Edit response")
         before = original
-        # Native Edit deletes the following line break with an empty replacement.
-        matched = old + "\n" if not new and not old.endswith("\n") and old + "\n" in before else old
-        after = before.replace(matched, new, -1 if replace_all else 1)
+        if old:
+            if old not in before or (not replace_all and before.count(old) != 1):
+                raise ValueError("ambiguous Edit response")
+            # Native Edit deletes the following line break with an empty replacement.
+            matched = old + "\n" if not new and not old.endswith("\n") and old + "\n" in before else old
+            count = before.count(matched) if replace_all else 1
+            before_bytes = len(before.encode("utf-8"))
+            after_bytes = before_bytes + count * (len(new.encode("utf-8")) - len(matched.encode("utf-8")))
+            if before_bytes + after_bytes > FALLOW_MAX_BYTES:
+                raise ValueError("oversized native edit")
+            after = before.replace(matched, new, -1 if replace_all else 1)
+        else:
+            if before.strip(EDIT_BLANK_CHARACTERS):
+                raise ValueError("empty-old Edit did not address a blank file")
+            after = new
+            wholly_owned = [str(path)]
     if len(before.encode("utf-8")) + len(after.encode("utf-8")) > FALLOW_MAX_BYTES:
         raise ValueError("oversized native edit")
-    with path.open("rb") as stream:
+    descriptor = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(descriptor, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("postimage is not a regular file")
         observed = stream.read(FALLOW_MAX_BYTES + 1)
     if observed != after.encode("utf-8"):
         raise ValueError("addressed postimage changed")
     relative = path.relative_to(root).as_posix()
     diff = "".join(difflib.unified_diff([line + "\n" for line in before.splitlines()], [line + "\n" for line in after.splitlines()],
-                                        fromfile="a/" + relative, tofile="b/" + relative))
+                                        fromfile="/dev/null" if created else "a/" + relative,
+                                        tofile="b/" + relative))
     if len(diff.encode("utf-8")) > FALLOW_MAX_BYTES:
         raise ValueError("oversized edit diff")
     return [str(path)], wholly_owned, diff
@@ -451,10 +479,19 @@ def _fallow_dispatch(data: dict, state: Path, event: str) -> dict | None:
             return None
         result = detector.analyze(workspace, affected, diff, wholly_owned_paths=owned, timeout_seconds=7)
         message = result.advisory or result.unavailable
+        unavailable = not result.advisory and bool(result.unavailable)
     except (OSError, ValueError, RuntimeError, UnicodeError):
         message = FALLOW_UNAVAILABLE
+        unavailable = True
+    claim_data = data
+    if unavailable:
+        claim_data = {key: value for key, value in data.items()
+                      if key not in {"tool_use_id", "toolUseId", "toolCallId"}}
+        identity = "fallow-unavailable:" + workspace
+        claim_data["tool_use_id"] = (identity if len(identity) <= MAX_ID_CHARS else
+                                     "fallow-unavailable:" + hashlib.sha256(workspace.encode()).hexdigest())
     return (_native_output(event, "additionalContext", message)
-            if message and claim_event(data, state, "mainframe-fallow-quality:post") else None)
+            if message and claim_event(claim_data, state, "mainframe-fallow-quality:post") else None)
 
 
 def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
@@ -471,20 +508,62 @@ def _combine_pre_shell(outputs: list[dict], event: str) -> dict | None:
     if not reasons and not advice:
         return None
     specific = {"hookEventName": event}
-    if reasons:
-        specific.update(permissionDecision="deny", permissionDecisionReason="\n\n".join(reasons))
-    if advice:
-        specific["additionalContext"] = "\n\n".join(advice)
     output = {"hookSpecificOutput": specific}
-    for field in ("permissionDecisionReason", "additionalContext"):
-        if field in specific:
-            specific[field] = specific[field][:MAX_MESSAGE_CHARS]
+    def join(messages, budget):
+        share = max(1, (budget - 2 * (len(messages) - 1)) // len(messages))
+        return "\n\n".join(message[:share] for message in messages)
+
+    budget = MAX_MESSAGE_CHARS
+    while True:
+        if reasons:
+            specific.update(permissionDecision="deny", permissionDecisionReason=join(
+                reasons, budget if not advice else budget * 3 // 4))
+        if advice:
+            specific["additionalContext"] = join(advice, budget if not reasons else budget // 4)
+        if len(_serialize(output).encode("utf-8")) + 1 <= MAX_OUTPUT_BYTES:
+            break
+        budget = budget * 3 // 4
+    return output
+
+
+def _dispatch_composite(names: tuple[str, ...], data: dict, state: Path) -> list[dict]:
+    outputs = []
+    for name in names:
+        try:
+            output = _dispatch_data(name, state, data)
+            if output is not None:
+                outputs.append(output)
+        except Exception:
+            continue
+    return outputs
+
+
+def _combine_post_edit(outputs: list[dict]) -> dict | None:
+    messages = []
+    for output in outputs:
+        message = output.get("hookSpecificOutput", {}).get("additionalContext")
+        if isinstance(message, str) and message and message not in messages:
+            messages.append(message)
+    if not messages:
+        return None
+    def limited_message(message: str, limit: int) -> str:
+        if len(message) <= limit:
+            return message
+        prefix = message[:limit]
+        boundary = prefix.rfind("\n")
+        return prefix[:boundary] if boundary >= limit // 2 else prefix
+
+    def joined(limit: int) -> str:
+        share = max(1, (limit - 2 * (len(messages) - 1)) // len(messages))
+        return "\n\n".join(limited_message(message, share) for message in messages)
+
+    limit = MAX_MESSAGE_CHARS
+    message = joined(limit)
+    output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": message}}
     while len(_serialize(output).encode("utf-8")) + 1 > MAX_OUTPUT_BYTES:
-        field = max(
-            (name for name in ("permissionDecisionReason", "additionalContext") if name in specific),
-            key=lambda name: len(specific[name]),
-        )
-        specific[field] = specific[field][:len(specific[field]) // 2]
+        limit = limit * 3 // 4
+        message = joined(limit)
+        output["hookSpecificOutput"]["additionalContext"] = message
     return output
 
 
@@ -540,11 +619,15 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
                                       *identity, command, event)
         return _native_output(event, "additionalContext", message) if message else None
     if name == PRE_SHELL_TRANSPORT:
-        outputs = [
-            output for hook in PRE_SHELL_HOOKS
-            if (output := _dispatch_data(hook, state, data)) is not None
-        ]
+        outputs = _dispatch_composite(PRE_SHELL_HOOKS, data, state)
         return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
+    if name == PRE_EVENT_TRANSPORT:
+        outputs = _dispatch_composite((PRE_SHELL_TRANSPORT, "mainframe-skill-reminder"), data, state)
+        return _combine_pre_shell(outputs, event) if isinstance(event, str) else None
+    if name == POST_EDIT_TRANSPORT:
+        if event != "PostToolUse" or _native_value(data, "tool_name", "toolName") not in {"Write", "Edit"}:
+            return None
+        return _combine_post_edit(_dispatch_composite(POST_EDIT_HOOKS, data, state))
     if name == "mainframe-destructive-operations" and event == "SessionStart":
         session_root(data, state, capture=True)
         return None
@@ -572,17 +655,18 @@ def _dispatch_data(name: str, state: Path, data: dict) -> dict | None:
             return _native_output(event, "permissionDecisionReason", reason)
         return None
 
-    if name in {"mainframe-commit-secrets", "mainframe-destructive-operations"}:
+    if name == "mainframe-destructive-operations":
+        reason = detector.context_free_decision_reason(command)
+        if isinstance(reason, str) and reason:
+            return _native_output(event, "permissionDecisionReason", reason)
+        cwd = _cwd(data)
+        root = session_root(data, state) if cwd else None
+        reason = detector.decision_reason(command, cwd, root) if root else None
+        return (_native_output(event, "permissionDecisionReason", reason)
+                if isinstance(reason, str) and reason else None)
+    if name == "mainframe-commit-secrets":
         cwd = _cwd(data)
         if cwd is None:
-            return None
-        if name == "mainframe-destructive-operations":
-            root = session_root(data, state)
-            if root is None:
-                return None
-            reason = detector.decision_reason(command, cwd, root)
-            if isinstance(reason, str) and reason:
-                return _native_output(event, "permissionDecisionReason", reason)
             return None
         with _commit_budget(detector):
             result = detector.check_command(command, cwd)
@@ -602,7 +686,7 @@ def dispatch(name: str, state: Path, stream: BinaryIO) -> dict | None:
     """Return one native decision/context object, or the neutral result."""
     if name not in SUPPORTED_HOOKS or (ROOT / (".disabled-" + name)).exists():
         return None
-    data = _read_payload(stream)
+    data = _read_payload(stream, MAX_POST_INPUT_BYTES if name == POST_EDIT_TRANSPORT else MAX_INPUT_BYTES)
     if data is None:
         return None
     return _dispatch_data(name, state, data)

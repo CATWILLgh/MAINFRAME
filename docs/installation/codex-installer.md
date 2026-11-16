@@ -8,12 +8,11 @@ the user-facing file-only invocation unchanged.
 
 On macOS or Linux, use Python 3.11 or newer and Git. Select the surface running
 this request under the [surface rule](verification.md#desktop-and-cli).
-The native mapping was inspected against engine **0.153.4**, revalidated for
-**Desktop 0.159.2**, and refreshed for **Desktop 0.165.0-alpha.1.2** on
-2026-11-01. Delivery compatibility is established from
-tagged source/schema comparison and disposable-home installer checks; live
-Desktop lifecycle and role acceptance remain separate. See the
-[current full-mapping evidence](native/codex.md#desktop-01650-alpha12-full-delivery).
+The current native mapping was reviewed against **Desktop 0.167.0-alpha.4.1**
+on 2026-11-12. Delivery evidence includes the exact upstream source, an
+isolated bundled-engine run, and disposable-home installer checks. Desktop
+activation and trust still require the running profile.
+[Current evidence](native/codex.md#desktop-01670-alpha41-hook-contract)
 Do not upgrade Codex,
 switch the user's model, or claim another version is verified. `plan` works
 read-only; a full installation requires the tested runtime. To support a different version,
@@ -21,7 +20,8 @@ revalidate the affected native contract and update the maintained module with
 its evidence, rather than bypassing the version check or writing a second installer.
 
 CLI remains limited to the inspected **0.153.4** mapping. Desktop admits
-**0.153.4**, **0.159.0-alpha.12.1**, **0.159.2**, and **0.165.0-alpha.1.2**
+**0.153.4**, **0.159.0-alpha.12.1**, **0.159.2**, **0.165.0-alpha.1.2**, and
+**0.167.0-alpha.4.1**
 for full delivery of the supported MAINFRAME components, including complete
 skill packages, roles, explicit commands and native hooks. The mapping
 accounts for every entry in the [canonical inventory](../../ADAPTATION.example.json).
@@ -36,19 +36,24 @@ app-server, model probe or trust UI automation.
 The current full route retains the existing subagent-selection registration for
 the verified collaboration interface and installs the Fallow detector plus a
 non-blocking `PostToolUse` advisory for supported exact patches. Fallow uses
-only bounded in-memory reconstruction of the addressed files; it never scans a
-dirty worktree for attribution or stores source/diff text. Runtime readiness
-includes `ruff`, `oxlint`, `semgrep` and `fallow`. The native callback gives
+bounded in-memory reconstruction of addressed files. A `PreToolUse` check
+captures a short-lived hash for verified new TS/JS files. See the
+[hook runtime dependencies](components/hooks.md#runtime-support). The native callback gives
 Fallow seven seconds within its ten-second handler timeout.
 
 Quality completion checks now bind both primary `Stop` and worker
 `SubagentStop`, with worker state isolated by native session and agent identity.
-One positive revalidation requests a repair continuation. A still-positive retry
-terminates with a visible unresolved reason and retains state for the next user
-turn. This is bounded recovery, not proof that Codex marks the turn as failed.
-Full quality parity remains unsupported, alongside full Fallow completion timing
-and the two shell guards' actual-tool-workdir-dependent guarantees. The plan
-reports all four retained partial bindings explicitly.
+One positive revalidation requests a repair continuation. A still-positive
+retry emits a visible unresolved warning and retains state. Other hooks can
+still request continuation. The plan reports completion-advice limitations for
+quality and Fallow and workdir limitations for both shell guards. Engine
+**0.167.0-alpha.4.1** also checks relative destructive targets and staged secrets
+when Bash identifies a separate local workdir in its payload. Its host fallback
+directory alone cannot establish the command's execution environment.
+
+The three read-only role files retain their methods. The child on both extended
+Desktop mappings inherits its parent's permissions, so the plan reports the
+read-only guarantee as unsupported.
 
 New hook definitions require native review/trust after delivery. The installer
 preserves existing trust state, hook order, deliberate disables, foreign files,
@@ -113,11 +118,12 @@ installation or full native mapping. See the [text-update comparison](native/cod
 
 ### Deliver one skill on Desktop
 
-Desktop **0.165.0-alpha.1.2**, **0.166.0-alpha.5.1**, and **0.167.0-alpha.3.2**
+Desktop **0.165.0-alpha.1.2**, **0.166.0-alpha.5.1**, **0.167.0-alpha.3.2**,
+and **0.167.0-alpha.4.1**
 support the explicit skill-only route for an existing same-source installation
 with a matching ownership receipt and schema-2 adaptation state. The tagged
-reader supports complete packages under `$CODEX_HOME/skills`. The two later
-versions have been revalidated for this route alone.
+reader supports complete packages under `$CODEX_HOME/skills`. Builds
+`0.166.0-alpha.5.1` and `0.167.0-alpha.3.2` have skill-only evidence.
 See the source evidence for [0.165.0](native/codex.md#desktop-01650-alpha12-skill-only-delivery),
 [0.166.0](native/codex.md#desktop-01660-alpha51-skill-only-delivery), and
 [0.167.0](native/codex.md#desktop-01670-alpha32-skill-only-delivery).
@@ -153,11 +159,12 @@ observed. Other runtimes, CLI, fresh installs and source moves are rejected by
 this route. Do not use whole-product apply to deliver a single skill on this
 runtime.
 
-### Deliver the backlog command and guard on Desktop 0.165.0-alpha.1.2
+### Deliver the backlog command and guard on Desktop
 
-An existing same-source installation with a matching receipt and schema-2 state
-can receive the canonical `todo` command and `mainframe-todo-limits` detector
-through the bounded route:
+On **0.165.0-alpha.1.2** and **0.167.0-alpha.4.1**, an existing same-source
+installation with a matching receipt and schema-2 state can receive the
+canonical `todo` command and `mainframe-todo-limits` detector through the
+bounded route.
 
 ```sh
 python3 -B install.py codex plan --surface desktop --todo
@@ -175,8 +182,8 @@ Other runtime versions, CLI, fresh installations and source moves are rejected.
 
 The [official slash-command guide](https://learn.chatgpt.com/docs/reference/slash-commands)
 places enabled skills in the Desktop slash menu. Type `/`, filter for `todo`
-and select it; literal `/todo <prose>` execution on this exact Desktop build
-has not been observed. The documented explicit alternative is `$todo <prose>`.
+and select it. Literal `/todo <prose>` execution on these Desktop builds has
+not been observed. The documented explicit alternative is `$todo <prose>`.
 The package accepts caller prose and disables implicit invocation, as described
 in the [skill guide](https://learn.chatgpt.com/docs/build-skills).
 
@@ -264,14 +271,14 @@ bounds an unresolved finding to one automatic continuation per turn while
 retaining it for the next user turn. Only completion-time
 advisory delivery is absent.
 
-The report also names two safe pre-shell partials. Destructive operations keep
-their command-structural Git and root/home deletion guards; commit secrets keep
-literal and absolute-file metadata inspection. Their workdir-dependent
-guarantees remain unsupported. All four shell identities use one
-`mainframe-pre-shell` registration, so a clean Bash event starts one bridge
-process and emits no context. Individual disable markers still apply inside
-the bridge. Desktop **0.165.0-alpha.1.2** retains the immediate Fallow advisory
-described above. Earlier full mappings have no Fallow binding.
+The report also names two pre-shell partials. Destructive operations keep
+their command-structural Git and root/home deletion guards. Commit secrets keep
+literal and absolute-file metadata inspection. On **0.167.0-alpha.4.1**
+both can inspect local workdir overrides when the event identifies one. The
+four pre-shell detectors share one `mainframe-pre-shell` process. A clean
+check is silent and individual disable markers apply inside the bridge.
+Desktop **0.165.0-alpha.1.2** and **0.167.0-alpha.4.1** retain the
+immediate Fallow advisory described above.
 
 ## Finish the current-surface installation pass
 
@@ -391,8 +398,8 @@ mapping; a successful offline fixture test does not update an acceptance badge.
 
 ## Migration from the shared skill root
 
-The maintained adapter now uses `$CODEX_HOME/skills` for its 15 skill packages
-and seven explicit-only commands. Ordinary `plan`, `apply`, and `verify` perform
+The maintained adapter uses `$CODEX_HOME/skills` for inventoried skill packages
+and explicit-only commands. Ordinary `plan`, `apply`, and `verify` perform
 the migration using the existing ownership receipt. Old shared copies are
 removed only when installer-owned and unchanged; customizations stop the plan
 before writes, and unrelated resources remain. Role method links follow the

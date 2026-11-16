@@ -31,6 +31,9 @@ SHELL_HOOK_NAMES = (
     "mainframe-commit-secrets",
 )
 PRE_SHELL_TRANSPORT = "mainframe-pre-shell"
+PRE_EVENT_TRANSPORT = "mainframe-before-shell"
+POST_EDIT_TRANSPORT = "mainframe-post-edit"
+POST_EDIT_HOOKS = {"mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-fallow-quality"}
 HOOK_NAMES = (*SHELL_HOOK_NAMES, "mainframe-code-quality", "mainframe-commit-checkpoint", "mainframe-skill-reminder", "mainframe-subagent-selection", "mainframe-todo-limits", "mainframe-fallow-quality")
 RUNTIME_TOOLS = CODE_QUALITY_TOOLS
 HOOK_RENAMES = {
@@ -40,11 +43,13 @@ HOOK_RENAMES = {
 }
 READ_ONLY_ROLES = {"mainframe-researcher", "mainframe-test-auditor", "mainframe-consequential-reviewer"}
 READ_ONLY_ROLE_ACTION = "Verify parent permission overrides preserve the read-only role boundary."
+READ_ONLY_ROLE_LIMIT = "The role profile and method are delivered. The native child inherits parent permissions; its role file cannot enforce read-only access."
 KNOWN_RUNTIME = "0.153.4"
 # Exact Desktop mapping revalidated against the tagged native schemas/sources.
 # This is delivery compatibility, not observed lifecycle/role acceptance.
-CURRENT_DESKTOP_RUNTIME = "0.165.0-alpha.1.2"
-INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1", CURRENT_DESKTOP_RUNTIME}
+TOOL_CWD_DESKTOP_RUNTIME = "0.167.0-alpha.4.1"
+EXTENDED_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2", TOOL_CWD_DESKTOP_RUNTIME}
+INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1"} | EXTENDED_DESKTOP_RUNTIMES
 # Current Desktop PreToolUse command/deny transport was observed unchanged.
 # This is an existing detector repair boundary, never a full native mapping.
 DETECTOR_UPDATE_RUNTIMES = {"0.162.0-alpha.17.2"}
@@ -54,12 +59,11 @@ SELECTION_UPDATE_RUNTIMES = {"0.163.0-alpha.11"}
 # Same instruction reader and private skill roots; existing Markdown only.
 # Retain the previous selection binding, without revalidating its execution.
 TEXT_UPDATE_RUNTIMES = {"0.164.0-alpha.11.1"}
-SELECTION_BINDING_RUNTIMES = SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES | {CURRENT_DESKTOP_RUNTIME}
+SELECTION_BINDING_RUNTIMES = SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES | EXTENDED_DESKTOP_RUNTIMES
 CONTENT_UPDATE_RUNTIMES = {"0.154.0-alpha.6.2"} | DETECTOR_UPDATE_RUNTIMES | SELECTION_UPDATE_RUNTIMES | TEXT_UPDATE_RUNTIMES
 # Only private skill-root discovery and SKILL.md parsing were inspected here.
 # This does not authorize reconciliation of hooks or any other native binding.
-SKILL_DELIVERY_DESKTOP_RUNTIMES = {CURRENT_DESKTOP_RUNTIME, "0.166.0-alpha.5.1", "0.167.0-alpha.3.2"}
-TODO_DELIVERY_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"}
+SKILL_DELIVERY_DESKTOP_RUNTIMES = EXTENDED_DESKTOP_RUNTIMES | {"0.166.0-alpha.5.1", "0.167.0-alpha.3.2"}
 SELECTION_MATCHER = "^collaborationspawn_agent$"
 LIMITATIONS = {
     "mainframe-destructive-operations": "The context-free command and root/home/Git guard subset is installed. Native shell hooks omit the actual tool workdir, so active-project-root and ordinary relative-target protection remain unsupported.",
@@ -67,10 +71,15 @@ LIMITATIONS = {
     "mainframe-code-quality": "The core pre-edit, post-edit, and revalidating completion guard is installed. The full contract remains unsupported because Stop lacks non-blocking model context for completion-only unavailable-check advice.",
     "mainframe-fallow-quality": "No safe partial binding is installed: Codex lacks the exact attributed post-edit diff, dirty-worktree reconstruction can include unrelated changes, persisting source content violates the hook state boundary, and Stop would force a model continuation for an advisory.",
 }
-CURRENT_LIMITATIONS = {
+EXTENDED_LIMITATIONS = {
     **LIMITATIONS,
-    "mainframe-code-quality": "The attributed pre/post-edit advisory and revalidating Stop/SubagentStop guard are installed. Full parity is unsupported: completion-only unavailable advice has no non-blocking model channel, and a still-positive retry terminates with a visible unresolved warning after one repair continuation rather than forcing an unbounded loop.",
-    "mainframe-fallow-quality": "An immediate PostToolUse advisory is installed for uniquely reconstructable Add/Update TS/JS patches, with in-memory diffs and no source retention. Full parity is unsupported: Stop/SubagentStop cannot deliver non-blocking completion advice; moved, deleted or ambiguous hunks lack safe exact reconstruction and produce bounded unavailable advice.",
+    "mainframe-code-quality": "The attributed pre/post-edit advisory and revalidating Stop/SubagentStop guard are installed. Completion-only unavailable advice has no non-blocking model channel. After one repair continuation, a still-positive check gives a visible unresolved warning and leaves other hooks' continuation decisions intact.",
+    "mainframe-fallow-quality": "An immediate PostToolUse advisory is installed for uniquely reconstructable TS/JS updates and verified new files, with in-memory diffs and no source retention. Stop/SubagentStop cannot deliver non-blocking completion advice. Overwritten, moved, deleted or ambiguous hunks produce bounded unavailable advice.",
+}
+TOOL_CWD_LIMITATIONS = {
+    **EXTENDED_LIMITATIONS,
+    "mainframe-destructive-operations": "The context-free guard is installed. Project-root and relative-target protection also run when native Bash payload cwd proves a local workdir override. The unchanged host fallback cwd cannot identify the command's execution environment.",
+    "mainframe-commit-secrets": "The context-free literal and absolute-file metadata guard is installed. Staged and worktree inspection also runs when native Bash payload cwd proves a local workdir override. The unchanged host fallback cwd cannot identify the command's execution environment.",
 }
 
 
@@ -81,7 +90,7 @@ def mapping_supported(version: str | None, surface: str | None) -> bool:
 
 
 def runtime_tools(version: str | None, surface: str | None) -> tuple[str, ...]:
-    return CODE_QUALITY_TOOLS + FALLOW_TOOLS if surface == "desktop" and version == CURRENT_DESKTOP_RUNTIME else RUNTIME_TOOLS
+    return CODE_QUALITY_TOOLS + FALLOW_TOOLS if surface == "desktop" and version in EXTENDED_DESKTOP_RUNTIMES else RUNTIME_TOOLS
 
 
 def _validate_mapping(source: dict) -> None:
@@ -127,13 +136,17 @@ def native_version(executable: str | None) -> str | None:
     return match.group(1) if result.returncode == 0 and match else None
 
 
-def hook_command(base: Path, name: str, state: Path, analyzer_bin: Path | None = None) -> str:
+def hook_command(base: Path, name: str, state: Path, analyzer_bin: Path | None = None,
+                 *, tool_cwd_override: bool = False) -> str:
     # This guard is in the registered command itself. It stays callable even
     # after Codex caches it and every MAINFRAME-owned file has been removed.
     script = ('[ -e "$1/.disabled-$3" ] && exit 0; '
               '[ -f "$1/bridge.py" ] || exit 0; '
               '[ -x "$2" ] || exit 0; '
-              'PATH="${5:+$5:}$PATH" PYTHONDONTWRITEBYTECODE=1 "$2" -B "$1/bridge.py" "$3" "$4" 2>/dev/null || :')
+              'PATH="${5:+$5:}$PATH" PYTHONDONTWRITEBYTECODE=1 "$2" -B "$1/bridge.py" "$3" "$4"')
+    if tool_cwd_override:
+        script += " --tool-cwd-override"
+    script += " 2>/dev/null || :"
     return shlex.join(["/bin/sh", "-c", script, "mainframe-hook", str(base),
                        str(Path(sys.executable).resolve()), name, str(state),
                        str(analyzer_bin) if analyzer_bin else ""])
@@ -152,16 +165,20 @@ def _commands(group: dict) -> set[str]:
     return {hook.get("command", "") for hook in group.get("hooks", []) if isinstance(hook, dict)}
 
 
+def hook_binding_name(command: str | None, base: Path) -> str | None:
+    if not isinstance(command, str):
+        return None
+    try:
+        arguments = shlex.split(command)
+    except ValueError:
+        return None
+    if len(arguments) >= 7 and arguments[3:5] == ["mainframe-hook", str(base)]:
+        return arguments[6]
+    return None
+
+
 def _binding_names(group: dict, base: Path) -> set[str]:
-    names = set()
-    for command in _commands(group):
-        try:
-            arguments = shlex.split(command)
-        except ValueError:
-            continue
-        if len(arguments) >= 7 and arguments[3:5] == ["mainframe-hook", str(base)]:
-            names.add(arguments[6])
-    return names
+    return {name for command in _commands(group) if (name := hook_binding_name(command, base))}
 
 
 def _is_validated_hook_registration_update(change: Change, previous: dict,
@@ -450,7 +467,7 @@ class Codex:
         for name in HOOK_NAMES:
             if name == "mainframe-subagent-selection" and self.version not in SELECTION_BINDING_RUNTIMES:
                 continue
-            if name == "mainframe-fallow-quality" and not (self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME):
+            if name == "mainframe-fallow-quality" and not (self.surface == "desktop" and self.version in EXTENDED_DESKTOP_RUNTIMES):
                 continue
             source_path = self.root / source["components"]["hooks"][name]["source"]
             add(self.hooks / "detectors" / source_path.name, source_path.read_bytes(), "hooks." + name)
@@ -494,6 +511,68 @@ class Codex:
             artifacts[self.skills / name / "agents/openai.yaml"] = (b"policy:\n  allow_implicit_invocation: false\n", 0o600, "commands." + name, False)
         return artifacts
 
+    def native_hook_groups(self, previous: dict | None = None) -> dict:
+        """Native registrations shared by planning and catalog verification."""
+        extended = self.surface == "desktop" and self.version in EXTENDED_DESKTOP_RUNTIMES
+        previous = self.receipt() if previous is None else previous
+        prior_groups = previous.get("hook_groups", {})
+        split_shell = any(PRE_SHELL_TRANSPORT in _binding_names(group, self.hooks)
+                          for group in prior_groups.get("PreToolUse", []))
+        split_post = any(_binding_names(group, self.hooks) & POST_EDIT_HOOKS
+                         for group in prior_groups.get("PostToolUse", []))
+        shell = hook_command(self.hooks, PRE_SHELL_TRANSPORT,
+                             self.event_state, runtime_bin(self.home),
+                             tool_cwd_override=self.surface == "desktop" and self.version == TOOL_CWD_DESKTOP_RUNTIME)
+        groups = {"PreToolUse": [
+            {"matcher": "^Bash$", "hooks": [{"type": "command", "command": shell,
+              "timeout": 5, "additionalContextLimit": 6000},
+              {"type": "command", "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
+               "timeout": 2, "additionalContextLimit": 300}]},
+            {"matcher": "^apply_patch$", "hooks": [{"type": "command",
+              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
+              "timeout": 180, "additionalContextLimit": 6000}]}],
+        "SubagentStart": [{"matcher": ROLE_MATCHER, "hooks": [{"type": "command",
+              "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
+              "timeout": 2, "additionalContextLimit": 300}]}],
+        "PostToolUse": [{"matcher": "^apply_patch$", "hooks": [{"type": "command",
+              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
+              "timeout": 180, "additionalContextLimit": 6000},
+              {"type": "command", "command": hook_command(self.hooks, "mainframe-commit-checkpoint", self.event_state),
+               "timeout": 5, "additionalContextLimit": 1000}]},
+            {"matcher": "^Bash$", "hooks": [{"type": "command",
+              "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
+              "timeout": 2, "additionalContextLimit": 300}]}],
+        "Stop": [{"hooks": [{"type": "command",
+              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
+              "timeout": 180}]}]}
+        if self.version in SELECTION_BINDING_RUNTIMES:
+            groups["PreToolUse"].append(self.selection_group())
+        groups["PreToolUse"].append(self.todo_group())
+        if extended:
+            # Native controls use group/handler indices. Retain split layouts
+            # on upgrades so independent disables and foreign keys keep meaning.
+            if not split_shell:
+                groups["PreToolUse"][0]["hooks"] = [{"type": "command",
+                    "command": hook_command(self.hooks, PRE_EVENT_TRANSPORT, self.event_state,
+                                            runtime_bin(self.home),
+                                            tool_cwd_override=self.version == TOOL_CWD_DESKTOP_RUNTIME),
+                    "timeout": 7, "additionalContextLimit": 1600}]
+            if not split_post:
+                groups["PostToolUse"][0]["hooks"] = [{"type": "command",
+                    "command": hook_command(self.hooks, POST_EDIT_TRANSPORT, self.event_state, runtime_bin(self.home)),
+                    "timeout": 20, "additionalContextLimit": 1600}]
+            fallow = hook_command(self.hooks, "mainframe-fallow-quality", self.event_state, runtime_bin(self.home))
+            groups["PreToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
+                "type": "command", "command": fallow, "timeout": 2}]})
+            if split_post:
+                groups["PostToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
+                    "type": "command", "command": fallow,
+                    "timeout": 10, "additionalContextLimit": 2000}]})
+            groups["SubagentStop"] = [{"hooks": [{
+                "type": "command", "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
+                "timeout": 180}]}]
+        return groups
+
     def todo_group(self):
         return {"matcher": "^apply_patch$", "hooks": [{"type": "command",
                 "command": hook_command(self.hooks, "mainframe-todo-limits", self.event_state),
@@ -501,7 +580,7 @@ class Codex:
 
     def plan_todo(self):
         """Deliver the explicit backlog command and its pre-edit guard only."""
-        if self.surface != "desktop" or self.version not in TODO_DELIVERY_DESKTOP_RUNTIMES:
+        if self.surface != "desktop" or self.version not in EXTENDED_DESKTOP_RUNTIMES:
             raise Conflict("Todo delivery is not validated for this Codex runtime and surface.")
         if regular_bytes(self.journal) is not None:
             raise Conflict(f"Interrupted transaction needs recovery: {self.journal}")
@@ -639,39 +718,7 @@ class Codex:
             instruction_record["user_sha256"] = user_digest
         changes.append(Change.from_snapshot(instruction_path, instruction_snapshot, instruction,
                        mode=instruction_snapshot[1] or 0o600, component="instructions.global"))
-        desired_hooks = {} if remove else {"PreToolUse": [
-            {"matcher": "^Bash$", "hooks": [{"type": "command", "command": hook_command(self.hooks, PRE_SHELL_TRANSPORT, self.event_state, runtime_bin(self.home)),
-              "timeout": 5, "additionalContextLimit": 6000},
-              {"type": "command", "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
-               "timeout": 2, "additionalContextLimit": 300}]},
-            {"matcher": "^apply_patch$", "hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
-              "timeout": 180, "additionalContextLimit": 6000}]}],
-        "SubagentStart": [{"matcher": ROLE_MATCHER, "hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
-              "timeout": 2, "additionalContextLimit": 300}]}],
-        "PostToolUse": [{"matcher": "^apply_patch$", "hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
-              "timeout": 180, "additionalContextLimit": 6000},
-              {"type": "command", "command": hook_command(self.hooks, "mainframe-commit-checkpoint", self.event_state),
-               "timeout": 5, "additionalContextLimit": 1000}]},
-            {"matcher": "^Bash$", "hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-skill-reminder", self.event_state),
-              "timeout": 2, "additionalContextLimit": 300}]}],
-        "Stop": [{"hooks": [{"type": "command",
-              "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
-              "timeout": 180}]}]}
-        if not remove and self.version in SELECTION_BINDING_RUNTIMES:
-            desired_hooks["PreToolUse"].append(self.selection_group())
-        if not remove:
-            desired_hooks["PreToolUse"].append(self.todo_group())
-            if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME:
-                desired_hooks["PostToolUse"].append({"matcher": "^apply_patch$", "hooks": [{
-                    "type": "command", "command": hook_command(self.hooks, "mainframe-fallow-quality", self.event_state, runtime_bin(self.home)),
-                    "timeout": 10, "additionalContextLimit": 2000}]})
-                desired_hooks["SubagentStop"] = [{"hooks": [{
-                    "type": "command", "command": hook_command(self.hooks, "mainframe-code-quality", self.event_state, runtime_bin(self.home)),
-                    "timeout": 180}]}]
+        desired_hooks = {} if remove else self.native_hook_groups(previous)
         hook_path = self.codex / "hooks.json"
         hook_snapshot = observed(hook_path)
         old_hooks = hook_snapshot[0]
@@ -750,9 +797,14 @@ class Codex:
             )
             unsupported = unsupported_dsh_plugins(source)
             pending = {}
-            if self.version not in SELECTION_UPDATE_RUNTIMES | {CURRENT_DESKTOP_RUNTIME}:
+            if self.version not in SELECTION_UPDATE_RUNTIMES | EXTENDED_DESKTOP_RUNTIMES:
                 pending[("hooks", "mainframe-subagent-selection")] = "Subagent-selection controls and binding require runtime validation; tested on Desktop 0.163.0-alpha.11."
-            limitations = CURRENT_LIMITATIONS if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME else LIMITATIONS
+            limitations = LIMITATIONS
+            role_limits = {}
+            if self.surface == "desktop" and self.version in EXTENDED_DESKTOP_RUNTIMES:
+                limitations = TOOL_CWD_LIMITATIONS if self.version == TOOL_CWD_DESKTOP_RUNTIME else EXTENDED_LIMITATIONS
+                role_limits = {name: READ_ONLY_ROLE_LIMIT for name in READ_ONLY_ROLES}
+                unsupported.update({("agents", name): reason for name, reason in role_limits.items()})
             for name, limitation in limitations.items():
                 component = ("hooks", name)
                 if mapping_supported(self.version, self.surface):
@@ -770,6 +822,8 @@ class Codex:
                 next_actions = [
                     f"Confirm discovery in a fresh Codex {self.surface or 'current-surface'} task after any required activation or reload."
                 ]
+            if role_limits:
+                next_actions = [action for action in next_actions if action != READ_ONLY_ROLE_ACTION]
             state = reconcile_state(
                 source, prior_state, target, unchanged=unchanged,
                 delivered=delivered, unsupported=unsupported, pending=pending,
@@ -804,14 +858,15 @@ class Codex:
         if not remove:
             report["unsupported_full_contracts"] = {
                 **(limitations if mapping_supported(self.version, self.surface) else {}),
+                **role_limits,
                 **{name: reason for (_, name), reason in unsupported_dsh_plugins(source).items()},
             }
             report["retained_partial_bindings"] = {
-                "mainframe-destructive-operations": LIMITATIONS["mainframe-destructive-operations"],
-                "mainframe-commit-secrets": LIMITATIONS["mainframe-commit-secrets"],
+                "mainframe-destructive-operations": limitations["mainframe-destructive-operations"],
+                "mainframe-commit-secrets": limitations["mainframe-commit-secrets"],
                 "mainframe-code-quality": limitations["mainframe-code-quality"]
             }
-            if self.surface == "desktop" and self.version == CURRENT_DESKTOP_RUNTIME:
+            if self.surface == "desktop" and self.version in EXTENDED_DESKTOP_RUNTIMES:
                 report["retained_partial_bindings"]["mainframe-fallow-quality"] = limitations["mainframe-fallow-quality"]
         return changes, report
 

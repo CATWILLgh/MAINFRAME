@@ -6,6 +6,44 @@ and representative source cases live in [hooks/README.md](../../../hooks/README.
 Read that catalog once before adapting the first hook, then revisit only the
 active hook section.
 
+## Reviewed Codex and ZCode events
+
+This table covers Codex Desktop `0.167.0-alpha.4.1` and ZCode Desktop
+`3.18.0.10300`. Evidence and activation details are version-specific.
+[Codex](../native/codex.md#desktop-01670-alpha41-hook-contract)
+[ZCode](../native/zcode-evidence.md#desktop-318010300-hook-contract)
+
+| Canonical hook | Codex | ZCode |
+| --- | --- | --- |
+| `mainframe-secret-access` | `PreToolUse Bash` denial | `PreToolUse Bash` denial |
+| `mainframe-rg-short-replace` | `PreToolUse Bash` advice | `PreToolUse Bash` advice |
+| `mainframe-destructive-operations` | `PreToolUse Bash`. Relative checks require a verified local workdir override. | `SessionStart` captures the root. `PreToolUse Bash` checks the actual local cwd. |
+| `mainframe-commit-secrets` | `PreToolUse Bash`. Staged inspection requires a verified local workdir override. | `PreToolUse Bash` inspects staged content in the actual local cwd. |
+| `mainframe-todo-limits` | `PreToolUse apply_patch` | `PreToolUse Write\|Edit` |
+| `mainframe-code-quality` | Pre/post `apply_patch`, then `Stop` or `SubagentStop` | Pre/post `Write\|Edit` with failure cleanup, then `Stop` |
+| `mainframe-commit-checkpoint` | `PostToolUse apply_patch` | `PostToolUse Write\|Edit` |
+| `mainframe-fallow-quality` | `PreToolUse apply_patch` checks new-file existence. `PostToolUse` emits advice for exact edits. | `PostToolUse Write\|Edit` with exact reconstruction |
+| `mainframe-skill-reminder` | Pre/post `Bash` and `SubagentStart` for known roles | Pre/post `Bash` and `PostToolUse Read` in the primary runtime |
+| `mainframe-subagent-selection` | `PreToolUse collaborationspawn_agent` when both fields are exposed | Unsupported by the ordinary `Agent` tool's per-call input schema |
+
+Fallow advice stays on the successful edit event because neither reviewed
+product offers non-blocking model advice at `Stop`. ZCode ordinary subagents
+also lack a runner for these callbacks.
+
+Fresh reviewed Desktop mappings combine quality, Fallow, and checkpoint advice
+into one successful-edit callback and one context message. They also combine
+Bash guard output and skill advice.
+Keep distinct detectors and disable markers behind these private transports.
+Isolate detector exceptions so an unavailable advisory cannot suppress a
+recognized denial from another detector. Limit combined text to 1600 characters
+and serialized output to 8 KiB, allocating space across active channels. A clean
+event emits nothing. The post-edit callback has a 20-second native timeout.
+Existing Codex split layouts retain native group/handler positions and their
+independent controls. ZCode split callbacks with native disable choices retain
+that layout and those choices. Replacing Codex hook definitions requires native
+trust review during delivery. Source tests alone establish neither trust nor
+live receipt.
+
 ## Keep native integration thin
 
 Prefer the canonical detector unchanged behind a small installed wrapper. Keep
@@ -96,20 +134,72 @@ repeatedly inspecting only one fixed directory prefix can starve cleanup.
 
 ## Runtime support
 
-Ruff, Oxlint, Semgrep, and Fallow are dependencies of their listed hooks, not
-separate MAINFRAME components. The maintained installer prepares them before
-changing an active hook's files or registration. It reuses compatible resolved
-executables or installs the tested official distributions in shared
-MAINFRAME-owned user storage, then gives native hook launchers that explicit
-runtime path. Plan reports missing support without mutation; verify fails while
-required support is unavailable. Preserve bounded execution, isolated scanner
-configuration, disabled metrics and telemetry, and the catalog's representative
-checks. Do not install a tool's own hooks as a substitute for the MAINFRAME
-trigger contract.
+Ruff, Oxlint, Semgrep, yamllint, ShellCheck, actionlint, KubeLinter, Squawk,
+Fallow, and Modern Web Guidance are hook runtime dependencies. The installer
+prepares them before changing hook files or registration. It can reuse a stable
+executable at the
+[tested minimum version](../../../installer/runtime.py) or a newer stable
+release that passes a bounded synthetic check through the hook's parser.
+If no candidate is compatible, it provisions the tested official release
+in shared MAINFRAME-owned user storage. Native archives are verified against
+pinned SHA256s for Linux and macOS on x86-64 and ARM64.
+
+The native launchers use the shared runtime path. Plan reports missing support
+without mutation. Apply and verify check the actual executable and report its
+version. The synthetic checks run during runtime preparation and verification.
+Keep hook execution bounded with isolated scanner configuration and disabled
+telemetry. Check a new tool release against the full hook suite before raising
+the tested minimum or changing the provisioned release.
+Compatibility probes keep child temporary files inside the parent's probe
+directory, which is removed after a process-group timeout as well as success.
+
+Modern Web Guidance uses the prepared CLI and requires Node.js 22 or later.
+The same managed Node.js generation includes the Svelte compiler. The ordinary
+CLI still serves guide lookup and broad scans. Its maintained launcher also
+provides an internal mode for the hook's embedded rules using local parser
+modules. A legacy launcher or missing/incompatible compiler requires runtime
+preparation before activating new hook files. Compatible newer releases must
+pass the own-rule samples, including Svelte and multiple resource attribution.
+Prepare dependencies during delivery, before changing hook files or registrations.
+Keep the official package's license and third-party notices intact; see
+[provenance](../../../THIRD_PARTY_NOTICES.md).
+Dependency preparation preserves active analyzers until a separate generation
+is ready. After activation remove only superseded generations explicitly
+recorded as installer allocations in the previous runtime receipt; reusing an
+executable never grants ownership of its directory. Remove newly staged
+generations on caught preparation failure. Reject ancestor symlinks before
+package creation or cleanup. Preserve unregistered directories and legacy files
+without allocation proof. Preparation gives child installers owned scratch paths;
+npm also uses a disposable cache and log directory. OpenSpec replacement removes
+only its previously receipted generation after activation, preserving active
+references and pending recovery. Activation uses the existing rollback journal;
+retain it until rollback and stage cleanup finish. Stop owned preparation
+process groups before cleaning their temporary files. Commit exact pending
+retirement receipts with new bindings and retry cleanup before returning ready;
+keep those receipts until deletion succeeds, including while a generation remains
+in use. A hard interruption before a stage is recorded can leave an unregistered
+directory; preserve it
+rather than sweeping directories by name. pip preparation constrains destination,
+log and report paths while retaining index and CA configuration. Refuse edited
+launchers and preserve concurrent changes before activation. Semgrep version
+probes use temporary log/settings paths without the user's application token.
+
+The Go, Dart, and Rust syntax checks use existing SDK executables. Rust also
+discovers local rustup toolchains when `rustfmt` is absent from `PATH`. A
+missing SDK produces one advisory per execution scope when a file of that
+language is edited.
 
 Product uninstall retains this shared runtime because another MAINFRAME adapter
-may still use it. A later apply or verify rechecks every required executable and
-its exact tested version.
+may still use it.
+
+The local runtime lifecycle checks are `python3 -B -m unittest discover -s tests
+-p 'test_runtime*.py'`. They use disposable
+homes to cover reuse, failed preparation, activation rollback/recovery and
+preservation of foreign files. The full-apply cases in
+[`test_codex_current`](../../../tests/test_codex_current.py) and
+[`test_zcode_current`](../../../tests/test_zcode_current.py) require runtime
+preparation before hook activation; a dependency failure leaves product payload
+and registration unchanged.
 
 ## Verify
 
@@ -123,6 +213,14 @@ operational failure behavior, context bounds, and the required advisory or
 blocking effect. Use synthetic payloads and isolated temporary files or Git
 repositories. Never test destructive behavior against a real root, home, or
 project path.
+
+The local regression routes are `python3 -B -m unittest discover -s hooks/tests`
+for canonical behavior and `python3 -B -m unittest discover -s tests` for
+adapters and lifecycle. Their cases cover duplicate callbacks, bounded scanner
+waits, nonregular files, disabled legacy layouts, per-detector fault isolation,
+Unicode wire budgets, and multi-channel consolidation. Native installed-build
+contract tests remain separate from disposable source fixtures and can reject
+an unreviewed application upgrade.
 
 For edit-dependent hooks, perform a real harmless native edit, observe the
 newly introduced finding, repair it, and prove the finding clears. For a
