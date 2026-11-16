@@ -48,6 +48,63 @@ environment. A logged timing helps diagnosis. For a performance gate, make the
 chosen budget or causal bound an assertion that can reject the defect.
 Demonstrate that it rejects the baseline defect for a regression fix.
 
+## Prove index usefulness and cost
+
+Use for index design, query/index changes, or missing/unused-index claims.
+Establish the index's purpose: query acceleration, an integrity constraint, or
+both. Separate installed validity, applicability to the query, planner choice,
+and measured benefit; none alone proves the others. Use the
+[migration method](migrations.md) for build readiness and safe replacement.
+For an integrity-only index, prove the intended accepted/rejected writes under
+relevant concurrency and bound affected cost; read-scan use is not its purpose.
+
+- Inspect the application's actual SQL, parameter types and representative
+  values, role/schema, and prepared-query behavior. Include filters, joins,
+  tenant scope, ordering and pagination. Compare existing index definitions and
+  current data statistics before choosing key order, a predicate, expression,
+  or included columns for the actual engine/version.
+- Inspect the plan for that query through the actual client execution mode
+  where relevant, including generic/custom prepared plans. Check partial-index
+  predicate implication, expressions, casts, collation and operator compatibility.
+  Parameters do not categorically prevent index use; a literal-only console
+  query does not prove the application's parameterized query can use it.
+- For claimed read acceleration, confirm the actual statement's chosen access
+  path and compare query work AND useful application completion before/after
+  under the workload above. Inspect rows, loops, buffers/I/O, sorting and heap
+  access as relevant, across common and selective parameter values. Investigate stale
+  statistics or row-estimate errors. An index scan can be slower than a table
+  scan; accept a justified plan that meets the result and cost budget. Forcing
+  index use is a diagnostic experiment, not acceptance evidence.
+- Compare affected insert/update/delete throughput and latency, index size,
+  WAL/I/O and maintenance cost where relevant. Included or frequently changed
+  columns can increase storage and write work; do not judge a read improvement
+  in isolation. Faster row discovery does not release transaction-held locks;
+  retain the concurrent-progress check when contention is the risk.
+- Preserve a regression on the real engine with representative data/statistics
+  and actual query bindings. Assert correct results and the relevant time or
+  work budget. For a performance fix, show it rejects the known defect, such as
+  the previous query or a fixture lacking the required index. Stable plan
+  properties may support the check; index existence, a scan-node name, or full-plan text equality alone
+  cannot establish benefit. Keep expensive workloads on the existing CI route.
+
+For ongoing control, reuse scoped statement/index statistics and metrics where
+available. Compare deltas over an identified workload interval, accounting for
+counter resets, replica routing and rare jobs. Index counters do not attribute
+benefit to a particular query or equal successful query counts. Do not reset
+shared statistics, install monitoring infrastructure, or delete indexes merely
+to complete a check. Record the query family, actual definition/readiness,
+plan evidence, read/write/resource results and regression command in the
+verification map. Name missing runtime evidence rather than claiming usefulness.
+
+PostgreSQL sources: [Index usage and statistics](https://www.postgresql.org/docs/current/indexes-examine.html),
+[Multicolumn indexes](https://www.postgresql.org/docs/current/indexes-multicolumn.html),
+[Partial indexes](https://www.postgresql.org/docs/current/indexes-partial.html),
+[Covering indexes](https://www.postgresql.org/docs/current/indexes-index-only-scans.html),
+[HOT update conditions](https://www.postgresql.org/docs/current/storage-hot.html),
+[Index statistics](https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-ALL-INDEXES-VIEW).
+Use the matching engine's method; ClickHouse has separate
+[index/pruning checks](../../mainframe-clickhouse/references/queries.md#verify-index-benefit).
+
 ## Diagnose database cost and blocking
 
 Trace connection acquisition, each query or batch, transaction lifetime, and

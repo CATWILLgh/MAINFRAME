@@ -70,7 +70,10 @@ Review these risks where the changed paths expose them.
   and queue delay. Check transaction scope and work that scales with data or
   traffic. Use realistic load and compare successful completion, latency,
   and limiting resources. Add a regression that can reject the observed cost
-  or contention. Use the correct engine when semantics matter.
+  or contention. Use the correct engine when semantics matter. For query or
+  index changes, apply the shared [index checks](../skills/mainframe-testing/references/performance.md#prove-index-usefulness-and-cost):
+  verify readiness, actual-query use for claimed acceleration, required integrity,
+  and measured read/write/resource effects.
 - **Diagnostics and documentation.** Use `mainframe-logging` for changed
   logs or failure diagnostics. Match API documentation to actual requests,
   responses, errors, examples, and permissions. Expose what each audience

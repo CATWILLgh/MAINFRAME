@@ -28,6 +28,11 @@ versions as defined outcomes. Retry only the intended transaction scope with a
 bounded termination rule. Use `errors.Is` with the selected database package's
 documented sentinel errors rather than comparing error text.
 
+For query optimization or index design/usefulness, use the shared
+[index checks](../../mainframe-testing/references/performance.md#prove-index-usefulness-and-cost).
+Verify the SQL and bindings emitted by the actual Go client, not a simplified
+console query; keep read benefit, write cost and concurrent progress in scope.
+
 For schema, migration, index, constraint, or backfill changes, use the shared
 [migration method](../../mainframe-testing/references/migrations.md). Keep the
 project's existing migration owner and runner; inspect its Go transaction and

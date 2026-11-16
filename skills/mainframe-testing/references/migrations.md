@@ -45,6 +45,14 @@ choose changes from the actual contract rather than universal schema defaults.
 - After an interrupted or failed concurrent build, inspect the index definition
   and validity before repair or retry. An invalid unique index can still enforce
   uniqueness. `IF NOT EXISTS` proves neither validity nor the expected index.
+- Before accepting a completed index rollout, compare the installed definition
+  with the intended keys/order, expressions, predicate, included columns and
+  relevant collation/operator class. Check `pg_index` validity, write readiness
+  and live state (`indisvalid`, `indisready`, `indislive`) on the actual target,
+  including required partitions. Transitional state during a build/drop is not
+  final readiness. Catalog flags do not prove query use or physical integrity;
+  use the shared [index checks](performance.md#prove-index-usefulness-and-cost)
+  for actual-query applicability and workload benefit.
 - Where supported, add a CHECK or foreign key `NOT VALID`, commit the short ADD,
   then VALIDATE separately; validation in the same transaction retains the
   earlier stronger lock. Check the target version's lock and scan behavior.
@@ -57,6 +65,23 @@ choose changes from the actual contract rather than universal schema defaults.
   safe; check references, nullability, and uniqueness. Exercise reads and writes
   with missing, changed, and reused tenant context; transaction-local context
   and pool reset must match actual pooling.
+
+## Replace or retire indexes
+
+Compare full definitions before calling indexes duplicates or treating a wider
+index as a replacement. Preserve uniqueness/null semantics, constraint and
+replica-identity dependencies, relevant access paths and rollback compatibility.
+In PostgreSQL, a foreign key does not automatically index the referencing
+columns; assess affected joins and parent updates/deletes rather than blindly
+indexing every foreign key.
+
+Zero observed scans alone does not justify removal: check the observation
+window/reset, read replicas, rare jobs and integrity purpose. When replacing a
+required path, prove the replacement is ready and useful through the
+[index checks](performance.md#prove-index-usefulness-and-cost). An obsolete index
+can be removed without replacement when evidence establishes it is unnecessary.
+Verify affected reads/writes and invariants after removal using the normal
+runner and authorized boundary.
 
 ## Prove upgrade, compatibility, and bounded disruption
 
@@ -88,6 +113,8 @@ Read the matching server version for version-sensitive behavior:
 - [PostgreSQL client timeouts](https://www.postgresql.org/docs/current/runtime-config-client.html#RUNTIME-CONFIG-CLIENT-STATEMENT)
   and [SET scope](https://www.postgresql.org/docs/current/sql-set.html).
 - [Concurrent index construction](https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY).
+- [Index readiness catalog](https://www.postgresql.org/docs/current/catalog-pg-index.html)
+  and [foreign-key/index behavior](https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-FK).
 - [PostgreSQL 16 ALTER TABLE: locks, validation, defaults and scans](https://www.postgresql.org/docs/16/sql-altertable.html).
 - [PostgreSQL 16 row security](https://www.postgresql.org/docs/16/ddl-rowsecurity.html)
   and [PgBouncer pooling compatibility](https://www.pgbouncer.org/features.html).

@@ -11,6 +11,11 @@
 - Own pools and clients once per intended process or request lifecycle. Prevent connection multiplication in hot-reload, serverless, worker, and test environments.
 - Release transactions and pool slots before waiting for a queue, quota, or upstream response whenever the protocol permits. Measure the lock holder, waiter, and request progress on the actual engine when changing contention.
 
+For query optimization or index design/usefulness, use the shared
+[index checks](../../mainframe-testing/references/performance.md#prove-index-usefulness-and-cost).
+Verify emitted client/ORM SQL, bindings and prepared-query behavior; declarations
+or an index added successfully do not prove application use or workload benefit.
+
 ## Schema and data rollout
 
 Use the shared [migration method](../../mainframe-testing/references/migrations.md)

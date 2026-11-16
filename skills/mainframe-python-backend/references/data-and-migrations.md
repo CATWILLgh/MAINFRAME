@@ -12,6 +12,11 @@ holder, waiter, and affected request progress on the actual engine.
 
 Review loading strategy and query count at the affected path. Avoid accidental lazy I/O after a session closes, implicit I/O in async code, unbounded reads, per-row queries, and serialization that changes query behavior.
 
+For query optimization or index design/usefulness, use the shared
+[index checks](../../mainframe-testing/references/performance.md#prove-index-usefulness-and-cost).
+Verify the actual ORM/client SQL and bindings; model declarations or literal-only
+queries do not prove index applicability or a read/write performance improvement.
+
 For schema, migration, index, constraint, or backfill changes, use the shared
 [migration method](../../mainframe-testing/references/migrations.md). Inspect the
 active framework's migration graph, generated operations, transaction settings,

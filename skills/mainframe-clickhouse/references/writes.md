@@ -70,6 +70,16 @@ actual view type; refreshable views have different behavior.
 
 ## Schema and cluster scope
 
+For an index/projection rollout, distinguish the installed definition, coverage
+of existing parts, and observed query benefit through the
+[index checks](queries.md#verify-index-benefit). Adding a skipping index normally
+covers new data; existing parts require supported materialization. Inspect the
+actual version and projection behavior rather than assuming identical rules.
+Budget materialization disk/CPU/I/O and ingestion/merge headroom, and track the
+specific work and relevant replicas before claiming completion. Reuse the normal
+schema owner and existing mutation/DDL diagnostics; a returned DDL acknowledgment
+does not prove historical data is covered.
+
 `ON CLUSTER` widens the target. Use it only for a verified cluster definition and
 explicitly covered nodes. Distributed DDL may reach unavailable hosts later and
 is not an atomic all-node transaction. Check the relevant DDL queue and resulting
