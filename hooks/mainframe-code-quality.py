@@ -581,12 +581,375 @@ _WEB_STYLE_EXTENSIONS = {".css", ".html", ".htm", ".vue", ".svelte"}
 _WEB_MAX_BYTES = 128_000
 _WEB_MAX_LINE_CHARS = 2_000
 _WEB_SCAN_BUDGET_SECONDS = 1
+_WEB_CHANNEL = "modern-web-rules-v1"
 _WEB_LABELS = {
     "ime-safe-enter-submit": "review text-entry composition guards; ignore buttons and links",
     "validate-input-after-interaction": "error styling can appear before interaction; preserve validation timing and browser support",
     "secure-external-subresources": "review integrity and CORS for external scripts or styles",
 }
 _WEB_IGNORED_DIRS = {"node_modules", "vendor", "third_party", "dist", "build", "coverage", ".next", "generated"}
+
+# The adapted rule program is Apache-2.0; see LICENSES/Apache-2.0.txt.
+_WEB_RULES_PROGRAM = r"""
+// SPDX-License-Identifier: Apache-2.0
+// Adapted from GoogleChrome modern-web-guidance 1.0.0 analyzing/rules (Apache-2.0):
+// https://github.com/GoogleChrome/modern-web-guidance-src/tree/main/src/analyzing/rules
+// MAINFRAME modifications: per-resource SRI, local same-event IME reachability,
+// per-rule validation timing, and official-compiler Svelte template coverage.
+// Evaluated by the managed launcher; all source parsing belongs to maintained parsers.
+import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const { runAnalyzeCli } = await import(pathToFileURL(process.argv[2]).href);
+const args = process.argv.slice(4);
+const guideIndex = args.indexOf('--guide');
+const allows = id => guideIndex < 0 || args[guideIndex + 1] === id;
+const kind = (n, name) => n?.getKindName() === name;
+const unwrap = n => {
+  while (n && ['ParenthesizedExpression', 'AsExpression', 'TypeAssertionExpression', 'NonNullExpression', 'SatisfiesExpression'].includes(n.getKindName())) n = n.getExpression();
+  return n;
+};
+const descendants = (n, name) => n.getDescendants().filter(x => kind(x, name));
+const literal = n => { n = unwrap(n); return n?.getLiteralValue?.(); };
+function bindsName(pattern, name) {
+  if (kind(pattern,'Identifier')) return pattern.getText() === name;
+  return pattern?.getElements?.().some(e => bindsName(e.getNameNode?.(),name)) ?? false;
+}
+function resolve(n) {
+  n = unwrap(n);
+  if (!kind(n, 'Identifier')) return n;
+  const name = n.getText();
+  for (let p = n.getParent(); p; p = p.getParent()) {
+    if (p.getParameters?.().some(param => bindsName(param.getNameNode(),name))) return null;
+    if (!p.getStatements) continue;
+    for (const stmt of p.getStatements()) {
+      if (kind(stmt, 'FunctionDeclaration') && stmt.getName() === name) return stmt;
+      for (const decl of stmt.getDeclarations?.() ?? []) if (decl.getName() === name) return unwrap(decl.getInitializer());
+    }
+  }
+  return null;
+}
+const isFunction = n => n && ['ArrowFunction', 'FunctionExpression', 'FunctionDeclaration'].includes(n.getKindName());
+const U = Symbol('unknown');
+const canTrue = values => values.some(v => v === U || Boolean(v));
+const canFalse = values => values.some(v => v === U || !v);
+const pathOf = n => {
+  n = unwrap(n);
+  if (kind(n, 'Identifier')) return [n.getText()];
+  if (kind(n, 'PropertyAccessExpression')) return [...pathOf(n.getExpression()), n.getName()];
+  if (kind(n, 'ElementAccessExpression')) return [...pathOf(n.getExpression()), literal(n.getArgumentExpression())];
+  return [];
+};
+let matcherUnavailable;
+function unavailable(reason) {
+  matcherUnavailable = new Error(`MAINFRAME web check unavailable: ${reason}`);
+  throw matcherUnavailable;
+}
+// Only local if/return/short-circuit/switch paths are interpreted, never application code.
+function reachableActions(fn, key) {
+  const actions = new Map(), event = fn.getParameters?.()[0]?.getName();
+  let budget = 4000;
+  const spend = () => { if (--budget < 0) unavailable('handler exceeds 4000 AST evaluation steps'); };
+  function expr(raw) {
+    const n = unwrap(raw);
+    if (!n) return [U];
+    spend();
+    if (kind(n, 'StringLiteral') || kind(n, 'NumericLiteral') || kind(n, 'NoSubstitutionTemplateLiteral')) return [literal(n)];
+    if (kind(n, 'TrueKeyword')) return [true];
+    if (kind(n, 'FalseKeyword')) return [false];
+    if (kind(n, 'NullKeyword')) return [null];
+    if (kind(n, 'PropertyAccessExpression') || kind(n, 'ElementAccessExpression')) {
+      const p = pathOf(n);
+      if (p[0] !== event || (p.length !== 2 && !(p.length === 3 && p[1] === 'nativeEvent'))) return [U];
+      const field = p.at(-1);
+      if (field === 'key' || field === 'code') return [key];
+      if (field === 'isComposing') return [true];
+      if (field === 'keyCode' || field === 'which') return [229];
+      if (['ctrlKey', 'metaKey', 'altKey', 'shiftKey'].includes(field)) return [false];
+      return [U];
+    }
+    if (kind(n, 'PrefixUnaryExpression') && n.getText().startsWith('!')) return expr(n.getOperand()).map(v => v === U ? U : !v);
+    if (kind(n, 'BinaryExpression')) {
+      const op = n.getOperatorToken().getText(), left = expr(n.getLeft());
+      if (op === '&&') return [...(canFalse(left) ? [false] : []), ...(canTrue(left) ? expr(n.getRight()) : [])];
+      if (op === '||') return [...(canTrue(left) ? [true] : []), ...(canFalse(left) ? expr(n.getRight()) : [])];
+      const right = expr(n.getRight());
+      if (['===', '==', '!==', '!='].includes(op)) return left.flatMap(a => right.map(b => a === U || b === U ? U : (op[0] === '!' ? a !== b : a === b)));
+      return [U];
+    }
+    if (kind(n, 'ConditionalExpression')) {
+      const c = expr(n.getCondition());
+      return [...(canTrue(c) ? expr(n.getWhenTrue()) : []), ...(canFalse(c) ? expr(n.getWhenFalse()) : [])];
+    }
+    if (kind(n, 'CallExpression')) {
+      for (const a of n.getArguments()) if (!isFunction(a)) expr(a);
+      const p = pathOf(n.getExpression());
+      if (!(p[0] === 'console' || (p[0] === event && ['preventDefault', 'stopPropagation', 'stopImmediatePropagation'].includes(p.at(-1))))) actions.set(n.getStart(), n);
+      return [U];
+    }
+    if (kind(n, 'AwaitExpression') || kind(n, 'VoidExpression')) return expr(n.getExpression());
+    return [U];
+  }
+  // Bit flags: 1 continues, 2 returns, 4 breaks out of a switch.
+  function sequence(statements) {
+    let state = 1;
+    for (const s of statements) if (state & 1) state = (state & ~1) | stmt(s);
+    return state;
+  }
+  function stmt(n) {
+    if (!n) return 1;
+    spend();
+    if (kind(n, 'Block')) return sequence(n.getStatements());
+    if (kind(n, 'ExpressionStatement')) { expr(n.getExpression()); return 1; }
+    if (kind(n, 'ReturnStatement') || kind(n, 'ThrowStatement')) { expr(n.getExpression()); return 2; }
+    if (kind(n, 'BreakStatement')) return 4;
+    if (kind(n, 'IfStatement')) {
+      const c = expr(n.getExpression());
+      return (canTrue(c) ? stmt(n.getThenStatement()) : 0) | (canFalse(c) ? stmt(n.getElseStatement()) : 0);
+    }
+    if (kind(n, 'VariableStatement')) { for (const d of n.getDeclarations()) expr(d.getInitializer()); return 1; }
+    if (kind(n, 'SwitchStatement')) {
+      const values = expr(n.getExpression()), clauses = n.getCaseBlock().getClauses();
+      let state = 0;
+      for (const v of values) {
+        const matched = clauses.findIndex(c => c.getExpression && literal(c.getExpression()) === v);
+        const start = matched >= 0 ? matched : clauses.findIndex(c => kind(c, 'DefaultClause'));
+        const indices = v === U ? clauses.map((_, i) => i) : [start];
+        for (const i of indices) state |= i < 0 ? 1 : sequence(clauses.slice(i).flatMap(c => c.getStatements()));
+      }
+      return (state & 4 ? 1 : 0) | (state & ~4);
+    }
+    if (['ForStatement','ForInStatement','ForOfStatement','WhileStatement','DoStatement','TryStatement','WithStatement'].includes(n.getKindName()) && descendants(n,'CallExpression').some(c => c.getFirstAncestor(isFunction) === fn)) unavailable('executed loop/try control flow is outside local handler analysis');
+    return 1;
+  }
+  const body = fn.getBody?.();
+  if (kind(body, 'Block')) stmt(body); else expr(body);
+  return actions;
+}
+function unsafeHandler(fn, enterOnly = false) {
+  if (!isFunction(fn) || !fn.getBody?.()) return null;
+  const event = fn.getParameters?.()[0]?.getName();
+  const ownKey = n => { const p = pathOf(n); return p[0] === event && (p.length === 2 || (p.length === 3 && p[1] === 'nativeEvent')) && ['key','code'].includes(p.at(-1)); };
+  function ownEnter(n) {
+    return [n,...n.getDescendants()].some(x => {
+      if (x.getFirstAncestor(isFunction) !== fn) return false;
+      if (kind(x,'SwitchStatement')) return ownKey(x.getExpression()) && x.getCaseBlock().getClauses().some(c => c.getExpression && literal(c.getExpression()) === 'Enter');
+      if (!kind(x,'BinaryExpression') || !['==','===','!=','!=='].includes(x.getOperatorToken().getText())) return false;
+      return [[x.getLeft(),x.getRight()],[x.getRight(),x.getLeft()]].some(([a,b]) => ownKey(a) && literal(b) === 'Enter');
+    });
+  }
+  if (!enterOnly && !ownEnter(fn.getBody())) return null;
+  const enter = reachableActions(fn, 'Enter');
+  const other = enterOnly ? new Map() : reachableActions(fn, '__mainframe_other_key__');
+  function enterBranch(node) {
+    for (let p = node.getParent(); p && p !== fn; p = p.getParent()) if (kind(p,'IfStatement') && ownEnter(p.getExpression())) return true;
+    return false;
+  }
+  return [...enter].find(([site,node]) => !other.has(site) || enterBranch(node))?.[1] ?? null;
+}
+const nonTextRoles = /^(?:button|link|menuitem|tab|switch|checkbox|radio|option|listbox|treeitem)$/i;
+function textElement(tag, attr) {
+  if (['button', 'a', 'select', 'option'].includes(tag) || nonTextRoles.test(attr('role') ?? '')) return false;
+  if (tag === 'textarea') return true;
+  if (tag === 'input') return /^(?:text|search|email|url|tel|password|number)?$/i.test(attr('type') ?? '');
+  return /^(?:true|plaintext-only)?$/i.test(attr('contenteditable') ?? '!') || attr('role') === 'textbox';
+}
+function textTarget(raw, seen = new Set()) {
+  const n = unwrap(raw);
+  if (!n || seen.has(n)) return false;
+  seen.add(n);
+  if (kind(n, 'Identifier')) return textTarget(resolve(n), seen);
+  if (!kind(n, 'CallExpression')) return false;
+  const p = pathOf(n.getExpression()), method = p.at(-1), value = literal(n.getArguments()[0]);
+  if (typeof value !== 'string' || !['querySelector', 'createElement'].includes(method)) return false;
+  if (method === 'createElement') return ['input', 'textarea'].includes(value.toLowerCase());
+  if (value.includes(',')) return false;
+  const subject = /(?:^|[\s>+~])((?:\[[^\]]*\]|[^\s>+~,])+)\s*$/.exec(value.trim())?.[1];
+  if (!subject) return false;
+  const tag = /^[a-z][\w-]*/i.exec(subject)?.[0].toLowerCase() ?? '';
+  if (!['input','textarea'].includes(tag) && subject.includes('(')) return false;
+  const attrs = new Map([...subject.matchAll(/\[\s*([\w-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+)))?\s*\]/g)]
+    .map(m => [m[1].toLowerCase(),m[2] ?? m[3] ?? m[4] ?? '']));
+  if (['type','role'].some(name => new RegExp('\\[' + name + '\\b','i').test(subject) && !attrs.has(name))) return false;
+  return textElement(tag, name => attrs.get(name) ?? null);
+}
+const imeMessage = 'Enter action on a text field can run during IME composition; guard the same event with isComposing before the action.';
+function jsIme(sf) {
+  const hits = [], record = (fn,site) => { if (unsafeHandler(resolve(fn))) hits.push({line:site.getStartLineNumber(), message:imeMessage}); };
+  for (const call of descendants(sf, 'CallExpression')) {
+    const access = unwrap(call.getExpression());
+    if (!kind(access, 'PropertyAccessExpression') || access.getName() !== 'addEventListener' || literal(call.getArguments()[0]) !== 'keydown') continue;
+    if (textTarget(access.getExpression())) record(call.getArguments()[1],call);
+  }
+  for (const attr of descendants(sf, 'JsxAttribute')) {
+    if (!['onKeyDown', 'onkeydown'].includes(attr.getNameNode().getText())) continue;
+    const el = attr.getFirstAncestor(n => kind(n,'JsxOpeningElement') || kind(n,'JsxSelfClosingElement')), attrs = el.getAttributes();
+    const get = name => {
+      const a = attrs.find(x => kind(x, 'JsxAttribute') && x.getNameNode().getText().toLowerCase() === name);
+      const init = a?.getInitializer();
+      return kind(init, 'JsxExpression') ? (literal(init.getExpression()) ?? (kind(init.getExpression(), 'TrueKeyword') ? 'true' : null)) : literal(init);
+    };
+    const dynamicType = attrs.some(a => kind(a,'JsxAttribute') && a.getNameNode().getText() === 'type') && get('type') === null;
+    const tag = el.getTagNameNode().getText();
+    if (tag === tag.toLowerCase() && !dynamicType && textElement(tag, get)) record(attr.getInitializer()?.getExpression?.(),attr);
+  }
+  for (const assignment of descendants(sf, 'BinaryExpression')) {
+    const left = unwrap(assignment.getLeft());
+    if (assignment.getOperatorToken().getText() === '=' && kind(left, 'PropertyAccessExpression') && left.getName() === 'onkeydown' && textTarget(left.getExpression())) record(assignment.getRight(),assignment);
+  }
+  return hits;
+}
+const meta = (id, hash, matcher) => {
+  const guarded = {...matcher};
+  for (const method of ['matchFile','matchElement','matchRule']) {
+    const match = matcher[method];
+    if (typeof match !== 'function') continue;
+    guarded[method] = (...args) => {
+      try { return match.apply(matcher,args); }
+      catch (error) {
+        matcherUnavailable ??= error instanceof Error ? error : new Error('web matcher failed');
+        throw error;
+      }
+    };
+  }
+  return {id,guideId:id,guideHash:hash,summary:id,matcher:guarded,verifierRubric:{keepWhen:[],dropWhen:[]}};
+};
+const scripts = [];
+let project, parsed = 0;
+// Markup callbacks are synchronous. Reuse upstream script ASTs, acquiring its parser
+// from one private seed only when a template has no script to supply a Project.
+const target = args.find(a => !a.startsWith('-'));
+const content = target ? await readFile(target, 'utf8') : '';
+if (allows('ime-safe-enter-submit') && /\.(?:vue|svelte|html?)$/i.test(target ?? '') && /keydown/i.test(content)) {
+  const collect = meta('mainframe-parser', '000000000000', {kind:'js',fastTokens:['function','const','let','var','=>'],matchFile(sf){project ??= sf.getProject();scripts.push(project.createSourceFile(`/__mainframe_script_${scripts.length}.ts`,sf.getFullText()));return [];}});
+  await runAnalyzeCli([target, '--json'], {rules:[collect]});
+  if (!project) {
+    const dir = await mkdtemp(join(tmpdir(), 'mainframe-web-parser-'));
+    try { const seed = join(dir,'seed.ts'); await writeFile(seed,'const seed = 0;',{mode:0o600}); await runAnalyzeCli([seed,'--json'],{rules:[collect]}); }
+    finally { await rm(dir,{recursive:true,force:true}); }
+  }
+}
+function templateHandler(raw, implicit) {
+  const text = raw.trim().replace(/^\{([\s\S]*)\}$/, '$1').trim();
+  const forwarding = /^([A-Za-z_$][\w$]*)\(\s*([A-Za-z_$][\w$]*)\s*\)$/.exec(text);
+  const name = forwarding?.[2] === implicit ? forwarding[1] : text;
+  if (/^[A-Za-z_$][\w$]*$/.test(name)) {
+    for (const sf of scripts) {
+      for (const n of sf.getStatements()) {
+        if (kind(n,'FunctionDeclaration') && n.getName() === name) return n;
+        const d = n.getDeclarations?.().find(d => d.getName() === name);
+        if (d) return resolve(d.getInitializer());
+      }
+    }
+    return null;
+  }
+  if (!project) return null;
+  const sf = project.createSourceFile(`/__mainframe_handler_${parsed++}.ts`, `const handler = (${text});`);
+  let fn = unwrap(sf.getStatements()[0]?.getDeclarations?.()[0]?.getInitializer());
+  if (!isFunction(fn)) { project.removeSourceFile(sf); return project.createSourceFile(`/__mainframe_handler_${parsed++}.ts`, `const handler = (${implicit}) => {${text}\n};`).getStatements()[0].getDeclarations()[0].getInitializer(); }
+  return fn;
+}
+const imeDom = meta('ime-safe-enter-submit','99e3b42fb16a',{kind:'dom',selector:'*',fastTokens:['<'],matchElement(el,ctx){
+  if (/\.svelte$/i.test(ctx.filePath) || el.isJsx || el.hasDynamicAttribute?.('type') || !textElement(el.tagName, n => el.getAttribute(n))) return null;
+  for (const [name, raw] of Object.entries(el.attributes)) {
+    if (!/^(?:@keydown|v-on:keydown|on:keydown|onkeydown)(?:[.|]|$)/i.test(name) || /[.|](?:ctrl|meta|alt|shift)\b/i.test(name)) continue;
+    const fn = templateHandler(raw, name.startsWith('@') || name.startsWith('v-on:') ? '$event' : 'event');
+    if (unsafeHandler(fn, /\.enter\b/i.test(name))) return {message:imeMessage};
+  }
+  return null;
+}});
+function secureResource(el) {
+  if (!['script','link'].includes(el.tagName) || (el.tagName === 'link' && el.getAttribute('rel')?.trim().toLowerCase() !== 'stylesheet')) return null;
+  const url = el.getAttribute(el.tagName === 'script' ? 'src' : 'href')?.trim() ?? '';
+  if (el.hasSpreadAttribute || el.hasAttribute('importance') || ['importance','integrity','crossorigin','crossOrigin','src','href'].some(a => el.hasDynamicAttribute?.(a))) return null;
+  if (el.hasAttribute('integrity')) return !el.hasAttribute('crossorigin') && !el.hasAttribute('crossOrigin') && /\bsha(?:256|384|512)-[A-Za-z0-9+/=]+/.test(el.getAttribute('integrity') ?? '') && /^https:\/\//i.test(url) ? {message:'External integrity-protected resource needs crossorigin for browser SRI verification.'} : null;
+  if (!/^https:\/\/(?:cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|code\.jquery\.com|maxcdn\.bootstrapcdn\.com|stackpath\.bootstrapcdn\.com|ajax\.googleapis\.com)\//i.test(url) || /\/combine\/|@(?:latest|next|main|master)\b|[?#{}<>]|<%|\$\{/i.test(url) || !/(?:\/|@|-)v?\d+\.\d+\.\d+(?:-[0-9a-zA-Z.-]+)?(?:\/|\.|-)/.test(url)) return null;
+  return (el.tagName === 'script' ? /\.(?:js|mjs)$/i : /\.css$/i).test(url) ? {message:'Immutable public CDN resource needs Subresource Integrity and crossorigin.'} : null;
+}
+const sri = meta('secure-external-subresources','dfe6b556317c',{kind:'dom',selector:'script[src], link[rel="stylesheet"][href]',fastTokens:['<'],skipIfHasSpread:true,skipIfDynamicAttributes:['integrity','crossorigin','crossOrigin','src','href'],matchElement:(el,ctx) => /\.svelte$/i.test(ctx.filePath) ? null : secureResource(el)});
+const visual = /^(?:border(?:-(?:color|top|right|bottom|left)(?:-color)?)?|background(?:-color|-image)?|color|(?:-(?:webkit|moz)-)?box-shadow|outline(?:-color)?)$/;
+const reset = /^(?:none|0(?:px)?|transparent|currentcolor|inherit|initial|unset|revert|normal|auto)$/;
+const css = meta('validate-input-after-interaction','039f2593da67',{kind:'css',fastTokens:[':'],matchRule(rule){
+  if (/@supports\s+not\s+selector\(\s*:user-invalid\s*\)/i.test(rule.parentAtRule ?? '')) return null;
+  const selectors = rule.selectorText.split(',');
+  const stateBase = s => s.replace(/:(?:valid|invalid)\b/gi,'').trim().replace(/\s+/g,' ');
+  const valid = new Set(selectors.filter(s => /:valid\b/i.test(s)).map(stateBase));
+  for (const raw of selectors) {
+    if (valid.has(stateBase(raw))) continue;
+    if (/:user-invalid\b|(?:::|:-)(?:webkit-input-|moz-|ms-input-)?placeholder\b|\.(?:was-validated|is-validated|validated|touched|is-touched|ng-touched|dirty|is-dirty|ng-dirty|interacted|submitted|submission-attempted)\b|\bform\.invalid\b|\[data-(?:touched|dirty|interacted|validated)\b/i.test(raw)) continue;
+    const s = raw.replace(/:not\([^)]*\)/gi,'');
+    if (!/(?:^|[\s>+~])(?:input|textarea)(?:[.#][\w-]+|\[[^\]]*\]|:[\w-]+)*:invalid\b/i.test(s)) continue;
+    if (!rule.declarations.some(d => (visual.test(d.property.toLowerCase()) || (/:invalid\b[^,]*[+~]/.test(s) && /^(?:display|visibility|opacity)$/.test(d.property))) && !reset.test(d.value.replace(/\s*!important\s*$/i,'').trim().toLowerCase()))) continue;
+    return {message:'Apply text-field error styling after interaction using :user-invalid or an explicit touched/validated gate.'};
+  }
+  return null;
+}});
+const rules = [meta('ime-safe-enter-submit','99e3b42fb16a',{kind:'js',fastTokens:['keydown','onKeyDown'],matchFile:jsIme}),imeDom,sri,css];
+const svelteHits = [];
+if (/\.svelte$/i.test(target ?? '') && ((allows('ime-safe-enter-submit') && /keydown/i.test(content)) || (allows('secure-external-subresources') && /<(?:script|link)\b/i.test(content)))) {
+  const imported = await import(pathToFileURL(process.argv[3]).href);
+  const ast = (imported.default ?? imported).parse(content,{modern:true});
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'RegularElement' || node.type === 'Script') {
+      const tag = node.type === 'Script' ? 'script' : node.name.toLowerCase();
+      const attrs = node.attributes;
+      const attribute = name => attrs.find(a => a.type === 'Attribute' && a.name.toLowerCase() === name.toLowerCase());
+      const get = name => {
+        const a = attribute(name);
+        if (a?.value === true) return '';
+        const values = Array.isArray(a?.value) ? a.value : a?.value ? [a.value] : [];
+        if (values.length === 1 && values[0].type === 'ExpressionTag' && values[0].expression.type === 'Literal') return String(values[0].expression.value);
+        return values.length && values.every(v => v.type === 'Text') ? values.map(v => v.data).join('') : null;
+      };
+      const dynamicType = Boolean(attribute('type')) && get('type') === null;
+      const hit = (guideId, offset, message) => {
+        const line = content.slice(0,offset).split('\n').length;
+        svelteHits.push({guideId,finding:{file:basename(target),line,message,lineContent:content.split('\n')[line-1].trim()}});
+      };
+      if (allows('secure-external-subresources')) {
+        const match = secureResource({tagName:tag,getAttribute:get,hasAttribute:name=>Boolean(attribute(name)),hasSpreadAttribute:attrs.some(a=>a.type === 'SpreadAttribute'),hasDynamicAttribute:name=>Boolean(attribute(name)) && get(name) === null});
+        if (match) hit('secure-external-subresources',node.start,match.message);
+      }
+      if (allows('ime-safe-enter-submit') && !dynamicType && !attrs.some(a => a.type === 'SpreadAttribute') && textElement(tag,get)) {
+        for (const a of attrs) {
+          const expression = a.type === 'OnDirective' && a.name === 'keydown' ? a.expression : a.type === 'Attribute' && a.name === 'onkeydown' ? (Array.isArray(a.value) ? a.value[0]?.expression : a.value?.expression) : null;
+          if (!expression || !['Identifier','ArrowFunctionExpression','FunctionExpression'].includes(expression.type)) continue;
+          const fn = templateHandler(content.slice(expression.start,expression.end),'event');
+          if (unsafeHandler(fn)) hit('ime-safe-enter-submit',a.start,imeMessage);
+        }
+      }
+    }
+    for (const [key,value] of Object.entries(node)) {
+      if (['loc','expression','attributes','instance','module','css','content'].includes(key)) continue;
+      if (Array.isArray(value)) value.forEach(visit); else if (value && typeof value === 'object') visit(value);
+    }
+  }
+  visit(ast.fragment);
+  visit(ast.instance);visit(ast.module);
+}
+const result = await runAnalyzeCli(args,{rules});
+// Upstream catches matcher exceptions per file; preserve bounded-unavailable
+// failures instead of allowing its empty result to appear successfully clean.
+if (matcherUnavailable) throw matcherUnavailable;
+// The upstream markup scanner drops brace-arrow Svelte attributes. Merge only
+// official-compiler DOM matches into its unchanged public wire schema.
+if (result.data && svelteHits.length) {
+  for (const {guideId,finding} of svelteHits) {
+    let guide = result.data.guides.find(g => g.guideId === guideId);
+    if (!guide) { guide = {guideId,retrieveCommand:`npx modern-web-guidance retrieve ${guideId}`,count:0,rules:[]}; result.data.guides.push(guide); }
+    let rule = guide.rules.find(r => r.ruleId === guideId);
+    if (!rule) { rule = {ruleId:guideId,summary:guideId,verifierRubric:{keepWhen:[],dropWhen:[]},count:0,findings:[]};guide.rules.push(rule); }
+    rule.findings.push(finding);rule.count = rule.findings.length;
+    guide.count = guide.rules.reduce((n,r) => n + r.findings.length,0);
+  }
+  result.data.totalFindings = result.data.guides.reduce((n,g) => n + g.count,0);
+  result.output = JSON.stringify(result.data,null,2) + '\n';
+}
+process.stdout.write(result.output);
+process.exitCode = result.exitCode;
+"""
 _CODE_MARKERS = (
     (
         "skipped/focused test (.skip/.only/xit/fit)",
@@ -1226,7 +1589,9 @@ def _modern_web_findings(text: str, path: Path, workspace: Path) -> list[Occurre
     lower = text.lower()
     guides = []
     if (extension in _JS_EXTENSIONS | _WEB_MARKUP_EXTENSIONS
-            and "Enter" in text and "keydown" in lower):
+            and "keydown" in lower and ("Enter" in text or (
+                extension == ".vue" and re.search(r"(?:@|v-on:)keydown(?:\.[\w-]+)*\.enter\b", lower)
+            ))):
         guides.append("ime-safe-enter-submit")
     style_candidate = extension in _WEB_STYLE_EXTENSIONS or (
         extension in _NODE_EXTENSIONS and re.search(r"\bcss\s*`", text)
@@ -1248,9 +1613,10 @@ def _modern_web_findings(text: str, path: Path, workspace: Path) -> list[Occurre
     environment.pop("NODE_PATH", None)
     with tempfile.TemporaryDirectory(prefix="mainframe-web-review-") as directory:
         root = Path(directory)
+        environment["TMPDIR"] = str(root)
         source = root / ("source" + suffix)
         source.write_text(text, encoding="utf-8")
-        command = [executable, "legacy-scan", source.name, "--json"]
+        command = [executable, "--mainframe-rules", _WEB_RULES_PROGRAM, source.name, "--json"]
         if len(guides) == 1:
             command.extend(["--guide", guides[0]])
         # The upstream dispatcher calls process.exit before piped stdout drains.
@@ -1290,7 +1656,7 @@ def _modern_web_findings(text: str, path: Path, workspace: Path) -> list[Occurre
                 line = finding["line"]
                 rows.append(_occurrence(
                     f"Modern Web {identity}: {_WEB_LABELS[identity]}", line, "scanner",
-                    source_lines[line - 1].strip()[:1000], channel="modern-web", blocking=False,
+                    source_lines[line - 1].strip()[:1000], channel=_WEB_CHANNEL, blocking=False,
                 ))
     return rows
 
@@ -2278,7 +2644,7 @@ def _read_edit_scans(paths: Iterable[Path], workspace: Path, deadline: float) ->
                 if source is None or source.revision != scan.revision:
                     raise ValueError("web review snapshot changed after core scanning")
                 rows = _modern_web_findings(source.text, path, workspace)
-                scans[path] = scan._replace(rows=scan.rows + rows, channels=scan.channels | {"modern-web"})
+                scans[path] = scan._replace(rows=scan.rows + rows, channels=scan.channels | {_WEB_CHANNEL})
             except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
                 issue = ScanIssue("scanner:modern-web", "Modern web review was unavailable for the edited file.")
                 scans[path] = scan._replace(issues=scan.issues + (issue,))

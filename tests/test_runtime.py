@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -26,7 +27,47 @@ class RuntimeSupportTests(unittest.TestCase):
         path = self.external / name
         path.write_text(f"#!/bin/sh\nprintf '%s\\n' '{name} {version}'\n")
         path.chmod(0o755)
+        if name == "modern-web-guidance":
+            (path.parent / "legacy-scan.mjs").write_text(
+                "export async function runAnalyzeCli(args) { return { exitCode: 0, output: JSON.stringify({targetDir: args[0], activeRuleCount: 1, guides: []}) }; }\n"
+            )
+            compiler = path.parent / "node_modules/svelte/compiler/index.js"
+            compiler.parent.mkdir(parents=True, exist_ok=True)
+            compiler.write_text("exports.parse = () => ({});\n")
+            (compiler.parent.parent / "package.json").write_text(json.dumps({"version": "5.57.3"}))
         return path
+
+    def test_web_wrapper_keeps_public_cli_and_routes_private_rules_without_shell_evaluation(self):
+        source = self.tool("modern-web-guidance", runtime.TOOL_SPECS["modern-web-guidance"][2])
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.external) + os.pathsep + os.environ.get("PATH", "")}),
+            mock.patch.object(runtime, "_managed_node", side_effect=AssertionError("unexpected install")),
+        ):
+            runtime.ensure(self.home, ("modern-web-guidance",))
+        shim = runtime.runtime_bin(self.home) / "modern-web-guidance"
+        version = subprocess.run([str(shim), "--version"], capture_output=True, text=True, timeout=5)
+        self.assertEqual(version.stdout.strip(), "modern-web-guidance 1.0.0")
+        program = "console.log(JSON.stringify(process.argv.slice(1)))"
+        result = subprocess.run([str(shim), "--mainframe-rules", program, "source.css", "--json"], capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [
+            "mainframe-web-check", str(source.parent / "legacy-scan.mjs"),
+            str(source.parent / "node_modules/svelte/compiler/index.js"), "source.css", "--json",
+        ])
+
+    def test_old_web_wrapper_is_repaired_without_reinstalling_compatible_packages(self):
+        source = self.tool("modern-web-guidance", runtime.TOOL_SPECS["modern-web-guidance"][2])
+        with (
+            mock.patch.dict(os.environ, {"PATH": str(self.external) + os.pathsep + os.environ.get("PATH", "")}),
+            mock.patch.object(runtime, "_managed_node", side_effect=AssertionError("unexpected install")),
+        ):
+            runtime.ensure(self.home, ("modern-web-guidance",))
+        shim = runtime.runtime_bin(self.home) / "modern-web-guidance"
+        shim.write_text(f'#!/bin/sh\nexec "{source}" "$@"\n')
+        self.assertFalse(runtime.status(self.home, ("modern-web-guidance",))["ready"])
+        with mock.patch.object(runtime, "_managed_node", side_effect=AssertionError("unnecessary install")):
+            self.assertTrue(runtime.ensure(self.home, ("modern-web-guidance",))["ready"])
+        self.assertIn("--mainframe-rules", shim.read_text())
 
     def test_reuses_compatible_tools_and_exposes_stable_shims(self):
         for name, (_, _, version) in runtime.TOOL_SPECS.items():
@@ -121,6 +162,26 @@ esac
         self.assertTrue(spawn.call_args.kwargs["start_new_session"])
         kill.assert_called_once_with(process.pid, signal.SIGKILL)
 
+    def test_killed_probe_removes_temporary_files_created_by_its_child(self):
+        marker = self.root / "child-temp-path"
+        executable = self.external / "slow-ruff"
+        executable.write_text(
+            "#!/usr/bin/env python3\nfrom pathlib import Path\nimport tempfile,time\n"
+            "child = tempfile.mkdtemp(prefix='mainframe-child-probe-')\n"
+            f"Path({str(marker)!r}).write_text(child)\n"
+            "time.sleep(30)\n"
+        )
+        executable.chmod(0o755)
+        try:
+            self.assertFalse(runtime._check_analyzer("ruff", executable))
+            self.assertTrue(marker.exists(), "probe never reached its child")
+            self.assertFalse(Path(marker.read_text()).exists())
+        finally:
+            if marker.exists():
+                child = Path(marker.read_text())
+                if child.name.startswith("mainframe-child-probe-") and child.exists():
+                    shutil.rmtree(child)
+
     def test_squawk_reuse_rejects_an_analyzer_missing_online_migration_checks(self):
         executable = self.external / "squawk"
         executable.write_text(
@@ -137,7 +198,7 @@ esac
         self.assertFalse(runtime._check_analyzer("squawk", executable))
 
     def test_modern_web_reuse_rejects_an_analyzer_that_always_reports_clean(self):
-        executable = self.external / "modern-web-guidance"
+        executable = self.tool("modern-web-guidance", "1.1.0")
         executable.write_text(
             "#!/usr/bin/env python3\n"
             "import json\n"
@@ -148,6 +209,21 @@ esac
             "    print(json.dumps({'targetDir': sys.argv[2], 'activeRuleCount': 1, 'guides': []}))\n"
         )
         executable.chmod(0o755)
+        self.assertIsNone(runtime._analyzer_version("modern-web-guidance", executable))
+
+    def test_web_runtime_rejects_missing_old_and_prerelease_compilers(self):
+        executable = self.tool("modern-web-guidance", "1.0.0")
+        manifest = self.external / "node_modules/svelte/package.json"
+        for version in ("5.57.2", "5.58.0-rc.1", None):
+            with self.subTest(version=version):
+                manifest.write_text(json.dumps({"version": version}))
+                self.assertIsNone(runtime._analyzer_version("modern-web-guidance", executable))
+        manifest.unlink()
+        self.assertIsNone(runtime._analyzer_version("modern-web-guidance", executable))
+
+    def test_newer_compiler_requires_own_rule_compatibility_even_with_tested_cli(self):
+        executable = self.tool("modern-web-guidance", "1.0.0")
+        (self.external / "node_modules/svelte/package.json").write_text(json.dumps({"version": "5.58.0"}))
         self.assertIsNone(runtime._analyzer_version("modern-web-guidance", executable))
 
     def test_missing_node_installer_stops_before_activation_manifest(self):
@@ -259,6 +335,12 @@ esac
                 executable = target / name
                 executable.write_text(f"#!/bin/sh\nprintf '{name} {runtime.TOOL_SPECS[name][2]}\\n'\n")
                 executable.chmod(0o755)
+            (target / "legacy-scan.mjs").write_text("export const parser = true;\n")
+            compiler = target.parent / "svelte/compiler/index.js"
+            compiler.parent.mkdir(parents=True)
+            compiler.write_text("exports.parse = () => ({});\n")
+            (compiler.parent.parent / "package.json").write_text(json.dumps({"version": runtime.WEB_COMPILER_VERSION}))
+            self.assertIn(f"svelte@{runtime.WEB_COMPILER_VERSION}", command)
 
         with mock.patch.dict(os.environ, {"PATH": str(self.external)}), mock.patch.object(runtime, "_run", side_effect=install):
             self.assertTrue(runtime.ensure(self.home, ("modern-web-guidance",))["ready"])

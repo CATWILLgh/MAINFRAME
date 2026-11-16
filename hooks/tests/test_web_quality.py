@@ -14,6 +14,7 @@ SOURCE = Path(__file__).resolve().parents[1] / "mainframe-code-quality.py"
 SPEC = importlib.util.spec_from_file_location("web_code_quality", SOURCE)
 QUALITY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(QUALITY)
+NODE_FINDINGS = QUALITY._node_findings
 
 ENTER = 'document.querySelector("textarea").addEventListener("keydown", event => { if (event.key === "Enter") sendMessage(); });\n'
 INVALID = 'input:invalid { border-color: red; }\n'
@@ -75,6 +76,179 @@ class WebQualityTests(unittest.TestCase):
                 self.capture(extension, path)
                 path.write_text(ENTER)
                 self.assertIn("ime-safe-enter-submit", self.after(extension).advisory or "")
+
+    def assert_web_lines(self, name, text, rule, lines):
+        rows = QUALITY._modern_web_findings(text, self.workspace / name, self.workspace)
+        self.assertEqual([row.line for row in rows], lines)
+        self.assertEqual(
+            [row.label for row in rows],
+            [f"Modern Web {rule}: {QUALITY._WEB_LABELS[rule]}"] * len(lines),
+        )
+
+    def test_new_cdn_occurrence_is_reported_once_and_repair_preserves_inherited_resource(self):
+        path = self.workspace / "resources.html"
+        inherited = CDN
+        added = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">\n'
+        path.write_text(inherited)
+        self.assertEqual(self.capture("append-resource", path), QUALITY.QualityResult())
+        path.write_text(inherited + added)
+        result = self.after("append-resource")
+        self.assertIn("resources.html:2", result.advisory or "")
+        self.assertNotIn("resources.html:1", result.advisory or "")
+        self.assertEqual((result.advisory or "").count("secure-external-subresources"), 1)
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.after("append-resource"), QUALITY.QualityResult())
+        self.capture("repair-resource", path)
+        repaired = added.replace('href="', 'integrity="sha384-Zml4dHVyZQ==" crossorigin="anonymous" href="')
+        path.write_text(inherited + repaired)
+        self.assertEqual(self.after("repair-resource"), QUALITY.QualityResult())
+        self.assert_web_lines("resources.html", path.read_text(), "secure-external-subresources", [1])
+        self.assertEqual(QUALITY.check_completion("web", self.workspace, state_root=self.state), QUALITY.QualityResult())
+
+    def test_every_static_external_resource_is_counted_and_nonstatic_resources_are_excluded(self):
+        script = CDN.strip()
+        stylesheet = '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">'
+        cases = (
+            ("resources.html", "\n".join((script, stylesheet, script, stylesheet)), [1, 2, 3, 4]),
+            ("uppercase.html", script.replace("https://", "HTTPS://"), [1]),
+            ("attributes.svelte", '<svelte:head>' + script.replace('></script>', ' crossOrigin="anonymous"></script>') + '</svelte:head>', [1]),
+            ("resources.tsx", 'const Page = () => <>\n' + script + '\n' + stylesheet.replace('>', ' />') + '\n</>;', [2, 3]),
+            ("excluded.html", '\n'.join((
+                '<script src="/assets/app.js"></script>',
+                '<script src="https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js"></script>',
+                '<link rel="preconnect" href="https://cdn.jsdelivr.net">',
+                '<!-- ' + script + ' -->',
+            )), []),
+            ("excluded.tsx", 'const Page = () => <>\n' + '\n'.join((
+                '<script src={cdnUrl} />',
+                '<script {...props} src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" />',
+                '<link rel="stylesheet" href={cdnUrl} />',
+                '<link {...props} rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />',
+            )) + '\n</>;', []),
+        )
+        for name, text, lines in cases:
+            with self.subTest(name=name):
+                self.assert_web_lines(name, text, "secure-external-subresources", lines)
+
+    def test_ime_rule_targets_text_controls_and_excludes_native_actions_and_global_hotkeys(self):
+        body = 'if (event.key === "Enter") sendMessage();'
+        cases = (
+            ("textarea.js", 'document.querySelector("textarea").addEventListener("keydown", event => {' + body + '});', [1]),
+            ("input.js", 'document.querySelector("input").addEventListener("keydown", event => {' + body + '});', [1]),
+            ("button-class.js", 'document.querySelector("textarea.button").addEventListener("keydown", event => {' + body + '});', [1]),
+            ("ancestor-type.js", 'document.querySelector("input[type=button] + textarea").addEventListener("keydown", event => {' + body + '});', [1]),
+            ("last-button.js", 'document.querySelector("textarea + button").addEventListener("keydown", event => {' + body + '});', []),
+            ("mixed-targets.js", 'document.querySelector("button, textarea").addEventListener("keydown", event => {' + body + '});', []),
+            ("text.tsx", 'const Form = () => <input type="text" onKeyDown={event => {' + body + '}} />;', [1]),
+            ("native-button.tsx", 'const Form = () => <button onKeyDown={event => {' + body + '}}>Send</button>;', []),
+            ("native-anchor.tsx", 'const Form = () => <a href="/send" onKeyDown={event => {' + body + '}}>Send</a>;', []),
+            ("role-button.tsx", 'const Form = () => <div role="button" onKeyDown={event => {' + body + '}} />;', []),
+            ("dynamic-type.tsx", 'const Form = () => <input type={kind} onKeyDown={event => {' + body + '}} />;', []),
+            ("custom-component.tsx", 'const Form = ({ Input }) => <Input onKeyDown={event => {' + body + '}} />;', []),
+            ("shadowed.tsx", 'const handle = event => {' + body + '}; const Form = (handle) => <input onKeyDown={handle} />;', []),
+            ("global.js", 'document.addEventListener("keydown", event => {' + body + '});', []),
+        )
+        cases += tuple(
+            (f"input-{kind}.tsx", 'const Form = () => <input type="' + kind + '" onKeyDown={event => {' + body + '}} />;', [])
+            for kind in ("button", "submit", "checkbox")
+        )
+        for name, text, lines in cases:
+            with self.subTest(name=name):
+                self.assert_web_lines(name, text, "ime-safe-enter-submit", lines)
+
+    def test_ime_guards_must_protect_the_same_event_before_the_submit(self):
+        submit = 'if (event.key === "Enter") sendMessage();'
+        cases = (
+            ("comment", '/* event.isComposing */ ' + submit, [1]),
+            ("logging", 'console.log(event.isComposing); ' + submit, [1]),
+            ("late", submit + ' if (event.isComposing) return;', [1]),
+            ("other-event", 'if (otherEvent.isComposing) return; ' + submit, [1]),
+            ("early", 'if (event.isComposing) return; ' + submit, []),
+            ("native", 'if (event.nativeEvent.isComposing) return; ' + submit, []),
+            ("condition", 'if (event.key === "Enter" && !event.isComposing) sendMessage();', []),
+        )
+        for name, body, lines in cases:
+            with self.subTest(name=name):
+                text = 'const Form = () => <textarea onKeyDown={event => {' + body + '}} />;'
+                self.assert_web_lines(name + ".tsx", text, "ime-safe-enter-submit", lines)
+
+    def test_vue_and_svelte_text_handlers_support_named_inline_and_guarded_forms(self):
+        submit = 'if (event.key === "Enter") sendMessage();'
+        for extension, attributes in (
+            ("vue", ("@keydown", "@keydown.enter")),
+            ("svelte", ("on:keydown", "onkeydown")),
+        ):
+            for attribute in attributes:
+                for named in (False, True):
+                    for guarded in (False, True):
+                        with self.subTest(extension=extension, attribute=attribute, named=named, guarded=guarded):
+                            body = ('if (event.isComposing) return; ' if guarded else '') + submit
+                            if extension == "vue":
+                                script = '<script setup>function handle(event) {' + body + '}</script>\n' if named else ''
+                                handler = 'handle' if named else 'event => {' + body + '}'
+                                text = script + '<template><textarea ' + attribute + '="' + handler.replace('"', "'") + '" /></template>'
+                            else:
+                                script = '<script>function handle(event) {' + body + '}</script>\n' if named else ''
+                                handler = 'handle' if named else '(event) => {' + body + '}'
+                                text = script + '<textarea ' + attribute + '={' + handler + '} />'
+                            self.assert_web_lines("form." + extension, text, "ime-safe-enter-submit", [] if guarded else [2 if named else 1])
+
+    def test_vue_and_svelte_nontext_handlers_stay_silent(self):
+        cases = (
+            ("vue", '<template><button @keydown="event => { if (event.key === \'Enter\') sendMessage(); }">Send</button></template>'),
+            ("vue", '<template><input type="checkbox" @keydown.enter="sendMessage()" /></template>'),
+            ("svelte", '<button on:keydown={(event) => { if (event.key === "Enter") sendMessage(); }}>Send</button>'),
+            ("svelte", '<input type="submit" onkeydown={(event) => { if (event.key === "Enter") sendMessage(); }} />'),
+        )
+        for extension, text in cases:
+            with self.subTest(extension=extension, text=text):
+                self.assert_web_lines("actions." + extension, text, "ime-safe-enter-submit", [])
+
+    def test_css_invalid_suppression_is_local_and_deliberate_fallbacks_remain_safe(self):
+        cases = (
+            ("unrelated", 'textarea:user-invalid { color: red; }\n' + INVALID, [2]),
+            ("comment", '/* Prefer :user-invalid here. */\n' + INVALID, [2]),
+            ("supports", '@supports not selector(:user-invalid) {\n' + INVALID + '}\ninput:user-invalid { color: red; }', []),
+            ("touched", '.touched input:invalid { border-color: red; }', []),
+            ("validated", '.was-validated input:invalid { border-color: red; }', []),
+            ("reset", 'input:invalid { box-shadow: none; outline: none; }', []),
+            ("uppercase", 'INPUT:INVALID { border-color: red; }', [1]),
+            ("required", 'input:required:invalid { border-color: red; }', [1]),
+            ("required-touched", '.touched input[required]:invalid { border-color: red; }', []),
+            ("shared-state-style", 'input:valid, input:invalid { color: var(--text); }', []),
+            ("unrelated-valid", 'input:invalid, textarea:valid { color: red; }', [1]),
+            ("same-field-states", 'input.field:invalid, input.field:valid { color: red; }', []),
+        )
+        for name, text, lines in cases:
+            with self.subTest(name=name):
+                self.assert_web_lines(name + ".css", text, "validate-input-after-interaction", lines)
+
+    def test_changed_rule_semantics_do_not_claim_inherited_findings_from_old_snapshots(self):
+        path = self.workspace / "upgrade.html"
+        path.write_text(CDN + CDN.replace("jquery@3.7.1", "jquery@3.7.0"))
+        modern = QUALITY._modern_web_findings
+        with (
+            mock.patch.object(QUALITY, "_WEB_CHANNEL", "modern-web"),
+            mock.patch.object(QUALITY, "_modern_web_findings", side_effect=lambda *args: modern(*args)[:1]),
+        ):
+            self.capture("legacy-snapshot", path)
+        self.assertEqual(self.after("legacy-snapshot"), QUALITY.QualityResult())
+        self.capture("new-snapshot", path)
+        path.write_text(path.read_text() + CDN.replace("jquery@3.7.1", "jquery@3.6.0"))
+        self.assertIn("upgrade.html:3", self.after("new-snapshot").advisory or "")
+
+    def test_unsupported_handler_paths_report_unavailable_once_and_keep_security(self):
+        path = self.workspace / "uncertain.tsx"
+        with mock.patch.object(QUALITY, "_node_findings", side_effect=NODE_FINDINGS):
+            self.capture("unsupported", path)
+            path.write_text('eval(value); const Form = () => <input onKeyDown={event => { if (event.key === "Enter") { try { send(); } finally {} } }} />;')
+            result = self.after("unsupported")
+            self.assertIn("Modern web review was unavailable", result.advisory or "")
+            self.assertIn("JavaScript security: eval()", result.advisory or "")
+            self.assertIn("JavaScript security: eval()", QUALITY.check_completion("web", self.workspace, state_root=self.state).block_reason or "")
+            self.assertEqual(self.after("unsupported"), QUALITY.QualityResult())
+            self.assertEqual(self.capture("unsupported-repeat", path), QUALITY.QualityResult())
+            self.assertEqual(self.after("unsupported-repeat"), QUALITY.QualityResult())
 
     def test_tagged_css_templates_are_checked_without_reclassifying_plain_strings(self):
         for extension in (".ts", ".tsx", ".mts", ".cts", ".js"):
@@ -211,13 +385,20 @@ class WebQualityTests(unittest.TestCase):
                 QUALITY._modern_web_findings(INVALID + "/*" + "x" * 2_001 + "*/", self.workspace / "form.css", self.workspace)
 
         executable = self.workspace / "slow-scanner"
-        executable.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(10)\n")
+        marker = self.workspace / "scanner-temp-path"
+        executable.write_text(
+            "#!/usr/bin/env python3\nfrom pathlib import Path\nimport tempfile,time\n"
+            "seed = tempfile.mkdtemp(prefix='mainframe-parser-seed-')\n"
+            f"Path({str(marker)!r}).write_text(seed)\n"
+            "time.sleep(10)\n"
+        )
         executable.chmod(0o755)
         with mock.patch.object(QUALITY.shutil, "which", return_value=str(executable)):
             start = time.monotonic()
             with self.assertRaises(subprocess.TimeoutExpired):
                 QUALITY._modern_web_findings(INVALID, self.workspace / "form.css", self.workspace)
             self.assertLess(time.monotonic() - start, 2)
+            self.assertFalse(Path(marker.read_text()).parent.exists())
 
         for raw in ([], {"guides": []}, {"error": "synthetic failure", "guides": []}):
             with self.subTest(raw=raw), mock.patch.object(QUALITY, "_run_scanner", side_effect=self.scanner_output(raw)):
@@ -242,16 +423,41 @@ class WebQualityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "output exceeds"):
                 QUALITY._modern_web_findings(INVALID, self.workspace / "form.css", self.workspace)
 
+    def test_unexpected_matcher_errors_cannot_be_swallowed_into_a_clean_result(self):
+        module = self.workspace / "broken-parser.mjs"
+        module.write_text(
+            "export async function runAnalyzeCli(args, {rules}) {\n"
+            " for (const rule of rules.filter(r => r.matcher.kind === 'js')) {\n"
+            "  try { rule.matcher.matchFile({getDescendants(){throw new TypeError('synthetic parser API fault');}}, {}); } catch {}\n"
+            " }\n"
+            " return {exitCode:0,output:JSON.stringify({targetDir:args[0],activeRuleCount:rules.length,totalFindings:0,guides:[]})};\n"
+            "}\n"
+        )
+        executable = self.workspace / "faulty-parser-launcher"
+        executable.write_text(
+            "#!/usr/bin/env python3\nimport os,sys\n"
+            "os.execvp('node',['node','--input-type=module','--eval',sys.argv[2],'--','mainframe-web-check',"
+            + repr(str(module)) + ", 'unused-compiler', *sys.argv[3:]])\n"
+        )
+        executable.chmod(0o755)
+        with mock.patch.object(QUALITY.shutil, "which", return_value=str(executable)):
+            with self.assertRaisesRegex(RuntimeError, "web scanner failed"):
+                QUALITY._modern_web_findings(ENTER, self.workspace / "form.ts", self.workspace)
+
     def test_scanner_is_isolated_and_raw_diagnostics_stay_out_of_findings(self):
         snapshots = []
 
         def scan(command, **options):
-            snapshot = options["cwd"] / command[2]
+            snapshot = options["cwd"] / command[3]
             snapshots.append(snapshot)
             self.assertEqual(snapshot.read_text(), INVALID)
-            self.assertEqual(command[1:], ["legacy-scan", "source.css", "--json", "--guide", "validate-input-after-interaction"])
+            self.assertEqual(command[1], "--mainframe-rules")
+            self.assertTrue(command[2])
+            self.assertNotIn(INVALID, command[2])
+            self.assertEqual(command[3:], ["source.css", "--json", "--guide", "validate-input-after-interaction"])
             self.assertEqual(options["env"]["DISABLE_TELEMETRY"], "1")
             self.assertEqual(options["env"]["ENABLE_FILE_LOGGING"], "false")
+            self.assertEqual(options["env"]["TMPDIR"], str(options["cwd"]))
             self.assertNotIn("NODE_OPTIONS", options["env"])
             self.assertNotIn("NODE_PATH", options["env"])
             self.assertEqual(options["timeout"], 1)

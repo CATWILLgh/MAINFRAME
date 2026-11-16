@@ -40,6 +40,7 @@ TOOL_SPECS = {
 }
 CODE_QUALITY_TOOLS = ("ruff", "oxlint", "semgrep", "yamllint", "shellcheck", "actionlint", "kube-linter", "squawk", "modern-web-guidance")
 FALLOW_TOOLS = ("fallow",)
+WEB_COMPILER_VERSION = "5.57.3"
 OPENSPEC_TOOLS = ("openspec",)
 OPENSPEC_PACKAGE = "@fission-ai/openspec"
 OPENSPEC_VERSION = "1.16.1"
@@ -203,6 +204,36 @@ def _parts(value: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
+def _web_parser_modules(executable: Path) -> tuple[Path, Path, str]:
+    entry = executable.resolve()
+    scanner = entry.with_name("legacy-scan.mjs")
+    if not scanner.is_file():
+        raise Conflict("Modern Web Guidance's parser module is unavailable.")
+    for parent in entry.parents:
+        package = parent / "node_modules/svelte"
+        compiler = package / "compiler/index.js"
+        try:
+            version = json.loads((package / "package.json").read_text())["version"]
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if (isinstance(version, str) and re.fullmatch(r"\d+\.\d+\.\d+", version)
+                and _parts(version) >= _parts(WEB_COMPILER_VERSION) and compiler.is_file()):
+            return scanner, compiler.resolve(), version
+    raise Conflict("The prepared web runtime requires the tested Svelte compiler or a compatible newer release.")
+
+
+def _analyzer_shim(name: str, executable: Path) -> bytes:
+    body = "#!/bin/sh\n"
+    if name == "modern-web-guidance":
+        scanner, compiler, _ = _web_parser_modules(executable)
+        body += ('if [ "${1-}" = "--mainframe-rules" ]; then\n'
+                 '  shift\n  [ "$#" -ge 1 ] || exit 2\n'
+                 '  mainframe_rules=$1\n  shift\n'
+                 '  exec node --input-type=module --eval "$mainframe_rules" -- mainframe-web-check '
+                 + shlex.quote(str(scanner)) + " " + shlex.quote(str(compiler)) + ' "$@"\nfi\n')
+    return (body + "exec " + shlex.quote(str(executable)) + ' "$@"\n').encode()
+
+
 def _analyzer_release(name: str, executable: Path) -> str | None:
     flag = {"actionlint": "-version", "kube-linter": "version"}.get(name, "--version")
     if name == "semgrep":
@@ -219,9 +250,15 @@ def _check_analyzer(name: str, executable: Path) -> bool:
     probe = Path(__file__).with_name("runtime_checks.py")
     try:
         with tempfile.TemporaryDirectory(prefix="mainframe-runtime-probe-") as directory:
+            if name == "modern-web-guidance":
+                prepared = Path(directory) / "prepared" / name
+                prepared.parent.mkdir()
+                prepared.write_bytes(_analyzer_shim(name, executable))
+                prepared.chmod(0o755)
+                executable = prepared
             with subprocess.Popen(
                 [sys.executable, "-B", str(probe), name, str(probe.parent.parent), str(executable)],
-                cwd=directory, env=_probe_environment(), stdout=subprocess.DEVNULL,
+                cwd=directory, env={**_probe_environment(), "TMPDIR": directory}, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, start_new_session=True,
             ) as process:
                 try:
@@ -233,16 +270,23 @@ def _check_analyzer(name: str, executable: Path) -> bool:
                     except ProcessLookupError:
                         pass
                     return False
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, Conflict, subprocess.SubprocessError):
         return False
 
 
 def _analyzer_version(name: str, executable: Path) -> str | None:
     version = _analyzer_release(name, executable)
     minimum = TOOL_SPECS[name][2]
-    if version == minimum:
+    compiler_tested = True
+    if name == "modern-web-guidance":
+        try:
+            _, _, compiler_version = _web_parser_modules(executable)
+            compiler_tested = compiler_version == WEB_COMPILER_VERSION
+        except Conflict:
+            return None
+    if version == minimum and compiler_tested:
         return version
-    if version is not None and _parts(version) > _parts(minimum) and _check_analyzer(name, executable):
+    if version is not None and _parts(version) >= _parts(minimum) and _check_analyzer(name, executable):
         return version
     return None
 
@@ -282,6 +326,14 @@ def status(home: Path, required: tuple[str, ...]) -> dict:
             continue
         if name == "openspec":
             version = _openspec_status(shim, row)
+        elif name == "modern-web-guidance":
+            executable = _recorded_path(row, "executable")
+            try:
+                expected = _analyzer_shim(name, executable) if executable else None
+                version = (_analyzer_version(name, executable)
+                           if executable and regular_bytes(shim) == expected else None)
+            except (OSError, Conflict):
+                version = None
         else:
             version = _analyzer_version(name, shim)
         if version is None:
@@ -345,6 +397,8 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
     parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     target = Path(tempfile.mkdtemp(prefix="mainframe-node-", dir=parent))
     packages = [f"{TOOL_SPECS[name][1]}@{TOOL_SPECS[name][2]}" for name in names]
+    if "modern-web-guidance" in names:
+        packages.append(f"svelte@{WEB_COMPILER_VERSION}")
     environment = {**os.environ, "NO_UPDATE_NOTIFIER": "1", "NPM_CONFIG_UPDATE_NOTIFIER": "false"}
     try:
         _run([npm, "install", "--prefix", str(target), "--no-audit", "--no-fund",
@@ -353,6 +407,8 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
         for name, executable in executables.items():
             if _analyzer_release(name, executable) != TOOL_SPECS[name][2]:
                 raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
+            if name == "modern-web-guidance" and _web_parser_modules(executable)[2] != WEB_COMPILER_VERSION:
+                raise Conflict("The prepared Svelte parser failed its version probe.")
         return executables
     except BaseException:
         shutil.rmtree(target)
@@ -626,8 +682,7 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
             raise Conflict(f"MAINFRAME runtime dependency {name} could not be resolved.")
         executable, version = candidates[name]
         shim = runtime_bin(home) / name
-        body = "#!/bin/sh\nexec " + shlex.quote(str(executable)) + ' "$@"\n'
-        atomic_write(shim, body.encode(), 0o755)
+        atomic_write(shim, _analyzer_shim(name, executable), 0o755)
         rows[name] = {"version": version, "executable": str(executable)}
     atomic_write(root / "installation.json", encode_json({**manifest, "schema": 1, "tools": rows}), 0o600)
     _cleanup_node_generations(root, existing, rows)

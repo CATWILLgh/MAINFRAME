@@ -442,7 +442,7 @@ Use static diagnostic descriptions and compare only new findings. See
 | actionlint | `.github/workflows/*.yml` and `.github/workflows/*.yaml` at the repository root. | Workflow YAML or schema errors, missing or cyclic job dependencies, and invalid identifiers, expressions, conditions, or matrices. |
 | KubeLinter | Plain Kubernetes deployment, stateful set, and daemon set YAML with a container specification. Skip Helm templates and recognized Kustomize overlays and patches. | A workload selector that does not match its pod template, or a container without a readiness probe. Check service selectors and routes against the rendered manifest set. |
 | Squawk | Versioned `.sql` migrations under a PostgreSQL Prisma lock, PostgreSQL Drizzle journal, or the embedded CSS migration layout. | Destructive drops, cascading truncation, type changes, ordinary index creation/removal, immediate constraint validation, required columns, rewrite-prone defaults, rolling-deployment renames, missing lock timeouts, and concurrent index creation inside an explicit SQL transaction. |
-| Modern Web Guidance | `.html`, `.htm`, `.css`, JS/TS module extensions, JSX/TSX, Vue and Svelte. Use snapshot content and the upstream AST/DOM/CSS parsers. | Curated `ime-safe-enter-submit`, `validate-input-after-interaction`, and `secure-external-subresources` findings. |
+| Modern web rules | `.html`, `.htm`, `.css`, JS/TS module extensions, JSX/TSX, Vue and Svelte. Use isolated snapshots, Modern Web Guidance's AST/DOM/CSS parser APIs, and the official Svelte compiler for Svelte templates. | Maintained `ime-safe-enter-submit`, `validate-input-after-interaction`, and `secure-external-subresources` rules. |
 
 These migration findings are advisory, attributed to the current edit, and
 deduplicated against its before snapshot. Connection-setting advice follows
@@ -457,22 +457,26 @@ Skip generated/vendor/build paths, minified bundles, and recognized JS test
 files. The scanner receives one temporary snapshot, with telemetry and file
 logging disabled and no project configuration. Limit its input to 128 KB and
 2000 characters per line, and read at most 2 MB of JSON from a private temporary
-stdout file. This avoids the upstream dispatcher's premature pipe exit.
+stdout file. Keep all child temporary files inside the snapshot directory so
+the parent removes them after failure or timeout.
 Finish established checks for every path before adding web advice from the
 same source revision. All web subprocesses together have at most one second
 within the unchanged shared scan budget. Include upstream-supported tagged
 `css` templates in JS/TS files. Keep output in the ordinary combined advisory. A reached
 bound or unavailable scanner emits one deduplicated availability notice.
-Preserve upstream exclusions for composition guards, modifier shortcuts,
+Preserve relevant exclusions for composition guards, modifier shortcuts,
 post-interaction styles, intentional support fallbacks, and mutable CDN URLs.
 Return only fixed rule labels and validated source locations. Keep these
 findings advisory and preserve existing completion guards if web review fails.
-The upstream matcher is an opportunity scanner. It reports only the first
-external-resource finding per document, can mistake non-text Enter handlers
-for text input, and can miss framework handlers or unsafe code when unrelated
-composition/validation markers appear. A clean result does not establish full
-coverage. Apply its contextual rubric before changing behavior; do not alter
-buttons or links to satisfy an IME finding.
+The hook supplies its own narrow rules through the prepared parser API. Check
+every supported static external resource, require a same-event composition
+guard before a reachable Enter action, exclude non-text controls, and evaluate
+validation timing per CSS rule. Resolve local callbacks, simple selectors and
+framework bindings; leave imported callbacks, complex/dynamic targets and cross-function data flow outside
+static coverage. Reached unsupported control flow or an exhausted AST budget
+reports unavailable. Version the web channel when semantics change so old
+snapshots cannot attribute inherited findings to a new edit. A clean static
+result does not replace affected browser interaction checks.
 Broader modernization uses the [frontend method](../skills/mainframe-frontend/references/modern-web.md).
 
 The code-quality hook uses its existing edit events and configured analyzer

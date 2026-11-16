@@ -150,11 +150,17 @@ version. The synthetic checks run during runtime preparation and verification.
 Keep hook execution bounded with isolated scanner configuration and disabled
 telemetry. Check a new tool release against the full hook suite before raising
 the tested minimum or changing the provisioned release.
+Compatibility probes keep child temporary files inside the parent's probe
+directory, which is removed after a process-group timeout as well as success.
 
 Modern Web Guidance uses the prepared CLI and requires Node.js 22 or later.
-The hook invokes only its local single-file scanner. Installer verification of
-newer versions covers the curated rules and their safe counterparts. Prepare
-dependencies during delivery, before changing hook files or registrations.
+The same managed Node.js generation includes the Svelte compiler. The ordinary
+CLI still serves guide lookup and broad scans. Its maintained launcher also
+provides an internal mode for the hook's embedded rules using local parser
+modules. A legacy launcher or missing/incompatible compiler requires runtime
+preparation before activating new hook files. Compatible newer releases must
+pass the own-rule samples, including Svelte and multiple resource attribution.
+Prepare dependencies during delivery, before changing hook files or registrations.
 Keep the official package's license and third-party notices intact; see
 [provenance](../../../THIRD_PARTY_NOTICES.md).
 Node.js package preparation preserves the active analyzers until the new

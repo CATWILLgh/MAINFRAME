@@ -93,15 +93,22 @@ def _analyzer(root: Path, workspace: Path, tool: str) -> bool:
             return False
     elif tool == "modern-web-guidance":
         scan = quality._modern_web_findings
+        resource = '<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>\n'
+        if len(scan(resource + resource.replace('3.7.1', '3.7.0'), workspace / "resources.html", workspace)) != 2:
+            return False
         checks = (
             (scan('input:invalid { border-color: red; }\n', workspace / "form.css", workspace), "Modern Web validate-input-after-interaction", 1),
             (scan('<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>\n', workspace / "page.html", workspace), "Modern Web secure-external-subresources", 1),
             (scan('document.querySelector("input").addEventListener("keydown", e => { if (e.key === "Enter") submit(); });\n', workspace / "form.ts", workspace), "Modern Web ime-safe-enter-submit", 1),
+            (scan('/* :user-invalid */\ninput:invalid { color: red; }\n', workspace / "local.css", workspace), "Modern Web validate-input-after-interaction", 2),
+            (scan('<input onkeydown={(e) => { if (e.key === "Enter") submit(); }} />\n', workspace / "form.svelte", workspace), "Modern Web ime-safe-enter-submit", 1),
         )
         safe = (
             ('@supports not selector(:user-invalid) { input:invalid { border-color: red; } }\ninput:user-invalid { border-color: red; }\n', "safe.css"),
             ('document.querySelector("input").addEventListener("keydown", e => { if (e.isComposing) return; if (e.key === "Enter") submit(); });\n', "safe.ts"),
             ('<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" integrity="sha384-Zml4dHVyZQ==" crossorigin="anonymous"></script>\n', "safe.html"),
+            ('const Button = () => <button onKeyDown={e => { if (e.key === "Enter") submit(); }} />;\n', "button.tsx"),
+            ('<input onkeydown={(e) => { if (e.isComposing) return; if (e.key === "Enter") submit(); }} />\n', "safe.svelte"),
         )
         if any(scan(text, workspace / name, workspace) for text, name in safe):
             return False

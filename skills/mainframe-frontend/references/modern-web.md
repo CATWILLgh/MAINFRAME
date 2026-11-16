@@ -85,10 +85,11 @@ neighboring existing path. A reduced finding count alone cannot prove success.
 The edit hook independently checks a curated subset of new IME, validation,
 and external-resource findings. Broader modernization and actual browser support
 need the checks selected by [frontend testing](testing.md).
-The scanner can miss additional resources, framework-bound handlers, or unsafe
-code masked by unrelated composition/validation markers. It can also flag
-non-text Enter handlers: preserve buttons and links. Use findings as review
-candidates; an empty result cannot replace the affected interaction checks.
+The hook's maintained parser-based rules check all supported static resources,
+local text-input handlers and validation-rule context. Imported callbacks,
+dynamic targets and cross-function behavior still need interaction checks.
+The broad CLI legacy scan remains an opportunity list requiring its contextual
+rubric. An empty static result cannot replace the affected browser checks.
 
 ## Primary references
 
