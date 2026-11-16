@@ -352,13 +352,25 @@ def status(home: Path, required: tuple[str, ...]) -> dict:
 def _run(command: list[str], *, timeout: int, env: dict[str, str] | None = None,
          cwd: Path | None = None) -> None:
     try:
-        result = subprocess.run(
-            command, capture_output=True, text=True, timeout=timeout, check=False,
-            env=env, cwd=cwd,
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env=env, cwd=cwd, start_new_session=True,
         )
+        try:
+            process.communicate(timeout=timeout)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=5)
+            finally:
+                process.stdout.close()
+                process.stderr.close()
     except (OSError, subprocess.SubprocessError) as error:
         raise Conflict("MAINFRAME runtime dependency installation could not start.") from error
-    if result.returncode:
+    if process.returncode:
         raise Conflict("MAINFRAME runtime dependency installation failed; no hook files were changed.")
 
 
@@ -446,22 +458,26 @@ def _managed_node(root: Path, names: list[str]) -> dict[str, Path]:
 
 def _cleanup_generations(root: Path, previous: dict, rows: dict, ecosystem: str) -> None:
     parent = root / "packages" / ecosystem
-    active = [Path(row["executable"]) for row in rows.values()
-              if isinstance(row, dict) and isinstance(row.get("executable"), str)]
     prior = [Path(row["executable"]) for row in previous.values()
              if isinstance(row, dict) and isinstance(row.get("executable"), str)]
-    if not any(path.is_relative_to(parent) for path in prior):
+    candidates = set()
+    for path in prior:
+        if not path.is_relative_to(parent):
+            continue
+        relative = path.relative_to(parent)
+        if not relative.parts:
+            continue
+        name = relative.parts[0]
+        legacy_node = ecosystem == "node" and name == "node_modules"
+        if legacy_node or re.fullmatch(rf"mainframe-{ecosystem}-[a-z0-9_]{{8}}", name):
+            candidates.add(parent / name)
+    if not candidates:
         return
     _runtime_directory(parent, root)
     if not parent.is_dir():
         return
-    for candidate in parent.iterdir():
-        if not any(path.is_relative_to(candidate) for path in prior):
-            continue
-        legacy_node = ecosystem == "node" and candidate.name == "node_modules"
-        if not legacy_node and not re.fullmatch(rf"mainframe-{ecosystem}-[a-z0-9_]{{8}}", candidate.name):
-            continue
-        if candidate.is_symlink() or not candidate.is_dir() or any(path.is_relative_to(candidate) for path in active):
+    for candidate in sorted(candidates):
+        if candidate.is_symlink() or not candidate.is_dir() or _generation_referenced(candidate, rows):
             continue
         _discard_generation(candidate, root)
 
@@ -478,6 +494,17 @@ def _cleanup_python_generations(root: Path, previous: dict, rows: dict) -> None:
 def _recorded_path(row: dict, key: str) -> Path | None:
     value = row.get(key)
     return Path(value) if isinstance(value, str) and Path(value).is_absolute() else None
+
+
+def _generation_referenced(generation: Path, rows: dict) -> bool:
+    active = [_recorded_path(row, key) for row in rows.values() if isinstance(row, dict)
+              for key in ("executable", "node")]
+    try:
+        return any(path is not None and (
+            path.is_relative_to(generation) or path.resolve().is_relative_to(generation)
+        ) for path in active)
+    except (OSError, RuntimeError):
+        return True  # An unresolved recorded path cannot establish safe removal.
 
 
 def _openspec_command(row: dict, shim: Path) -> tuple[Path, ...] | None:
@@ -595,15 +622,7 @@ def _cleanup_openspec_generation(root: Path, previous: tuple[Path, ...] | None, 
     generation = packages / relative.parts[0]
     if executable != generation / "node_modules" / OPENSPEC_PACKAGE / "bin/openspec.js":
         return
-    active = [_recorded_path(row, key) for row in rows.values() if isinstance(row, dict)
-              for key in ("executable", "node")]
-    try:
-        referenced = any(path is not None and (
-            path.is_relative_to(generation) or path.resolve().is_relative_to(generation)
-        ) for path in active)
-    except (OSError, RuntimeError):
-        return  # An unresolved recorded path cannot establish safe removal.
-    if referenced:
+    if _generation_referenced(generation, rows):
         return
     _runtime_directory(packages, root)
     if generation.is_symlink() or not generation.is_dir():
@@ -649,7 +668,7 @@ def _ensure_openspec(root: Path, shim: Path, journal: Path, allowed) -> None:
         transact([
             Change.from_snapshot(shim, snapshot, _openspec_shim(command), 0o755),
             Change.from_snapshot(manifest_path, manifest_snapshot, encode_json(record)),
-        ], journal, allowed)
+        ], journal, allowed, after_restore=lambda changes: _cleanup_restored_stages(root, changes))
     except BaseException:
         if staged is not None and not journal.exists():
             _discard_generation(staged, root)
@@ -716,7 +735,10 @@ def ensure(home: Path, required: tuple[str, ...]) -> dict:
         return path in (shim, root / "installation.json")
 
     with installation_lock(root / ".install.lock"):
-        restore(journal, openspec_paths)
+        cleanup = lambda changes: _cleanup_restored_stages(root, changes)
+        restore(journal, openspec_paths, after_restore=cleanup)
+        restore(root / ".analyzers-recovery.json", lambda path: _analyzer_path(root, path),
+                after_restore=cleanup)
         current = status(home, required)
         if current["ready"]:
             return current
@@ -730,7 +752,33 @@ def ensure(home: Path, required: tuple[str, ...]) -> dict:
     return result
 
 
+def _analyzer_path(root: Path, path: Path) -> bool:
+    return path == root / "installation.json" or (path.parent == root / "bin" and path.name in TOOL_SPECS)
+
+
+def _cleanup_stages(root: Path, staged: dict, active: dict) -> None:
+    _cleanup_python_generations(root, staged, active)
+    _cleanup_node_generations(root, staged, active)
+    row = staged.get("openspec")
+    command = _openspec_command(row, root / "bin/openspec") if isinstance(row, dict) else None
+    _cleanup_openspec_generation(root, command, active)
+
+
+def _cleanup_restored_stages(root: Path, changes: list[Change]) -> None:
+    for change in changes:
+        if change.path != root / "installation.json" or change.after is None:
+            continue
+        try:
+            record = json.loads(change.after)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(record, dict) and record.get("schema") == 1:
+            _cleanup_stages(root, _tool_rows(record), _tool_rows(_manifest(root)))
+
+
 def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None:
+    manifest_path = root / "installation.json"
+    manifest_snapshot = observed(manifest_path)
     manifest = _manifest(root)
     existing = _tool_rows(manifest)
     wanted = sorted(set(TOOL_SPECS).intersection(set(existing).union(required)))
@@ -739,6 +787,7 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
         raise Conflict("npm is required to install active MAINFRAME Node.js analyzers; no hook files were changed.")
     provisioned = {name: _managed_release(root, name) for name in missing["release"]}
     staged = {}
+    journal = root / ".analyzers-recovery.json"
     try:
         if missing["python"]:
             staged.update(_managed_python(root, missing["python"]))
@@ -750,19 +799,27 @@ def _ensure_analyzers(root: Path, home: Path, required: tuple[str, ...]) -> None
             if version != TOOL_SPECS[name][2]:
                 raise Conflict(f"MAINFRAME runtime dependency {name} failed its version probe.")
             candidates[name] = executable, version
+        rows = dict(existing)
+        changes = []
+        for name in wanted:
+            if name not in candidates:
+                raise Conflict(f"MAINFRAME runtime dependency {name} could not be resolved.")
+            executable, version = candidates[name]
+            shim = runtime_bin(home) / name
+            snapshot = observed(shim)
+            data = _analyzer_shim(name, executable)
+            if name not in existing and snapshot[0] not in (None, data):
+                raise Conflict(f"Existing file has no installer ownership: {shim}")
+            changes.append(Change.from_snapshot(shim, snapshot, data, 0o755))
+            rows[name] = {"version": version, "executable": str(executable)}
+        changes.append(Change.from_snapshot(manifest_path, manifest_snapshot,
+                       encode_json({**manifest, "schema": 1, "tools": rows})))
+        transact(changes, journal, lambda path: _analyzer_path(root, path),
+                 after_restore=lambda restored: _cleanup_restored_stages(root, restored))
     except BaseException:
-        abandoned = {name: {"executable": str(path)} for name, path in staged.items()}
-        _cleanup_python_generations(root, abandoned, {})
-        _cleanup_node_generations(root, abandoned, {})
+        if not journal.exists():
+            abandoned = {name: {"executable": str(path)} for name, path in staged.items()}
+            _cleanup_stages(root, abandoned, _tool_rows(_manifest(root)))
         raise
-    rows = dict(existing)
-    for name in wanted:
-        if name not in candidates:
-            raise Conflict(f"MAINFRAME runtime dependency {name} could not be resolved.")
-        executable, version = candidates[name]
-        shim = runtime_bin(home) / name
-        atomic_write(shim, _analyzer_shim(name, executable), 0o755)
-        rows[name] = {"version": version, "executable": str(executable)}
-    atomic_write(root / "installation.json", encode_json({**manifest, "schema": 1, "tools": rows}), 0o600)
     _cleanup_python_generations(root, existing, rows)
     _cleanup_node_generations(root, existing, rows)

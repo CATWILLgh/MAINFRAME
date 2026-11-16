@@ -841,9 +841,9 @@ printf 'attempt\\n' >> "$OPENSPEC_FIXTURE_ATTEMPTS"
         old.unlink()
         transact = runtime.transact
 
-        def activate(changes, journal, allowed):
+        def activate(changes, journal, allowed, **options):
             self.assertTrue(generation.exists())
-            transact(changes, journal, allowed)
+            transact(changes, journal, allowed, **options)
             self.assertTrue(generation.exists(), "cleanup must follow committed activation")
             active = json.loads(manifest.read_text())["tools"]["openspec"]["executable"]
             self.assertNotEqual(active, str(old))
@@ -886,7 +886,7 @@ printf 'attempt\\n' >> "$OPENSPEC_FIXTURE_ATTEMPTS"
         old.unlink()
         before = manifest.read_bytes(), shim.read_bytes()
 
-        def interrupted(*arguments):
+        def interrupted(*arguments, **options):
             journal.write_text("synthetic recovery data")
             raise Conflict("synthetic recovery needed")
 
@@ -932,8 +932,8 @@ printf 'attempt\\n' >> "$OPENSPEC_FIXTURE_ATTEMPTS"
         relocated = self.root / "relocated-packages"
         transact = runtime.transact
 
-        def activate(changes, journal, allowed):
-            transact(changes, journal, allowed)
+        def activate(changes, journal, allowed, **options):
+            transact(changes, journal, allowed, **options)
             packages.rename(relocated)
             packages.symlink_to(relocated, target_is_directory=True)
 
