@@ -82,6 +82,34 @@ class CodeQualityTests(unittest.TestCase):
             state_root=self.state,
         )
 
+    def test_mixed_advice_preserves_decision_boundaries_within_context_budget(self) -> None:
+        file = self.workspace / "worker.js"
+        before = "const value = 1;\n" * 399
+        file.write_text(before, encoding="utf-8")
+        self.capture("mixed", "edit", file)
+        self.scanners[1].side_effect = RuntimeError("unavailable")
+        self.scanners[2].return_value = [QUALITY.Occurrence(
+            "Review dynamic subprocess", 2, "review",
+            channel=QUALITY._SEMGREP_SECURITY_CHANNEL, blocking=False,
+        )]
+        file.write_text("// TODO: finish\n" + before + "\n" * 5, encoding="utf-8")
+
+        result = self.after("mixed", "edit")
+        message = result.advisory or ""
+        self.assertLessEqual(len(message), QUALITY.MAX_ADVISORY_CHARS)
+        for evidence in ("worker.js:1", "TODO", "crossed 400", "unavailable"):
+            self.assertIn(evidence, message)
+        for boundary in ("non-blocking", "no forced split", "verify directly"):
+            self.assertIn(boundary, message)
+        self.assertIsNone(result.block_reason)
+        self.assertEqual(self.after("mixed", "edit"), QUALITY.QualityResult())
+        self.assertIn("Completion blocked", self.completion("mixed").block_reason or "")
+
+        self.capture("mixed", "repair", file)
+        file.write_text(before, encoding="utf-8")
+        self.after("mixed", "repair")
+        self.assertIsNone(self.completion("mixed").block_reason)
+
     def after(self, scope: str, operation: str, *, succeeded: bool = True):
         return QUALITY.record_after(
             scope,

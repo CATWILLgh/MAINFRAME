@@ -2746,10 +2746,9 @@ def _issue_advisory(messages: Iterable[str]) -> str | None:
     if len(unique) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(unique) - MAX_MESSAGE_ROWS} more unavailable checks"
     return (
-        "Code-quality protection unavailable for part of this check:\n"
+        "Code-quality protection unavailable; verify directly:\n"
         + body
-        + "\nThis is not evidence that the edit is clean. Continue without a "
-        "hook block and verify the affected boundary directly."
+        + "\nNo clean result or hook block is implied."
     )
 
 
@@ -2900,9 +2899,8 @@ def _advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> str:
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
     return (
-        "Code quality — new findings:\n"
+        "Code quality — new findings; fix behavior and verify:\n"
         + body
-        + "\nResolve the underlying behavior and verify the affected path."
     )
 
 
@@ -2918,15 +2916,14 @@ def _review_advisory(rows: list[tuple[Path, Occurrence]], workspace: Path) -> st
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
     if any(row.channel != _SEMGREP_SECURITY_CHANNEL for _, row in rows):
         return (
-            "Code review advice for newly introduced findings:\n"
+            "Code review advice (non-blocking):\n"
             + body
             + "\nReview the affected line or configuration."
         )
     return (
-        "Security review advice for newly introduced code:\n"
+        "Security review advice (non-blocking):\n"
         + body
-        + "\nReview the affected trust boundary before continuing. These "
-        "context-dependent findings are advisory and do not block completion."
+        + "\nReview the affected trust boundary in context."
     )
 
 
@@ -2949,10 +2946,9 @@ def _growth_advisory(rows: list[GrowthFinding], workspace: Path) -> str:
     if len(locations) > MAX_MESSAGE_ROWS:
         body += f"\n  - … {len(locations) - MAX_MESSAGE_ROWS} more"
     return (
-        "Code structure review for newly introduced growth:\n"
+        "Code structure review (no forced split):\n"
         + body
-        + "\nCheck whether the affected responsibilities remain cohesive. A size "
-        "threshold is review pressure, not a requirement to split coherent code."
+        + "\nReview the affected responsibilities for cohesion."
     )
 
 

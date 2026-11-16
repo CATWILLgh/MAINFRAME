@@ -370,8 +370,12 @@ unavailable-check advice. Bound regular-file reads before scanning and reject
 nonregular inputs without waiting for a writer. Bound each finding row to 240
 characters, preserving its path prefix and diagnostic suffix. Compact combined
 quality advice to 480 characters, reserving evidence for each subsection before
-omitting extra rows and explanatory footers. Native adapters own the combined
-event-message and serialized-output limits.
+omitting extra rows and explanatory footers. Keep decision boundaries in the
+retained headings: review advice is non-blocking, size alone does not require
+a split, and unavailable protection requires direct verification. The mixed
+advice lifecycle regression in `hooks/tests/test_code_quality.py` checks these
+boundaries, redelivery silence, completion blocking, and release after repair.
+Native adapters own the combined event-message and serialized-output limits.
 
 Preserve the high-signal detector set: TODO/FIXME/HACK/XXX comments, diagnostic
 suppressions, skipped or focused tests, explicit debugger residue, and comments
