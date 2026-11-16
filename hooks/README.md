@@ -10,6 +10,17 @@ The files in this directory define product-agnostic behavior; globally installed
 adapter copies supply native event names, payload and output encoding, paths,
 timeouts, registration, and permissions.
 
+Automatic project checks must work after supported adapter installation and
+native activation, without additional consumer-project setup or agent invocation.
+Select applicable checks from the native event, addressed files and unambiguous
+existing metadata. Do not require project-specific configuration, custom test/CI
+integration, database endpoints or new services. Prepare required tool dependencies
+through the maintained installer, not in the consuming project or on each event.
+Keep inapplicable checks silent. Where the available evidence cannot establish a
+runtime guarantee, state the coverage limit rather than presenting a project
+integration proposal as an automatic MAINFRAME capability. Skills may guide
+project engineering; that method is distinct from an installed automatic check.
+
 Install only hooks listed in `ADAPTATION.<product-id>.json`. Preserve their
 trigger timing, filtering, blocking or advisory effect, failure behavior,
 attribution, deduplication, and bounded context. Do not add telemetry or claim

@@ -19,6 +19,10 @@ content, actual product payload, and historical disclosure separately.
   duplicate files, registrations, permissions, hooks, or index entries.
 - Keep reusable methods in skills, bounded execution roles in agents, explicit
   user workflows in commands, and deterministic event reactions in hooks.
+- For automatic project checks, follow the [hook contract](hooks/README.md):
+  supported adapter installation must suffice, with no additional consumer-project
+  setup or agent-triggered execution. Infer applicability from existing evidence
+  and keep checks bounded, silent when irrelevant, and honest about their limits.
 - Write agent-facing canonical material in clear English. Use direct
   instructions and state observable triggers, boundaries, and failure behavior.
 - Do not add telemetry, permission-audit storage, committed generated exports, bundled
