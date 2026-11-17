@@ -8,10 +8,10 @@ active hook section.
 
 ## Reviewed Codex and ZCode events
 
-This table covers Codex Desktop `0.167.0-alpha.4.1` and ZCode Desktop
-`3.18.0.10300`. Evidence and activation details are version-specific.
-[Codex](../native/codex.md#desktop-01670-alpha41-hook-contract)
-[ZCode](../native/zcode-evidence.md#desktop-318010300-hook-contract)
+This table covers Codex Desktop `0.169.0-alpha.11.1` and ZCode Desktop
+`3.18.2.10443`. Evidence and activation details are version-specific.
+[Codex](../native/codex.md#desktop-01690-alpha111-delivery-compatibility)
+[ZCode](../native/zcode-evidence.md#desktop-318210443-hook-contract)
 
 | Canonical hook | Codex | ZCode |
 | --- | --- | --- |

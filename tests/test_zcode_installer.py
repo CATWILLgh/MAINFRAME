@@ -12,7 +12,7 @@ from installer.zcode import (ZCode, HOOK_NAMES, SHELL_HOOK_NAMES,
     _is_validated_hook_config_update, _legacy_hook_registration,
     role_body, command_body)
 from installer.core import Change, Conflict, transact, restore
-from installer.runtime import CODE_QUALITY_TOOLS, OPENSPEC_VERSION, runtime_bin, TOOL_SPECS
+from installer.runtime import CODE_QUALITY_TOOLS, OPENSPEC_VERSION, WEB_COMPILER_VERSION, runtime_bin, TOOL_SPECS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,6 +52,15 @@ class ZCodeInstallationTests(unittest.TestCase):
             tool = tools / name
             tool.write_text('#!/bin/sh\nprintf "%s\\n" "' + name + ' ' + TOOL_SPECS[name][2] + '"\n')
             tool.chmod(0o755)
+        # Match the pinned web runtime's presence/version boundary; no analyzer is run.
+        (tools / 'legacy-scan.mjs').write_text('export const synthetic = true;\n')
+        compiler = tools / 'node_modules/svelte/compiler/index.js'
+        compiler.parent.mkdir(parents=True, exist_ok=True)
+        compiler.write_text('exports.parse = () => ({});\n')
+        (compiler.parent.parent / 'package.json').write_text(json.dumps({'version': WEB_COMPILER_VERSION}))
+        npm = tools / 'npm'
+        npm.write_text('#!/bin/sh\nexit 91\n')
+        npm.chmod(0o755)
         openspec = tools / 'openspec'
         openspec.write_text(f"#!/bin/sh\nprintf '%s\\n' '{OPENSPEC_VERSION}'\n")
         openspec.chmod(0o755)

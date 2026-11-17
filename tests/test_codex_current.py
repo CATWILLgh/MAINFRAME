@@ -62,6 +62,30 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
                 self.assertEqual(codex.runtime_tools(version, "desktop"), codex.CODE_QUALITY_TOOLS + ("fallow",))
         self.assertEqual(codex.runtime_tools("0.153.4", "cli"), codex.CODE_QUALITY_TOOLS)
 
+    def test_0169_desktop_mapping_preserves_inspected_contract_and_upgrade_coordinates(self):
+        current = "0.169.0-alpha.11.1"
+        self.assertTrue(codex.mapping_supported(current, "desktop"))
+        self.assertFalse(codex.mapping_supported(current, "cli"))
+        self.assertFalse(codex.mapping_supported("0.169.0-alpha.11.2", "desktop"))
+        self.assertEqual(codex.runtime_tools(current, "desktop"), codex.CODE_QUALITY_TOOLS + ("fallow",))
+
+        self.adapter.version = "0.167.0-alpha.4.1"
+        self.apply()
+        hooks = self.adapter.codex / "hooks.json"
+        previous = hooks.read_bytes()
+        self.adapter.version = current
+        report = self.apply()
+        self.assertEqual(hooks.read_bytes(), previous)
+        self.assertIn("local workdir override", report["retained_partial_bindings"]["mainframe-commit-secrets"])
+        self.assertIn("mainframe-subagent-selection", {
+            name for name, row in json.loads(self.adapter.state_path.read_bytes())["components"]["hooks"].items()
+            if row["delivery"] == "installed"
+        })
+        state = json.loads(self.adapter.state_path.read_bytes())
+        for name in codex.READ_ONLY_ROLES:
+            self.assertIn("inherits parent permissions", state["components"]["agents"][name]["reason"])
+        self.assertEqual(self.adapter.plan()[1]["changes"], [])
+
     def test_desktop_tool_cwd_upgrade_changes_only_owned_shell_binding(self):
         self.apply()
         path = self.adapter.codex / "hooks.json"
@@ -202,7 +226,7 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         specification = importlib.util.spec_from_file_location("mainframe_current_entrypoint", self.source / "install.py")
         entrypoint = importlib.util.module_from_spec(specification)
         specification.loader.exec_module(entrypoint)
-        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION]
+        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", codex.CURRENT_DESKTOP_RUNTIME]
         required = codex.CODE_QUALITY_TOOLS + ("fallow", "openspec")
         ready = {"ready": True, "required": list(required), "missing": []}
         with (patch.object(Path, "cwd", return_value=self.source),
@@ -228,7 +252,7 @@ class CurrentCodexDeliveryTests(unittest.TestCase):
         foreign = self.home / "foreign-native-state"
         foreign.write_bytes(b"preserve user state")
         before = {path: path.read_bytes() for path in self.home.rglob("*") if path.is_file()}
-        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", VERSION]
+        options = ["--home", str(self.home), "--surface", "desktop", "--runtime-version", codex.CURRENT_DESKTOP_RUNTIME]
         required = codex.CODE_QUALITY_TOOLS + ("fallow", "openspec")
         with (patch.object(Path, "cwd", return_value=self.source),
               patch.object(entrypoint, "ensure_runtime", side_effect=Conflict("fixture runtime unavailable")) as ensure,

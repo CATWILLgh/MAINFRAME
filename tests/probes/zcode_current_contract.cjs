@@ -10,6 +10,7 @@ const pins = new Map([
   ['3.17.1.9553', '9afd565a104d660259e6bdeeaa5cb8abc74a908559e21aa3c5f6a06f2a9da6c6'],
   ['3.17.2.9661', 'd9afd58d694f98a5279bf548cdc7646413c125762e86730605a6071f9e0346d6'],
   ['3.18.0.10300', '26785f28ab8fb9f8b0f3821f2bf71d294f4d0b8bf28108785292f86c7e14090d'],
+  ['3.18.2.10443', '08726b5ef69e1e9072828baa4656713cb3aac93bb096938681278c5600312b2c'],
 ]);
 assert.ok(pins.has(build), `Unreviewed ZCode build ${build}: inspect the public contract before adding a pin`);
 const bytes = readFileSync(bundle);
@@ -178,7 +179,12 @@ async function verifyCurrentBuild() {
   ]);
 }
 
-if (build === '3.18.0.10300') {
+if (build === '3.18.2.10443') {
+  require('./zcode_3182_contract.cjs')({ source, region, fn, includes }).then(reportSuccess, error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+} else if (build === '3.18.0.10300') {
   verifyCurrentBuild().then(reportSuccess, error => {
     console.error(error);
     process.exitCode = 1;
