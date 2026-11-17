@@ -32,6 +32,40 @@ the maintained installer and preserve unrelated project environments.
 SonarQube and comparable server/hosted platforms are not default dependencies;
 adding them requires an explicit user request and an agreed operating scope.
 
+## Shared runtime, storage, and updates
+
+Codex and ZCode share `~/.local/share/mainframe/runtime/` for prepared packages,
+launchers, and ownership/recovery records. Compatible existing tools can be
+reused from their original locations; reuse does not transfer ownership of those
+installations. Hooks execute prepared tools. Package installation and updates
+belong to `apply`, rather than individual hook invocations.
+
+A reference measurement on 2026-11-17 used macOS ARM64, the tested releases in
+the [runtime catalog](../../../installer/runtime.py), and four compatible
+existing uv/npm installations:
+
+| Included support | Observed footprint |
+| --- | ---: |
+| Ten hook tools and the Svelte compiler | About 514 MiB |
+| The same set plus OpenSpec support | About 530 MiB |
+
+These rounded figures include reused package environments. Python, Node.js,
+project language SDKs, and shared package-manager caches are outside the
+measurement. Platform, versions, dependency resolution, and available compatible
+tools determine actual use. The disposable measurement environment was removed.
+
+Preparation gives child processes owned scratch directories. The main pip
+installation uses `--no-cache-dir`; npm cache, logs, and scratch storage are
+temporary and removed after preparation. Existing shared uv/pip/npm caches can
+contain downloads from multiple installations and are preserved.
+
+During replacement, old and new managed generations coexist until activation
+succeeds; downloads and unpacking need additional temporary space. Superseded
+owned generations retire after activation or a later retry. External, referenced,
+legacy, and unproven paths remain preserved. A hard stop before ownership is
+recorded can leave an unregistered directory; no directory-name sweep deletes it.
+Removing one adapter retains the shared runtime for the other adapters.
+
 ## Shared OpenSpec CLI
 
 The [OpenSpec skill](../../../skills/mainframe-openspec/SKILL.md) uses one CLI
@@ -52,7 +86,7 @@ its OpenSpec artifacts and can select its own approved executable.
 
 `plan` reports runtime readiness without provisioning. `apply` prepares the CLI
 before writing the skill. `verify` requires both file convergence and a working
-CLI. The shared runtime remains available after removing one adapter.
+CLI.
 
 ## MCP and external capabilities
 

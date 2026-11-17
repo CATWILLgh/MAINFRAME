@@ -134,15 +134,14 @@ now distinguishes unavailable prerequisites from failed behavior assertions.
 The complete shell route was checked with missing analyzers, missing SDK tools,
 and a reused prepared home; refusals occurred before assertions and the prepared
 route passed all 81 tests.
-Fallow's real-analyzer creation case and the other analyzer suites remain
-separate checks. Hosted CI for these commits was not run.
+The complete hook suite was subsequently included in the hosted publication
+checks below, covering the other analyzer owners as well.
 
 The Python skill validator lacked PyYAML. Existing Ruby safely parsed the four
 changed entrypoint frontmatters and checked name/description constraints;
 repository links/inventory and complete Codex/ZCode delivery parity passed.
-Test dependencies were prepared only in the isolated test home; no global
-installation, product-native acceptance probes, publication or live-system
-actions were performed. Source and synthetic checks do not establish native
+Local dependency preparation used isolated test homes without changing the
+user's global adapter installation. Source and synthetic checks do not establish native
 activation or equal task performance across models.
 
 ## Ordinary installation follow-up — 2026-11-17
@@ -175,6 +174,22 @@ setting was added to adapter installation.
 
 Shared runtime and unproven legacy directories remain intentionally preserved.
 A hard stop before a stage is recorded may leave an unregistered directory;
-there is no automatic name-based sweep. Native application/authenticated-index
-acceptance and hosted CI were not run; the user's global installation was not
-updated.
+there is no automatic name-based sweep. Native application and authenticated-index
+acceptance remain outside this source review; the user's global installation was
+not updated.
+
+## Hosted publication evidence — 2026-11-17
+
+The reviewed source was published through [PR #8](https://github.com/CATWILLgh/MAINFRAME/pull/8)
+as GitHub `main` commit [`990bc6d`](https://github.com/CATWILLgh/MAINFRAME/commit/990bc6dd828afde141e123f11ce74d4de28dbd3e).
+Both [PR CI](https://github.com/CATWILLgh/MAINFRAME/actions/runs/43973544255) and
+[published-main CI](https://github.com/CATWILLgh/MAINFRAME/actions/runs/43974588130)
+passed. The PR run reported 396 repository tests, 233 hook tests, and 17
+credential-helper tests, plus successful shell and whitespace checks. One
+source-only probe requiring the macOS ZCode bundle was skipped on Linux.
+
+This records that publication's hosted source checks. Later revisions have
+their own results in [GitHub Actions](https://github.com/CATWILLgh/MAINFRAME/actions/workflows/ci.yml);
+native application acceptance remains separate. The subsequent
+[storage reference](installation/components/integrations.md#shared-runtime-storage-and-updates)
+records the measured complete toolset, shared-cache boundary and update cleanup.

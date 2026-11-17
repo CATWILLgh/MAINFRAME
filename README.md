@@ -56,8 +56,15 @@ scoped Desktop updates, hook controls, removal, and recovery. [Installation guid
 
 The installer prepares the analyzers needed by supported hook bindings and
 the shared OpenSpec CLI when delivering its skill. It reuses compatible tools
-or provisions their pinned distributions before activation. Some provisioning
-paths need Node.js and npm. [Shared runtime and provisioning](docs/installation/components/integrations.md)
+or provisions their pinned distributions before activation. Fallback provisioning
+for the complete toolset requires Node.js 22.12 or newer and npm. The installer
+prepares analyzer packages; optional language syntax checks use SDKs already
+installed.
+
+Codex and ZCode share one toolset per user. A macOS ARM64 reference measurement
+found about 0.5 GiB for hook dependencies and OpenSpec support. Downloads and
+preparation use temporary storage; updates briefly retain old and new versions.
+[Runtime storage, caches, and cleanup](docs/installation/components/integrations.md#shared-runtime-storage-and-updates)
 
 ## What MAINFRAME delivers
 
@@ -99,6 +106,7 @@ current project's reusable skill. [Codex commands](docs/installation/native/code
 | [todo](commands/todo.md) | Capture or update an idea in the current project's tracked queue |
 | [mainframe-init](commands/mainframe-init.md) | Establish ownership and verification for one user-facing coordinating session |
 | [mainframe-project-skill](commands/mainframe-project-skill.md) | Initialize, update, or extend the current project's evolving skill |
+| [mainframe-review-branch](commands/mainframe-review-branch.md) | Review and repair the current branch through verified local checkpoints |
 | [mainframe-tickets-init](commands/mainframe-tickets-init.md) | Initialize or migrate project ticket directories, format and root instructions |
 | [mainframe-tickets-find](commands/mainframe-tickets-find.md) | Investigate random project areas and record or enrich deduplicated problem tickets |
 | [mainframe-tickets-refine](commands/mainframe-tickets-refine.md) | Deeply investigate ticket execution paths, blast radius, and duplicates; route each outcome |

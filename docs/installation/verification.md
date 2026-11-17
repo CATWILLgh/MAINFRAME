@@ -78,6 +78,10 @@ run deterministic inventory, rendering, destination, ownership, preservation,
 and convergence checks. A successfully delivered component may therefore have
 `delivery: installed` and `verification: pending`.
 
+The maintained installer also prepares required dependencies and checks their
+versions or bounded compatibility samples. These installation checks are
+separate from native model, event, and application acceptance.
+
 Do not append native discovery, model or agent sessions, browser interaction,
 credential operations, hook lifecycle probes, repository test suites, or an
 acceptance campaign to an ordinary installation. Reuse applicable adapter
