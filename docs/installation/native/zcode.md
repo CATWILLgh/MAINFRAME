@@ -1,8 +1,9 @@
 # ZCode Desktop adaptation
 
-Current Desktop delivery mapping is **3.18.0.10300**, reviewed 2026-11-12 against
-the shipped runtime and official references. The mapping for **3.17.1.9553**
-remains available. See the [current evidence](zcode-evidence.md#desktop-318010300-hook-contract)
+Current Desktop delivery mapping is **3.18.2.10443**, reviewed 2026-11-17 against
+the shipped runtime and pinned extracted-function probes. The mappings for
+**3.18.0.10300** and **3.17.1.9553** remain available. See the
+[current evidence](zcode-evidence.md#desktop-318210443-hook-contract)
 and [earlier delivery review](zcode-evidence.md#desktop-31719553-full-delivery).
 Installed build **3.17.2.9661** has
 [selected-skill reader evidence](zcode-evidence.md#desktop-31729661-private-skill-reader)
@@ -125,7 +126,7 @@ separate registrations because they consume different events and state.
 | `mainframe-destructive-operations` | Capture initialized root at `SessionStart` startup, clear, resume, or fork. Combine it with the actual pre-Bash cwd. Without a root, retain context-free denials. |
 | `mainframe-commit-secrets` | Native pre-Bash cwd is the execution cwd; pass it to canonical staged-content inspection. |
 | `mainframe-code-quality` | Retain `PreToolUse` capture and matching `PostToolUse` or `PostToolUseFailure` attribution for native `Write|Edit`; use `Stop` only for a positive revalidating block. The full contract remains unsupported because advisory-only Stop output is discarded unless it requests another model turn. |
-| `mainframe-fallow-quality` | On 3.17.1.9553 and 3.18.0.10300, retain immediate PostToolUse advice for native Write/Edit TS/JS responses. Build an exact addressed diff in memory and verify the postimage. Full completion timing remains unsupported. |
+| `mainframe-fallow-quality` | On 3.17.1.9553, 3.18.0.10300 and 3.18.2.10443, retain immediate PostToolUse advice for native Write/Edit TS/JS responses. Build an exact addressed diff in memory and verify the postimage. Full completion timing remains unsupported. |
 | `mainframe-subagent-selection` | Current Agent input has no per-call model or effort. Report unsupported without a strict runtime denial. Preserve native role model/thoughtLevel presets as configuration, without claiming preventive selection enforcement. |
 | `mainframe-todo-limits` | PreToolUse Write/Edit projects addressed content or replacements through the detector. An empty old string can create or fill a blank note. Fuzzy edits and shell writes are outside the preventive binding. |
 | `mainframe-commit-checkpoint` | PostToolUse Write/Edit provides bounded non-blocking advice. |

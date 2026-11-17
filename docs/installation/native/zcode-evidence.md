@@ -1,5 +1,96 @@
 # ZCode bundled runtime hook evidence
 
+## Desktop 3.18.2.10443 hook contract
+
+On 2026-11-17 the installed `dev.zcode.app` plist reported version `3.18.2`,
+build `3.18.2.10443`. Inspection used clone copies of the plist, resource seal,
+Node runtime and Electron archive in a private scratch directory. The resources
+matched their `CodeResources` SHA-256 entries:
+
+| Resource | SHA-256 |
+| --- | --- |
+| `Contents/Resources/glm/zcode.cjs` | `08726b5ef69e1e9072828baa4656713cb3aac93bb096938681278c5600312b2c` |
+| `Contents/Resources/app.asar` | `236db1e6aeceb5fbbde3e28e69a3fcac4772c11787120efb41548e8d87c5ecb6` |
+
+Strict deep `codesign` verification failed with an invalid-signature message for
+arm64. These hashes identify the inspected local resources; whole-app signature
+verification did not pass.
+
+The [pinned probe](../../../tests/probes/zcode_current_contract.cjs) dispatches
+this build to its [reviewed function slices](../../../tests/probes/zcode_3182_contract.cjs).
+It rejects mismatched bytes before extraction. The Node VM runs audited pure
+functions and native scanner/parser classes against synthetic in-memory files,
+inert hook callbacks and path operations. It imports no application initializer
+and starts no app-server, CLI agent, model, auth flow or user-state reader.
+
+```sh
+node tests/probes/zcode_current_contract.cjs /Applications/ZCode.app/Contents/Resources/glm/zcode.cjs 3.18.2.10443
+```
+
+The probe establishes the following current contracts:
+
+- User `~/.zcode/AGENTS.md` and workspace `AGENTS.md` both load. Default skill
+  roots retain user/project `.zcode/skills` and `.agents/skills`; native skill
+  and command scanners load the exact body, metadata and disabled-path choice.
+  User commands remain under `.zcode/commands`, with filename identity and
+  `description`/`argument-hint` metadata.
+- User roles retain `model`, `thoughtLevel`, `color`, `injectAgentsMd` and
+  `disallowedTools` parsing. Native filtering excludes Edit/Write while keeping
+  the Skill tool. This verifies the installed role boundary, not a universal
+  read-only shell sandbox or availability of a particular provider model.
+- The event enum remains SessionStart, UserPromptSubmit, PreToolUse,
+  PermissionRequest, PostToolUse, PostToolUseFailure and Stop. Pre-tool denial,
+  post/failure context, `Write|Edit` matching and ApplyPatch matcher aliases
+  retain their reviewed semantics. Global configuration disable and individual
+  `enabled: false` callbacks are filtered before callback creation.
+- Bash and process-hook callbacks use the primary execution port and pre-tool
+  cwd. Successful foreground Bash captures cwd; native policy keeps a directory
+  inside the workspace and resets an outside directory to its root. SessionStart
+  supplies initialized cwd on startup/resume/fork; compact can dispatch again.
+  MAINFRAME keeps root capture through compact by excluding that matcher.
+- Write responses include exact content and `originalFile`. Edit responses use
+  actual old/new strings, `replaceAll` and `originalFile`, including absent/blank
+  file creation. PostToolUse receives the raw result; its additional context
+  reaches the model attachment path used for immediate Fallow advice.
+- Advisory-only Stop output still causes no continuation. Positive Stop feedback
+  with context can continue below the native cap of three. Ordinary Agent/Task
+  child construction still omits hook runners and workspace-hook ports; the
+  call schema still has no per-call model or reasoning-effort field.
+
+Selected anchors below are **UTF-8 byte offsets** in the pinned runtime:
+
+| Boundary | Anchor | Offset |
+| --- | --- | ---: |
+| Event enum | `Ec={SessionStart:` | 1464507 |
+| Compatible stdin | `LPn` | 5146235 |
+| Hook output / matcher | `zPn` / `HRo` | 5150549 / 5152269 |
+| Configured registrations | `xwt` | 5164486 |
+| Pre-tool dispatch | `akt` | 5288845 |
+| Tool executor / post-result route | `bMa` | 7346172 |
+| Bash request / policy / execution | `w8a` / `_4o` / `W6o` | 7628553 / 7545454 / 7623849 |
+| User instruction lookup | `B3s` | 2299664 |
+| Skill roots / reader | `Bbo` / `RCn` | 4374393 / 4380151 |
+| Command roots / reader | `Kbo` / `MCn` | 4383817 / 4388271 |
+| Role parser / user-role loader | `yie` / `rCi` | 1087927 / 14757204 |
+| SessionStart / Stop predicate | `Rti` / `jti` | 13527364 / 13529668 |
+| Ordinary child constructor | `let qe=new _D(n.sessionId,` | 13463702 |
+
+Static inspection of sealed `app.asar` also traces the default Desktop resolver
+`Na` through the Electron Node route `$p`/`Ks` to the packaged `glm/zcode.cjs`.
+Its inspected host module `out/host/chunk-O6MP7ZHZ.js` hashes to
+`b0213d10b27c1f43370a69af7b358d9f5da3377684fea14a4ebd7bb3ce474aba`;
+the runtime definition in `out/host/chunk-IEBWXNOE.js` hashes to
+`b20de5221bc64f2ab37ad2e09cf3b0d7b122e1dbacca2c7986d2860ee508b172`.
+The definition retains `nativeConfigDir: ".zcode/cli"` and `config.json`.
+
+The narrow adapter update adds the reviewed build to existing full/extended
+Desktop mappings and preserves older mappings and unsupported guarantees.
+Disposable-home checks cover delivery, convergence, role settings, global and
+individual hook disables, attributed edits, Fallow advice and bounded Stop
+repair. A fresh running Desktop session's discovery, permission prompts, hook
+delivery and model behavior remain separate acceptance; no live activation is
+claimed by these source and fixture checks.
+
 ## Desktop 3.18.0.10300 hook contract
 
 On 2026-11-12 the installed Desktop plist reported `3.18.0.10300`. The shipped

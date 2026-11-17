@@ -48,7 +48,9 @@ KNOWN_RUNTIME = "0.153.4"
 # Exact Desktop mapping revalidated against the tagged native schemas/sources.
 # This is delivery compatibility, not observed lifecycle/role acceptance.
 TOOL_CWD_DESKTOP_RUNTIME = "0.167.0-alpha.4.1"
-EXTENDED_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2", TOOL_CWD_DESKTOP_RUNTIME}
+CURRENT_DESKTOP_RUNTIME = "0.169.0-alpha.11.1"
+TOOL_CWD_DESKTOP_RUNTIMES = {TOOL_CWD_DESKTOP_RUNTIME, CURRENT_DESKTOP_RUNTIME}
+EXTENDED_DESKTOP_RUNTIMES = {"0.165.0-alpha.1.2"} | TOOL_CWD_DESKTOP_RUNTIMES
 INSPECTED_DESKTOP_RUNTIMES = {"0.159.2", "0.159.0-alpha.12.1"} | EXTENDED_DESKTOP_RUNTIMES
 # Current Desktop PreToolUse command/deny transport was observed unchanged.
 # This is an existing detector repair boundary, never a full native mapping.
@@ -522,7 +524,7 @@ class Codex:
                          for group in prior_groups.get("PostToolUse", []))
         shell = hook_command(self.hooks, PRE_SHELL_TRANSPORT,
                              self.event_state, runtime_bin(self.home),
-                             tool_cwd_override=self.surface == "desktop" and self.version == TOOL_CWD_DESKTOP_RUNTIME)
+                             tool_cwd_override=self.surface == "desktop" and self.version in TOOL_CWD_DESKTOP_RUNTIMES)
         groups = {"PreToolUse": [
             {"matcher": "^Bash$", "hooks": [{"type": "command", "command": shell,
               "timeout": 5, "additionalContextLimit": 6000},
@@ -555,7 +557,7 @@ class Codex:
                 groups["PreToolUse"][0]["hooks"] = [{"type": "command",
                     "command": hook_command(self.hooks, PRE_EVENT_TRANSPORT, self.event_state,
                                             runtime_bin(self.home),
-                                            tool_cwd_override=self.version == TOOL_CWD_DESKTOP_RUNTIME),
+                                            tool_cwd_override=self.version in TOOL_CWD_DESKTOP_RUNTIMES),
                     "timeout": 7, "additionalContextLimit": 1600}]
             if not split_post:
                 groups["PostToolUse"][0]["hooks"] = [{"type": "command",
@@ -802,7 +804,7 @@ class Codex:
             limitations = LIMITATIONS
             role_limits = {}
             if self.surface == "desktop" and self.version in EXTENDED_DESKTOP_RUNTIMES:
-                limitations = TOOL_CWD_LIMITATIONS if self.version == TOOL_CWD_DESKTOP_RUNTIME else EXTENDED_LIMITATIONS
+                limitations = TOOL_CWD_LIMITATIONS if self.version in TOOL_CWD_DESKTOP_RUNTIMES else EXTENDED_LIMITATIONS
                 role_limits = {name: READ_ONLY_ROLE_LIMIT for name in READ_ONLY_ROLES}
                 unsupported.update({("agents", name): reason for name, reason in role_limits.items()})
             for name, limitation in limitations.items():

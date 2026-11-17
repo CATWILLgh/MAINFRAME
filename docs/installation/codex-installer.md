@@ -8,11 +8,11 @@ the user-facing file-only invocation unchanged.
 
 On macOS or Linux, use Python 3.11 or newer and Git. Select the surface running
 this request under the [surface rule](verification.md#desktop-and-cli).
-The current native mapping was reviewed against **Desktop 0.167.0-alpha.4.1**
-on 2026-11-12. Delivery evidence includes the exact upstream source, an
-isolated bundled-engine run, and disposable-home installer checks. Desktop
-activation and trust still require the running profile.
-[Current evidence](native/codex.md#desktop-01670-alpha41-hook-contract)
+The current native mapping was reviewed against **Desktop 0.169.0-alpha.11.1**
+on 2026-11-17. Delivery evidence includes the exact upstream source,
+auth-free disposable bundled-engine discovery, and disposable-home installer
+checks. Desktop activation and trust still require the running profile.
+[Current evidence](native/codex.md#desktop-01690-alpha111-delivery-compatibility)
 Do not upgrade Codex,
 switch the user's model, or claim another version is verified. `plan` works
 read-only; a full installation requires the tested runtime. To support a different version,
@@ -20,8 +20,8 @@ revalidate the affected native contract and update the maintained module with
 its evidence, rather than bypassing the version check or writing a second installer.
 
 CLI remains limited to the inspected **0.153.4** mapping. Desktop admits
-**0.153.4**, **0.159.0-alpha.12.1**, **0.159.2**, **0.165.0-alpha.1.2**, and
-**0.167.0-alpha.4.1**
+**0.153.4**, **0.159.0-alpha.12.1**, **0.159.2**, **0.165.0-alpha.1.2**,
+**0.167.0-alpha.4.1**, and **0.169.0-alpha.11.1**
 for full delivery of the supported MAINFRAME components, including complete
 skill packages, roles, explicit commands and native hooks. The mapping
 accounts for every entry in the [canonical inventory](../../ADAPTATION.example.json).
@@ -47,11 +47,12 @@ One positive revalidation requests a repair continuation. A still-positive
 retry emits a visible unresolved warning and retains state. Other hooks can
 still request continuation. The plan reports completion-advice limitations for
 quality and Fallow and workdir limitations for both shell guards. Engine
-**0.167.0-alpha.4.1** also checks relative destructive targets and staged secrets
-when Bash identifies a separate local workdir in its payload. Its host fallback
-directory alone cannot establish the command's execution environment.
+**0.167.0-alpha.4.1** and **0.169.0-alpha.11.1** also check relative destructive
+targets and staged secrets when Bash identifies a separate local workdir in its
+payload. Its host fallback directory alone cannot establish the command's
+execution environment.
 
-The three read-only role files retain their methods. The child on both extended
+The three read-only role files retain their methods. The child on the extended
 Desktop mappings inherits its parent's permissions, so the plan reports the
 read-only guarantee as unsupported.
 
@@ -119,7 +120,7 @@ installation or full native mapping. See the [text-update comparison](native/cod
 ### Deliver one skill on Desktop
 
 Desktop **0.165.0-alpha.1.2**, **0.166.0-alpha.5.1**, **0.167.0-alpha.3.2**,
-and **0.167.0-alpha.4.1**
+**0.167.0-alpha.4.1**, and **0.169.0-alpha.11.1**
 support the explicit skill-only route for an existing same-source installation
 with a matching ownership receipt and schema-2 adaptation state. The tagged
 reader supports complete packages under `$CODEX_HOME/skills`. Builds
@@ -161,10 +162,10 @@ runtime.
 
 ### Deliver the backlog command and guard on Desktop
 
-On **0.165.0-alpha.1.2** and **0.167.0-alpha.4.1**, an existing same-source
-installation with a matching receipt and schema-2 state can receive the
-canonical `todo` command and `mainframe-todo-limits` detector through the
-bounded route.
+On **0.165.0-alpha.1.2**, **0.167.0-alpha.4.1**, and **0.169.0-alpha.11.1**,
+an existing same-source installation with a matching receipt and schema-2 state
+can receive the canonical `todo` command and `mainframe-todo-limits` detector
+through the bounded route.
 
 ```sh
 python3 -B install.py codex plan --surface desktop --todo
@@ -273,11 +274,13 @@ advisory delivery is absent.
 
 The report also names two pre-shell partials. Destructive operations keep
 their command-structural Git and root/home deletion guards. Commit secrets keep
-literal and absolute-file metadata inspection. On **0.167.0-alpha.4.1**
+literal and absolute-file metadata inspection. On **0.167.0-alpha.4.1** and
+**0.169.0-alpha.11.1**,
 both can inspect local workdir overrides when the event identifies one. The
 four pre-shell detectors share one `mainframe-pre-shell` process. A clean
 check is silent and individual disable markers apply inside the bridge.
-Desktop **0.165.0-alpha.1.2** and **0.167.0-alpha.4.1** retain the
+Desktop **0.165.0-alpha.1.2**, **0.167.0-alpha.4.1**, and
+**0.169.0-alpha.11.1** retain the
 immediate Fallow advisory described above.
 
 ## Finish the current-surface installation pass

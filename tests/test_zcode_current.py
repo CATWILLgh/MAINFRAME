@@ -21,7 +21,7 @@ from installer.zcode import ZCode, FULL_MAPPING_RUNTIMES, hook_registration
 from installer.runtime import runtime_bin
 
 ROOT = Path(__file__).resolve().parents[1]
-CURRENT = "3.18.0.10300"
+CURRENT = "3.18.2.10443"
 FALLOW = "mainframe-fallow-quality"
 
 
@@ -44,6 +44,7 @@ class CurrentZCodeInstallationTests(unittest.TestCase):
 
     def test_current_full_delivery_maps_every_component_and_converges(self):
         self.assertIn(CURRENT, FULL_MAPPING_RUNTIMES)
+        self.assertIn("3.18.0.10300", FULL_MAPPING_RUNTIMES)
         from installer.zcode import runtime_tools
         self.assertEqual(runtime_tools(CURRENT, "desktop"), CODE_QUALITY_TOOLS + FALLOW_TOOLS)
         self.assertEqual(runtime_tools("unknown", "desktop"), CODE_QUALITY_TOOLS)

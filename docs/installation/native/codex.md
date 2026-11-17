@@ -1,6 +1,6 @@
 # Codex orientation
 
-Last reviewed 2026-11-12 for Desktop engine `0.167.0-alpha.4.1`.
+Last reviewed 2026-11-17 for Desktop engine `0.169.0-alpha.11.1`.
 
 Use the [maintained Codex installer](../codex-installer.md) for its inspected
 runtime mapping. This page owns native evidence and revalidation decisions;
@@ -8,6 +8,62 @@ the installer owns repeatable packaging and lifecycle operations. Recheck the
 version, effective home/configuration layers, and requested Desktop/CLI surface.
 Revisit the relevant official contract when a mapping or observed behavior
 changes instead of repeating full adaptation research for an unchanged runtime.
+
+## Desktop 0.169.0-alpha.11.1 delivery compatibility
+
+ChatGPT Desktop `26.1111.21308`, build `27194`, bundles engine
+`0.169.0-alpha.11.1`, identified by its shipped `codex-cli/codex-package.json`.
+The exact [OpenAI release](https://github.com/openai/codex/releases/tag/rust-v0.169.0-alpha.11.1)
+resolves to commit [226fa88979b1a9d76dc36f339ee9c5fbdb2c8e7f](https://github.com/openai/codex/commit/226fa88979b1a9d76dc36f339ee9c5fbdb2c8e7f).
+The downloaded [tag archive](https://codeload.github.com/openai/codex/tar.gz/refs/tags/rust-v0.169.0-alpha.11.1)
+had SHA-256 `9e70ef495ada2b43f2cba273b6a6ab2f96be71f2e732ab135c5dd63d083c45a2`.
+Comparison with the previously inspected `0.167.0-alpha.4.1` supports the same
+Desktop delivery mapping:
+
+- The [skill parser](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/skills/src/parser.rs),
+  [role parser](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/agent-roles/src/agent_role_config.rs),
+  [role loader](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/agent-roles/src/loader.rs)
+  and [instruction reader](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/codex-home/src/instructions/mod.rs)
+  are byte-identical. Skill host access was refactored, but the
+  [private compatibility root](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/ext/skills/src/host_roots.rs#L150-L171)
+  remains `$CODEX_HOME/skills`. Relevant agents, skills, permissions, sandbox,
+  hooks and MCP [configuration schemas](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/core/config.schema.json)
+  retain the installed representation.
+- The generated hook schemas, [discovery/trust implementation](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/hooks/src/engine/discovery.rs)
+  and [output parser](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/hooks/src/engine/output_parser.rs)
+  are byte-identical. The [dispatcher](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/core/src/hook_runtime.rs)
+  retains the existing events, identities and output effects. The
+  [exec handler](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/core/src/tools/handlers/unified_exec/exec_command.rs#L349-L364)
+  retains local overridden `cwd` attribution and remote fallback; its changed
+  environment accessor does not broaden shell protection.
+- The [MultiAgentV2 defaults](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/core/src/config/mod.rs#L1424-L1478)
+  retain the `collaboration` namespace and both selection fields. The
+  [tool specification](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/core/src/tools/handlers/multi_agents_spec.rs)
+  is byte-identical. Role configuration now uses a session layer, but
+  [child overrides](https://github.com/openai/codex/blob/rust-v0.169.0-alpha.11.1/codex-rs/core/src/agent/role.rs#L174-L238)
+  still do not replace parent sandbox/approval permissions. Read-only role
+  enforcement remains unsupported.
+
+An intact copy of the bundled `CodexCLI.app` reported the expected version;
+its executable SHA-256 was
+`3ea20787e106af94573d3d6c19480aed93a1334b0dd32b6b04e2f780ce82cf4b`.
+The explicit [disposable catalog probe](../../../tests/probes/codex_desktop_contract.py)
+used temporary source, home and workspace trees, file-backed empty auth and
+disabled analytics. `skills/list`, `hooks/list` and `config/read` discovered
+27 skills, nine commands and ten hook identities with zero diagnostics.
+All new hooks remained untrusted. To repeat assigned discovery, pass the intact
+bundle's executable with `python3 -B tests/probes/codex_desktop_contract.py
+--engine /path/to/CodexCLI.app/Contents/MacOS/codex`.
+
+No model turn, hook execution, native trust or live-profile activation was
+performed. The [0.167 hook contract](#desktop-01670-alpha41-hook-contract)
+and four partial-hook limitations remain the mapping boundary; its historical
+behavioral probes are not new 0.169 acceptance. An upgrade fixture preserves
+existing hook coordinates byte-for-byte and converges. This admits only the
+exact Desktop engine, including its existing skill-only and backlog routes;
+CLI and neighboring versions remain excluded. Observe fresh-task discovery,
+trust and affected role/hook execution on the running profile before claiming
+live acceptance.
 
 ## Desktop 0.167.0-alpha.4.1 hook contract
 

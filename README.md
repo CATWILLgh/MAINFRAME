@@ -23,9 +23,9 @@ the requested surface.
 
 | Product | Full delivery mapping | Other maintained paths |
 | --- | --- | --- |
-| [Codex Desktop](docs/installation/codex-installer.md) | Engine `0.167.0-alpha.4.1` | `0.166.0-alpha.5.1` and `0.167.0-alpha.3.2` support skill-only updates of an existing installation. |
+| [Codex Desktop](docs/installation/codex-installer.md) | Engine `0.169.0-alpha.11.1` | `0.166.0-alpha.5.1` and `0.167.0-alpha.3.2` support skill-only updates of an existing installation. |
 | [Codex CLI](docs/installation/codex-installer.md) | Engine `0.153.4` | Read-only native discovery is available on the inspected CLI. |
-| [ZCode Desktop](docs/installation/zcode-installer.md) | Build `3.18.0.10300` | Build `3.17.2.9661` supports skill-only updates of an existing installation. |
+| [ZCode Desktop](docs/installation/zcode-installer.md) | Build `3.18.2.10443` | Build `3.17.2.9661` supports skill-only updates of an existing installation. |
 
 Some hooks have narrower native bindings. Codex retains partial shell guards
 where the host omits the actual tool working directory, and both adapters
