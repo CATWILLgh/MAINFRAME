@@ -31,8 +31,12 @@ python3 -B install.py zcode verify --surface desktop --skill mainframe-openspec
 ```
 
 The route reconciles the selected package under `~/.zcode/skills/` and its
-receipt and adaptation records. It leaves hooks, commands, roles, configuration
-and analyzers alone. `scoped_update_matches` proves selected-file convergence.
+receipt and adaptation records. It preserves hooks, commands, roles and
+configuration. `scoped_update_matches` proves selected-file convergence. For
+`mainframe-openspec`, apply also prepares the
+[shared CLI](components/integrations.md#shared-openspec-cli), and verify requires
+`runtime_support.ready`. Other selected skills do not provision unrelated hook
+analyzers.
 Refresh Skills in Desktop settings and open a new conversation for discovery.
 
 ## Deliver only /todo
@@ -174,9 +178,10 @@ binding: an immediate `PostToolUse` advisory for attributed TS/JS `Write|Edit`
 results. Native responses supply the original content and actual replacement;
 the bridge compares the addressed postimage and builds its diff in memory.
 Missing, conflicting, oversized or concurrently changed attribution produces
-bounded unavailable advice. No source or diff is retained. The current full
-route verifies the tested Fallow dependency alongside Ruff, Oxlint and Semgrep;
-the `/todo`-only route provisions none of them.
+bounded unavailable advice. No source or diff is retained. The full route
+prepares every dependency required by its supported hook bindings before
+activation; the `/todo`-only route provisions none of them. See the
+[runtime support contract](components/hooks.md#runtime-support).
 
 The current native `Agent` input exposes neither a per-call model nor reasoning
 effort. `mainframe-subagent-selection` is therefore reported as unsupported with

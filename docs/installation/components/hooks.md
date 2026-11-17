@@ -146,7 +146,8 @@ pinned SHA256s for Linux and macOS on x86-64 and ARM64.
 
 The native launchers use the shared runtime path. Plan reports missing support
 without mutation. Apply and verify check the actual executable and report its
-version. The synthetic checks run during runtime preparation and verification.
+version. Preparation and verification check executable versions and required
+modules; newer stable candidates also pass bounded compatibility samples.
 Keep hook execution bounded with isolated scanner configuration and disabled
 telemetry. Check a new tool release against the full hook suite before raising
 the tested minimum or changing the provisioned release.
